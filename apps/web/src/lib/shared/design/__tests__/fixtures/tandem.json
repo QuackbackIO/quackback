@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mode": "light",
   "brand": {
     "light": {
@@ -48,13 +48,13 @@
   "layout": {
     "header": "stacked",
     "nav": "underline",
-    "band": "blend",
+    "hero": "blend",
     "cards": "filled",
     "density": "comfortable",
     "width": "default",
     "filters": "end",
     "blend": "mesh",
-    "bandArt": "dots"
+    "heroArt": "dots"
   },
   "pages": {
     "home": {

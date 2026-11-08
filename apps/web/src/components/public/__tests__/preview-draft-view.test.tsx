@@ -107,7 +107,7 @@ const words = (en: string) => ({ en })
 /** Drafts that between them change every page the builder designs. */
 const drafts: Record<string, Design> = {
   'Home with its hero, composer and blocks': draft((d) => {
-    d.layout.band = 'brand'
+    d.layout.hero = 'brand'
     d.nav.home = { on: true, tab: true, label: 'Start' }
     d.pages.home = {
       headline: {
@@ -130,7 +130,7 @@ const drafts: Record<string, Design> = {
     }
   }),
   'Home with a call to action': draft((d) => {
-    d.layout.band = 'tint'
+    d.layout.hero = 'tint'
     d.nav.home = { on: true, tab: false }
     d.pages.home.headline = { title: words('Hello'), subtitle: words('') }
     d.pages.home.mainAction = 'button'
@@ -162,7 +162,7 @@ const drafts: Record<string, Design> = {
     d.pages.support = { request: words('Ask us') }
   }),
   'every titled page, on the band, with page choices': draft((d) => {
-    d.layout.band = 'brand'
+    d.layout.hero = 'brand'
     d.layout.pageTitles = 'band'
     d.pages.titles = {
       roadmap: { title: words('What is next'), subtitle: words('Planned') },
@@ -176,7 +176,7 @@ const drafts: Record<string, Design> = {
   }),
   'the header, menu, logo, image and status colours': draft((d) => {
     d.layout.header = 'inline'
-    d.layout.band = 'brand'
+    d.layout.hero = 'brand'
     d.layout.status = 'brand'
     d.brand.logoColours = ['#e01e5a', '#36c5f0']
     d.brand.logo = {
@@ -185,7 +185,7 @@ const drafts: Record<string, Design> = {
       wordmark: { light: null, dark: null },
       mark: { light: { key: 'header-logos/mark.png' }, dark: null },
     }
-    d.brand.bandImage = {
+    d.brand.heroImage = {
       key: 'portal-images/room.webp',
       width: 2560,
       variants: [{ key: 'portal-images/room-640.webp', w: 640 }],

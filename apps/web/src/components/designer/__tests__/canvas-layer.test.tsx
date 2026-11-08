@@ -216,7 +216,7 @@ function inHero({
 } = {}) {
   const frame = heroPage(width, own)
   let design = defaultDesign()
-  design.layout.bandAlign = centred ? 'centre' : 'left'
+  design.layout.heroAlign = centred ? 'centre' : 'left'
   design.pages.home.blocks = [{ ...newBlock('composer'), id: 'composer01' }]
   design.pages.home.composer = 'band'
   if (stored) design.pages.home.composerWidth = stored as never

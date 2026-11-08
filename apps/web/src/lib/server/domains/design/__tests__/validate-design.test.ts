@@ -5,15 +5,19 @@
  */
 import { describe, expect, it } from 'vitest'
 import { defaultDesign } from '@/lib/shared/design/schema'
+import { asFormat2 } from '@/lib/shared/design/__tests__/format2'
 import { validateDesign } from '../validate-design'
 import { isValidWords } from '@/lib/shared/design/words-schema'
 
 describe('validateDesign', () => {
   it('takes a design that still has its words, without them', () => {
-    const doc = { ...defaultDesign(), vocabulary: { post: 'suggestion', board: 'category' } }
+    const doc = asFormat2({
+      ...defaultDesign(),
+      vocabulary: { post: 'suggestion', board: 'category' },
+    })
     const valid = validateDesign(doc)
     expect(valid).not.toHaveProperty('vocabulary')
-    expect(valid.brand).toEqual(defaultDesign().brand)
+    expect(valid).toEqual(defaultDesign())
   })
 
   it('refuses any other key it does not know', () => {

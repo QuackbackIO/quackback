@@ -189,7 +189,7 @@ export function HeaderPanel({
             />
           </PropertyRow>
         )}
-        {layout.band !== 'none' && (
+        {layout.hero !== 'none' && (
           <PropertyRow
             label={FIND.headerBlend.label}
             find={FIND.headerBlend.id}
@@ -198,11 +198,11 @@ export function HeaderPanel({
             <Switch
               id={`${id}-blend`}
               aria-label="Header blends into the hero"
-              checked={layout.headerOnBand === true}
+              checked={layout.headerOnHero === true}
               onCheckedChange={(on) =>
                 update((draft) => {
-                  if (on) draft.layout.headerOnBand = true
-                  else delete draft.layout.headerOnBand
+                  if (on) draft.layout.headerOnHero = true
+                  else delete draft.layout.headerOnHero
                 }, 'Header blends into the hero')
               }
             />

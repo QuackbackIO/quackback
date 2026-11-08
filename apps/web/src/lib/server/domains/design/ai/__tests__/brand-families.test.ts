@@ -75,11 +75,11 @@ describe('hero family', () => {
       heroChanges({ hero: ruleHero(EVIDENCE)!, layout: CENTRED, hasBandImage: false })
     )
     expect(out).toMatchObject({
-      'layout.band': 'support',
-      'layout.bandShape': 'full',
-      'layout.headerOnBand': true,
-      'layout.bandAlign': 'centre',
-      'layout.bandHeight': 'roomy',
+      'layout.hero': 'support',
+      'layout.heroShape': 'full',
+      'layout.headerOnHero': true,
+      'layout.heroAlign': 'centre',
+      'layout.heroHeight': 'roomy',
     })
     expect(out['layout.imagePlace']).toBeUndefined()
   })
@@ -101,14 +101,14 @@ describe('hero family', () => {
       glow: null,
       glowFill: null,
       art: 'none',
-      headerOnBand: false,
+      headerOnHero: false,
       picture: 'side',
       fill: null,
       by: 'rule',
       why: 'a photo hero',
     }
     const withImage = values(heroChanges({ hero, layout: UNSEEN, hasBandImage: true }))
-    expect(withImage).toMatchObject({ 'layout.bandShape': 'panel', 'layout.imagePlace': 'side' })
+    expect(withImage).toMatchObject({ 'layout.heroShape': 'panel', 'layout.imagePlace': 'side' })
     expect(
       values(heroChanges({ hero, layout: UNSEEN, hasBandImage: false }))['layout.imagePlace']
     ).toBeUndefined()
@@ -120,11 +120,11 @@ describe('hero family', () => {
       })
     )
     expect(plain).toMatchObject({
-      'layout.band': 'none',
-      'layout.bandArt': 'none',
-      'layout.headerOnBand': false,
+      'layout.hero': 'none',
+      'layout.heroArt': 'none',
+      'layout.headerOnHero': false,
     })
-    expect(plain['layout.bandShape']).toBeUndefined()
+    expect(plain['layout.heroShape']).toBeUndefined()
     expect(plain['layout.imagePlace']).toBeUndefined()
   })
 
@@ -136,7 +136,7 @@ describe('hero family', () => {
         hasBandImage: false,
       })
     )
-    expect(out['layout.band']).toBe('none')
+    expect(out['layout.hero']).toBe('none')
   })
 })
 
@@ -149,7 +149,7 @@ describe('a hero that can be drawn', () => {
     glow: null,
     glowFill: null,
     art: 'none',
-    headerOnBand: false,
+    headerOnHero: false,
     picture: 'side',
     fill: null,
     by: 'rule',
@@ -163,10 +163,10 @@ describe('a hero that can be drawn', () => {
 
   it('centres a panel whose picture the design does not have, so no half of the band is empty', () => {
     const out = values(heroChanges({ hero: PANEL, layout: LEFT, hasBandImage: false }))
-    expect(out).toMatchObject({ 'layout.bandShape': 'panel', 'layout.bandAlign': 'centre' })
+    expect(out).toMatchObject({ 'layout.heroShape': 'panel', 'layout.heroAlign': 'centre' })
     // With the picture, the words keep the site's side.
     expect(values(heroChanges({ hero: PANEL, layout: LEFT, hasBandImage: true }))).toMatchObject({
-      'layout.bandAlign': 'left',
+      'layout.heroAlign': 'left',
     })
   })
 
@@ -212,7 +212,7 @@ describe('a hero that can be drawn', () => {
     )
     // The colours stay a blend, beside the words, before a flat band.
     expect(drawn.hero).toMatchObject({ band: 'blend', blend: 'mesh' })
-    expect(drawn.result.design.layout.band).toBe('blend')
+    expect(drawn.result.design.layout.hero).toBe('blend')
     expect(drawn.result.refused).toEqual([])
   })
 
@@ -222,11 +222,11 @@ describe('a hero that can be drawn', () => {
       values(heroChanges({ hero: dark, layout: UNSEEN, hasBandImage: false, extras: ['#39a7a4'] }))
     ).toMatchObject({
       'brand.light.extra': ['#39a7a4', '#0f2f35'],
-      'layout.bandColour': 'extra2',
+      'layout.heroColour': 'extra2',
     })
     expect(values(heroChanges({ hero: dark, layout: UNSEEN, hasBandImage: false }))).toMatchObject({
       'brand.light.extra': ['#0f2f35'],
-      'layout.bandColour': 'extra1',
+      'layout.heroColour': 'extra1',
     })
     // With two logo colours already, the band's takes the second place.
     expect(
@@ -238,10 +238,10 @@ describe('a hero that can be drawn', () => {
           extras: ['#111111', '#222222'],
         })
       )
-    ).toMatchObject({ 'brand.light.extra': ['#111111', '#0f2f35'], 'layout.bandColour': 'extra2' })
+    ).toMatchObject({ 'brand.light.extra': ['#111111', '#0f2f35'], 'layout.heroColour': 'extra2' })
     // Without one, a colour left from a design before goes.
     expect(
-      values(heroChanges({ hero: PANEL, layout: UNSEEN, hasBandImage: false }))['layout.bandColour']
+      values(heroChanges({ hero: PANEL, layout: UNSEEN, hasBandImage: false }))['layout.heroColour']
     ).toBeNull()
   })
 
@@ -257,28 +257,28 @@ describe('a hero that can be drawn', () => {
       values(heroChanges({ hero, layout: UNSEEN, hasBandImage: false, extras }))
     // A colour of the design's close to the glow's draws it.
     expect(run(['#fbdc9c'])).toMatchObject({
-      'layout.bandGlow': 'bottom',
-      'layout.bandGlowColour': 'extra1',
-      'layout.bandShape': 'inset',
+      'layout.heroGlow': 'bottom',
+      'layout.heroGlowColour': 'extra1',
+      'layout.heroShape': 'inset',
     })
     // Else the glow's colour joins the extra colours, after the logo's.
     expect(run(['#fc9912'])).toMatchObject({
       'brand.light.extra': ['#fc9912', '#fbde9a'],
-      'layout.bandGlowColour': 'extra2',
+      'layout.heroGlowColour': 'extra2',
     })
     // With both places taken, the glow is a light of the band's own colour.
-    expect(run(['#111111', '#222222'])).toMatchObject({ 'layout.bandGlowColour': null })
+    expect(run(['#111111', '#222222'])).toMatchObject({ 'layout.heroGlowColour': null })
     expect(run(['#111111', '#222222'])).not.toHaveProperty('brand.light.extra')
     // A band in a measured colour keeps its place; the glow takes the one after.
     expect(run(['#fc9912'], { ...lit, fill: '#0f2f35' })).toMatchObject({
       'brand.light.extra': ['#fc9912', '#0f2f35'],
-      'layout.bandColour': 'extra2',
-      'layout.bandGlowColour': null,
+      'layout.heroColour': 'extra2',
+      'layout.heroGlowColour': null,
     })
     // No glow measured: one left from a design before goes.
     expect(run(['#fc9912'], PANEL)).toMatchObject({
-      'layout.bandGlow': null,
-      'layout.bandGlowColour': null,
+      'layout.heroGlow': null,
+      'layout.heroGlowColour': null,
     })
   })
 
@@ -294,7 +294,7 @@ describe('a hero that can be drawn', () => {
       'site'
     )
     expect(out.refused).toEqual([])
-    expect(out.design.layout).toMatchObject({ band: 'brand', bandColour: 'extra1' })
+    expect(out.design.layout).toMatchObject({ hero: 'brand', heroColour: 'extra1' })
     expect(out.design.brand.light.extra).toEqual(['#0f2f35'])
   })
 })
@@ -426,13 +426,13 @@ describe('rules after the families', () => {
         values(
           reconcile([
             { path: 'brand.light.support', value: '#ff7a59', why: 'a' },
-            { path: 'layout.band', value: band, why: 'b' },
+            { path: 'layout.hero', value: band, why: 'b' },
           ])
         )['layout.pageTitles'],
         band
       ).toBe('band')
     expect(
-      values(reconcile([{ path: 'layout.band', value: 'none', why: 'b' }]))['layout.pageTitles']
+      values(reconcile([{ path: 'layout.hero', value: 'none', why: 'b' }]))['layout.pageTitles']
     ).toBe('plain')
     expect(
       values(reconcile([{ path: 'brand.light.accent', value: '#000000', why: 'a' }]))
@@ -441,15 +441,15 @@ describe('rules after the families', () => {
 
   it('a second-colour hero, action or tint needs a second colour', () => {
     const out = reconcile([
-      { path: 'layout.band', value: 'support', why: 'a' },
+      { path: 'layout.hero', value: 'support', why: 'a' },
       { path: 'shape.action', value: 'support', why: 'b' },
       { path: 'layout.tint', value: 'support', why: 'c' },
-      { path: 'layout.headerOnBand', value: true, why: 'd' },
+      { path: 'layout.headerOnHero', value: true, why: 'd' },
     ])
     expect(values(out)).toEqual({
-      'layout.band': 'brand',
+      'layout.hero': 'brand',
       'layout.tint': 'neutral',
-      'layout.headerOnBand': true,
+      'layout.headerOnHero': true,
       'layout.pageTitles': 'band',
     })
   })
@@ -457,19 +457,19 @@ describe('rules after the families', () => {
   it('no shared header or art on a plain hero; a later change to a field wins', () => {
     const out = reconcile([
       { path: 'brand.light.support', value: '#ff7a59', why: 'a' },
-      { path: 'layout.band', value: 'brand', why: 'b' },
-      { path: 'layout.headerOnBand', value: true, why: 'c' },
-      { path: 'layout.bandArt', value: 'waves', why: 'd' },
-      { path: 'layout.band', value: 'none', why: 'e' },
+      { path: 'layout.hero', value: 'brand', why: 'b' },
+      { path: 'layout.headerOnHero', value: true, why: 'c' },
+      { path: 'layout.heroArt', value: 'waves', why: 'd' },
+      { path: 'layout.hero', value: 'none', why: 'e' },
     ])
     expect(out.map((c) => c.path)).toEqual([
       'brand.light.support',
-      'layout.headerOnBand',
-      'layout.bandArt',
-      'layout.band',
+      'layout.headerOnHero',
+      'layout.heroArt',
+      'layout.hero',
       'layout.pageTitles',
     ])
-    expect(values(out)).toMatchObject({ 'layout.headerOnBand': false, 'layout.bandArt': 'none' })
+    expect(values(out)).toMatchObject({ 'layout.headerOnHero': false, 'layout.heroArt': 'none' })
   })
 
   it('keeps the headline’s settled face and sets body text in Inter, not Inter Tight', () => {

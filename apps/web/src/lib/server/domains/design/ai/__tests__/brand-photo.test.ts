@@ -245,7 +245,7 @@ describe('a brand match on a site that leads with a photo', { timeout: 60_000 },
     expect(stored.map((s) => s.name).sort()).toEqual(['hero-source.jpg', 'hero.jpg'])
     const crop = decodeJpeg(stored.find((s) => s.name === 'hero.jpg')!.bytes)
     expect(crop.width).toBeGreaterThan(2000)
-    const image = at(result, 'brand.bandImage')?.after as Record<string, unknown>
+    const image = at(result, 'brand.heroImage')?.after as Record<string, unknown>
     expect(image).toMatchObject({
       key: 'portal-images/2026/11/hero.jpg',
       alt: 'A mountain lake at dawn',
@@ -253,7 +253,7 @@ describe('a brand match on a site that leads with a photo', { timeout: 60_000 },
     })
     expect((image.shade as { tone: string }).tone).toMatch(/dark|light/)
     expect(at(result, 'layout.imagePlace')?.after).toBe('cover')
-    expect(result.design.layout.band).not.toBe('none')
+    expect(result.design.layout.hero).not.toBe('none')
     expect(result.design.layout.imagePoint).toBeDefined()
     // The words reach 4.5:1 on the veiled photo: no readability problem left.
     expect(result.readability).toEqual([])
@@ -279,7 +279,7 @@ describe('a brand match on a site that leads with a photo', { timeout: 60_000 },
   it('offers a photo, without storing one, when the photo is too small to show', async () => {
     const { result, stored } = await match([600, 200, 1000, 520], 'photo')
     expect(stored).toEqual([])
-    expect(at(result, 'brand.bandImage')).toBeUndefined()
+    expect(at(result, 'brand.heroImage')).toBeUndefined()
     expect(result.chips).toContain(MATCH_BRAND.addHeroPhoto)
     expect(result.notes.join(' ')).toMatch(/leads with a photo/)
   })
@@ -326,15 +326,15 @@ describe('photoChanges', () => {
   it('sets the image behind the words on a full coloured band, on Home only, the header its own', () => {
     const changes = photoChanges({ led: true, plan, quality: null, placed }, 'none')
     const value = (path: string) => changes.find((c) => c.path === path)?.value
-    expect(value('layout.band')).toBe('brand')
-    expect(value('layout.bandShape')).toBe('full')
+    expect(value('layout.hero')).toBe('brand')
+    expect(value('layout.heroShape')).toBe('full')
     // On Home only: the other pages' heroes stay short and the picture does not repeat; the
     // header keeps its own colour on them, so it is not drawn on the photo.
-    expect(value('brand.bandImage')).toMatchObject({ homeOnly: true })
-    expect(value('layout.headerOnBand')).toBe(false)
+    expect(value('brand.heroImage')).toMatchObject({ homeOnly: true })
+    expect(value('layout.headerOnHero')).toBe(false)
     expect(value('layout.imageFocus')).toBe('right')
     expect(value('layout.imagePoint')).toEqual({ x: 80, y: 40 })
-    expect(changes.find((c) => c.path === 'brand.bandImage')?.why).toMatch(
+    expect(changes.find((c) => c.path === 'brand.heroImage')?.why).toMatch(
       /replace it with the original/
     )
   })
@@ -356,7 +356,7 @@ describe('a photo an earlier match cut from another screenshot', () => {
       had
     )
     expect(changes.map((c) => [c.path, c.value])).toEqual([
-      ['brand.bandImage', null],
+      ['brand.heroImage', null],
       ['layout.imagePoint', null],
       ['layout.imageFocus', null],
     ])

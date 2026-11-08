@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mode": "light",
   "brand": {
     "light": {
@@ -35,7 +35,7 @@
       "display": "mark_and_name",
       "name": "Juniper"
     },
-    "bandImage": {
+    "heroImage": {
       "key": "portal-images/juniper-studio.jpg"
     },
     "favicon": {
@@ -50,8 +50,8 @@
   "layout": {
     "header": "centered",
     "nav": "underline",
-    "band": "brand",
-    "bandShape": "split",
+    "hero": "brand",
+    "heroShape": "split",
     "imagePhone": "hide",
     "imagePoint": {
       "x": 40,
@@ -61,9 +61,9 @@
     "density": "spacious",
     "width": "default",
     "filters": "end",
-    "headerOnBand": true,
+    "headerOnHero": true,
     "status": "brand",
-    "bandArt": "hills",
+    "heroArt": "hills",
     "pageTitles": "band"
   },
   "pages": {

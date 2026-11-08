@@ -32,9 +32,9 @@ const { AskAiPanel } = await import('@/components/admin/settings/appearance/ask-
 
 const fromShot = (): PortalDesign => {
   const d = defaultDesign()
-  d.layout.band = 'brand'
+  d.layout.hero = 'brand'
   d.layout.imagePlace = 'cover'
-  d.brand.bandImage = {
+  d.brand.heroImage = {
     key: 'portal-images/hero.jpg',
     alt: 'A lake',
     screenshot: { key: 'portal-images/hero-source.jpg', box: { x: 0, y: 0, w: 1, h: 0.7 } },
@@ -116,12 +116,12 @@ describe('a hero photo cut from a screenshot, in the hero’s panel', () => {
     const save = await screen.findByRole('button', { name: MATCH_BRAND.save })
     await waitFor(() => expect((save as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(save)
-    await waitFor(() => expect(seen.design.brand.bandImage?.key).toBe('portal-images/recrop.jpg'))
+    await waitFor(() => expect(seen.design.brand.heroImage?.key).toBe('portal-images/recrop.jpg'))
     expect(uploads.cropped).toEqual([
       { url: '/api/storage/portal-images/hero-source.jpg', box: { x: 0, y: 0, w: 1, h: 0.7 } },
     ])
     // Still from the screenshot, its description kept.
-    expect(seen.design.brand.bandImage).toMatchObject({
+    expect(seen.design.brand.heroImage).toMatchObject({
       alt: 'A lake',
       screenshot: { key: 'portal-images/hero-source.jpg' },
     })
@@ -131,8 +131,8 @@ describe('a hero photo cut from a screenshot, in the hero’s panel', () => {
   it('drops the old crop’s smaller copies, which would draw the old picture', async () => {
     vi.stubGlobal('Image', LoadedImage)
     const start = fromShot()
-    start.brand.bandImage = {
-      ...start.brand.bandImage!,
+    start.brand.heroImage = {
+      ...start.brand.heroImage!,
       width: 1600,
       variants: [{ key: 'portal-images/hero-640.webp', w: 640 }],
     }
@@ -141,9 +141,9 @@ describe('a hero photo cut from a screenshot, in the hero’s panel', () => {
     const save = await screen.findByRole('button', { name: MATCH_BRAND.save })
     await waitFor(() => expect((save as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(save)
-    await waitFor(() => expect(seen.design.brand.bandImage?.key).toBe('portal-images/recrop.jpg'))
-    expect(seen.design.brand.bandImage).not.toHaveProperty('variants')
-    expect(seen.design.brand.bandImage).not.toHaveProperty('width')
+    await waitFor(() => expect(seen.design.brand.heroImage?.key).toBe('portal-images/recrop.jpg'))
+    expect(seen.design.brand.heroImage).not.toHaveProperty('variants')
+    expect(seen.design.brand.heroImage).not.toHaveProperty('width')
   })
 
   it('is no longer marked once the original replaces it', async () => {
@@ -151,19 +151,19 @@ describe('a hero photo cut from a screenshot, in the hero’s panel', () => {
     const file = new File(['x'], 'original.jpg', { type: 'image/jpeg' })
     fireEvent.change(screen.getByLabelText('Replace'), { target: { files: [file] } })
     await waitFor(() =>
-      expect(seen.design.brand.bandImage).toEqual({ key: 'portal-images/original.jpg' })
+      expect(seen.design.brand.heroImage).toEqual({ key: 'portal-images/original.jpg' })
     )
     expect(screen.queryByRole('button', { name: MATCH_BRAND.adjustCrop })).toBeNull()
   })
 
   it('shows on Home only, or on every page again', () => {
     const start = fromShot()
-    start.brand.bandImage!.homeOnly = true
+    start.brand.heroImage!.homeOnly = true
     const seen = show(start)
     fireEvent.click(screen.getByRole('button', { name: 'Reset to every page' }))
-    expect(seen.design.brand.bandImage).not.toHaveProperty('homeOnly')
+    expect(seen.design.brand.heroImage).not.toHaveProperty('homeOnly')
     // Its crop and description stay.
-    expect(seen.design.brand.bandImage).toMatchObject({
+    expect(seen.design.brand.heroImage).toMatchObject({
       key: 'portal-images/hero.jpg',
       alt: 'A lake',
     })
@@ -172,7 +172,7 @@ describe('a hero photo cut from a screenshot, in the hero’s panel', () => {
   it('is removed like any image', () => {
     const seen = show(fromShot())
     fireEvent.click(screen.getByRole('button', { name: 'Remove image' }))
-    expect(seen.design.brand.bandImage).toBeUndefined()
+    expect(seen.design.brand.heroImage).toBeUndefined()
   })
 })
 
@@ -182,7 +182,7 @@ describe('Add a hero photo', () => {
     const file = new File(['x'], 'team.jpg', { type: 'image/jpeg' })
     fireEvent.change(screen.getByLabelText(MATCH_BRAND.addHeroPhoto), { target: { files: [file] } })
     await waitFor(() =>
-      expect(seen.design.brand.bandImage).toEqual({ key: 'portal-images/team.jpg' })
+      expect(seen.design.brand.heroImage).toEqual({ key: 'portal-images/team.jpg' })
     )
   })
 

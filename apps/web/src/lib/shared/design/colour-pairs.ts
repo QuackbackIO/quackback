@@ -130,7 +130,7 @@ export function colourPairs(doc: PortalDesign): ColourPair[] {
       pairs.push(pair(mode, 'Subtitle', 'the hero', subtitle, band.background, target))
     }
     const bandRing = tokens['--qb-band-focus']
-    if (doc.layout.band !== 'none' && bandRing) {
+    if (doc.layout.hero !== 'none' && bandRing) {
       // Where it reads worst, such as the foot of a fade.
       const behind = headlineBehind(doc, vars, mode).reduce((worst, each) =>
         contrastRatio(bandRing, each) < contrastRatio(bandRing, worst) ? each : worst
@@ -138,7 +138,7 @@ export function colourPairs(doc: PortalDesign): ColourPair[] {
       pairs.push(pair(mode, 'The focus ring', 'the hero', bandRing, behind, 3))
     }
     const header = tokens['--qb-header-bg']
-    if (doc.layout.headerOnBand && header && tokens['--qb-header-focus'])
+    if (doc.layout.headerOnHero && header && tokens['--qb-header-focus'])
       pairs.push(pair(mode, 'The focus ring', 'the header', tokens['--qb-header-focus'], header, 3))
     pairs.push(...surfacePairs(doc, vars, mode), ...tonePairs(doc, vars, mode))
   }

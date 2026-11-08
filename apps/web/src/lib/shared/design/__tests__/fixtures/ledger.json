@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mode": "light",
   "brand": {
     "light": {
@@ -44,7 +44,7 @@
       "key": "fixtures/ledger/favicon.png"
     },
     "shareImage": null,
-    "bandImage": {
+    "heroImage": {
       "key": "portal-images/ledger-skyline.png"
     }
   },
@@ -55,16 +55,16 @@
   "layout": {
     "header": "stacked",
     "nav": "tabs",
-    "band": "tint",
-    "bandColour": "extra1",
+    "hero": "tint",
+    "heroColour": "extra1",
     "cards": "bordered",
     "density": "comfortable",
     "width": "narrow",
     "filters": "end",
     "imagePlace": "edge",
-    "bandArt": "grid",
+    "heroArt": "grid",
     "imageFocus": "centre",
-    "bandHeight": "compact"
+    "heroHeight": "compact"
   },
   "pages": {
     "home": {

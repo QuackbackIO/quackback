@@ -42,7 +42,7 @@ const designs: Array<{ name: string; doc: PortalDesign }> = [
 const banded = designs.flatMap(({ name, doc }) =>
   (['brand', 'blend', 'tint'] as const).map((band) => ({
     name: `${name}, ${band} band with the header on it`,
-    doc: { ...doc, layout: { ...doc.layout, band, headerOnBand: true } } as PortalDesign,
+    doc: { ...doc, layout: { ...doc.layout, band, headerOnHero: true } } as PortalDesign,
   }))
 )
 
@@ -76,7 +76,7 @@ describe('the visitor’s focus ring', () => {
     const design = defaultDesign()
     design.mode = 'light'
     design.brand.light.accent = '#14532d'
-    design.layout.band = 'brand'
+    design.layout.hero = 'brand'
     const resolved = resolveDesign(design)
     const band = headlineBehind(design, resolved.light!, 'light')[0]!
     expect(ratio(resolved.light!.ring, band)).toBeLessThan(3)

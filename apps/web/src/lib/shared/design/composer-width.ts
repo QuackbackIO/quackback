@@ -63,8 +63,8 @@ export function composerSetting(design: PortalDesign): ComposerSetting {
   return {
     // DESIGN_DEFAULTS.layout.imagePlace, written here (a test holds them equal): importing
     // defaults.ts would split this module into one more script on every portal page.
-    side: !!design.brand.bandImage && (layout.imagePlace ?? IMAGE_PLACE_DEFAULT) === 'side',
-    centred: (layout.bandAlign ?? (layout.header === 'centered' ? 'centre' : 'left')) === 'centre',
+    side: !!design.brand.heroImage && (layout.imagePlace ?? IMAGE_PLACE_DEFAULT) === 'side',
+    centred: (layout.heroAlign ?? (layout.header === 'centered' ? 'centre' : 'left')) === 'centre',
   }
 }
 

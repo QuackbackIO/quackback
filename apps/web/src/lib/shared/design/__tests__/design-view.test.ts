@@ -153,7 +153,7 @@ describe('designView', () => {
   it('carries the band image and where it sits, beside the words unless it says', () => {
     const doc = defaultDesign()
     expect(designView(doc, 1).bandImage).toBeNull()
-    doc.brand.bandImage = { key: 'portal-images/room.jpg' }
+    doc.brand.heroImage = { key: 'portal-images/room.jpg' }
     expect(designView(doc, 1).bandImage).toEqual({
       url: '/api/storage/portal-images/room.jpg',
       place: 'side',
@@ -164,9 +164,9 @@ describe('designView', () => {
 
   it('says when the band image is Home’s only and when its words sit on a measured veil', () => {
     const doc = defaultDesign()
-    doc.layout.band = 'brand'
+    doc.layout.hero = 'brand'
     doc.layout.imagePlace = 'cover'
-    doc.brand.bandImage = {
+    doc.brand.heroImage = {
       key: 'portal-images/room.jpg',
       homeOnly: true,
       shade: { tone: 'dark', strength: 40, under: '#333333' },
@@ -178,15 +178,15 @@ describe('designView', () => {
 
   it('describes the band image for those who cannot see it, unless it is decoration', () => {
     const doc = defaultDesign()
-    doc.brand.bandImage = { key: 'portal-images/room.jpg', alt: 'Our team at work' }
+    doc.brand.heroImage = { key: 'portal-images/room.jpg', alt: 'Our team at work' }
     expect(designView(doc, 1).bandImage?.alt).toBe('Our team at work')
-    doc.brand.bandImage.decorative = true
+    doc.brand.heroImage.decorative = true
     expect(designView(doc, 1).bandImage).not.toHaveProperty('alt')
   })
 
   it('offers the smaller copies made on upload as a srcset, the full image last', () => {
     const doc = defaultDesign()
-    doc.brand.bandImage = {
+    doc.brand.heroImage = {
       key: 'portal-images/room.webp',
       width: 2560,
       variants: [
@@ -203,10 +203,10 @@ describe('designView', () => {
 
   it('leaves an image stored before copies were made as the one file it is', () => {
     const doc = defaultDesign()
-    doc.brand.bandImage = { key: 'portal-images/room.jpg' }
+    doc.brand.heroImage = { key: 'portal-images/room.jpg' }
     expect(designView(doc, 1).bandImage).not.toHaveProperty('srcSet')
     // Copies without the full image's width still lead to it, which the browser cannot size.
-    doc.brand.bandImage = {
+    doc.brand.heroImage = {
       key: 'portal-images/room.jpg',
       variants: [{ key: 'portal-images/room-640.webp', w: 640 }],
     }

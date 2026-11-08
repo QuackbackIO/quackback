@@ -39,7 +39,7 @@ describe('lookDesign', () => {
           headingWeight: 700,
         },
       },
-      layout: { band: 'brand', cards: 'bordered', nav: 'pills', header: 'inline' },
+      layout: { hero: 'brand', cards: 'bordered', nav: 'pills', header: 'inline' },
       nav: { home: { on: true, tab: true } },
     })
     expect(design).not.toHaveProperty('vocabulary')
@@ -125,7 +125,7 @@ describe('lookDesign', () => {
   it('sets the look’s type, band, buttons and Home composer', () => {
     const { design } = lookDesign(defaultDesign(), DIRECTIONS_EXAMPLE, allows)
     expect(design.brand.fonts).toMatchObject({ scale: 'large', tracking: 'tight' })
-    expect(design.layout).toMatchObject({ band: 'brand', bandShape: 'full', headerOnBand: false })
+    expect(design.layout).toMatchObject({ hero: 'brand', heroShape: 'full', headerOnHero: false })
     // A look leaves the logo as the draft has it: an icon and a title.
     expect(design.brand.logo.display).toBe('mark_and_name')
     expect(design.pages.home.composer).toBe('band')
@@ -135,7 +135,7 @@ describe('lookDesign', () => {
     const look = { ...DIRECTIONS_EXAMPLE, status: 'brand' } as const
     const { design } = lookDesign(defaultDesign(), look, allows)
     expect(design.layout.status).toBe('colour')
-    expect(design.brand.bandImage).toBeUndefined()
+    expect(design.brand.heroImage).toBeUndefined()
   })
 
   it('sets an accent phrase apart only where the headline holds it', () => {
@@ -160,13 +160,13 @@ describe('lookDesign', () => {
       accent: '#533afd',
       background: '#ffffff',
       support: '#ff7a59',
-      band: 'blend',
+      hero: 'blend',
       blend: 'mesh',
     } as const
     const { design, refused } = lookDesign(defaultDesign(), look, allows)
     expect(refused).toEqual([])
     expect(design.brand.light.support).toBe('#ff7a59')
-    expect(design.layout).toMatchObject({ band: 'blend', blend: 'mesh' })
+    expect(design.layout).toMatchObject({ hero: 'blend', blend: 'mesh' })
     expect(
       lookDesign(defaultDesign(), DIRECTIONS_EXAMPLE, allows).design.layout.blend
     ).toBeUndefined()
@@ -217,8 +217,8 @@ describe('a look’s finishing choices', () => {
   it('sets band art, headline colour and the second colour at work', () => {
     const look = {
       ...DIRECTIONS_EXAMPLE,
-      band: 'tint',
-      bandArt: 'hills',
+      hero: 'tint',
+      heroArt: 'hills',
       headlineColour: 'accent',
       support: '#c6ff3d',
       tint: 'support',
@@ -226,7 +226,7 @@ describe('a look’s finishing choices', () => {
     } as const
     const { design, refused } = lookDesign(defaultDesign(), look, allows)
     expect(refused).toEqual([])
-    expect(design.layout).toMatchObject({ bandArt: 'hills', tint: 'support' })
+    expect(design.layout).toMatchObject({ heroArt: 'hills', tint: 'support' })
     expect(design.shape.action).toBe('support')
     expect(design.brand.fonts.headlineColour).toBe('accent')
   })

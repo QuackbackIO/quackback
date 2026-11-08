@@ -289,12 +289,12 @@ export function heroChanges(input: {
   const why = hero.why
   const out: Change[] = []
   if (hero.blend) out.push(change('layout.blend', hero.blend, why))
-  out.push(change('layout.band', hero.band, why))
+  out.push(change('layout.hero', hero.band, why))
   out.push(...heroColourChanges(hero, input.extras))
   const coloured = hero.band === 'brand' || hero.band === 'support' || hero.band === 'blend'
-  if (coloured) out.push(change('layout.bandShape', hero.shape, why))
-  out.push(change('layout.bandArt', hero.band === 'none' ? 'none' : hero.art, why))
-  out.push(change('layout.headerOnBand', coloured && hero.headerOnBand, why))
+  if (coloured) out.push(change('layout.heroShape', hero.shape, why))
+  out.push(change('layout.heroArt', hero.band === 'none' ? 'none' : hero.art, why))
+  out.push(change('layout.headerOnHero', coloured && hero.headerOnHero, why))
   // A panel beside a picture the design lacks would leave half the band empty: centre it.
   const lone = coloured && hero.shape === 'panel' && !input.hasBandImage
   const centre = lone && (hero.picture !== null || layout.picture !== null)
@@ -302,9 +302,9 @@ export function heroChanges(input: {
   const alignWhy = centre
     ? 'the site’s picture is not in the design, so the panel is centred'
     : null
-  if (align) out.push(change('layout.bandAlign', align, alignWhy ?? layout.why.align ?? 'measured'))
+  if (align) out.push(change('layout.heroAlign', align, alignWhy ?? layout.why.align ?? 'measured'))
   if (layout.height && hero.band !== 'none')
-    out.push(change('layout.bandHeight', layout.height, layout.why.height ?? 'measured'))
+    out.push(change('layout.heroHeight', layout.height, layout.why.height ?? 'measured'))
   // A picture's place only matters for a hero that has one; none is taken from screenshots.
   // Where the site's picture sits is measured; a set-in band keeps it beside the words.
   const measured = layout.picture
@@ -455,13 +455,13 @@ export function reconcile(changes: readonly Change[]): Change[] {
   const value = (path: string) => last.get(path)?.value
   const support = value('brand.light.support')
   if (!support) {
-    if (value('layout.band') === 'support')
-      last.set('layout.band', { ...last.get('layout.band')!, value: 'brand' })
+    if (value('layout.hero') === 'support')
+      last.set('layout.hero', { ...last.get('layout.hero')!, value: 'brand' })
     if (value('shape.action') === 'support') last.delete('shape.action')
     if (value('layout.tint') === 'support')
       last.set('layout.tint', { ...last.get('layout.tint')!, value: 'neutral' })
   }
-  const band = value('layout.band')
+  const band = value('layout.hero')
   // The other pages open as Home does: on the band when Home has a coloured
   // hero, on a plain title when it has none (as every approved goal design).
   if (typeof band === 'string')
@@ -474,10 +474,10 @@ export function reconcile(changes: readonly Change[]): Change[] {
           : 'the other pages open on the band, as Home does',
     })
   if (band === 'none' || band === 'tint' || band === 'fade') {
-    if (last.has('layout.headerOnBand'))
-      last.set('layout.headerOnBand', { ...last.get('layout.headerOnBand')!, value: false })
-    if (last.has('layout.bandArt') && band === 'none')
-      last.set('layout.bandArt', { ...last.get('layout.bandArt')!, value: 'none' })
+    if (last.has('layout.headerOnHero'))
+      last.set('layout.headerOnHero', { ...last.get('layout.headerOnHero')!, value: false })
+    if (last.has('layout.heroArt') && band === 'none')
+      last.set('layout.heroArt', { ...last.get('layout.heroArt')!, value: 'none' })
   }
   const action = heroActionChange([...last.values()])
   if (action) last.set('shape.action', action)

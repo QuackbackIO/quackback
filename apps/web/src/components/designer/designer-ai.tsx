@@ -39,7 +39,7 @@ export function aiScopeOf(selection: Selection | null): {
     site: 'brand',
     header: 'header',
     logo: 'logo',
-    // The hero's fields are stored under its older name, band.
+    // The AI's scope for the hero keeps its older name, band.
     hero: 'band',
     welcome: 'welcome',
     // The composer's words are the feed's.

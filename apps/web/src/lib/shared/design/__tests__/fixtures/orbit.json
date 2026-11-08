@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mode": "dark",
   "brand": {
     "light": {
@@ -56,7 +56,7 @@
   "layout": {
     "header": "inline",
     "nav": "pills",
-    "band": "blend",
+    "hero": "blend",
     "blend": "ribbon",
     "cards": "raised",
     "density": "comfortable",
@@ -64,7 +64,7 @@
     "filters": "end",
     "status": "pill",
     "tint": "neutral",
-    "bandArt": "none"
+    "heroArt": "none"
   },
   "pages": {
     "home": {

@@ -73,7 +73,7 @@ describe('pageTree', () => {
       ['Subtitle', 'hero', 'hero.roadmap.subtitle'],
     ])
     const withImage = tree('roadmap', (draft) => {
-      draft.brand.bandImage = { key: 'band.png' }
+      draft.brand.heroImage = { key: 'band.png' }
     })
     expect(find(withImage.rows, 'hero')!.children?.map((row) => row.label)).toContain('Image')
   })

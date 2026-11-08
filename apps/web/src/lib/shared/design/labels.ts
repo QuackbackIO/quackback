@@ -38,7 +38,7 @@ const LABELS: Record<string, string> = {
   'brand.dark.support': 'Dark second colour',
   'brand.light.extra': 'Extra colours',
   'brand.dark.extra': 'Dark extra colours',
-  'layout.bandColour': 'Hero colour',
+  'layout.heroColour': 'Hero colour',
   'brand.fonts.scale': 'Headline size',
   'brand.fonts.tracking': 'Headline spacing',
   'brand.fonts.headlineCase': 'Headline capitals',
@@ -52,20 +52,20 @@ const LABELS: Record<string, string> = {
   'brand.fonts.headlineColour': 'Headline colour',
   'shape.action': 'Hero call to action colour',
   'layout.tint': 'Second colour tint',
-  'layout.bandArt': 'Hero art',
+  'layout.heroArt': 'Hero art',
   'layout.background': 'Page background',
   'layout.pageBackgrounds': 'A page’s own background',
   'layout.imageFocus': 'Hero image focus',
   'layout.imagePoint': 'Hero image focal point',
   'layout.imagePhone': 'Hero image on phones',
   'layout.blend': 'Hero blend',
-  'layout.bandAlign': 'Hero alignment',
-  'layout.bandShape': 'Hero shape',
-  'layout.bandHeight': 'Hero height',
+  'layout.heroAlign': 'Hero alignment',
+  'layout.heroShape': 'Hero shape',
+  'layout.heroHeight': 'Hero height',
   'layout.fadeFrom': 'Hero fade direction',
-  'layout.bandGlow': 'Hero glow',
-  'layout.bandGlowColour': 'Hero glow colour',
-  'layout.headerOnBand': 'Header blends into the hero',
+  'layout.heroGlow': 'Hero glow',
+  'layout.heroGlowColour': 'Hero glow colour',
+  'layout.headerOnHero': 'Header blends into the hero',
   'layout.imagePlace': 'Hero image placement',
   'layout.status': 'Status markers',
   'pages.home.composer': 'Home composer',
@@ -77,7 +77,7 @@ const LABELS: Record<string, string> = {
   'layout.header': 'Header',
   'layout.nav': 'Menu style',
   'layout.navText': 'Menu text',
-  'layout.band': 'Hero look',
+  'layout.hero': 'Hero look',
   'layout.cards': 'Cards',
   'layout.density': 'Density',
   'layout.width': 'Page width',
@@ -153,11 +153,11 @@ const IMAGES: Record<string, string> = {
   'brand.logo.wordmark.dark': 'Full logo on dark',
   'brand.favicon': 'Favicon',
   'brand.shareImage': 'Share image',
-  'brand.bandImage': 'Hero image',
+  'brand.heroImage': 'Hero image',
 }
 
 const IMAGE_PATH =
-  /^(brand\.(?:logo\.(?:mark|wordmark)\.(?:light|dark)|favicon|shareImage|bandImage))(?:\.|$)/
+  /^(brand\.(?:logo\.(?:mark|wordmark)\.(?:light|dark)|favicon|shareImage|heroImage))(?:\.|$)/
 
 /** Whether a path holds an uploaded image, whose value is a storage key no one should read. */
 export function isImageField(path: string): boolean {
@@ -266,10 +266,10 @@ export function alsoChanges(path: string): string | null {
 /** The parts of the portal a review groups its changes under, in the order they show. */
 const CHANGE_GROUPS: Array<[group: string, matches: RegExp]> = [
   ['Site styles', /^(mode|brand|shape|tune|layout\.(width|density|tint|cards|status|fill)|css)\b/],
-  ['Header and menu', /^(layout\.(header|nav|headerOnBand)|nav)\b/],
+  ['Header and menu', /^(layout\.(header|nav|headerOnHero)|nav)\b/],
   [
     'Hero',
-    /^(layout\.(band|blend|bandAlign|bandShape|bandHeight|fadeFrom|bandGlow|bandGlowColour|bandArt|imagePlace|imageFocus|pageTitles)|pages\.(feedback|home)\.headline|pages\.titles)\b/,
+    /^(layout\.(hero|blend|heroAlign|heroShape|heroHeight|fadeFrom|heroGlow|heroGlowColour|heroArt|imagePlace|imageFocus|pageTitles)|pages\.(feedback|home)\.headline|pages\.titles)\b/,
   ],
   ['Home', /^pages\.home\b/],
   ['Feedback page', /^(pages\.feedback|layout\.(filters|postCardHides))\b/],

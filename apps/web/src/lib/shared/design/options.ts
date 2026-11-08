@@ -41,29 +41,29 @@ export const DESIGN_OPTIONS = {
   /** The menu's other pages: in a softer grey, or in the text colour, as most brands' menus are. */
   navText: ['muted', 'ink'],
   /** `support` fills with the second brand colour; `blend` runs the two together. */
-  band: ['none', 'tint', 'fade', 'brand', 'support', 'blend'],
+  hero: ['none', 'tint', 'fade', 'brand', 'support', 'blend'],
   /** How a blend band runs: in a line, as a soft mesh beside the words, or as a diagonal ribbon beside them. */
   blend: ['linear', 'mesh', 'ribbon'],
   /** A colour of the brand's: the brand colour, the second, or one of up to two more. */
   /** The same list as content-html's COLOUR_ROLES (kept apart so neither loads the other). */
   colourRole: ['accent', 'support', 'extra1', 'extra2'],
   /** Where the band's words sit. */
-  bandAlign: ['left', 'centre'],
+  heroAlign: ['left', 'centre'],
   /**
    * The band across the page, as a rounded panel within it, with its words on
    * a panel, or as a panel split between the words and a side image.
    */
-  bandShape: ['full', 'inset', 'panel', 'split'],
+  heroShape: ['full', 'inset', 'panel', 'split'],
   /** How much room the band gives its words, top and bottom. */
-  bandHeight: ['compact', 'roomy', 'tall'],
+  heroHeight: ['compact', 'roomy', 'tall'],
   /** Where a fade band starts from: its top, or its foot. */
   fadeFrom: ['top', 'bottom'],
   /** A soft glow of light on a brand or second-colour band: none, rising from its foot, along its top, or in a corner. */
-  bandGlow: ['none', 'bottom', 'top', 'corner'],
+  heroGlow: ['none', 'bottom', 'top', 'corner'],
   /** Where the band's image sits: beside the words, along its bottom, behind them, or tiled. */
   imagePlace: ['side', 'edge', 'cover', 'pattern'],
   /** Quiet art drawn in the brand's colours, for a band without an image. */
-  bandArt: ['none', 'dots', 'grid', 'lines', 'waves', 'hills', 'petals', 'confetti'],
+  heroArt: ['none', 'dots', 'grid', 'lines', 'waves', 'hills', 'petals', 'confetti'],
   /** The band's image on phones: shown, or left off where a narrow crop would not read. */
   imagePhone: ['show', 'hide'],
   /** Where an image is cropped toward when it does not fit. */

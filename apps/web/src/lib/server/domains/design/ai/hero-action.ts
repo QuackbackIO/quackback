@@ -32,14 +32,14 @@ export function heroActionChange(changes: readonly BrandChange[]): BrandChange |
   const support = hex('brand.light.support')
   const role = (r: unknown) => (r === 'support' ? support : r === 'extra1' ? null : accent)
   // What the call to action sits on: a panel when the words have one, else the band's colour.
-  const band = at.get('layout.band')
+  const band = at.get('layout.hero')
   const surface =
-    at.get('layout.bandShape') === 'panel'
+    at.get('layout.heroShape') === 'panel'
       ? (support ?? '#ffffff')
       : band === 'support'
         ? support
         : band === 'brand'
-          ? role(at.get('layout.bandColour'))
+          ? role(at.get('layout.heroColour'))
           : null
   if (!surface) return null
   const action = at.get('shape.action')

@@ -7,7 +7,7 @@
 import type { PortalDesign } from './schema'
 
 /** A motif; `none` draws nothing. */
-export type BandArt = Exclude<NonNullable<PortalDesign['layout']['bandArt']>, 'none'>
+export type BandArt = Exclude<NonNullable<PortalDesign['layout']['heroArt']>, 'none'>
 
 /** Art that runs along the band's bottom; the rest tiles. */
 export const EDGE_ART: ReadonlySet<BandArt> = new Set(['hills', 'waves'])

@@ -141,13 +141,13 @@ describe('HeaderPanel', () => {
   })
 
   it('sets the layout and blends the header into the hero, each named for undo', () => {
-    const { seen } = show((draft) => void (draft.layout.band = 'brand'))
+    const { seen } = show((draft) => void (draft.layout.hero = 'brand'))
     fireEvent.click(screen.getByRole('radio', { name: 'Inline' }))
     expect(seen.design.layout.header).toBe('inline')
     fireEvent.click(screen.getByRole('switch', { name: 'Header blends into the hero' }))
-    expect(seen.design.layout.headerOnBand).toBe(true)
+    expect(seen.design.layout.headerOnHero).toBe(true)
     fireEvent.click(screen.getByRole('switch', { name: 'Header blends into the hero' }))
-    expect(seen.design.layout).not.toHaveProperty('headerOnBand')
+    expect(seen.design.layout).not.toHaveProperty('headerOnHero')
     expect(seen.labels).toEqual([
       'Header layout',
       'Header blends into the hero',
@@ -156,7 +156,7 @@ describe('HeaderPanel', () => {
   })
 
   it('has no blend into a hero that is plain', () => {
-    show((draft) => void (draft.layout.band = 'none'))
+    show((draft) => void (draft.layout.hero = 'none'))
     expect(screen.queryByRole('switch', { name: 'Header blends into the hero' })).toBeNull()
   })
 

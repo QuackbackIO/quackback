@@ -49,10 +49,10 @@ export function readableHero<R extends { refused: Array<{ path: string }> }>(
   applyWith: (hero: HeroDecision) => R
 ): { hero: HeroDecision; result: R } {
   const first = applyWith(hero)
-  if (!first.refused.some((r) => r.path === 'layout.band')) return { hero, result: first }
+  if (!first.refused.some((r) => r.path === 'layout.hero')) return { hero, result: first }
   for (const alt of heroFallbacks(hero)) {
     const result = applyWith(alt)
-    if (!result.refused.some((r) => r.path === 'layout.band')) return { hero: alt, result }
+    if (!result.refused.some((r) => r.path === 'layout.hero')) return { hero: alt, result }
   }
   return { hero, result: first }
 }

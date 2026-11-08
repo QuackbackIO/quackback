@@ -40,7 +40,7 @@ export const DESIGN_PRESETS: readonly DesignPreset[] = [
       layout: {
         header: 'stacked',
         nav: 'tabs',
-        band: 'none',
+        hero: 'none',
         cards: 'bordered',
         density: 'comfortable',
         width: 'default',
@@ -66,7 +66,7 @@ export const DESIGN_PRESETS: readonly DesignPreset[] = [
       layout: {
         header: 'stacked',
         nav: 'pills',
-        band: 'brand',
+        hero: 'brand',
         cards: 'raised',
         density: 'comfortable',
         width: 'default',
@@ -88,7 +88,7 @@ export const DESIGN_PRESETS: readonly DesignPreset[] = [
       layout: {
         header: 'stacked',
         nav: 'underline',
-        band: 'none',
+        hero: 'none',
         cards: 'list',
         density: 'spacious',
         width: 'narrow',
@@ -110,7 +110,7 @@ export const DESIGN_PRESETS: readonly DesignPreset[] = [
       layout: {
         header: 'stacked',
         nav: 'tabs',
-        band: 'tint',
+        hero: 'tint',
         cards: 'raised',
         density: 'spacious',
         width: 'default',
@@ -136,7 +136,7 @@ export const DESIGN_PRESETS: readonly DesignPreset[] = [
       layout: {
         header: 'stacked',
         nav: 'underline',
-        band: 'none',
+        hero: 'none',
         cards: 'list',
         density: 'compact',
         width: 'wide',
@@ -159,7 +159,7 @@ export const DESIGN_PRESETS: readonly DesignPreset[] = [
       layout: {
         header: 'stacked',
         nav: 'pills',
-        band: 'fade',
+        hero: 'fade',
         cards: 'raised',
         density: 'comfortable',
         width: 'default',
@@ -181,7 +181,7 @@ export const DESIGN_PRESETS: readonly DesignPreset[] = [
       layout: {
         header: 'stacked',
         nav: 'tabs',
-        band: 'tint',
+        hero: 'tint',
         cards: 'bordered',
         density: 'comfortable',
         width: 'narrow',
@@ -203,7 +203,7 @@ export const DESIGN_PRESETS: readonly DesignPreset[] = [
       layout: {
         header: 'stacked',
         nav: 'pills',
-        band: 'brand',
+        hero: 'brand',
         cards: 'raised',
         density: 'comfortable',
         width: 'wide',

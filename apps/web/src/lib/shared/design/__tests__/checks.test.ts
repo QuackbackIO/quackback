@@ -23,13 +23,13 @@ describe('designChecks', () => {
 
   it('flags a hero image until it is described or marked as decoration', () => {
     const design = defaultDesign()
-    design.brand.bandImage = { key: 'band.png' }
+    design.brand.heroImage = { key: 'band.png' }
     expect(designChecks(design).map((check) => check.part)).toEqual(['hero'])
-    design.brand.bandImage = { key: 'band.png', alt: '  ' }
+    design.brand.heroImage = { key: 'band.png', alt: '  ' }
     expect(designChecks(design)).toHaveLength(1)
-    design.brand.bandImage = { key: 'band.png', alt: 'Our team at work' }
+    design.brand.heroImage = { key: 'band.png', alt: 'Our team at work' }
     expect(designChecks(design)).toEqual([])
-    design.brand.bandImage = { key: 'band.png', decorative: true }
+    design.brand.heroImage = { key: 'band.png', decorative: true }
     expect(designChecks(design)).toEqual([])
     expect(portalDesign.safeParse(design).success).toBe(true)
   })

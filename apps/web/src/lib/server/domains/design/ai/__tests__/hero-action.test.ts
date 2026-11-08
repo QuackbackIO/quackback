@@ -23,8 +23,8 @@ describe('the hero’s call to action', () => {
       c('shape.fill', 'ink'),
       c('tune.button.fill', null),
       c('shape.action', null),
-      c('layout.band', 'support'),
-      c('layout.bandShape', 'inset'),
+      c('layout.hero', 'support'),
+      c('layout.heroShape', 'inset'),
     ]
     expect(heroActionChange(coralbank)?.value).toBe('accent')
     expect(actionOf(coralbank)?.value).toBe('accent')
@@ -37,8 +37,8 @@ describe('the hero’s call to action', () => {
       c('brand.light.support', '#fbdb04'),
       c('shape.fill', 'accent'),
       c('shape.action', 'support'),
-      c('layout.band', 'brand'),
-      c('layout.bandShape', 'panel'),
+      c('layout.hero', 'brand'),
+      c('layout.heroShape', 'panel'),
     ]
     expect(actionOf(hemla)?.value).toBe('accent')
   })
@@ -49,7 +49,7 @@ describe('the hero’s call to action', () => {
       c('brand.light.support', '#fd9330'),
       c('shape.fill', 'accent'),
       c('shape.action', null),
-      c('layout.band', 'blend'),
+      c('layout.hero', 'blend'),
     ]
     expect(heroActionChange(paylane)).toBeNull()
     expect(actionOf(paylane)?.value ?? null).toBeNull()
@@ -58,7 +58,7 @@ describe('the hero’s call to action', () => {
       c('brand.light.support', '#a7e479'),
       c('shape.fill', 'accent'),
       c('shape.action', null),
-      c('layout.band', 'support'),
+      c('layout.hero', 'support'),
     ]
     expect(heroActionChange(fernway)).toBeNull()
   })

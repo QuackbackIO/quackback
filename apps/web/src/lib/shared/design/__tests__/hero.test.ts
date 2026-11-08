@@ -64,14 +64,14 @@ describe('the hero in the registry', () => {
   it('lets the AI change the design fields its settings store, and only those of the hero', () => {
     expect(aiKeysOf('hero')).toEqual(HERO_AI_PATHS)
     for (const path of [
-      'layout.band',
-      'brand.bandImage',
-      'layout.bandArt',
-      'layout.bandColour',
-      'layout.bandHeight',
-      'layout.bandAlign',
-      'layout.bandShape',
-      'layout.headerOnBand',
+      'layout.hero',
+      'brand.heroImage',
+      'layout.heroArt',
+      'layout.heroColour',
+      'layout.heroHeight',
+      'layout.heroAlign',
+      'layout.heroShape',
+      'layout.headerOnHero',
       'layout.pageTitles',
       'layout.imagePlace',
       'layout.imagePhone',
@@ -117,8 +117,8 @@ describe('heroOf', () => {
 
   it('reads a look no curated one makes as Custom', () => {
     const design = defaultDesign()
-    design.layout.band = 'brand'
-    design.layout.bandArt = 'petals'
+    design.layout.hero = 'brand'
+    design.layout.heroArt = 'petals'
     expect(heroOf(design).look).toBe('custom')
   })
 })
@@ -126,7 +126,7 @@ describe('heroOf', () => {
 describe('changing the hero', () => {
   it('takes a look, writing every field it covers', () => {
     const design = set(defaultDesign(), 'look', 'brand-waves')
-    expect(design.layout).toMatchObject({ band: 'brand', bandArt: 'waves' })
+    expect(design.layout).toMatchObject({ hero: 'brand', heroArt: 'waves' })
     expect(heroOf(design).look).toBe('brand-waves')
     expect(portalDesign.safeParse(design).success).toBe(true)
   })
@@ -134,7 +134,7 @@ describe('changing the hero', () => {
   it('keeps its height when a look is taken', () => {
     let design = set(defaultDesign(), 'height', 'tall')
     design = set(design, 'look', 'tint')
-    expect(design.layout.bandHeight).toBe('tall')
+    expect(design.layout.heroHeight).toBe('tall')
     expect(heroOf(design).look).toBe('tint')
   })
 
@@ -154,13 +154,13 @@ describe('changing the hero', () => {
 
   it('takes an image with its description, and lets it go', () => {
     let design = set(defaultDesign(), 'image', { key: 'band/team.jpg', alt: 'Our team' })
-    expect(design.brand.bandImage).toEqual({ key: 'band/team.jpg', alt: 'Our team' })
+    expect(design.brand.heroImage).toEqual({ key: 'band/team.jpg', alt: 'Our team' })
     design.layout.imagePoint = { x: 20, y: 30 }
     // The same image described again keeps its crop.
     design = set(design, 'image', { key: 'band/team.jpg', decorative: true })
     expect(design.layout.imagePoint).toEqual({ x: 20, y: 30 })
     design = set(design, 'image', null)
-    expect(design.brand.bandImage).toBeUndefined()
+    expect(design.brand.heroImage).toBeUndefined()
     expect(design.layout.imagePoint).toBeUndefined()
     expect(applySetting(heroOf(design), 'image', { key: 'x', alt: 'a'.repeat(201) })).toMatchObject(
       { ok: false }
@@ -169,13 +169,13 @@ describe('changing the hero', () => {
 
   it('leaves a value back at its default out of the design', () => {
     let design = set(defaultDesign(), 'shape', 'inset')
-    expect(design.layout.bandShape).toBe('inset')
+    expect(design.layout.heroShape).toBe('inset')
     design = set(design, 'shape', 'full')
-    expect('bandShape' in design.layout).toBe(false)
+    expect('heroShape' in design.layout).toBe(false)
     design = set(design, 'headerBlend', true)
-    expect(design.layout.headerOnBand).toBe(true)
+    expect(design.layout.headerOnHero).toBe(true)
     design = set(design, 'headerBlend', false)
-    expect('headerOnBand' in design.layout).toBe(false)
+    expect('headerOnHero' in design.layout).toBe(false)
     design = set(design, 'titles', 'band')
     expect(design.layout.pageTitles).toBe('band')
     design = set(design, 'action', 'support')
@@ -251,7 +251,7 @@ describe('changing the hero', () => {
   it('sums itself up by its look', () => {
     expect(summaryOf(heroOf(defaultDesign()))).toBe('Plain')
     const design = set(defaultDesign(), 'look', 'brand')
-    design.brand.bandImage = { key: 'a.png' }
+    design.brand.heroImage = { key: 'a.png' }
     expect(summaryOf(heroOf(design))).toBe('Brand colour · with an image')
   })
 })
@@ -261,7 +261,7 @@ describe('the hero’s panel shows', () => {
     const design = set(defaultDesign(), 'look', 'brand')
     expect(heroSettingShown('imagePlace', design, 'home')).toBe(false)
     expect(heroSettingShown('art', design, 'home')).toBe(true)
-    design.brand.bandImage = { key: 'a.png' }
+    design.brand.heroImage = { key: 'a.png' }
     expect(heroSettingShown('imagePlace', design, 'home')).toBe(true)
     expect(heroSettingShown('imagePhone', design, 'home')).toBe(true)
     expect(heroSettingShown('art', design, 'home')).toBe(false)
@@ -271,13 +271,13 @@ describe('the hero’s panel shows', () => {
     let design = set(defaultDesign(), 'look', 'brand')
     expect(heroSettingShown('glow', design, 'home')).toBe(true)
     design = set(design, 'glow', 'bottom')
-    expect(design.layout.bandGlow).toBe('bottom')
+    expect(design.layout.heroGlow).toBe('bottom')
     expect(heroOf(design).look).toBe('brand')
     expect(portalDesign.safeParse(design).success).toBe(true)
     // Back to none, the field is left out, as an untouched design has it.
-    expect(set(design, 'glow', 'none').layout).not.toHaveProperty('bandGlow')
+    expect(set(design, 'glow', 'none').layout).not.toHaveProperty('heroGlow')
     expect(heroSettingShown('glow', set(defaultDesign(), 'look', 'tint'), 'home')).toBe(false)
-    design.brand.bandImage = { key: 'a.png' }
+    design.brand.heroImage = { key: 'a.png' }
     expect(heroSettingShown('glow', design, 'home')).toBe(false)
   })
 

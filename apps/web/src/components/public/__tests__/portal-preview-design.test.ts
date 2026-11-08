@@ -49,7 +49,7 @@ describe('a draft design read from the preview message', () => {
 
   it('keeps a band image and its smaller copies only from storage', () => {
     const draft = defaultDesign()
-    draft.brand.bandImage = {
+    draft.brand.heroImage = {
       key: 'portal-images/room.webp',
       width: 2560,
       variants: [{ key: 'portal-images/room-640.webp', w: 640 }],
@@ -58,11 +58,11 @@ describe('a draft design read from the preview message', () => {
     expect(posted(draft)?.bandImage?.srcSet).toContain('640w')
 
     // A copy whose key could end a srcset candidate is no design at all.
-    draft.brand.bandImage.variants = [{ key: 'room 640.webp, //evil.example/x', w: 640 }]
+    draft.brand.heroImage.variants = [{ key: 'room 640.webp, //evil.example/x', w: 640 }]
     expect(posted(draft)).toBeNull()
 
-    delete draft.brand.bandImage.variants
-    draft.brand.bandImage.key = 'room.webp?x=1'
+    delete draft.brand.heroImage.variants
+    draft.brand.heroImage.key = 'room.webp?x=1'
     expect(posted(draft)?.bandImage).toBeNull()
   })
 })

@@ -104,7 +104,7 @@ function drawsMost(): PortalDesign {
   const design = defaultDesign()
   design.nav.home.on = true
   design.mode = 'auto'
-  design.layout.band = 'brand'
+  design.layout.hero = 'brand'
   design.layout.header = 'inline'
   design.brand.light.support = '#0ea5e9'
   design.pages.home.blocks = [
@@ -117,7 +117,7 @@ function drawsMost(): PortalDesign {
 /** The other half: a hero image and a full logo image. */
 function drawsTheRest(): PortalDesign {
   const design = drawsMost()
-  design.brand.bandImage = { key: 'portal-images/room.jpg' }
+  design.brand.heroImage = { key: 'portal-images/room.jpg' }
   design.brand.logo.display = 'wordmark'
   return design
 }

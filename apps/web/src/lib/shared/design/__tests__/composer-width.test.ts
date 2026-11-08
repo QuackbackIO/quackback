@@ -69,12 +69,12 @@ describe('drawnComposerWidth', () => {
 describe('composerWidthOf and writeComposerWidth', () => {
   it('reads the hero’s alignment and side image', () => {
     const design = defaultDesign()
-    design.layout.bandAlign = 'left'
+    design.layout.heroAlign = 'left'
     expect(composerWidthOf(design)).toBe('full')
-    design.layout.bandAlign = 'centre'
+    design.layout.heroAlign = 'centre'
     expect(composerWidthOf(design)).toBe('wide')
-    design.layout.bandAlign = 'left'
-    design.brand.bandImage = { key: 'band/photo.jpg' }
+    design.layout.heroAlign = 'left'
+    design.brand.heroImage = { key: 'band/photo.jpg' }
     expect(composerWidthOf(design)).toBe('wide')
     design.layout.imagePlace = 'cover'
     expect(composerWidthOf(design)).toBe('full')
@@ -82,12 +82,12 @@ describe('composerWidthOf and writeComposerWidth', () => {
 
   it('stores a step, and leaves it out where it draws as one left out would', () => {
     const design = defaultDesign()
-    design.layout.bandAlign = 'left'
+    design.layout.heroAlign = 'left'
     writeComposerWidth(design, 'narrow')
     expect(design.pages.home.composerWidth).toBe('narrow')
     writeComposerWidth(design, 'full')
     expect(design.pages.home.composerWidth).toBeUndefined()
-    design.layout.bandAlign = 'centre'
+    design.layout.heroAlign = 'centre'
     writeComposerWidth(design, 'full')
     expect(design.pages.home.composerWidth).toBe('full')
     writeComposerWidth(design, 'wide')

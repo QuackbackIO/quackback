@@ -26,7 +26,7 @@ describe('matchSummary', () => {
   })
 
   it('names only colours, fonts, logo and words; the rest goes without saying', () => {
-    expect(matchSummary(['brand.light.accent', 'layout.band', 'shape.corners'])).toBe(
+    expect(matchSummary(['brand.light.accent', 'layout.hero', 'shape.corners'])).toBe(
       'Matched your brand: colours.'
     )
     expect(matchSummary(['shape.corners'])).toBe('Matched your brand.')
@@ -37,8 +37,8 @@ describe('partsChanged', () => {
   it('puts the hero, page background and Home in plain parts, once each', () => {
     expect(
       partsChanged([
-        'layout.band',
-        'layout.bandGlow',
+        'layout.hero',
+        'layout.heroGlow',
         'layout.background',
         'pages.home.blocks',
         'tune.headline.size',

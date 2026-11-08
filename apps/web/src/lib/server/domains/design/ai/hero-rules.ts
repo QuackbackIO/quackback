@@ -38,7 +38,7 @@ export interface HeroDecision {
   /** The glow's measured colour, drawn in a colour of the design's that matches it or kept as an extra one. */
   glowFill: string | null
   art: Exclude<(typeof HERO_ART)[number], 'not_visible'>
-  headerOnBand: boolean
+  headerOnHero: boolean
   /** Where a band image sits, when the design has one. */
   picture: 'side' | 'edge' | 'cover' | null
   by: 'rule' | 'model' | 'default'
@@ -158,7 +158,7 @@ const decision = (band: HeroBand, why: string, over: Partial<HeroDecision> = {})
   glow: null,
   glowFill: null,
   art: 'none',
-  headerOnBand: false,
+  headerOnHero: false,
   picture: null,
   fill: null,
   by: 'rule',
@@ -237,8 +237,8 @@ function withFrame(out: HeroDecision, ev: HeroEvidence): HeroDecision {
  */
 function withHeader(out: HeroDecision, ev: HeroEvidence): HeroDecision {
   const coloured = out.band !== 'none' && out.band !== 'tint'
-  return coloured && ev.surface?.joinsHeader === true && !out.headerOnBand
-    ? { ...out, headerOnBand: true, why: `${out.why}; the site's header sits on the hero` }
+  return coloured && ev.surface?.joinsHeader === true && !out.headerOnHero
+    ? { ...out, headerOnHero: true, why: `${out.why}; the site's header sits on the hero` }
     : out
 }
 
@@ -253,7 +253,7 @@ function ruleLook(ev: HeroEvidence): HeroDecision | null {
       return decision(
         'blend',
         `a ${ev.measuredColour} band with a large ${graphic.colour} graphic in it: the band runs into the graphic's colour`,
-        { blend: 'linear', fill: graphic.colour, headerOnBand: near(ev.header, ev.measuredColour) }
+        { blend: 'linear', fill: graphic.colour, headerOnHero: near(ev.header, ev.measuredColour) }
       )
     const band: HeroBand = ev.measuredRole === 'support' ? 'support' : 'brand'
     return decision(
@@ -261,7 +261,7 @@ function ruleLook(ev: HeroEvidence): HeroDecision | null {
       `a solid ${ev.measuredColour} fills the hero behind the headline, ${ROLE_WORDS[ev.measuredRole]}`,
       {
         colour: ev.measuredRole === 'extra1' ? 'extra1' : null,
-        headerOnBand: near(ev.header, ev.measuredColour),
+        headerOnHero: near(ev.header, ev.measuredColour),
       }
     )
   }
@@ -275,7 +275,7 @@ function ruleLook(ev: HeroEvidence): HeroDecision | null {
     return decision(
       'brand',
       `a dark ${ev.measuredColour} section holds the headline on the light page: the band is that colour`,
-      { fill: ev.measuredColour, headerOnBand: near(ev.header, ev.measuredColour) }
+      { fill: ev.measuredColour, headerOnHero: near(ev.header, ev.measuredColour) }
     )
   // A photo hero set in a large flat dark section (the photo on one side, the dark on the
   // other) reads as that dark section on the light page, wherever the finder's box falls:
@@ -291,7 +291,7 @@ function ruleLook(ev: HeroEvidence): HeroDecision | null {
     return decision(
       'brand',
       `a dark ${section.colour} section holds ${Math.round(section.share * 100)}% of the hero on the light page: the band is that colour`,
-      { fill: section.colour, headerOnBand: near(ev.header, section.colour) }
+      { fill: section.colour, headerOnHero: near(ev.header, section.colour) }
     )
   const glow = ev.surface?.glow
   // A gradient under the words is a line; a photo hero's dark parts are the photo's, not a glow.
@@ -307,7 +307,7 @@ function ruleLook(ev: HeroEvidence): HeroDecision | null {
       : decision(
           'brand',
           `a dark ${lit.base} hero section lit by ${lit.colour} on the light page: the band is its dark`,
-          { fill: lit.base, headerOnBand: near(ev.header, lit.base) }
+          { fill: lit.base, headerOnHero: near(ev.header, lit.base) }
         )
   if (lit && darkPage)
     return decision(
@@ -484,7 +484,7 @@ export async function decideHero(
     const look = agreed('look')
     out = (look && fromLook(ev, look, a!.evidence)) || defaultHero(ev)
     const header = agreed('header_on_hero')
-    if (out.by === 'model' && header) out = { ...out, headerOnBand: header === 'shares_colour' }
+    if (out.by === 'model' && header) out = { ...out, headerOnHero: header === 'shares_colour' }
     out = withHeader(out, ev)
   }
   if (out.band === 'none') return out

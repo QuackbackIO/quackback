@@ -117,9 +117,9 @@ describe('portalDesign', () => {
 })
 
 describe('the band image', () => {
-  const withImage = (bandImage: unknown) => {
+  const withImage = (heroImage: unknown) => {
     const doc = defaultDesign() as unknown as { brand: Record<string, unknown> }
-    doc.brand.bandImage = bandImage
+    doc.brand.heroImage = heroImage
     return doc
   }
 
@@ -152,7 +152,7 @@ describe('defaultDesign', () => {
     expect(doc.layout).toEqual({
       header: 'stacked',
       nav: 'tabs',
-      band: 'none',
+      hero: 'none',
       cards: 'bordered',
       density: 'comfortable',
       width: 'default',

@@ -85,12 +85,12 @@ describe('the pages a change lands on', () => {
     expect(fieldPage('pages.titles.roadmap.title')).toBe('roadmap')
     expect(fieldPage('layout.pageBackgrounds.help')).toBe('help')
     expect(fieldPage('pages.home.blocks')).toBe('home')
-    expect(fieldPage('layout.band')).toBeNull()
+    expect(fieldPage('layout.hero')).toBeNull()
     expect(fieldPage('tune.button.radius')).toBeNull()
   })
 
   it('reads a shared field as every page', () => {
-    expect(changePages(design(), change('layout.band'))).toBe('every')
+    expect(changePages(design(), change('layout.hero'))).toBe('every')
   })
 
   it('reads an override by its target', () => {
@@ -120,7 +120,7 @@ describe('the pages a change lands on', () => {
 
 describe('the reach clause', () => {
   it('says “on every page” when a hero change lands beyond the page shown', () => {
-    expect(reachClause(design(), [change('layout.band')], { scope: 'band', page: 'home' })).toBe(
+    expect(reachClause(design(), [change('layout.hero')], { scope: 'band', page: 'home' })).toBe(
       'on every page'
     )
   })
@@ -141,7 +141,7 @@ describe('the reach clause', () => {
   })
 
   it('says nothing for the whole site, its styles, or a part on every page anyway', () => {
-    const changes = [change('layout.band')]
+    const changes = [change('layout.hero')]
     expect(reachClause(design(), changes, { scope: 'site', page: 'home' })).toBe('')
     expect(reachClause(design(), changes, { scope: 'brand', page: 'home' })).toBe('')
     expect(

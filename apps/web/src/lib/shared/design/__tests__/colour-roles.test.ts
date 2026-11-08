@@ -54,8 +54,8 @@ describe('extra brand colours', () => {
 
   it('fill the band in the colour it picks, with text that reads on it', () => {
     const doc = withExtras()
-    doc.layout.band = 'brand'
-    doc.layout.bandColour = 'extra1'
+    doc.layout.hero = 'brand'
+    doc.layout.heroColour = 'extra1'
     const { light, tokens } = lightTokens(doc)
     expect(tokens['--qb-band-bg']).toBe(FOREST)
     expect(contrastRatio(tokens['--qb-band-ink']!, FOREST)).toBeGreaterThanOrEqual(4.5)
@@ -64,9 +64,9 @@ describe('extra brand colours', () => {
 
   it('tint the band from the colour it picks', () => {
     const doc = withExtras()
-    doc.layout.band = 'tint'
+    doc.layout.hero = 'tint'
     const accentTint = lightTokens(doc).tokens['--qb-band-bg']
-    doc.layout.bandColour = 'extra2'
+    doc.layout.heroColour = 'extra2'
     const cyanTint = lightTokens(doc).tokens['--qb-band-bg']
     expect(cyanTint).not.toBe(accentTint)
     // A colour the design does not have falls back to the brand colour.
@@ -115,8 +115,8 @@ describe('text on a colour both black and white pass on', () => {
     doc.brand.light.extra = [MID_BLUE]
     doc.brand.light.support = MID_BLUE
     doc.shape.action = 'support'
-    doc.layout.band = 'brand'
-    doc.layout.bandColour = 'extra1'
+    doc.layout.hero = 'brand'
+    doc.layout.heroColour = 'extra1'
     const { tokens } = lightTokens(doc)
     for (const token of ['--qb-on-role-extra1', '--qb-band-ink', '--qb-action-ink'] as const) {
       expect(isLight(tokens[token]!), token).toBe(true)

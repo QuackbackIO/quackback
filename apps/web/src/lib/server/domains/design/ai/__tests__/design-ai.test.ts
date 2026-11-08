@@ -557,7 +557,7 @@ describe('designDirections', () => {
           name: 'Calm',
           description: 'Soft.',
           preset: 'calm',
-          band: 'tint',
+          hero: 'tint',
           accent: '#0f766e',
           background: '#f8fafc',
           ink: '#0f172a',
@@ -593,7 +593,7 @@ describe('designDirections', () => {
     )
     if (!result.ok) throw new Error('expected looks')
     expect(result.looks.map((look) => look.name)).toEqual(['Calm', 'Editorial'])
-    expect(result.looks[0].design.layout.band).toBe('tint')
+    expect(result.looks[0].design.layout.hero).toBe('tint')
     expect(result.looks[0].design.brand.light.accent).toBe('#0f766e')
     expect(result.looks[0].preset).toBe('calm')
     expect(result.looks[0].design.pages.feedback.headline).toEqual({
@@ -1018,7 +1018,7 @@ describe('a request keeps as near as the chip says it reaches', () => {
   const ask = (message: string, within: 'page' | 'every') => {
     const design = defaultDesign()
     design.nav.home.on = true
-    design.layout.band = 'brand'
+    design.layout.hero = 'brand'
     return askDesignAi({
       message,
       design,
@@ -1036,7 +1036,7 @@ describe('a request keeps as near as the chip says it reaches', () => {
       const result = await ask(message, 'page')
       if (!result.ok) throw new Error('expected an answer')
       expect(result.applied).toEqual([])
-      expect(result.design.layout.band).toBe('brand')
+      expect(result.design.layout.hero).toBe('brand')
       expect(result.reply).toBe('That reaches beyond this page, so nothing changed.')
       // About the hero itself: no offer to ask about the whole site.
       expect(result.outOfScope).toBe(false)
@@ -1046,7 +1046,7 @@ describe('a request keeps as near as the chip says it reaches', () => {
     model.answer = calmer
     const result = await ask('Make this calmer', 'every')
     if (!result.ok) throw new Error('expected an answer')
-    expect(result.design.layout.band).toBe('tint')
+    expect(result.design.layout.hero).toBe('tint')
     expect(result.reply).toBe('The hero is calmer now, on every page.')
   })
 

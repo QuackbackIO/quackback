@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mode": "light",
   "brand": {
     "light": {
@@ -38,7 +38,7 @@
       "key": "fixtures/fieldnote/favicon.png"
     },
     "shareImage": null,
-    "bandImage": {
+    "heroImage": {
       "key": "portal-images/fieldnote-grid.png"
     }
   },
@@ -49,13 +49,13 @@
     "header": "inline",
     "nav": "underline",
     "navText": "ink",
-    "band": "none",
+    "hero": "none",
     "cards": "list",
     "density": "compact",
     "width": "default",
     "filters": "end",
     "imagePlace": "pattern",
-    "bandArt": "waves"
+    "heroArt": "waves"
   },
   "pages": {
     "home": {

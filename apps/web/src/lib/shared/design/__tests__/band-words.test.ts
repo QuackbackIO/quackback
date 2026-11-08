@@ -19,7 +19,7 @@ function orangeBand(change?: (doc: PortalDesign) => void): PortalDesign {
   const doc = defaultDesign()
   doc.brand.light.accent = ORANGE
   doc.brand.light.ink = '#0a0a0a'
-  doc.layout.band = 'brand'
+  doc.layout.hero = 'brand'
   doc.tune = { subtitle: { size: 18, colour: '#fff8eb' } }
   change?.(doc)
   return portalDesign.parse(doc)
@@ -97,7 +97,7 @@ describe('words on a bright band', () => {
 
   it('leaves words on a panel as they are', () => {
     const tokens = tokensOf(
-      orangeBand((d) => (d.layout.bandShape = 'panel')),
+      orangeBand((d) => (d.layout.heroShape = 'panel')),
       'light'
     )
     expect(tokens['--qb-band-headline']).toBeUndefined()

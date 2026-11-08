@@ -12,7 +12,7 @@ describe('changeLabel', () => {
     ['brand.light.support', 'Second colour'],
     ['brand.light.extra', 'Extra colours'],
     ['brand.light.extra.1', 'Extra colours'],
-    ['layout.bandColour', 'Hero colour'],
+    ['layout.heroColour', 'Hero colour'],
     ['tune.subtitle.size', 'Subtitle size'],
     ['brand.dark.ink', 'Dark text'],
     ['brand.fonts.heading.id', 'Heading font'],
@@ -193,7 +193,7 @@ describe('ChangeList groups', () => {
         changes={[
           { path: 'pages.home.blocks', before: [], after: [] },
           { path: 'brand.light.accent', before: '#000000', after: '#0f766e' },
-          { path: 'layout.band', before: 'none', after: 'tint' },
+          { path: 'layout.hero', before: 'none', after: 'tint' },
         ]}
       />
     )

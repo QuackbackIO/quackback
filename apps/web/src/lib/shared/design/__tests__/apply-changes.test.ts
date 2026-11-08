@@ -164,13 +164,13 @@ describe('applyDesignChanges', () => {
     const result = applyDesignChanges(
       defaultDesign(),
       [
-        { path: 'layout.band', value: 'brand' },
+        { path: 'layout.hero', value: 'brand' },
         { path: 'layout.nav', value: 'pills' },
         { path: 'css', value: 'body {}' },
       ],
       'header'
     )
-    expect(result.outOfScope).toEqual(['layout.band', 'css'])
+    expect(result.outOfScope).toEqual(['layout.hero', 'css'])
     expect(result.applied.map((change) => change.path)).toEqual(['layout.nav'])
   })
 
@@ -198,7 +198,7 @@ describe('applyDesignChanges', () => {
     expect(scopeFields('header')).toEqual([
       'layout.header',
       'layout.nav',
-      'layout.headerOnBand',
+      'layout.headerOnHero',
       'nav',
       'brand.logo',
       'tune.label',
@@ -276,12 +276,12 @@ describe('applyDesignChanges', () => {
     expect(placed.design.brand.logo.wordmark.light).toEqual({ key: 'header-logos/site-abc.svg' })
     const named = applyDesignChanges(
       defaultDesign(),
-      [{ path: 'brand.bandImage', value: { key: 'portal-images/other.jpg' } }],
+      [{ path: 'brand.heroImage', value: { key: 'portal-images/other.jpg' } }],
       'site',
       untrusted
     )
     expect(named.refused).toEqual([
-      { path: 'brand.bandImage', reason: 'images and fonts are uploaded in Brand' },
+      { path: 'brand.heroImage', reason: 'images and fonts are uploaded in Brand' },
     ])
   })
 

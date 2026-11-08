@@ -104,7 +104,7 @@ describe('a headline accent in a colour role', () => {
 
   it('reads at 3:1 on a brand colour band', () => {
     const doc = withAccent('light')
-    doc.layout.band = 'brand'
+    doc.layout.hero = 'brand'
     const resolved = resolveDesign(doc)
     const used = resolved.tokens.light['--qb-band-accent-support']!
     expect(contrastRatio(used, resolved.light!.primary!)).toBeGreaterThanOrEqual(3)

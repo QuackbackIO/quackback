@@ -28,22 +28,22 @@ interface Fixture {
       headlineColour?: string
     }
     logo: { display: string; tone?: string }
-    bandImage?: { key: string }
+    heroImage?: { key: string }
   }
   shape: { corners: string; buttons?: string; action?: string; fill?: string; hover?: string }
-  layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string> & {
+  layout: Record<'header' | 'nav' | 'hero' | 'cards' | 'density' | 'width' | 'filters', string> & {
     blend?: string
     menuAlign?: string
     navText?: string
-    bandAlign?: string
-    bandShape?: string
-    bandHeight?: string
+    heroAlign?: string
+    heroShape?: string
+    heroHeight?: string
     fadeFrom?: string
     status?: string
     imagePlace?: string
     tint?: string
-    bandArt?: string
-    bandColour?: string
+    heroArt?: string
+    heroColour?: string
     imageFocus?: string
     imagePhone?: string
     pageTitles?: string
@@ -115,15 +115,15 @@ function used(): Record<DesignOption, Set<string>> {
       if (headline?.accent) add('headlineAccent', headline.accent.style)
     for (const page of Object.keys(titles)) add('titledPage', page)
     add('pageTitles', doc.layout.pageTitles ?? 'plain')
-    for (const key of ['header', 'nav', 'band', 'cards', 'density', 'width', 'filters'] as const)
+    for (const key of ['header', 'nav', 'hero', 'cards', 'density', 'width', 'filters'] as const)
       add(key, doc.layout[key])
-    if (doc.layout.band === 'blend') add('blend', doc.layout.blend ?? 'linear')
-    add('bandAlign', doc.layout.bandAlign ?? (doc.layout.header === 'centered' ? 'centre' : 'left'))
-    add('bandShape', doc.layout.bandShape ?? 'full')
-    add('bandHeight', doc.layout.bandHeight ?? 'roomy')
+    if (doc.layout.hero === 'blend') add('blend', doc.layout.blend ?? 'linear')
+    add('heroAlign', doc.layout.heroAlign ?? (doc.layout.header === 'centered' ? 'centre' : 'left'))
+    add('heroShape', doc.layout.heroShape ?? 'full')
+    add('heroHeight', doc.layout.heroHeight ?? 'roomy')
     add('fadeFrom', doc.layout.fadeFrom ?? 'top')
-    if (['brand', 'tint', 'fade'].includes(doc.layout.band))
-      add('colourRole', doc.layout.bandColour ?? 'accent')
+    if (['brand', 'tint', 'fade'].includes(doc.layout.hero))
+      add('colourRole', doc.layout.heroColour ?? 'accent')
     add('buttons', doc.shape.buttons ?? 'match')
     add('action', doc.shape.action ?? 'buttons')
     add('fill', doc.shape.fill ?? 'accent')
@@ -131,11 +131,11 @@ function used(): Record<DesignOption, Set<string>> {
     add('menuAlign', doc.layout.menuAlign ?? 'start')
     add('navText', doc.layout.navText ?? 'muted')
     add('tint', doc.layout.tint ?? 'neutral')
-    add('bandArt', doc.layout.bandArt ?? 'none')
-    if (doc.brand.bandImage) add('imageFocus', doc.layout.imageFocus ?? 'centre')
-    if (doc.brand.bandImage) add('imagePhone', doc.layout.imagePhone ?? 'show')
+    add('heroArt', doc.layout.heroArt ?? 'none')
+    if (doc.brand.heroImage) add('imageFocus', doc.layout.imageFocus ?? 'centre')
+    if (doc.brand.heroImage) add('imagePhone', doc.layout.imagePhone ?? 'show')
     add('status', doc.layout.status ?? 'colour')
-    if (doc.brand.bandImage) add('imagePlace', doc.layout.imagePlace ?? 'side')
+    if (doc.brand.heroImage) add('imagePlace', doc.layout.imagePlace ?? 'side')
     if (doc.pages.home.blocks.some((block) => block.type === 'composer'))
       add('composerPlace', doc.pages.home.composer ?? 'block')
     add('sort', doc.pages.feedback.defaultSort)
@@ -175,7 +175,7 @@ describe('reference brand fixtures', () => {
   })
 
   it.each(Object.entries(fixtures))('%s uses only documented options', (_name, doc) => {
-    expect(doc.version).toBe(2)
+    expect(doc.version).toBe(3)
     const check = (option: DesignOption, value: unknown) =>
       expect(DESIGN_OPTIONS[option] as readonly unknown[], `${option}: ${String(value)}`).toContain(
         value
@@ -186,7 +186,7 @@ describe('reference brand fixtures', () => {
     check('fontKind', doc.brand.fonts.heading.kind)
     check('fontKind', doc.brand.fonts.body.kind)
     check('logoDisplay', doc.brand.logo.display)
-    for (const key of ['header', 'nav', 'band', 'cards', 'density', 'width', 'filters'] as const)
+    for (const key of ['header', 'nav', 'hero', 'cards', 'density', 'width', 'filters'] as const)
       check(key, doc.layout[key])
     check('sort', doc.pages.feedback.defaultSort)
     for (const key of ['accent', 'background', 'ink'] as const)
@@ -235,7 +235,7 @@ describe('reference brand fixtures', () => {
       'pattern',
       'patternScale',
       // A band's glow came after them too; components.test.ts and hero.test.ts cover it.
-      'bandGlow',
+      'heroGlow',
       // So did the composer's width in the band; composer-width.test.ts and hero.test.ts cover it.
       'composerWidth',
       // And the hero's main action; main-action.test.ts and hero.test.ts cover it.

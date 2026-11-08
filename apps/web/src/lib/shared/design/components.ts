@@ -161,7 +161,7 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
     // A vote box's only edge, at 3:1 on cards and the page.
     '--qb-vote-edge': solveContrast(t.input, [t.card, t.background], 3) ?? t.foreground,
     ...bandTokens(doc, onGround(doc, t, mode), mode),
-    ...(headerOnBand(doc) ? headerBandTokens(doc, onGround(doc, t, mode), mode) : {}),
+    ...(headerOnHero(doc) ? headerBandTokens(doc, onGround(doc, t, mode), mode) : {}),
   }
   tokens['--qb-header-focus'] = focusOn(t, [tokens['--qb-header-bg']!], tokens['--qb-header-ink']!)
   Object.assign(tokens, supportTokens(doc, t, mode, tokens), roleTokens(doc, t, mode))
@@ -219,7 +219,7 @@ export function bandContrast(
   vars: ThemeVariables,
   mode: Mode
 ): { ink: string; background: string; target: number } | null {
-  if (doc.layout.band === 'none') return null
+  if (doc.layout.hero === 'none') return null
   const t = vars as Required<ThemeVariables>
   const surface = bandSurface(doc, t, mode)
   const words = bandWords(doc, t, surface)
@@ -249,8 +249,8 @@ function bandWords(
   t: Required<ThemeVariables>,
   surface: BandSurface
 ): { headline: string; subtitle: string; large: boolean } | null {
-  if (doc.layout.band !== 'brand' && doc.layout.band !== 'support') return null
-  if (layoutValue(doc.layout, 'bandShape') === 'panel' || doc.brand.bandImage) return null
+  if (doc.layout.hero !== 'brand' && doc.layout.hero !== 'support') return null
+  if (layoutValue(doc.layout, 'heroShape') === 'panel' || doc.brand.heroImage) return null
   // A headline set smaller than large text anywhere reads as body text does.
   if (!largeHeadline(doc)) return null
   const light = [t.background, t.foreground, NEAR_WHITE, '#ffffff'].filter(isLight)
@@ -288,7 +288,7 @@ function bandWordsTokens(doc: PortalDesign, t: Required<ThemeVariables>, surface
 
 /** The colours a band's headline sits on, in a mode: the page's under a mesh, the top tint of a fade. */
 export function headlineBehind(doc: PortalDesign, vars: ThemeVariables, mode: Mode): string[] {
-  if (doc.layout.band === 'none') return []
+  if (doc.layout.hero === 'none') return []
   return bandSurface(doc, vars as Required<ThemeVariables>, mode).behind
 }
 
@@ -327,7 +327,7 @@ function supportTokens(
     out['--qb-support-tint'] = tint
     const edge = mixColor(support, t.card, 0.55)
     out['--qb-support-edge'] = solveContrast(edge, [t.card, t.background], 3) ?? edge
-    if (!headerOnBand(doc)) {
+    if (!headerOnHero(doc)) {
       const header = tokens['--qb-header-bg'] ?? t.background
       out['--qb-nav-active-bg'] = tintOf(support, header, 0.07)
       out['--qb-nav-active-ink'] = readableOn(t.foreground, out['--qb-nav-active-bg']!)
@@ -386,8 +386,8 @@ function activePill(ink: string, surface: string): string {
 }
 
 /** Whether the header takes the band's colour: asked for, and the band has one. */
-const headerOnBand = (doc: PortalDesign) =>
-  doc.layout.headerOnBand === true && doc.layout.band !== 'none'
+const headerOnHero = (doc: PortalDesign) =>
+  doc.layout.headerOnHero === true && doc.layout.hero !== 'none'
 
 /**
  * The header in the band's colour, its text and menu in the band's text. Its
@@ -439,9 +439,9 @@ function headerBandTokens(doc: PortalDesign, t: Required<ThemeVariables>, mode: 
  * measured, veiled image behind the words.
  */
 export const headerOverPhoto = (doc: PortalDesign) =>
-  headerOnBand(doc) &&
-  layoutValue(doc.layout, 'bandShape') === 'full' &&
-  !doc.brand.bandImage?.homeOnly &&
+  headerOnHero(doc) &&
+  layoutValue(doc.layout, 'heroShape') === 'full' &&
+  !doc.brand.heroImage?.homeOnly &&
   photoShade(doc) !== null
 
 /** How much deeper the veil is behind the header than behind the words, percent. */
@@ -454,11 +454,11 @@ const HEADER_VEIL = 15
  * or art, which keep their own placement.
  */
 export const headerSpans = (doc: PortalDesign) =>
-  headerOnBand(doc) &&
-  (doc.layout.band === 'blend' || doc.layout.band === 'fade') &&
-  layoutValue(doc.layout, 'bandShape') === 'full' &&
-  !doc.brand.bandImage &&
-  (!doc.layout.bandArt || doc.layout.bandArt === 'none')
+  headerOnHero(doc) &&
+  (doc.layout.hero === 'blend' || doc.layout.hero === 'fade') &&
+  layoutValue(doc.layout, 'heroShape') === 'full' &&
+  !doc.brand.heroImage &&
+  (!doc.layout.heroArt || doc.layout.heroArt === 'none')
 
 /**
  * The shared surface and the header's text on it: a text that reads on every
@@ -519,7 +519,7 @@ function bandTokens(doc: PortalDesign, t: Required<ThemeVariables>, mode: Mode):
     // The focus ring on the band, and on the words' panel when they sit on one.
     '--qb-band-focus': focusOn(
       t,
-      doc.layout.band !== 'none' && doc.layout.bandShape === 'panel'
+      doc.layout.hero !== 'none' && doc.layout.heroShape === 'panel'
         ? [...surface.behind, support ?? t.card]
         : surface.behind,
       surface.ink
@@ -580,8 +580,8 @@ function footTokens(
     '--qb-band-foot-pad': pad,
     '--qb-band-fade-out': fadeOut ? 'transparent' : 'black',
   })
-  const { band } = doc.layout
-  const shape = layoutValue(doc.layout, 'bandShape')
+  const { hero: band } = doc.layout
+  const shape = layoutValue(doc.layout, 'heroShape')
   if (band === 'none') return {}
   if (band === 'fade' || shape === 'inset' || shape === 'split') return foot(CLEAN_EDGE)
   const blend = layoutValue(doc.layout, 'blend')
@@ -635,8 +635,8 @@ function artTokens(
   t: Required<ThemeVariables>,
   support: string | undefined
 ): TokenMap {
-  const art = doc.layout.bandArt
-  if (!art || art === 'none' || doc.layout.band === 'none') return {}
+  const art = doc.layout.heroArt
+  if (!art || art === 'none' || doc.layout.hero === 'none') return {}
   return {
     '--qb-band-art': bandArtImage(art, t.primary, support ?? t.primary),
     '--qb-band-art-size': ART_TILE[art],
@@ -690,12 +690,12 @@ interface BandSurface {
  */
 export function photoShade(
   doc: PortalDesign
-): NonNullable<NonNullable<PortalDesign['brand']['bandImage']>['shade']> | null {
-  const image = doc.brand.bandImage
-  if (!image?.shade || doc.layout.band === 'none') return null
+): NonNullable<NonNullable<PortalDesign['brand']['heroImage']>['shade']> | null {
+  const image = doc.brand.heroImage
+  if (!image?.shade || doc.layout.hero === 'none') return null
   if (layoutValue(doc.layout, 'imagePlace') !== 'cover') return null
   if (layoutValue(doc.layout, 'imagePhone') === 'hide') return null
-  const shape = layoutValue(doc.layout, 'bandShape')
+  const shape = layoutValue(doc.layout, 'heroShape')
   return shape === 'full' ? image.shade : null
 }
 
@@ -738,14 +738,14 @@ function brandBand(
   mode: Mode,
   own: { fill: string; ink: string }
 ): { fill: string; ink: string } {
-  const role = doc.layout.bandColour
+  const role = doc.layout.heroColour
   if (mode !== 'dark' || doc.brand.dark?.accent || (role && role !== 'accent')) return own
   const light = doc.brand.light.accent
   return contrastRatio(t.foreground, light) >= 4.5 ? { fill: light, ink: t.foreground } : own
 }
 
 /** Where a band's glow is centred, and how far it reaches across and up (its ellipse's radii). */
-const GLOW_PLACE: Record<Exclude<(typeof DESIGN_OPTIONS.bandGlow)[number], 'none'>, string> = {
+const GLOW_PLACE: Record<Exclude<(typeof DESIGN_OPTIONS.heroGlow)[number], 'none'>, string> = {
   bottom: 'ellipse 38% 60% at 50% 100%',
   top: 'ellipse 38% 60% at 50% 0%',
   corner: 'ellipse 45% 80% at 100% 0%',
@@ -772,10 +772,10 @@ function lit(
   mode: Mode,
   band: BandSurface
 ): BandSurface {
-  const at = doc.layout.bandGlow
+  const at = doc.layout.heroGlow
   if (!at || at === 'none') return band
   const fill = band.background
-  const role = doc.layout.bandGlowColour
+  const role = doc.layout.heroGlowColour
   const glow = role ? roleFill(doc, t, mode, role).fill : mixColor('#ffffff', fill, 0.6)
   const inks: Array<[string, number]> = [
     [band.ink, 4.5],
@@ -803,8 +803,8 @@ function lit(
 function bandSurface(doc: PortalDesign, t: Required<ThemeVariables>, mode: Mode): BandSurface {
   const support = supportColour(doc, mode)
   // The colour a brand-colour, tint or fade band is drawn in.
-  const own = roleFill(doc, t, mode, doc.layout.bandColour)
-  switch (doc.layout.band) {
+  const own = roleFill(doc, t, mode, doc.layout.heroColour)
+  switch (doc.layout.hero) {
     case 'brand': {
       const { fill, ink } = brandBand(doc, t, mode, own)
       return lit(doc, t, mode, { background: fill, behind: [fill], ink, muted: ink })
@@ -816,9 +816,9 @@ function bandSurface(doc: PortalDesign, t: Required<ThemeVariables>, mode: Mode)
     }
     case 'blend': {
       // The brand colour runs into the hero colour where one is chosen, else the second.
-      const chosen = doc.layout.bandColour && doc.layout.bandColour !== 'accent' ? own.fill : null
+      const chosen = doc.layout.heroColour && doc.layout.heroColour !== 'accent' ? own.fill : null
       const second = chosen ?? support ?? mixColor(t.primary, t.background, 0.5)
-      const centred = (doc.layout.bandAlign ?? 'left') === 'centre'
+      const centred = (doc.layout.heroAlign ?? 'left') === 'centre'
       if (doc.layout.blend === 'mesh') {
         // Soft colour beside the words, or around centred ones; the page's own colour under them (band-glow).
         const mesh = meshBand(
@@ -959,30 +959,30 @@ export function baseTokens(doc: PortalDesign): TokenMap {
 
 /** The structural choices, as attributes on `<html>`. */
 export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`, string> {
-  const { header, nav, band, cards, filters } = doc.layout
+  const { header, nav, hero: band, cards, filters } = doc.layout
   return {
     'data-qb-header': header,
     'data-qb-nav': nav,
     'data-qb-band': band,
-    'data-qb-band-align': doc.layout.bandAlign ?? (header === 'centered' ? 'centre' : 'left'),
+    'data-qb-band-align': doc.layout.heroAlign ?? (header === 'centered' ? 'centre' : 'left'),
     // A split panel needs a side image to split with; without one it is a panel within the page.
     'data-qb-band-shape':
-      doc.layout.bandShape === 'split' &&
-      !(doc.brand.bandImage && layoutValue(doc.layout, 'imagePlace') === 'side')
+      doc.layout.heroShape === 'split' &&
+      !(doc.brand.heroImage && layoutValue(doc.layout, 'imagePlace') === 'side')
         ? 'inset'
-        : layoutValue(doc.layout, 'bandShape'),
+        : layoutValue(doc.layout, 'heroShape'),
     'data-qb-image-phone': layoutValue(doc.layout, 'imagePhone'),
-    'data-qb-band-height': layoutValue(doc.layout, 'bandHeight'),
+    'data-qb-band-height': layoutValue(doc.layout, 'heroHeight'),
     // A glow rising from the band's foot, which a short title band leaves off.
     'data-qb-band-glow':
-      doc.layout.bandGlow === 'bottom' && (band === 'brand' || band === 'support')
+      doc.layout.heroGlow === 'bottom' && (band === 'brand' || band === 'support')
         ? 'foot'
         : 'none',
     // Over a page of more than one colour in a mode it shows, the band can fade out itself.
     'data-qb-band-over': shownModes(doc).every((mode) => onePageColour(doc, mode))
       ? 'page'
       : 'fill',
-    'data-qb-header-band': headerOnBand(doc) ? 'on' : 'off',
+    'data-qb-header-band': headerOnHero(doc) ? 'on' : 'off',
     'data-qb-header-span': headerSpans(doc) ? 'on' : headerOverPhoto(doc) ? 'photo' : 'off',
     'data-qb-status': layoutValue(doc.layout, 'status'),
     // In the brand colour, a headline takes the band's accent, read where the headline sits.
@@ -991,12 +991,12 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     'data-qb-page-titles': doc.layout.pageTitles === 'band' && band !== 'none' ? 'band' : 'plain',
     // An image behind the words takes the band's place; art beside a side image stays.
     'data-qb-band-art':
-      !doc.layout.bandArt ||
-      doc.layout.bandArt === 'none' ||
+      !doc.layout.heroArt ||
+      doc.layout.heroArt === 'none' ||
       band === 'none' ||
-      (doc.brand.bandImage && layoutValue(doc.layout, 'imagePlace') !== 'side')
+      (doc.brand.heroImage && layoutValue(doc.layout, 'imagePlace') !== 'side')
         ? 'none'
-        : EDGE_ART.has(doc.layout.bandArt)
+        : EDGE_ART.has(doc.layout.heroArt)
           ? 'edge'
           : 'tile',
     'data-qb-tint':

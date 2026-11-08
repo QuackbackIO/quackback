@@ -76,13 +76,13 @@ const quiet =
 
 /** A look as a small drawing: its colour, with its art or its panel where it has one. */
 function LookDrawing({ look }: { look: BandLook }) {
-  const { band, bandArt, bandShape } = look.fields
+  const { hero: band, heroArt, heroShape } = look.fields
   return (
-    <span className={cn('relative block h-full w-full', bandShape === 'inset' && 'px-1 pt-0.5')}>
-      <span className={cn('block h-full overflow-hidden', bandShape === 'inset' && 'rounded-sm')}>
+    <span className={cn('relative block h-full w-full', heroShape === 'inset' && 'px-1 pt-0.5')}>
+      <span className={cn('block h-full overflow-hidden', heroShape === 'inset' && 'rounded-sm')}>
         <BandDrawing band={band} />
       </span>
-      {bandArt === 'waves' && (
+      {heroArt === 'waves' && (
         <span className="absolute inset-x-0 bottom-1 h-1 bg-[radial-gradient(circle_at_50%_0,transparent_2px,var(--background)_2.5px)] bg-[length:6px_6px]" />
       )}
     </span>
@@ -357,22 +357,22 @@ export function HeroPanel({
           {look}
           {image}
           <PropertySection title={HERO_WORDS.layout}>
-            {shown('height') && tiles('height', HERO_WORDS.height, layout.bandHeight, 'roomy')}
+            {shown('height') && tiles('height', HERO_WORDS.height, layout.heroHeight, 'roomy')}
             {tiles(
               'align',
               HERO_WORDS.align,
-              layout.bandAlign,
+              layout.heroAlign,
               // Unset, the words sit as the header does.
               layout.header === 'centered' ? 'centre' : 'left',
-              () => update((draft) => void delete draft.layout.bandAlign, labelOf('align'))
+              () => update((draft) => void delete draft.layout.heroAlign, labelOf('align'))
             )}
-            {tiles('shape', HERO_WORDS.shape, layout.bandShape, 'full')}
+            {tiles('shape', HERO_WORDS.shape, layout.heroShape, 'full')}
           </PropertySection>
           {title}
           <PropertySection
             more={
               <>
-                {shown('glow') && tiles('glow', HERO_WORDS.glow, layout.bandGlow, 'none')}
+                {shown('glow') && tiles('glow', HERO_WORDS.glow, layout.heroGlow, 'none')}
                 {shown('blend') && tiles('blend', HERO_WORDS.blend, layout.blend, 'linear')}
                 {shown('fadeFrom') &&
                   tiles('fadeFrom', HERO_WORDS.fadeFrom, layout.fadeFrom, 'top')}
@@ -401,7 +401,7 @@ function ColourRow({
   change: (key: HeroKey, value: unknown) => void
 }) {
   const roles = designRoles(design)
-  const stored = design.layout.bandColour
+  const stored = design.layout.heroColour
   return (
     <PropertyRow
       label={FIND.heroColour.label}

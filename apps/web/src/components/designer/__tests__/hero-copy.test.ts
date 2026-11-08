@@ -2,8 +2,8 @@
  * People call the top of each page the hero, so the builder never says
  * "band" where they read it: its outline, quick find, the block registry,
  * the looks, change names, checks, the AI composer's chips, and the words in
- * the builder's own components. (The design's stored keys keep the older
- * word; see schema.ts.)
+ * the builder's own components. (Some stored option values and the AI's
+ * scope keep the older word; see schema.ts.)
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -37,10 +37,10 @@ const PAGES: DesignerPage[] = [
 function designWithEverything() {
   const design = defaultDesign()
   design.nav.home.on = true
-  design.layout.band = 'brand'
-  design.layout.headerOnBand = true
+  design.layout.hero = 'brand'
+  design.layout.headerOnHero = true
   design.brand.light.support = '#0ea5e9'
-  design.brand.bandImage = { key: 'portal-images/room.jpg' }
+  design.brand.heroImage = { key: 'portal-images/room.jpg' }
   return design
 }
 
@@ -85,7 +85,7 @@ describe('the hero’s name in the builder’s words', () => {
     const words = [
       ...BAND_LOOKS.map((look) => look.label),
       ...DESIGN_PRESETS.flatMap((preset) => [preset.label, preset.description]),
-      ...[...HERO_AI_PATHS, 'layout.band', 'brand.bandImage.key'].flatMap((path) => [
+      ...[...HERO_AI_PATHS, 'layout.hero', 'brand.heroImage.key'].flatMap((path) => [
         changeLabel(path),
         changeGroup(path),
       ]),

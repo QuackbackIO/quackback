@@ -258,8 +258,8 @@ describe('the page backgrounds as CSS', () => {
     const top = resolved.backgrounds.light!.site.top
     expect(resolved.backgroundCss).toContain(`--header-background: ${top};`)
     const onHero = structuredClone(tinted)
-    onHero.layout.band = 'brand'
-    onHero.layout.headerOnBand = true
+    onHero.layout.hero = 'brand'
+    onHero.layout.headerOnHero = true
     expect(resolveDesign(onHero).backgroundCss).not.toContain('--header-background')
   })
 

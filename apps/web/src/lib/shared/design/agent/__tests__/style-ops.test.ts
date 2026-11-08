@@ -247,8 +247,8 @@ describe('applying a step', () => {
     const d = design()
     d.mode = 'light'
     d.brand.light.accent = '#fc5f0a'
-    d.layout.band = 'brand'
-    d.layout.bandGlow = 'bottom'
+    d.layout.hero = 'brand'
+    d.layout.heroGlow = 'bottom'
     const reading = staticReading(d, R, { element: 'headline', state: 'base', block: '' })
     expect(reading.behind).toBe('#fc5f0a')
   })
