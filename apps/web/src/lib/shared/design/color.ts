@@ -71,6 +71,30 @@ export function mixColor(a: string, b: string, weight: number): string {
   return oklchToHex(formatOklch(l, c, h))
 }
 
+/**
+ * Below this chroma a colour the browser converts into oklch (hex, rgb()) has
+ * no hue, so a mix takes the other colour's: Chromium's rule, measured.
+ */
+const HUELESS = 0.02
+
+/**
+ * `a` mixed into `b` as `color-mix(in oklch, a <weight>, b)` draws it:
+ * lightness and chroma run straight, hue the shorter way round, a hueless
+ * colour taking the other's hue. As hex, so it measures as painted.
+ */
+export function mixOklch(a: string, b: string, weight: number): string {
+  const read = (color: string) => {
+    const parsed = parseOklch(color.startsWith('#') ? hexToOklch(color) : color)
+    if (!parsed) throw new Error(`Cannot mix "${color}"`)
+    return { ...parsed, hueless: color.startsWith('#') && parsed.c < HUELESS }
+  }
+  const [x, y] = [read(a), read(b)]
+  const mix = (p: number, q: number) => p * weight + q * (1 - weight)
+  const turn = ((y.h - x.h + 540) % 360) - 180
+  const h = x.hueless ? y.h : y.hueless ? x.h : (x.h + turn * (1 - weight) + 360) % 360
+  return oklchToHex(formatOklch(mix(x.l, y.l), mix(x.c, y.c), h))
+}
+
 type Lch = { l: number; c: number; h: number }
 
 function lchOf(color: string): Lch {
