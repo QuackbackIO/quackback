@@ -133,10 +133,11 @@ export function FeedbackToolbar({
               <button
                 key={option.value}
                 type="button"
+                data-qb-part="tab"
                 aria-pressed={isActive}
                 onClick={() => onSortChange(option.value)}
                 className={cn(
-                  'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
+                  'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-item text-sm transition-colors cursor-pointer',
                   isActive
                     ? 'bg-muted text-foreground font-medium'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'

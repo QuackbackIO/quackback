@@ -268,6 +268,20 @@ describe('element styles, drawn', () => {
     expect(r.styleCss).toContain('[data-qb-section="block-ideas00001"] [data-qb-post]:is(:hover')
   })
 
+  it('styles tabs and filters, pressed or selected ones as Current', () => {
+    const r = resolveDesign(
+      design((d) => {
+        d.style = { tab: { base: { radius: 0 }, current: { background: 'accent' } } }
+      })
+    )
+    expect(r.styleCss).toContain('[data-qb-part=tab] { border-radius')
+    expect(r.styleCss).toContain(
+      '[data-qb-part=tab]:is(:is([aria-pressed=true], [aria-selected=true], [aria-current=page]), [data-qb-force=current]) { background'
+    )
+    // Its text moves until it reads on the brand colour.
+    expect(r.tokens.light['--qb-st-tab-current-color']).toBeDefined()
+  })
+
   it('styles post cards apart from panels, a post card focused while what it holds is', () => {
     const r = resolveDesign(
       design((d) => {

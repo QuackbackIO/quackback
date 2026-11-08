@@ -22,6 +22,7 @@ export const ELEMENT_KINDS: Record<StyleElement, ContentKind> = {
   ghost: 'system',
   link: 'static',
   navItem: 'static',
+  tab: 'system',
   postCard: 'system',
   panel: 'system',
   block: 'system',

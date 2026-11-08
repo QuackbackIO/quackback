@@ -32,6 +32,7 @@ export interface ElementPick {
 export const PICKABLE: readonly StyleElement[] = [
   'vote',
   'navItem',
+  'tab',
   'button',
   'secondary',
   'ghost',
@@ -291,6 +292,7 @@ const ONE: Record<StyleElement, string> = {
   ghost: 'Quiet button',
   link: 'Link',
   navItem: 'Menu item',
+  tab: 'Tab',
   postCard: 'Post card',
   panel: 'Panel',
   block: 'Home block',

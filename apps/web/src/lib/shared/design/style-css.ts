@@ -61,6 +61,7 @@ const SHADES: ReadonlySet<StyleElement> = new Set([
   'secondary',
   'ghost',
   'navItem',
+  'tab',
   'chip',
   'vote',
 ])

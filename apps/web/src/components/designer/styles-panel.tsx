@@ -45,6 +45,7 @@ const ORDER: readonly StyleElement[] = [
   'button',
   'link',
   'navItem',
+  'tab',
   'postCard',
   'panel',
   'vote',
@@ -67,9 +68,10 @@ const ORDER: readonly StyleElement[] = [
 /** Every element some part is drawn as; the rest are the page's own regions, always listed. */
 const PART_OF = new Set<StyleElement>(Object.values(PART_STYLES).flat())
 
-/** Elements drawn only where a module is on: post cards with Feedback or the roadmap. */
+/** Elements drawn only where a module is on: post cards, tabs and filters with Feedback or the roadmap. */
 const GATED: Partial<Record<StyleElement, (gates: PortalPageGates) => boolean>> = {
   postCard: (gates) => gates.feedback || gates.roadmap,
+  tab: (gates) => gates.feedback || gates.roadmap,
 }
 
 /** What an element's brand choices are, in a word or two; null where it has none. */

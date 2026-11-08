@@ -148,10 +148,11 @@ describe('the elements', () => {
     const names = screen
       .getAllByRole('listitem')
       .map((item) => item.querySelector('span')!.textContent)
-    expect(names.slice(0, 10)).toEqual([
+    expect(names.slice(0, 11)).toEqual([
       'Main buttons',
       'Links',
       'Menu items',
+      'Tabs and filters',
       'Post cards',
       'Panels',
       'Vote boxes',
@@ -162,9 +163,10 @@ describe('the elements', () => {
     ])
   })
 
-  it('lists post cards only while Feedback or the roadmap is on, and panels always', () => {
+  it('lists post cards, tabs and filters only while Feedback or the roadmap is on, and panels always', () => {
     renderPanel(defaultDesign(), { ...ALL_ON, feedback: false, roadmap: false })
     expect(screen.queryByRole('button', { name: /^Post cards/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Tabs and filters/ })).toBeNull()
     expect(screen.getByRole('button', { name: /^Panels/ })).toBeTruthy()
   })
 

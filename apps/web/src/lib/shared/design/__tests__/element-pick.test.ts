@@ -45,6 +45,7 @@ beforeEach(() => {
         <article id="card1" data-qb-surface="card" data-qb-post=""><button id="vote1" data-qb-part="vote-button">3</button></article>
         <article id="card2" data-qb-surface="card" data-qb-post=""><button id="vote2" data-qb-part="vote-button">5</button></article>
         <aside id="panel" data-qb-surface="card"><span id="panel-words">Filters</span></aside>
+        <button id="tab" data-qb-part="tab" aria-pressed="true"><span id="tab-words">Top</span></button>
         <a id="more" data-qb-link="" href="/">All posts</a>
       </section>
     </div>`
@@ -77,6 +78,11 @@ describe('pickAt', () => {
     expect(at('card1')?.pick).toMatchObject({ element: 'postCard', part: null, index: 0 })
   })
 
+  it('picks a tab as Tabs and filters, never the block it sits in', () => {
+    expect(at('tab-words')?.pick).toMatchObject({ element: 'tab', part: null, index: 0 })
+    expect(pickName(at('tab')!.pick, design, 'home')).toBe('Tab')
+  })
+
   it('picks a post card as Post cards and a box that is no post as Panels', () => {
     expect(at('card2')?.pick).toMatchObject({ element: 'postCard', index: 1 })
     expect(at('panel-words')?.pick).toMatchObject({ element: 'panel', index: 0 })
@@ -107,6 +113,7 @@ describe('pickAt', () => {
       'postCard',
       'vote',
       'panel',
+      'tab',
       'link',
     ])
   })

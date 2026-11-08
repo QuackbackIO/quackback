@@ -170,3 +170,17 @@ describe('FeedbackToolbar sort', () => {
     expect(screen.getByRole('button', { name: 'Trending' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
+
+describe('the sort tabs', () => {
+  it('are tabs the design styles, the current one pressed, with the button corners', () => {
+    renderToolbar({})
+    const tabs = document.querySelectorAll('[data-qb-part="tab"]')
+    expect(tabs.length).toBeGreaterThanOrEqual(3)
+    const current = [...tabs].filter((tab) => tab.getAttribute('aria-pressed') === 'true')
+    expect(current.map((tab) => tab.textContent)).toEqual(['Trending'])
+    for (const tab of tabs) {
+      expect(tab.className).toContain('rounded-item')
+      expect(tab.className).not.toContain('rounded-full')
+    }
+  })
+})

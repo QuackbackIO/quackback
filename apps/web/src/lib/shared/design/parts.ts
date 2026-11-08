@@ -201,6 +201,18 @@ export const PORTAL_PARTS = [
     files: ['components/public/feedback/feedback-sidebar.tsx'],
   },
   {
+    name: 'tab',
+    description:
+      'A sort tab or filter pill on Feedback, or a tab on the roadmap. The chosen one is pressed or selected.',
+    states: [],
+    tokens: ['--qb-radius-button'],
+    files: [
+      'components/public/feedback/feedback-toolbar.tsx',
+      'components/public/feedback/filter-pill.tsx',
+      'components/public/roadmap-tabs.tsx',
+    ],
+  },
+  {
     name: 'title-action',
     description: "A page's own buttons beside or under its title, such as Subscribe.",
     states: [],
