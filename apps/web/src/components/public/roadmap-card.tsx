@@ -59,6 +59,7 @@ export function RoadmapCard({
         <Link
           to="/b/$slug/posts/$postId"
           params={{ slug: board.slug, postId: id }}
+          data-qb-part="post-title"
           className="block text-sm font-medium text-foreground line-clamp-2 after:absolute after:inset-0 after:[border-radius:var(--radius)] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
         >
           {title}

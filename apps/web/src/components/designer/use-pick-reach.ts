@@ -42,7 +42,7 @@ export function usePickReach(
     if (!pick) return setReach(null)
     const timer = setTimeout(() => {
       const doc = canvasDoc()
-      setReach(doc ? reachOf(doc, pick) : null)
+      setReach(doc ? reachOf(doc, pick, design, page) : null)
       const node = doc ? locatePick(doc, pick, design, page) : null
       setDrawn(node ? drawnValues(node) : null)
     }, 150)

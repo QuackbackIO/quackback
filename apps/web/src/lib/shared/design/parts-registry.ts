@@ -34,7 +34,9 @@ export interface PartInfo {
   within: boolean
   /**
    * Whether the anchor names the element itself, whatever its element kind's
-   * own marks: a data block's items, each styled as text.
+   * own marks: a listed item, a data block's or a list page's, styled as
+   * text. Its part styles every item of its kind where it is listed, and is
+   * the one scope that reaches it.
    */
   exact?: boolean
   /** Who owns what it says: the design (static), the workspace's data (dynamic) or the product (system). */
@@ -279,10 +281,49 @@ function blockName(block: PortalDesign['pages']['home']['blocks'][number]): stri
 }
 
 /**
- * The items a design's data blocks list, one part for each kind of item in a
- * block: picking one post's title styles every post title in it. They are
- * the workspace's data, picked on the canvas, and kept out of the parts the
- * AI is told of.
+ * The items list pages draw, by the section that lists them and the mark on
+ * each: the Feedback feed's post titles and excerpts, the roadmap's titles.
+ * Picked, one is itself, as a Home block's item is, not the card around it.
+ */
+const LIST_ITEMS: ReadonlyArray<{
+  section: string
+  group: string
+  page: OverridePage
+  mark: string
+  label: string
+  file: string
+}> = [
+  {
+    section: 'feed',
+    group: 'Feed',
+    page: 'feedback',
+    mark: 'post-title',
+    label: 'Post title',
+    file: 'components/public/post-card.tsx',
+  },
+  {
+    section: 'feed',
+    group: 'Feed',
+    page: 'feedback',
+    mark: 'post-excerpt',
+    label: 'Post excerpt',
+    file: 'components/public/post-card.tsx',
+  },
+  {
+    section: 'board',
+    group: 'Board',
+    page: 'roadmap',
+    mark: 'post-title',
+    label: 'Post title',
+    file: 'components/public/roadmap-card.tsx',
+  },
+]
+
+/**
+ * The items a design's data blocks and list pages list, one part for each
+ * kind of item where it is listed: picking one post's title styles every
+ * post title there. They are the workspace's data, picked on the canvas,
+ * and kept out of the parts the AI is told of.
  */
 export function itemPartsOf(design: PortalDesign): PartInfo[] {
   const parts: PartInfo[] = []
@@ -303,6 +344,19 @@ export function itemPartsOf(design: PortalDesign): PartInfo[] {
         files: ['components/public/home/home-blocks.tsx'],
       })
   }
+  for (const item of LIST_ITEMS)
+    parts.push({
+      id: `${item.section}.${item.mark}`,
+      label: item.label,
+      group: item.group,
+      elements: ['body'],
+      pages: [item.page],
+      anchor: `[data-qb-section=${item.section}] [data-qb-part=${item.mark}]`,
+      within: false,
+      exact: true,
+      kind: 'dynamic',
+      files: [item.file],
+    })
   return parts
 }
 

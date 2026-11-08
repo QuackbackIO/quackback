@@ -29,7 +29,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/shared/utils'
-import { pickName, singular, type ElementPick, type Reach } from '@/lib/shared/design/element-pick'
+import {
+  pickName,
+  pickScope,
+  singular,
+  type ElementPick,
+  type Reach,
+} from '@/lib/shared/design/element-pick'
 import { partOf } from '@/lib/shared/design/parts-registry'
 import {
   SCOPE_NAMES,
@@ -117,6 +123,12 @@ export interface DrawnElement {
   dark: boolean
 }
 
+/**
+ * A count a scope line shows. A scope that holds the pick reaches one at
+ * least, so none is shown rather than a 0 that would be wrong.
+ */
+const counted = (n: number | null | undefined) => (n ? n : undefined)
+
 /** A row's tile for its exact field, after the brand's choices. */
 const CUSTOM = 'custom'
 
@@ -179,22 +191,28 @@ export function ElementPanel({
 }) {
   const ctx = useMemo(() => contextOf(pick, page), [pick, page])
   const el: StyleElementInfo = STYLE_ELEMENTS[pick.element]
-  const scopes = shared ? (['everywhere'] as ScopeName[]) : scopesFor(ctx)
+  // What a change reaches, in the pick's own noun. A listed item, such as a post's title, is
+  // reached only by its own part, which changes every item where it is listed.
+  const reaches = pickScope(pick, design, ctx.page)
+  const item = !shared && reaches.item
+  const scopes: ScopeName[] = shared ? ['everywhere'] : item ? ['part'] : scopesFor(ctx)
+  const startAt: ScopeName = item ? 'part' : defaultScope(ctx)
   const [scope, setScope] = useState<ScopeName>(() =>
-    initialScope && scopes.includes(initialScope) ? initialScope : defaultScope(ctx)
+    initialScope && scopes.includes(initialScope) ? initialScope : startAt
   )
   /** Rows whose Custom tile is picked, showing their exact field before a value is set. */
   const [customOpen, setCustomOpen] = useState<ReadonlySet<StyleProp>>(new Set())
-  const at = scopes.includes(scope) ? scope : defaultScope(ctx)
+  const at = scopes.includes(scope) ? scope : startAt
   const name = pickName(pick, design, ctx.page)
+  // One of its element kind, which the wider scopes it inherits from are named by.
   const one = singular(pick.element)
   // Under its block in the trail, a part is named alone: "Call to action".
   const crumb = shared ? el.label : (pick.part && partOf(design, pick.part)?.label) || name
   const phone = screen === 'phone'
   const tokens = useMemo(() => colourTokens(design), [design])
   const fonts = useMemo(() => fontTokens(design), [design])
-  const undoName = (what: string) =>
-    `${name}: ${what}, ${SCOPE_NAMES[at].toLowerCase()}${phone ? ', phones' : ''}`
+  const atWords = item ? reaches.phrase : SCOPE_NAMES[at].toLowerCase()
+  const undoName = (what: string) => `${name}: ${what}, ${atWords}${phone ? ', phones' : ''}`
   const allowed = (prop: StyleProp) =>
     (el.props as readonly StyleProp[]).includes(prop) &&
     styleAllows(pick.element, state, prop) &&
@@ -237,6 +255,16 @@ export function ElementPanel({
   }
   const inheritedRaw = (prop: StyleProp): { value: unknown; from: string } | null => {
     const wider = widerValue(design, ctx, at, screen, state, prop)
+    // A listed item takes nothing from wider scopes: none of them reaches it. It has what it is drawn with.
+    if (item) {
+      if (wider && wider.from === at)
+        return {
+          value: wider.value,
+          from: wider.screen !== screen ? 'From all screens' : `From ${STATE_INFO.base.label}`,
+        }
+      const measured = measure?.(prop)
+      return measured !== undefined ? { value: measured, from: WORDS.fromBrand } : null
+    }
     if (wider)
       return {
         value: wider.value,
@@ -502,7 +530,7 @@ export function ElementPanel({
             id: 'block' as const,
             link: WORDS.thisBlock,
             phrase: `this block’s ${kinds}`,
-            count: reach?.block ?? undefined,
+            count: counted(reach?.block),
           },
         ]
       : []),
@@ -512,7 +540,7 @@ export function ElementPanel({
             id: 'page' as const,
             link: WORDS.thisPage,
             phrase: `${kinds} on ${PAGE_NAMES[page]}`,
-            count: reach?.page,
+            count: counted(reach?.page),
           },
         ]
       : []),
@@ -535,7 +563,7 @@ export function ElementPanel({
     ...(values
       ? [
           {
-            label: `Reset ${scopeWords(at, one)} (${values} ${values === 1 ? 'value' : 'values'})`,
+            label: `Reset ${item ? reaches.phrase : scopeWords(at, one)} (${values} ${values === 1 ? 'value' : 'values'})`,
             onSelect: () =>
               update((draft) => {
                 resetAt(draft, ctx, at, screen)
@@ -570,12 +598,16 @@ export function ElementPanel({
         >
           <ScopeLine
             one={one}
-            widest={{
-              id: 'everywhere',
-              count: reach?.page,
-              countNote: reach ? 'on this page' : undefined,
-            }}
-            narrower={narrower}
+            widest={
+              item
+                ? { id: 'part', phrase: reaches.phrase, count: counted(reach?.page) }
+                : {
+                    id: 'everywhere',
+                    count: counted(reach?.page),
+                    countNote: counted(reach?.page) ? 'on this page' : undefined,
+                  }
+            }
+            narrower={item ? [] : narrower}
             value={at}
             onChange={setScope}
           />

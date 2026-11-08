@@ -26,6 +26,12 @@ const cta = { element: 'button', part: 'hero.home.cta', section: 'hero', index: 
 const vote = { element: 'vote', part: null, section: 'block-abcdefgh', index: 1 } as const
 const headline = { element: 'headline', part: null, section: null, index: 0 } as const
 const link = { element: 'link', part: null, section: 'block-abcdefgh', index: 0 } as const
+const postTitle = {
+  element: 'body',
+  part: 'block.abcdefgh.post-title',
+  section: 'block-abcdefgh',
+  index: 1,
+} as const
 
 function home(): PortalDesign {
   return portalDesign.parse({
@@ -49,7 +55,7 @@ function home(): PortalDesign {
 }
 
 function mount(
-  pick: typeof cta | typeof vote | typeof headline | typeof link,
+  pick: typeof cta | typeof vote | typeof headline | typeof link | typeof postTitle,
   design = home(),
   extra: {
     reach?: { page: number; block: number | null }
@@ -304,6 +310,32 @@ describe('the picked element’s properties', () => {
     fireEvent.click(within(sizeRow()).getByRole('button', { name: 'Use all-screens value' }))
     expect(box.design.stylePhone?.headline?.base?.size).toBeUndefined()
     expect(box.labels.at(-1)).toBe('Headline: size, everywhere, phones')
+  })
+})
+
+describe('a listed item, such as a post’s title', () => {
+  it('names it as itself and counts what its change reaches, with no scope that misses it', () => {
+    const { view, box } = mount(postTitle, home(), { reach: { page: 3, block: 3 } })
+    expect(line(view)).toBe('Changing every post title in Top posts (3)')
+    expect(view.container.textContent).not.toContain('body text')
+    expect(
+      screen.queryByRole('button', { name: /^(Just this one|This block|This page)/ })
+    ).toBeNull()
+    fireEvent.change(screen.getByLabelText('Text size'), { target: { value: '18' } })
+    expect(
+      findOverride(box.design, {
+        scope: 'part',
+        part: 'block.abcdefgh.post-title',
+        element: 'body',
+      })?.style?.base?.size
+    ).toBe(18)
+    expect(box.labels.at(-1)).toBe('Post title · Top posts: size, every post title in Top posts')
+  })
+
+  it('never says (0) for what is picked, whatever the canvas counted', () => {
+    const { view } = mount(vote, home(), { reach: { page: 0, block: 0 } })
+    expect(line(view)).toBe('Changing every vote box')
+    expect(screen.getByRole('button', { name: 'This block' })).toBeTruthy()
   })
 })
 
