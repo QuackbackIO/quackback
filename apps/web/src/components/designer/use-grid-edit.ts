@@ -21,6 +21,7 @@ import { GRID_COLUMNS, settle, type GridPlace } from '@/lib/shared/design/home-g
 import { toLayerRect, type Rect } from '@/lib/shared/design/layer-geometry'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import { dispatcher } from './dispatcher'
 import { playReflow, snapshotBlocks } from './frame-reflow'
 import { blockElement } from './use-frame-rects'
 
@@ -172,12 +173,17 @@ export function useGridEdit({
   function apply(drag: Drag, change: GridChange | null) {
     if (!editing) return
     const before = snapshotBlocks(page())
-    let landed = drag.origin
-    editing.update((draft) => {
-      draft.pages.home.blocks = structuredClone(drag.blocks)
-      if (change) landed = editGrid(draft, editing.gates, drag.id, change) ?? drag.origin
+    const done = dispatcher(
+      editing.design,
+      editing.update
+    )({
+      op: 'block.grid',
+      id: drag.id,
+      change,
+      gates: editing.gates,
+      from: drag.blocks,
     })
-    drag.landed = landed
+    drag.landed = (done.ok && done.place) || drag.origin
     playReflow(page(), before)
   }
 
@@ -324,9 +330,8 @@ export function useGridEdit({
       return true
     }
     const before = snapshotBlocks(page())
-    const gates = editing.gates
-    editing.update(
-      (draft) => void editGrid(draft, gates, id, change),
+    dispatcher(editing.design, editing.update)(
+      { op: 'block.grid', id, change, gates: editing.gates },
       `${resizes(change) ? 'Resize' : 'Move'} ${called}`
     )
     playReflow(page(), before)

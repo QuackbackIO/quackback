@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { blockOf, type SettingField } from '@/lib/shared/design/blocks'
-import { editGrid, movedWords, resizedWords, type GridChange } from '@/lib/shared/design/grid-edit'
+import { movedWords, resizedWords, type GridChange } from '@/lib/shared/design/grid-edit'
 import type { HomeBlock } from '@/lib/shared/design/home'
 import { homeGridItems } from '@/lib/shared/design/home'
 import { MAX_ROWS, GRID_COLUMNS, settle } from '@/lib/shared/design/home-grid'
@@ -32,15 +32,14 @@ import { cn } from '@/lib/shared/utils'
 import {
   CONTACT_USUAL,
   LOOK_DEFAULTS,
-  resetLook,
   sharedLook,
   takesLook,
   usualWords,
   widthTiles,
-  writeLook,
   type LookProp,
   type LookScope,
 } from './block-panel'
+import { dispatcher } from './dispatcher'
 import { FIND } from './find-rows'
 import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
 import { ScopeLine } from './properties/scope-line'
@@ -274,11 +273,11 @@ export function BlockLayout({
         ? grid.move.x === place.x && grid.move.y === place.y
         : 'size' in grid && grid.size.w === place.w && grid.size.h === place.h
     if (same) return
-    let moved = null as ReturnType<typeof editGrid>
-    update((draft) => {
-      moved = editGrid(draft, gates, block.id, grid)
-    }, `${name}: ${what}`)
-    if (moved) say(('size' in grid ? resizedWords : movedWords)(name, moved))
+    const done = dispatcher(design, update)(
+      { op: 'block.grid', id: block.id, change: grid, gates },
+      `${name}: ${what}`
+    )
+    if (done.ok && done.place) say(('size' in grid ? resizedWords : movedWords)(name, done.place))
   }
   const width = String(place.w)
   const tiles = widthTiles(def.grid.minW)
@@ -389,14 +388,15 @@ export function BlockLook({
       ? own(prop) !== undefined && own(prop) !== shared(prop)
       : own(prop) !== undefined
   const where = scope === 'one' ? 'just this one' : EVERY_HOME_BLOCK
+  const dispatch = dispatcher(design, update)
   const write = (prop: LookProp, value: string | undefined) =>
-    update(
-      (draft) => writeLook(draft, scope, block.id, prop, value),
+    dispatch(
+      { op: 'block.look', id: block.id, scope, prop, value },
       `${name}: ${LOOK_NAMES[prop]}, ${where}`
     )
   const reset = (prop: LookProp) =>
-    update(
-      (draft) => resetLook(draft, scope, block.id, prop),
+    dispatch(
+      { op: 'block.lookReset', id: block.id, scope, prop },
       `${name}: ${LOOK_NAMES[prop]}, ${where}`
     )
   const fromWhere = scope === 'one' ? `From ${EVERY_HOME_BLOCK}` : undefined
@@ -497,11 +497,10 @@ export function BlockLook({
         count={count}
         onElement={onElement}
         onReset={(el) =>
-          update((draft) => {
-            const at = draft.pages.home.blocks.find((b) => b.id === block.id)
-            const sheet = at?.look?.style as Record<string, unknown> | undefined
-            if (sheet) delete sheet[el]
-          }, `${name}: ${STYLE_ELEMENTS[el].label.toLowerCase()}, just this one`)
+          dispatch(
+            { op: 'block.styleReset', id: block.id, element: el },
+            `${name}: ${STYLE_ELEMENTS[el].label.toLowerCase()}, just this one`
+          )
         }
       />
     </PropertySection>
