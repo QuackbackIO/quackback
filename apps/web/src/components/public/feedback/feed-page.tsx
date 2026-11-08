@@ -10,7 +10,7 @@ import {
   createFeedHandoff,
   FeedHandoffContext,
 } from '@/components/public/feedback/feed-input-handoff'
-import { usePreviewWelcomeCard } from '@/components/public/preview-draft-context'
+import { usePortalDesign, usePreviewWelcomeCard } from '@/components/public/preview-draft-context'
 import { portalQueries, useSeedPortalStatusesCache } from '@/lib/client/queries/portal'
 import type { PortalWelcomeCard as PortalWelcomeCardData } from '@/lib/shared/types/settings'
 import { portalDefaultSort, savedWelcomeCard } from '@/lib/shared/design/view'
@@ -55,10 +55,7 @@ function PortalHero() {
     select: (context) => context.settings?.publicPortalConfig?.welcomeCard,
   })
   // On the design engine the welcome message is part of the design.
-  const design = useRouteContext({
-    from: '__root__',
-    select: (context) => context.settings?.portalDesign,
-  })
+  const design = usePortalDesign()
   const savedCard = useMemo(
     () => savedWelcomeCard(design, legacyWelcomeCard),
     [design, legacyWelcomeCard]

@@ -1,17 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useRouteContext } from '@tanstack/react-router'
 import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
 import { BrandStatusColours } from './brand-status-colours'
 import {
-  PreviewDraftProvider,
-  PreviewAttributesContext,
-  PreviewLogoContext,
-  PreviewBandImageContext,
-  PreviewHeadlineContext,
-  PreviewPagesContext,
-  PreviewSamplesContext,
   FeedCopyContext,
-  type FeedCopy,
-  type PreviewDesignPages,
+  PreviewDraftProvider,
+  PreviewDesignContext,
+  PreviewSamplesContext,
+  type DraftDesignView,
   type PortalPreviewDraft,
 } from './preview-draft-context'
 
@@ -19,7 +15,6 @@ type StructuralDraft = Omit<PortalPreviewDraft, 'css'>
 
 type DesignChannel = typeof import('./portal-preview-design')
 type DesignerChannel = typeof import('./portal-preview-designer')
-type DesignPreview = import('./portal-preview-design').DesignPreview
 
 const sameContent = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b)
 
@@ -63,9 +58,11 @@ function previewStylesheet(css: string): string {
 /**
  * Bridge between the admin Branding page and the portal preview iframe.
  *
- * Mounted from the portal layout ONLY when the document is loaded with
- * `?preview=1` inside a same-origin iframe (the admin live preview). It
- * listens for postMessage from the parent and exposes two draft channels:
+ * Mounted by the portal layout on every page, where it provides what pages
+ * take from the design in force (its wording and status colours). Only when
+ * the document is loaded with `?preview=true` inside a same-origin iframe
+ * (the admin live preview) does it listen for postMessage from the parent,
+ * on these draft channels:
  *
  * - `quackback:preview-css`: the theme editor's full draft stylesheet,
  *   rendered into a <style> AFTER the children so it cascades over the
@@ -73,6 +70,11 @@ function previewStylesheet(css: string): string {
  * - `quackback:preview-draft`: structural drafts (nav config, welcome card,
  *   header identity) provided via PreviewDraftContext for draft-aware
  *   components (PortalHeader, the welcome card render site).
+ * - `quackback:preview-design`: the builder's whole draft design. The frame
+ *   reads it with the design schema and builds its view with designView, as
+ *   the server builds the published one, then provides that view where the
+ *   portal reads the published view (usePortalDesign). Nothing in the portal
+ *   reads a draft any other way.
  *
  * CSS is applied via a text node (never innerHTML) and both sides verify
  * the message origin, so a hostile page cannot inject anything executable.
@@ -86,7 +88,7 @@ export function PortalPreviewProvider({
 }) {
   const [css, setCss] = useState('')
   const [draft, setDraft] = useState<StructuralDraft | null>(null)
-  const [design, setDesign] = useState<DesignPreview | null>(null)
+  const [design, setDesign] = useState<DraftDesignView | null>(null)
   const designChannel = useRef<DesignChannel | null>(null)
   // In the designer: its own click handling; the builder draws what is picked.
   const [designer, setDesigner] = useState<DesignerChannel | null>(null)
@@ -110,7 +112,7 @@ export function PortalPreviewProvider({
         const value = msg.design
         void import('./portal-preview-design').then((channel) => {
           designChannel.current = channel
-          setDesign(channel.readDesignPreview(value))
+          setDesign(channel.readDraftView(value))
         })
       } else if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
         setCss(msg.css)
@@ -172,44 +174,36 @@ export function PortalPreviewProvider({
         document.removeEventListener(type, hold, true)
     }
   }, [active, designer])
-  // The channel checks their shape; the admin drafted them through the schema.
-  const pages = useMemo<PreviewDesignPages | undefined>(
-    () =>
-      design
-        ? {
-            home: design.home as PreviewDesignPages['home'],
-            titles: design.titles,
-            nav: design.nav as PreviewDesignPages['nav'],
-          }
-        : undefined,
-    [design]
-  )
   const fontIds = design?.fontIds.join(' ') ?? ''
   useEffect(() => {
     for (const id of fontIds.split(' ').filter(Boolean)) loadBrandingFont(id).catch(() => {})
   }, [fontIds])
 
-  if (!enabled) return <>{children}</>
+  // What every page takes from the design in force: the draft's in the frame, else the published one.
+  const saved = useRouteContext({
+    from: '__root__',
+    select: (context) => context.settings?.portalDesign,
+  })
+  const shown = design ?? (saved?.engine === 'v2' ? saved : undefined)
+  const page = (
+    <FeedCopyContext.Provider value={shown?.feedback.copy}>
+      <BrandStatusColours colours={shown?.statusColours}>{children}</BrandStatusColours>
+    </FeedCopyContext.Provider>
+  )
+
+  if (!enabled) return page
 
   return (
     <PreviewDraftProvider draft={draft} css={css}>
-      <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
-        <PreviewPagesContext.Provider value={pages}>
-          <PreviewAttributesContext.Provider value={design?.attributes}>
-            <PreviewLogoContext.Provider value={design?.logo ?? undefined}>
-              <BrandStatusColours colours={design?.statusColours}>
-                <PreviewBandImageContext.Provider value={design ? design.bandImage : undefined}>
-                  <PreviewSamplesContext.Provider value={!!designer && !trying}>
-                    <DraftCopy copy={design?.copy}>{children}</DraftCopy>
-                  </PreviewSamplesContext.Provider>
-                </PreviewBandImageContext.Provider>
-              </BrandStatusColours>
-            </PreviewLogoContext.Provider>
-          </PreviewAttributesContext.Provider>
-        </PreviewPagesContext.Provider>
-      </PreviewHeadlineContext.Provider>
+      <PreviewDesignContext.Provider value={design ?? undefined}>
+        <PreviewSamplesContext.Provider value={!!designer && !trying}>
+          {page}
+        </PreviewSamplesContext.Provider>
+      </PreviewDesignContext.Provider>
       {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
-      {design?.css ? <style data-preview-design="">{design.css}</style> : null}
+      {design && designChannel.current ? (
+        <style data-preview-design="">{designChannel.current.draftStylesheet(design)}</style>
+      ) : null}
       {designer ? <style data-preview-designer="">{designer.DESIGNER_CSS}</style> : null}
       {/* Appearance's own hover outline; in the designer the builder draws it. */}
       {design && designChannel.current && !designer ? (
@@ -217,10 +211,4 @@ export function PortalPreviewProvider({
       ) : null}
     </PreviewDraftProvider>
   )
-}
-
-/** The draft's own wording in place of the saved design's, while previewing a design. */
-function DraftCopy({ copy, children }: { copy: FeedCopy | null | undefined; children: ReactNode }) {
-  if (!copy) return children
-  return <FeedCopyContext.Provider value={copy}>{children}</FeedCopyContext.Provider>
 }

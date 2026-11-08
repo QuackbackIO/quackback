@@ -115,7 +115,7 @@ vi.mock('@/components/shared/user-stats', () => ({
 import { PortalHeader } from '../portal-header'
 import { foldMenu } from '../use-menu-fold'
 import {
-  PreviewAttributesContext,
+  PreviewDesignContext,
   PreviewDraftProvider,
   type PortalPreviewDraft,
 } from '../preview-draft-context'
@@ -373,9 +373,11 @@ describe('PortalHeader — design layouts', () => {
     })
     return render(
       <IntlProvider locale="en" defaultLocale="en">
-        <PreviewAttributesContext.Provider value={attributes}>
+        <PreviewDesignContext.Provider
+          value={attributes ? ({ ...(portalDesign as object), attributes } as never) : undefined}
+        >
           <PortalHeader orgName="Acme" userRole={null} showThemeToggle={false} />
-        </PreviewAttributesContext.Provider>
+        </PreviewDesignContext.Provider>
       </IntlProvider>
     )
   }

@@ -1,15 +1,11 @@
 import type { ReactNode } from 'react'
 import { useIntl } from 'react-intl'
-import { useRouteContext } from '@tanstack/react-router'
 import { PortalBand, accented, textForLocale, type TitledPage } from './portal-band'
-import { usePreviewDesignAttributes, usePreviewTitles } from './preview-draft-context'
+import { usePortalDesign } from './preview-draft-context'
 
 /** Whether the page's title comes from the design, as it does on the design engine. */
 export function useDesignTitles(): boolean {
-  return useRouteContext({
-    from: '__root__',
-    select: (context) => context.settings?.portalDesign?.engine === 'v2',
-  })
+  return usePortalDesign()?.engine === 'v2'
 }
 
 /**
@@ -36,14 +32,9 @@ export function PortalPageTitle({
   children?: ReactNode
 }) {
   const intl = useIntl()
-  const design = useRouteContext({
-    from: '__root__',
-    select: (context) => context.settings?.portalDesign,
-  })
-  const draftAttributes = usePreviewDesignAttributes()
-  const draftTitles = usePreviewTitles()
+  const design = usePortalDesign()
   if (design?.engine !== 'v2') return null
-  const onBand = (draftAttributes ?? design.attributes)['data-qb-page-titles'] === 'band'
+  const onBand = design.attributes['data-qb-page-titles'] === 'band'
   if (onBand)
     return (
       <PortalBand page={page} words={{ title, subtitle }}>
@@ -63,7 +54,7 @@ export function PortalPageTitle({
         ) : null}
       </PortalBand>
     )
-  const headline = (draftTitles ?? design.titles)[page]
+  const headline = design.titles[page]
   const shown = textForLocale(headline?.title, intl.locale) || title
   const line = textForLocale(headline?.subtitle, intl.locale) || subtitle
   const phrase = textForLocale(headline?.accent?.text, intl.locale)

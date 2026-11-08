@@ -26,11 +26,9 @@ function ready(frame: HTMLIFrameElement) {
 
 describe('openCheckFrame', () => {
   it('lays out Home off screen at the screenshots’ width and sends it each design', async () => {
-    const preview = (d: { name: string }) => ({ css: d.name })
     const opening = openCheckFrame({
       src: 'about:blank',
       design: { name: 'first' },
-      preview,
       settle: async () => {},
     })
     const frame = document.querySelector<HTMLIFrameElement>('iframe[data-brand-check]')!
@@ -46,13 +44,13 @@ describe('openCheckFrame', () => {
     })
     ready(frame)
     const probe = await opening
-    expect(posted).toEqual([{ type: 'quackback:preview-design', design: { css: 'first' } }])
+    expect(posted).toEqual([{ type: 'quackback:preview-design', design: { name: 'first' } }])
     expect(probe.frame()).toBe(frame)
     probe.show({ name: 'second' })
-    expect(posted.at(-1)).toEqual({ type: 'quackback:preview-design', design: { css: 'second' } })
+    expect(posted.at(-1)).toEqual({ type: 'quackback:preview-design', design: { name: 'second' } })
     // A reload starts from the saved design: the latest is sent again.
     ready(frame)
-    expect(posted.at(-1)).toEqual({ type: 'quackback:preview-design', design: { css: 'second' } })
+    expect(posted.at(-1)).toEqual({ type: 'quackback:preview-design', design: { name: 'second' } })
     probe.close()
     expect(document.querySelector('iframe[data-brand-check]')).toBeNull()
   })
@@ -62,7 +60,6 @@ describe('openCheckFrame', () => {
       openCheckFrame({
         src: 'about:blank',
         design: {},
-        preview: (d) => d,
         timeoutMs: 20,
         settle: async () => {},
       })

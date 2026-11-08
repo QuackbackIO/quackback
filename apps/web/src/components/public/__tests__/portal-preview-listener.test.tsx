@@ -8,13 +8,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
+import { designView } from '@/lib/shared/design/design-view'
+import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
+
+/** The published design, as the route context carries it. */
+const root = vi.hoisted(() => ({ portalDesign: undefined as unknown }))
+vi.mock('@tanstack/react-router', () => ({
+  useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
+    select({ settings: { portalDesign: root.portalDesign } }),
+}))
+
 import { PortalPreviewProvider } from '../portal-preview-listener'
-import { FeedCopyContext, useFeedCopy } from '../preview-draft-context'
+import { useFeedCopy, usePortalDesign } from '../preview-draft-context'
 import {
   usePreviewCss,
-  usePreviewDesignNav,
   usePreviewDraft,
-  usePreviewHome,
   usePreviewNav,
   usePreviewWelcomeCard,
 } from '../preview-draft-context'
@@ -38,16 +46,23 @@ function DraftReader() {
   return <p data-testid="draft">{usePreviewDraft() ? 'draft' : 'none'}</p>
 }
 function PagesReader() {
-  const home = usePreviewHome()
-  const designNav = usePreviewDesignNav()
+  const design = usePortalDesign()
+  const v2 = design?.engine === 'v2' ? design : undefined
   return (
     <p data-testid="pages">
       {JSON.stringify({
-        blocks: home?.blocks.map((block) => block.type) ?? null,
-        nav: designNav ?? null,
+        blocks: v2?.home.blocks.map((block) => block.type) ?? null,
+        nav: v2?.nav.items.map((item) => item.type) ?? null,
       })}
     </p>
   )
+}
+
+/** A draft design: the default one, changed as asked. */
+function draftDesign(change: (draft: PortalDesign) => void = () => {}): PortalDesign {
+  const draft = defaultDesign()
+  change(draft)
+  return draft
 }
 
 /** The page that frames the preview. */
@@ -92,6 +107,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  root.portalDesign = undefined
 })
 
 describe('PortalPreviewProvider', () => {
@@ -194,32 +210,32 @@ describe('PortalPreviewProvider', () => {
 })
 
 describe('a design draft in the preview', () => {
+  const attributes = Object.keys(designView(defaultDesign(), null).attributes)
   afterEach(() => {
-    document.documentElement.removeAttribute('data-qb-nav')
+    for (const name of [...attributes, 'data-qb-header'])
+      document.documentElement.removeAttribute(name)
   })
 
-  it('applies the draft design’s CSS and structure, then puts the saved ones back', async () => {
-    document.documentElement.setAttribute('data-qb-nav', 'tabs')
-    await postDesign({
-      type: 'quackback:preview-design',
-      design: {
-        css: '[data-portal-theme] { --qb-accent: #0f766e; }',
-        attributes: { 'data-qb-nav': 'pills' },
-        fontIds: [],
-      },
+  it('draws the draft with the view the server builds for it, then puts the saved one back', async () => {
+    document.documentElement.setAttribute('data-qb-header', 'saved')
+    const draft = draftDesign((d) => {
+      d.css = '[data-qb-part="band"] { letter-spacing: 0.02em; }'
     })
-    expect(document.querySelector('style[data-preview-design]')?.textContent).toContain(
-      '--qb-accent: #0f766e'
+    const view = designView(draft, null)
+    await postDesign({ type: 'quackback:preview-design', design: draft })
+    expect(document.querySelector('style[data-preview-design]')?.textContent).toBe(
+      `${view.themeStyles}\n${view.customCss}`
     )
-    expect(document.documentElement.getAttribute('data-qb-nav')).toBe('pills')
+    for (const [name, value] of Object.entries(view.attributes))
+      expect(document.documentElement.getAttribute(name), name).toBe(value)
 
     await postDesign({ type: 'quackback:preview-design', design: null })
     expect(document.querySelector('style[data-preview-design]')).toBeNull()
-    expect(document.documentElement.getAttribute('data-qb-nav')).toBe('tabs')
+    expect(document.documentElement.getAttribute('data-qb-header')).toBe('saved')
   })
 
   it('outlines sections on hover for Appearance, but not in the designer, whose builder draws it', async () => {
-    const design = { css: '', attributes: {}, fontIds: [] }
+    const design = draftDesign()
     await postDesign({ type: 'quackback:preview-design', design })
     expect(document.querySelector('style[data-preview-sections]')).not.toBeNull()
     await postDesign({ type: 'quackback:preview-designer' })
@@ -227,56 +243,44 @@ describe('a design draft in the preview', () => {
     expect(document.querySelector('style[data-preview-sections]')).toBeNull()
   })
 
-  it('hands the page the draft’s Home and menu, dropping what it cannot read', async () => {
+  it('hands the page the draft’s design where it reads the published one', async () => {
     const pages = () => JSON.parse(screen.getByTestId('pages').textContent ?? '{}')
     expect(pages()).toEqual({ blocks: null, nav: null })
-    await postDesign({
-      type: 'quackback:preview-design',
-      design: {
-        css: '',
-        attributes: {},
-        fontIds: [],
-        headline: null,
-        home: {
-          headline: null,
-          blocks: [
-            { type: 'status', width: 'third' },
-            { type: 'ideas', grid: { x: 0, y: 4, w: 6, h: 8 } },
-            { type: 'script', width: 'full' },
-            { type: 'links' },
-            { type: 'links', grid: { x: 0, y: 'top', w: 6, h: 8 } },
-          ],
+    const draft = draftDesign((d) => {
+      d.pages.home.blocks = [
+        { id: 'status01', type: 'status', grid: { x: 0, y: 0, w: 4, h: 4 } },
+        {
+          id: 'ideas001',
+          type: 'ideas',
+          grid: { x: 0, y: 4, w: 6, h: 8 },
+          sort: 'trending',
+          count: 3,
         },
-        nav: { home: { on: true, tab: false }, items: [{ type: 'feedback', shown: true }, 'x'] },
-      },
+      ]
     })
+    await postDesign({ type: 'quackback:preview-design', design: draft })
     expect(pages()).toEqual({
       blocks: ['status', 'ideas'],
-      nav: { home: { on: true, tab: false }, items: [{ type: 'feedback', shown: true }] },
+      nav: draft.nav.items.map((item) => item.type),
     })
-    // A menu without Home's switches is no menu.
-    await postDesign({
-      type: 'quackback:preview-design',
-      design: { css: '', attributes: {}, fontIds: [], nav: { home: {}, items: [] } },
-    })
+    await postDesign({ type: 'quackback:preview-design', design: null })
     expect(pages()).toEqual({ blocks: null, nav: null })
   })
 
-  it('ignores attributes outside the design’s own', async () => {
-    await postDesign({
-      type: 'quackback:preview-design',
-      design: {
-        css: '',
-        attributes: { onload: 'x', 'data-qb-band': 'tint', 'data-qb-band-shape': 'panel' },
-        fontIds: [],
-      },
-    })
+  it('uses nothing from a design the schema refuses', async () => {
+    const forged = {
+      ...draftDesign(),
+      css: ':root{}',
+      attributes: { onload: 'x' },
+      pages: { home: { blocks: [{ type: 'script' }] } },
+    }
+    await postDesign({ type: 'quackback:preview-design', design: forged })
+    expect(document.querySelector('style[data-preview-design]')).toBeNull()
     expect(document.documentElement.hasAttribute('onload')).toBe(false)
-    expect(document.documentElement.getAttribute('data-qb-band')).toBe('tint')
-    expect(document.documentElement.getAttribute('data-qb-band-shape')).toBe('panel')
-    await postDesign({ type: 'quackback:preview-design', design: null })
-    expect(document.documentElement.hasAttribute('data-qb-band')).toBe(false)
-    expect(document.documentElement.hasAttribute('data-qb-band-shape')).toBe(false)
+    expect(JSON.parse(screen.getByTestId('pages').textContent ?? '{}')).toEqual({
+      blocks: null,
+      nav: null,
+    })
   })
 })
 
@@ -284,7 +288,7 @@ describe('picking a section in a design preview', () => {
   const sent: unknown[] = []
   const designMessage = {
     type: 'quackback:preview-design',
-    design: { css: '', attributes: {}, fontIds: [], headline: null },
+    design: defaultDesign(),
   }
 
   beforeEach(() => {
@@ -326,23 +330,25 @@ describe('picking a section in a design preview', () => {
 describe('a design draft’s own wording in the preview', () => {
   it('replaces the saved wording before it is published', async () => {
     cleanup()
+    const saved = draftDesign((d) => {
+      d.pages.feedback.copy = { prompt: { en: 'Saved prompt' } }
+    })
+    root.portalDesign = designView(saved, 3)
     function Copy() {
       return <p data-testid="copy">{useFeedCopy().prompt ?? 'none'}</p>
     }
     render(
       <IntlProvider locale="en" onError={() => {}}>
-        <FeedCopyContext.Provider value={{ prompt: { en: 'Saved prompt' } }}>
-          <PortalPreviewProvider enabled>
-            <Copy />
-          </PortalPreviewProvider>
-        </FeedCopyContext.Provider>
+        <PortalPreviewProvider enabled>
+          <Copy />
+        </PortalPreviewProvider>
       </IntlProvider>
     )
     expect(screen.getByTestId('copy').textContent).toBe('Saved prompt')
-    await postDesign({
-      type: 'quackback:preview-design',
-      design: { css: '', attributes: {}, fontIds: [], copy: { prompt: { en: 'Draft prompt' } } },
+    const draft = draftDesign((d) => {
+      d.pages.feedback.copy = { prompt: { en: 'Draft prompt' } }
     })
+    await postDesign({ type: 'quackback:preview-design', design: draft })
     expect(screen.getByTestId('copy').textContent).toBe('Draft prompt')
   })
 })

@@ -36,16 +36,8 @@ export interface PortalPreviewProps {
   scaleToDesktop?: boolean
   /** The feed's sort in the frame; a design's default sort, which changes by reloading it. */
   sort?: 'trending' | 'top' | 'new'
-  /** A draft portal design, resolved: applied in the frame in place of the saved one. */
-  design?: {
-    css: string
-    attributes: Record<string, string>
-    fontIds: string[]
-    headline: { title: Record<string, string>; subtitle: Record<string, string> } | null
-    home?: PortalDesign['pages']['home']
-    nav?: PortalDesign['nav']
-    copy?: PortalDesign['pages']['feedback']['copy']
-  } | null
+  /** A draft portal design, drawn in the frame in place of the saved one. */
+  design?: PortalDesign | null
   /** The page the frame shows: the root, Home or the feed at its own address. */
   page?: PreviewPage
   /** Draw the portal as it would be after switching to the design. */

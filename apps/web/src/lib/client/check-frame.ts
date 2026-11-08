@@ -47,18 +47,16 @@ export async function settleContent(
   }
 }
 
-export function openCheckFrame<D, P>({
+export function openCheckFrame<D>({
   src,
   design,
-  preview,
   timeoutMs = 10_000,
   settle = settleContent,
 }: {
   /** The page's preview address (the canvas's own, for Home). */
   src: string
+  /** The draft design, posted whole: the frame reads it as the canvas does. */
   design: D
-  /** The design as the frame takes it. */
-  preview: (design: D) => P
   timeoutMs?: number
   settle?: (frame: HTMLIFrameElement) => Promise<void>
 }): Promise<CheckFrame<D>> {
@@ -80,7 +78,7 @@ export function openCheckFrame<D, P>({
   let latest = design
   const post = () =>
     frame.contentWindow?.postMessage(
-      { type: 'quackback:preview-design', design: preview(latest) },
+      { type: 'quackback:preview-design', design: latest },
       window.location.origin
     )
   let isReady: (() => void) | null = null

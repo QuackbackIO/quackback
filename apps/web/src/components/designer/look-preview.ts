@@ -3,8 +3,7 @@
  * preset someone points at before choosing it. Nothing is saved: leaving the
  * choice shows the draft again.
  */
-import { useMemo, useSyncExternalStore } from 'react'
-import { designPreview } from '@/components/admin/settings/appearance/use-design-draft'
+import { useSyncExternalStore } from 'react'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 
 let shown: PortalDesign | null = null
@@ -31,9 +30,7 @@ export function usePreviewedDesign(): PortalDesign | null {
   )
 }
 
-/** What the canvas draws: a design being tried, else the draft's own preview. */
-export function useCanvasDesign<T>(draft: T): T | ReturnType<typeof designPreview> {
-  const tried = usePreviewedDesign()
-  const preview = useMemo(() => (tried ? designPreview(tried) : null), [tried])
-  return preview ?? draft
+/** What the canvas draws: a design being tried, else the draft. */
+export function useCanvasDesign(draft: PortalDesign): PortalDesign {
+  return usePreviewedDesign() ?? draft
 }

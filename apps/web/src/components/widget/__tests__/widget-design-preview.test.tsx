@@ -10,6 +10,8 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react'
 vi.mock('@/lib/shared/theme/font-loader', () => ({ loadBrandingFont: vi.fn(async () => {}) }))
 
 const { WidgetDesignPreview } = await import('../widget-design-preview')
+const { defaultDesign } = await import('@/lib/shared/design/schema')
+const { designView } = await import('@/lib/shared/design/design-view')
 
 const parent = { postMessage: vi.fn() }
 let realParent: PropertyDescriptor | undefined
@@ -22,20 +24,18 @@ afterEach(() => {
   cleanup()
   if (realParent) Object.defineProperty(window, 'parent', realParent)
   parent.postMessage.mockClear()
-  document.documentElement.removeAttribute('data-qb-look')
+  for (const name of Object.keys(designView(defaultDesign(), null).attributes))
+    document.documentElement.removeAttribute(name)
 })
 
-const design = {
-  css: ':root{--primary:#123456}',
-  attributes: { 'data-qb-look': 'soft' },
-  fontIds: [],
-}
+const design = { ...defaultDesign(), css: '.qb-widget { letter-spacing: 0.01em; }' }
+const view = designView(design, null)
 
-function post(from: unknown, origin = window.location.origin) {
+function post(from: unknown, origin = window.location.origin, sent: unknown = design) {
   act(() => {
     window.dispatchEvent(
       new MessageEvent('message', {
-        data: { type: 'quackback:preview-design', design },
+        data: { type: 'quackback:preview-design', design: sent },
         origin,
         source: from as MessageEventSource,
       })
@@ -51,8 +51,17 @@ describe('WidgetDesignPreview', () => {
       window.location.origin
     )
     post(parent)
-    expect(container.querySelector('style[data-preview-design]')?.textContent).toBe(design.css)
-    expect(document.documentElement.getAttribute('data-qb-look')).toBe('soft')
+    expect(container.querySelector('style[data-preview-design]')?.textContent).toBe(
+      `${view.themeStyles}\n${view.customCss}`
+    )
+    const [name, value] = Object.entries(view.attributes)[0]!
+    expect(document.documentElement.getAttribute(name)).toBe(value)
+  })
+
+  it('draws nothing from a design the schema does not accept', () => {
+    const { container } = render(<WidgetDesignPreview />)
+    post(parent, window.location.origin, { css: ':root{--primary:red}', attributes: {} })
+    expect(container.querySelector('style')).toBeNull()
   })
 
   it('takes a design only from the page that frames it', () => {

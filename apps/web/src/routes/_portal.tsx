@@ -10,7 +10,6 @@ import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
-import { FeedCopyContext } from '@/components/public/preview-draft-context'
 import { PortalPreviewProvider } from '@/components/public/portal-preview-listener'
 import { SharedPreviewNotice } from '@/components/public/shared-preview-notice'
 import { isPreviewToken } from '@/lib/shared/design/preview-link'
@@ -44,7 +43,6 @@ import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
 import { usePreviewCss } from '@/components/public/preview-draft-context'
-import { BrandStatusColours } from '@/components/public/brand-status-colours'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import {
   portalFavicon,
@@ -417,23 +415,9 @@ function PortalLayout() {
     permissionKeys,
     showPoweredBy,
   } = loaderData
-  const statusColours = useRouteContext({
-    from: '__root__',
-    select: (context) =>
-      context.settings?.portalDesign?.engine === 'v2'
-        ? context.settings.portalDesign.statusColours
-        : null,
-  })
   const workspaceSlug = useRouteContext({
     from: '__root__',
     select: (context) => context.settings?.slug,
-  })
-  const feedCopy = useRouteContext({
-    from: '__root__',
-    select: (context) =>
-      context.settings?.portalDesign?.engine === 'v2'
-        ? context.settings.portalDesign.feedback.copy
-        : undefined,
   })
 
   return (
@@ -446,34 +430,30 @@ function PortalLayout() {
             error={prompt.error}
             isAuthenticated={isAuthenticated}
           />
-          {/* Draft bridge for the admin branding preview; renders children
-              untouched (and provides no context) outside preview mode. */}
-          <FeedCopyContext.Provider value={feedCopy}>
-            <BrandStatusColours colours={statusColours}>
-              <PortalPreviewProvider enabled={preview === true}>
-                <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
-                <PortalShell>
-                  <PortalHeader
-                    orgName={workspaceName}
-                    orgLogo={brandingData?.logoUrl ?? null}
-                    userRole={userRole}
-                    initialUserData={initialUserData}
-                    // The toggle is inert under a forced theme, and the preview
-                    // always forces one — hide it there.
-                    showThemeToggle={themeMode === 'user' && !preview}
-                  />
-                  <main className="flex-1 w-full flex flex-col">
-                    <FileViewerProvider onJumpToMessage={scrollToMessage}>
-                      <Outlet />
-                    </FileViewerProvider>
-                  </main>
-                  <PortalFooter showPoweredBy={showPoweredBy} workspaceSlug={workspaceSlug} />
-                  <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
-                  <SharedPreviewNotice />
-                </PortalShell>
-              </PortalPreviewProvider>
-            </BrandStatusColours>
-          </FeedCopyContext.Provider>
+          {/* The design's wording and status colours for every page, and the
+              draft bridge for the builder's preview frame (?preview=true). */}
+          <PortalPreviewProvider enabled={preview === true}>
+            <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
+            <PortalShell>
+              <PortalHeader
+                orgName={workspaceName}
+                orgLogo={brandingData?.logoUrl ?? null}
+                userRole={userRole}
+                initialUserData={initialUserData}
+                // The toggle is inert under a forced theme, and the preview
+                // always forces one — hide it there.
+                showThemeToggle={themeMode === 'user' && !preview}
+              />
+              <main className="flex-1 w-full flex flex-col">
+                <FileViewerProvider onJumpToMessage={scrollToMessage}>
+                  <Outlet />
+                </FileViewerProvider>
+              </main>
+              <PortalFooter showPoweredBy={showPoweredBy} workspaceSlug={workspaceSlug} />
+              <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
+              <SharedPreviewNotice />
+            </PortalShell>
+          </PortalPreviewProvider>
         </AuthPopoverProvider>
       </PortalPermissionsProvider>
     </PortalIntlProvider>
