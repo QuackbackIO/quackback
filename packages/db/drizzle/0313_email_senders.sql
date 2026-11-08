@@ -20,19 +20,75 @@
 -- until a later release can drop it under the contract rules.
 ALTER TABLE "channel_accounts" ADD COLUMN IF NOT EXISTS "sender_name" text;
 
-CREATE TABLE IF NOT EXISTS "email_senders" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "surface" text NOT NULL,
-  "scope_type" text DEFAULT 'workspace' NOT NULL,
-  "scope_id" text,
-  "mode" text DEFAULT 'address' NOT NULL,
-  "channel_account_id" uuid,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  -- cascade: a choice of sender means nothing once its address row is gone.
-  CONSTRAINT "email_senders_channel_account_id_fkey"
-    FOREIGN KEY ("channel_account_id") REFERENCES "channel_accounts"("id") ON DELETE cascade
-);
+-- The table, and the backfill that fills it, together: on a database that
+-- already has the table this whole block is skipped, so a replay never writes
+-- a sender back that an admin has since cleared.
+--
+-- Backfill: every existing email keeps the sender it had.
+--
+-- - Support replies from the address the customer wrote to when the workspace
+--   receives email (an inbound route, forwarded or the platform's own) and no
+--   support address covers it. When the support address is the one forwarded
+--   in, or the route forwards nothing, the support address is the override, so
+--   a widget thread still sends from it. Otherwise support's oldest address is
+--   the override.
+-- - Changelog keeps its oldest address as its override.
+-- - Feedback and status email always came from the platform address, and no
+--   default sender existed, so neither gets a row and no default is written.
+--   An admin chooses a default on Settings > Email.
+-- Ticket email needs no row: it follows its conversation, else support.
+-- @replay: guarded-by the email_senders table not existing yet; once it exists the table and its backfill are skipped
+DO $$
+BEGIN
+  IF to_regclass('"email_senders"') IS NULL THEN
+    CREATE TABLE "email_senders" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "surface" text NOT NULL,
+      "scope_type" text DEFAULT 'workspace' NOT NULL,
+      "scope_id" text,
+      "mode" text DEFAULT 'address' NOT NULL,
+      "channel_account_id" uuid,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+      -- cascade: a choice of sender means nothing once its address row is gone.
+      CONSTRAINT "email_senders_channel_account_id_fkey"
+        FOREIGN KEY ("channel_account_id") REFERENCES "channel_accounts"("id") ON DELETE cascade
+    );
+
+    INSERT INTO "email_senders" ("surface", "mode", "channel_account_id")
+    SELECT 'support', 'address', sa."id"
+    FROM (
+      SELECT ca."id", lower(ca."address") AS "address"
+      FROM "channel_accounts" ca
+      WHERE ca."role" = 'sending' AND ca."address" IS NOT NULL AND ca."deleted_at" IS NULL
+        AND ca."module" = 'support'
+      ORDER BY ca."created_at", ca."id"
+      LIMIT 1
+    ) sa
+    WHERE NOT EXISTS (
+      SELECT 1 FROM "channel_accounts" i
+      WHERE i."role" = 'inbound' AND i."deleted_at" IS NULL
+        AND nullif(i."config"->>'forwardingTarget', '') IS NOT NULL
+        AND lower(i."config"->>'forwardingTarget') <> sa."address"
+    );
+
+    INSERT INTO "email_senders" ("surface", "mode")
+    SELECT 'support', 'inbox'
+    WHERE NOT EXISTS (SELECT 1 FROM "email_senders" e WHERE e."surface" = 'support')
+      AND EXISTS (
+        SELECT 1 FROM "channel_accounts" i
+        WHERE i."role" = 'inbound' AND i."deleted_at" IS NULL
+      );
+
+    INSERT INTO "email_senders" ("surface", "channel_account_id")
+    SELECT 'changelog', ca."id"
+    FROM "channel_accounts" ca
+    WHERE ca."role" = 'sending' AND ca."address" IS NOT NULL AND ca."deleted_at" IS NULL
+      AND ca."module" = 'changelog'
+    ORDER BY ca."created_at", ca."id"
+    LIMIT 1;
+  END IF;
+END $$;
 
 -- One sender per surface and scope. Two partial indexes rather than one, so the
 -- workspace scope (scope_id null) is unique too without NULLS NOT DISTINCT.
@@ -42,64 +98,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS "email_senders_surface_scope_uq"
   ON "email_senders" ("surface", "scope_type", "scope_id") WHERE "scope_id" IS NOT NULL;
 CREATE INDEX IF NOT EXISTS "email_senders_channel_account_idx"
   ON "email_senders" ("channel_account_id");
-
--- Backfill: every existing email keeps the sender it had.
---
--- 1. A workspace that receives email (it has an inbound route, forwarded or
---    the platform's own) replies from the address the customer wrote to, as it
---    did.
--- 2. One address used everywhere becomes the workspace default.
--- 3. Otherwise each module's oldest address becomes that surface's override,
---    except support when (1) already chose the inbox.
--- 4. With several addresses and the inbox chosen, the old support address
---    becomes the default, so a reply that cannot use the inbox address (a
---    widget thread, or an unverified inbox domain) still sends from it.
--- Ticket email needs no row: it follows its conversation, else support.
---
--- Replay: every INSERT absorbs a conflict and is guarded on the rows the
--- statements before it write, so a second run inserts nothing.
-INSERT INTO "email_senders" ("surface", "mode")
-SELECT 'support', 'inbox'
-WHERE NOT EXISTS (SELECT 1 FROM "email_senders")
-  AND EXISTS (
-    SELECT 1 FROM "channel_accounts" i
-    WHERE i."role" = 'inbound' AND i."deleted_at" IS NULL
-  )
-ON CONFLICT DO NOTHING;
-
-INSERT INTO "email_senders" ("surface", "channel_account_id")
-SELECT 'default', ca."id"
-FROM "channel_accounts" ca
-WHERE ca."role" = 'sending' AND ca."address" IS NOT NULL AND ca."deleted_at" IS NULL
-  AND NOT EXISTS (SELECT 1 FROM "email_senders" e WHERE e."mode" = 'address')
-  AND (
-    SELECT count(DISTINCT s."address") FROM "channel_accounts" s
-    WHERE s."role" = 'sending' AND s."address" IS NOT NULL AND s."deleted_at" IS NULL
-  ) = 1
-ORDER BY ca."created_at", ca."id"
-LIMIT 1
-ON CONFLICT DO NOTHING;
-
-INSERT INTO "email_senders" ("surface", "channel_account_id")
-SELECT DISTINCT ON (ca."module") ca."module", ca."id"
-FROM "channel_accounts" ca
-WHERE ca."role" = 'sending' AND ca."address" IS NOT NULL AND ca."deleted_at" IS NULL
-  AND ca."module" IN ('support', 'feedback', 'changelog')
-  AND NOT EXISTS (SELECT 1 FROM "email_senders" e WHERE e."mode" = 'address')
-  AND (
-    SELECT count(DISTINCT s."address") FROM "channel_accounts" s
-    WHERE s."role" = 'sending' AND s."address" IS NOT NULL AND s."deleted_at" IS NULL
-  ) > 1
-ORDER BY ca."module", ca."created_at", ca."id"
-ON CONFLICT DO NOTHING;
-
-INSERT INTO "email_senders" ("surface", "channel_account_id")
-SELECT 'default', ca."id"
-FROM "channel_accounts" ca
-WHERE ca."role" = 'sending' AND ca."address" IS NOT NULL AND ca."deleted_at" IS NULL
-  AND ca."module" = 'support'
-  AND EXISTS (SELECT 1 FROM "email_senders" e WHERE e."surface" = 'support' AND e."mode" = 'inbox')
-  AND NOT EXISTS (SELECT 1 FROM "email_senders" e WHERE e."surface" = 'default')
-ORDER BY ca."created_at", ca."id"
-LIMIT 1
-ON CONFLICT DO NOTHING;
