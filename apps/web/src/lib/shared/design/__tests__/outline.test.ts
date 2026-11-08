@@ -73,6 +73,7 @@ describe('outlineOf', () => {
       'logo',
       'hero',
       'welcome',
+      'composer',
       'feed',
       'filters',
     ])
@@ -172,9 +173,8 @@ describe('looks are not in the outline', () => {
 })
 
 describe('what every page shares, in the outline', () => {
-  it('lists the words; the brand kit, styles and readability are in Theme', () => {
+  it('lists nothing under it: the brand kit and styles are in Theme, words on each page', () => {
     const site = outlineOf(defaultDesign(), 'feedback')[0]!
-    expect(site).toMatchObject({ key: 'site', label: 'Every page' })
-    expect(site.children?.map((node) => [node.key, node.label])).toEqual([['site:words', 'Words']])
+    expect(site).toEqual({ key: 'site', label: 'Every page' })
   })
 })

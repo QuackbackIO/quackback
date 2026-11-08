@@ -42,6 +42,8 @@ export function aiScopeOf(selection: Selection | null): {
     // The hero's fields are stored under its older name, band.
     hero: 'band',
     welcome: 'welcome',
+    // The composer's words are the feed's.
+    composer: 'feed',
     feed: 'feed',
     filters: 'filters',
     home: 'home',

@@ -30,6 +30,8 @@ export type Selection =
   /** The top of each page, with its headline: one block on every page that has one. */
   | 'hero'
   | 'welcome'
+  /** The feed's composer: its prompt and button, edited where they sit. */
+  | 'composer'
   | 'feed'
   | 'filters'
   | 'home'
@@ -45,18 +47,14 @@ export type Selection =
   | `link:${string}`
 
 /**
- * The parts of the site's styles, each its own row under them: what the
- * customer brings, how the portal uses it, its words and its readability.
+ * The parts of the site's styles: what the customer brings and how the
+ * portal uses it, both in Theme. Words are edited where each page draws them.
  */
 export const SITE_PARTS = {
   brand: 'Brand kit',
   styles: 'Styles',
-  words: 'Words',
 } as const
 export type SitePart = keyof typeof SITE_PARTS
-
-/** The site parts the outline lists; the brand kit and styles open panels of their own. */
-const OUTLINE_SITE_PARTS: SitePart[] = ['words']
 
 export interface OutlineNode {
   key: Selection
@@ -106,14 +104,7 @@ const PAGE_SECTIONS: Record<
 /** The parts of a page, in the order a visitor meets them, after what every page shares. */
 export function outlineOf(design: PortalDesign, page: DesignerPage): OutlineNode[] {
   const nodes: OutlineNode[] = [
-    {
-      key: 'site',
-      label: 'Every page',
-      children: OUTLINE_SITE_PARTS.map((part) => ({
-        key: `site:${part}` as const,
-        label: SITE_PARTS[part],
-      })),
-    },
+    { key: 'site', label: 'Every page' },
     { key: 'header', label: 'Header and menu', children: [{ key: 'logo', label: 'Logo' }] },
   ]
   // Every page with a headline has a hero; the status page and a post do not.
@@ -140,6 +131,7 @@ export function outlineOf(design: PortalDesign, page: DesignerPage): OutlineNode
       key: 'welcome',
       label: design.pages.feedback.welcome.show ? 'Welcome message' : 'Welcome (off)',
     })
+    nodes.push({ key: 'composer', label: 'Composer' })
     nodes.push({ key: 'feed', label: 'Feed' })
     nodes.push({ key: 'filters', label: 'Filters' })
   } else if (page !== 'status' && page !== 'post') {

@@ -47,7 +47,7 @@ import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { shownName } from '@/lib/shared/greeting-name'
 import { takeArrivedTitle, useFeedHandoff } from '@/components/public/feedback/feed-input-handoff'
-import { useFeedCopy } from '@/components/public/preview-draft-context'
+import { useDesignerPreview, useFeedCopy } from '@/components/public/preview-draft-context'
 
 const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
   mine: {
@@ -166,6 +166,8 @@ export function FeedbackContainer({
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const feedCopy = useFeedCopy()
+  // The builder can ask to see the feed with no posts, to edit its empty title where it sits.
+  const previewEmpty = useDesignerPreview().empty
   const router = useRouter()
   const session = useSessionContext()
   const { filters, setFilters, clearFilters, activeFilterCount } = usePublicFilters()
@@ -469,16 +471,18 @@ export function FeedbackContainer({
     <div data-qb-section="feed">
       <div className="flex gap-6 lg:gap-8 [[data-qb-filters=start]_&]:flex-row-reverse">
         <div className="flex-1 min-w-0">
-          <FeedbackHeader
-            workspaceName={workspaceName}
-            boards={boards}
-            defaultBoardId={boardIdForCreate}
-            user={effectiveUser}
-            boardPermissions={boardPermissions}
-            onPostCreated={handlePostCreated}
-            boardLocked={boardLocked}
-            draft={draft}
-          />
+          <div data-qb-section="composer">
+            <FeedbackHeader
+              workspaceName={workspaceName}
+              boards={boards}
+              defaultBoardId={boardIdForCreate}
+              user={effectiveUser}
+              boardPermissions={boardPermissions}
+              onPostCreated={handlePostCreated}
+              boardLocked={boardLocked}
+              draft={draft}
+            />
+          </div>
 
           <FeedbackToolbar
             currentSort={activeSort}
@@ -537,8 +541,8 @@ export function FeedbackContainer({
             >
               <div className="feed-loading-bar h-full w-1/3 rounded-full bg-muted-foreground" />
             </div>
-            {posts.length === 0 && !isPending ? (
-              activeSearch ? (
+            {previewEmpty || (posts.length === 0 && !isPending) ? (
+              !previewEmpty && activeSearch ? (
                 // A search that finds nothing is the moment to post the idea.
                 <div className="text-center py-8 px-4 space-y-3">
                   <p className="text-muted-foreground">
@@ -563,7 +567,7 @@ export function FeedbackContainer({
                     </Button>
                   )}
                 </div>
-              ) : narrowingCount > 0 ? (
+              ) : !previewEmpty && narrowingCount > 0 ? (
                 <p className="text-muted-foreground text-center py-8">
                   {activeView && narrowingCount === 1
                     ? intl.formatMessage(EMPTY_VIEW_MESSAGES[activeView])
@@ -574,7 +578,10 @@ export function FeedbackContainer({
                 </p>
               ) : (
                 <div className="text-center py-10 px-4 space-y-3">
-                  <p className="text-base font-medium text-foreground">
+                  <p
+                    className="text-base font-medium text-foreground"
+                    data-qb-words="feedback.emptyTitle"
+                  >
                     {feedCopy.emptyTitle ??
                       intl.formatMessage({
                         id: 'portal.feedback.list.noPostsYetTitle',

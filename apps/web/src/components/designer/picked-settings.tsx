@@ -1,6 +1,5 @@
 import { ExclamationTriangleIcon } from '@heroicons/react/16/solid'
 import type { ReactNode } from 'react'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
 import type { DesignCheck } from '@/lib/shared/design/checks'
 import { linkOf, type MenuPartId } from '@/lib/shared/design/menu'
 import type { DesignerPage, OutlineNode, Selection } from '@/lib/shared/design/outline'
@@ -15,7 +14,6 @@ import { MenuPartSettings } from './menu-part-settings'
 import { PagePanel } from './page-panel'
 import { PickedBlock } from './picked-block'
 import type { Crumb } from './properties/properties-panel'
-import { SiteInspector } from './site-inspector'
 import type { MenuEditing } from './use-menu-editing'
 
 /** Changes the draft under a name, so undo says what it takes back. */
@@ -49,7 +47,7 @@ export function crumbsOf(
 /**
  * What the right panel holds under any sheet, as the route table says: the
  * page's own panel with nothing picked, the header's, the logo's and a menu link's, the
- * hero's, a block's, another part's, or the words every page uses. Never
+ * hero's, a block's, or another part's. Never
  * blank: a pick with no panel of its own shows the page's.
  */
 export function PickedSettings({
@@ -131,8 +129,6 @@ export function PickedSettings({
           onRemoved={() => onSelect('header')}
         />
       )
-    case 'words':
-      return <SiteInspector crumbs={crumbs} design={design} update={update as Update} />
     case 'hero':
       return (
         <HeroPanel
@@ -173,6 +169,7 @@ export function PickedSettings({
           design={design}
           update={update}
           gates={gates}
+          locale={locale}
         />
       )
     case 'page':

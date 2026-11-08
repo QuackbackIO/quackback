@@ -10,7 +10,8 @@ const nameOf = (key: string | null) => (key ? names[key] : undefined)
 
 describe('panelFor', () => {
   it('shows the page with nothing picked, and for the site or a pick it has no panel for', () => {
-    for (const pick of [null, 'site', 'site:brand', 'nonsense'] as const)
+    // The words panel is gone: words are edited where each page draws them.
+    for (const pick of [null, 'site', 'site:brand', 'site:words', 'nonsense'] as const)
       expect(panelFor(pick as never, false, 'roadmap', nameOf)).toMatchObject({
         panel: 'page',
         crumbs: [{ label: 'Roadmap' }],
@@ -27,7 +28,10 @@ describe('panelFor', () => {
       { label: 'Help Center', to: null },
       { label: 'Hero' },
     ])
-    expect(panelFor('site:words', false, 'home', nameOf)).toMatchObject({ panel: 'words' })
+    expect(panelFor('composer', false, 'feedback', nameOf)).toMatchObject({
+      panel: 'part',
+      crumbs: [{ label: 'Feedback', to: null }, { label: 'Composer' }],
+    })
     expect(panelFor('feed', false, 'feedback', nameOf)).toMatchObject({
       panel: 'part',
       crumbs: [{ label: 'Feedback', to: null }, { label: 'Feed' }],

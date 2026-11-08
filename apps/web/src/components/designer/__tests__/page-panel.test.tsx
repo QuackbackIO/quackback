@@ -2,7 +2,7 @@
 /**
  * The page's own panel, shown with nothing picked: where the title sits, the
  * background and width, the page's parts as rows that pick each, and the
- * way to Theme and Words.
+ * way to Theme.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -82,7 +82,7 @@ describe('PagePanel', () => {
     expect(onTheme).toHaveBeenCalledWith(true)
   })
 
-  it('lists the page’s parts, each picking itself, and leads to Theme and Words', () => {
+  it('lists the page’s parts, each picking itself, and leads to Theme, with no Words panel', () => {
     const { onSelect, onTheme } = show('roadmap')
     const list = screen.getByRole('list', { name: 'On this page' })
     expect(
@@ -92,8 +92,7 @@ describe('PagePanel', () => {
     ).toEqual(['Header and menu', 'Hero', 'Board'])
     fireEvent.click(within(list).getByRole('button', { name: 'Hero' }))
     expect(onSelect).toHaveBeenCalledWith('hero')
-    fireEvent.click(screen.getByRole('button', { name: 'Words' }))
-    expect(onSelect).toHaveBeenCalledWith('site:words')
+    expect(screen.queryByRole('button', { name: 'Words' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Theme' }))
     expect(onTheme).toHaveBeenCalledWith(false)
   })

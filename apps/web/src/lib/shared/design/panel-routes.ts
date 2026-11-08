@@ -12,17 +12,7 @@ import { PAGE_NAMES, type DesignerPage, type Selection } from './outline'
 
 /** The panels the right panel holds. */
 export type PanelKind =
-  | 'page'
-  | 'words'
-  | 'header'
-  | 'logo'
-  | 'link'
-  | 'hero'
-  | 'blocks'
-  | 'block'
-  | 'section'
-  | 'part'
-  | 'element'
+  'page' | 'header' | 'logo' | 'link' | 'hero' | 'blocks' | 'block' | 'section' | 'part' | 'element'
 
 /** A step of the breadcrumb: `to` picks it (null is the page); the last has none. */
 export interface RouteCrumb {
@@ -43,8 +33,8 @@ const OWN_NAMES: Partial<Record<string, string>> = {
   logo: 'Logo',
   hero: 'Hero',
   home: 'Blocks',
-  'site:words': 'Words',
   welcome: 'Welcome message',
+  composer: 'Composer',
   feed: 'Feed',
   filters: 'Filters',
   entries: 'Entries',
@@ -53,7 +43,7 @@ const OWN_NAMES: Partial<Record<string, string>> = {
   board: 'Board',
 }
 
-const PARTS = new Set(['welcome', 'feed', 'filters'])
+const PARTS = new Set(['welcome', 'composer', 'feed', 'filters'])
 
 /** The level above a pick: a Home block's is Blocks, a menu link's and the logo's the header, the rest the page. */
 export function upOf(selection: string | null): Selection | null {
@@ -93,7 +83,6 @@ export function panelFor(
     return under('link', selection, [{ label: named('header'), to: 'header' }])
   if (selection === 'logo')
     return under('logo', selection, [{ label: named('header'), to: 'header' }])
-  if (selection === 'site:words') return under('words', selection)
   if (selection === 'hero') return under('hero', selection)
   if (selection === 'home') return under('blocks', selection)
   if (selection.startsWith('block-'))

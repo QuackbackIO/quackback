@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { defaultDesign } from '@/lib/shared/design/schema'
 import type { WordsState } from '@/lib/shared/words-editor/extensions'
+import { setDesignerPreview } from '@/components/public/designer-preview-state'
 import { editOnCanvas } from '../edit-on-canvas'
 import { WordsLayer } from '../words-layer'
 
@@ -49,6 +50,8 @@ function mount() {
       say={say}
     />
   )
+  // On mount the layer tells the frame what to show (see 'what a panel asks the page to show').
+  sent.mockClear()
   const fromFrame = (data: Record<string, unknown>) =>
     act(() => {
       window.dispatchEvent(
@@ -176,5 +179,27 @@ describe('the canvas’s format bar', () => {
     const { fromFrame, say } = mount()
     fromFrame({ type: 'quackback:words-blocked', field: 'block-welcome001.body' })
     expect(say).toHaveBeenCalledWith(expect.stringMatching(/edited in its panel/))
+  })
+})
+
+describe('what a panel asks the page to show', () => {
+  it('sends the feed empty as asked, and again whenever the frame asks', () => {
+    const { sent, fromFrame } = mount()
+    act(() => setDesignerPreview({ empty: true }))
+    expect(sent).toHaveBeenLastCalledWith(
+      { type: 'quackback:preview-state', empty: true },
+      window.location.origin
+    )
+    sent.mockClear()
+    fromFrame({ type: 'quackback:preview-state-ask' })
+    expect(sent).toHaveBeenCalledWith(
+      { type: 'quackback:preview-state', empty: true },
+      window.location.origin
+    )
+    act(() => setDesignerPreview({ empty: false }))
+    expect(sent).toHaveBeenLastCalledWith(
+      { type: 'quackback:preview-state', empty: false },
+      window.location.origin
+    )
   })
 })

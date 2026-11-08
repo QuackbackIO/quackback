@@ -32,7 +32,7 @@ const link =
 /**
  * The page itself, shown with nothing picked: where its title sits, its
  * background and width, its parts as rows that pick each one, and the way
- * to what every page shares.
+ * to Theme, which every page shares.
  */
 export function PagePanel({
   crumbs,
@@ -127,9 +127,6 @@ export function PagePanel({
         <p className="flex min-h-7 items-center gap-3">
           <button type="button" className={link} onClick={() => onTheme(false)}>
             {WORDS.theme}
-          </button>
-          <button type="button" className={link} onClick={() => onSelect('site:words')}>
-            {WORDS.words}
           </button>
         </p>
       </PropertySection>

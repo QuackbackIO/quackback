@@ -204,3 +204,43 @@ describe("a block's own plain words", () => {
     expect(design.pages.home.blocks[0]).not.toHaveProperty('emptyText')
   })
 })
+
+describe('the composer’s and the empty feed’s words', () => {
+  it('reads their marks as plain words by language, each within its own length', () => {
+    expect(readWordsField('feedback.prompt')).toEqual({ kind: 'feed', part: 'prompt' })
+    expect(readWordsField('feedback.submit')).toEqual({ kind: 'feed', part: 'submit' })
+    expect(readWordsField('feedback.emptyTitle')).toEqual({ kind: 'feed', part: 'emptyTitle' })
+    expect(readWordsField('feedback.other')).toBeNull()
+    const prompt = readWordsField('feedback.prompt')!
+    const submit = readWordsField('feedback.submit')!
+    expect(wordsKindOf(prompt)).toBe('plain')
+    expect(wordsByLanguage(prompt)).toBe(true)
+    expect(wordsLimitOf(prompt)).toBe(60)
+    expect(wordsLimitOf(submit)).toBe(24)
+    expect(wordsLimitOf(readWordsField('feedback.emptyTitle')!)).toBe(60)
+    expect(wordsName(prompt)).toBe('Composer prompt')
+    expect(wordsName(submit)).toBe('Composer button')
+    expect(wordsName(readWordsField('feedback.emptyTitle')!)).toBe('Empty feed title')
+  })
+
+  it('writes each in one language where the design keeps them, and drops them once emptied', () => {
+    const draft = defaultDesign()
+    const prompt = readWordsField('feedback.prompt')!
+    const submit = readWordsField('feedback.submit')!
+    setWords(draft, prompt, 'en', 'Tell us what would help')
+    setWords(draft, prompt, 'fr', 'Dites-nous')
+    setWords(draft, submit, 'en', 'A very long button label that runs on')
+    expect(draft.pages.feedback.copy.prompt).toEqual({
+      en: 'Tell us what would help',
+      fr: 'Dites-nous',
+    })
+    expect(draft.pages.feedback.copy.submit).toEqual({ en: 'A very long button label' })
+    expect(docText(wordsDocOf(draft, prompt, 'fr'))).toBe('Dites-nous')
+    expect(wordsElsewhere(draft, prompt, 'en')).toEqual([{ locale: 'fr', text: 'Dites-nous' }])
+    setWords(draft, prompt, 'en', '')
+    setWords(draft, prompt, 'fr', '')
+    setWords(draft, submit, 'en', '')
+    expect(draft.pages.feedback.copy).toEqual({})
+    expect(portalDesign.safeParse(draft).success).toBe(true)
+  })
+})

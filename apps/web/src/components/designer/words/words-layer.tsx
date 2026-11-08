@@ -9,6 +9,12 @@ import { wordsRoles } from '@/lib/shared/design/colour-roles'
 import type { WordsCommand, WordsState } from '@/lib/shared/words-editor/extensions'
 import type { CanvasFrame } from '../designer-canvas'
 import { cn } from '@/lib/shared/utils'
+import {
+  PREVIEW_STATE_ASK,
+  PREVIEW_STATE_MESSAGE,
+  designerPreview,
+  subscribeDesignerPreview,
+} from '@/components/public/designer-preview-state'
 import { EDIT_ON_CANVAS } from './edit-on-canvas'
 import { WordsBubble } from './words-bubble'
 
@@ -123,6 +129,28 @@ export function WordsLayer({
     return () => {
       window.removeEventListener('message', onMessage)
       window.removeEventListener(EDIT_ON_CANVAS, onAsked)
+    }
+  }, [frame])
+
+  // What a panel asks the page to show, such as the feed empty, sent again whenever the page asks.
+  useEffect(() => {
+    if (!frame) return
+    const send = () =>
+      frame.contentWindow?.postMessage(
+        { type: PREVIEW_STATE_MESSAGE, empty: designerPreview().empty },
+        window.location.origin
+      )
+    function onReady(event: MessageEvent) {
+      if (event.origin !== window.location.origin || event.source !== frame?.contentWindow) return
+      const type = (event.data as { type?: unknown } | null)?.type
+      if (type === 'quackback:preview-ready' || type === PREVIEW_STATE_ASK) send()
+    }
+    send()
+    const stop = subscribeDesignerPreview(send)
+    window.addEventListener('message', onReady)
+    return () => {
+      stop()
+      window.removeEventListener('message', onReady)
     }
   }, [frame])
 
