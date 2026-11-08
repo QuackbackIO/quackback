@@ -137,11 +137,12 @@ function guideLines(
         'layout.blend',
         'layout.bandAlign',
         'layout.bandShape',
+        'layout.bandHeight',
         'layout.headerOnBand',
         'layout.imagePlace',
         'brand.bandImage',
       ],
-      `layout.band (behind a page headline): ${DESIGN_OPTIONS.band.join(', ')}; support fills it with the second colour and blend runs the accent into it, as a line, with layout.blend mesh, a soft mesh beside the words, or with layout.blend ribbon, a diagonal ribbon sweeping past the words. It shows only with a headline; when you add one and there is no headline, write one. layout.bandAlign: ${DESIGN_OPTIONS.bandAlign.join(', ')}. layout.bandShape: full, inset (a rounded panel within the page), panel (the words on a block of the second colour), split (a rounded panel with the words on one half and a side band image flush in the other). layout.headerOnBand: true puts the header in the band's colour. layout.bandColour (the colour a brand, tint or fade band is drawn in): ${DESIGN_OPTIONS.colourRole.join(', ')}, where extra1 and extra2 are brand.light.extra's; leave it out for the brand colour. layout.imagePlace (for an uploaded band image): ${DESIGN_OPTIONS.imagePlace.join(', ')}.`,
+      `layout.band (behind a page headline): ${DESIGN_OPTIONS.band.join(', ')}; support fills it with the second colour and blend runs the accent into it, as a line, with layout.blend mesh, a soft mesh beside the words, or with layout.blend ribbon, a diagonal ribbon sweeping past the words. It shows only with a headline; when you add one and there is no headline, write one. layout.bandAlign: ${DESIGN_OPTIONS.bandAlign.join(', ')}. layout.bandShape: full, inset (a rounded panel within the page), panel (the words on a block of the second colour), split (a rounded panel with the words on one half and a side band image flush in the other). layout.bandHeight: ${DESIGN_OPTIONS.bandHeight.join(', ')}, the room Home's hero gives its words; the other pages' heroes take Home's look at a compact height of their own. layout.headerOnBand: true puts the header in the band's colour. layout.bandColour (the colour a brand, tint or fade band is drawn in): ${DESIGN_OPTIONS.colourRole.join(', ')}, where extra1 and extra2 are brand.light.extra's; leave it out for the brand colour. layout.imagePlace (for an uploaded band image): ${DESIGN_OPTIONS.imagePlace.join(', ')}.`,
     ],
     [
       ['layout.status'],
@@ -179,8 +180,8 @@ function guideLines(
       'pages.feedback.welcome: {show, body}: the message above the feed; body is plain text, a blank line between paragraphs. When you turn it on with no text, write some.',
     ],
     [
-      ['pages.feedback.defaultSort'],
-      `pages.feedback.defaultSort: ${DESIGN_OPTIONS.sort.join(', ')}`,
+      ['pages.feedback.defaultSort', 'pages.feedback.openOn'],
+      `pages.feedback.defaultSort: ${DESIGN_OPTIONS.sort.join(', ')}. pages.feedback.openOn: the id of the board the feed opens on when the address names none; leave it out to open on every board.`,
     ],
     [
       ['pages.feedback.copy'],
@@ -203,6 +204,10 @@ function guideLines(
       `The Roadmap page; leave a field out for its usual look. pages.roadmap.board: ${DESIGN_OPTIONS.roadmapBoard.join(', ')} (a column per status, or one list grouped by status); pages.roadmap.votes: true or false (the vote box on its cards).`,
     ],
     [
+      ['pages.post'],
+      `A post's own page, with three fixed parts; leave a field out for its usual look. pages.post.vote: ${DESIGN_OPTIONS.postVote.join(', ')} (where its one vote control sits: beside the title, or at the top of the details). pages.post.board, pages.post.tags, pages.post.date and pages.post.author: true or false (each detail beside the post; the status always shows). pages.post.subscribe: ${DESIGN_OPTIONS.postSubscribe.join(', ')} (Subscribe in the details, or beside the comments' heading). pages.post.comments: ${DESIGN_OPTIONS.commentOrder.join(', ')} (the comments' order; the pinned reply always leads).`,
+    ],
+    [
       [
         'pages.home.headline',
         'pages.home.composer',
@@ -210,7 +215,7 @@ function guideLines(
         'pages.home.mainAction',
         'pages.home.button',
       ],
-      `pages.home.headline: like the feedback headline, for Home. The hero's mainAction setting is Home's one main action under the headline: ${DESIGN_OPTIONS.mainAction.join(', ')} (composer: the post box in the band; search: the help centre's search box, with Ask AI where it is on, and only with the help centre on; button: one call to action; none: the headline and subtitle alone). Outside the hero the composer is a block on the grid. It is the hero's mainAction setting: "put a search box in the hero instead" is mainAction search. With button, the hero's buttonTo says where it goes: ${DESIGN_OPTIONS.heroButtonTo.join(' or ')} (it opens the post box in place, or goes to the roadmap), and secondButton true adds a quiet second button going to the other. pages.home.composer: band puts the composer block in the band under the headline; block keeps it on the grid. pages.home.composerWidth: ${DESIGN_OPTIONS.composerWidth.join(', ')} (how wide the composer is in the band, narrowest first; full is the band's words' width; leave it out for its usual width: wide beside a side image or under centred words, else full; phones always run it full). It is the hero's composerWidth setting: "make the composer narrower" is one step narrower than it draws now.`,
+      `pages.home.headline: like the feedback headline, for Home. The hero's mainAction setting is Home's one main action under the headline: ${DESIGN_OPTIONS.mainAction.join(', ')} (composer: the post box in the band; search: the help centre's search box, with Ask AI where it is on, and only with the help centre on; button: one call to action; none: the headline and subtitle alone). Outside the hero the composer is a block on the grid. It is the hero's mainAction setting: "put a search box in the hero instead" is mainAction search. With button, the hero's buttonTo says where it goes: ${DESIGN_OPTIONS.heroButtonTo.join(', ')} (it opens the post box in place, or goes to the roadmap, the help center or support, each only while that page is on), and secondButton true adds a quiet second button: to the roadmap beside the post box, else to the post box. pages.home.composer: band puts the composer block in the band under the headline; block keeps it on the grid. pages.home.composerWidth: ${DESIGN_OPTIONS.composerWidth.join(', ')} (how wide the composer is in the band, narrowest first; full is the band's words' width; leave it out for its usual width: wide beside a side image or under centred words, else full; phones always run it full). It is the hero's composerWidth setting: "make the composer narrower" is one step narrower than it draws now.`,
     ],
     [
       ['pages.home.blocks'],

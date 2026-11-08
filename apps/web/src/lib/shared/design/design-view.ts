@@ -42,6 +42,7 @@ export function designView(
       welcome: feedbackWelcome(doc),
       headline: doc.pages.feedback.headline,
       defaultSort: doc.pages.feedback.defaultSort,
+      openOn: doc.pages.feedback.openOn ?? null,
       copy: doc.pages.feedback.copy,
     },
     home: doc.pages.home,

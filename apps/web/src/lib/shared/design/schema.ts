@@ -28,7 +28,12 @@ import { normaliseColor } from './color'
 import { BUNDLED_FONT_IDS, DESIGN_OPTIONS } from './options'
 import { GRID_COLUMNS, MAX_ROWS } from './home-grid'
 import { withGridPlaces } from './home-legacy'
-import { changelogChoicesSchema, helpChoicesSchema, roadmapChoicesSchema } from './page-choices'
+import {
+  changelogChoicesSchema,
+  helpChoicesSchema,
+  postChoicesSchema,
+  roadmapChoicesSchema,
+} from './page-choices'
 import { pageBackgroundSchema, pageBackgroundsSchema } from './page-background'
 
 const helpCenterCategoryIdSchema = typeIdSchema('kb_category')
@@ -570,6 +575,8 @@ export const portalDesignV2 = z
             headline,
             welcome: z.object({ show: z.boolean(), body: tiptapContentSchema }).strict(),
             defaultSort: sort,
+            /** The board the feed opens on when the address names none; absent is every board. */
+            openOn: boardIdSchema.optional(),
             copy: z
               .object({
                 prompt: localizedUpTo(60),
@@ -586,6 +593,7 @@ export const portalDesignV2 = z
         changelog: changelogChoicesSchema.optional(),
         help: helpChoicesSchema.optional(),
         roadmap: roadmapChoicesSchema.optional(),
+        post: postChoicesSchema.optional(),
       })
       .strict(),
     nav: z

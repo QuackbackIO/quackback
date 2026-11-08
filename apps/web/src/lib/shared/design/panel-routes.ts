@@ -41,6 +41,9 @@ const OWN_NAMES: Partial<Record<string, string>> = {
   topics: 'Topics',
   popular: 'Popular articles',
   board: 'Board',
+  vote: 'Vote',
+  details: 'Details',
+  comments: 'Comments',
 }
 
 const PARTS = new Set(['welcome', 'composer', 'feed', 'filters'])

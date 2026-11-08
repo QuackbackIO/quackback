@@ -7,7 +7,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
-import { Inspector } from '../inspector'
+
+vi.mock('../use-block-sources', () => ({
+  useBlockSources: () => ({
+    boards: [
+      ['board_ideas', 'Ideas'],
+      ['board_bugs', 'Bugs'],
+    ],
+    roadmaps: [],
+    categories: [],
+    columns: [],
+  }),
+}))
+
+const { Inspector } = await import('../inspector')
 
 afterEach(cleanup)
 
@@ -62,5 +75,35 @@ describe('the feed’s panel', () => {
     expect(design.pages.feedback.defaultSort).toBe('top')
     fireEvent.click(screen.getByRole('switch', { name: 'Show tags' }))
     expect(design.layout.postCardHides).toEqual(['tags'])
+  })
+})
+
+async function pick(name: string) {
+  const opens = screen.getByRole('combobox', { name: 'Opens on' })
+  opens.focus()
+  fireEvent.keyDown(opens, { key: 'ArrowDown' })
+  const option = await screen.findByRole('option', { name })
+  fireEvent.pointerDown(option)
+  fireEvent.pointerUp(option)
+  fireEvent.click(option)
+}
+
+describe('the board the feed opens on', () => {
+  it('opens on every board until one is picked, and sets one by its id', async () => {
+    const { design, update } = feed()
+    const opens = screen.getByRole('combobox', { name: 'Opens on' })
+    expect(opens.textContent).toContain('All boards')
+    expect(opens.closest('[data-find]')?.getAttribute('data-find')).toBe('feed-opens-on')
+    await pick('Bugs')
+    expect(design.pages.feedback.openOn).toBe('board_bugs')
+    expect(update).toHaveBeenLastCalledWith(expect.any(Function), 'Opens on')
+  })
+
+  it('goes back to every board, leaving no choice stored', async () => {
+    const { design } = feed((draft) => (draft.pages.feedback.openOn = 'board_bugs' as never))
+    const opens = screen.getByRole('combobox', { name: 'Opens on' })
+    expect(opens.textContent).toContain('Bugs')
+    await pick('All boards')
+    expect(design.pages.feedback).not.toHaveProperty('openOn')
   })
 })

@@ -360,7 +360,6 @@ export const HERO_WORDS = {
   glow: 'Glow',
   blend: 'Blend',
   fadeFrom: 'Fade from',
-  otherPages: 'Other pages',
   fillAndEdge: 'Fill and edge',
   /** A summary row's value: as the brand has it, or set here. */
   asBrand: WORDS.brand,

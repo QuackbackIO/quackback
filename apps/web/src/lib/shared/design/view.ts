@@ -45,6 +45,8 @@ export type PortalDesignView =
         headline: PortalDesign['pages']['feedback']['headline']
         /** The feed's sort when the visitor has not picked one. */
         defaultSort: 'trending' | 'top' | 'new'
+        /** The board the feed opens on when the address names none, by id; null is every board. */
+        openOn?: string | null
         /** The workspace's own wording, by language. */
         copy: PortalDesign['pages']['feedback']['copy']
       }

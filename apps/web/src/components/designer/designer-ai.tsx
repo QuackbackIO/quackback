@@ -51,6 +51,9 @@ export function aiScopeOf(selection: Selection | null): {
     topics: 'help',
     popular: 'help',
     board: 'roadmap',
+    vote: 'post',
+    details: 'post',
+    comments: 'post',
   }
   return { scope: scopes[selection] ?? 'site' }
 }

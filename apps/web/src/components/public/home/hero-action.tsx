@@ -27,9 +27,18 @@ const BUTTON_CLASS = {
     'inline-flex items-center rounded-[var(--qb-radius-button,999px)] border border-[color-mix(in_srgb,var(--qb-band-ink)_28%,transparent)] px-5 py-2.5 text-sm font-semibold text-[var(--qb-band-ink)] hover:bg-[color-mix(in_srgb,var(--qb-band-ink)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
 }
 
+/** Each place's usual words, and the page each goes to other than the composer. */
+const BUTTON_WORDS = {
+  composer: homeMessages.heroWritePost,
+  roadmap: homeMessages.heroSeeRoadmap,
+  help: homeMessages.helpAll,
+  support: homeMessages.contactStart,
+} as const
+const BUTTON_PATHS = { roadmap: '/roadmap', help: '/hc', support: '/support' } as const
+
 /**
  * Home's call to action: one button that opens the composer in place or goes
- * to the roadmap, in the design's own words (edited on the page itself), and
+ * to the roadmap, help or support, in the design's own words (edited on the page itself), and
  * a quiet second going to the other where the design asks for it and that
  * page is on. Once the composer opens it takes their place; Cancel gives
  * them back.
@@ -45,13 +54,10 @@ export function HeroButtons({ home, gates }: { home: Home; gates: PortalPageGate
         <HomeComposer inBand startOpen onClose={() => setComposing(false)} />
       </div>
     )
-  const other: ButtonTo = to === 'roadmap' ? 'composer' : 'roadmap'
+  const other: ButtonTo = to === 'composer' ? 'roadmap' : 'composer'
   const otherOn = other === 'roadmap' ? gates.roadmap : gates.feedback
   const words = (going: ButtonTo, stored: Record<string, string> | undefined) =>
-    textForLocale(stored, intl.locale) ||
-    intl.formatMessage(
-      going === 'roadmap' ? homeMessages.heroSeeRoadmap : homeMessages.heroWritePost
-    )
+    textForLocale(stored, intl.locale) || intl.formatMessage(BUTTON_WORDS[going])
   const button = (going: ButtonTo, main: boolean) => {
     const label = (
       <span data-qb-words={main ? 'home.button' : 'home.secondButton'}>
@@ -63,8 +69,8 @@ export function HeroButtons({ home, gates }: { home: Home; gates: PortalPageGate
       'data-qb-action': main ? '' : undefined,
       className: main ? BUTTON_CLASS.main : BUTTON_CLASS.quiet,
     }
-    return going === 'roadmap' ? (
-      <Link to="/roadmap" {...shared}>
+    return going !== 'composer' ? (
+      <Link to={BUTTON_PATHS[going]} {...shared}>
         {label}
       </Link>
     ) : (

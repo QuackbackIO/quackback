@@ -26,6 +26,9 @@ const SECTION_TYPES: Record<string, SectionType> = {
   topics: 'help.topics',
   popular: 'help.popular',
   board: 'roadmap.board',
+  vote: 'post.vote',
+  details: 'post.details',
+  comments: 'post.comments',
 }
 
 /** The registry block a page section pick is, or null for any other pick. */

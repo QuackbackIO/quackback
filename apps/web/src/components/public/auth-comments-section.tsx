@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { CommentThread } from './comment-thread'
@@ -60,6 +60,10 @@ interface AuthCommentsSectionProps {
   restoringCommentId?: PostCommentId | null
   onImageUpload?: (file: File) => Promise<string>
   canModerate?: boolean
+  /** Oldest comments first, as a conversation reads. */
+  oldestFirst?: boolean
+  /** What sits above the comments, under the composer. */
+  before?: ReactNode
 }
 
 /**
@@ -93,6 +97,8 @@ export function AuthCommentsSection({
   restoringCommentId,
   onImageUpload,
   canModerate = false,
+  oldestFirst,
+  before,
 }: AuthCommentsSectionProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -194,6 +200,8 @@ export function AuthCommentsSection({
       restoringCommentId={restoringCommentId}
       onImageUpload={onImageUpload}
       canModerate={canModerate}
+      oldestFirst={oldestFirst}
+      before={before}
     />
   )
 }

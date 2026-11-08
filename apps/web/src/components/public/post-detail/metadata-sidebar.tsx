@@ -350,6 +350,15 @@ interface MetadataSidebarProps {
   onVotersInvalidate?: () => void
   /** Admin manage actions (renders icon row at top of sidebar) */
   manageActions?: MetadataSidebarManageActions
+  /**
+   * The portal's vote row, as the design places the post's one vote control:
+   * the control here, the count alone (over the voters list), or nothing.
+   */
+  portalVote?: 'button' | 'count' | 'none'
+  /** The details the design shows; each left out shows. The status always does. */
+  rows?: Partial<Record<'board' | 'tags' | 'date' | 'author', boolean>>
+  /** Marks the details and the vote control as the parts the portal builder picks. */
+  markParts?: boolean
 }
 
 export function MetadataSidebar({
@@ -386,6 +395,9 @@ export function MetadataSidebar({
   votersCanCreateUser,
   onVotersInvalidate,
   manageActions,
+  portalVote = 'button',
+  rows = {},
+  markParts = false,
 }: MetadataSidebarProps) {
   const tagStyle = useTagStyle()
   const intl = useIntl()
@@ -466,9 +478,11 @@ export function MetadataSidebar({
   }
 
   const isCard = variant === 'card'
+  const shows = (row: keyof typeof rows) => rows[row] !== false
 
   return (
     <aside
+      data-qb-section={markParts ? 'details' : undefined}
       className={cn(
         'hidden lg:block w-72 shrink-0 animate-in fade-in duration-200 fill-mode-backwards',
         !isCard && 'border-s border-border/30 bg-muted/5'
@@ -520,8 +534,11 @@ export function MetadataSidebar({
                 />
               )}
             </div>
-          ) : (
-            <div className="space-y-2">
+          ) : portalVote === 'none' ? null : (
+            <div
+              className="space-y-2"
+              data-qb-section={markParts && portalVote === 'button' ? 'vote' : undefined}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <ChevronUpIcon className="h-4 w-4" />
@@ -534,14 +551,22 @@ export function MetadataSidebar({
                 </div>
                 {/* Portal mode: interactive vote button with auth + authz.
                     Don't structurally disable on !canVote — AuthVoteButton renders
-                    the denied state (sign-in prompt or "no access" tooltip). */}
-                <AuthVoteButton
-                  postId={postId}
-                  voteCount={voteCount}
-                  canVote={canVote}
-                  isAuthenticated={isMember}
-                  compact
-                />
+                    the denied state (sign-in prompt or "no access" tooltip).
+                    Where the post's one vote control is beside its title, the
+                    count alone sits over the voters list. */}
+                {portalVote === 'count' ? (
+                  <span className="text-sm font-semibold tabular-nums text-foreground">
+                    {voteCount}
+                  </span>
+                ) : (
+                  <AuthVoteButton
+                    postId={postId}
+                    voteCount={voteCount}
+                    canVote={canVote}
+                    isAuthenticated={isMember}
+                    compact
+                  />
+                )}
               </div>
               {showVoters && (
                 <VotersAvatarStack
@@ -640,57 +665,59 @@ export function MetadataSidebar({
         )}
 
         {/* Board */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <FolderIcon className="h-4 w-4" />
-            <span>
-              <FormattedMessage id="portal.postDetail.metadata.board" defaultMessage={'Board'} />
-            </span>
+        {shows('board') && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <FolderIcon className="h-4 w-4" />
+              <span>
+                <FormattedMessage id="portal.postDetail.metadata.board" defaultMessage={'Board'} />
+              </span>
+            </div>
+            {onBoardChange && allBoards && allBoards.length > 0 ? (
+              <Popover open={boardOpen} onOpenChange={setBoardOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    className={cn(
+                      'text-sm font-medium text-foreground text-end max-w-[60%]',
+                      'hover:text-primary transition-colors',
+                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                    )}
+                  >
+                    {board.name}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-1" align="end" sideOffset={4}>
+                  <div className="max-h-48 overflow-y-auto space-y-0.5">
+                    {allBoards.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => handleBoardChange(b.id as BoardId)}
+                        className={cn(
+                          'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
+                          'text-foreground/80 hover:text-foreground hover:bg-muted/60',
+                          'transition-all duration-100 text-start font-medium'
+                        )}
+                      >
+                        <FolderIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="truncate flex-1">{b.name}</span>
+                        {b.id === board.id && (
+                          <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <span className="text-sm font-medium text-foreground text-end max-w-[60%]">
+                {board.name}
+              </span>
+            )}
           </div>
-          {onBoardChange && allBoards && allBoards.length > 0 ? (
-            <Popover open={boardOpen} onOpenChange={setBoardOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  disabled={isUpdating}
-                  className={cn(
-                    'text-sm font-medium text-foreground text-end max-w-[60%]',
-                    'hover:text-primary transition-colors',
-                    'disabled:opacity-50 disabled:cursor-not-allowed'
-                  )}
-                >
-                  {board.name}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-48 p-1" align="end" sideOffset={4}>
-                <div className="max-h-48 overflow-y-auto space-y-0.5">
-                  {allBoards.map((b) => (
-                    <button
-                      key={b.id}
-                      type="button"
-                      onClick={() => handleBoardChange(b.id as BoardId)}
-                      className={cn(
-                        'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
-                        'text-foreground/80 hover:text-foreground hover:bg-muted/60',
-                        'transition-all duration-100 text-start font-medium'
-                      )}
-                    >
-                      <FolderIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span className="truncate flex-1">{b.name}</span>
-                      {b.id === board.id && (
-                        <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-          ) : (
-            <span className="text-sm font-medium text-foreground text-end max-w-[60%]">
-              {board.name}
-            </span>
-          )}
-        </div>
+        )}
 
         {/* Owner (assignee) — renders only when the actor can set the owner. */}
         {onOwnerChange && (
@@ -787,180 +814,186 @@ export function MetadataSidebar({
         )}
 
         {/* Tags */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <TagIcon className="h-4 w-4" />
-            <span>
-              <FormattedMessage id="portal.postDetail.metadata.tags" defaultMessage="Tags" />
-            </span>
+        {shows('tags') && (
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <TagIcon className="h-4 w-4" />
+              <span>
+                <FormattedMessage id="portal.postDetail.metadata.tags" defaultMessage="Tags" />
+              </span>
+            </div>
+            {onTagsChange ? (
+              <div className="flex flex-wrap justify-end gap-1 max-w-[60%]">
+                {tags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => handleTagToggle(tag.id as PostTagId)}
+                    disabled={isUpdating}
+                    className={cn(
+                      'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
+                      'rounded-full text-xs font-medium border',
+                      TAG_TINT,
+                      TAG_EDGE,
+                      'hover:opacity-80',
+                      'transition-all duration-150',
+                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                    )}
+                    data-qb-part="tag"
+                    style={tagStyle(tag.color)}
+                  >
+                    {tag.name}
+                    <XMarkIcon className="h-2.5 w-2.5 opacity-50 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                ))}
+                {availableTags.length > 0 && (
+                  <Popover open={tagOpen} onOpenChange={setTagOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        className={cn(
+                          'inline-flex items-center gap-0.5 px-1.5 py-0.5',
+                          'rounded-full text-xs font-medium',
+                          'text-muted-foreground hover:text-muted-foreground',
+                          'border border-dashed border-border/60 hover:border-border',
+                          'hover:bg-muted/40',
+                          'transition-all duration-150',
+                          'disabled:opacity-50'
+                        )}
+                      >
+                        <PlusIcon className="h-2.5 w-2.5" />
+                        <FormattedMessage
+                          id="portal.postDetail.metadata.tagAdd"
+                          defaultMessage="Add"
+                        />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-40 p-1" align="end" sideOffset={4}>
+                      <ScrollArea
+                        className="[&_[data-slot=scroll-area-viewport]]:max-h-48"
+                        scrollBarClassName="w-1.5"
+                      >
+                        <div className="space-y-0.5">
+                          {availableTags.map((tag) => (
+                            <button
+                              key={tag.id}
+                              type="button"
+                              onClick={() => handleAddTag(tag.id as PostTagId)}
+                              className={cn(
+                                'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
+                                'text-foreground/80 hover:text-foreground hover:bg-muted/60',
+                                'transition-all duration-100 text-start font-medium'
+                              )}
+                            >
+                              <span
+                                className="h-2.5 w-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: tag.color }}
+                              />
+                              {tag.name}
+                            </button>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
+                )}
+                {tags.length === 0 && availableTags.length === 0 && !tagOpen && (
+                  <span className="text-xs text-muted-foreground">-</span>
+                )}
+              </div>
+            ) : tags.length > 0 ? (
+              <div className="flex flex-wrap justify-end gap-1 max-w-[60%]">
+                {tags.map((tag) => (
+                  <span
+                    key={tag.id}
+                    data-qb-part="tag"
+                    className={cn(
+                      'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                      TAG_TINT
+                    )}
+                    style={tagStyle(tag.color)}
+                  >
+                    {tag.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">-</span>
+            )}
           </div>
-          {onTagsChange ? (
-            <div className="flex flex-wrap justify-end gap-1 max-w-[60%]">
-              {tags.map((tag) => (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => handleTagToggle(tag.id as PostTagId)}
-                  disabled={isUpdating}
-                  className={cn(
-                    'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
-                    'rounded-full text-xs font-medium border',
-                    TAG_TINT,
-                    TAG_EDGE,
-                    'hover:opacity-80',
-                    'transition-all duration-150',
-                    'disabled:opacity-50 disabled:cursor-not-allowed'
-                  )}
-                  data-qb-part="tag"
-                  style={tagStyle(tag.color)}
-                >
-                  {tag.name}
-                  <XMarkIcon className="h-2.5 w-2.5 opacity-50 group-hover:opacity-100 transition-opacity" />
-                </button>
-              ))}
-              {availableTags.length > 0 && (
-                <Popover open={tagOpen} onOpenChange={setTagOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      disabled={isUpdating}
-                      className={cn(
-                        'inline-flex items-center gap-0.5 px-1.5 py-0.5',
-                        'rounded-full text-xs font-medium',
-                        'text-muted-foreground hover:text-muted-foreground',
-                        'border border-dashed border-border/60 hover:border-border',
-                        'hover:bg-muted/40',
-                        'transition-all duration-150',
-                        'disabled:opacity-50'
-                      )}
-                    >
-                      <PlusIcon className="h-2.5 w-2.5" />
-                      <FormattedMessage
-                        id="portal.postDetail.metadata.tagAdd"
-                        defaultMessage="Add"
-                      />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-40 p-1" align="end" sideOffset={4}>
-                    <ScrollArea
-                      className="[&_[data-slot=scroll-area-viewport]]:max-h-48"
-                      scrollBarClassName="w-1.5"
-                    >
-                      <div className="space-y-0.5">
-                        {availableTags.map((tag) => (
-                          <button
-                            key={tag.id}
-                            type="button"
-                            onClick={() => handleAddTag(tag.id as PostTagId)}
-                            className={cn(
-                              'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
-                              'text-foreground/80 hover:text-foreground hover:bg-muted/60',
-                              'transition-all duration-100 text-start font-medium'
-                            )}
-                          >
-                            <span
-                              className="h-2.5 w-2.5 rounded-full shrink-0"
-                              style={{ backgroundColor: tag.color }}
-                            />
-                            {tag.name}
-                          </button>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </PopoverContent>
-                </Popover>
-              )}
-              {tags.length === 0 && availableTags.length === 0 && !tagOpen && (
-                <span className="text-xs text-muted-foreground">-</span>
-              )}
-            </div>
-          ) : tags.length > 0 ? (
-            <div className="flex flex-wrap justify-end gap-1 max-w-[60%]">
-              {tags.map((tag) => (
-                <span
-                  key={tag.id}
-                  data-qb-part="tag"
-                  className={cn(
-                    'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-                    TAG_TINT
-                  )}
-                  style={tagStyle(tag.color)}
-                >
-                  {tag.name}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <span className="text-xs text-muted-foreground">-</span>
-          )}
-        </div>
+        )}
 
         {/* Date */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CalendarIcon className="h-4 w-4" />
-            <span>
-              <FormattedMessage id="portal.postDetail.metadata.date" defaultMessage="Date" />
-            </span>
+        {shows('date') && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CalendarIcon className="h-4 w-4" />
+              <span>
+                <FormattedMessage id="portal.postDetail.metadata.date" defaultMessage="Date" />
+              </span>
+            </div>
+            <TimeAgo date={createdAt} className="text-sm text-foreground" />
           </div>
-          <TimeAgo date={createdAt} className="text-sm text-foreground" />
-        </div>
+        )}
 
         {/* Author */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <UserIcon className="h-4 w-4" />
-            <span>
-              <FormattedMessage id="portal.postDetail.metadata.author" defaultMessage="Author" />
-            </span>
-          </div>
-          {canEdit && authorPrincipalId ? (
-            <AdminAuthorHoverCard principalId={authorPrincipalId} displayName={authorName}>
-              <span className="inline-flex items-center gap-1.5">
-                <Avatar
-                  className="h-5 w-5"
-                  src={authorAvatarUrl}
-                  name={authorName}
-                  fallbackClassName="text-xs"
-                />
-                <span className="text-sm font-medium text-foreground underline decoration-muted-foreground/30 underline-offset-2">
-                  {authorName ||
-                    intl.formatMessage({
-                      id: 'portal.postDetail.metadata.authorFallback',
-                      defaultMessage: 'Anonymous',
-                    })}
-                </span>
+        {shows('author') && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <UserIcon className="h-4 w-4" />
+              <span>
+                <FormattedMessage id="portal.postDetail.metadata.author" defaultMessage="Author" />
               </span>
-            </AdminAuthorHoverCard>
-          ) : (
-            (() => {
-              const authorRow = (
-                <div className="flex items-center gap-1.5">
+            </div>
+            {canEdit && authorPrincipalId ? (
+              <AdminAuthorHoverCard principalId={authorPrincipalId} displayName={authorName}>
+                <span className="inline-flex items-center gap-1.5">
                   <Avatar
                     className="h-5 w-5"
                     src={authorAvatarUrl}
                     name={authorName}
                     fallbackClassName="text-xs"
                   />
-                  <span className="text-sm font-medium text-foreground">
+                  <span className="text-sm font-medium text-foreground underline decoration-muted-foreground/30 underline-offset-2">
                     {authorName ||
                       intl.formatMessage({
                         id: 'portal.postDetail.metadata.authorFallback',
                         defaultMessage: 'Anonymous',
                       })}
                   </span>
-                </div>
-              )
-              return authorPrincipalId ? (
-                <AuthorHoverCard principalId={authorPrincipalId} displayName={authorName}>
-                  {authorRow}
-                </AuthorHoverCard>
-              ) : (
-                authorRow
-              )
-            })()
-          )}
-        </div>
+                </span>
+              </AdminAuthorHoverCard>
+            ) : (
+              (() => {
+                const authorRow = (
+                  <div className="flex items-center gap-1.5">
+                    <Avatar
+                      className="h-5 w-5"
+                      src={authorAvatarUrl}
+                      name={authorName}
+                      fallbackClassName="text-xs"
+                    />
+                    <span className="text-sm font-medium text-foreground">
+                      {authorName ||
+                        intl.formatMessage({
+                          id: 'portal.postDetail.metadata.authorFallback',
+                          defaultMessage: 'Anonymous',
+                        })}
+                    </span>
+                  </div>
+                )
+                return authorPrincipalId ? (
+                  <AuthorHoverCard principalId={authorPrincipalId} displayName={authorName}>
+                    {authorRow}
+                  </AuthorHoverCard>
+                ) : (
+                  authorRow
+                )
+              })()
+            )}
+          </div>
+        )}
 
         {/* Subscribe section - hidden in admin mode */}
         {!hideSubscribe && (

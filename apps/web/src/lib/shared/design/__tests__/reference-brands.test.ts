@@ -241,6 +241,10 @@ describe('reference brand fixtures', () => {
       // And the hero's main action; main-action.test.ts and hero.test.ts cover it.
       'mainAction',
       'heroButtonTo',
+      // And the post page's parts; post-choices.test.ts covers them.
+      'postVote',
+      'postSubscribe',
+      'commentOrder',
     ])
     for (const [option, values] of Object.entries(DESIGN_OPTIONS))
       for (const value of later.has(option) ? [] : values)

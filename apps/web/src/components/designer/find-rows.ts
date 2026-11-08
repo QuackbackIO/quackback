@@ -124,7 +124,6 @@ export const FIND = {
   glow: row('hero-glow', HERO_WORDS.glow),
   blend: row('hero-blend', HERO_WORDS.blend),
   fadeFrom: row('hero-fade-from', HERO_WORDS.fadeFrom, 'fade'),
-  otherPages: row('hero-other-pages', HERO_WORDS.otherPages, 'page titles'),
   heroFill: row('hero-fill', HERO_WORDS.fillAndEdge, 'background border shadow corners'),
   // The page's own background, in the page's panel and the hero's
   pageBackground: row('page-background', WORDS.background, 'page background'),
@@ -133,6 +132,7 @@ export const FIND = {
   prompt: row('feed-words-prompt', 'Prompt', 'composer words placeholder'),
   submit: row('feed-words-submit', 'Button', 'composer submit post words'),
   sort: row('feed-sort', 'Sort', 'default order trending top new'),
+  opensOn: row('feed-opens-on', 'Opens on', 'board first default all boards'),
   previewEmpty: row('feed-preview-empty', 'Preview empty', 'no posts'),
   emptyTitle: row('feed-words-emptyTitle', 'Title', 'empty no posts words'),
   excerpt: row('feed-card-excerpt', 'Excerpt', 'post card line'),
@@ -235,22 +235,6 @@ export const PART_PANELS: readonly FindPanel[] = [
     name: 'Hero',
     sections: [
       {
-        title: HERO_WORDS.look,
-        rows: [
-          FIND.heroLook,
-          { ...FIND.heroColour, when: heroShown('colour') },
-          { ...FIND.heroArt, when: heroShown('art') },
-        ],
-      },
-      { title: HERO_WORDS.layout, rows: [FIND.heroHeight, FIND.heroAlign, FIND.heroShape] },
-      {
-        title: HERO_WORDS.image,
-        rows: [
-          { ...FIND.heroImage, when: hasHeroImage },
-          { ...FIND.heroPhones, when: hasHeroImage },
-        ],
-      },
-      {
         title: HERO_WORDS.mainAction,
         rows: [
           { ...FIND.mainAction, pages: ['home'] },
@@ -261,11 +245,29 @@ export const PART_PANELS: readonly FindPanel[] = [
         ],
       },
       {
+        title: HERO_WORDS.look,
+        rows: [
+          FIND.heroLook,
+          { ...FIND.heroColour, when: heroShown('colour') },
+          { ...FIND.heroArt, when: heroShown('art') },
+        ],
+      },
+      {
+        title: HERO_WORDS.image,
+        rows: [
+          { ...FIND.heroImage, when: hasHeroImage },
+          { ...FIND.heroPhones, when: hasHeroImage },
+        ],
+      },
+      {
+        title: HERO_WORDS.layout,
+        rows: [{ ...FIND.heroHeight, pages: ['home'] }, FIND.heroAlign, FIND.heroShape],
+      },
+      {
         rows: [
           { ...FIND.glow, when: heroShown('glow') },
           { ...FIND.blend, when: heroShown('blend') },
           { ...FIND.fadeFrom, when: heroShown('fadeFrom') },
-          FIND.otherPages,
           FIND.heroFill,
         ],
       },
@@ -281,7 +283,7 @@ export const PART_PANELS: readonly FindPanel[] = [
     place: 'feed',
     name: 'Feed',
     sections: [
-      { title: 'Posts', rows: [FIND.sort] },
+      { title: 'Posts', rows: [FIND.sort, FIND.opensOn] },
       { title: 'When empty', rows: [FIND.previewEmpty, FIND.emptyTitle] },
       { title: 'Post cards', rows: [FIND.excerpt, FIND.tags, FIND.details] },
     ],

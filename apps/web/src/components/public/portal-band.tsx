@@ -322,12 +322,15 @@ export function PortalBand({
         image && !side ? ({ '--qb-band-image': `url("${image.url}")` } as CSSProperties) : undefined
       }
       className={cn(
-        // Its padding: less on a phone, where a wide screen's would leave the hero half empty.
-        'portal-band py-8 sm:py-10 [[data-qb-band-height=compact]_&]:py-5 sm:[[data-qb-band-height=compact]_&]:py-6 [[data-qb-band-height=tall]_&]:py-10 sm:[[data-qb-band-height=tall]_&]:py-20',
+        // Its padding, less on a phone, where a wide screen's would leave the hero half empty, and
+        // its bottom padding, where a coloured band's foot may fade without crossing the words.
+        // Home takes the design's height; the list pages follow Home's look at a compact one.
+        'portal-band',
+        page === 'home'
+          ? 'py-8 sm:py-10 [[data-qb-band-height=compact]_&]:py-5 sm:[[data-qb-band-height=compact]_&]:py-6 [[data-qb-band-height=tall]_&]:py-10 sm:[[data-qb-band-height=tall]_&]:py-20 [--qb-band-pad:2rem] sm:[--qb-band-pad:2.5rem] [[data-qb-band-height=compact]_&]:[--qb-band-pad:1.25rem] sm:[[data-qb-band-height=compact]_&]:[--qb-band-pad:1.5rem] [[data-qb-band-height=tall]_&]:[--qb-band-pad:2.5rem] sm:[[data-qb-band-height=tall]_&]:[--qb-band-pad:5rem]'
+          : 'py-5 sm:py-6 [--qb-band-pad:1.25rem] sm:[--qb-band-pad:1.5rem]',
         // A bare hero keeps room under the header, and none at its foot.
         '[[data-qb-band=none]_&]:!pt-6 [[data-qb-band=none]_&]:!pb-0',
-        // Its bottom padding, as above, where a coloured band's foot may fade without crossing the words.
-        '[--qb-band-pad:2rem] sm:[--qb-band-pad:2.5rem] [[data-qb-band-height=compact]_&]:[--qb-band-pad:1.25rem] sm:[[data-qb-band-height=compact]_&]:[--qb-band-pad:1.5rem] [[data-qb-band-height=tall]_&]:[--qb-band-pad:2.5rem] sm:[[data-qb-band-height=tall]_&]:[--qb-band-pad:5rem]',
         BAND_FILL,
         ART_FILL,
         IMAGE_FILL,

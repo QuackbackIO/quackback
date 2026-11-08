@@ -125,7 +125,7 @@ export function describeBlock(type: HomeBlockType | 'hero', places: AiPlaces): s
 
 /** The pages' own settings, set with target the page's name. */
 function pagesText(places: AiPlaces): string {
-  const pages = ['changelog', 'help', 'roadmap'] as const
+  const pages = ['changelog', 'help', 'roadmap', 'post'] as const
   const lines = pages.map((page) => {
     const fields = SECTION_TYPES.filter((type) => type.startsWith(`${page}.`)).flatMap((type) =>
       blockOf(type)!.fields.map((field) => settingLine(field, places))
@@ -141,7 +141,7 @@ function pagesText(places: AiPlaces): string {
   )
   return [
     ...lines,
-    'feedback page (target "feedback page"):\n  sort: The order the feed opens in. Takes trending, top or new.',
+    'feedback page (target "feedback page"):\n  sort: The order the feed opens in. Takes trending, top or new.\n  opensOn: The board the feed opens on when the address names none. Takes a board by its name, or all boards.',
     ...examples,
   ].join('\n')
 }
@@ -470,7 +470,7 @@ export function designContext(
     : null
   const element = pickedElement(design, input.picked, input.page)
   const hero = heroOf(design)
-  const choices = (['changelog', 'help', 'roadmap'] as const)
+  const choices = (['changelog', 'help', 'roadmap', 'post'] as const)
     .map((page) => {
       const made = { ...PAGE_CHOICE_DEFAULTS[page], ...design.pages[page] } as Record<
         string,
@@ -480,7 +480,12 @@ export function designContext(
         .map((key) => `${key} ${String(made[key])}`)
         .join(', ')}`
     })
-    .concat(`feedback page: sort ${design.pages.feedback.defaultSort}`)
+    .concat(
+      `feedback page: sort ${design.pages.feedback.defaultSort}, opensOn ${
+        places.boards.find((board) => board.id === design.pages.feedback.openOn)?.name ??
+        'all boards'
+      }`
+    )
   const menu = menuParts(design, input.gates).map(
     (part) =>
       `${part.id} "${part.label}"${part.lands ? ' (visitors land here)' : ''}${part.shown ? '' : ' (hidden)'}`

@@ -74,6 +74,7 @@ describe('page choices in the design document', () => {
       changelog: { entries: 'cards', images: 'thumbnail', subscribe: 'under' },
       help: { topics: 'list', popular: false, search: 'large' },
       roadmap: { board: 'list', votes: false },
+      post: PAGE_CHOICE_DEFAULTS.post,
     })
   })
 
@@ -87,6 +88,15 @@ describe('page choices in the design document', () => {
       changelog: { entries: 'timeline', images: 'none', subscribe: 'beside' },
       help: { topics: 'cards', popular: true, search: 'standard' },
       roadmap: { board: 'columns', votes: true },
+      post: {
+        vote: 'title',
+        board: true,
+        tags: true,
+        date: true,
+        author: true,
+        subscribe: 'details',
+        comments: 'newest',
+      },
     })
   })
 })
