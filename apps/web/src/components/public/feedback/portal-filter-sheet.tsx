@@ -58,7 +58,7 @@ export function PortalFilterSheet({
         <FunnelIcon className="h-4 w-4" aria-hidden />
         {title}
         {activeCount > 0 && (
-          <span className="rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-4 text-primary-foreground tabular-nums">
+          <span className="rounded-full bg-primary px-1.5 text-xs font-semibold leading-4 text-primary-foreground tabular-nums">
             {activeCount}
           </span>
         )}

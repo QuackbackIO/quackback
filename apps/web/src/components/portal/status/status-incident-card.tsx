@@ -48,7 +48,7 @@ export function StatusIncidentCard({ incident, className }: StatusIncidentCardPr
         )}
       >
         <h3 className="text-sm font-semibold">{incident.title}</h3>
-        <span className="text-[11px] font-semibold tracking-wide uppercase">
+        <span className="text-xs font-semibold tracking-wide uppercase">
           {intl.formatMessage(LIFECYCLE_LABEL[incident.status])}
         </span>
       </div>

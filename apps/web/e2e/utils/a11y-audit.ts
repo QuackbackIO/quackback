@@ -85,7 +85,6 @@ export async function audit(page: Page, options: AuditOptions = {}): Promise<Aud
       const behind = (el: Element, x: number, y: number): number[] | null => {
         const stack = document.elementsFromPoint(x, y)
         const start = stack.indexOf(el)
-        let colour: number[] | null = null
         const layers: number[][] = []
         for (const each of start >= 0 ? stack.slice(start) : stack) {
           const style = getComputedStyle(each)
@@ -95,7 +94,8 @@ export async function audit(page: Page, options: AuditOptions = {}): Promise<Aud
           layers.push(bg)
           if (bg[3] >= 1) break
         }
-        colour = [255, 255, 255, 1]
+        // The canvas under everything is white.
+        let colour = [255, 255, 255, 1]
         for (const layer of layers.reverse()) colour = over(layer, colour)
         return colour
       }

@@ -121,7 +121,7 @@ function StatusIncidentPage() {
             {intl.formatMessage(IMPACT_LABEL[incident.impact])}
           </span>
           <span
-            className={cn('text-[11px] font-semibold tracking-wide uppercase', lifecycleStyle.text)}
+            className={cn('text-xs font-semibold tracking-wide uppercase', lifecycleStyle.text)}
           >
             {intl.formatMessage(LIFECYCLE_LABEL[incident.status])}
           </span>

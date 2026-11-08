@@ -214,7 +214,7 @@ export function PublicMoreFilters({ filters, setFilters, size = 'sm' }: MoreFilt
       >
         {intl.formatMessage({ id: 'portal.feedback.filter.more', defaultMessage: 'More filters' })}
         {onCount > 0 && (
-          <span className="rounded-full bg-foreground px-1.5 text-[11px] font-semibold leading-4 text-background tabular-nums">
+          <span className="rounded-full bg-foreground px-1.5 text-xs font-semibold leading-4 text-background tabular-nums">
             {onCount}
           </span>
         )}

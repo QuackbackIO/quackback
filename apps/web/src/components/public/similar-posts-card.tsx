@@ -66,7 +66,7 @@ export const SimilarPostsCard = memo(function SimilarPostsCard({
           className={cn('overflow-hidden', className)}
         >
           <div ref={contentRef}>
-            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
               <LightBulbIcon className="h-3.5 w-3.5 text-muted-foreground" />
               {heading ??
                 intl.formatMessage({
