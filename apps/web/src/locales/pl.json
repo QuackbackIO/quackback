@@ -1919,6 +1919,8 @@
   "common.errorPage.technicalDetails": "Szczegóły techniczne",
   "common.errorPage.tryAgain": "Spróbuj ponownie",
   "common.errorPage.goHome": "Przejdź do strony głównej",
+  "common.errorPage.notFound.board": "Przejdź do tablicy",
+  "common.errorPage.notFound.search": "Szukaj wpisów",
   "portal.header.auth.accountMenu": "Otwórz menu konta",
   "portal.feedback.header.titleLabel": "Tytuł wpisu",
   "portal.feedback.header.postingToBoard": "Publikujesz na tablicy {board}",

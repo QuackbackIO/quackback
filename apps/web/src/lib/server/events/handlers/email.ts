@@ -170,6 +170,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        brand: cfg.brand,
       })
     } else if (event.type === 'comment.created') {
       result = await sendNewCommentEmail({
@@ -183,6 +184,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        brand: cfg.brand,
       })
     } else if (event.type === 'post.mentioned') {
       const data = event.data as EventPostMentionedData
@@ -196,6 +198,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        brand: cfg.brand,
       })
     } else if (event.type === 'conversation.note_mentioned') {
       const c = config as unknown as NoteMentionEmailConfig
@@ -221,6 +224,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        brand: cfg.brand,
         from:
           (await permittedSendingIdentity((changelogCfg.from as string | undefined) ?? null)) ??
           undefined,
@@ -239,6 +243,7 @@ async function deliverEmail(
         unsubscribeUrl: unsubscribeUrl ?? '',
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        brand: cfg.brand,
       })
     } else if (event.type === 'status.maintenance_scheduled') {
       const c = config as Record<string, unknown>
@@ -256,6 +261,7 @@ async function deliverEmail(
         unsubscribeUrl: unsubscribeUrl ?? '',
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        brand: cfg.brand,
       })
     } else if (TICKET_EMAIL_EVENT_TYPES.has(event.type)) {
       // All six ticket/SLA event types map onto sendTicketEventEmail; the

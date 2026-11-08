@@ -53,6 +53,7 @@ const hoisted = vi.hoisted(() => ({
   mockRevokeMagicLinkToken: vi.fn(),
   mockRevokeMagicLinkTokens: vi.fn(),
   mockGetEmailSafeUrl: vi.fn(),
+  mockEmailBranding: vi.fn(),
   mockGetBaseUrl: vi.fn(),
   mockGenerateId: vi.fn(),
 }))
@@ -130,6 +131,14 @@ vi.mock('@/lib/server/storage/s3', () => ({
   getEmailSafeUrl: hoisted.mockGetEmailSafeUrl,
 }))
 
+// The published design's email brand: its own tests live beside it.
+vi.mock('@/lib/server/email/email-brand', () => ({
+  emailBranding: hoisted.mockEmailBranding,
+}))
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getWorkspaceSettings: async () => ({ featureFlags: { portalDesignV2: true } }),
+}))
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -168,6 +177,7 @@ beforeEach(async () => {
   hoisted.mockRevokeMagicLinkToken.mockResolvedValue(undefined)
   hoisted.mockRevokeMagicLinkTokens.mockResolvedValue(undefined)
   hoisted.mockGetEmailSafeUrl.mockReturnValue(null)
+  hoisted.mockEmailBranding.mockResolvedValue({ logoUrl: undefined, brand: undefined })
   hoisted.mockSendPortalInviteEmail.mockResolvedValue({ sent: false })
   hoisted.mockGenerateId.mockReturnValue('invite_test')
   hoisted.mockDbInsert.mockResolvedValue(undefined)
@@ -272,6 +282,18 @@ describe('sendPortalInviteFn — success (single)', () => {
         to: 'invitee@example.com',
         workspaceName: ADMIN_AUTH.settings.name,
       })
+    )
+  })
+
+  it('sends the invite in the workspace brand', async () => {
+    hoisted.mockSendPortalInviteEmail.mockResolvedValue({ sent: true })
+    const brand = { accent: '#0c862c', accentText: '#ffffff', link: '#0c862c' }
+    hoisted.mockEmailBranding.mockResolvedValue({ logoUrl: 'https://cdn.example/icon.png', brand })
+
+    await sendHandler({ data: { emails: ['invitee@example.com'] } })
+
+    expect(hoisted.mockSendPortalInviteEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ brand, logoUrl: 'https://cdn.example/icon.png' })
     )
   })
 

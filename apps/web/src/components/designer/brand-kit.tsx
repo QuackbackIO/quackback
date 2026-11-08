@@ -8,6 +8,7 @@ import { BrandKitFonts } from './brand-kit-fonts'
 import { BrandMatchRow } from './brand-match-row'
 import { FIND } from './find-rows'
 import { KitImageTile } from './kit-image-tile'
+import { LinkPreview } from './link-preview'
 import { LogoIconRow, LogoTitleRow } from './logo-rows'
 import { PropertyRow, PropertySection } from './properties/properties-panel'
 import { THEME, resetToValue } from './properties/words'
@@ -68,8 +69,10 @@ export function BrandKit({
 
 /**
  * The brand's other images, open in Theme: the favicon and the image a
- * shared link shows, each saying what shows while there is none. Each is
- * drafted like the icon.
+ * shared link shows, each saying what shows while there is none: the
+ * favicon falls back to the icon, then the workspace logo; the share image
+ * is a card drawn from the brand. Under them, a link to the portal as it
+ * shows when shared. Each image is drafted like the icon.
  */
 export function BrandKitImages({
   update,
@@ -78,24 +81,33 @@ export function BrandKitImages({
 }: {
   design: PortalDesign
   update: Update
-  /** The workspace's logo, which a portal without its own favicon shows. */
+  /** The workspace's logo, which a portal without its own favicon or icon shows. */
   logoUrl?: string | null
 }) {
   const { favicon, shareImage } = design.brand
+  const { mark } = design.brand.logo
+  const iconUrl = url(mark.light ?? mark.dark)
+  const faviconFallback = iconUrl
+    ? { url: iconUrl, caption: THEME.fromIcon }
+    : logoUrl
+      ? { url: logoUrl, caption: THEME.workspaceLogo }
+      : null
   return (
     <PropertySection title={THEME.sections.siteImages}>
       <PropertyRow
         label={FIND.favicon.label}
         find={FIND.favicon.id}
         set={!!favicon}
-        resetLabel={resetToValue(THEME.workspaceLogo.toLowerCase())}
+        resetLabel={
+          faviconFallback ? resetToValue(faviconFallback.caption.toLowerCase()) : undefined
+        }
         onReset={() => update((draft) => void (draft.brand.favicon = null))}
       >
         <KitImageTile
           label={THEME.favicon}
           url={url(favicon)}
-          fallbackUrl={logoUrl}
-          fallbackCaption={THEME.workspaceLogo}
+          fallbackUrl={faviconFallback?.url ?? null}
+          fallbackCaption={faviconFallback?.caption}
           accept="image/png,image/svg+xml,image/x-icon,image/webp"
           presign={presignWith(getFaviconUploadUrlFn)}
           onUploaded={(key) => update((draft) => void (draft.brand.favicon = { key }))}
@@ -117,6 +129,9 @@ export function BrandKitImages({
           presign={presignWith(getShareImageUploadUrlFn)}
           onUploaded={(key) => update((draft) => void (draft.brand.shareImage = { key }))}
         />
+      </PropertyRow>
+      <PropertyRow label={THEME.linkPreview}>
+        <LinkPreview design={design} className="min-w-0 flex-1" />
       </PropertyRow>
     </PropertySection>
   )

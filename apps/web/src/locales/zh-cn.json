@@ -1919,6 +1919,8 @@
   "common.errorPage.technicalDetails": "技术详情",
   "common.errorPage.tryAgain": "重试",
   "common.errorPage.goHome": "返回首页",
+  "common.errorPage.notFound.board": "前往看板",
+  "common.errorPage.notFound.search": "搜索帖子",
   "portal.header.auth.accountMenu": "打开账户菜单",
   "portal.feedback.header.titleLabel": "帖子标题",
   "portal.feedback.header.postingToBoard": "发布到 {board}",

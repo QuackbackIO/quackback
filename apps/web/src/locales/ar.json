@@ -1919,6 +1919,8 @@
   "common.errorPage.technicalDetails": "التفاصيل التقنية",
   "common.errorPage.tryAgain": "حاول مرة أخرى",
   "common.errorPage.goHome": "العودة إلى الرئيسية",
+  "common.errorPage.notFound.board": "الانتقال إلى اللوحة",
+  "common.errorPage.notFound.search": "البحث في المنشورات",
   "portal.header.auth.accountMenu": "فتح قائمة الحساب",
   "portal.feedback.header.titleLabel": "عنوان المنشور",
   "portal.feedback.header.postingToBoard": "النشر في {board}",

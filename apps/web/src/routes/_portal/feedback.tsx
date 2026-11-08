@@ -24,6 +24,6 @@ export const Route = createFileRoute('/_portal/feedback')({
     const { settings, gates } = portalPathsOf(context)
     return loadFeed(context, location, portalFeedbackPath(settings, gates))
   },
-  head: ({ loaderData }) => feedHead(loaderData),
+  head: ({ loaderData, matches }) => feedHead(loaderData, matches),
   component: FeedPage,
 })

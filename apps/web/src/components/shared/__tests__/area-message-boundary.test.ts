@@ -53,7 +53,8 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
     importers: null,
   },
   errorPage: {
-    users: /^components\/shared\/error-page\.tsx$/,
+    // The portal's own not-found page words itself through the error page's copy.
+    users: /^components\/(shared\/error-page|public\/portal-not-found)\.tsx$/,
     importers: null,
   },
   deviceSignIn: {

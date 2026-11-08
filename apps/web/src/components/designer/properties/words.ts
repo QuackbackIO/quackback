@@ -135,6 +135,7 @@ export const THEME = {
   fromIcon: 'From icon',
   shareImage: 'Share image',
   automatic: 'Automatic',
+  linkPreview: 'Link preview',
   fullLogo: 'Full logo',
   fullLogoSwitch: 'Use a full logo image instead',
   fullLogoEmpty: 'Shows icon and title',

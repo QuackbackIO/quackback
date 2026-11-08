@@ -337,6 +337,7 @@ async function buildEmailTargets(
         {
           workspaceName: context.workspaceName,
           logoUrl: context.logoUrl ?? undefined,
+          brand: context.emailBrand,
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           ...eventConfig,
         }
@@ -642,6 +643,7 @@ export async function getMentionTargets(
           postUrl,
           workspaceName: context.workspaceName,
           logoUrl: context.logoUrl ?? undefined,
+          brand: context.emailBrand,
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           eventType: 'post.mentioned',
         })
@@ -1298,6 +1300,7 @@ function baseTicketConfig(params: BaseTicketConfigParams): Record<string, unknow
     kind: params.kind,
     workspaceName: params.context.workspaceName,
     logoUrl: params.context.logoUrl ?? undefined,
+    brand: params.context.emailBrand,
     preferencesUrl: `${params.context.portalBaseUrl}/settings/preferences`,
     ticketLabel: params.ticketLabel,
     title: params.title,
@@ -1877,6 +1880,7 @@ export async function getChangelogSubscriberTargets(
           {
             workspaceName: context.workspaceName,
             logoUrl: context.logoUrl ?? undefined,
+            brand: context.emailBrand,
             preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
             changelogTitle: event.data.changelog.title,
             changelogUrl,
@@ -2133,6 +2137,7 @@ export async function getStatusSubscriberTargets(
                 eventType: event.type,
                 workspaceName: context.workspaceName,
                 logoUrl: context.logoUrl ?? undefined,
+                brand: context.emailBrand,
                 preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
                 incidentTitle: incident.title,
                 incidentUrl,

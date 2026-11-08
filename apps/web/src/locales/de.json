@@ -1919,6 +1919,8 @@
   "common.errorPage.technicalDetails": "Technische Details",
   "common.errorPage.tryAgain": "Erneut versuchen",
   "common.errorPage.goHome": "Zur Startseite",
+  "common.errorPage.notFound.board": "Zum Board",
+  "common.errorPage.notFound.search": "Beiträge durchsuchen",
   "portal.header.auth.accountMenu": "Kontomenü öffnen",
   "portal.feedback.header.titleLabel": "Titel des Beitrags",
   "portal.feedback.header.postingToBoard": "Beitrag in {board}",

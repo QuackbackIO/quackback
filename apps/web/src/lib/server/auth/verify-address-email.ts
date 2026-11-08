@@ -6,15 +6,20 @@
  */
 export async function sendVerifyAddressCode(email: string, code: string): Promise<void> {
   const { sendVerifyAddressEmail } = await import('@quackback/email')
-  const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
+  const { emailBranding } = await import('@/lib/server/email/email-brand')
   const { db } = await import('@/lib/server/db')
   const settings = await db.query.settings.findFirst({
-    columns: { name: true, logoKey: true },
+    columns: { name: true, logoKey: true, featureFlags: true },
+  })
+  const { logoUrl, brand } = await emailBranding({
+    logoKey: settings?.logoKey,
+    featureFlags: settings?.featureFlags,
   })
   await sendVerifyAddressEmail({
     to: email,
     code,
     workspaceName: settings?.name ?? undefined,
-    logoUrl: getEmailSafeUrl(settings?.logoKey) ?? undefined,
+    logoUrl,
+    brand,
   })
 }

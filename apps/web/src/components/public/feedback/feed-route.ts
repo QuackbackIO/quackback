@@ -12,6 +12,13 @@ import type { RouterContext } from '@/routes/__root'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters'
+import {
+  headSettings,
+  pageShareMeta,
+  pageTitle,
+  portalHeadWords,
+  portalSiteName,
+} from '@/lib/shared/portal-head'
 
 /** The feed's search: shareable filters, kept in the URL. */
 export const feedSearchSchema = z.object({
@@ -118,11 +125,15 @@ export async function loadFeed(
 }
 
 /** The feed's title, description and canonical address. */
-export function feedHead(loaderData: Awaited<ReturnType<typeof loadFeed>> | undefined) {
+export function feedHead(
+  loaderData: Awaited<ReturnType<typeof loadFeed>> | undefined,
+  matches?: ReadonlyArray<{ context?: unknown }>
+) {
   if (!loaderData) return {}
-  const { workspaceName, baseUrl, canonicalPath } = loaderData
-  const title = `Feedback - ${workspaceName}`
-  const description = `Submit and vote on feature requests for ${workspaceName}. Help shape what gets built next.`
+  const { baseUrl, canonicalPath } = loaderData
+  const settings = headSettings(matches)
+  const title = pageTitle(settings, 'feedback')
+  const description = portalHeadWords(settings).feedback(portalSiteName(settings))
   const canonical = canonicalPath === '/' ? baseUrl : `${baseUrl}${canonicalPath}`
   return {
     meta: [
@@ -133,6 +144,7 @@ export function feedHead(loaderData: Awaited<ReturnType<typeof loadFeed>> | unde
       ...(baseUrl ? [{ property: 'og:url', content: canonical }] : []),
       { name: 'twitter:title', content: title },
       { name: 'twitter:description', content: description },
+      ...pageShareMeta(settings, baseUrl, 'feedback'),
     ],
     links: baseUrl ? [{ rel: 'canonical', href: canonical }] : [],
   }

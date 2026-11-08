@@ -514,10 +514,15 @@ async function createAuth() {
           )
           return
         }
-        const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-        const settings = await db.query.settings.findFirst({ columns: { logoKey: true } })
-        const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
-        await sendPasswordResetEmail({ to, resetLink: url, logoUrl })
+        const { emailBranding } = await import('@/lib/server/email/email-brand')
+        const settings = await db.query.settings.findFirst({
+          columns: { logoKey: true, featureFlags: true },
+        })
+        const { logoUrl, brand } = await emailBranding({
+          logoKey: settings?.logoKey,
+          featureFlags: settings?.featureFlags,
+        })
+        await sendPasswordResetEmail({ to, resetLink: url, logoUrl, brand })
       },
       resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24 hours
       // Completing a reset proves inbox ownership (the user received and

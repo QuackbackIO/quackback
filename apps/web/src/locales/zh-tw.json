@@ -1919,6 +1919,8 @@
   "common.errorPage.technicalDetails": "技術詳細資料",
   "common.errorPage.tryAgain": "再試一次",
   "common.errorPage.goHome": "回首頁",
+  "common.errorPage.notFound.board": "前往看板",
+  "common.errorPage.notFound.search": "搜尋貼文",
   "portal.header.auth.accountMenu": "開啟帳戶選單",
   "portal.feedback.header.titleLabel": "貼文標題",
   "portal.feedback.header.postingToBoard": "發佈至 {board}",

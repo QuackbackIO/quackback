@@ -75,9 +75,33 @@ export const publishPortalDesignFn = createServerFn({ method: 'POST' })
       expectedRevision: data.revision,
       workspaceLogo: data.workspaceLogo === true,
     })
-    if (result.ok) log.info({ revision: result.number }, 'portal design published from appearance')
-    return result
+    if (!result.ok) return result
+    log.info({ revision: result.number }, 'portal design published from appearance')
+    return { ...result, address: await liveAddress(auth.permissions) }
   })
+
+/** Where the portal is live now, for publishing to show; on a failed read, the address alone. */
+async function liveAddress(permissions: readonly string[]) {
+  const [{ config }, { portalAddress }] = await Promise.all([
+    import('@/lib/server/config'),
+    import('@/lib/shared/design/portal-address'),
+  ])
+  try {
+    const [{ getWorkspaceSettingsRow }, { parseIdentityProjection }] = await Promise.all([
+      import('@/lib/server/domains/settings/settings.service'),
+      import('@/lib/server/domains/settings/cloud/identity-projection'),
+    ])
+    const row = await getWorkspaceSettingsRow()
+    return portalAddress(
+      config.baseUrl,
+      parseIdentityProjection(row?.cloudIdentity),
+      permissions.includes(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)
+    )
+  } catch (err) {
+    log.warn({ err }, 'cloud identity could not be read for the live address')
+    return portalAddress(config.baseUrl, null, false)
+  }
+}
 
 export const listPortalDesignVersionsFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })

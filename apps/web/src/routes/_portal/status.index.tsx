@@ -12,6 +12,13 @@ import {
 } from '@/components/portal/status'
 import { StatusPageView } from '@/components/portal/status/status-page-view'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
+import {
+  headSettings,
+  pageShareMeta,
+  pageTitle,
+  portalHeadWords,
+  portalSiteName,
+} from '@/lib/shared/portal-head'
 
 export const Route = createFileRoute('/_portal/status/')({
   loader: async ({ context }) => {
@@ -37,11 +44,12 @@ export const Route = createFileRoute('/_portal/status/')({
       messages: await messagesPromise,
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
-    const { workspaceName, baseUrl } = loaderData
-    const title = `Status - ${workspaceName}`
-    const description = `Live status and incident history for ${workspaceName}.`
+    const { baseUrl } = loaderData
+    const settings = headSettings(matches)
+    const title = pageTitle(settings, 'status')
+    const description = portalHeadWords(settings).status(portalSiteName(settings))
     const canonicalUrl = baseUrl ? `${baseUrl}/status` : ''
     return {
       meta: [
@@ -52,6 +60,7 @@ export const Route = createFileRoute('/_portal/status/')({
         ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
         { name: 'twitter:title', content: title },
         { name: 'twitter:description', content: description },
+        ...pageShareMeta(settings, baseUrl, 'status'),
       ],
       links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }

@@ -17,13 +17,40 @@ const body = {
 describe('designView', () => {
   it('carries the design’s own favicon and share image, where it has them', () => {
     const doc = defaultDesign()
-    expect(designView(doc, null).icons).toEqual({ favicon: null, shareImage: null })
+    expect(designView(doc, null).icons).toMatchObject({ favicon: null, shareImage: null })
     doc.brand.favicon = { key: 'favicons/a.png' }
     doc.brand.shareImage = { key: 'portal-images/b.png' }
-    expect(designView(doc, null).icons).toEqual({
+    expect(designView(doc, null).icons).toMatchObject({
       favicon: '/api/storage/favicons/a.png',
       shareImage: '/api/storage/portal-images/b.png',
     })
+  })
+
+  it('offers the brand icon as a favicon: an SVG as it is, else squared on the server', () => {
+    const doc = defaultDesign()
+    expect(designView(doc, null).icons?.mark).toBeNull()
+    doc.brand.logo.mark.light = { key: 'logos/icon.svg' }
+    expect(designView(doc, null).icons?.mark).toBe('/api/storage/logos/icon.svg')
+    doc.brand.logo.mark.light = { key: 'logos/icon.png' }
+    expect(designView(doc, null).icons?.mark).toMatch(/^\/brand\.png\?v=\w+&kind=icon$/)
+  })
+
+  it('versions the share card by what it shows', () => {
+    const doc = defaultDesign()
+    const before = designView(doc, null).icons?.card
+    expect(before).toBeTruthy()
+    expect(designView(defaultDesign(), null).icons?.card).toBe(before)
+    doc.brand.light.background = '#112233'
+    expect(designView(doc, null).icons?.card).not.toBe(before)
+  })
+
+  it('gives the browser the page colour for each mode the design shows', () => {
+    const doc = defaultDesign()
+    doc.brand.light.background = '#fafafa'
+    expect(designView(doc, null).icons?.themeColor?.light).toBe('#fafafa')
+    expect(designView(doc, null).icons?.themeColor?.dark).toMatch(/^#[0-9a-f]{6}$/)
+    doc.mode = 'light'
+    expect(designView(doc, null).icons?.themeColor?.dark).toBeNull()
   })
 
   it('carries the welcome message when it is on and has text', () => {

@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { PAGE_NAMES, type CanvasLocation, type DesignerPage } from '@/lib/shared/design/outline'
-import { ALWAYS_SAMPLED } from '@/lib/shared/design/sample-pages'
+import { ALWAYS_SAMPLED, isPageSample } from '@/lib/shared/design/sample-pages'
 import type { PickablePost, useDesignerPage } from './use-designer-page'
 import { Tag } from './tag'
 
@@ -70,15 +70,19 @@ export function CanvasBar({
       {sample ? (
         <p className="flex items-center gap-1.5">
           <Tag>Sample</Tag>
-          <span>Made-up content, to design {PAGE_NAMES[sample]} before it has its own.</span>
-          {partOn && (
+          <span>
+            {isPageSample(sample)
+              ? `Made-up content, to design ${PAGE_NAMES[sample]} before it has its own.`
+              : 'What visitors see at an address with nothing at it.'}
+          </span>
+          {(partOn || !isPageSample(sample)) && (
             <Button
               variant="link"
               size="sm"
               className="h-auto p-0 text-xs"
               onClick={() => onSample(null)}
             >
-              Show the real page
+              {isPageSample(sample) ? 'Show the real page' : 'Back to the page'}
             </Button>
           )}
         </p>

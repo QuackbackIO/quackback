@@ -44,6 +44,8 @@ export type SampleContent =
   | { page: 'feedback'; feedback: ReturnType<typeof sampleFeedback> }
   | { page: 'roadmap'; roadmap: ReturnType<typeof sampleRoadmap> }
   | { page: 'changelog'; changelog: ReturnType<typeof sampleChangelog> }
+  /** The not-found page shows only its words. */
+  | { page: 'not-found' }
 
 const DAY = 86_400_000
 /** Fixture ids say what they are; no row anywhere has one. */
@@ -237,5 +239,7 @@ export function sampleContent(page: SamplePage, now: Date = new Date()): SampleC
       return { page, roadmap: sampleRoadmap(now) }
     case 'changelog':
       return { page, changelog: sampleChangelog(now) }
+    case 'not-found':
+      return { page }
   }
 }

@@ -69,12 +69,17 @@ export async function requestEmailSignin(opts: {
   const { db } = await import('@/lib/server/db')
   const { isEmailConfigured, sendMagicLinkEmail, sendSignupNotAllowedEmail } =
     await import('@quackback/email')
-  const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
+  const { emailBranding } = await import('@/lib/server/email/email-brand')
 
   // Read before the branch, not inside it: both outcomes mail something, and
   // both mail it with this workspace's branding.
-  const settings = await db.query.settings.findFirst({ columns: { name: true, logoKey: true } })
-  const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
+  const settings = await db.query.settings.findFirst({
+    columns: { name: true, logoKey: true, featureFlags: true },
+  })
+  const { logoUrl, brand } = await emailBranding({
+    logoKey: settings?.logoKey,
+    featureFlags: settings?.featureFlags,
+  })
 
   // `openSignup`, in front of the mint rather than around it.
   //
@@ -104,6 +109,7 @@ export async function requestEmailSignin(opts: {
       to,
       workspaceName: settings?.name ?? undefined,
       logoUrl,
+      brand,
     })
     return
   }
@@ -170,6 +176,7 @@ export async function requestEmailSignin(opts: {
     signInUrl: minted.url,
     code: otp,
     logoUrl,
+    brand,
     workspaceName: settings?.name ?? undefined,
   })
 }

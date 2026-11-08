@@ -1,6 +1,7 @@
-import { Button, Heading, Section, Text } from '@react-email/components'
+import { Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
-import { typography, button, colors } from './shared-styles'
+import { typography, colors } from './shared-styles'
+import { BrandButton } from './brand-parts'
 
 interface StatusChangeEmailProps {
   postTitle: string
@@ -83,9 +84,7 @@ export function StatusChangeEmail({
 
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={postUrl}>
-          View post
-        </Button>
+        <BrandButton href={postUrl}>View post</BrandButton>
       </Section>
 
       {/* Footer */}

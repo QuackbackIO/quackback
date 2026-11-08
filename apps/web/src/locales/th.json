@@ -128,6 +128,8 @@
   "common.errorPage.technicalDetails": "รายละเอียดทางเทคนิค",
   "common.errorPage.tryAgain": "ลองอีกครั้ง",
   "common.errorPage.goHome": "ไปหน้าหลัก",
+  "common.errorPage.notFound.board": "ไปที่บอร์ด",
+  "common.errorPage.notFound.search": "ค้นหาโพสต์",
   "files.viewer.failureUnsupported": "ไฟล์ประเภทนี้ไม่มีตัวอย่าง",
   "files.viewer.failureCorrupt": "แสดงตัวอย่างไฟล์นี้ไม่ได้",
   "files.viewer.failureTooLarge": "ไฟล์ใหญ่เกินกว่าจะแสดงตัวอย่าง",

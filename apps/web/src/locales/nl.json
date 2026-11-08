@@ -1919,6 +1919,8 @@
   "common.errorPage.technicalDetails": "Technische details",
   "common.errorPage.tryAgain": "Opnieuw proberen",
   "common.errorPage.goHome": "Naar de startpagina",
+  "common.errorPage.notFound.board": "Naar het bord",
+  "common.errorPage.notFound.search": "Berichten zoeken",
   "portal.header.auth.accountMenu": "Accountmenu openen",
   "portal.feedback.header.titleLabel": "Titel van de post",
   "portal.feedback.header.postingToBoard": "Plaatsen op {board}",

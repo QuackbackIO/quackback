@@ -1,6 +1,7 @@
-import { Heading, Link, Text } from '@react-email/components'
+import { Heading, Text } from '@react-email/components'
 import { EmailLayout, TransactionalFooter } from './email-layout'
-import { typography, utils } from './shared-styles'
+import { typography } from './shared-styles'
+import { BrandLink } from './brand-parts'
 
 /** The record whose check failed, as the settings page names it. */
 export interface SendingDomainAttentionRecord {
@@ -76,10 +77,8 @@ export function SendingDomainAttentionEmail({
       <Text style={typography.text}>Replies send from the default address until it is fixed.</Text>
       {settingsUrl ? (
         <Text style={typography.text}>
-          <Link href={settingsUrl} style={utils.link}>
-            Open email settings
-          </Link>{' '}
-          to see every record and verify.
+          <BrandLink href={settingsUrl}>Open email settings</BrandLink> to see every record and
+          verify.
         </Text>
       ) : null}
       <TransactionalFooter>

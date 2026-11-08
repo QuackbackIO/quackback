@@ -362,6 +362,14 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "copied id could answer from the wrong workspace and leak or hide that workspace's test data.",
   },
   {
+    file: 'apps/web/src/lib/server/domains/design/share-card/serve.ts',
+    name: 'cache',
+    category: 'workspace-keyed',
+    reason:
+      'The drawn share cards and squared favicons, by the version of what they show. Shared, one ' +
+      "workspace's link previews would show another workspace's name, colours and icon.",
+  },
+  {
     file: 'apps/web/src/lib/server/local-cache.ts',
     name: 'localCopies',
     category: 'workspace-keyed',

@@ -34,7 +34,7 @@ import {
   type SwitcherRow,
 } from '@/lib/shared/design/page-switcher'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
-import type { SamplePage } from '@/lib/shared/design/sample-pages'
+import { SAMPLE_NAMES, type SamplePage } from '@/lib/shared/design/sample-pages'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 
@@ -129,7 +129,7 @@ export function PageSwitcher({
             {widget
               ? SWITCHER_COPY.widget
               : sample
-                ? PAGE_NAMES[sample]
+                ? SAMPLE_NAMES[sample]
                 : pageName(design, gates, here.page)}
           </span>
           <ChevronDownIcon className="size-3.5" aria-hidden="true" />
