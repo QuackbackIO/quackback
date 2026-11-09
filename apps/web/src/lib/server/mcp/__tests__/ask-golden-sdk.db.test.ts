@@ -195,8 +195,21 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
         expect((await none.call('navigate_workspace', { destination: 'domains' })).isError).toBe(
           true
         )
+        expect((await none.call('navigate_workspace', { destination: 'email' })).isError).toBe(true)
       } finally {
         await none.close()
+      }
+      const admin = await openAskSdkHarness({
+        ...seeded.auth,
+        scopes: ['read:settings'],
+        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.SETTINGS_MANAGE]),
+      })
+      try {
+        expect(
+          parseAskSdkResult(await admin.call('navigate_workspace', { destination: 'email' }))
+        ).toMatchObject({ navigation: { href: '/admin/settings/email' } })
+      } finally {
+        await admin.close()
       }
     })
   })

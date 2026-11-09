@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { buildAskDestinations } from '@/lib/shared/ask-destinations'
 import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
+import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 import { getFeatureFlags } from '@/lib/server/domains/settings/settings.service'
 import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { resolveMcpActor } from '../resolve-actor'
@@ -61,6 +62,11 @@ export const WORKSPACE_NAVIGATION = {
   domains: {
     href: '/admin/settings/domains',
     anyOf: DOMAINS_PAGE_PERMISSIONS,
+    scope: 'read:settings',
+  },
+  email: {
+    href: '/admin/settings/email',
+    permission: EMAIL_SENDING_PERMISSION,
     scope: 'read:settings',
   },
   members: {
