@@ -69,13 +69,16 @@ function renderCard(
     forwardingTarget: string | null
     forwardingTargetPermitted: boolean | null
     rows: Array<keyof EmailSendersDTO>
+    platformFrom: string | null
+    platformName: string
   }> = {}
 ) {
   return render(
     <SendFromCard
       senders={{ ...NONE, ...over.senders }}
       identities={[HELLO, NEWS, PENDING]}
-      platformFrom={PLATFORM}
+      platformFrom={over.platformFrom === undefined ? PLATFORM : over.platformFrom}
+      platformName={over.platformName}
       forwardingTarget={over.forwardingTarget ?? null}
       forwardingTargetPermitted={over.forwardingTargetPermitted ?? null}
       hasInboundRoute={over.hasInboundRoute ?? false}
@@ -90,6 +93,44 @@ const options = (name: string) => [...select(name).options].map((o) => o.textCon
 
 beforeEach(() => setSender.mockReset())
 afterEach(cleanup)
+
+describe('a server with its own default address', () => {
+  it('names the configured address the server default', () => {
+    renderCard({ platformName: 'Server default', platformFrom: 'Acme <noreply@acme.com>' })
+    expect(options('Default')).toContain('Server default (Acme <noreply@acme.com>)')
+  })
+
+  it('says when no address is configured at all', () => {
+    renderCard({ platformName: 'Server default', platformFrom: null })
+    expect(options('Default')).toContain('Server default (not set)')
+    expect(
+      screen.getByText('No default address is configured, so choose one to send email.')
+    ).toBeTruthy()
+  })
+})
+
+describe('a chosen address that cannot send', () => {
+  it('says the default goes out from the platform address meanwhile', () => {
+    renderCard({ senders: { default: { mode: 'address', id: PENDING.id } } })
+    expect(
+      screen.getByText(`help@pending.example isn't verified yet, so email sends from ${PLATFORM}.`)
+    ).toBeTruthy()
+  })
+
+  it('says an override goes out from the default meanwhile', () => {
+    renderCard({
+      senders: {
+        default: { mode: 'address', id: HELLO.id },
+        changelog: { mode: 'address', id: PENDING.id },
+      },
+    })
+    expect(
+      screen.getByText(
+        `help@pending.example isn't verified yet, so email sends from ${HELLO.label}.`
+      )
+    ).toBeTruthy()
+  })
+})
 
 describe('the default sender', () => {
   it('offers the verified addresses and the Quackback address', () => {
