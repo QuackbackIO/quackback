@@ -848,6 +848,16 @@ describe('removing a sending address', () => {
     )
   })
 
+  it('treats an address as usable on a server that sends from any address', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [NOT_FOUND],
+      addressMode: 'any',
+      senders: { default: { mode: 'address', id: 'a1' } },
+    })
+    expect(document.body.textContent).not.toContain("isn't verified yet")
+  })
+
   it('keeps the plain sentence for an address nothing sends from', async () => {
     renderSettings({
       addresses: [address('a1', 'hello@acme.com'), address('a2', 'spare@acme.com')],

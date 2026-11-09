@@ -53,10 +53,14 @@ function choiceOf(value: string): EmailSenderChoiceDTO | null {
   return { mode: 'address', id: value }
 }
 
+/** The addr-spec of a "Name <address>" label. */
+const addressOf = (label: string): string => /<([^>]+)>/.exec(label)?.[1] ?? label
+
 export function SendFromCard({
   senders,
   identities,
   platformFrom,
+  platformName = 'Quackback address',
   forwardingTarget,
   forwardingTargetPermitted,
   hasInboundRoute,
@@ -70,6 +74,8 @@ export function SendFromCard({
   identities: SenderIdentity[]
   /** "Workspace <platform address>", or null when this install has none. */
   platformFrom: string | null
+  /** What the address email sends from with nothing chosen is called here. */
+  platformName?: string
   forwardingTarget: string | null
   forwardingTargetPermitted: boolean | null
   /** Whether the workspace receives email, so support can reply from the inbox. */
@@ -104,8 +110,21 @@ export function SendFromCard({
   // What "the default" sends from today.
   const resolvedDefault = defaultIdentity?.label ?? platformFrom
 
-  const defaultHint =
-    !defaultChoice && platformFrom ? `Email sends from ${platformFrom}.` : undefined
+  const defaultHint = defaultChoice
+    ? undefined
+    : platformFrom
+      ? `Email sends from ${platformFrom}.`
+      : 'No default address is configured, so choose one to send email.'
+  // A chosen address whose domain stopped verifying (or never finished) is
+  // still shown as chosen; this says what mail goes out from meanwhile.
+  const notLiveHint = (surface: Surface): string | undefined => {
+    const choice = senders[surface]
+    if (choice?.mode !== 'address') return undefined
+    const identity = identities.find((i) => i.id === choice.id)
+    const fallback = surface === 'default' ? platformFrom : resolvedDefault
+    if (!identity || identity.live || !fallback) return undefined
+    return `${addressOf(identity.label)} isn't verified yet, so email sends from ${fallback}.`
+  }
   // Said only when what happens differs from what is chosen.
   const supportHint =
     senders.support?.mode === 'inbox' &&
@@ -127,7 +146,7 @@ export function SendFromCard({
           <SettingRow
             label="Default"
             htmlFor="send-from-default"
-            description={defaultHint}
+            description={notLiveHint('default') ?? defaultHint}
             control={
               <Select
                 value={valueOf(defaultChoice, 'default')}
@@ -144,7 +163,7 @@ export function SendFromCard({
                     </SelectItem>
                   ))}
                   <SelectItem value={PLATFORM}>
-                    {platformFrom ? `Quackback address (${platformFrom})` : 'Quackback address'}
+                    {`${platformName} (${platformFrom ?? 'not set'})`}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -166,6 +185,7 @@ export function SendFromCard({
               htmlFor={id}
               description={
                 (surface === 'support' ? supportHint : undefined) ??
+                notLiveHint(surface) ??
                 (!showDefault && value === SAME_AS_DEFAULT && resolvedDefault
                   ? `Sends from ${resolvedDefault}.`
                   : undefined)

@@ -81,13 +81,17 @@ function useEmailConfigView() {
       ? `${workspaceName} <${bareAddress(defaultFrom)}>`
       : bareAddress(defaultFrom)
     : null
+  // One workspace on its own server sends from any address it is given, so
+  // every address is usable there and the fallback is the server's own.
+  const anyAddress = data?.addressMode === 'any'
+  const platformName = anyAddress ? 'Server default' : 'Quackback address'
   const now = new Date()
   const identities: SenderIdentity[] = oldestFirst(addresses).map((a) => {
     const domain = domainOf(a, domains)
     return {
       id: a.id,
       label: senderLabel(a, workspaceName),
-      live: domain ? domainPhase(domain, now) === 'live' : true,
+      live: anyAddress || !domain || domainPhase(domain, now) === 'live',
     }
   })
   return {
@@ -97,6 +101,7 @@ function useEmailConfigView() {
     domains,
     senders: data?.senders ?? NO_SENDERS,
     platformFrom,
+    platformName,
     identities,
   }
 }
@@ -120,6 +125,7 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
         senders={view.senders}
         workspaceName={view.workspaceName}
         platformFrom={view.platformFrom}
+        platformName={view.platformName}
         available={data?.addressMode !== 'unavailable'}
         guardPermitsAny={data?.addressMode === 'any'}
       />
@@ -127,6 +133,7 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
         senders={view.senders}
         identities={view.identities}
         platformFrom={view.platformFrom}
+        platformName={view.platformName}
         forwardingTarget={inboundTarget(data?.inboundRoute)}
         forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
         hasInboundRoute={!!data?.inboundRoute}
@@ -157,6 +164,7 @@ export function SupportInboxSettings({ canManageSending }: { canManageSending: b
         senders={view.senders}
         identities={view.identities}
         platformFrom={view.platformFrom}
+        platformName={view.platformName}
         forwardingTarget={inboundTarget(data?.inboundRoute)}
         forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
         hasInboundRoute={!!data?.inboundRoute}
@@ -401,10 +409,11 @@ function domainOf(a: SendingAddress, domains: SendingDomainDTO[]): SendingDomain
 function removalNote(
   id: string,
   senders: EmailSendersDTO,
-  platformFrom: string | null
+  platformFrom: string | null,
+  platformName: string
 ): string | null {
   if (senders.default?.mode === 'address' && senders.default.id === id) {
-    return `It's the default address, so email sent from it will send from ${platformFrom ?? 'the Quackback address'}.`
+    return `It's the default address, so email sent from it will send from ${platformFrom ?? `the ${platformName.toLowerCase()}`}.`
   }
   const using = (Object.keys(SURFACE_NAMES) as Array<keyof typeof SURFACE_NAMES>).filter((s) => {
     const choice = senders[s]
@@ -451,6 +460,7 @@ function SendingAddressesSection({
   senders,
   workspaceName,
   platformFrom,
+  platformName,
   available,
   guardPermitsAny,
 }: {
@@ -459,6 +469,7 @@ function SendingAddressesSection({
   senders: EmailSendersDTO
   workspaceName: string
   platformFrom: string | null
+  platformName: string
   available: boolean
   /** One workspace: email still leaves as the address, so nothing falls back. */
   guardPermitsAny: boolean
@@ -562,7 +573,7 @@ function SendingAddressesSection({
                     domain && rows.filter((r) => r.domain?.id === domain.id).length === 1
                       ? domain.domain
                       : null,
-                  note: removalNote(a.id, senders, platformFrom),
+                  note: removalNote(a.id, senders, platformFrom, platformName),
                 }),
             },
           ]
