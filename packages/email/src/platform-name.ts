@@ -26,17 +26,34 @@ const ABOUT_QUACKBACK_EMAIL_TYPES: ReadonlySet<string> = new Set([
 ])
 
 /**
+ * Email types written as a person on the team, whose name the caller passes
+ * (an agent's reply). That name is the point of the email, so it is used even
+ * where the operator's own name is kept for everything else.
+ */
+const PERSONAL_EMAIL_TYPES: ReadonlySet<string> = new Set([
+  'ConversationReplyEmail',
+  'ConversationMessageEmail',
+])
+
+/**
  * The name for a platform-address send of `emailType`.
  *
- * `undefined` when there is no workspace name to use (a self-hosted install
- * whose settings carry none): the configured From then goes out as written, so
- * the operator's own `EMAIL_FROM` display name is kept.
+ * `undefined` means the configured From goes out as written. That is the case
+ * when there is no workspace name to use, and when the From is the operator's
+ * own `EMAIL_FROM` with a display name of its own (`operatorNamed`): an operator
+ * who named their From chose what their recipients see, so only a person's name
+ * on a reply replaces it.
  */
 export function platformDisplayName(
   emailType: string,
-  workspaceName: string | null | undefined
+  workspaceName: string | null | undefined,
+  options: { operatorNamed?: boolean; callerName?: string } = {}
 ): string | undefined {
+  if (options.operatorNamed) {
+    const personal = options.callerName?.trim()
+    return PERSONAL_EMAIL_TYPES.has(emailType) && personal ? personal : undefined
+  }
   if (ABOUT_QUACKBACK_EMAIL_TYPES.has(emailType)) return QUACKBACK_DISPLAY_NAME
-  const name = workspaceName?.trim()
+  const name = (options.callerName ?? workspaceName)?.trim()
   return name ? name : undefined
 }

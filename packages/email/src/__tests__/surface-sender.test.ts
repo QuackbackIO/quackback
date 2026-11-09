@@ -46,7 +46,7 @@ beforeEach(() => {
     delete process.env[key]
   }
   process.env.EMAIL_RESEND_API_KEY = 're_test'
-  process.env.EMAIL_FROM = 'Platform <noreply@platform.test>'
+  process.env.EMAIL_FROM = 'noreply@platform.test'
   resendSend.mockReset()
   resendSend.mockResolvedValue({ data: { id: 'resend-email-id' }, error: null, headers: null })
 })

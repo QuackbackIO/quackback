@@ -116,6 +116,21 @@ export function formatAddress(value: string): string {
   return `${encodeDisplayName(parsed.name)} <${parsed.address}>`
 }
 
+/**
+ * A From for a transport that encodes headers itself (SMTP): the display name
+ * as plain text beside the address. Undoes the quoting or the RFC 2047 word
+ * {@link formatAddress} gives a name, since the transport would otherwise quote
+ * the encoded word and recipients would see it raw.
+ */
+export function plainAddress(value: string): string | { name: string; address: string } {
+  const parsed = parseAddress(value)
+  if (typeof parsed === 'string') return parsed
+  const unescaped = (parsed.name ?? '').replace(/\\(.)/g, '$1')
+  const encoded = /^=\?UTF-8\?B\?([A-Za-z0-9+/=]*)\?=$/i.exec(unescaped)
+  const name = encoded ? Buffer.from(encoded[1], 'base64').toString('utf8') : unescaped
+  return { name, address: parsed.address }
+}
+
 /** Replace (or add) the display name on an addr-spec or `Name <addr>` value. */
 export function applyDisplayName(from: string, displayName: string): string {
   const parsed = parseAddress(from)

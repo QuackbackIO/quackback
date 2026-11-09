@@ -17,7 +17,13 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
-import { applyDisplayName, sendViaSes, SesTenantPausedError } from './ses'
+import {
+  applyDisplayName,
+  parseAddress,
+  plainAddress,
+  sendViaSes,
+  SesTenantPausedError,
+} from './ses'
 import { reportSesTenantPaused, resolveSesTenant } from './tenant-hooks'
 import { sendViaResend } from './resend'
 import { listUnsubscribeHeaders } from './list-unsubscribe'
@@ -411,9 +417,17 @@ async function dispatch(
   const resolvedFrom = options.from ?? getEmailFrom()
   // On the platform address the registry's display name names the platform, so
   // the name is decided here for every sender rather than trusted to each one.
+  // An install's own EMAIL_FROM (no registry From) keeps a name it already has.
+  const operatorNamed =
+    !options.from &&
+    resolvedDefaultFrom() === null &&
+    typeof parseAddress(resolvedFrom) !== 'string'
   const displayName = options.from
     ? options.fromDisplayName
-    : platformDisplayName(emailType, options.fromDisplayName ?? options.workspaceName)
+    : platformDisplayName(emailType, options.workspaceName, {
+        operatorNamed,
+        callerName: options.fromDisplayName,
+      })
   const from = displayName ? applyDisplayName(resolvedFrom, displayName) : resolvedFrom
   const html = options.html ?? (options.react ? await render(options.react) : undefined)
   const text =
@@ -525,7 +539,9 @@ async function dispatch(
   // SMTP is the last rung: console, SES and Resend all returned above.
   try {
     const result = await getSmtpTransporter().sendMail({
-      from,
+      // The name unencoded: the mail library encodes it itself, and an encoded
+      // word handed to it inside a string ends up quoted and shown raw.
+      from: plainAddress(from),
       to: options.to,
       subject: options.subject,
       html,

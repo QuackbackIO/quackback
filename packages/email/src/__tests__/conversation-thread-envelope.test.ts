@@ -32,7 +32,7 @@ beforeEach(() => {
     delete process.env[key]
   }
   process.env.EMAIL_SMTP_HOST = 'smtp.example.com'
-  process.env.EMAIL_FROM = 'Platform <noreply@platform.example>'
+  process.env.EMAIL_FROM = 'noreply@platform.example'
   sendMailMock.mockClear()
 })
 
@@ -51,9 +51,12 @@ const RATINGS = [1, 2, 3, 4, 5].map((r) => `https://portal.example/csat?rating=$
   string,
 ]
 
+/** What the transport was handed, with a named From read as `Name <addr>`. */
 function wire(): Record<string, unknown> {
   expect(sendMailMock).toHaveBeenCalledTimes(1)
-  return sendMailMock.mock.calls[0][0] as Record<string, unknown>
+  const call = sendMailMock.mock.calls[0][0] as Record<string, unknown>
+  const from = call.from as string | { name: string; address: string }
+  return { ...call, from: typeof from === 'string' ? from : `${from.name} <${from.address}>` }
 }
 
 describe('sendConversationAutoAckEmail', () => {
