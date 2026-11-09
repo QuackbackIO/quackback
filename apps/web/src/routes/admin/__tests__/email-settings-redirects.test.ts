@@ -7,17 +7,20 @@ import { describe, expect, it } from 'vitest'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 type BeforeLoad = (ctx: Record<string, unknown>) => void
+type RouteModule = { Route: { options: { beforeLoad?: BeforeLoad } } }
+
+// Imported once, outside any test's timeout: a route module pulls in its page.
+const ROUTES = {
+  email: (await import('../settings.email')) as unknown as RouteModule,
+  channels: (await import('../settings.channels_.email')) as unknown as RouteModule,
+}
 
 async function landing(
   module: 'email' | 'channels',
   permissions: string[],
   supportOn: boolean
 ): Promise<string | null> {
-  const { Route } = (module === 'email'
-    ? await import('../settings.email')
-    : await import('../settings.channels_.email')) as unknown as {
-    Route: { options: { beforeLoad?: BeforeLoad } }
-  }
+  const { Route } = ROUTES[module]
   try {
     Route.options.beforeLoad?.({
       context: {
