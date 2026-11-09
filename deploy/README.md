@@ -7,6 +7,7 @@ This directory contains deployment configurations for Quackback.
 | Option                                     | For                          | Infrastructure       |
 | ------------------------------------------ | ---------------------------- | -------------------- |
 | **[Self-Hosted](./self-hosted/README.md)** | Community & Enterprise users | Docker, Bun, any VPS |
+| **[Kubernetes](./kubernetes/quackback/README.md)** | Community & Enterprise users | Kubernetes, Helm     |
 | **[Cloud](./cloud/README.md)**             | Quackback team only          | Cloudflare Workers   |
 
 ---
@@ -43,6 +44,26 @@ See the [Self-Hosted Guide](./self-hosted/README.md) for complete documentation.
 
 ---
 
+## Kubernetes
+
+Running on a cluster instead of a single host? Use the Helm chart at
+[`kubernetes/quackback`](./kubernetes/quackback) — it bundles the same
+Postgres/Dragonfly/MinIO stack as `docker-compose.prod.yml`, plus a
+`pre-upgrade` migration hook Job (per the guidance in `apps/web/Dockerfile`).
+
+```bash
+helm install quackback ./deploy/kubernetes/quackback \
+  --namespace quackback --create-namespace \
+  --set secretKey="$(openssl rand -base64 32)" \
+  --set baseUrl=https://feedback.example.com \
+  --set ingress.host=feedback.example.com \
+  --set ingress.tls.secretName=feedback-tls
+```
+
+See the [Helm Chart Guide](./kubernetes/quackback/README.md) for full configuration.
+
+---
+
 ## Quackback Cloud (Internal)
 
 The `cloud/` directory contains Cloudflare Workers deployment configuration for Quackback Cloud (app.quackback.io).
@@ -65,8 +86,14 @@ deploy/
 │   ├── wrangler.production.jsonc  # Production environment
 │   ├── .dev.vars.example  # Secrets template
 │   └── .gitignore         # Ignores .dev.vars
-└── self-hosted/           # Self-hosting documentation
-    └── README.md          # Self-hosted deployment guide
+├── self-hosted/           # Self-hosting documentation
+│   └── README.md          # Self-hosted deployment guide
+└── kubernetes/
+    └── quackback/         # Helm chart
+        ├── README.md      # Helm chart guide
+        ├── Chart.yaml
+        ├── values.yaml
+        └── templates/
 ```
 
 ---

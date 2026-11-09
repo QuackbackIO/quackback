@@ -1,0 +1,92 @@
+{{/*
+apps/web/Dockerfile documents this exact pattern: "K8s deployments should set
+SKIP_MIGRATIONS=true and run migrations from a pre-upgrade Helm hook Job
+instead — that way cold starts don't wait on a DB round-trip." This Job is
+that hook: it runs once before the app Deployment is created/updated and
+blocks the release until migrations succeed.
+*/}}
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "quackback.fullname" . }}-migrate
+  labels:
+    {{- include "quackback.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "quackback.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.postgres.enabled }}
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "quackback.fullname" . }}-postgres 5432; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready."
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+      {{- end }}
+      containers:
+        - name: migrate
+          image: "{{ include "quackback.appImage" . }}"
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          command: ["bun", "/app/migrate.mjs"]
+          securityContext:
+            {{- toYaml .Values.app.securityContext | nindent 12 }}
+          env:
+            {{- if .Values.postgres.enabled }}
+            - name: DB_USER
+              value: {{ .Values.postgres.user | quote }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "quackback.fullname" . }}-postgres
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: postgresql://$(DB_USER):$(DB_PASSWORD)@{{ include "quackback.fullname" . }}-postgres:5432/{{ .Values.postgres.database }}
+            {{- else }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "quackback.fullname" . }}-secret
+                  key: DATABASE_URL
+            {{- end }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+      securityContext:
+        {{- toYaml .Values.app.podSecurityContext | nindent 8 }}
+{{- end }}
