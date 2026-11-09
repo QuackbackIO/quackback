@@ -9,6 +9,9 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { BoardsList } from '@/components/admin/settings/boards/boards-list'
 import { boardTabSearch } from '@/components/admin/settings/boards/board-tabs'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
+import { FeedbackEmailCard } from '@/components/admin/settings/boards/feedback-email-card'
+import { surfaceSenderQuery } from '@/lib/client/queries/channel-accounts'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
@@ -36,7 +39,11 @@ export const Route = createFileRoute('/admin/settings/boards/')({
   },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.BOARD_MANAGE)
-    await context.queryClient.ensureQueryData(adminQueries.boardsWithCounts())
+    await Promise.all([
+      context.queryClient.ensureQueryData(adminQueries.boardsWithCounts()),
+      // The Email card's "Sent from" line, so it renders from the document.
+      warmQuery(context.queryClient, surfaceSenderQuery('feedback')),
+    ])
     return {}
   },
   component: BoardsSettingsPage,
@@ -63,6 +70,7 @@ function BoardsSettingsPage() {
           <BoardsList boards={boards} />
         )}
       </SettingsCard>
+      <FeedbackEmailCard />
     </SettingsPage>
   )
 }
