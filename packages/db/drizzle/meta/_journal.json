@@ -2038,6 +2038,13 @@
       "when": 1791001800000,
       "tag": "0313_email_senders",
       "breakpoints": true
+    },
+    {
+      "idx": 291,
+      "version": "7",
+      "when": 1791001900000,
+      "tag": "0314_outbound_email_kind",
+      "breakpoints": true
     }
   ]
 }

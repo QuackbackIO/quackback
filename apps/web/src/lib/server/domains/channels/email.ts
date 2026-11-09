@@ -68,6 +68,8 @@ export const emailAdapter: ChannelAdapter = {
     })
     const outboundMessageId =
       result?.messageId === undefined ? messageId : (result.messageId ?? undefined)
-    if (outboundMessageId) await recordOutboundEmail(outboundMessageId, ctx.conversationId)
+    if (outboundMessageId) {
+      await recordOutboundEmail(outboundMessageId, ctx.conversationId, 'csat')
+    }
   },
 }

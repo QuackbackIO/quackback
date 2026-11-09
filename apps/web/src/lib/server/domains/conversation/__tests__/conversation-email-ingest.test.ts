@@ -83,6 +83,7 @@ function boundParams(clause: unknown): string[] {
 vi.mock('../conversation.email-store', () => ({
   resolveConversationByMessageIds: (...a: unknown[]) => resolveConversationByMessageIds(...a),
   resolvePrincipalIdByEmail: (...a: unknown[]) => resolvePrincipalIdByEmail(...a),
+  answersSurveyEmail: async () => false,
 }))
 
 vi.mock('../conversation.service', () => ({

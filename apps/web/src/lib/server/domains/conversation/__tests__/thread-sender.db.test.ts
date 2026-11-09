@@ -348,6 +348,33 @@ describe.skipIf(!fixture.available)('one sender for a whole support thread (real
       expect(referenceIds(mails[i])).toEqual(expect.arrayContaining(ids.slice(0, i)))
     }
 
+    // A reply to the rating request lands in the closed conversation without
+    // reopening it; a reply to the closing notice reopens it as usual.
+    const replyTo = (parent: Map<string, string>, n: number): ParsedInboundEmail => ({
+      ...coldEmail,
+      toAddresses: [bareFrom(parent.get('reply-to'))],
+      subject: 'Re: Help with billing',
+      text: `Thanks ${n}`,
+      messageId: `<reply-${n}@example.org>`,
+      inReplyTo: parent.get('message-id') ?? null,
+      references: [parent.get('message-id') ?? ''],
+    })
+    const statusNow = async () =>
+      (
+        await testDb
+          .select({ status: conversations.status })
+          .from(conversations)
+          .where(eq(conversations.id, conversationId))
+      )[0]?.status
+    expect((await asWorkspace(() => ingestParsedEmail(replyTo(mails[2], 1)))).status).toBe(
+      'ingested'
+    )
+    expect(await statusNow()).toBe('closed')
+    expect((await asWorkspace(() => ingestParsedEmail(replyTo(mails[3], 2)))).status).toBe(
+      'ingested'
+    )
+    expect(await statusNow()).toBe('open')
+
     // Support is pointed at another address, which a new thread would use, and
     // the conversation is reassigned.
     await setEmailSender('support', { mode: 'address', channelAccountId: billingAddress.id })
