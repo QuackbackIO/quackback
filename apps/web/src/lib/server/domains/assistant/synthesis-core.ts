@@ -39,6 +39,7 @@ import {
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging, type AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
 import { isWireForwardable } from './agui'
+import { AI_CHAT_OPTIONS } from '@/lib/server/domains/ai/chat-options'
 
 /** Output budget default: constrained decoding on small models needs headroom. */
 export const DEFAULT_MAX_OUTPUT_TOKENS = 1024
@@ -283,6 +284,7 @@ async function streamOnce<TContext>(
   const tools = opts.tools
   const stream = tools
     ? chat({
+        ...AI_CHAT_OPTIONS,
         adapter,
         messages: opts.messages,
         systemPrompts: opts.systemPrompts,
@@ -296,6 +298,7 @@ async function streamOnce<TContext>(
         ...(opts.middleware ? { middleware: opts.middleware } : {}),
       })
     : chat({
+        ...AI_CHAT_OPTIONS,
         adapter,
         messages: opts.messages,
         systemPrompts: opts.systemPrompts,

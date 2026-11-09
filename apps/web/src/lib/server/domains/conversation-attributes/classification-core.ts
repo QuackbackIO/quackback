@@ -20,6 +20,7 @@ import { z } from 'zod'
 import { config } from '@/lib/server/config'
 import { structuredOutputProviderOptions } from '@/lib/server/domains/ai/config'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
+import { AI_CHAT_OPTIONS } from '@/lib/server/domains/ai/chat-options'
 
 /**
  * Bounds any transcript handed to the classifier call, real conversation or
@@ -148,6 +149,7 @@ export async function runClassificationCall(
   ].join('\n')
 
   const object = await chat({
+    ...AI_CHAT_OPTIONS,
     adapter: openaiCompatibleText(model, {
       baseURL: config.openaiBaseUrl!,
       apiKey: config.openaiApiKey!,
