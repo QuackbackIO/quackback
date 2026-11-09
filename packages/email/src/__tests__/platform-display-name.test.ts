@@ -367,7 +367,30 @@ describe('an install with no workspace name (self-hosted EMAIL_FROM)', () => {
     expect(sentFrom()).toBe('Acme Support <support@acme.test>')
   })
 
-  it("names the workspace over the operator's name once it has one", async () => {
+  it.each(Object.entries(workspaceSenders))(
+    "%s keeps the operator's EMAIL_FROM name over the workspace name",
+    async (_name, send) => {
+      await send('Acme Widgets')
+      expect(sentFrom()).toBe('Acme Support <support@acme.test>')
+    }
+  )
+
+  it('still names an agent reply after the agent', () => {
+    expect(
+      platformDisplayName('ConversationReplyEmail', 'Acme', {
+        operatorNamed: true,
+        callerName: 'Alex from Acme',
+      })
+    ).toBe('Alex from Acme')
+  })
+})
+
+describe('an install whose EMAIL_FROM is a bare address', () => {
+  beforeEach(() => {
+    process.env.EMAIL_FROM = 'support@acme.test'
+  })
+
+  it('names the workspace', async () => {
     await email.sendPasswordResetEmail({ to, resetLink: 'https://x.test', workspaceName: 'Acme' })
     expect(sentFrom()).toBe('Acme <support@acme.test>')
   })
