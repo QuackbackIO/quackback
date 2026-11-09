@@ -15,6 +15,12 @@
         "sensitive": false
       },
       {
+        "key": "OPENAI_DEFAULT_HEADERS",
+        "kind": "secret",
+        "group": "connection",
+        "sensitive": true
+      },
+      {
         "key": "AI_CHAT_MODEL",
         "kind": "model",
         "group": "models",

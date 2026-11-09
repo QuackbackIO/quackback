@@ -16,6 +16,7 @@
  * teammate-facing copilot with tools optionally on) is meant to be a new set
  * of options here, not a fork of this file.
  */
+import { getOpenAIClientOptions } from '@/lib/server/domains/ai/client-options'
 import {
   chat,
   parsePartialJSON,
@@ -239,10 +240,7 @@ async function streamOnce<TContext>(
   opts: RunAttemptOptions<TContext>,
   controller: AbortController
 ): Promise<AttemptOutcome> {
-  const adapter = openaiCompatibleText(opts.model, {
-    baseURL: config.openaiBaseUrl!,
-    apiKey: config.openaiApiKey!,
-  })
+  const adapter = openaiCompatibleText(opts.model, getOpenAIClientOptions(config))
   // TOOLS AND response_format MUST NOT SHARE A REQUEST. The compatible
   // adapter reports combined tools+schema support (the API accepts it), but
   // under constrained decoding models stop CALLING tools: generation is
