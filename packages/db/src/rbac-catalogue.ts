@@ -180,7 +180,7 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
     key: PERMISSIONS.SETTINGS_MANAGE,
     category: 'workspace',
     description:
-      'Manage workspace settings: branding, general config, portal and widget, moderation default',
+      'Manage workspace settings: branding, general config, portal and widget, moderation default, and the addresses email is sent from',
   },
   {
     key: PERMISSIONS.BILLING_MANAGE,
@@ -567,7 +567,8 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
   {
     key: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
     category: 'support',
-    description: 'Manage connected inbox channels (email / widget accounts)',
+    description:
+      'Manage connected inbox channels (email and widget accounts) and the address support replies come from',
   },
 
   {
@@ -750,7 +751,7 @@ export const SYSTEM_ROLE_DEFS: ReadonlyArray<{
     key: SYSTEM_ROLES.SUPPORT_LEAD,
     name: 'Support lead',
     description:
-      'Everything a Manager can do, plus routing, workflows, SLA policies, office hours, inbox channels, custom fields, and the customer-facing AI',
+      'Everything a Manager can do, plus routing, workflows, SLA policies, office hours, inbox channels and the support reply address, custom fields, and the customer-facing AI',
   },
   {
     key: SYSTEM_ROLES.CONTRIBUTOR,

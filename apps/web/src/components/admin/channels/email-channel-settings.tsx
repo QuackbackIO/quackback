@@ -162,7 +162,11 @@ export function SupportInboxSettings({ canManageSending }: { canManageSending: b
         hasInboundRoute={!!data?.inboundRoute}
         rows={['support']}
         title="Replies"
-        description="The address support replies come from."
+        description={
+          canManageSending
+            ? 'The address support replies come from.'
+            : 'The address support replies come from. An admin adds sending addresses in Settings > Email.'
+        }
         action={
           canManageSending ? (
             <Button variant="outline" size="sm" asChild>
