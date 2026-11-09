@@ -198,6 +198,25 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
       expect(await resolveSendingAddress(null, 'changelog')).toBe('hello@acme.example')
     })
 
+    it('leaves the default unset once any address has been chosen for something', async () => {
+      await seedVerifiedDomain(await defaultTeam(), 'acme.example')
+      const news = await seedAddress('news@acme.example')
+      await setEmailSender('default', null)
+      await setEmailSender('changelog', { mode: 'address', channelAccountId: news })
+
+      await seedAddress('hello@acme.example')
+
+      expect((await getEmailSenders()).get('default')).toBeUndefined()
+      expect(await resolveSender({ surface: 'feedback' })).toBeNull()
+    })
+
+    it('still makes the first address the default beside an inbox', async () => {
+      await seedVerifiedDomain(await defaultTeam(), 'acme.example')
+      await seedForwardedInbox('support@acme.example')
+      const first = await seedAddress('hello@acme.example')
+      expect((await getEmailSenders()).get('default')?.account?.id).toBe(first)
+    })
+
     it('sends from the platform when no default is chosen', async () => {
       await seedVerifiedDomain(await defaultTeam(), 'acme.example')
       await seedAddress('hello@acme.example')
