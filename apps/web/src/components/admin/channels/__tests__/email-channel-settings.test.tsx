@@ -1120,4 +1120,16 @@ describe('where each part lives', () => {
     renderSettings({ view: 'support', canManageSending: false })
     expect(screen.queryByRole('link', { name: 'Manage sending addresses' })).toBeNull()
   })
+
+  it('tells someone who cannot manage sending where addresses are added', () => {
+    renderSettings({ view: 'support', canManageSending: false })
+    expect(
+      screen.getByText('An admin adds sending addresses in Settings > Email.', { exact: false })
+    ).toBeTruthy()
+  })
+
+  it('does not tell an admin to ask an admin', () => {
+    renderSettings({ view: 'support' })
+    expect(screen.queryByText('An admin adds sending addresses', { exact: false })).toBeNull()
+  })
 })
