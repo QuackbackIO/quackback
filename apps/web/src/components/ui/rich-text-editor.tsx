@@ -1466,6 +1466,12 @@ function RichTextEditorBase({
           borderless ? 'py-0' : 'px-3 py-2'
         ),
         style: `--editor-min-height: ${minHeight}`,
+        // Block browser translation (Chrome/Edge Translate) from injecting
+        // <font>/<span> wrapper nodes into the ProseMirror document tree.
+        // Browser translation corrupts the DOM↔document mapping, causing
+        // insert/delete commands to throw "node to be inserted is not a
+        // child of this node". translate="no" is the standard HTML signal;
+        translate: 'no',
       },
       handleDrop:
         (features.images && onImageUpload) || (features.videos && onVideoUpload)
