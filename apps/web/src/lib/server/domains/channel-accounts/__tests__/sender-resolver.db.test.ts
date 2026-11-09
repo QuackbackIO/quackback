@@ -453,6 +453,36 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
       expect(await storedSender(conv)).toBe('hello@acme.example')
     })
 
+    it('moves to the current sender once its stored address is removed', async () => {
+      await seedVerifiedDomain(await defaultTeam(), 'acme.example')
+      const hello = await seedAddress('hello@acme.example')
+      const help = await seedAddress('help@acme.example')
+      const conv = await seedConversation({})
+      expect(await resolveConversationFrom(conv)).toBe('hello@acme.example')
+
+      await setEmailSender('default', { mode: 'address', channelAccountId: help })
+      await removeSendingAddress(hello)
+
+      expect(await resolveConversationSender(conv)).toEqual({
+        from: 'help@acme.example',
+        source: 'default',
+        senderName: null,
+      })
+      expect(await storedSender(conv)).toBe('help@acme.example')
+      expect((await resolveConversationSender(conv))?.source).toBe('thread')
+    })
+
+    it('keeps a stored inbox address while its route is still connected', async () => {
+      await seedVerifiedDomain(await defaultTeam(), 'acme.example')
+      await seedAddress('hello@acme.example')
+      const route = await seedForwardedInbox('support@acme.example')
+      const conv = await seedConversation({ channelAccountId: route })
+      expect(await resolveConversationFrom(conv)).toBe('support@acme.example')
+
+      await setEmailSender('support', null)
+      expect((await resolveConversationSender(conv))?.source).toBe('thread')
+    })
+
     it('records nothing when the thread sends from the platform default', async () => {
       const conv = await seedConversation({})
       expect(await resolveConversationFrom(conv)).toBeNull()

@@ -10,7 +10,18 @@
 import type { ChannelAccountId, ConversationId, TeamId, TicketId } from '@quackback/ids'
 import type { SendingIdentity } from '@quackback/email/sender'
 import { parseAddress } from '@quackback/email/ses'
-import { db, and, asc, eq, isNull, conversations, ticketConversations } from '@/lib/server/db'
+import {
+  db,
+  and,
+  asc,
+  eq,
+  isNull,
+  or,
+  sql,
+  channelAccounts,
+  conversations,
+  ticketConversations,
+} from '@/lib/server/db'
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { getChannelAccount } from './channel-account.service'
@@ -113,9 +124,10 @@ export async function resolveSender(input: {
       .limit(1)
     channelAccountId = conv?.channelAccountId ?? null
     const stored = conv?.threadSenderAddress ?? null
-    const from = await permitted(stored)
-    if (from && stored)
-      return { from, source: 'thread', senderName: await senderNameForAddress(stored) }
+    if (stored && (await isWorkspaceAddress(stored))) {
+      const from = await permitted(stored)
+      if (from) return { from, source: 'thread', senderName: await senderNameForAddress(stored) }
+    }
   }
 
   const senders = await getEmailSenders()
@@ -155,6 +167,30 @@ export async function resolveSender(input: {
 }
 
 /**
+ * Whether an address is still one of this workspace's own: a sending address,
+ * or the address an inbound route forwards. A thread's stored sender counts
+ * only while it is, so removing an address moves its threads to whatever is
+ * chosen now instead of leaving them on an address the workspace gave up.
+ */
+async function isWorkspaceAddress(address: string): Promise<boolean> {
+  const bare = address.trim().toLowerCase()
+  const [row] = await db
+    .select({ id: channelAccounts.id })
+    .from(channelAccounts)
+    .where(
+      and(
+        isNull(channelAccounts.deletedAt),
+        or(
+          sql`lower(${channelAccounts.address}) = ${bare}`,
+          sql`lower(${channelAccounts.config}->>'forwardingTarget') = ${bare}`
+        )
+      )
+    )
+    .limit(1)
+  return !!row
+}
+
+/**
  * The From for an email that belongs to no conversation (feedback, changelog
  * and status mail, a ticket with no linked conversation): the surface's chosen
  * address, else the default, else null for the platform default. The team is
@@ -183,26 +219,48 @@ export function bareSenderAddress(from: SendingIdentity | string): string {
  * by then. Stored only while the column is empty: two first sends racing each
  * other converge on whichever wrote first, and a sender that falls through the
  * guard for a while is not overwritten, so the thread returns to it when its
- * domain is verified again. Nothing is stored for the platform default, which
- * is the address a thread has before anything is configured rather than one it
- * chose.
+ * domain is verified again. A stored sender the workspace has removed is
+ * replaced by the current answer. Nothing is stored for the platform default
+ * or the platform inbox, which are addresses a thread has before the workspace
+ * can send as its own, not ones it chose.
  */
 export async function resolveConversationSender(
   conversationId: ConversationId,
   surface: SenderSurface = 'support'
 ): Promise<ResolvedSender | null> {
   const resolved = await resolveSender({ surface, conversationId })
-  if (!resolved || resolved.source === 'thread') return resolved
+  // The platform inbox is a stand-in until the workspace's own address can
+  // send, so it is never stored: the thread moves to that address once it can.
+  if (!resolved || resolved.source === 'thread' || resolved.source === 'platform_inbox') {
+    return resolved
+  }
+
+  const [conv] = await db
+    .select({ stored: conversations.threadSenderAddress })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  const previous = conv?.stored ?? null
+  // A stored sender the workspace has since removed is replaced; one that is
+  // only refused for now (its domain unverified for a while) is kept.
+  const replaceable = previous === null || !(await isWorkspaceAddress(previous))
+  if (!replaceable) return resolved
 
   const [stored] = await db
     .update(conversations)
     .set({ threadSenderAddress: bareSenderAddress(resolved.from) })
-    .where(and(eq(conversations.id, conversationId), isNull(conversations.threadSenderAddress)))
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        previous === null
+          ? isNull(conversations.threadSenderAddress)
+          : eq(conversations.threadSenderAddress, previous)
+      )
+    )
     .returning({ id: conversations.id })
   if (stored) return resolved
-  // Either another send stored the thread's sender between the read and this
-  // write, or the stored one is refused for now. Asking again returns the
-  // former and falls through the same way for the latter.
+  // Another send stored the thread's sender between the read and this write.
+  // Asking again returns it.
   return resolveSender({ surface, conversationId })
 }
 
