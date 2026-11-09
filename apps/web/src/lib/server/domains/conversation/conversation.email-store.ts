@@ -116,12 +116,14 @@ function storedFormsOf(id: string): string[] {
  */
 export async function recordOutboundEmail(
   messageId: string,
-  conversationId: ConversationId
+  conversationId: ConversationId,
+  /** `csat` for a satisfaction survey; see {@link answersSurveyEmail}. */
+  kind?: 'csat'
 ): Promise<void> {
   try {
     await db
       .insert(conversationOutboundEmails)
-      .values({ messageId: normalizeMessageId(messageId), conversationId })
+      .values({ messageId: normalizeMessageId(messageId), conversationId, kind: kind ?? null })
       .onConflictDoNothing()
   } catch (err) {
     log.warn({ err }, 'failed to record outbound email message-id')
@@ -237,6 +239,33 @@ export async function resolveConversationByMessageIds(
     .where(inArray(conversationOutboundEmails.messageId, normalized))
     .limit(1)
   return (rows[0]?.conversationId as ConversationId | undefined) ?? null
+}
+
+/**
+ * Whether a reply answers a satisfaction survey email: its In-Reply-To names a
+ * survey this conversation sent. Only the direct parent counts, so a reply to a
+ * later email on the thread (a closing notice, an agent's answer) is an
+ * ordinary reply even though its References include the survey.
+ */
+export async function answersSurveyEmail(
+  conversationId: ConversationId,
+  inReplyTo: string | null
+): Promise<boolean> {
+  if (!inReplyTo) return false
+  const forms = storedFormsOf(inReplyTo)
+  if (forms.length === 0) return false
+  const [row] = await db
+    .select({ messageId: conversationOutboundEmails.messageId })
+    .from(conversationOutboundEmails)
+    .where(
+      and(
+        inArray(conversationOutboundEmails.messageId, forms),
+        eq(conversationOutboundEmails.conversationId, conversationId),
+        eq(conversationOutboundEmails.kind, 'csat')
+      )
+    )
+    .limit(1)
+  return !!row
 }
 
 /** Resolve a sender email to the principal that owns it, or null. */
