@@ -456,11 +456,11 @@
       "componentRenders": 348
     },
     "sweep:doc:admin:/admin/settings/boards": {
-      "dbQueries": 8,
+      "dbQueries": 9,
       "htmlKB": 74.5
     },
     "sweep:ui:admin:/admin/settings/boards": {
-      "dbQueries": 8,
+      "dbQueries": 9,
       "serverRequests": 1,
       "requests": 122,
       "jsRequests": 117,
@@ -997,7 +997,7 @@
       "serverRequests": 3,
       "requests": 86,
       "jsRequests": 80,
-      "jsKB": 363.0,
+      "jsKB": 370.3,
       "htmlTransferKB": 16.4,
       "componentRenders": 240
     },
