@@ -472,13 +472,24 @@ export async function createSendingAddress(input: {
     })
     .returning()
   if (!row) throw new ChannelAddressInUseError(address)
-  await db
-    .insert(emailSenders)
-    .values({ surface: 'default', channelAccountId: row.id })
-    .onConflictDoNothing({
-      target: [emailSenders.surface, emailSenders.scopeType],
-      where: sql`scope_id IS NULL`,
-    })
+  // The first address a workspace adds becomes its default, so a new setup
+  // sends from it without a second step. Only while no address is chosen for
+  // anything: once one is, or an admin has cleared the default, adding an
+  // address never changes what any email sends from.
+  const [chosen] = await db
+    .select({ id: emailSenders.id })
+    .from(emailSenders)
+    .where(eq(emailSenders.mode, 'address'))
+    .limit(1)
+  if (!chosen) {
+    await db
+      .insert(emailSenders)
+      .values({ surface: 'default', channelAccountId: row.id })
+      .onConflictDoNothing({
+        target: [emailSenders.surface, emailSenders.scopeType],
+        where: sql`scope_id IS NULL`,
+      })
+  }
   return row
 }
 
