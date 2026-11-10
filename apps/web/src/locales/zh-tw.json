@@ -1565,6 +1565,7 @@
   "onboarding.branding.use": "使用",
   "onboarding.branding.notNow": "暫不",
   "onboarding.branding.undo": "復原",
+  "onboarding.branding.review": "檢查並發布",
   "onboarding.branding.undoConflict": "品牌設定已變更，無法復原。",
   "onboarding.branding.permissionRequired": "請工作區擁有者變更品牌設定。",
   "onboarding.branding.unavailable": "此品牌設定變更已無法使用。",

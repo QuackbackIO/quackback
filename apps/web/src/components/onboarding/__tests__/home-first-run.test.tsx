@@ -14,12 +14,13 @@ const hoisted = vi.hoisted(() => ({
   dismissWin: vi.fn(),
   dismiss: vi.fn(),
   start: vi.fn(),
+  branding: null as unknown,
 }))
 
-// Automatic branding has its own suite; here it has nothing to show.
+// Automatic branding has its own suite; here it shows nothing unless a case sets it.
 vi.mock('@/components/admin/branding/use-automatic-website-branding', () => ({
   useAutomaticWebsiteBranding: () => ({
-    status: null,
+    status: hoisted.branding,
     pending: false,
     error: null,
     undo: vi.fn(),
@@ -114,6 +115,7 @@ beforeEach(() => {
     removeEventListener: () => {},
   })) as unknown as typeof window.matchMedia
   hoisted.progress = {}
+  hoisted.branding = null
   hoisted.card.mockReset()
   hoisted.card.mockResolvedValue(null)
   hoisted.dismissWin.mockReset()
@@ -138,6 +140,24 @@ describe('Home first-run cards', () => {
     expect(screen.queryByRole('region', { name: /first customer/ })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Launch plan done.' })).toBeNull()
     expect(hoisted.card).not.toHaveBeenCalled()
+  })
+
+  it('leads a logo drafted into the design to the builder to review and publish', async () => {
+    hoisted.status = status()
+    hoisted.branding = {
+      domain: 'example.com',
+      status: 'drafted',
+      logoUrl: '/api/storage/logos/acme.png',
+      colorApplied: false,
+      canUndo: false,
+      canUse: false,
+    }
+    mount({ tour: false })
+    expect(await screen.findByText('Logo from example.com')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Review and publish' })).toHaveAttribute(
+      'href',
+      '/design'
+    )
   })
 
   it('offers the tour in the launch window and remembers Not now', async () => {
