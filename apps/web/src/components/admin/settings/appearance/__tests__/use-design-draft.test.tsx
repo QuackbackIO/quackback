@@ -428,6 +428,14 @@ describe('useDesignDraft', () => {
       })
     })
 
+    it('reads the server draft only when it moved past the revision saved last', async () => {
+      const { result } = setup()
+      await expect(result.current.moved()).resolves.toBeNull()
+      // A request stopped just as the server saved it.
+      server.revision = 'rev7'
+      await expect(result.current.moved()).resolves.toMatchObject({ revision: 'rev7' })
+    })
+
     it('takes the revision a server-side save returned, without asking again', async () => {
       const { result } = setup()
       const ai = structuredClone(result.current.design)

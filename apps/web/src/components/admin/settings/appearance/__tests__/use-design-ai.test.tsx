@@ -778,6 +778,84 @@ describe('Stop', () => {
     })
   })
 
+  it('takes the draft the server saved just as Stop landed, with its Undo', async () => {
+    let seen: AbortSignal | undefined
+    server.ask.mockImplementation(
+      ({ signal }: { signal?: AbortSignal }) =>
+        new Promise((_, reject) => {
+          seen = signal
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          )
+        })
+    )
+    const start = defaultDesign()
+    const saved = structuredClone(start)
+    saved.layout.width = 'wide'
+    const report = { adjustments: [], errors: [], css: [] }
+    const adopt = vi.fn()
+    const moved = vi.fn(async () => ({ design: saved, report, revision: 'r9' }))
+    const { result } = renderHook(() =>
+      useDesignAi({
+        flush: async () => {},
+        adopt,
+        moved,
+        update,
+        workspaceName: 'Acme',
+        check: {
+          begin: vi.fn(),
+          end: vi.fn(),
+          replace: vi.fn(),
+          frame: () => null,
+          current: () => start,
+        },
+      })
+    )
+    let asked: Promise<void> | undefined
+    act(() => {
+      asked = result.current.ask('Wider', 'site')
+    })
+    await vi.waitFor(() => expect(seen).toBeDefined())
+    act(() => result.current.stop())
+    await act(() => asked!)
+    expect(adopt).toHaveBeenCalledWith(saved, report, 'Wider', 'r9')
+    expect(result.current.turns.at(-1)).toMatchObject({
+      role: 'assistant',
+      text: 'Stopped. What changed so far stays.',
+      changes: [{ path: 'layout.width', before: start.layout.width, after: 'wide' }],
+    })
+  })
+
+  it('says nothing changed after Stop when the server draft did not move', async () => {
+    server.ask.mockImplementation(
+      ({ signal }: { signal?: AbortSignal }) =>
+        new Promise((_, reject) => {
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          )
+        })
+    )
+    const adopt = vi.fn()
+    const { result } = renderHook(() =>
+      useDesignAi({
+        flush: async () => {},
+        adopt,
+        moved: async () => null,
+        update,
+        workspaceName: 'Acme',
+      })
+    )
+    let asked: Promise<void> | undefined
+    act(() => {
+      asked = result.current.ask('Wider', 'site')
+    })
+    await vi.waitFor(() => expect(server.ask).toHaveBeenCalled())
+    act(() => result.current.stop())
+    await act(() => asked!)
+    expect(adopt).not.toHaveBeenCalled()
+    expect(result.current.turns.at(-1)?.text).toBe('Stopped. Nothing changed.')
+  })
+
   it('does nothing when nothing is running', () => {
     const { result } = hook()
     act(() => result.current.stop())

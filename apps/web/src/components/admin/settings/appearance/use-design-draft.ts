@@ -261,9 +261,15 @@ export function useDesignDraft() {
    * AI's, at the revision that save returned; the next save is made against it.
    * The server worked from the draft it last saved; a change made by hand
    * since stays, with only the server's own changes put on top, and saves next.
+   * Returns the draft as it now shows.
    */
   const adopt = useCallback(
-    (next: PortalDesign, nextReport?: typeof report, label?: string, nextRevision?: string) => {
+    (
+      next: PortalDesign,
+      nextReport?: typeof report,
+      label?: string,
+      nextRevision?: string
+    ): PortalDesign => {
       const mine = latest.current
       const merged = rebaseOnto(accepted.current, next, mine)
       // A step of its own, never merged into the one before, named for what it changed.
@@ -291,9 +297,21 @@ export function useDesignDraft() {
         latest.current = next
         setDesign(next)
       }
+      return merged
     },
     [commit, fetchEditor, history]
   )
+
+  /**
+   * The server's draft when it moved past the revision this builder last
+   * saved, such as by an Ask AI request stopped just as the server saved it;
+   * null when it is where this builder left it.
+   */
+  const moved = useCallback(async () => {
+    await inflight.current
+    const fresh = await fetchEditor()
+    return fresh.revision !== revision.current ? fresh : null
+  }, [fetchEditor])
 
   /** Reads what visitors see again after a change made outside the draft, such as a new logo. */
   const refreshLive = useCallback(async () => {
@@ -405,6 +423,7 @@ export function useDesignDraft() {
       replace,
       flush,
       adopt,
+      moved,
       refreshLive,
       changes,
       report,
@@ -439,6 +458,7 @@ export function useDesignDraft() {
       replace,
       flush,
       adopt,
+      moved,
       refreshLive,
       changes,
       report,

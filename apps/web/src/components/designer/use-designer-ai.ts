@@ -34,7 +34,7 @@ const openHome = (locale: SupportedLocale) => (design: PortalDesign) =>
 export function useDesignerAi(
   draft: Pick<
     ReturnType<typeof useDesignDraft>,
-    'flush' | 'adopt' | 'update' | 'replace' | 'begin' | 'end' | 'design'
+    'flush' | 'adopt' | 'moved' | 'update' | 'replace' | 'begin' | 'end' | 'design'
   >,
   view: { page: DesignerPage; locale: SupportedLocale },
   workspaceName: string,
@@ -49,8 +49,9 @@ export function useDesignerAi(
   const adoptAndShow = useCallback(
     (...args: Parameters<typeof adopt>) => {
       const before = latest.current
-      adopt(...args)
-      applied.current?.(before, args[0])
+      // What shows: the server's design with any change made by hand meanwhile on top.
+      const shown = adopt(...args)
+      applied.current?.(before, shown)
     },
     [adopt]
   )
@@ -58,6 +59,7 @@ export function useDesignerAi(
     ai: useDesignAi({
       flush: draft.flush,
       adopt: adoptAndShow,
+      moved: draft.moved,
       update: draft.update,
       workspaceName,
       view,
