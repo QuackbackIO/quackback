@@ -16,7 +16,12 @@ const ON = { feedback: true, roadmap: true, changelog: true, help: true, support
 const GOLDEN: [string, string][] = [
   ['Share your idea', 'Share your post'],
   ['Share your ideas with us', 'Share your posts with us'],
-  ['Got an idea for your deliveries?', 'Got a post for your deliveries?'],
+  ['Got an idea for your deliveries?', 'Got feedback for your deliveries?'],
+  ['Got an idea to make Discord more fun?', 'Got feedback to make Discord more fun?'],
+  ['Have an idea? Tell us', 'Have feedback? Tell us'],
+  ['Any ideas for the app?', 'Any feedback for the app?'],
+  ['A feature, a fix or an idea?', 'A feature, a fix or something else?'],
+  ['A feature, a fix or a idea?', 'A feature, a fix or something else?'],
   ['An idea for the roadmap', 'A post for the roadmap'],
   ['Vote for the ideas you like', 'Vote for the posts you like'],
   ['IDEAS WELCOME', 'POSTS WELCOME'],
@@ -53,7 +58,7 @@ describe('posts wording', () => {
     expect(read.evidence).toBe('They like ideas.')
     expect(read.home_layout).toBe('portal')
     expect(WORD_LINES.map((line) => read[line])).toEqual([
-      'Got a post?',
+      'Got feedback?',
       'Share posts.',
       'Your posts',
       'Vote on posts.',
@@ -70,7 +75,7 @@ describe('posts wording', () => {
       Object.fromEntries(
         wordsChanges(idea, defaultDesign(), ON, language).map((c) => [c.path, c.value])
       )
-    expect(values('en')['pages.home.headline.title']).toBe('Got a post?')
+    expect(values('en')['pages.home.headline.title']).toBe('Got feedback?')
     expect(values('en')['pages.feedback.copy.submit']).toBe('Send your post')
     expect(values('de')['pages.home.headline.title']).toBe('Got an idea?')
   })

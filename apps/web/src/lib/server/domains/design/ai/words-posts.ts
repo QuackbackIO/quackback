@@ -16,18 +16,33 @@ const likeIt = (written: string, word: string) =>
 
 const IDEA = /\b(an\s+)?(idea)(s?)\b/giu
 
+/** "Got an idea", "Have an idea", "Any ideas": asking for one, which reads best as feedback. */
+const ASKING = /\b(got|have|had|any)(\s+)(?:an\s+)?ideas?\b/giu
+
+/** "A feature, a fix or an idea?": the last of a list of kinds, which reads best as anything else. */
+const OR_IDEA = /\b(or)(\s+)(?:an?\s+)?idea\b/giu
+
 /** Whether the words are English: no language read, or an English one. */
 export const isEnglish = (language?: string | null) => !language || /^en(-|_|$)/i.test(language)
 
-/** English words with "idea" and "ideas" written as "post" and "posts" ("an idea" as "a post"). */
+/**
+ * English words with "idea" and "ideas" written as "post" and "posts" ("an
+ * idea" as "a post"), and asking for one ("Got an idea?") as "Got feedback?".
+ */
 export function postsWording(text: string, language?: string | null): string {
   if (!isEnglish(language)) return text
-  return text.replace(IDEA, (_whole, article: string | undefined, idea: string, plural: string) => {
-    const post = likeIt(idea, 'post') + plural
-    if (!article) return post
-    const a = article.trimEnd()
-    return `${likeIt(a, 'a')}${article.slice(a.length)}${post}`
-  })
+  const asked = text
+    .replace(ASKING, (_whole, verb: string, gap: string) => `${verb}${gap}feedback`)
+    .replace(OR_IDEA, (_whole, or: string, gap: string) => `${or}${gap}something else`)
+  return asked.replace(
+    IDEA,
+    (_whole, article: string | undefined, idea: string, plural: string) => {
+      const post = likeIt(idea, 'post') + plural
+      if (!article) return post
+      const a = article.trimEnd()
+      return `${likeIt(a, 'a')}${article.slice(a.length)}${post}`
+    }
+  )
 }
 
 /** The words with every line visitors read set as posts, for English. */

@@ -75,11 +75,11 @@ describe('a match from the website alone', () => {
     )
     if (!result.ok) throw new Error('expected a match')
     const { feedback, home } = result.design.pages
-    expect(feedback.headline?.title).toEqual({ en: 'Got a post?' })
+    expect(feedback.headline?.title).toEqual({ en: 'Got feedback?' })
     expect(feedback.headline?.subtitle).toEqual({
       en: 'Tell us what to build, and vote on the posts you want most.',
     })
-    expect(feedback.copy?.prompt).toEqual({ en: 'A feature, a fix or a post?' })
+    expect(feedback.copy?.prompt).toEqual({ en: 'A feature, a fix or something else?' })
     expect(feedback.copy?.submit).toEqual({ en: 'Send your post' })
     expect(home.headline?.title).toEqual({ en: 'Posts welcome' })
     expect(home.headline?.subtitle).toEqual({ en: 'Share a post with the team.' })
