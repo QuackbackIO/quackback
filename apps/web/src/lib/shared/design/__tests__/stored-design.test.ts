@@ -259,6 +259,13 @@ describe('reading a stored design with a value this build does not offer', () =>
     expect(read?.dropped).toEqual(['brand.fonts.headingWeight'])
   })
 
+  it('reads a stored file whose key this build refuses as no file, keeping the brand', () => {
+    const bad = { key: 'logos/a.png 1w, https://evil.example/x.png' }
+    const read = readStoredDesign(written({ 'brand.heroImage': bad, 'brand.logo.mark.light': bad }))
+    expect(read?.design).toEqual(stored())
+    expect(read?.dropped.sort()).toEqual(['brand.heroImage', 'brand.logo.mark.light'])
+  })
+
   it('still refuses a design whose required field is the wrong kind of value', () => {
     expect(readStoredDesign(written({ 'layout.nav': 7 }))).toBeNull()
   })
