@@ -191,8 +191,11 @@ describe('tileColumns', () => {
   it('keeps three that do not fit as three equal columns', () => {
     expect(tileColumns(['As written', 'All capitals', 'Custom'])).toBe(3)
   })
+  it('never crowds six short names onto one row', () => {
+    expect(tileColumns(['300', '400', '500', '600', '700', '800'])).toBe(3)
+  })
   it('takes five or more three to a row when they fit, else two', () => {
-    expect(tileColumns(['Aa', 'AA', 'aa', 'Ab', 'Abc', 'Def'])).toBe(0)
+    expect(tileColumns(['Aa', 'AA', 'aa', 'Ab'])).toBe(0)
     expect(tileColumns(['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven'])).toBe(3)
     expect(tileColumns(['Comfortable', 'Help Center', 'Logo colours', 'Tabs', 'Pills'])).toBe(2)
   })

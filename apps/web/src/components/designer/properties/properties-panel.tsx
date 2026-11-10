@@ -510,11 +510,11 @@ function ResetButton({ label, onReset }: { label: string; onReset: () => void })
 }
 
 /** About how wide a tile's label is drawn, per character, at 11px. */
-const TILE_CHAR_PX = 5.6
+const TILE_CHAR_PX = 5.2
 /** A tile's padding and border. */
-const TILE_PAD_PX = 12
+const TILE_PAD_PX = 14
 /** The room a row's control has in the panel, past the label and the end slot. */
-const TILE_ROW_PX = 176
+const TILE_ROW_PX = 168
 
 /**
  * How the tiles of a row lie, so none is left alone on a row: 0 when they
