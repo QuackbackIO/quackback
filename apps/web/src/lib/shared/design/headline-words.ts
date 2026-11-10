@@ -327,18 +327,24 @@ export function setWordsDoc(
   }
 }
 
+/** A phrase set apart, by the name the words editor gives its kind. */
+const PHRASE_KIND = { colour: 'accent', highlight: 'highlight', muted: 'lighter' } as const
+
 /**
  * What a change to a mark's words is called in the builder's undo: "Headline:
- * words" when the words change, "Headline: accent" when only the phrase set
- * apart, or its look, does.
+ * words" when the words change; when only the phrase set apart, or its look,
+ * does, its kind as the editor names it ("Headline: lighter"), or "Headline:
+ * no highlight" when it is taken away.
  */
 export function wordsChangeLabel(field: WordsField, before: WordsDoc, after: WordsDoc): string {
   const name = wordsName(field)
   if (wordsKindOf(field) === 'headline') {
     const was = headlineFromDoc(before)
     const now = headlineFromDoc(after)
-    if (was.title === now.title && JSON.stringify(was.accent) !== JSON.stringify(now.accent))
-      return `${name}: accent`
+    if (was.title === now.title && JSON.stringify(was.accent) !== JSON.stringify(now.accent)) {
+      if (now.accent) return `${name}: ${PHRASE_KIND[now.accent.style]}`
+      return `${name}: no ${PHRASE_KIND[was.accent?.style ?? 'colour']}`
+    }
   }
   if (wordsKindOf(field) === 'rich' && docText(before) === docText(after))
     return `${name}: formatting`

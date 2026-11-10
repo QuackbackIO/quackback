@@ -463,6 +463,7 @@ describe('words with marks', () => {
       style: 'muted',
       text: { en: 'Acme grows into' },
     })
+    expect(lighter.label).toBe('Headline: lighter')
   })
 
   it('clears the accent when the headline is written as plain words', () => {
@@ -470,7 +471,7 @@ describe('words with marks', () => {
     d.pages.home.headline!.accent = { style: 'highlight', text: { en: 'Acme' } }
     const result = ok(setWords(d, model, 'home', 'title', 'Help shape what Acme grows into'))
     expect(result.design.pages.home.headline?.accent).toBeUndefined()
-    expect(result.label).toBe('Headline: accent')
+    expect(result.label).toBe('Headline: no highlight')
     const renamed = ok(setWords(d, model, 'home', 'title', 'Hi'))
     expect(renamed.design.pages.home.headline?.title).toEqual({ en: 'Hi' })
     expect(renamed.label).toBe('Home headline: “Hi”')

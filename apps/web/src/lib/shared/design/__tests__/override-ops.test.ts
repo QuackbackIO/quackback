@@ -9,7 +9,7 @@ import { applyOp, applyOps, type FlatOp, type OpWorld } from '../design-ops'
 import { homeBlockTypes } from '../home'
 import { defaultDesign, portalDesign, type PortalDesign } from '../schema'
 import { findOverride } from '../style-overrides'
-import { overridesNow, partsText } from '../override-ops'
+import { OVERRIDE_RULE, overridesNow, partsText } from '../override-ops'
 
 const GATES = {
   feedback: true,
@@ -80,6 +80,25 @@ describe('the override operation', () => {
     expect(findOverride(result.design, 'page:roadmap:button')?.style).toEqual({
       base: { radius: 999 },
     })
+  })
+
+  it('takes the cards on a page without post cards as its panels, and says where neither is', () => {
+    // "Lifted cards on the changelog": its entries are panels, never post cards.
+    const lifted = ok(applyOp(design(), model, op('page:changelog', 'postCard.shadow', 'lifted')))
+    expect(findOverride(lifted.design, 'page:changelog:postCard')).toBeUndefined()
+    expect(findOverride(lifted.design, 'page:changelog:panel')?.style).toEqual({
+      base: { shadow: 'lifted' },
+    })
+    // A look panels cannot take is refused in plain words, never written where it cannot show.
+    const hover = applyOp(design(), model, op('page:changelog', 'postCard.hover.lift', '2'))
+    expect(hover).toMatchObject({ ok: false, refusal: 'Changelog has no post cards' })
+    // Where posts are listed, post cards stay post cards.
+    const roadmap = ok(applyOp(design(), model, op('page:roadmap', 'postCard.shadow', 'lifted')))
+    expect(findOverride(roadmap.design, 'page:roadmap:postCard')).toBeDefined()
+    // And the AI is told what cards are on each page.
+    expect(OVERRIDE_RULE).toContain(
+      '"Cards" are post cards (postCard) on Home, Feedback and Roadmap only'
+    )
   })
 
   it('reads a page as people name it', () => {

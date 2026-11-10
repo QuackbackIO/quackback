@@ -370,6 +370,80 @@ describe('useDesignDraft', () => {
       expect(server.saves.at(-1)).toMatchObject({ layout: { width: 'wide' } })
     })
 
+    it('keeps a change made by hand while the AI worked, and saves both', async () => {
+      vi.useFakeTimers()
+      const { result } = setup()
+      const original = structuredClone(result.current.design)
+      // The person changes the density while the server works on the request.
+      act(() =>
+        result.current.update((draft) => void (draft.layout.density = 'compact'), 'Density')
+      )
+      // The server's design: the draft it read (before the hand change) and the AI's change.
+      const ai = structuredClone(original)
+      ai.layout.width = 'wide'
+      act(() => result.current.adopt(ai, undefined, 'Wider', 'r2'))
+      expect(result.current.design.layout).toMatchObject({ density: 'compact', width: 'wide' })
+      // The hand change saves on top of the AI's, against the revision the AI's save returned.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS)
+      })
+      expect(server.saves.at(-1)).toMatchObject({ layout: { density: 'compact', width: 'wide' } })
+      expect(server.revisions.at(-1)).toBe('r2')
+      // Undo takes back the AI's change alone, then the hand change.
+      expect(result.current.undoLabel).toBe('Wider')
+      act(() => result.current.undo())
+      expect(result.current.design.layout).toMatchObject({
+        density: 'compact',
+        width: original.layout.width,
+      })
+      act(() => result.current.undo())
+      expect(result.current.design).toEqual(original)
+    })
+
+    it('keeps a hand change made during an AI step of the loop, inside its group', () => {
+      const { result } = setup()
+      const original = structuredClone(result.current.design)
+      act(() => result.current.begin('Make it calmer', 'ai'))
+      act(() =>
+        result.current.update((draft) => void (draft.layout.density = 'compact'), 'Density')
+      )
+      const ai = structuredClone(original)
+      ai.layout.width = 'wide'
+      act(() => result.current.adopt(ai, undefined, 'Make it calmer', 'r2'))
+      act(() => result.current.end('ai'))
+      expect(result.current.design.layout).toMatchObject({ density: 'compact', width: 'wide' })
+      expect(result.current.undoLabel).toBe('Make it calmer')
+      act(() => result.current.undo())
+      expect(result.current.design.layout).toMatchObject({
+        density: 'compact',
+        width: original.layout.width,
+      })
+    })
+
+    it('lets the hand change win where it and the AI changed the same thing', () => {
+      const { result } = setup()
+      const original = structuredClone(result.current.design)
+      act(() => result.current.update((draft) => void (draft.layout.width = 'narrow'), 'Width'))
+      const ai = structuredClone(original)
+      ai.layout.width = 'wide'
+      ai.layout.density = 'compact'
+      act(() => result.current.adopt(ai, undefined, 'Calmer', 'r2'))
+      expect(result.current.design.layout).toMatchObject({ width: 'narrow', density: 'compact' })
+      act(() => result.current.undo())
+      expect(result.current.design.layout).toMatchObject({
+        width: 'narrow',
+        density: original.layout.density,
+      })
+    })
+
+    it('reads the server draft only when it moved past the revision saved last', async () => {
+      const { result } = setup()
+      await expect(result.current.moved()).resolves.toBeNull()
+      // A request stopped just as the server saved it.
+      server.revision = 'rev7'
+      await expect(result.current.moved()).resolves.toMatchObject({ revision: 'rev7' })
+    })
+
     it('takes the revision a server-side save returned, without asking again', async () => {
       const { result } = setup()
       const ai = structuredClone(result.current.design)

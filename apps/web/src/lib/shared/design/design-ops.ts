@@ -863,7 +863,8 @@ function setTitle(
   return finish(
     design,
     draft,
-    label.endsWith(': accent') ? label : wordsLabel(read.words.title),
+    // Only the phrase set apart changed: named by its kind, as the editor names it.
+    label.endsWith(': words') ? wordsLabel(read.words.title) : label,
     world
   )
 }

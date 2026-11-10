@@ -104,7 +104,8 @@ export interface CheckRound {
   ms: number
 }
 
-export type CheckStop = 'bar' | 'rounds' | 'no_gain' | 'no_revision' | 'time' | 'failed'
+/** Why the check ended; `stopped` is the person's Stop. */
+export type CheckStop = 'bar' | 'rounds' | 'no_gain' | 'no_revision' | 'time' | 'failed' | 'stopped'
 
 export interface CheckReport {
   rounds: CheckRound[]
@@ -136,7 +137,15 @@ export interface CheckDeps<D, S extends CheckScore = CheckScore> {
   apply: (design: D) => Promise<void>
   progress?: (text: string) => void
   now?: () => number
+  /**
+   * The person's Stop: nothing more is read, scored, revised or shown after
+   * it. A candidate on trial goes back to the best so far; what was kept stays.
+   */
+  signal?: AbortSignal
 }
+
+/** Thrown inside the loop at Stop, so every stage ends in one place. */
+class Stopped extends Error {}
 
 /**
  * Whether a revision is better: the measured score holds and the combined
@@ -192,11 +201,17 @@ export async function runCheckLoop<D, S extends CheckScore = CheckScore>(
   const progress = () => {
     if (rounds.length > 1) say('Refining the match')
   }
+  // Before each stage: the person's Stop ends the loop there.
+  const go = () => {
+    if (deps.signal?.aborted) throw new Stopped()
+  }
 
   try {
+    go()
     say('Checking the match')
     let t = now()
     const reading = await deps.read()
+    go()
     const score = await deps.score(reading, 0)
     best = { reading, score }
     first = score
@@ -214,17 +229,22 @@ export async function runCheckLoop<D, S extends CheckScore = CheckScore>(
       if (round > MAX_ROUNDS) return report('rounds')
       if (now() - began + budget.round > budget.total) return report('time')
       t = now()
+      go()
       const candidate = await deps.revise(best, round)
       if (!candidate || !candidate.changes.length) return report('no_revision')
+      go()
       trying = true
       await deps.apply(candidate.design)
+      go()
       const next = await deps.read()
+      go()
       const quick = deps.measure?.(next) ?? null
       const fell: boolean =
         quick !== null && best.score.measured !== null && quick < best.score.measured
       const nextScore: S = fell
         ? ({ measured: quick, critic: null, combined: combinedScore(quick, null) } as S)
         : await deps.score(next, round)
+      go()
       const kept = isBetter(nextScore, best.score)
       const why = whyOf(nextScore, best.score)
       rounds.push({ round, score: nextScore, kept, why, changes: candidate.changes, ms: now() - t })
@@ -239,6 +259,11 @@ export async function runCheckLoop<D, S extends CheckScore = CheckScore>(
       progress()
     }
   } catch (err) {
+    // Stopped (or cut off by Stop): a candidate on trial goes back, and the loop says so.
+    if (err instanceof Stopped || deps.signal?.aborted) {
+      if (trying) await deps.apply(bestDesign).catch(() => {})
+      return report('stopped')
+    }
     // A failure keeps the best design: a candidate on show goes back.
     if (trying) await deps.apply(bestDesign).catch(() => {})
     return report('failed', err instanceof Error ? err.message : String(err))

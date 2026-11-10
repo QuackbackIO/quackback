@@ -17,6 +17,7 @@ import { LOOP_BUDGET, stoppedReply, trailOf } from '@/lib/shared/design/agent/lo
 import { routeRequest } from '@/lib/shared/design/agent/router'
 import { STYLE_REGISTRY } from '@/lib/shared/design/agent/style-registry'
 import { designPreviewCss } from './use-design-draft'
+import { designChanges } from '@/lib/shared/design/diff'
 import { snapToMark } from '@/lib/shared/design/brand-shots'
 import {
   isBrandStart,
@@ -178,6 +179,7 @@ const FAILED = 'Something went wrong, so nothing changed. Try again.'
 export function useDesignAi({
   flush,
   adopt,
+  moved,
   update,
   workspaceName,
   view,
@@ -186,6 +188,11 @@ export function useDesignAi({
   /** Saves a pending draft change first, so the server reads the latest draft. */
   flush: () => Promise<void>
   adopt: (design: PortalDesign, report: Report, label?: string, revision?: string) => void
+  /**
+   * The server's draft when it moved past the revision the builder last saved,
+   * such as by a request stopped just as the server saved it; null when not.
+   */
+  moved?: () => Promise<{ design: PortalDesign; report: Report; revision: string } | null>
   /** Changes the draft as one named step, as the logo a brand match places is; `ai` when the AI makes it. */
   update: (change: (draft: PortalDesign) => void, label?: string, by?: 'ai') => void
   /** The workspace's name, which a title read from screenshots only replaces when it differs. */
@@ -354,7 +361,11 @@ export function useDesignAi({
           ...(result.font ? { font: result.font } : {}),
         })
         // Stopped once the match landed: it stays, and the check does not start.
-        if (!checking || !target || signal?.aborted) return
+        if (signal?.aborted) {
+          say({ role: 'assistant', text: stoppedReply(result.applied.length > 0 || !!logo) })
+          return
+        }
+        if (!checking || !target) return
         // The verified critic loop: read the drawn preview, score it against what was
         // measured, and keep a revision only when the measured match improves.
         setSteps((now) => [...now, CHECK_STEP])
@@ -372,6 +383,7 @@ export function useDesignAi({
             ...(check.open ? { open: check.open } : {}),
             show: (design) => check.replace(design, 'Match your brand'),
             flush,
+            ...(signal && { signal }),
             progress: (text) => {
               setStage(`${text}…`)
               setSteps((now) => [...now.filter((step) => !step.startsWith(CHECK_STEP)), text])
@@ -405,6 +417,8 @@ export function useDesignAi({
           kept: kept.length,
           stopped: report.stopped,
         })
+        // Stopped during the check: the match and what the check kept stay, with their Undo.
+        if (signal?.aborted) say({ role: 'assistant', text: stoppedReply(true) })
       } finally {
         if (checking) check.end()
       }
@@ -430,8 +444,12 @@ export function useDesignAi({
       // A website named with screenshots is read beside them; named alone, it is captured.
       const site =
         isSiteStart(text) || (!!brand && isBrandStart(text, images)) ? websiteIn(text) : null
-      const matching =
+      const asksToMatch =
         (!!brand && isBrandStart(text, images)) || (!!site && (images === 0 || !!brand))
+      // The whole brand match restyles the whole site: only when nothing is picked. A request
+      // about one part takes the loop, which borrows from a site with read_website.
+      const whole = scope === 'site' && !element && !within
+      const matching = asksToMatch && whole
       const thumbnails = (attachments ?? []).flatMap((attached) =>
         attached.image ? [attached.image] : []
       )
@@ -456,7 +474,8 @@ export function useDesignAi({
         const route =
           check?.current &&
           routeRequest(STYLE_REGISTRY, { message: text, images: attachments?.length ?? 0 })
-        if (check?.current && route && route.mode === 'loop') {
+        // A match asked of one part takes the loop too, where read_website is its tool.
+        if (check?.current && route && (route.mode === 'loop' || asksToMatch)) {
           check.begin(requestLabel(text))
           // The captures read_website brought, to show beside the reply.
           const captures = new Map<string, string>()
@@ -485,7 +504,7 @@ export function useDesignAi({
                 ...(check.open ? { open: check.open } : {}),
                 previewCss: designPreviewCss,
                 readWebsite: async (url) => {
-                  const read = await readWebsiteFn({ data: { url } })
+                  const read = await readWebsiteFn({ data: { url }, signal })
                   if (read.capture) captures.set(read.reading.host ?? url, read.capture)
                   found.push(readingSummary(read.reading))
                   return read
@@ -564,6 +583,8 @@ export function useDesignAi({
           }
           return
         }
+        // The draft as the server reads it, to say what a request stopped as it saved changed.
+        const start = check?.current?.()
         const result = await askPortalDesignAiFn({
           data: {
             message: text,
@@ -576,7 +597,26 @@ export function useDesignAi({
             ...(seen.current ?? {}),
           },
           signal,
+        }).catch(async (err: unknown) => {
+          // Stopped just as the server saved: its draft is taken, as one step with its Undo.
+          const saved = signal.aborted && moved ? await moved().catch(() => null) : null
+          if (!saved) throw err
+          adopt(saved.design, saved.report, requestLabel(text), saved.revision)
+          shaped.current = true
+          say({
+            role: 'assistant',
+            text: stoppedReply(true),
+            changes: start
+              ? designChanges(start, saved.design).map((change) => ({
+                  path: change.path,
+                  before: (change.before ?? null) as DesignValue,
+                  after: (change.after ?? null) as DesignValue,
+                }))
+              : [],
+          })
+          return null
         })
+        if (!result) return
         if (!result.ok) {
           refused(result)
           return
@@ -603,7 +643,7 @@ export function useDesignAi({
         setSteps([])
       }
     },
-    [turns, flush, adopt, matchBrand]
+    [turns, flush, adopt, moved, matchBrand]
   )
 
   /**

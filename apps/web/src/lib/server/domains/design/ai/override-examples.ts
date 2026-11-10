@@ -61,6 +61,20 @@ export const OVERRIDE_OPS_EXAMPLES = [
     },
   },
   {
+    request: "This block's heading in the second colour",
+    picked: 'the Updates block on Home picked (block updates)',
+    answer: {
+      reply: 'This block’s heading is now in the second colour; the other blocks keep theirs.',
+      outOfScope: false,
+      ops: [
+        op(
+          { op: 'set', target: 'updates', key: 'style.heading.base.color', value: 'support' },
+          'this block’s heading to the second colour'
+        ),
+      ],
+    },
+  },
+  {
     request: 'Centre the welcome text and colour “every idea” in our second colour',
     picked:
       'the Welcome block whose body now reads "Thanks for [stopping by]{accent}. We read every idea."',

@@ -6,6 +6,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultDesign, portalDesign } from '@/lib/shared/design/schema'
 import { resolveDesign } from '@/lib/shared/design/resolve'
+import { oneSentence } from '@/lib/shared/design/ai-reach'
+import { writtenInEnglish } from '../design-ai-view'
 import { DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import type { HomeBlockType } from '@/lib/shared/design/home'
 
@@ -353,6 +355,56 @@ describe('askDesignAi', () => {
     )
   })
 
+  it('answers a request in another language in the model’s own words, never English labels', async () => {
+    const design = defaultDesign()
+    design.nav.home.on = true
+    design.pages.home.blocks = [
+      { type: 'status', id: 'statusaaaa', grid: { x: 0, y: 0, w: 4, h: 4 } },
+      { type: 'contact', id: 'contactbbb', grid: { x: 0, y: 4, w: 12, h: 4 } },
+    ]
+    model.answer = {
+      reply: 'Der Kontaktblock hat jetzt eine freundlichere Überschrift.',
+      ops: [
+        op(
+          { op: 'set', target: 'contactbbb', key: 'heading', value: 'Schreib uns' },
+          'die Überschrift des Kontaktblocks'
+        ),
+        op(
+          { op: 'set', target: 'statusaaaa', key: 'heading', value: 'Läuft?' },
+          'die Statusüberschrift'
+        ),
+      ],
+      outOfScope: false,
+    }
+    const result = await askDesignAi({
+      message: 'Gib ihm eine freundlichere Überschrift',
+      design,
+      scope: 'home',
+      blockId: 'contactbbb',
+      history: [],
+      allows: ALLOWS,
+    })
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.applied).toHaveLength(1)
+    expect(result.reply).toBe('Der Kontaktblock hat jetzt eine freundlichere Überschrift.')
+    // The model is told to answer in the request's language, naming parts in it.
+    expect(model.calls.at(-1)!.systemPrompts[1]).toContain(
+      'Write reply and says in the language of the request'
+    )
+  })
+
+  it('reads which requests are in English', () => {
+    for (const english of ['Calmer', 'Give it a friendlier heading', 'Make the buttons rounder'])
+      expect(writtenInEnglish(english), english).toBe(true)
+    for (const other of [
+      'Gib ihm eine freundlichere Überschrift',
+      'Pon los botones en negro',
+      'Mach alle Buttons schwarz',
+      'このボタンだけを黒にして',
+    ])
+      expect(writtenInEnglish(other), other).toBe(false)
+  })
+
   it('passes the colours of an attached image with the request', async () => {
     model.answer = { reply: 'Done.', ops: [], outOfScope: false }
     await askDesignAi({
@@ -649,6 +701,23 @@ describe('any change to the design', () => {
       expect(result.outOfScope, example.request).toEqual([])
       expect(result.done.length, example.request).toBe(example.answer.ops.length)
     }
+  })
+
+  it('shows the model replies of one sentence only, as its own replies must be', () => {
+    for (const example of OPS_EXAMPLES) {
+      expect(oneSentence(example.answer.reply), example.request).toBe(example.answer.reply)
+      // The few-shot JSON is an answer the model's schema takes.
+      expect(editSchema.safeParse(example.answer).success, example.request).toBe(true)
+    }
+  })
+
+  it('shows the model a picked block’s heading set in the second colour', () => {
+    const example = OPS_EXAMPLES.find((each) =>
+      /block's heading in the second colour/i.test(each.request)
+    )
+    expect(example?.answer.ops).toEqual([
+      expect.objectContaining({ op: 'set', key: 'style.heading.base.color', value: 'support' }),
+    ])
   })
 
   it('keeps the answer’s grammar flat: a few strings per operation, no nesting', () => {

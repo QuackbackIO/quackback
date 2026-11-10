@@ -15,7 +15,7 @@ import { aiAllowanceNow } from '@/lib/server/domains/settings/tier-enforce'
 import { logger } from '@/lib/server/logger'
 import { opsPrompt, valuesNow, type OpsAnswer } from './design-ai-guide'
 import { BLOCK_NAMES, type DesignerPage } from '@/lib/shared/design/outline'
-import { languageName, viewNote } from './design-ai-view'
+import { languageName, viewNote, writtenInEnglish } from './design-ai-view'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import { brandColour } from '@/lib/shared/design/palette'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -193,14 +193,22 @@ function honestReply(
   /** What was picked, such as "the hero". */
   where: string,
   /** How far the request could reach, when narrower than everywhere the pick is. */
-  reach: AiReach | undefined
+  reach: AiReach | undefined,
+  /** Whether the request is in English, which the server's own words are. */
+  english = true
 ): { reply: string; notes: string[] } {
   const { done, refused, already } = result
+  // In another language, the model's own line, in the person's words, where it can be
+  // true: some of it applied, or the model itself said the request was outside.
+  const own = !english && answer.reply.trim() ? oneSentence(answer.reply) : null
   const why = plainReasons(refused.map((each) => each.reason))
   const narrowed = reach === 'page' ? 'this page' : reach === 'one' ? 'this one' : null
   const leftOut = result.outOfScope.length > 0
   if (done.length === 0 && (outOfScope || (leftOut && !narrowed)))
-    return { reply: `That is outside ${where}, so nothing changed.`, notes: [] }
+    return {
+      reply: own && answer.outOfScope ? own : `That is outside ${where}, so nothing changed.`,
+      notes: [],
+    }
   if (done.length === 0 && leftOut)
     return { reply: `That reaches beyond ${narrowed}, so nothing changed.`, notes: [] }
   if (done.length === 0 && refused.length > 0)
@@ -213,13 +221,15 @@ function honestReply(
   const applied = new Set(done.map((each) => opKey(each.op)))
   const said = answer.ops.every((each) => applied.has(opKey(each)))
     ? oneSentence(answer.reply)
-    : `I changed ${done
-        .map((each) => {
-          const own = answer.ops.find((op) => opKey(op) === opKey(each.op))?.says?.trim()
-          const words = own || each.label
-          return `${words.charAt(0).toLowerCase()}${words.slice(1)}`
-        })
-        .join(', ')}.`
+    : own
+      ? own
+      : `I changed ${done
+          .map((each) => {
+            const says = answer.ops.find((op) => opKey(op) === opKey(each.op))?.says?.trim()
+            const words = says || each.label
+            return `${words.charAt(0).toLowerCase()}${words.slice(1)}`
+          })
+          .join(', ')}.`
   const notes = [
     ...(leftOut
       ? [
@@ -422,7 +432,8 @@ export async function askDesignAi(input: {
       result,
       outOfScope,
       input.scope === 'site' ? 'the section picked' : `the ${picked}`,
-      reachTo
+      reachTo,
+      writtenInEnglish(input.message)
     )
     const clause = reachClause(result.design, result.applied, {
       scope: input.scope,

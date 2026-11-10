@@ -286,9 +286,73 @@ describe('the edit loop', () => {
     if (!result.ok) throw new Error(result.message)
     expect(step).toHaveBeenCalledTimes(3)
     expect(result.stopped).toBe('steps')
-    // One sentence; what did not come out as asked is under Show changes.
-    expect(result.reply).toBe('I changed main buttons on hover: background periwinkle.')
+    // One sentence in the step's own words, never the undo label; what did not come out
+    // as asked is under Show changes.
+    expect(result.reply).toBe('I changed buttons darker on hover.')
     expect(result.notes).toContain('Some of it did not come out as asked, so ask again to finish.')
+  })
+
+  it('says only the last value a field was set to, in the reply and under Show changes', async () => {
+    const original = start()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({
+          plan: 'Try',
+          styles: [{ ...hoverStyle('#c7d2fe'), says: 'buttons pale on hover' }],
+        }),
+        answer({
+          plan: 'Deeper',
+          styles: [{ ...hoverStyle('#312e81'), says: 'buttons deep indigo on hover' }],
+        }),
+      ],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+      budget: { steps: 2, ms: 60_000 },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.reply).toBe('I changed buttons deep indigo on hover.')
+    expect(result.applied.map((c) => c.label)).toEqual([
+      'Main buttons on hover: background #312e81',
+    ])
+  })
+
+  it('drops a refusal a later step put right, and says the step’s own reply', async () => {
+    const original = start()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({ plan: 'Try', styles: [hoverStyle('not a colour')] }),
+        answer({
+          plan: 'Again',
+          styles: [hoverStyle('#312e81')],
+          done: true,
+          reply: 'Buttons now turn deep indigo on hover.',
+        }),
+      ],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+      budget: { steps: 2, ms: 60_000 },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(step.mock.results[0]).toBeDefined()
+    // The first step's refusal was real; the second set the same thing.
+    expect((await step.mock.results[0]!.value).outcome.refused).not.toEqual([])
+    expect(result.refused).toEqual([])
+    expect(result.notes.some((note) => /left the rest|could not do the rest/.test(note))).toBe(
+      false
+    )
+    expect(result.reply).toBe('Buttons now turn deep indigo on hover.')
   })
 
   it('starts no step the time budget cannot fit', async () => {

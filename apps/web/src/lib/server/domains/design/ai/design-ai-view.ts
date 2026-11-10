@@ -25,9 +25,30 @@ export function viewNote(page: DesignerPage | undefined, locale: string | undefi
     page && `The person is looking at the ${PAGE_NAMES[page]} page.`,
     language &&
       `The page is shown in ${language}: write any words they ask for in ${language}. Plain text in a field by language sets ${language} and leaves the other languages alone.`,
+    REPLY_LANGUAGE,
   ]
     .filter(Boolean)
     .join(' ')
+}
+
+/** The language a reply is in: the person's own, with parts named in it. */
+const REPLY_LANGUAGE =
+  'Write reply and says in the language of the request, naming each part in that language rather than by the English names listed here.'
+
+/** Short English words nearly every English request of a few words has. */
+const ENGLISH_WORDS =
+  /\b(the|a|an|it|this|that|these|to|of|in|on|and|or|with|make|give|set|use|just|only|all|every|my|our|more|less|bigger|smaller|darker|lighter|please)\b/i
+
+/**
+ * Whether a request reads as English, so a reply the server writes in English
+ * suits it: no letters outside Latin, no accented letters, and an English
+ * word in any request of three words or more.
+ */
+export function writtenInEnglish(text: string): boolean {
+  const words = text.trim()
+  if (/[^\p{Script=Latin}\p{N}\p{P}\p{S}\s]/u.test(words)) return false
+  if (/[\u00C0-\u024F]/.test(words)) return false
+  return words.split(/\s+/).length < 3 || ENGLISH_WORDS.test(words)
 }
 
 /** Words written in a language other than English, said so the person knows which. */
