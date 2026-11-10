@@ -58,6 +58,8 @@ import {
   type WordsDoc,
 } from './rich-words'
 import { checkedWords } from './words-schema'
+import { HERO_PATHS } from './hero'
+import { withHeroPath } from './migrations'
 import {
   setHeadline,
   wordsChangeLabel,
@@ -567,7 +569,9 @@ export function setHero(
   value: unknown
 ): OpResult {
   const def = blockOf('hero')!
-  const field = fieldOf(def, key)
+  // A setting by the design field it stores, or format 2's name: layout.heroAlign, bandAlign.
+  const named = key ? heroKeyOf(key) : null
+  const field = fieldOf(def, key) ?? (named ? fieldOf(def, named) : null)
   if (!field)
     return refuse(
       `The hero has no setting called ${key ?? 'that'}; it has ${listed(def.fields.map((f) => f.key))}`
@@ -755,6 +759,21 @@ function tuneAsStyle(key: string): string | null {
   return stylePath(`style.${element}.base.${TUNE_PROP[m[2]!] ?? m[2]!}`)
 }
 
+/**
+ * The hero setting a Theme key names, as the model may write one: hero.composerWidth,
+ * a design field one hero setting alone stores (layout.heroAlign), or format 2's
+ * name for it (layout.bandAlign, bandAlign).
+ */
+function heroKeyOf(key: string): string | null {
+  const own = /^(?:hero|band)\.(\w+)$/i.exec(key.trim())?.[1]
+  if (own) return own
+  const path = withHeroPath(key.includes('.') ? key : `layout.${key}`)
+  const found = Object.entries(HERO_PATHS).find(
+    ([, paths]) => paths.length === 1 && paths[0] === path
+  )
+  return found?.[0] ?? null
+}
+
 /** Sets a brand-wide setting by its name in Theme: setTheme(key, value). */
 export function setTheme(
   design: PortalDesign,
@@ -787,6 +806,11 @@ export function setTheme(
     }
     return { ...at, label: labels.join('; ') } as OpResult
   }
+  // A hero setting named as Theme's is the hero's, as op set hero writes it; the
+  // hero's own fill, edge and shadow (hero.background) stay its style.
+  const hero = !path && key ? heroKeyOf(key) : null
+  if (hero && (fieldOf(blockOf('hero')!, hero) || !tuneAsStyle(key!)))
+    return setHero(design, world, hero, value)
   // An exact value the design has none of, but a style has: the element's look, at rest.
   const asStyle = !path && key ? tuneAsStyle(key) : null
   if (asStyle) return setTheme(design, world, asStyle, value)
@@ -1594,7 +1618,11 @@ export function applyOp(design: PortalDesign, world: OpWorld, op: FlatOp): OpRes
       const target = op.target ?? ''
       // A Theme setting, exact value or element style named with no block is the whole
       // portal's, as op theme writes it.
-      if (!target.trim() && op.key && (themePath(themeKeyOf(op.key)) || tuneAsStyle(op.key)))
+      if (
+        !target.trim() &&
+        op.key &&
+        (themePath(themeKeyOf(op.key)) || tuneAsStyle(op.key) || heroKeyOf(op.key))
+      )
         return setTheme(design, world, op.key, value)
       // Phones' own sizes or dark mode's own colours: an override, of the block where one is named.
       if (

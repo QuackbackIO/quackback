@@ -249,6 +249,32 @@ describe('setHero, setPageSection, setTheme and setWords', () => {
     expect(setHero(design(), world, 'image', { key: 'x' })).toMatchObject({ ok: false })
   })
 
+  it('takes a hero setting named through theme as the hero’s, old names included', () => {
+    const d = design()
+    d.pages.home.composer = 'band'
+    const narrow = applyOps(d, model, [
+      { op: 'theme', target: '', key: 'hero.composerWidth', value: 'narrow' },
+    ])
+    expect(narrow.refused).toEqual([])
+    expect(narrow.design.pages.home.composerWidth).toBe('narrow')
+    expect(narrow.done[0]!.label).toBe('Hero composer width: Narrow')
+    for (const key of ['layout.heroAlign', 'layout.bandAlign', 'heroAlign', 'hero.align']) {
+      const centred = applyOp(d, model, { op: 'theme', target: '', key, value: 'centre' })
+      expect(heroOf(ok(centred).design).align, key).toBe('centre')
+    }
+    const set = applyOp(d, model, {
+      op: 'set',
+      target: 'hero',
+      key: 'layout.bandAlign',
+      value: 'centre',
+    })
+    expect(heroOf(ok(set).design).align).toBe('centre')
+    // A hero setting it does not have is refused as the hero's, by its own settings.
+    expect(applyOp(d, model, { op: 'theme', key: 'hero.sparkle', value: 'on' })).toMatchObject({
+      ok: false,
+      refusal: expect.stringContaining('The hero has no setting called sparkle'),
+    })
+  })
 
   it('tells the roadmap page from a Roadmap block by the setting', () => {
     const withBlock = ok(addBlock(design(), world, 'roadmap')).design

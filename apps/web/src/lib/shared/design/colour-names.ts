@@ -89,9 +89,16 @@ export function plainWords(text: string): string {
 const INTERNAL =
   /[{}"`_]|\bJSON\b|\bids?\b|\bop\b|\bkey\b|\btokens?\b|\b(accent|support|ink|muted|surface)\b|\b\d+(px|em)\b|\btakes? \w+(?:, \w+)+,? (?:and|or) \w+/i
 
+/**
+ * A setting asked for that is not there, named by the key the model wrote and
+ * followed by the list of what there is, which are for the model: the person
+ * is told only that there is no such setting.
+ */
+const NO_SETTING = /^(.+?) has no setting called [^;]+(?:;.*)?$/s
+
 /** A reason a change was left alone, said to a person, or null where it is the builder's own. */
 export function plainReason(reason: string): string | null {
-  const words = plainWords(reason).trim()
+  const words = plainWords(reason.trim().replace(NO_SETTING, '$1 has no setting like that')).trim()
   return words && !INTERNAL.test(words) ? words : null
 }
 
