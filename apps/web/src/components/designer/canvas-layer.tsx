@@ -20,6 +20,7 @@ import {
   type ElementPick,
 } from '@/lib/shared/design/element-pick'
 import { destinationName } from '@/lib/shared/design/content-kinds'
+import { CHIP_NAME, keepFocus } from './settings-focus'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { OverridePage } from '@/lib/shared/design/style-overrides'
 import type { StyleState } from '@/lib/shared/design/style-tokens'
@@ -156,7 +157,7 @@ export function CanvasLayer({
     if (!elements || !element) return
     if (to === 'up') {
       elements.onPick(null)
-      keepFocus('[data-editing-layer] [data-chip-name]')
+      keepFocus(CHIP_NAME)
       return
     }
     const doc = canvas.frame?.contentDocument
@@ -302,20 +303,4 @@ export function CanvasLayer({
       )}
     </EditingLayer>
   )
-}
-
-/**
- * Puts focus on what a selector names once it is drawn: the tag of the
- * element just picked, drawn again once its box is measured.
- */
-function keepFocus(selector: string, frames = 20): void {
-  let left = frames
-  let seen: HTMLElement | null = null
-  const tick = () => {
-    const found = document.querySelector<HTMLElement>(selector)
-    if (found && found !== document.activeElement) found.focus()
-    if (found) seen = found
-    if (--left > 0 && (!seen || seen.isConnected)) requestAnimationFrame(tick)
-  }
-  requestAnimationFrame(tick)
 }

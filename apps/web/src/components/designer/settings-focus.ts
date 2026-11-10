@@ -13,6 +13,36 @@ export const inSettings = () =>
 export const focusCanvas = () =>
   requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-canvas-region]')?.focus())
 
+/** The picked block's chip name on the canvas. */
+export const CHIP_NAME = '[data-editing-layer] [data-chip-name]'
+
+/**
+ * Puts focus on what a selector names once it is drawn: the tag of the
+ * element just picked, drawn again once its box is measured. To `follow`,
+ * it looks again each frame, as the chip of a block picked anew mounts once
+ * its box is measured; once focus is there it is put back only when lost.
+ */
+export function keepFocus(selector: string, frames = 20, follow = false): void {
+  let left = frames
+  let seen: HTMLElement | null = null
+  const tick = () => {
+    const found = document.querySelector<HTMLElement>(selector)
+    const active = document.activeElement
+    const lost = !active || active === document.body || !active.isConnected
+    if (found && found !== active && (!follow || !seen || lost)) found.focus()
+    if (found) seen = found
+    if (--left > 0 && (follow || !seen || seen.isConnected)) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
+
+/**
+ * Focus, after a block was removed or copied: the chip of the block picked
+ * in its place, else the canvas when nothing is left to pick.
+ */
+export const focusPicked = (picked: boolean) =>
+  picked ? keepFocus(CHIP_NAME, 30, true) : focusCanvas()
+
 const settings = () => document.getElementById('designer-settings')
 
 /** A row of "On this page", by the row's id. */
