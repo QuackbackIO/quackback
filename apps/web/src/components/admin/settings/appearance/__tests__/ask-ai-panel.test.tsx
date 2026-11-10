@@ -420,6 +420,93 @@ describe('AskAiPanel', () => {
   })
 })
 
+describe('a brand match after it lands', () => {
+  const matchTurn = (
+    extra: Partial<Extract<DesignAiTurn, { role: 'assistant' }>> = {}
+  ): DesignAiTurn => ({
+    role: 'assistant',
+    text: 'I matched your brand.',
+    matched: true,
+    changes: [
+      { path: 'brand.light.accent', before: draft.brand.light.accent, after: '#0058a3' },
+      { path: 'layout.hero', before: draft.layout.hero, after: 'brand' },
+      { path: 'nav.home.on', before: draft.nav.home.on, after: !draft.nav.home.on },
+    ],
+    ...extra,
+  })
+  /** The draft as the match left it. */
+  const matched = () => {
+    const next = structuredClone(draft)
+    next.brand.light.accent = '#0058a3'
+    next.layout.hero = 'brand'
+    next.nav.home.on = !draft.nav.home.on
+    return next
+  }
+
+  it('keeps one Undo, and offers Undo brand, hero and words only under Show changes', () => {
+    const turn = matchTurn()
+    const before = structuredClone(draft)
+    draft = matched()
+    mount({ turns: [turn] })
+    expect(screen.queryByRole('button', { name: 'Undo hero' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Show changes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Undo hero' }))
+    expect(draft.layout.hero).toBe(before.layout.hero)
+    expect(draft.brand.light.accent).toBe('#0058a3')
+    expect(draft.nav.home.on).toBe(!before.nav.home.on)
+    expect(labels.at(-1)).toBe('Undo hero')
+    // The hero is back, so the parts left are brand and words.
+    expect(screen.queryByRole('button', { name: 'Undo hero' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Undo words' }))
+    expect(draft.nav.home.on).toBe(before.nav.home.on)
+    expect(draft.brand.light.accent).toBe('#0058a3')
+  })
+
+  it('makes a one-change follow-up directly, as its own step, and asks AI for the rest', () => {
+    const onChip = vi.fn()
+    const onDirect = vi.fn()
+    const turn = matchTurn({ chips: ['Calmer hero', 'Use more blue'] })
+    draft = matched()
+    mount({ turns: [turn], onChip, onDirect })
+    fireEvent.click(screen.getByRole('button', { name: 'Calmer hero' }))
+    expect(draft.layout.hero).toBe('tint')
+    expect(onChip).not.toHaveBeenCalled()
+    expect(onDirect).toHaveBeenCalledWith({
+      label: 'Calmer hero',
+      reply: 'Done.',
+      changes: [expect.objectContaining({ path: 'layout.hero', before: 'brand', after: 'tint' })],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Use more blue' }))
+    expect(onChip).toHaveBeenCalledWith('Use more blue')
+  })
+
+  it('offers the other looks already written, each as a new step', () => {
+    const onDirect = vi.fn()
+    const pre = structuredClone(draft)
+    const turn = matchTurn({
+      others: [
+        {
+          description: 'A calm look.',
+          changes: [
+            { path: 'brand.light.accent', before: pre.brand.light.accent, after: '#00aa00' },
+          ],
+        },
+      ],
+    })
+    draft = matched()
+    mount({ turns: [turn], onChip: vi.fn(), onDirect })
+    fireEvent.click(screen.getByRole('button', { name: 'Try another look' }))
+    expect(draft.brand.light.accent).toBe('#00aa00')
+    expect(draft.layout.hero).toBe(pre.layout.hero)
+    expect(onDirect).toHaveBeenCalledWith(
+      expect.objectContaining({ label: 'Try another look', reply: 'A calm look.' })
+    )
+    // Only one other look, so none is left to try.
+    expect(screen.queryByRole('button', { name: 'Try another look' })).toBeNull()
+  })
+})
+
 describe('the capture a match was made from', () => {
   const capture = {
     host: 'acme.test',

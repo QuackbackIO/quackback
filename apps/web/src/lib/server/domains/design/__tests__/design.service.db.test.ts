@@ -447,3 +447,46 @@ describe('retention', () => {
     expect(Math.max(...numbers)).toBe(REVISIONS_KEPT + 2)
   })
 })
+
+describe('a choice picked again, by any writer', () => {
+  const cornered = () => {
+    const doc = withAccent('#0F766E')
+    doc.shape.corners = 'subtle'
+    doc.tune = { card: { radius: 4 }, headline: { weight: 300 } }
+    doc.style = { postCard: { base: { radius: 4, background: '#ffffff' } } }
+    return doc
+  }
+
+  it('releases the exact values and styles it competes with, as a REST or MCP write sends them', async () => {
+    const who = await admin()
+    await saveDraft(cornered(), who)
+    // A whole document, as REST and MCP send it: the choice changed, the old values still in it.
+    const sent = cornered()
+    sent.shape.corners = 'pill'
+    await saveDraft(sent, who)
+    const draft = (await getDesignState())?.draft
+    expect(draft?.shape.corners).toBe('pill')
+    expect(draft?.tune).toEqual({ headline: { weight: 300 } })
+    expect(draft?.style).toEqual({ postCard: { base: { background: '#ffffff' } } })
+  })
+
+  it('compares against the published design when there is no draft', async () => {
+    const who = await admin()
+    await saveDraft(cornered(), who)
+    await publishDraft({ ...who, source: 'appearance' })
+    const sent = cornered()
+    sent.shape.corners = 'pill'
+    await saveDraft(sent, who)
+    expect((await getDesignState())?.draft?.tune).toEqual({ headline: { weight: 300 } })
+  })
+
+  it('keeps values the same write set along with the choice', async () => {
+    const who = await admin()
+    await saveDraft(cornered(), who)
+    const sent = cornered()
+    sent.shape.corners = 'pill'
+    sent.tune!.card = { radius: 10 }
+    await saveDraft(sent, who)
+    expect((await getDesignState())?.draft?.tune?.card).toEqual({ radius: 10 })
+  })
+})

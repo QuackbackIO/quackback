@@ -43,6 +43,7 @@ import type { ShotBox } from '@/lib/shared/design/brand-shots'
 import type { CheckReport } from '@/lib/shared/design/brand-check'
 import type { CheckFrame } from '@/lib/client/check-frame'
 import type { DesignValue } from '@/lib/shared/design/apply-changes'
+import type { OtherLook } from '@/lib/shared/design/match-steps'
 
 /** What the brand match's check needs from the draft and the canvas. */
 export interface DesignCheckHooks {
@@ -147,6 +148,8 @@ export type DesignAiTurn =
       font?: UnmatchedFont
       /** The fonts drawn are only the nearest to the brand's, so the summary does not claim them. */
       fontsNearest?: boolean
+      /** The match's other looks, already written, offered as Try another look. */
+      others?: OtherLook[]
     }
 
 /** The logo a brand match placed: cut from one screenshot, as an icon and title or a full logo. */
@@ -362,6 +365,7 @@ export function useDesignAi({
             : {}),
           ...(result.font ? { font: result.font } : {}),
           ...(result.fontsNearest ? { fontsNearest: true } : {}),
+          ...(result.others?.length ? { others: result.others } : {}),
         })
         // Stopped once the match landed: it stays, and the check does not start.
         if (signal?.aborted) {

@@ -5,6 +5,7 @@
  * through applyDesignChanges, so the schema and the contrast solver decide
  * what reaches the draft.
  */
+import type { OtherLook } from '@/lib/shared/design/match-steps'
 import { plainWords } from '@/lib/shared/design/colour-names'
 import { z } from 'zod'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
@@ -183,6 +184,8 @@ export type DesignAiResult =
       notes?: string[]
       /** What the solver now adjusts to keep text readable that it did not before. */
       readability: string[]
+      /** A brand match's other looks, already written, offered as Try another look. */
+      others?: OtherLook[]
     }
   | { ok: false; code: 'AI_UNAVAILABLE' | 'AI_FAILED' | 'AI_LIMIT'; message: string }
 

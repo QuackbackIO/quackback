@@ -113,6 +113,25 @@ describe('serveBrandImage', () => {
     expect(read).toHaveBeenCalledTimes(1)
   })
 
+  it('draws once for requests that come in while it is drawn', async () => {
+    const doc = defaultDesign()
+    doc.brand.logo.mark.light = { key: 'logos/burst.png' }
+    const { value, read, settings } = deps(doc, red())
+    const card = queryOf(portalShareImage(settings, '', 'help'))
+    const icon = queryOf(settings!.portalDesign.icons!.mark!)
+    const answers = await Promise.all([
+      serveBrandImage(card, value),
+      serveBrandImage(card, value),
+      serveBrandImage(icon, value),
+      serveBrandImage(icon, value),
+    ])
+    expect(answers.map((r) => r.status)).toEqual([200, 200, 200, 200])
+    // One read for the card's draw, one for the square's.
+    expect(read).toHaveBeenCalledTimes(2)
+    const [a, b] = await Promise.all(answers.slice(0, 2).map((r) => r.arrayBuffer()))
+    expect(new Uint8Array(a!)).toEqual(new Uint8Array(b!))
+  })
+
   it('fits the brand icon into a square for the favicon', async () => {
     const doc = defaultDesign()
     doc.brand.logo.mark.light = { key: 'logos/wide.png' }

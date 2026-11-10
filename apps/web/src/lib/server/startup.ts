@@ -244,6 +244,13 @@ export function logStartupBanner(): void {
     .then(({ startJobWakePublisher }) => startJobWakePublisher())
     .catch((err) => log.error({ err }, 'failed to start job-wake publisher'))
 
+  // A serving replica logs when its event loop is held, so CPU work on the
+  // request thread shows up before users report slow pages.
+  if (getProcessRole() !== 'migrator')
+    import('./event-loop-lag')
+      .then(({ startEventLoopLagLog }) => startEventLoopLagLog())
+      .catch((err) => log.error({ err }, 'failed to start the event-loop lag log'))
+
   if (shouldRunWorkers()) {
     startBackgroundProcessing()
   } else {

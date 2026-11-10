@@ -269,8 +269,15 @@ registerPath('/settings/portal_design', {
     tags: ['Settings'],
     summary: 'Change the portal design draft',
     description:
-      'Applies a JSON merge patch to the design being edited and saves the result as the draft. Nothing goes live until a person publishes the draft in Settings › Portal. If-Match must carry the revision you read: 428 when missing, 412 when stale. A design that fails the schema answers 400 with INVALID_DESIGN, and one whose ink cannot be read answers 400 with UNREADABLE_DESIGN. A patch written for version 2, with the hero keys named band (layout.band, layout.bandShape, brand.bandImage), is still accepted: its keys take their version 3 names. A design a newer version of Quackback saved answers 409 with DESIGN_NEWER_FORMAT. Requires the write:settings scope and the settings.branding permission.',
+      "Applies a JSON merge patch to the design being edited and saves the result as the draft. Nothing goes live until a person publishes the draft in Settings › Portal. If-Match must carry the revision you read: 428 when missing, 412 when stale. A design that fails the schema answers 400 with INVALID_DESIGN, and one whose ink cannot be read answers 400 with UNREADABLE_DESIGN. A patch written for version 2, with the hero keys named band (layout.band, layout.bandShape, brand.bandImage), is still accepted: its keys take their version 3 names. A design a newer version of Quackback saved answers 409 with DESIGN_NEWER_FORMAT. Arrays are replaced whole: a patch that names pages.home.blocks, overrides or nav.items answers 400 with REPLACE_REQUIRED unless it passes ?replace=true, and Home blocks and menu links without their ids answer 400 with ID_REQUIRED. To change one block, use POST /settings/portal_design/draft/ops. Home's grid is settled after the patch, so blocks never overlap. Requires the write:settings scope and the settings.branding permission.",
     parameters: [
+      {
+        name: 'replace',
+        in: 'query',
+        required: false,
+        schema: { type: 'string', enum: ['true'] },
+        description: 'Allows the patch to replace pages.home.blocks, overrides or nav.items whole.',
+      },
       {
         name: 'If-Match',
         in: 'header',
@@ -320,6 +327,70 @@ registerPath('/settings/portal_design/draft', {
     responses: {
       204: { description: 'Discarded' },
       ...errorResponses(403, 409, 412),
+    },
+  },
+})
+
+const DesignOpsResultSchema = z
+  .object({
+    applied: z.array(z.number().int()).meta({ description: 'The operations made, by index.' }),
+    refused: z
+      .array(z.object({ index: z.number().int(), reason: z.string() }))
+      .meta({ description: 'The operations refused, by index, and why. They changed nothing.' }),
+    revision: RevisionSchema,
+  })
+  .meta({ id: 'PortalDesignOpsResult' })
+
+registerPath('/settings/portal_design/draft/ops', {
+  post: {
+    tags: ['Settings'],
+    summary: 'Apply operations to the portal design draft',
+    description:
+      "Applies the builder's operations to the design being edited, in order, with the builder's checks, and saves the result as the draft. A refused operation changes nothing and the rest still apply. Blocks are named by id or by their place in the list. Operations: block.set {block, key, value, locale?}, block.setEach {block, settings, locale?}, block.add {type, after?, turnOnHome?}, block.duplicate {id}, block.remove {block}, block.step {id, by: -1|1}, block.place {id, place}, block.grid {id, change: {nudge}|{move:{x,y}}|{size:{w,h}}}, block.look {id, scope, prop, value?}, block.lookReset {id, scope, prop}, block.matchLook {id, to}, block.styleReset {id, element}, block.phoneHidden {id, hidden}, home.layout {layout}, section.set {type, key, value, locale?}, page.choice {page, key, value}, part.shown {key, shown}, words.set {field, locale, doc}, hero.set {key, value, locale?}. If-Match must carry the revision you read: 428 when missing, 412 when stale. Nothing goes live until a person publishes the draft. Requires the write:settings scope and the settings.branding permission.",
+    parameters: [
+      {
+        name: 'If-Match',
+        in: 'header',
+        required: true,
+        schema: { type: 'string' },
+        description: 'The revision from the last read.',
+      },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['ops'],
+            properties: {
+              ops: {
+                type: 'array',
+                minItems: 1,
+                maxItems: 50,
+                items: {
+                  type: 'object',
+                  required: ['op'],
+                  properties: { op: { type: 'string' } },
+                },
+              },
+            },
+            example: { ops: [{ op: 'block.set', block: 'ideas001', key: 'count', value: 5 }] },
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Applied; saved as the draft when any operation was made',
+        headers: { ETag: { description: 'The new revision, quoted', schema: { type: 'string' } } },
+        content: {
+          'application/json': {
+            schema: createItemResponseSchema(DesignOpsResultSchema, 'Operations'),
+          },
+        },
+      },
+      ...errorResponses(400, 403, 409, 412, 428),
     },
   },
 })

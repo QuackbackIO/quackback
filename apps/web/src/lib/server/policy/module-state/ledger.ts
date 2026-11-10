@@ -1435,6 +1435,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'and storage, which the second cannot read back.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/design/share-card/serve.ts',
+    name: 'drawing',
+    category: 'workspace-scoped-key',
+    keyedBy: 'drawingKey',
+    reason:
+      'Keyed by drawingKey: currentWorkspaceNamespace() and the image key, so requests for one ' +
+      'brand image share a draw only within a workspace. Keyed by the image key alone, a second ' +
+      "workspace could be served the first workspace's card or icon. Entries leave when the draw ends.",
+  },
+  {
     file: 'apps/web/src/lib/server/domains/design/extract/colours.ts',
     name: 'labCache',
     category: 'content-addressed',

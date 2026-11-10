@@ -2,6 +2,12 @@ import { useState, type ReactNode } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
 import { plainWords } from '@/lib/shared/design/colour-names'
 import { matchSummary } from '@/lib/shared/design/step-summary'
+import {
+  chipChange,
+  lookChanges,
+  matchParts,
+  MATCH_PART_LABEL,
+} from '@/lib/shared/design/match-steps'
 import { overrideChangeLines } from '@/lib/shared/design/override-cascade'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
 import { MATCH_BRAND, type UnmatchedFont } from '@/lib/shared/design/match-brand'
@@ -11,6 +17,7 @@ import {
   applyDesignChanges,
   changeState,
   type AppliedDesignChange,
+  type DesignChangeRequest,
 } from '@/lib/shared/design/apply-changes'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
@@ -28,6 +35,22 @@ export interface ShowChange {
   /** Shows the change on the canvas; `words` is the row as it reads. */
   go: (at: RowChange, words: string) => void
 }
+
+/**
+ * Puts changes into the draft as the design allows, as Undo does: a field
+ * set to nothing goes from the draft.
+ */
+function putChanges(draft: PortalDesign, changes: DesignChangeRequest[]): AppliedDesignChange[] {
+  const next = applyDesignChanges(draft, changes, 'site')
+  for (const key of Object.keys(draft))
+    if (!(key in next.design)) delete (draft as Record<string, unknown>)[key]
+  Object.assign(draft, next.design)
+  return next.applied
+}
+
+/** Puts changes into the draft as one step, named when a label is given. */
+const putAsStep = (update: Update, changes: DesignChangeRequest[], label?: string) =>
+  update((draft) => void putChanges(draft, changes), label)
 
 /** A row as it reads, for its Show's name and what is said once it is shown. */
 const rowWords = (row: ChangeRow) =>
@@ -73,7 +96,8 @@ function Swatch({ colour }: { colour: string }) {
 /**
  * What one request did, under its reply: one Undo for the whole step, and
  * the changes, as "Thing: old → new", behind Show changes. The Undo takes
- * back what still holds; a value changed since is left as it is now.
+ * back what still holds; a value changed since is left as it is now. A
+ * brand match also undoes in parts (brand, hero, words), inside Show changes.
  */
 function StepResult({
   changes,
@@ -82,6 +106,7 @@ function StepResult({
   design,
   update,
   show,
+  parts = false,
 }: {
   changes: AppliedDesignChange[]
   readability: string[]
@@ -90,21 +115,17 @@ function StepResult({
   design: PortalDesign
   update: Update
   show?: ShowChange
+  /** Offer Undo by part (brand, hero, words) under Show changes, as a brand match does. */
+  parts?: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const undo = (rows: AppliedDesignChange[]) => {
-    update((draft) => {
-      const restored = applyDesignChanges(
-        draft,
-        rows.map((row) => ({ path: row.path, value: row.before })),
-        'site'
-      )
-      // A field the change brought in, such as the first override, goes again.
-      for (const key of Object.keys(draft))
-        if (!(key in restored.design)) delete (draft as Record<string, unknown>)[key]
-      Object.assign(draft, restored.design)
-    })
-  }
+  // A field the change brought in, such as the first override, goes again.
+  const undo = (rows: AppliedDesignChange[], label?: string) =>
+    putAsStep(
+      update,
+      rows.map((row) => ({ path: row.path, value: row.before })),
+      label
+    )
   const holding = changes.filter((change) => changeState(design, change) === 'applied')
   const undone = changes.every((change) => changeState(design, change) === 'undone')
   // One row per operation, in words; an override's lines say what it set where.
@@ -123,6 +144,8 @@ function StepResult({
         ).map((line) => ({ key: line, line }))
       ),
   ]
+  // Parts that still hold something to take back; only worth offering when there are two or more.
+  const partUndos = parts ? matchParts(holding) : []
   const details = lines.length > 0 || readability.length > 0 || notes.length > 0
   return (
     <div className="space-y-1.5">
@@ -182,6 +205,20 @@ function StepResult({
                 </li>
               ))}
             </ul>
+          )}
+          {partUndos.length > 1 && (
+            <div aria-label="Undo in parts" role="group" className="flex flex-wrap gap-x-3">
+              {partUndos.map(({ part, changes: rows }) => (
+                <button
+                  key={part}
+                  type="button"
+                  onClick={() => undo(rows, MATCH_PART_LABEL[part])}
+                  className="rounded text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                >
+                  {MATCH_PART_LABEL[part]}
+                </button>
+              ))}
+            </div>
           )}
           {readability.length > 0 && (
             <p className="text-muted-foreground">
@@ -254,6 +291,7 @@ export function AskAiPanel({
   onUploadFont,
   onFonts,
   show,
+  onDirect,
 }: {
   available: boolean
   turns: DesignAiTurn[]
@@ -281,7 +319,24 @@ export function AskAiPanel({
   onFonts?: () => void
   /** Shows a change on the canvas, from its row's Show; without it, rows have none. */
   show?: ShowChange
+  /**
+   * Records a change made here with no request (a one-change follow-up, or
+   * another look), so it shows as its own step with Undo. Without it, every
+   * follow-up is a request.
+   */
+  onDirect?: (step: { label: string; reply: string; changes: AppliedDesignChange[] }) => void
 }) {
+  // How many of each match's other looks have been tried, by turn.
+  const [tried, setTried] = useState<Record<number, number>>({})
+  /** Makes known changes now, as one named step, and records it; false when nothing changed. */
+  const direct = (label: string, reply: string, changes: DesignChangeRequest[]) => {
+    if (!onDirect) return false
+    const applied = putChanges(structuredClone(design), changes)
+    if (!applied.length) return false
+    putAsStep(update, changes, label)
+    onDirect({ label, reply, changes: applied })
+    return true
+  }
   if (!available) {
     return (
       <p className="text-[13px] text-muted-foreground">
@@ -337,9 +392,34 @@ export function AskAiPanel({
                     notes={turn.notes ?? []}
                     design={design}
                     update={update}
+                    parts={!!turn.matched}
                     {...(show ? { show } : {})}
                   />
                 )}
+                {turn.matched &&
+                  turn.changes &&
+                  onDirect &&
+                  (turn.others?.length ?? 0) > (tried[index] ?? 0) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="-my-1 h-7 px-2 text-xs text-muted-foreground"
+                      disabled={busy}
+                      onClick={() => {
+                        const others = turn.others!
+                        const look = others[tried[index] ?? 0]!
+                        direct(
+                          'Try another look',
+                          plainWords(look.description),
+                          lookChanges(turn.changes!, others, look)
+                        )
+                        setTried((was) => ({ ...was, [index]: (was[index] ?? 0) + 1 }))
+                      }}
+                    >
+                      Try another look
+                    </Button>
+                  )}
                 {turn.capture && (
                   <SiteCapture capture={turn.capture} busy={busy} onRecapture={onRecapture} />
                 )}
@@ -380,7 +460,10 @@ export function AskAiPanel({
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => onChip(chip)}
+                            onClick={() => {
+                              const change = chipChange(chip)
+                              if (!change || !direct(chip, 'Done.', change)) onChip(chip)
+                            }}
                             className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground disabled:opacity-50"
                           >
                             {chip}

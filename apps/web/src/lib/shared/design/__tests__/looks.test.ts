@@ -172,3 +172,54 @@ describe('arrangeHome', () => {
     expect(layoutFits(help, { ...ALL_ON, help: false })).toBe(false)
   })
 })
+
+describe('a look’s element looks', () => {
+  const styled = () => {
+    const doc = defaultDesign()
+    doc.style = {
+      button: { base: { radius: 2, background: '#ff0000', font: 'display' } },
+      postCard: { hover: { shadow: 'soft' } },
+    }
+    doc.styleDark = { button: { base: { background: '#330000' } } }
+    doc.stylePhone = { button: { base: { radius: 0 } } }
+    return doc
+  }
+
+  it('carries style, dark and phone, and takes them whole with its colours', () => {
+    const look = lookOf(styled())
+    expect(look.style).toEqual(styled().style)
+    const next = withLook(defaultDesign(), look, { itsColours: true })
+    expect(next.style).toEqual(styled().style)
+    expect(next.styleDark).toEqual(styled().styleDark)
+    expect(next.stylePhone).toEqual(styled().stylePhone)
+  })
+
+  it('replaces the draft’s treatment but keeps its own colours and fonts', () => {
+    const own = defaultDesign()
+    own.style = {
+      button: { base: { radius: 30, background: '#00ff00' } },
+      input: { base: { radius: 9 } },
+    }
+    own.styleDark = { button: { base: { background: '#003300' } } }
+    own.stylePhone = { input: { base: { radius: 1 } } }
+    const next = withLook(own, lookOf(styled()))
+    expect(next.style).toEqual({
+      button: { base: { radius: 2, background: '#00ff00' } },
+      postCard: { hover: { shadow: 'soft' } },
+    })
+    expect(next.styleDark).toEqual(own.styleDark)
+    expect(next.stylePhone).toEqual({ button: { base: { radius: 0 } } })
+    expect(portalDesign.safeParse(next).success).toBe(true)
+  })
+
+  it('clears element looks when the look has none, as a look saved before them does', () => {
+    const own = defaultDesign()
+    own.style = { input: { base: { radius: 9, color: '#123456' } } }
+    own.stylePhone = { input: { base: { radius: 1 } } }
+    const old = lookOf(defaultDesign())
+    expect(old).not.toHaveProperty('style')
+    const next = withLook(own, old)
+    expect(next.style).toEqual({ input: { base: { color: '#123456' } } })
+    expect(next).not.toHaveProperty('stylePhone')
+  })
+})

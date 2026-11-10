@@ -30,6 +30,7 @@ import type { WordsPick } from '../words-pick'
 import { colourName, followUps } from '../brand-reply'
 import { matchType, type TypeMatches } from '../brand-fonts'
 import { BUDGET } from '../brand-match'
+import { measureShots } from '../measure-shots'
 
 // Each match measures full-size screenshots in plain JS (about 2s of CPU a run
 // here, several times that on a shared CI runner), so the default 20s cap
@@ -223,6 +224,8 @@ function setup(
   const shots = Array.from({ length: images }, () => page(thin, secondLine, ground))
   const order: string[] = []
   const deps: BrandMatchDeps = {
+    // Measured in process: the worker itself is pinned by measure-stage.test.ts.
+    measure: async (shots, primary) => measureShots(shots, primary),
     find: vi.fn(async (img: Image) => {
       order.push('find')
       const at = shots.findIndex((s) => s.img.width === img.width)

@@ -24,8 +24,11 @@ export function RightPanel({
   hidden,
   sheet,
   showing,
+  pinned,
   children,
 }: {
+  /** Kept above what the panel holds whatever is picked: the page's tree. */
+  pinned?: ReactNode
   /** Whether the panel is open: it is, unless Escape closed the page's panel. */
   open: boolean
   /** Out of view in a narrow window while another column shows. */
@@ -59,6 +62,18 @@ export function RightPanel({
     >
       {/* A fixed width inside, so the contents never reflow as the panel slides. */}
       <div className="relative flex min-h-0 w-[340px] flex-1 flex-col max-[1100px]:w-full">
+        {pinned && (
+          <div
+            data-panel-pinned=""
+            inert={!!sheet}
+            className={cn(
+              'transition-opacity motion-reduce:transition-none',
+              sheet && 'opacity-40'
+            )}
+          >
+            {pinned}
+          </div>
+        )}
         <div
           data-panel-under=""
           inert={!!sheet}

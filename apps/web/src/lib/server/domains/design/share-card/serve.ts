@@ -7,7 +7,10 @@
  * workspace and kept in a small in-memory cache.
  */
 import { logger } from '@/lib/server/logger'
-import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
+import {
+  currentWorkspaceNamespace,
+  WorkspaceKeyedCache,
+} from '@/lib/server/workspaces/workspace-keyed'
 import { designAssetUrl, designView } from '@/lib/shared/design/design-view'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -47,6 +50,36 @@ const BRIEFLY = 'public, max-age=300'
 
 /** Drawn images by version, each workspace's apart from the others'. */
 const cache = new WorkspaceKeyedCache<Uint8Array>(CACHE_ENTRIES)
+
+/**
+ * Draws under way, by the cache's key in its workspace: requests for one
+ * image while it is drawn share that draw, so a burst of them (a link
+ * shared, a page of favicons) draws it once instead of once each.
+ */
+const drawing = new Map<string, Promise<Uint8Array | null>>()
+
+/** A draw's key in `drawing`: the workspace first, so two workspaces never share a draw. */
+const drawingKey = (key: string) => `${currentWorkspaceNamespace()}|${key}`
+
+/** The image kept under `key`, else drawn once however many ask meanwhile, and kept. */
+function drawnOnce(
+  key: string,
+  draw: () => Promise<Uint8Array | null>
+): Promise<Uint8Array | null> {
+  const kept = cache.get(key)
+  if (kept) return Promise.resolve(kept)
+  const at = drawingKey(key)
+  const pending = drawing.get(at)
+  if (pending) return pending
+  const run = draw()
+    .then((bytes) => {
+      if (bytes) cache.set(key, bytes)
+      return bytes
+    })
+    .finally(() => drawing.delete(at))
+  drawing.set(at, run)
+  return run
+}
 
 function png(bytes: Uint8Array, current: boolean): Response {
   return new Response(bytes as BodyInit, {
@@ -108,14 +141,13 @@ export async function serveBrandImage(
   const pageName = shownPage ? portalHeadWords(settings).pages[shownPage] : null
   const version = shareCardAddressVersion(shareCardVersion(facts), title, pageName)
   const key = `card:${version}:${shownPage ?? ''}`
-  const kept = cache.get(key)
-  if (kept) return png(kept, asked === version)
-
-  const started = performance.now()
-  const bytes = await drawCard(deps, facts, title, pageName)
-  cache.set(key, bytes)
-  log.debug({ ms: Math.round(performance.now() - started), page: shownPage }, 'share card drawn')
-  return png(bytes, asked === version)
+  const bytes = await drawnOnce(key, async () => {
+    const started = performance.now()
+    const drawn = await drawCard(deps, facts, title, pageName)
+    log.debug({ ms: Math.round(performance.now() - started), page: shownPage }, 'share card drawn')
+    return drawn
+  })
+  return bytes ? png(bytes, asked === version) : notFound()
 }
 
 /** A drawn square of the brand, with the version its address carries; or where a stored icon is. */
@@ -134,13 +166,11 @@ async function brandSquare(
   kind: 'icon' | 'logo'
 ): Promise<BrandSquare> {
   const drawn = async (key: string, version: string, imageKey: string) => {
-    const kept = cache.get(key)
-    if (kept) return { bytes: kept, version }
-    const image = await pixels(deps, imageKey, ICON_SIDE)
-    if (!image) return null
-    const bytes = encodeShareCard(drawSquareIcon(image, ICON_SIDE))
-    cache.set(key, bytes)
-    return { bytes, version }
+    const bytes = await drawnOnce(key, async () => {
+      const image = await pixels(deps, imageKey, ICON_SIDE)
+      return image ? encodeShareCard(drawSquareIcon(image, ICON_SIDE)) : null
+    })
+    return bytes ? { bytes, version } : null
   }
   // The full logo for email headers, fitted into their square; an SVG drawn to PNG.
   if (kind === 'logo' && facts.logoKey) {
@@ -159,11 +189,10 @@ async function brandSquare(
   // No icon: the initial tile, as the header and the card draw it.
   const version = `${shareCardVersion(facts)}${shortHash(title)}`
   const key = `tile:${version}`
-  const kept = cache.get(key)
-  if (kept) return { bytes: kept, version }
-  const bytes = encodeShareCard(drawInitialTile({ ...facts, initial: nameInitial(title) }, ICON_SIDE))
-  cache.set(key, bytes)
-  return { bytes, version }
+  const bytes = await drawnOnce(key, async () =>
+    encodeShareCard(drawInitialTile({ ...facts, initial: nameInitial(title) }, ICON_SIDE))
+  )
+  return { bytes: bytes!, version }
 }
 
 const dataUrl = (bytes: Uint8Array) =>

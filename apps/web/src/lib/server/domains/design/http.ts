@@ -30,6 +30,8 @@ const REFUSAL_STATUS: Record<DesignRefusalCode, number> = {
   DESIGN_TOO_LARGE: 413,
   WELCOME_TOO_LONG: 400,
   DESIGN_NEWER_FORMAT: 409,
+  REPLACE_REQUIRED: 400,
+  ID_REQUIRED: 400,
 }
 
 /** The key needs the settings scope and its owner the branding permission. */

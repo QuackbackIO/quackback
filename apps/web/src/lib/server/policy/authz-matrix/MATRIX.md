@@ -900,7 +900,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workspace-api-key-settings.ts`::fetchWorkspaceKeyRolesFn | api_key.manage |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 137 surfaces
+### Public REST API (`withApiKeyAuth`) — 138 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -993,6 +993,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/settings/$area.ts`::GET | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `routes/api/v1/settings/$area.ts`::PATCH | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `routes/api/v1/settings/index.ts`::GET | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
+| `routes/api/v1/settings/portal_design.draft.ops.ts`::POST | DYNAMIC (settings.branding) |
 | `routes/api/v1/settings/portal_design.draft.ts`::DELETE | DYNAMIC (settings.branding) |
 | `routes/api/v1/settings/portal_design.ts`::GET | DYNAMIC (settings.branding) |
 | `routes/api/v1/settings/portal_design.ts`::PATCH | DYNAMIC (settings.branding) |
@@ -1062,13 +1063,14 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-45 tools. "Team" = requires an admin/member role in addition to the scope.
+46 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
 | accept_suggestion | write:feedback | ✓ |
 | add_comment | write:feedback | · |
 | add_ticket_note | write:chat | ✓ |
+| apply_portal_design_ops | write:settings | ✓ |
 | create_article | write:article | ✓ |
 | create_changelog | write:changelog | ✓ |
 | create_post | write:feedback | · |
@@ -1124,7 +1126,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-233 of 1142 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+233 of 1143 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
