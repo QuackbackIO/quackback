@@ -32,7 +32,7 @@ vi.mock('@/lib/server/storage/s3', () => ({
   getEmailSafeUrl: (key: string) => `https://files.example/${key}`,
   // The full logo, a blue 40x20 PNG, as storage holds it.
   getS3Object: async () => ({
-    body: new Blob([encodePng(solid(40, 20, [20, 20, 220]))]).stream(),
+    body: new Blob([encodePng(solid(40, 20, [20, 20, 220])) as BlobPart]).stream(),
   }),
 }))
 vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://acme.example' } }))
