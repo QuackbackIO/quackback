@@ -9,6 +9,7 @@ import { mixOklch } from './color'
 import { bandContrast, headlineBehind } from './components'
 import { roleFill } from './colour-roles'
 import { contrastRatio, solveContrast } from './contrast'
+import { blockLookValue } from './defaults'
 import { resolveDesignCached } from './resolve'
 import type { PortalDesign } from './schema'
 import { drawnSurfaces, type Drawn } from './surfaces'
@@ -91,7 +92,7 @@ function tonePairs(doc: PortalDesign, vars: ThemeVariables, mode: ColourPair['mo
   const roles = new Set(
     doc.pages.home.blocks
       .filter((block) => block.look?.tone === 'brand')
-      .map((block) => block.look?.colour ?? 'accent')
+      .map((block) => blockLookValue(block.look, 'colour'))
   )
   const pairs: ColourPair[] = []
   for (const role of roles) {

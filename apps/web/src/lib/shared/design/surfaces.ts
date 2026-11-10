@@ -9,6 +9,7 @@ import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { mixOklch, tintOf } from './color'
 import { roleFill, type ColourRole } from './colour-roles'
 import { overlay } from './contrast'
+import { blockLookValue } from './defaults'
 import type { PortalDesign } from './schema'
 import { BLOCK_TINT } from './tints'
 
@@ -54,7 +55,7 @@ export function drawnSurfaces(
   const roles = new Set(
     doc.pages.home.blocks
       .filter((block) => block.look?.tone === 'tint')
-      .map((block) => block.look?.colour ?? 'accent')
+      .map((block) => blockLookValue(block.look, 'colour'))
   )
   for (const role of roles) {
     const { fill } = roleFill(doc, t, mode, role)
