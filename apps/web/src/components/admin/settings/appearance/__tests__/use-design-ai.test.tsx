@@ -574,6 +574,82 @@ describe('a website to match', () => {
   })
 })
 
+describe('a request about one part', () => {
+  const partHook = () =>
+    renderHook(() =>
+      useDesignAi({
+        flush: async () => {},
+        adopt: vi.fn(),
+        update,
+        workspaceName: 'Acme',
+        check: {
+          begin: vi.fn(),
+          end: vi.fn(),
+          replace: vi.fn(),
+          frame: () => null,
+          current: () => defaultDesign(),
+        },
+      })
+    )
+  beforeEach(() => {
+    loop.run.mockReset()
+    loop.run.mockResolvedValue({ ok: false, code: 'AI_FAILED', message: 'No.' })
+    server.ask.mockResolvedValue({ ok: false, code: 'AI_FAILED', message: 'No.' })
+  })
+
+  it('never runs the whole brand match for a site named with the hero picked', async () => {
+    const { result } = partHook()
+    await act(() =>
+      result.current.ask(
+        'match stripe.com',
+        'band',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'page'
+      )
+    )
+    expect(stream.match).not.toHaveBeenCalled()
+    // The loop borrows from the site with read_website, for the hero only.
+    const [request, deps] = loop.run.mock.calls[0]!
+    expect(request).toMatchObject({ scope: 'band', within: 'page' })
+    expect(deps.matchWebsite).toBeUndefined()
+    expect(deps.readWebsite).toBeTypeOf('function')
+  })
+
+  it('never runs the whole brand match for a screenshot sent with one element picked', async () => {
+    const shot = {
+      id: 's1',
+      jpeg: 'data:image/jpeg;base64,AAAA',
+      width: 1440,
+      height: 900,
+    } as never
+    const { result } = partHook()
+    await act(() =>
+      result.current.ask(
+        'Match my brand from this',
+        'band',
+        [{ palette: ['#ffffff'], image: 'data:image/jpeg;base64,AAAA' }],
+        undefined,
+        { shots: [shot], name: '', icon: null },
+        { element: 'button', part: 'hero.home.cta' },
+        'one'
+      )
+    )
+    expect(stream.match).not.toHaveBeenCalled()
+    expect(loop.run).toHaveBeenCalledTimes(1)
+  })
+
+  it('still matches the whole brand when nothing is picked', async () => {
+    stream.match.mockResolvedValue({ ok: false, code: 'X', message: 'No.' })
+    const { result } = partHook()
+    await act(() => result.current.ask('match stripe.com', 'site'))
+    expect(stream.match).toHaveBeenCalledTimes(1)
+    expect(loop.run).not.toHaveBeenCalled()
+  })
+})
+
 describe('startBrandMatch', () => {
   const stamped = () => {
     const design = defaultDesign()

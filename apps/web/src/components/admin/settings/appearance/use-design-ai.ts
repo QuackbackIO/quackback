@@ -430,8 +430,12 @@ export function useDesignAi({
       // A website named with screenshots is read beside them; named alone, it is captured.
       const site =
         isSiteStart(text) || (!!brand && isBrandStart(text, images)) ? websiteIn(text) : null
-      const matching =
+      const asksToMatch =
         (!!brand && isBrandStart(text, images)) || (!!site && (images === 0 || !!brand))
+      // The whole brand match restyles the whole site: only when nothing is picked. A request
+      // about one part takes the loop, which borrows from a site with read_website.
+      const whole = scope === 'site' && !element && !within
+      const matching = asksToMatch && whole
       const thumbnails = (attachments ?? []).flatMap((attached) =>
         attached.image ? [attached.image] : []
       )
@@ -456,7 +460,8 @@ export function useDesignAi({
         const route =
           check?.current &&
           routeRequest(STYLE_REGISTRY, { message: text, images: attachments?.length ?? 0 })
-        if (check?.current && route && route.mode === 'loop') {
+        // A match asked of one part takes the loop too, where read_website is its tool.
+        if (check?.current && route && (route.mode === 'loop' || asksToMatch)) {
           check.begin(requestLabel(text))
           // The captures read_website brought, to show beside the reply.
           const captures = new Map<string, string>()
