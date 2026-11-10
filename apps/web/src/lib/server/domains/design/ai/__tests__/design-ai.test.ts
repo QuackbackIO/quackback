@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultDesign, portalDesign } from '@/lib/shared/design/schema'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import { oneSentence } from '@/lib/shared/design/ai-reach'
+import { writtenInEnglish } from '../design-ai-view'
 import { DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import type { HomeBlockType } from '@/lib/shared/design/home'
 
@@ -352,6 +353,56 @@ describe('askDesignAi', () => {
     expect(model.calls.at(-1)!.systemPrompts[1]).toContain(
       'The person picked Contact (contactbbb); "this" and "it" mean it.'
     )
+  })
+
+  it('answers a request in another language in the model’s own words, never English labels', async () => {
+    const design = defaultDesign()
+    design.nav.home.on = true
+    design.pages.home.blocks = [
+      { type: 'status', id: 'statusaaaa', grid: { x: 0, y: 0, w: 4, h: 4 } },
+      { type: 'contact', id: 'contactbbb', grid: { x: 0, y: 4, w: 12, h: 4 } },
+    ]
+    model.answer = {
+      reply: 'Der Kontaktblock hat jetzt eine freundlichere Überschrift.',
+      ops: [
+        op(
+          { op: 'set', target: 'contactbbb', key: 'heading', value: 'Schreib uns' },
+          'die Überschrift des Kontaktblocks'
+        ),
+        op(
+          { op: 'set', target: 'statusaaaa', key: 'heading', value: 'Läuft?' },
+          'die Statusüberschrift'
+        ),
+      ],
+      outOfScope: false,
+    }
+    const result = await askDesignAi({
+      message: 'Gib ihm eine freundlichere Überschrift',
+      design,
+      scope: 'home',
+      blockId: 'contactbbb',
+      history: [],
+      allows: ALLOWS,
+    })
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.applied).toHaveLength(1)
+    expect(result.reply).toBe('Der Kontaktblock hat jetzt eine freundlichere Überschrift.')
+    // The model is told to answer in the request's language, naming parts in it.
+    expect(model.calls.at(-1)!.systemPrompts[1]).toContain(
+      'Write reply and says in the language of the request'
+    )
+  })
+
+  it('reads which requests are in English', () => {
+    for (const english of ['Calmer', 'Give it a friendlier heading', 'Make the buttons rounder'])
+      expect(writtenInEnglish(english), english).toBe(true)
+    for (const other of [
+      'Gib ihm eine freundlichere Überschrift',
+      'Pon los botones en negro',
+      'Mach alle Buttons schwarz',
+      'このボタンだけを黒にして',
+    ])
+      expect(writtenInEnglish(other), other).toBe(false)
   })
 
   it('passes the colours of an attached image with the request', async () => {
