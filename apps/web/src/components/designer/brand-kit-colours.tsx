@@ -20,6 +20,7 @@ import { ColourField, toHex } from '@/components/admin/settings/appearance/colou
 import { colourPairs, colourRowIssues, type ColourRowIssue } from '@/lib/shared/design/colour-pairs'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import { hexOf } from './properties/tokens'
 import { cn } from '@/lib/shared/utils'
 import { FIND, type FindRow } from './find-rows'
 import { PropertyMore, PropertyRow, PropertySection } from './properties/properties-panel'
@@ -106,6 +107,8 @@ export function ColourValue({
 }) {
   const [open, setOpen] = useState(startOpen)
   const shown = value ?? (auto || undefined)
+  // A colour as people read it: its hex, never the way it is stored, such as "oklch(…)".
+  const label = value ? (hexOf(value) ?? value) : undefined
   return (
     <Popover
       open={open}
@@ -118,7 +121,7 @@ export function ColourValue({
         <button
           id={id}
           type="button"
-          aria-label={`${name}: ${value ?? (auto !== undefined ? WORDS.auto : WORDS.none)}`}
+          aria-label={`${name}: ${label ?? (auto !== undefined ? WORDS.auto : WORDS.none)}`}
           data-colour-state={value ? 'set' : 'auto'}
           className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-xs hover:border-border hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
         >
@@ -129,7 +132,7 @@ export function ColourValue({
               value && 'font-mono text-[11px] uppercase'
             )}
           >
-            {value ?? (auto !== undefined ? WORDS.auto : WORDS.none)}
+            {label ?? (auto !== undefined ? WORDS.auto : WORDS.none)}
           </span>
         </button>
       </PopoverTrigger>

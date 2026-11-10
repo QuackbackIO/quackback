@@ -90,6 +90,14 @@ describe('BrandKitColours', () => {
     expect(screen.queryByText(/Hard to read on/)).toBeNull()
   })
 
+  it('names the default brand colour by its hex, never as it is stored', () => {
+    render(<Harness start={defaultDesign()} />)
+    const accent = document.getElementById('kit-accent')!
+    expect(accent.textContent).not.toMatch(/oklch/i)
+    expect(accent.textContent).toMatch(/#[0-9a-f]{6}/i)
+    expect(accent.getAttribute('aria-label')).toMatch(/^Brand colour: #[0-9a-f]{6}$/i)
+  })
+
   it('shows each colour as a variable row with its value', () => {
     const design = defaultDesign()
     design.brand.light.accent = '#1d4ed8'
