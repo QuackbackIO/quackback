@@ -553,3 +553,16 @@ describe('one ladder of scope words', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 })
+
+describe('a row’s label', () => {
+  it('wraps when longer than its column, as "Logo colours" beside its ⓘ is, never cut off', () => {
+    render(
+      <PropertyRow label="Logo colours" source="Read from your logo">
+        <span />
+      </PropertyRow>
+    )
+    const label = screen.getByText('Logo colours')
+    expect(label.className).not.toMatch(/truncate|text-ellipsis|whitespace-nowrap/)
+    expect(label.className).toContain('break-words')
+  })
+})

@@ -384,3 +384,59 @@ describe('resizing the composer in the hero', () => {
     tag.remove()
   })
 })
+
+describe('the picked logo’s chip', () => {
+  /** A header as the frame draws it: the logo at the top, the menu's row just under it. */
+  function header() {
+    const page = document.createElement('header')
+    page.setAttribute('data-test-page', '')
+    const box = (element: Element, rect: DOMRect) => {
+      element.getBoundingClientRect = () => rect
+      element.getClientRects = () => [rect] as unknown as DOMRectList
+    }
+    const logo = document.createElement('a')
+    logo.setAttribute('data-qb-part', 'logo')
+    box(logo, new DOMRect(170, 10, 105, 31))
+    const row = document.createElement('nav')
+    row.setAttribute('data-qb-menu-row', '')
+    box(row, new DOMRect(0, 56, 800, 17))
+    const item = document.createElement('a')
+    item.setAttribute('data-qb-menu', 'feedback')
+    box(item, new DOMRect(180, 56, 60, 17))
+    row.append(item)
+    page.append(logo, row)
+    document.body.append(page)
+    return {
+      contentDocument: document,
+      contentWindow: window,
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    } as unknown as HTMLIFrameElement
+  }
+
+  it('sits beside the logo rather than over the first menu item', async () => {
+    render(
+      <CanvasLayer
+        canvas={{ frame: header(), scale: 1, room: { width: 800, height: 600 } }}
+        hovered={null}
+        picked={'logo' as never}
+        name="Logo"
+        homeOn
+        pages={['feedback']}
+        onPage={vi.fn()}
+        onDuplicate={vi.fn()}
+        onRemove={vi.fn()}
+        onDeselect={vi.fn()}
+      />
+    )
+    const chip = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('[data-chip-for="logo"]')
+      expect(found).not.toBeNull()
+      return found!
+    })
+    await waitFor(() => expect(Number.parseFloat(chip.style.left)).toBeGreaterThanOrEqual(275))
+    // Level with the logo, and so above the menu's row.
+    expect(Number.parseFloat(chip.style.top) + 28).toBeLessThanOrEqual(56)
+  })
+})

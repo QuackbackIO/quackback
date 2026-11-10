@@ -122,6 +122,7 @@ export function EditingLayer({
   hovered,
   picked,
   pickedKey,
+  avoid,
   name,
   onDuplicate,
   onRemove,
@@ -138,6 +139,8 @@ export function EditingLayer({
   picked: Rect | null
   /** Which block is picked, so the outline and chip glide to a new pick. */
   pickedKey?: string | null
+  /** What the chip keeps clear of beside something small, such as the menu's items. */
+  avoid?: readonly Rect[]
   /** The picked block's name. */
   name: string | null
   /** Copies or removes the picked block; absent for parts of a page that cannot be. */
@@ -170,7 +173,7 @@ export function EditingLayer({
     const next = { width: element.offsetWidth, height: element.offsetHeight }
     if (next.width && (next.width !== size.width || next.height !== size.height)) setSize(next)
   })
-  const place = picked && name ? chipPlacement(picked, size, room) : null
+  const place = picked && name ? chipPlacement(picked, size, room, avoid) : null
   const glide = useGlide(pickedKey) ? GLIDE : undefined
   return (
     <div data-editing-layer="" className="pointer-events-none absolute inset-0 overflow-hidden">
