@@ -8,10 +8,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
-const where = vi.hoisted(() => ({ pathname: '/nope' }))
+const where = vi.hoisted(() => ({
+  pathname: '/nope',
+  matches: [] as Array<{ status: string; error?: unknown }>,
+}))
 vi.mock('@tanstack/react-router', () => ({
   useRouterState: ({ select }: { select: (state: unknown) => unknown }) =>
-    select({ location: { pathname: where.pathname } }),
+    select({ location: { pathname: where.pathname }, matches: where.matches }),
 }))
 vi.mock('../use-portal-paths', () => ({ useFeedbackPath: () => '/feedback' }))
 
@@ -32,6 +35,7 @@ const images = () => [...document.querySelectorAll('img')].map((img) => img.getA
 afterEach(() => {
   cleanup()
   where.pathname = '/nope'
+  where.matches = []
 })
 
 describe('a missing page in the portal', () => {
@@ -50,6 +54,7 @@ describe('a missing page in the portal', () => {
 
   it('leads a missing post to its board and to a search of the posts', () => {
     where.pathname = '/b/bug%20reports/posts/post_123'
+    where.matches = [{ status: 'notFound', error: { data: { board: 'bug reports' } } }]
     inPortal(<NotFoundPage />)
     expect(screen.getByRole('link', { name: 'Go to the board' }).getAttribute('href')).toBe(
       '/feedback?board=bug%20reports'
@@ -59,6 +64,17 @@ describe('a missing page in the portal', () => {
     expect(screen.getByRole('searchbox', { name: 'Search posts' }).getAttribute('name')).toBe(
       'search'
     )
+  })
+})
+
+describe('a missing post on a board that is not there', () => {
+  it('offers no way to the board, only the search and the way home', () => {
+    where.pathname = '/b/no-such-board/posts/post_123'
+    where.matches = [{ status: 'notFound', error: { data: { board: null } } }]
+    inPortal(<NotFoundPage />)
+    expect(screen.queryByRole('link', { name: 'Go to the board' })).toBeNull()
+    expect(screen.getByRole('search')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Go home' })).toBeTruthy()
   })
 })
 
