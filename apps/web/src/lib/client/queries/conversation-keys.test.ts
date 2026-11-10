@@ -70,6 +70,10 @@ describe('conversationKeys parity', () => {
     expect(conversationKeys.widgetConversationList(3)).toEqual(['widget', 'my-conversations', 3])
   })
 
+  it('widget unread badge key matches the legacy inline key', () => {
+    expect(conversationKeys.widgetMessengerUnread(3)).toEqual(['widget', 'messenger-unread', 3])
+  })
+
   it('portal list key matches PORTAL_MY_CONVERSATIONS_QUERY_KEY', () => {
     expect(conversationKeys.portalConversationList()).toEqual(['portal', 'my-conversations'])
   })
