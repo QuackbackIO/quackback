@@ -1,12 +1,15 @@
 /**
  * Build the performance-bench database from scratch: create, migrate, seed
  * with a pinned random generator, then switch on every surface the journeys
- * visit and add the support data the demo seed does not create.
+ * visit and add the support data the demo seed does not create. For the
+ * designed suite (PERF_SUITE=designed), also the design engine and the
+ * designed portals' preview links (perf/designs.ts).
  *
  * Usage: bun perf/setup-db.ts            (PERF_DATABASE_URL overrides the target)
+ *        PERF_SUITE=designed bun perf/setup-db.ts
  */
 import postgres from 'postgres'
-import { BENCH_DATABASE_URL } from './config'
+import { BENCH_DATABASE_URL, BENCH_SUITE } from './config'
 
 const target = new URL(BENCH_DATABASE_URL)
 const dbName = target.pathname.slice(1)
@@ -45,6 +48,12 @@ for (let i = 1; i <= 5; i++) {
     'bun',
     `${scripts}/seed-conversation.ts`,
     `Bench conversation ${i}`,
+  ])
+}
+if (BENCH_SUITE === 'designed') {
+  run('turn the design engine on, with a preview link per designed portal', [
+    'bun',
+    'apps/web/perf/seed-designs.ts',
   ])
 }
 console.log(`Bench database ready: ${dbName}`)

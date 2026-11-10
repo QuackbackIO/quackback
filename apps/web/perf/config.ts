@@ -1,9 +1,21 @@
 /** Shared settings for the performance bench. */
 import type { Browser, BrowserContextOptions } from '@playwright/test'
 
+/**
+ * Which journeys run, and on which database: the core suite on a portal with
+ * no design (the legacy theme), or, with PERF_SUITE=designed, the designed
+ * portals (perf/designs.ts) on a database of their own whose portal is on the
+ * design engine. One database cannot hold both: the engine's switch changes
+ * what every portal and settings page draws.
+ */
+export const BENCH_SUITE: 'core' | 'designed' =
+  process.env.PERF_SUITE === 'designed' ? 'designed' : 'core'
+
 export const BENCH_DATABASE_URL =
   process.env.PERF_DATABASE_URL ??
-  'postgresql://postgres:password@localhost:5432/quackback_perf_bench'
+  `postgresql://postgres:password@localhost:5432/${
+    BENCH_SUITE === 'designed' ? 'quackback_perf_designed' : 'quackback_perf_bench'
+  }`
 
 export const BENCH_PORT = Number(process.env.PERF_PORT ?? 3190)
 

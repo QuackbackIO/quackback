@@ -252,6 +252,10 @@ jobs:
           fi
       - run: bun run --cwd apps/web perf:setup
       - run: bun run --cwd apps/web perf
+      # The designed portals, on a database whose portal is on the design
+      # engine: how far each moves as it draws, and what its pages cost.
+      - run: bun run --cwd apps/web perf:designed:setup
+      - run: bun run --cwd apps/web perf:designed
       # Server-rendered pages hydrate cleanly for a visitor in another time
       # zone and locale (a date or number formatted differently on each side
       # is a hydration error).
@@ -260,7 +264,9 @@ jobs:
         if: always()
         with:
           name: perf-results
-          path: apps/web/perf/.results/latest.json
+          path: |
+            apps/web/perf/.results/latest.json
+            apps/web/perf/.results/latest-designed.json
           retention-days: 14
 
   live-api:

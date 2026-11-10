@@ -11,6 +11,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import postgres from 'postgres'
 import { buildWidgetInstallSnippet } from '../src/lib/shared/widget/install-prompt'
 import { BENCH_DATABASE_URL, BENCH_PORT } from './config'
+import { BENCH_DESIGNS, designedPath, serveDesignFiles, type BenchDesign } from './designs'
 
 export type Actor = 'anon' | 'admin'
 
@@ -20,6 +21,8 @@ export interface DocumentJourney {
   as: Actor
   /** A fixed path, or one resolved at run time (seeded ids differ per database). */
   path: string | ((request: APIRequestContext) => Promise<string>)
+  /** The suite it belongs to (perf/config.ts BENCH_SUITE); core when left out. */
+  suite?: 'designed'
   /** Part of the breadth sweep over every page (skipped by --core). */
   sweep?: boolean
 }
@@ -34,6 +37,12 @@ export interface BrowserJourney {
   run: (page: Page) => Promise<void>
   /** Puts back what the journey wrote, so every journey measures the seeded data. */
   teardown?: () => Promise<void>
+  /** Scores how far the content moves during the measured part (cls). */
+  layoutShifts?: boolean
+  /** A phone's screen instead of a 1440 by 900 desktop. */
+  device?: 'phone'
+  /** The suite it belongs to (perf/config.ts BENCH_SUITE); core when left out. */
+  suite?: 'designed'
   /** Part of the breadth sweep over every page (skipped by --core). */
   sweep?: boolean
 }
@@ -238,6 +247,76 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
   })),
 ]
 
+/**
+ * The designed portals (perf/designs.ts), each as its document and as a
+ * visitor loads it on a desktop and on a phone, scored on how far its content
+ * moves as it draws. Their own suite: PERF_SUITE=designed.
+ */
+function designedJourneys(): Journey[] {
+  const load =
+    (design: BenchDesign, path = '/') =>
+    async (page: Page) => {
+      await serveDesignFiles(page)
+      await page.goto(designedPath(design, path))
+      await page.locator('[data-qb-part=band]').first().waitFor()
+      await firstPortalPost(page).waitFor()
+    }
+  return [
+    ...BENCH_DESIGNS.flatMap((design): Journey[] => [
+      {
+        kind: 'document',
+        name: `doc:designed:${design}`,
+        as: 'anon',
+        path: designedPath(design),
+        suite: 'designed',
+      },
+      {
+        kind: 'browser',
+        name: `ui:designed:${design}-load`,
+        as: 'anon',
+        suite: 'designed',
+        layoutShifts: true,
+        run: load(design),
+      },
+      {
+        kind: 'browser',
+        name: `ui:designed:${design}-load:phone`,
+        as: 'anon',
+        suite: 'designed',
+        device: 'phone',
+        layoutShifts: true,
+        run: load(design),
+      },
+    ]),
+    // The pages whose posts arrive after the page: a roadmap's columns, by
+    // groups down the page (kiln) and as a board (juniper), and the changelog.
+    ...(
+      [
+        ['kiln', '/roadmap'],
+        ['juniper', '/roadmap'],
+        ['juniper', '/changelog'],
+      ] as const
+    ).map(([design, path]): Journey => ({
+      kind: 'browser',
+      name: `ui:designed:${design}-${path.slice(1)}:phone`,
+      as: 'anon',
+      suite: 'designed',
+      device: 'phone',
+      layoutShifts: true,
+      run: async (page) => {
+        await serveDesignFiles(page)
+        await page.goto(designedPath(design, path))
+        // Done once the page's own posts are in, with no placeholder left.
+        await page
+          .locator(path === '/changelog' ? '[data-qb-section=entries]' : '.roadmap-card')
+          .first()
+          .waitFor()
+        await page.waitForFunction(() => !document.querySelector('[data-qb-skeleton]'))
+      },
+    })),
+  ]
+}
+
 function sweepJourneys(): Journey[] {
   return SWEEP_PAGES.flatMap(({ path, as }): Journey[] => [
     { kind: 'document', name: `sweep:doc:${as}:${path}`, as, path, sweep: true },
@@ -283,6 +362,7 @@ export const journeys: Journey[] = [
     kind: 'browser',
     name: 'ui:portal-load',
     as: 'anon',
+    layoutShifts: true,
     run: async (page) => {
       await page.goto('/?sort=trending')
       await firstPortalPost(page).waitFor()
@@ -292,6 +372,7 @@ export const journeys: Journey[] = [
     kind: 'browser',
     name: 'ui:portal-open-post',
     as: 'anon',
+    layoutShifts: true,
     setup: async (page) => {
       await page.goto('/?sort=trending')
       await firstPortalPost(page).waitFor()
@@ -306,6 +387,7 @@ export const journeys: Journey[] = [
     kind: 'browser',
     name: 'ui:portal-post-load',
     as: 'anon',
+    layoutShifts: true,
     run: async (page) => {
       await page.goto(await firstPostPath(page.request), { waitUntil: 'load' })
       await page.getByRole('heading', { level: 1 }).first().waitFor()
@@ -317,6 +399,7 @@ export const journeys: Journey[] = [
     kind: 'browser',
     name: 'ui:portal-open-post-with-comments',
     as: 'anon',
+    layoutShifts: true,
     setup: async (page) => {
       await page.goto('/?sort=top')
       await firstPortalPost(page).waitFor()
@@ -442,6 +525,7 @@ export const journeys: Journey[] = [
     kind: 'browser',
     name: 'ui:portal-hover-open-post',
     as: 'anon',
+    layoutShifts: true,
     setup: async (page) => {
       await page.goto('/?sort=trending')
       await firstPortalPost(page).waitFor()
@@ -760,4 +844,5 @@ export const journeys: Journey[] = [
   },
 
   ...sweepJourneys(),
+  ...designedJourneys(),
 ]
