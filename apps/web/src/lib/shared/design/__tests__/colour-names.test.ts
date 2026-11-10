@@ -33,5 +33,12 @@ describe('plainReason', () => {
       plainReason('A tint background’s settings are written as JSON, such as {"a":1}')
     ).toBeNull()
     expect(plainReason('use a brand colour (accent, support)')).toBeNull()
+    // A list of a setting's own fields is the builder's vocabulary, not a person's.
+    expect(
+      plainReason(
+        'A gradient background has no colour; it takes stops, shape, direction, centre and strength'
+      )
+    ).toBeNull()
+    expect(plainReason('Fields take borderColor, radius or shadow')).toBeNull()
   })
 })

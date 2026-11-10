@@ -81,9 +81,13 @@ export function plainWords(text: string): string {
     .replace(CODE, (code) => colourName(code))
 }
 
-/** Words that mark a reason as the builder's own, not a person's: ids, JSON, keys, roles. */
+/**
+ * Words that mark a reason as the builder's own, not a person's: ids, JSON,
+ * keys, roles, and a list of the fields a setting takes ("it takes stops,
+ * shape, direction, centre and strength").
+ */
 const INTERNAL =
-  /[{}"`_]|\bJSON\b|\bids?\b|\bop\b|\bkey\b|\btokens?\b|\b(accent|support|ink|muted|surface)\b|\b\d+(px|em)\b/i
+  /[{}"`_]|\bJSON\b|\bids?\b|\bop\b|\bkey\b|\btokens?\b|\b(accent|support|ink|muted|surface)\b|\b\d+(px|em)\b|\btakes? \w+(?:, \w+)+,? (?:and|or) \w+/i
 
 /** A reason a change was left alone, said to a person, or null where it is the builder's own. */
 export function plainReason(reason: string): string | null {
