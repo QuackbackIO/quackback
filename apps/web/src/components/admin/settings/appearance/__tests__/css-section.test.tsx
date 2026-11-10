@@ -66,6 +66,14 @@ function renderSection(
 afterEach(cleanup)
 
 describe('Custom CSS', () => {
+  it('lists the hero’s parts by their hero names, never band', () => {
+    renderSection(defaultDesign())
+    const list = screen.getByText(/Parts:/).textContent ?? ''
+    expect(list).toMatch(/\bhero, hero-image, hero-foot-image\b/)
+    expect(list).toContain('post-hero')
+    expect(list).not.toMatch(/band/)
+  })
+
   it('writes the draft’s CSS, and emptying it removes it', async () => {
     const seen = renderSection(defaultDesign())
     const editor = await screen.findByRole('textbox', { name: 'CSS' })
