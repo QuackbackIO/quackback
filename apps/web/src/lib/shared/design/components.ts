@@ -50,7 +50,7 @@ export const PORTAL_ALIASES: Record<string, `--qb-${string}`> = {
 }
 
 /** Buttons and badges, fields, and panels such as cards, dialogs and menus. */
-const RADII: Record<PortalDesign['shape']['corners'], [string, string, string]> = {
+export const RADII: Record<PortalDesign['shape']['corners'], [string, string, string]> = {
   sharp: ['0rem', '0rem', '0rem'],
   subtle: ['0.25rem', '0.25rem', '0.375rem'],
   rounded: ['999px', '0.5rem', '0.75rem'],
@@ -58,7 +58,7 @@ const RADII: Record<PortalDesign['shape']['corners'], [string, string, string]> 
 }
 
 /** Buttons, and the composer that carries one, by button shape. */
-const BUTTON_RADII: Record<
+export const BUTTON_RADII: Record<
   Exclude<NonNullable<PortalDesign['shape']['buttons']>, 'match'>,
   [string, string]
 > = {
