@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { homeBlockTypes } from '@/lib/shared/design/home'
+import { opsPrompt } from '../design-ai-guide'
+import { OVERRIDE_OPS_EXAMPLES } from '../override-examples'
 import { defaultDesign } from '@/lib/shared/design/schema'
 import { wordsChanges } from '../brand-decide'
 import { WORDS_EXAMPLES } from '../words-examples'
@@ -75,5 +80,58 @@ describe('posts wording', () => {
       Object.values(example.answers).flatMap((a) => WORD_LINES.map((line) => a[line]))
     )
     expect(lines.filter((line) => /\bideas?\b/i.test(line))).toEqual([])
+  })
+
+  /**
+   * "ideas" is the stored key of the Top posts block, and the model must be
+   * able to name it; everywhere else the guide, the examples and the hints
+   * teach visitor copy, which says posts.
+   */
+  const withoutTheKey = (text: string) =>
+    text.replace(/"ideas"|:ideas\b|\(ideas\)|\bideas \("Top posts"\)/g, '')
+  const ideasIn = (text: string) =>
+    [...withoutTheKey(text).matchAll(/.{0,30}\bideas?\b.{0,30}/gi)].map((m) => m[0])
+
+  it('the design AI guide never teaches "idea"', () => {
+    const prompt = opsPrompt({
+      blockTypes: homeBlockTypes(ON),
+      writesCss: true,
+      places: { boards: [], roadmaps: [], categories: [] },
+    })
+    // The scan reaches the examples, where the stored key is named.
+    expect(prompt).toContain('"target":"ideas"')
+    expect(ideasIn(prompt)).toEqual([])
+  })
+
+  it('the override examples never teach "idea"', () => {
+    expect(ideasIn(JSON.stringify(OVERRIDE_OPS_EXAMPLES))).toEqual([])
+  })
+
+  it('the words hints never teach "idea"', () => {
+    // The hints are the lines lineLint returns, which the model is told to fix.
+    // Its detectors may match "idea" in what the model wrote; its advice may not.
+    const dir = path.resolve(__dirname, '..')
+    const source = readFileSync(path.join(dir, 'words-evidence.ts'), 'utf8')
+    const lint = source.slice(
+      source.indexOf('export function lineLint'),
+      source.indexOf('export function wordsLints')
+    )
+    const constants = (file: string) =>
+      Object.fromEntries(
+        [
+          ...readFileSync(path.join(dir, file), 'utf8').matchAll(
+            /^(?:export )?const ([A-Z_]+) =\s*'((?:[^'\\]|\\.)*)'/gm
+          ),
+        ].map((m) => [m[1], m[2]])
+      )
+    const named = { ...constants('words-evidence.ts'), ...constants('words-button.ts') }
+    const hints = [
+      ...[...lint.matchAll(/return '((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]),
+      ...[...lint.matchAll(/return ([A-Z_]+)\b/g)].map((m) => named[m[1]!]),
+    ]
+    // The scan must reach the hints it guards, named ones included.
+    expect(hints.length).toBeGreaterThan(15)
+    expect(hints).not.toContain(undefined)
+    expect(hints.flatMap((hint) => ideasIn(hint!))).toEqual([])
   })
 })

@@ -61,12 +61,12 @@ export const OVERRIDE_OPS_EXAMPLES = [
     },
   },
   {
-    request: 'Centre the welcome text and colour “every idea” in our second colour',
+    request: 'Centre the welcome text and colour “every post” in our second colour',
     picked:
-      'the Welcome block whose body now reads "Thanks for [stopping by]{accent}. We read every idea."',
+      'the Welcome block whose body now reads "Thanks for [stopping by]{accent}. We read every post."',
     answer: {
       reply:
-        'The welcome is centred, with “every idea” in the second colour; “stopping by” keeps the brand colour.',
+        'The welcome is centred, with “every post” in the second colour; “stopping by” keeps the brand colour.',
       outOfScope: false,
       ops: [
         op(
@@ -74,9 +74,9 @@ export const OVERRIDE_OPS_EXAMPLES = [
             op: 'set',
             target: 'welcome',
             key: 'body',
-            value: 'Thanks for [stopping by]{accent}. We read [every idea]{support}. {center}',
+            value: 'Thanks for [stopping by]{accent}. We read [every post]{support}. {center}',
           },
-          'the welcome centred, with every idea in the second colour'
+          'the welcome centred, with every post in the second colour'
         ),
       ],
     },
