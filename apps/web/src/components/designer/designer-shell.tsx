@@ -251,6 +251,7 @@ export function DesignerShell({
         },
         onDuplicate: selection ? () => blocks.duplicateBlock(selection) : undefined,
         onRemove: selection ? () => blocks.removeBlock(selection) : undefined,
+        onHome: design.nav.home.on ? undefined : () => menu.land('home'),
       }),
   })
   // A sheet's way back names what the panel under it shows: the element, the pick, or the page.

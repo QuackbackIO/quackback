@@ -65,6 +65,24 @@ describe('QuickFind', () => {
     for (const text of shown()) expect(text).not.toMatch(/site:|block-/)
   })
 
+  it('greys a setting it cannot go to, saying why, and goes nowhere on it', async () => {
+    const off: FindItem = {
+      id: 'part:hero:hero-height',
+      group: 'Settings',
+      label: 'Height',
+      path: ['Hero', 'Layout'],
+      off: 'On Home, which is off',
+      target: { kind: 'part', selection: 'hero', page: 'home' },
+    }
+    const navigation = show(() => [off])
+    await typeIn('height')
+    const item = document.querySelector('[data-find-item="part:hero:hero-height"]')!
+    expect(item.getAttribute('data-disabled')).toBe('true')
+    expect(item.textContent).toContain('On Home, which is off')
+    fireEvent.click(item)
+    expect(navigation.show).not.toHaveBeenCalled()
+  })
+
   it('leads a setting on another page to its part there', async () => {
     const navigation = show()
     await typeIn('sort')

@@ -13,6 +13,7 @@ import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { STYLE_ELEMENTS } from '@/lib/shared/design/style-tokens'
 import {
   blockFindActions,
+  ON_HOME_OFF,
   elementFindItems,
   findIndex,
   findPath,
@@ -50,6 +51,43 @@ const search = (items: FindItem[], query: string) =>
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score)
     .map(({ item }) => findPath(item))
+
+describe('Home’s own settings while Home is off', () => {
+  const homeOff = () => {
+    const design = defaultDesign()
+    design.nav.home.on = false
+    return findIndex({
+      design,
+      gates: ALL_ON,
+      nodes: outlineOf(design, 'feedback'),
+      page: 'feedback',
+      pages: PAGES.filter((page) => page !== 'home'),
+    })
+  }
+
+  it('are found, greyed, saying Home is off, never a dead end', () => {
+    const items = homeOff()
+    for (const query of ['hero height', 'main action', 'roomy']) {
+      const found = items.filter((item) => findScore(item, query) > 0 && item.off)
+      expect(found.length).toBeGreaterThan(0)
+      expect(found.every((item) => item.off === ON_HOME_OFF)).toBe(true)
+    }
+    expect(byPath(items, 'Hero › Layout › Height')?.off).toBe(ON_HOME_OFF)
+    // With Home on, they are no longer off.
+    expect(byPath(index('home'), 'Hero › Layout › Height')?.off).toBeUndefined()
+  })
+
+  it('offer Turn on Home, found by the same words', () => {
+    const run = () => {}
+    const actions = blockFindActions({ picked: null, onAdd: run, onLayouts: run, onHome: run })
+    const home = actions.find((item) => item.label === 'Turn on Home')!
+    for (const query of ['hero height', 'main action', 'roomy'])
+      expect(findScore(home, query)).toBeGreaterThan(0)
+    expect(
+      blockFindActions({ picked: null, onAdd: run, onLayouts: run }).map((a) => a.label)
+    ).not.toContain('Turn on Home')
+  })
+})
 
 describe('the paths quick find shows', () => {
   it('read as where each row is', () => {
