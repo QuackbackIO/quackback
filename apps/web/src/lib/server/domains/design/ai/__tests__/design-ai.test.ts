@@ -311,6 +311,33 @@ describe('askDesignAi', () => {
     expect(result.reply).toBe('That is outside the header, so nothing changed.')
   })
 
+  it('never reaches from a picked Home block into the page of the same name', async () => {
+    const design = defaultDesign()
+    design.nav.home.on = true
+    design.pages.home.blocks = [
+      { type: 'roadmap', id: 'roadmapaaa', roadmapId: null, grid: { x: 0, y: 0, w: 12, h: 4 } },
+    ]
+    model.answer = {
+      reply: 'Votes are off.',
+      // "roadmap" names the block and the page; votes is the page's setting.
+      ops: [op({ op: 'set', target: 'roadmap', key: 'votes', value: 'false' }, 'roadmap votes')],
+      outOfScope: false,
+    }
+    const result = await askDesignAi({
+      message: 'Hide the votes',
+      design,
+      scope: 'home',
+      blockId: 'roadmapaaa',
+      history: [],
+      allows: ALLOWS,
+    })
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.applied).toEqual([])
+    expect(result.design.pages.roadmap).toEqual(design.pages.roadmap)
+    expect(result.reply).toBe('That is outside the Roadmap block on Home, so nothing changed.')
+    expect(result.reply).not.toMatch(/votes/i)
+  })
+
   it('keeps a request about one Home block to that block', async () => {
     const design = defaultDesign()
     design.nav.home.on = true
