@@ -309,6 +309,8 @@ export const BLOCK_WORDS = {
   moveDown: 'Move down a row',
   /** On a phone, in place of Layout's rows. */
   stacks: 'Stacks in reading order',
+  /** On a phone: whether the block shows there. */
+  showOnPhones: 'Show on phones',
   background: 'Background',
   colour: 'Colour',
   align: 'Align',

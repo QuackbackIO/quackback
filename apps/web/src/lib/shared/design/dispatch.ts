@@ -28,7 +28,14 @@ import {
   type SectionType,
   type SettingResult,
 } from './blocks'
-import { matchLook, resetLook, writeLook, type LookProp, type LookScope } from './block-look'
+import {
+  matchLook,
+  resetLook,
+  setHiddenOnPhones,
+  writeLook,
+  type LookProp,
+  type LookScope,
+} from './block-look'
 import { editGrid, type GridChange } from './grid-edit'
 import { setWordsDoc, type WordsField } from './headline-words'
 import { heroOf, writeHero, type HeroKey } from './hero'
@@ -117,6 +124,8 @@ export type DesignOp =
   | { op: 'block.matchLook'; id: string; to: string }
   /** Takes away a block's own look of one element it draws. */
   | { op: 'block.styleReset'; id: string; element: StyleElement }
+  /** Leaves a Home block off phones, or shows it there again (`look.phone.hidden`). */
+  | { op: 'block.phoneHidden'; id: string; hidden: boolean }
   /** Arranges Home's blocks as a layout to start from. */
   | { op: 'home.layout'; layout: HomeLayout; gates: PortalPageGates }
   /** One of a page section's settings, through the registry's checks. */
@@ -278,6 +287,9 @@ function run(draft: PortalDesign, op: DesignOp): DispatchResult {
       if (sheet) delete sheet[op.element]
       return { ok: true }
     }
+    case 'block.phoneHidden':
+      setHiddenOnPhones(draft, op.id, op.hidden)
+      return { ok: true }
     case 'home.layout':
       takeHomeLayout(draft, op.layout, op.gates)
       return { ok: true }

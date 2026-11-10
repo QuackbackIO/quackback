@@ -77,6 +77,15 @@ const areaOf = (place: GridPlace) =>
 const AREA_CLASS =
   'md:[grid-area:var(--qb-area-md)] md:max-lg:self-start lg:[grid-area:var(--qb-area-lg)]'
 
+/**
+ * A block left off phones (`look.phone.hidden`): gone below md for visitors,
+ * and faded in the builder, where it stays to be picked.
+ */
+function phoneHiddenClass(block: HomeBlock, samples: boolean): string | false {
+  if (block.look?.phone?.hidden !== true) return false
+  return samples ? 'max-md:opacity-50' : 'max-md:hidden'
+}
+
 /** Home's grid: one column on phones, two on tablets, twelve from lg, rows at least a unit tall. */
 export const HOME_GRID_CLASS =
   'grid grid-cols-1 md:grid-cols-2 md:auto-rows-[minmax(var(--qb-row),auto)] lg:grid-cols-12'
@@ -190,6 +199,7 @@ function BlockCard({
 }) {
   const area = useArea(index)
   const intl = useIntl()
+  const samples = usePreviewSamples()
   const key = `block-${block.id ?? index}`
   const tone = block.look?.tone
   const card = !bare && tone !== 'plain'
@@ -205,6 +215,7 @@ function BlockCard({
       data-qb-block={block.type}
       data-qb-surface={card ? 'card' : undefined}
       data-qb-tone={tone}
+      data-qb-phone-hidden={block.look?.phone?.hidden ? '' : undefined}
       style={{
         ...area,
         ...(tone === 'tint' || tone === 'brand' ? toneStyle(tone, block.look?.colour) : undefined),
@@ -215,7 +226,8 @@ function BlockCard({
         card &&
           'rounded-lg border border-border/40 bg-card p-[var(--qb-card-padding,1rem)] shadow-sm',
         row && 'md:flex-row md:items-center md:gap-6 md:[&>p]:flex-1',
-        block.look?.align === 'centre' && 'items-center text-center'
+        block.look?.align === 'centre' && 'items-center text-center',
+        phoneHiddenClass(block, samples)
       )}
     >
       {heading && (
@@ -250,12 +262,17 @@ function BlockCard({
 /** A block waiting on its data: the card's outline, so the grid does not jump. */
 function BlockSkeleton({ block, index }: { block: HomeBlock; index: number }) {
   const area = useArea(index)
+  const samples = usePreviewSamples()
   return (
     <div
       aria-hidden="true"
       data-qb-skeleton={`block-${block.id ?? index}`}
       style={area}
-      className={cn('min-h-32 animate-pulse rounded-lg bg-muted/40', AREA_CLASS)}
+      className={cn(
+        'min-h-32 animate-pulse rounded-lg bg-muted/40',
+        AREA_CLASS,
+        phoneHiddenClass(block, samples)
+      )}
     />
   )
 }
