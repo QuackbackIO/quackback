@@ -91,6 +91,7 @@ export {
   withPreviousChecks,
 } from './sending-domain-records'
 import { notifySendingDomainLive, notifySendingDomainNeedsAttention } from './sending-domain-notify'
+import { ownershipGrace, startOwnershipGrace } from './ownership-grace'
 import { enqueueSesTenantReconcile } from './ses-tenant-queue'
 import { rekeyToHeldSigningKey, sealSigningKey, shouldHoldSigningKey } from './pending-signing-key'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
@@ -501,11 +502,14 @@ export async function refreshSendingDomain(
     checkSendingDomainOwnership(stored.domain, proofRecords, readZone),
   ])
   // Proven only on a read that found the proof: the owner-only writes below
-  // need it. A verified row whose lookup went unanswered keeps the proof it
-  // already has for its status, so only the zone saying the record is gone, or
-  // the provider changing its answer, can demote it.
+  // need it. The ownership record has to stay published (see
+  // `ownership-grace.ts`). A verified row whose lookup went unanswered keeps
+  // the proof it already has; one whose record the zone says is gone keeps it
+  // for the grace period from the first miss, and is demoted after it.
+  const now = new Date()
   const ownershipProven = ownership === 'proven'
   const ownershipKept = wasVerified && ownership === 'unknown'
+  const grace = ownershipGrace(stored, ownership, now)
   if (ownershipKept) {
     log.warn(
       { sending_domain_id: id, domain: stored.domain },
@@ -515,7 +519,9 @@ export async function refreshSendingDomain(
 
   let identity = found
   // A row holding its own key re-keys the identity once, after it proves
-  // ownership; until then the identity's key is not one anybody can publish.
+  // ownership on this read; until then the identity's key is not one anybody
+  // can publish. A row kept verified through an unanswered lookup or the grace
+  // period has not proved anything on this read, so it writes nothing.
   const rekey = await rekeyToHeldSigningKey(stored, identity, ownershipProven)
   const row = rekey.row
   if (rekey.rekeyed) identity = (await getSesDomainIdentity(row.domain)) ?? identity
@@ -533,11 +539,10 @@ export async function refreshSendingDomain(
   // that key failing is not this row's verdict.
   const verdict = sendingDomainStatusFrom({
     identity,
-    ownershipProven: ownershipProven || ownershipKept,
+    ownershipProven: ownershipProven || ownershipKept || grace.inGrace,
   })
   const status = verdict === 'failed' && row.pendingSigningKey ? 'pending' : verdict
 
-  const now = new Date()
   // Each record's own state, for the person publishing them. Recorded beside
   // the status and never feeding it: the provider's scan is what decides.
   const composed = withPreviousChecks(
@@ -567,12 +572,19 @@ export async function refreshSendingDomain(
       ...(promoted ? {} : { status }),
       dnsRecords,
       ...(dmarc ? { preflight: { ...row.preflight, dmarc } } : {}),
+      // Found again: the clock for a missing record starts over.
+      ...(ownershipProven ? { ownershipMissingSince: null } : {}),
       lastCheckedAt: now,
       updatedAt: now,
     })
     .where(eq(emailSendingDomains.id, id))
     .returning()
   let updated = written
+
+  // The first miss on a verified row starts the grace period and warns.
+  if (written && grace.since && !row.ownershipMissingSince && status === 'verified') {
+    updated = (await startOwnershipGrace(id, grace.since)) ?? updated
+  }
 
   // The one place a domain goes live, whether the watch job, the daily sweep or
   // a person's click got it there. Conditional, so when two checks find it
@@ -634,19 +646,25 @@ export async function restartSendingDomainChecks(
  * make about the past. Three things can stop being true after a row is marked
  * verified, and none of them announces itself:
  *
- * - the ownership TXT is deleted, so the workspace no longer demonstrably
- *   controls the zone it is sending as;
+ * - the ownership record is deleted, so the workspace no longer demonstrably
+ *   controls the zone it is sending as. The provider's identity is shared by
+ *   every workspace that adds the domain, so its verdict cannot answer this;
+ *   only the row's own record can;
  * - the MAIL FROM MX is removed or moved, so the envelope sender falls back to
  *   the provider's own domain and SPF stops aligning, leaving DMARC resting on
  *   DKIM alone — the arrangement that fails as soon as a message is forwarded;
  * - the provider stops signing, so mail leaves unsigned as a domain whose DMARC
  *   policy tells receivers to reject exactly that.
  *
- * Each demotes the row here, and a row that is not verified is not an identity
- * the send guard will hand out, so the workspace drops back to the platform
- * sender. That is a visible, honest degradation instead of three silent ones,
- * and it is the reason the provider's MAIL FROM failure behaviour can be the
- * lenient one.
+ * The last two demote the row on the check that finds them. A missing
+ * ownership record is warned about on the first check that finds it gone, and
+ * demotes the row only when it is still gone after the grace period
+ * (`ownership-grace.ts`), because a record removed by mistake is common and a
+ * domain is worth a week's notice. A row that is not verified is not an
+ * identity the send guard will hand out, so the workspace drops back to the
+ * platform sender. That is a visible, honest degradation instead of three
+ * silent ones, and it is the reason the provider's MAIL FROM failure behaviour
+ * can be the lenient one.
  *
  * ## Why it does nothing when identity provisioning is not configured
  *
