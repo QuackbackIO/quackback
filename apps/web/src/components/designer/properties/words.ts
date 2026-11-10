@@ -36,6 +36,7 @@ export const WORDS = {
   dark: 'Dark',
   /** Sources a value can come from, on hover. */
   fromBrand: 'From brand',
+  fromTheme: 'From Theme',
   /** Corner steps, sharpest first. */
   corners: { sharp: 'Sharp', soft: 'Soft', round: 'Round', pill: 'Pill' },
   /** Letter case. */

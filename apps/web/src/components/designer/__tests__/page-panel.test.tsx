@@ -87,9 +87,12 @@ describe('PagePanel', () => {
     expect(screen.getByText('Background settings')).toBeTruthy()
   })
 
-  it('shows the page width as the brand’s, opening Theme at its styles', () => {
+  it('shows the page width as Theme’s, opening Theme at its styles', () => {
     const { onTheme } = show('roadmap', (draft) => void (draft.layout.width = 'wide'))
-    fireEvent.click(screen.getByRole('button', { name: 'Brand: Wide' }))
+    // Where it comes from, said by its ⓘ.
+    expect(screen.getByRole('button', { name: 'From Theme' })).toBeTruthy()
+    expect(screen.queryByText(/Brand: /)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Theme: Wide' }))
     expect(onTheme).toHaveBeenCalledWith(true)
   })
 
