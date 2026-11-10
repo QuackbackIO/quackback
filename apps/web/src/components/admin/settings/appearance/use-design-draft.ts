@@ -15,6 +15,7 @@ import { changeLabel } from '@/lib/shared/design/labels'
 import { designView, previewStylesheet } from '@/lib/shared/design/design-view'
 import { createHistory, patchesBetween, type Author } from '@/lib/shared/design/history'
 import { releaseOverrides } from '@/lib/shared/design/overrides'
+import { rebaseOnto } from '@/lib/shared/design/rebase'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalDesignRevisionId } from '@quackback/ids'
 import type { DraftLastChange } from '@/lib/server/domains/design/draft-last-change'
@@ -258,22 +259,24 @@ export function useDesignDraft() {
   /**
    * Takes a design the server already saved as the draft, such as Quackback
    * AI's, at the revision that save returned; the next save is made against it.
+   * The server worked from the draft it last saved; a change made by hand
+   * since stays, with only the server's own changes put on top, and saves next.
    */
   const adopt = useCallback(
     (next: PortalDesign, nextReport?: typeof report, label?: string, nextRevision?: string) => {
+      const mine = latest.current
+      const merged = rebaseOnto(accepted.current, next, mine)
       // A step of its own, never merged into the one before, named for what it changed.
-      const [patches, inverse] = patchesBetween(latest.current, next)
-      const name = label ?? nameOfChange(latest.current, next)
+      const [patches, inverse] = patchesBetween(mine, merged)
+      const name = label ?? nameOfChange(mine, merged)
       // Quackback AI's, so a change made by hand meanwhile never joins its step.
       history.getState().begin(name, 'ai')
       history.getState().push(name, patches, inverse, undefined, 'ai')
       history.getState().end('ai')
-      latest.current = next
       // The server saved it already.
       accepted.current = next
       refused.current = null
       setRefusal(null)
-      setDesign(next)
       if (nextReport) setReport(nextReport)
       if (nextRevision) revision.current = nextRevision
       else
@@ -282,8 +285,14 @@ export function useDesignDraft() {
             revision.current = (await fetchEditor()).revision
           })
           .catch(() => {})
+      // The hand change on top saves against the revision the server's save returned.
+      if (merged !== next) commit(merged)
+      else {
+        latest.current = next
+        setDesign(next)
+      }
     },
-    [fetchEditor, history]
+    [commit, fetchEditor, history]
   )
 
   /** Reads what visitors see again after a change made outside the draft, such as a new logo. */
