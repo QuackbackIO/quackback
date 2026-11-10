@@ -37,3 +37,23 @@ export function postsInWords(words: WordsAnswer, language?: string | null): Word
   for (const field of WORD_LINES) out[field] = postsWording(words[field], language)
   return out
 }
+
+/** The visitor-facing words of a starting look: English from the model, so set as posts. */
+const LOOK_LINES = [
+  'headline',
+  'subtitle',
+  'prompt',
+  'submit',
+  'homeHeadline',
+  'homeSubtitle',
+  'accentPhrase',
+] as const
+
+/** A starting look with its words set as posts, the way a words answer's are. */
+export function postsInLook<
+  T extends Record<(typeof LOOK_LINES)[number], string> & { pageWords: string[] },
+>(look: T): T {
+  const out = { ...look, pageWords: look.pageWords.map((words) => postsWording(words)) }
+  for (const field of LOOK_LINES) out[field] = postsWording(look[field]) as T[typeof field]
+  return out
+}

@@ -20,6 +20,7 @@ import { readHero, withHero } from './hero-read'
 import { writeLooks } from './look-calls'
 import { BLOCK_SIZES, BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
 import { confirmedBy } from './faithful-look'
+import { postsInLook } from './words-posts'
 
 const log = logger.child({ module: 'design-directions' })
 
@@ -187,7 +188,8 @@ export function lookDesign(
   allows: Omit<UntrustedChanges, 'links'>
 ) {
   const preset = DESIGN_PRESETS.find((candidate) => candidate.id === look.preset)!
-  return applyDesignChanges(applyPreset(base, preset), lookChanges(look), 'site', {
+  // The portal is a feedback board: whichever match wrote the look, its words say posts.
+  return applyDesignChanges(applyPreset(base, preset), lookChanges(postsInLook(look)), 'site', {
     ...allows,
     links: new Set(),
     files: new Set(),
