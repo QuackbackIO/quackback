@@ -170,6 +170,21 @@ describe('the pairing, where one text was not read', () => {
     expect(sans.body!.face.id).toBe('inter')
   })
 
+  it('never sets body text in a mono headline face unless the text reads as mono', () => {
+    const mono = () => match(500, option('jetbrains', 500, 0.74), option('fira-code', 500, 0.7))
+    for (const body_type of ['not_visible', undefined] as const) {
+      const type = chooseFaces({ headline: mono(), body: null }, { headline_type: 'mono', body_type })
+      expect(type.headline!.face.id).toBe('jetbrains')
+      expect(type.body!.face.id).toBe('inter')
+    }
+    // Paragraph text read as mono is mono: the headline's face, as one family.
+    const code = chooseFaces(
+      { headline: mono(), body: null },
+      { headline_type: 'mono', body_type: 'mono' }
+    )
+    expect(code.body!.face.id).toBe('jetbrains')
+  })
+
   it('never sets body text in a condensed or wide headline face', () => {
     const condensed = match(600, option('oswald', 600, 0.72), option('roboto', 600, 0.5))
     const type = chooseFaces(

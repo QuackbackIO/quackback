@@ -312,14 +312,15 @@ function paired(
     }
   }
   if (h && !readClearly(b) && !site.body) {
-    const sameKind = !bodyKind || bodyKind === h.face.top
-    const id = sameKind && textFace(h.face) ? h.face.id : PLAIN_FACE[bodyKind ?? h.face.top]
+    // A mono headline is a display choice: body text is mono only where it was read so.
+    const kind = bodyKind ?? (h.face.top === 'mono' ? 'sans' : h.face.top)
+    const id = kind === h.face.top && textFace(h.face) ? h.face.id : PLAIN_FACE[kind]
     const face = faceById(id)
     if (face) {
       const why =
         id === h.face.id
           ? `the text under the headline was not read; the headline's face, as a site sets both in one family`
-          : `the text under the headline was not read; it reads as ${bodyKind ?? h.face.top}, so the plain ${face.id}`
+          : `the text under the headline was not read; it reads as ${kind}, so the plain ${face.id}`
       b = b
         ? { ...b, face, why }
         : {
