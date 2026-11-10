@@ -1,8 +1,6 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
-import { applyDesignOp, type DispatchResult } from '@/lib/shared/design/dispatch'
 import type { HomeBlockType } from '@/lib/shared/design/home'
-import { setLanding } from '@/lib/shared/design/menu'
 import { blockKey, BLOCK_NAMES, type Selection } from '@/lib/shared/design/outline'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { dispatcher } from './dispatcher'
@@ -68,22 +66,16 @@ export function useBlockActions({
     const after = !homeOff && selection?.startsWith('block-') ? idOf(selection) : null
     const afterName = after && selection ? nameOf(selection) : undefined
     const name = BLOCK_NAMES[type]
-    let done: DispatchResult = { ok: false, refusal: '' }
-    if (homeOff)
-      draft.update((next) => {
-        done = applyDesignOp(next, { op: 'block.add', type, after: null })
-        // With the block in, Home is turned on as it is, never filled with starters.
-        if (done.ok && done.block) setLanding(next, gates, 'home')
-      }, `Add ${name} and turn on Home`)
-    else done = dispatch({ op: 'block.add', type, after }, `Add ${name}`)
-    if (!done.ok || !done.block) return
-    setSelection(blockKey(done.block, 0))
+    const done = homeOff
+      ? dispatch({ op: 'block.add', type, turnOnHome: { gates } }, `Add ${name} and turn on Home`)
+      : dispatch({ op: 'block.add', type, after }, `Add ${name}`)
+    if (done.ok && done.block) setSelection(blockKey(done.block, 0))
     say(
       homeOff
         ? `Home turned on. ${name} added. Undo takes both back.`
         : `${name} added ${afterName ? `under ${afterName}` : 'at the end of Home'}.`
     )
-    focusPicked(true)
+    if (done.ok && done.block) focusPicked(true)
   }
 
   /**
