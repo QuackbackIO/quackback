@@ -25,6 +25,8 @@ vi.mock('@/lib/client/builder-events', () => events)
 const shots = vi.hoisted(() => ({ read: vi.fn() }))
 vi.mock('@/lib/client/brand-shots', () => ({ readBrandShot: shots.read }))
 vi.mock('@/lib/client/image-palette', () => ({ imagePalette: async () => ['#0058a3'] }))
+const site = vi.hoisted(() => ({ read: vi.fn() }))
+vi.mock('@/lib/server/functions/site-capture', () => ({ readWebsiteFn: site.read }))
 const checker = vi.hoisted(() => ({ check: vi.fn() }))
 vi.mock('@/lib/client/brand-check', () => ({ checkBrandMatch: checker.check }))
 
@@ -672,6 +674,24 @@ describe('a request about one part', () => {
     )
     expect(stream.match).not.toHaveBeenCalled()
     expect(loop.run).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads a website with the request’s Stop, so Stop cuts the read off', async () => {
+    site.read.mockResolvedValue({
+      reading: { host: 'stripe.com' },
+      capture: null,
+    })
+    loop.run.mockImplementation(
+      async (request: { signal: AbortSignal }, deps: { readWebsite: (u: string) => unknown }) => {
+        await deps.readWebsite('stripe.com')
+        expect(site.read.mock.calls[0]![0].signal).toBe(request.signal)
+        return { ok: false, code: 'AI_FAILED', message: 'No.' }
+      }
+    )
+    const { result } = partHook()
+    await act(() => result.current.ask('make the hero look like stripe.com', 'band'))
+    expect(site.read).toHaveBeenCalledTimes(1)
+    expect(site.read.mock.calls[0]![0].signal).toBeInstanceOf(AbortSignal)
   })
 
   it('still matches the whole brand when nothing is picked', async () => {

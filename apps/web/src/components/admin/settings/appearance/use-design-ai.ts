@@ -504,7 +504,7 @@ export function useDesignAi({
                 ...(check.open ? { open: check.open } : {}),
                 previewCss: designPreviewCss,
                 readWebsite: async (url) => {
-                  const read = await readWebsiteFn({ data: { url } })
+                  const read = await readWebsiteFn({ data: { url }, signal })
                   if (read.capture) captures.set(read.reading.host ?? url, read.capture)
                   found.push(readingSummary(read.reading))
                   return read

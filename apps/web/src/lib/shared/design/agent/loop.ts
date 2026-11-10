@@ -490,6 +490,11 @@ export async function runEditLoop(input: {
         else {
           deps.progress?.(`Reading ${toRead}`)
           const got = await deps.readWebsite(answer.read_website)
+          // Stopped while the site was read: nothing it brought back is used.
+          if (input.signal?.aborted) {
+            stopped = 'stopped'
+            break
+          }
           readSites.set(toRead, got)
           website.push(readingText(got.reading))
           capture = got.capture
@@ -504,6 +509,15 @@ export async function runEditLoop(input: {
         matchedSites.add(toMatch)
         deps.progress?.(`Matching ${toMatch}`)
         const matched = await deps.matchWebsite(answer.match_website)
+        // Stopped during the match: a match that saved keeps its changes, with their Undo.
+        if (input.signal?.aborted) {
+          if (matched.design) {
+            design = matched.design
+            lists.push(matched.applied)
+          }
+          stopped = 'stopped'
+          break
+        }
         website.push(matchText(matched.match))
         if (matched.design) {
           design = matched.design
