@@ -13,6 +13,7 @@ import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   isShareCardPage,
+  shareCardAddressVersion,
   shareCardFacts,
   shareCardVersion,
   shortHash,
@@ -94,7 +95,8 @@ export async function serveBrandImage(
   const page = query.get('page')
   const shownPage = isShareCardPage(page) ? page : null
   const title = portalSiteName(settings)
-  const version = `${shareCardVersion(facts)}${shortHash(title)}`
+  const pageName = shownPage ? portalHeadWords(settings).pages[shownPage] : null
+  const version = shareCardAddressVersion(shareCardVersion(facts), title, pageName)
   const key = `card:${version}:${shownPage ?? ''}`
   const kept = cache.get(key)
   if (kept) return png(kept, asked === version)
@@ -105,7 +107,7 @@ export async function serveBrandImage(
     drawShareCard({
       ...facts,
       title,
-      pageName: shownPage ? portalHeadWords(settings).pages[shownPage] : null,
+      pageName,
       icon,
     })
   )

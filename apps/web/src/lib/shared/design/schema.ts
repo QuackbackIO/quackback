@@ -74,7 +74,15 @@ const localizedUpTo = (max: number) => z.record(locale, displayText(max))
 /** locale -> text. */
 const localized = localizedUpTo(280)
 /** A storage key, never a URL. */
-const asset = z.object({ key: z.string().min(1).max(512) }).strict()
+/**
+ * A stored file's key. It is written into srcset lists and CSS, so it holds
+ * only characters that cannot end a candidate or a `url()`, and no segment
+ * is `.` or `..`. Upload keys (prefix/yyyy/mm/uuid-name) always fit.
+ */
+export const ASSET_KEY = /^(?!(?:.*\/)?\.{1,2}(?:\/|$))[\w./-]+$/
+export const assetKey = z.string().min(1).max(512).regex(ASSET_KEY)
+
+const asset = z.object({ key: assetKey }).strict()
 
 /**
  * A hero image cut from the customer's own screenshot by a brand match, so
@@ -84,7 +92,7 @@ const asset = z.object({ key: z.string().min(1).max(512) }).strict()
  */
 export const screenshotSourceSchema = z
   .object({
-    key: z.string().min(1).max(512),
+    key: assetKey,
     box: z
       .object({
         x: z.number().min(0).max(1),

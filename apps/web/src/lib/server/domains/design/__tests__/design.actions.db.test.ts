@@ -290,6 +290,33 @@ describe('the workspace’s own CSS', () => {
   })
 })
 
+describe('restoring a version with its own CSS', () => {
+  beforeEach(() => {
+    plan.customCss = true
+  })
+
+  it('asks the plan, unless the CSS is what visitors see now', async () => {
+    const who = await author()
+    const styled = defaultDesign()
+    styled.css = '[data-qb-part="post-card"] { border-width: 2px; }'
+    await actions.saveDesignDraft(styled, who)
+    const first = await actions.publishDesign({ ...who, source: 'appearance' })
+    const plain = defaultDesign()
+    plain.brand.light.accent = '#0f766e'
+    await actions.saveDesignDraft(plain, who)
+    const second = await actions.publishDesign({ ...who, source: 'appearance' })
+    if (!first.ok || !second.ok) throw new Error('publish failed')
+
+    plan.customCss = false
+    expect(await actions.restoreDesign(first.revisionId, who)).toMatchObject({
+      ok: false,
+      code: 'TIER_LIMIT_EXCEEDED',
+    })
+    // A version without CSS restores whatever the plan.
+    expect(await actions.restoreDesign(second.revisionId, who)).toMatchObject({ ok: true })
+  })
+})
+
 describe('saveDesignDraft', () => {
   it('returns the contrast report with the saved draft', async () => {
     const who = await author()

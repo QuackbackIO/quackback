@@ -21,6 +21,7 @@ import { buttonToOf, composerInHero, mainActionOf, writeMainAction } from './mai
 import { DESIGN_OPTIONS } from './options'
 import type { DesignerPage } from './outline'
 import {
+  assetKey,
   imageShadeSchema,
   imageVariantSchema,
   screenshotSourceSchema,
@@ -63,7 +64,7 @@ export type HeroKey = Exclude<keyof HeroBlock, 'type'>
 
 const image = z
   .object({
-    key: z.string().min(1).max(512),
+    key: assetKey,
     alt: z.string().trim().max(200).optional(),
     decorative: z.boolean().optional(),
     screenshot: screenshotSourceSchema.optional(),

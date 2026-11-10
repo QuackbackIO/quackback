@@ -39,11 +39,18 @@ export const savePortalDesignDraftFn = createServerFn({ method: 'POST' })
     return saveDesignDraft(data.design, author, data.revision)
   })
 
-export const discardPortalDesignDraftFn = createServerFn({ method: 'POST' }).handler(async () => {
-  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-  const { discardDesignDraft } = await import('@/lib/server/domains/design/design.actions')
-  return discardDesignDraft()
-})
+export const discardPortalDesignDraftFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      /** The draft revision the person saw; a newer draft refuses the discard. */
+      revision: z.string().max(64).optional(),
+    })
+  )
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const { discardDesignDraft } = await import('@/lib/server/domains/design/design.actions')
+    return discardDesignDraft(data.revision, auth.principal.id)
+  })
 
 export const publishPortalDesignFn = createServerFn({ method: 'POST' })
   .validator(

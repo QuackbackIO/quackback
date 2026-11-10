@@ -86,9 +86,24 @@ export function themeColours(resolved: ResolvedDesign): {
   }
 }
 
+/**
+ * The version an address names: what the card shows, its title, and the
+ * page name under it, which follows the main language and the page's words.
+ */
+export const shareCardAddressVersion = (
+  version: string,
+  title: string,
+  pageName?: string | null
+): string => `${version}${shortHash(title)}${pageName ? shortHash(pageName) : ''}`
+
 /** The card's address: its version and title, and the page whose name it shows. */
-export function shareCardPath(version: string, title: string, page?: ShareCardPage): string {
-  const v = `${version}${shortHash(title)}`
+export function shareCardPath(
+  version: string,
+  title: string,
+  page?: ShareCardPage,
+  pageName?: string | null
+): string {
+  const v = shareCardAddressVersion(version, title, page ? pageName : null)
   return `${BRAND_IMAGE_PATH}?v=${v}${page ? `&page=${page}` : ''}`
 }
 

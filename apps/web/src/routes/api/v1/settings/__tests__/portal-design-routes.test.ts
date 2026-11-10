@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   scopes: null as string[] | null,
   permissions: new Set(['settings.branding']),
   patchResult: { ok: true } as unknown,
+  discardResult: { ok: true } as unknown,
   calls: [] as unknown[],
 }))
 
@@ -35,9 +36,9 @@ vi.mock('@/lib/server/domains/design/design.actions', () => ({
     state.calls.push({ patch, author, expected })
     return state.patchResult
   },
-  discardDesignDraft: async () => {
-    state.calls.push('discard')
-    return { ok: true }
+  discardDesignDraft: async (expected: unknown) => {
+    state.calls.push({ discard: expected })
+    return state.discardResult
   },
   listDesignVersions: async () => [],
 }))
@@ -62,6 +63,7 @@ beforeEach(() => {
   state.scopes = null
   state.permissions = new Set(['settings.branding'])
   state.patchResult = { ok: true }
+  state.discardResult = { ok: true }
   state.calls = []
 })
 
@@ -122,6 +124,32 @@ describe('DELETE /api/v1/settings/portal_design/draft', () => {
       }),
     })
     expect(response.status).toBe(204)
-    expect(state.calls).toEqual(['discard'])
+    expect(state.calls).toEqual([{ discard: undefined }])
+  })
+
+  it('passes If-Match through as the revision the discard is made against', async () => {
+    const response = await draft.DELETE({
+      request: new Request('http://localhost/api/v1/settings/portal_design/draft', {
+        method: 'DELETE',
+        headers: { 'if-match': 'W/"rev1"' },
+      }),
+    })
+    expect(response.status).toBe(204)
+    expect(state.calls).toEqual([{ discard: 'rev1' }])
+  })
+
+  it('refuses a stale If-Match with 412', async () => {
+    state.discardResult = {
+      ok: false,
+      code: 'REVISION_MISMATCH',
+      message: 'The draft changed since you opened it.',
+    }
+    const response = await draft.DELETE({
+      request: new Request('http://localhost/api/v1/settings/portal_design/draft', {
+        method: 'DELETE',
+        headers: { 'if-match': '"rev0"' },
+      }),
+    })
+    expect(response.status).toBe(412)
   })
 })

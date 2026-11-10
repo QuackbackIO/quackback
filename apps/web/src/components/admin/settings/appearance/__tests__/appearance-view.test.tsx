@@ -35,6 +35,7 @@ type Version = {
   source: 'appearance'
   message: string | null
   principalId: null
+  publishedBy: string | null
   createdAt: Date
 }
 let versions: Version[] = []
@@ -100,6 +101,7 @@ describe('AppearanceView', () => {
         source: 'appearance',
         message: null,
         principalId: null,
+        publishedBy: null,
         createdAt: new Date(Date.now() - 3 * 86_400_000),
       },
     ]

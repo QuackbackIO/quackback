@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultDesign, portalDesign, type PortalDesign } from '../schema'
+import { heroSchema } from '../hero'
 
 const fixtures = import.meta.glob<unknown>('./fixtures/*.json', { eager: true, import: 'default' })
 
@@ -143,6 +144,23 @@ describe('the band image', () => {
     const bad = (key: string) => ({ key: 'portal-images/room.webp', variants: [{ key, w: 640 }] })
     expect(parse(withImage(bad('portal-images/a b.webp 9999w, https://x'))).success).toBe(false)
     expect(parse(withImage(bad('portal-images/a,b.webp'))).success).toBe(false)
+  })
+
+  it('refuses a stored file whose key would break the srcset or CSS it is written into', () => {
+    const injected = 'portal-images/a.webp 1w, https://evil.example/x.png'
+    expect(parse(withImage({ key: injected, width: 2560 })).success).toBe(false)
+    expect(parse(withImage({ key: 'portal-images/a"b).webp' })).success).toBe(false)
+    expect(parse(withImage({ key: 'portal-images/../../api/v1/x' })).success).toBe(false)
+    const logo = defaultDesign()
+    logo.brand.logo.mark.light = { key: 'logos/a.png 1w, https://evil.example/x.png' }
+    expect(parse(logo).success).toBe(false)
+    // The hero's settings, as the builder and the AI write them.
+    expect(heroSchema.shape.image.safeParse({ key: injected }).success).toBe(false)
+  })
+
+  it('keeps every key an upload names', () => {
+    const key = 'portal-images/2026/11/0b4e7d2c-8f4e-4c39-9d8e-2a6b1c1d9e0f-my_photo..v2.webp'
+    expect(parse(withImage({ key })).success).toBe(true)
   })
 })
 

@@ -15,6 +15,11 @@
  * step at the end of the list, `{ version: 3, to: 4 }`, with DESIGN_VERSION
  * and the schema's literal moved on with it.
  *
+ * Policy for a new format: ship the reader for v(n+1) one release before the
+ * writer. A build that only reads a format (stored-design.ts reads a newer
+ * version as this one, setting aside what it does not know) lets a workspace
+ * roll back across the release that starts writing it without losing its brand.
+ *
  * Format 3 renamed format 2's hero keys, which still called the hero a
  * "band" (HERO_KEYS below). What visitors' pages and workspace CSS can name,
  * the `--qb-band-*` properties and `data-qb-*band*` attributes, kept the word.

@@ -30,8 +30,8 @@ import {
 
 /**
  * Overrides whose part (or the block it was in) the design no longer has,
- * or that name an element kind their part is not. They are kept, drawn
- * nowhere, and listed as orphaned.
+ * or that name an element kind their part is not. The draft keeps them,
+ * drawn nowhere, and publishing drops them.
  */
 export function orphanedOverrides(design: PortalDesign): StyleOverride[] {
   return (design.overrides ?? []).filter((o) => {
@@ -39,6 +39,19 @@ export function orphanedOverrides(design: PortalDesign): StyleOverride[] {
     const part = partOf(design, o.target.part)
     return !part || !part.elements.includes(o.target.element)
   })
+}
+
+/**
+ * The design without the overrides nothing draws, as it is published: an
+ * override whose part is gone is dropped then rather than kept to reset by
+ * hand. The same design when it has none.
+ */
+export function withoutOrphanedOverrides(design: PortalDesign): PortalDesign {
+  const orphans = new Set(orphanedOverrides(design))
+  if (!orphans.size) return design
+  const overrides = design.overrides!.filter((o) => !orphans.has(o))
+  const { overrides: _gone, ...rest } = design
+  return overrides.length ? { ...rest, overrides } : rest
 }
 
 type BrandValues = ReturnType<typeof brandValues>

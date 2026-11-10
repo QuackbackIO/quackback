@@ -24,10 +24,11 @@ import { ConflictError, NotFoundError } from '@/lib/shared/errors'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { readStoredDesign } from '@/lib/shared/design/stored-design'
 import { sameDesign } from '@/lib/shared/design/diff'
+import { withoutOrphanedOverrides } from '@/lib/shared/design/override-cascade'
 import { logger } from '@/lib/server/logger'
 import { digestOf } from '@/lib/server/utils/canonical-json'
 import { authorKey, recordAuthors, type DraftAuthors } from './draft-authors'
-import { draftRevision } from './draft-revision'
+import { draftRevision, EMPTY_REVISION } from './draft-revision'
 import { dropDraft, NO_DRAFT } from './no-draft'
 import { validateDesign } from './validate-design'
 
@@ -218,22 +219,34 @@ export async function saveDraft(
   })
 }
 
-export async function discardDraft(): Promise<void> {
-  await db
-    .update(portalDesigns)
-    .set({ ...NO_DRAFT, updatedAt: new Date() })
-    .where(defaultSite())
+/**
+ * Drops the draft, returning the revision the next save names; refuses a
+ * stale `expectedRevision`, so a discard never throws away changes someone
+ * saved after the person last looked.
+ */
+export async function discardDraft(expectedRevision?: string): Promise<string> {
+  return db.transaction(async (tx) => {
+    const row = await designRow(tx, true)
+    if (!row) return EMPTY_REVISION
+    if (expectedRevision !== undefined && expectedRevision !== draftRevision(row))
+      throw new ConflictError('REVISION_MISMATCH', 'The draft changed since you opened it.')
+    return dropDraft(tx, row)
+  })
 }
 
-/** Writes the next revision, makes it the published one, and trims the oldest. */
+/**
+ * Writes the next revision, without overrides whose part is gone, makes it
+ * the published one, and trims the oldest.
+ */
 async function publishDocument(
   tx: Transaction,
   designId: PortalDesignId,
-  document: PortalDesign,
+  given: PortalDesign,
   author: Pick<DesignAuthor, 'principalId'> | null,
   source: PortalDesignSource,
   message: string | null
 ) {
+  const document = withoutOrphanedOverrides(given)
   const [latest] = await tx
     .select({ number: portalDesignRevisions.number })
     .from(portalDesignRevisions)
@@ -428,6 +441,8 @@ export async function restoreRevision(
     const document = storedDesign(old.document, `revision ${old.number}`)
     if (!document)
       throw new NotFoundError('REVISION_NOT_FOUND', 'That version can no longer be read.')
+    // A version's CSS goes live again only on a plan that has it, unless visitors see it now.
+    await assertCssAllowed(tx, document, row.publishedRevisionId)
     const published = await publishDocument(
       tx,
       row.id,
@@ -462,22 +477,4 @@ export async function restoreRevision(
   })
   await invalidateSettingsCache()
   return result
-}
-
-export async function listRevisions(limit = REVISIONS_KEPT) {
-  const row = await designRow(db)
-  if (!row) return []
-  return db
-    .select({
-      id: portalDesignRevisions.id,
-      number: portalDesignRevisions.number,
-      source: portalDesignRevisions.source,
-      message: portalDesignRevisions.message,
-      principalId: portalDesignRevisions.principalId,
-      createdAt: portalDesignRevisions.createdAt,
-    })
-    .from(portalDesignRevisions)
-    .where(eq(portalDesignRevisions.designId, row.id))
-    .orderBy(desc(portalDesignRevisions.number))
-    .limit(limit)
 }

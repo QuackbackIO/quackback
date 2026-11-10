@@ -152,7 +152,11 @@ export function portalShareImage(
   if (design?.engine !== 'v2' || !design.icons) return null
   if (design.icons.shareImage) return absolute(design.icons.shareImage, baseUrl)
   if (!design.icons.card) return null
-  return absolute(shareCardPath(design.icons.card, portalSiteName(settings), page), baseUrl)
+  const pageName = page ? portalHeadWords(settings).pages[page] : null
+  return absolute(
+    shareCardPath(design.icons.card, portalSiteName(settings), page, pageName),
+    baseUrl
+  )
 }
 
 /** The meta that points a link preview at a page's own card, to sit over the portal's. */

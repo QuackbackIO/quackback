@@ -325,16 +325,29 @@ export function useDesignDraft() {
     await save(latest.current)
   }, [fetchEditor, save])
 
-  /** Discards the draft; undo brings it back as the draft. */
-  const discard = useCallback(async () => {
+  /**
+   * Discards the draft; undo brings it back as the draft. A draft someone
+   * else changed since is kept, and the person chooses as after a refused
+   * save: load their changes or keep their own.
+   */
+  const discard = useCallback(async (): Promise<Outcome> => {
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
     await inflight.current
     const before = latest.current
-    await discardPortalDesignDraftFn()
+    const result = await discardPortalDesignDraftFn({ data: { revision: revision.current } })
+    if (!result.ok) {
+      if (result.code === 'REVISION_MISMATCH') {
+        blocked.current = true
+        setConflict(true)
+        setConflictChange(result.lastChange ?? null)
+      }
+      return { ok: false, message: result.message }
+    }
     await refresh()
     const [patches, inverse] = patchesBetween(before, latest.current)
     history.getState().clear([{ label: 'Discard draft', patches, inversePatches: inverse }])
+    return { ok: true }
   }, [refresh, history])
 
   /** Publishes the draft as reviewed: a draft that moved since, or one in conflict, is refused. */
