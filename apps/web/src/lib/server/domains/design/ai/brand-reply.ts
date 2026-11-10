@@ -63,8 +63,6 @@ export interface BrandReplyInput {
   photo?: 'placed' | 'offered' | null
   /** Why a photo seen was not placed (too small, blurred), when it was not. */
   photoWhy?: string | null
-  /** Home words were written but Home is off, so they wait for a chip to add Home. */
-  homeOff?: boolean
 }
 
 export interface BrandReply {
@@ -128,14 +126,14 @@ export function brandReply(input: BrandReplyInput): BrandReply {
       ? `Your site leads with a photo${input.photoWhy ? `, but ${input.photoWhy.replace(/^the photo /, 'it ')}` : ''}. Add one to the hero for the same feel.`
       : '',
   ].filter(Boolean)
-  // A photo-led site is offered a hero photo first, whether or not one was cut;
-  // a portal without Home is offered one, as the match never adds it itself.
-  const chips = [
-    ...(input.photo ? [MATCH_BRAND.addHeroPhoto] : []),
-    ...(input.homeOff ? [MATCH_BRAND.addHome] : []),
-    ...followUps(roles, input.band),
-  ].slice(0, 4)
-  return { reply, asks, notes, chips }
+  const chips = followUps(roles, input.band)
+  // A photo-led site is offered a hero photo first, whether or not one was cut.
+  return {
+    reply,
+    asks,
+    notes,
+    chips: input.photo ? [MATCH_BRAND.addHeroPhoto, ...chips].slice(0, 4) : chips,
+  }
 }
 
 const BAND_WORDS: Record<string, string> = {

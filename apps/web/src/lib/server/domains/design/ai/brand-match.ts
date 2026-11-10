@@ -430,7 +430,6 @@ export async function brandMatch(
     failed,
     logo: !logo ? 'not_found' : logoKey ? 'placed' : 'not_stored',
     faceClose: type?.headline ? type.headline.close : null,
-    homeOff: !!words?.home_headline.trim() && !applied.design.nav.home.on,
     ...heroPhoto.photoSaid(photo, applied.design),
   })
   // The site's own face no bundled face is, offered for upload under the reply.

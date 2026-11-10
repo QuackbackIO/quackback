@@ -341,31 +341,8 @@ describe('composition', () => {
     submit: '',
   })
 
-  /** A portal with Home on: the match writes its words and arranges it. */
-  const homeDesign = () => {
-    const design = defaultDesign()
-    design.nav.home = { ...design.nav.home, on: true, tab: true }
-    return design
-  }
-
-  it('leaves Home off, its blocks, menu and words untouched, when it was off', () => {
-    const out = values(wordsChanges(answer('portal'), defaultDesign(), ON))
-    expect(
-      Object.keys(out).filter((p) => p.startsWith('pages.home') || p.startsWith('nav.'))
-    ).toEqual([])
-    // The feedback page's words are still written.
-    expect(out['pages.feedback.headline.title']).toBeDefined()
-  })
-
-  it('writes Home words into a Home already on, without touching the menu', () => {
-    const out = values(wordsChanges(answer('portal'), homeDesign(), ON))
-    expect(out['pages.home.headline.title']).toBe('Shape what is next')
-    expect(out['pages.home.composer']).toBe('band')
-    expect(Object.keys(out).filter((p) => p.startsWith('nav.'))).toEqual([])
-  })
-
   it('writes headlines through the words model: a phrase marked is an accent, plain words have none', () => {
-    const plain = values(wordsChanges(answer('portal'), homeDesign(), ON))
+    const plain = values(wordsChanges(answer('portal'), defaultDesign(), ON))
     expect(plain['pages.home.headline.title']).toBe('Shape what is next')
     expect(plain['pages.home.headline.accent']).toBeUndefined()
     const marked = values(
@@ -374,7 +351,7 @@ describe('composition', () => {
           ...answer('portal', 'Shape what is [next]{accent}'),
           home_subtitle: 'Share [ideas]{lighter}.',
         },
-        homeDesign(),
+        defaultDesign(),
         ON,
         'fr'
       )
@@ -385,10 +362,10 @@ describe('composition', () => {
   })
 
   it('keeps a Home already arranged as it is, whatever arrangement the words chose', () => {
-    const helpFirst = values(wordsChanges(answer('help_first'), homeDesign(), ON))[
+    const helpFirst = values(wordsChanges(answer('help_first'), defaultDesign(), ON))[
       'pages.home.blocks'
     ] as ReturnType<typeof defaultDesign>['pages']['home']['blocks']
-    const design = homeDesign()
+    const design = defaultDesign()
     design.pages.home.blocks = helpFirst
     const kept = values(wordsChanges(answer('portal'), design, ON))[
       'pages.home.blocks'
@@ -405,8 +382,8 @@ describe('composition', () => {
       feedback_headline: 'what should the studio make next?',
     }
     const out = applyDesignChanges(
-      homeDesign(),
-      wordsChanges(lower, homeDesign(), ON).map(({ path, value }) => ({ path, value })),
+      defaultDesign(),
+      wordsChanges(lower, defaultDesign(), ON).map(({ path, value }) => ({ path, value })),
       'site'
     )
     expect(out.refused).toEqual([])
@@ -422,13 +399,13 @@ describe('composition', () => {
       ...answer('portal', 'quiet tools, made in small batches'),
       feedback_headline: 'Ideas',
     }
-    const paths = wordsChanges(mixed, homeDesign(), ON).map((c) => c.path)
+    const paths = wordsChanges(mixed, defaultDesign(), ON).map((c) => c.path)
     expect(paths.some((p) => p.startsWith('style.'))).toBe(false)
   })
 
   it('leaves no hole on Home where the composer moves into the band, in every arrangement', () => {
     for (const layout of HOME_ARRANGEMENTS) {
-      const out = values(wordsChanges(answer(layout), homeDesign(), ON))
+      const out = values(wordsChanges(answer(layout), defaultDesign(), ON))
       expect(out['pages.home.composer']).toBe('band')
       const home = {
         blocks: out['pages.home.blocks'],

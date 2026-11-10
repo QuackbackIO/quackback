@@ -259,11 +259,8 @@ function setup(
     })),
     ...over,
   }
-  // The portal matched has Home on, so its words are written there too.
-  const design = defaultDesign()
-  design.nav.home = { ...design.nav.home, on: true, tab: true }
   const input = {
-    design,
+    design: defaultDesign(),
     shots: shots.map(({ img }) => ({
       analysis: dataUrl(img),
       strip: dataUrl({ width: W, height: 200, data: img.data.slice(0, W * 200 * 4) }),
@@ -423,20 +420,6 @@ describe('brandMatch', () => {
     })
     const plain = await run()
     expect(plain.result.design.pages.home.headline?.accent).toBeUndefined()
-  })
-
-  it('leaves a portal without Home as it is, offering Home as a follow-up', async () => {
-    const { deps, input } = setup()
-    input.design = defaultDesign()
-    const result = (await brandMatch(input, deps)) as BrandMatchResult
-    expect(result.design.nav.home.on).toBe(false)
-    expect(result.design.pages.home).toEqual(defaultDesign().pages.home)
-    expect(
-      result.applied.filter((c) => c.path.startsWith('nav.') || c.path.startsWith('pages.home'))
-    ).toEqual([])
-    expect(result.chips).toContain('Add a Home page')
-    // Home on: no offer.
-    expect((await run()).result.chips).not.toContain('Add a Home page')
   })
 
   it('offers follow-ups for the brand colour and the hero', async () => {
