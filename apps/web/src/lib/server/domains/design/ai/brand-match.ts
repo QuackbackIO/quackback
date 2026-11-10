@@ -57,17 +57,14 @@ import {
   cleanShots,
   measurable,
   onlyDimmed,
-  cutBrandLogo,
   headerColour,
-  measureColours,
-  measureGeometry,
-  measurePageFill,
   measureTone,
   primaryShot,
   withTypeMatch,
   type Shot,
 } from './brand-measure'
 import { brandReply } from './brand-reply'
+import { measureOffThread } from './measure-stage'
 import { targetFingerprint } from './brand-target'
 import { heroCrop } from './brand-crops'
 import { headlineInkChanges } from './colour-changes'
@@ -238,15 +235,15 @@ export async function brandMatch(
   // 2. Measure.
   onStep('measure')
   await yieldToStream()
-  const measuredColours = measureColours(shots)
+  // Every pixel walked on a worker thread, so other requests are served meanwhile.
+  const measures = await (deps.measure ?? measureOffThread)(shots, primary)
+  const { colours: measuredColours, pageReadings, logo } = measures
   const { evidence } = measuredColours
   // The site's colours settle a role the rules left open where they name the measured one.
   const ruled = site
     ? withSiteColours(measuredColours.roles, site.facts.colours).roles
     : measuredColours.roles
-  const pageReadings = measurePageFill(shots)
-  let geometry = measureGeometry(primary)
-  const logo = cutBrandLogo(cleanShots(shots).length < shots.length ? cleanShots(shots) : shots)
+  let geometry = measures.geometry
   done('measure')
 
   // 3. Fonts: CPU on a worker thread, skipped when the match is short of time.
