@@ -295,22 +295,26 @@ describe('brandMatch', () => {
     expect(result.ok).toBe(true)
     expect(steps).toEqual(['read', 'measure', 'fonts', 'hero', 'words'])
     // The roles were settled by rule (one blue): no classifier call. The voice read starts
-    // once the screenshots are read; the hero, asked twice at once so its answers can be
-    // checked against each other, comes before the words: a set from each writing angle at
-    // once, then the words critic's choice.
-    expect(order).toEqual([
-      'find',
-      'voice',
-      'hero',
-      'hero',
-      'words',
-      'words',
-      'words',
-      'layout',
-      'layout',
-      'layout',
-      'words_pick',
-    ])
+    // once the screenshots are read, and the words from it at once (a set from each writing
+    // angle, then the words critic's choice), beside the hero, asked twice at once so its
+    // answers can be checked against each other: the words never wait for the hero.
+    expect(order.slice(0, 2)).toEqual(['find', 'voice'])
+    expect(order.indexOf('words')).toBeLessThan(order.indexOf('hero'))
+    expect([...order].sort()).toEqual(
+      [
+        'find',
+        'voice',
+        'hero',
+        'hero',
+        'words',
+        'words',
+        'words',
+        'layout',
+        'layout',
+        'layout',
+        'words_pick',
+      ].sort()
+    )
     expect(Object.keys(result.timings)).toEqual([
       'read',
       'measure',
@@ -499,8 +503,9 @@ describe('brandMatch', () => {
     const { deps, input } = setup()
     deps.now = () => t
     const family = deps.family
+    // Time runs short while the voice is read, before any words are asked for.
     deps.family = vi.fn(async <T>(request: FamilyRequest<T>) => {
-      if (request.family === 'hero') t = 39_500
+      if (request.family === 'voice') t = 39_500
       return family(request)
     }) as unknown as BrandMatchDeps['family']
     const result = (await brandMatch(input, deps)) as BrandMatchResult
