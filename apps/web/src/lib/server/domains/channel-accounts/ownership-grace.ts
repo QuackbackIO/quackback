@@ -23,6 +23,13 @@ export const SENDING_DOMAIN_OWNERSHIP_GRACE_DAYS = 7
 
 const GRACE_MS = SENDING_DOMAIN_OWNERSHIP_GRACE_DAYS * 24 * 60 * 60 * 1000
 
+/**
+ * How early the period may end. Only the daily sweep demotes, and its start
+ * time drifts from day to day, so without slack a row could outlive the date
+ * the warning gave by most of a day.
+ */
+export const OWNERSHIP_GRACE_SLACK_MS = 60 * 60 * 1000
+
 /** When a verified row whose ownership record went missing at `since` is demoted. */
 export function ownershipGraceEnds(since: Date): Date {
   return new Date(since.getTime() + GRACE_MS)
@@ -41,7 +48,10 @@ export function ownershipGrace(
 ): { since: Date | null; inGrace: boolean } {
   if (row.status !== 'verified' || ownership !== 'absent') return { since: null, inGrace: false }
   const since = row.ownershipMissingSince ?? now
-  return { since, inGrace: now.getTime() < ownershipGraceEnds(since).getTime() }
+  return {
+    since,
+    inGrace: now.getTime() < ownershipGraceEnds(since).getTime() - OWNERSHIP_GRACE_SLACK_MS,
+  }
 }
 
 /**

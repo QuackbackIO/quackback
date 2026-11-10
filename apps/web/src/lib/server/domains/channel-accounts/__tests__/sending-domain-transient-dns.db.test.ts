@@ -129,7 +129,9 @@ function publish(domain: string, records: SendingDomainDnsRecord[]) {
   }
 }
 
-const DAY = 24 * 60 * 60 * 1000
+const MINUTE = 60 * 1000
+const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
 
 /** The full name of a provider-keyed row's ownership TXT. */
 function ownershipName(row: EmailSendingDomain): string {
@@ -290,6 +292,19 @@ describe.skipIf(!fixture.available)('sending domain checks on unanswered DNS', (
     expect(sentAttention).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    ['two hours before the deadline', 'verified', 7 * DAY - 2 * HOUR, 0],
+    ['half an hour before the deadline', 'pending', 7 * DAY - 30 * MINUTE, 1],
+    ['a second after the deadline', 'pending', 7 * DAY + 1000, 1],
+  ] as const)('at %s, a sweep leaves the domain %s', async (_when, status, missingFor, demoted) => {
+    const row = await verifiedDomain()
+    zone.delete(proofName(row))
+    await setMissingSince(row, new Date(Date.now() - missingFor))
+
+    expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted })
+    expect((await getSendingDomain(row.id))?.status).toBe(status)
+  })
+
   it('demotes and tells the managers when the grace period ends with the record still missing', async () => {
     const row = await verifiedDomain()
     zone.delete(proofName(row))
@@ -407,10 +422,11 @@ describe.skipIf(!fixture.available)('sending domain checks on unanswered DNS', (
   it('does not put back a demoted domain while its ownership TXT is still missing', async () => {
     const row = await verifiedEasyDomain()
     zone.delete(ownershipName(row))
-    // As the end of a grace period left it.
+    // Demoted, with a mark still inside the grace period: only a verified row
+    // has a period, so the mark alone must not put it back.
     await testDb
       .update(emailSendingDomains)
-      .set({ status: 'pending', ownershipMissingSince: new Date(Date.now() - 8 * DAY) })
+      .set({ status: 'pending', ownershipMissingSince: new Date(Date.now() - DAY) })
       .where(eq(emailSendingDomains.id, row.id))
 
     expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 0 })
