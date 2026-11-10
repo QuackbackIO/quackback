@@ -1,9 +1,11 @@
 /**
- * Which address each kind of email is sent from: the workspace default, and
- * an override for support, the feedback board, the changelog and the status
- * page. Support can also reply from the address the customer wrote to, once
- * the workspace receives email.
+ * Which address email is sent from: the workspace default, and beside it only
+ * the kinds of email (support, the feedback board, the changelog, the status
+ * page) that send from something else. Support can also reply from the
+ * address the customer wrote to, once the workspace receives email.
  */
+import { useState } from 'react'
+import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import {
@@ -13,6 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useSetEmailSender } from '@/lib/client/mutations/channel-accounts'
 import type { EmailSenderChoiceDTO, EmailSendersDTO } from '@/lib/server/functions/channel-accounts'
 
@@ -85,8 +94,9 @@ export function SendFromCard({
   hasInboundRoute,
   rows = ALL_ROWS,
   title = 'Send from',
-  description = 'The address each kind of email comes from.',
+  description = 'The address your email comes from.',
   action,
+  id,
   onError,
 }: {
   senders: EmailSendersDTO
@@ -113,6 +123,8 @@ export function SendFromCard({
   title?: string
   description?: string
   action?: React.ReactNode
+  /** An anchor for a link that lands on this card. */
+  id?: string
   onError: (error: unknown) => void
 }) {
   const setSender = useSetEmailSender()
@@ -181,12 +193,100 @@ export function SendFromCard({
         : undefined
 
   const showDefault = rows.includes('default')
-  // Beside the default row "Same as default" is enough. Alone, the row's
-  // description says which address that is, since the select is too narrow.
-  const sameAsDefault = showDefault ? 'Same as default' : 'Workspace default'
+  const surfaces = OVERRIDES.filter(({ surface }) => rows.includes(surface))
+  // Support can reply from the inbox only while the workspace has one.
+  const offersInbox = (surface: Surface) => surface === 'support' && hasInboundRoute
+  // A kind of email sends from its own choice: an address, or the inbox where
+  // there is one. Anything else is the default.
+  const isException = (surface: Surface) => {
+    const choice = senders[surface]
+    return choice?.mode === 'address' || (choice?.mode === 'inbox' && offersInbox(surface))
+  }
+
+  // Beside the default, only the kinds of email that differ from it are listed,
+  // so a workspace that sends everything from one address sees one row. A kind
+  // picked from the menu is listed without a choice until one is made.
+  const [picked, setPicked] = useState<Surface[]>([])
+  const listed = showDefault
+    ? surfaces.filter(({ surface }) => isException(surface) || picked.includes(surface))
+    : surfaces
+  const addable = showDefault
+    ? surfaces.filter(
+        ({ surface }) =>
+          !listed.some((l) => l.surface === surface) &&
+          (optionsFor(surface).length > 0 || offersInbox(surface))
+      )
+    : []
+  const drop = (surface: Surface) => {
+    setPicked((current) => current.filter((s) => s !== surface))
+    if (senders[surface]) setSender.mutate({ surface, choice: null }, { onError })
+  }
+
+  const row = ({ surface, label }: (typeof OVERRIDES)[number]) => {
+    const id = `send-from-${surface}`
+    const exception = isException(surface)
+    // On its own page the row is the card's one setting, named for what it
+    // does; beside the default it is named for the kind of email.
+    const rowLabel = !showDefault && surface === 'support' ? 'Reply from' : label
+    const value = exception
+      ? valueOf(senders[surface], surface)
+      : showDefault
+        ? ''
+        : SAME_AS_DEFAULT
+    return (
+      <SettingRow
+        key={surface}
+        label={rowLabel}
+        htmlFor={id}
+        description={
+          (surface === 'support' ? (supportHint ?? behindInboxHint) : undefined) ??
+          notLiveHint(surface) ??
+          (!showDefault && !exception && resolvedDefault
+            ? `${surface === 'support' ? 'Replies come' : 'Email comes'} from ${resolvedDefault}.`
+            : undefined)
+        }
+        control={
+          <>
+            <Select
+              value={value}
+              disabled={setSender.isPending}
+              onValueChange={(v) => choose(surface, String(v))}
+            >
+              <SelectTrigger id={id} className="w-72 lg:w-96" aria-label={rowLabel}>
+                <SelectValue placeholder="Choose an address" />
+              </SelectTrigger>
+              <SelectContent>
+                {offersInbox(surface) && (
+                  <SelectItem value={INBOX}>Address the customer wrote to</SelectItem>
+                )}
+                {!showDefault && <SelectItem value={SAME_AS_DEFAULT}>Workspace default</SelectItem>}
+                {optionsFor(surface).map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {showDefault && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Use the default for ${label}`}
+                className="text-muted-foreground"
+                disabled={setSender.isPending}
+                onClick={() => drop(surface)}
+              >
+                <XMarkIcon className="size-4" />
+              </Button>
+            )}
+          </>
+        }
+      />
+    )
+  }
 
   return (
-    <SettingsCard title={title} description={description} action={action}>
+    <SettingsCard id={id} title={title} description={description} action={action}>
       <SettingRows>
         {showDefault && (
           <SettingRow
@@ -216,51 +316,33 @@ export function SendFromCard({
             }
           />
         )}
-        {OVERRIDES.filter(({ surface }) => rows.includes(surface)).map(({ surface, label }) => {
-          const id = `send-from-${surface}`
-          const offerInbox = surface === 'support' && hasInboundRoute
-          // Support without an inbound route has no inbox to reply from.
-          const value =
-            senders[surface]?.mode === 'inbox' && !offerInbox
-              ? SAME_AS_DEFAULT
-              : valueOf(senders[surface], surface)
-          return (
-            <SettingRow
-              key={surface}
-              label={label}
-              htmlFor={id}
-              description={
-                (surface === 'support' ? (supportHint ?? behindInboxHint) : undefined) ??
-                notLiveHint(surface) ??
-                (!showDefault && value === SAME_AS_DEFAULT && resolvedDefault
-                  ? `${surface === 'support' ? 'Replies come' : 'Email comes'} from ${resolvedDefault}.`
-                  : undefined)
-              }
-              control={
-                <Select
-                  value={value}
-                  disabled={setSender.isPending}
-                  onValueChange={(v) => choose(surface, String(v))}
-                >
-                  <SelectTrigger id={id} className="w-72 lg:w-96" aria-label={label}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {offerInbox && (
-                      <SelectItem value={INBOX}>Address the customer wrote to</SelectItem>
-                    )}
-                    <SelectItem value={SAME_AS_DEFAULT}>{sameAsDefault}</SelectItem>
-                    {optionsFor(surface).map((i) => (
-                      <SelectItem key={i.id} value={i.id}>
-                        {i.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              }
-            />
-          )
-        })}
+        {showDefault && listed.length > 0 && (
+          <div className="py-3.5">
+            <h3 className="text-xs font-medium text-muted-foreground">Except</h3>
+            <SettingRows className="mt-3">{listed.map(row)}</SettingRows>
+          </div>
+        )}
+        {!showDefault && listed.map(row)}
+        {addable.length > 0 && (
+          <div className="py-3.5">
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+                <PlusIcon className="size-4" />
+                Use a different address for
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {addable.map(({ surface, label }) => (
+                  <DropdownMenuItem
+                    key={surface}
+                    onClick={() => setPicked((current) => [...current, surface])}
+                  >
+                    {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </SettingRows>
     </SettingsCard>
   )

@@ -30,6 +30,7 @@ import type { EmailSendersDTO, SendingDomainDTO } from '@/lib/server/functions/c
 import { DomainSetupPanel } from './domain-setup-panel'
 import { SendingPausedNotice } from './sending-paused-notice'
 import { SENDER_SURFACE_NAMES, SendFromCard, type SenderIdentity } from './send-from-card'
+import { SEND_FROM_ANCHOR } from './surface-sender-row'
 import {
   errorText,
   SendingAddressDialog,
@@ -132,6 +133,8 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
         platformName={view.platformName}
         available={data?.addressMode !== 'unavailable'}
         guardPermitsAny={data?.addressMode === 'any'}
+        setsUpDomains={data?.addressMode === 'verified-domains'}
+        ownDomains={ownDomains(data?.platformAddress, data?.defaultFrom)}
         loaded={data !== undefined}
       />
       {/* With no address there is nothing to choose between, so the card
@@ -147,6 +150,7 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
           forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
           hasInboundRoute={!!data?.inboundRoute}
           rows={['default', ...surfaces]}
+          id={SEND_FROM_ANCHOR}
           onError={reason("Couldn't change where email is sent from.")}
         />
       )}
@@ -390,6 +394,16 @@ const senderLabel = (a: SendingAddress, workspaceName: string): string => {
   return name ? `${name} <${a.address ?? ''}>` : (a.address ?? '')
 }
 
+/**
+ * The domains of the platform's own addresses (the workspace's inbox on it and
+ * the address email leaves from by default), which need no setup to send from.
+ */
+const ownDomains = (...addresses: Array<string | null | undefined>): string[] =>
+  addresses.flatMap((a) => {
+    const domain = /@([^\s<>@]+)>?\s*$/.exec(a ?? '')?.[1]?.toLowerCase()
+    return domain ? [domain] : []
+  })
+
 /** Oldest first: the order the page lists addresses and offers them in. */
 const oldestFirst = <T extends SendingAddress>(addresses: T[]): T[] =>
   [...addresses].sort((x, y) => (x.createdAt ?? '').localeCompare(y.createdAt ?? ''))
@@ -482,6 +496,8 @@ function SendingAddressesSection({
   platformName,
   available,
   guardPermitsAny,
+  setsUpDomains,
+  ownDomains: platformDomains,
   loaded,
 }: {
   addresses: SendingAddress[]
@@ -493,6 +509,10 @@ function SendingAddressesSection({
   available: boolean
   /** One workspace: email still leaves as the address, so nothing falls back. */
   guardPermitsAny: boolean
+  /** Shared, and domains can be set up: a new domain brings records to add. */
+  setsUpDomains: boolean
+  /** The platform's own domains, which an address needs no setup to send from. */
+  ownDomains: readonly string[]
   /** Whether the config has arrived, so an empty list really is empty. */
   loaded: boolean
 }) {
@@ -527,7 +547,7 @@ function SendingAddressesSection({
 
   // Listed oldest first: the panel and the domain's status line sit under the
   // address that has been on the domain longest, so adding another one does
-  // not move them, and the newest address sits next to the Add button.
+  // not move them.
   const rows = oldestFirst(addresses).map((a) => {
     const domain = domainOf(a, domains)
     return { a, domain, phase: domain ? domainPhase(domain, now) : ('live' as const) }
@@ -562,7 +582,23 @@ function SendingAddressesSection({
   const empty = loaded && rows.length === 0 && unused.length === 0
 
   return (
-    <SettingsCard title="Sending addresses" flush>
+    <SettingsCard
+      title="Sending addresses"
+      flush
+      // The empty state carries its own, as the one thing to do there.
+      action={
+        empty ? undefined : (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!available}
+            onClick={() => setDialog({ kind: 'add' })}
+          >
+            Add address
+          </Button>
+        )
+      }
+    >
       <SettingsList>
         {rows.map(({ a, domain, phase }) => {
           const first = firstOnDomain.has(a.id)
@@ -687,15 +723,8 @@ function SendingAddressesSection({
             ) : undefined
           }
         />
-      ) : (
+      ) : !available || actionError ? (
         <div className="space-y-2 border-t border-border/50 px-4 py-3 sm:px-6">
-          <Button
-            variant="outline"
-            disabled={!available}
-            onClick={() => setDialog({ kind: 'add' })}
-          >
-            Add address
-          </Button>
           {!available && (
             <p className="text-[13px] text-muted-foreground">
               Custom sending addresses aren&apos;t available on this server.
@@ -707,10 +736,13 @@ function SendingAddressesSection({
             </p>
           )}
         </div>
-      )}
+      ) : null}
       <SendingAddressDialog
         target={dialog}
         workspaceName={workspaceName}
+        domains={domains}
+        setsUpDomains={setsUpDomains}
+        ownDomains={platformDomains}
         onClose={() => setDialog(null)}
       />
       <ConfirmDialog

@@ -14,6 +14,9 @@ import {
   type ProductSenderSurface,
 } from '@/lib/shared/email-sending-permissions'
 
+/** The Send from card's anchor on Settings → Email, where "Change" lands. */
+export const SEND_FROM_ANCHOR = 'send-from'
+
 export function SurfaceSenderRow({ surface }: { surface: ProductSenderSurface }) {
   const { data } = useQuery(surfaceSenderQuery(surface))
   const canChange = useHasPermission(EMAIL_SENDING_PERMISSION)
@@ -25,7 +28,9 @@ export function SurfaceSenderRow({ surface }: { surface: ProductSenderSurface })
       control={
         canChange ? (
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/admin/settings/email">Change</Link>
+            <Link to="/admin/settings/email" hash={SEND_FROM_ANCHOR}>
+              Change
+            </Link>
           </Button>
         ) : null
       }

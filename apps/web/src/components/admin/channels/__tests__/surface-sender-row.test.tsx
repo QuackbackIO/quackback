@@ -6,8 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 const canChange = vi.hoisted(() => ({ value: true }))
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
+  Link: ({ children, to, hash }: { children: React.ReactNode; to: string; hash?: string }) => (
+    <a href={hash ? `${to}#${hash}` : to}>{children}</a>
   ),
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
@@ -40,10 +40,10 @@ describe('SurfaceSenderRow', () => {
     expect(screen.getByText('Acme <hello@acme.com>')).toBeTruthy()
   })
 
-  it('links an admin to the Email settings to change it', () => {
+  it('links an admin to the Send from card on the Email settings to change it', () => {
     renderRow('Acme <hello@acme.com>')
     expect(screen.getByRole('link', { name: 'Change' }).getAttribute('href')).toBe(
-      '/admin/settings/email'
+      '/admin/settings/email#send-from'
     )
   })
 

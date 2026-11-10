@@ -37,6 +37,8 @@ vi.mock('@/components/ui/select', () => ({
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
     >
+      {/* Nothing chosen yet: the real trigger shows its placeholder. */}
+      {value === '' && <option value="" />}
       {children}
     </select>
   ),
@@ -45,6 +47,21 @@ vi.mock('@/components/ui/select', () => ({
   SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
   SelectItem: ({ value, children }: { value: string; children: ReactNode }) => (
     <option value={value}>{children}</option>
+  ),
+}))
+
+// The menu's popup also relies on layout APIs happy-dom lacks; render its items
+// in place, so what it offers and what picking one does are drivable.
+vi.mock('@/components/ui/dropdown-menu', () => ({
+  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: ReactNode }) => (
+    <button type="button">{children}</button>
+  ),
+  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div role="menu">{children}</div>,
+  DropdownMenuItem: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
+    <button type="button" role="menuitem" onClick={onClick}>
+      {children}
+    </button>
   ),
 }))
 
@@ -72,12 +89,13 @@ function renderCard(
     platformFrom: string | null
     platformName: string
     platformInbox: string | null
+    identities: Array<{ id: string; label: string; live: boolean }>
   }> = {}
 ) {
   return render(
     <SendFromCard
       senders={{ ...NONE, ...over.senders }}
-      identities={[HELLO, NEWS, PENDING]}
+      identities={over.identities ?? [HELLO, NEWS, PENDING]}
       platformFrom={over.platformFrom === undefined ? PLATFORM : over.platformFrom}
       platformName={over.platformName}
       platformInbox={over.platformInbox}
@@ -92,6 +110,10 @@ function renderCard(
 
 const select = (name: string) => screen.getByRole('combobox', { name }) as HTMLSelectElement
 const options = (name: string) => [...select(name).options].map((o) => o.textContent)
+/** The kinds of email the "Use a different address for" menu offers. */
+const addable = () => screen.queryAllByRole('menuitem').map((item) => item.textContent)
+const pick = (name: string) => fireEvent.click(screen.getByRole('menuitem', { name }))
+const rowNames = () => screen.getAllByRole('combobox').map((s) => s.getAttribute('aria-label'))
 
 beforeEach(() => setSender.mockReset())
 afterEach(cleanup)
@@ -272,47 +294,84 @@ describe('the default sender', () => {
   })
 })
 
-describe('the per-kind overrides', () => {
-  it.each(['Feedback board', 'Changelog', 'Status page'])(
-    '%s starts at Same as default, then the verified addresses',
-    (name) => {
-      renderCard({ hasInboundRoute: true })
-      expect(options(name)).toEqual(['Same as default', HELLO.label, NEWS.label])
-      expect(select(name).value).toBe('__default')
-    }
-  )
+describe('the kinds of email that differ from the default', () => {
+  it('lists only the default while every kind uses it', () => {
+    renderCard()
+    expect(rowNames()).toEqual(['Default'])
+    expect(screen.queryByText('Except')).toBeNull()
+    expect(addable()).toEqual(['Support', 'Feedback board', 'Changelog', 'Status page'])
+  })
 
-  it('points a kind of email at an address, and back to the default', () => {
+  it('lists a kind once it sends from something else, with its own addresses to choose', () => {
     renderCard({ senders: { changelog: { mode: 'address', id: NEWS.id } } })
+    expect(rowNames()).toEqual(['Default', 'Changelog'])
+    expect(screen.getByText('Except')).toBeTruthy()
+    // Going back to the default is the remove button, not an option.
+    expect(options('Changelog')).toEqual([HELLO.label, NEWS.label])
     expect(select('Changelog').value).toBe(NEWS.id)
-    fireEvent.change(select('Changelog'), { target: { value: '__default' } })
+    expect(addable()).toEqual(['Support', 'Feedback board', 'Status page'])
+  })
+
+  it('goes back to the default when the exception is removed', () => {
+    renderCard({ senders: { changelog: { mode: 'address', id: NEWS.id } } })
+    fireEvent.click(screen.getByRole('button', { name: 'Use the default for Changelog' }))
     expect(setSender).toHaveBeenLastCalledWith(
       { surface: 'changelog', choice: null },
       expect.anything()
     )
+  })
+
+  it('adds a kind from the menu, and saves only once an address is chosen', () => {
+    renderCard()
+    pick('Feedback board')
+    expect(rowNames()).toEqual(['Default', 'Feedback board'])
+    expect(select('Feedback board').value).toBe('')
+    expect(addable()).not.toContain('Feedback board')
+    expect(setSender).not.toHaveBeenCalled()
+
+    fireEvent.change(select('Feedback board'), { target: { value: HELLO.id } })
+    expect(setSender).toHaveBeenLastCalledWith(
+      { surface: 'feedback', choice: { mode: 'address', id: HELLO.id } },
+      expect.anything()
+    )
+  })
+
+  it('drops a kind picked from the menu without saving anything', () => {
+    renderCard()
+    pick('Status page')
+    fireEvent.click(screen.getByRole('button', { name: 'Use the default for Status page' }))
+    expect(rowNames()).toEqual(['Default'])
+    expect(setSender).not.toHaveBeenCalled()
+  })
+
+  it('offers nothing to add while there is no address to point a kind at', () => {
+    renderCard({ identities: [PENDING] })
+    expect(addable()).toEqual([])
+    expect(screen.queryByText('Use a different address for')).toBeNull()
+  })
+
+  it('offers support alone when the inbox is the only other choice', () => {
+    renderCard({ identities: [], hasInboundRoute: true })
+    expect(addable()).toEqual(['Support'])
   })
 })
 
 describe('support', () => {
   it('offers the address the customer wrote to first when the workspace receives email', () => {
     renderCard({ hasInboundRoute: true, senders: { support: { mode: 'inbox' } } })
-    expect(options('Support')).toEqual([
-      'Address the customer wrote to',
-      'Same as default',
-      HELLO.label,
-      NEWS.label,
-    ])
+    expect(options('Support')).toEqual(['Address the customer wrote to', HELLO.label, NEWS.label])
     expect(select('Support').value).toBe('__inbox')
   })
 
-  it('starts at Same as default without an inbound route', () => {
+  it('uses the default without an inbound route, whatever was chosen while there was one', () => {
     renderCard({ senders: { support: { mode: 'inbox' } } })
-    expect(options('Support')).toEqual(['Same as default', HELLO.label, NEWS.label])
-    expect(select('Support').value).toBe('__default')
+    expect(rowNames()).toEqual(['Default'])
+    expect(addable()).toContain('Support')
   })
 
   it('chooses the inbox', () => {
     renderCard({ hasInboundRoute: true })
+    pick('Support')
     fireEvent.change(select('Support'), { target: { value: '__inbox' } })
     expect(setSender).toHaveBeenLastCalledWith(
       { surface: 'support', choice: { mode: 'inbox' } },
@@ -356,22 +415,23 @@ describe('support', () => {
       forwardingTargetPermitted: false,
       ...over,
     } as Parameters<typeof renderCard>[0])
-    expect(screen.queryByText(/isn't verified yet/)).toBeNull()
+    expect(screen.queryByText(/isn't verified, so replies come from/)).toBeNull()
   })
 })
 
 describe('showing only some rows', () => {
-  const rowNames = () => screen.getAllByRole('combobox').map((s) => s.getAttribute('aria-label'))
-
-  it('shows only the kinds of email asked for', () => {
+  it('offers only the kinds of email asked for', () => {
     renderCard({ rows: ['default', 'feedback', 'changelog'] })
-    expect(rowNames()).toEqual(['Default', 'Feedback board', 'Changelog'])
+    expect(rowNames()).toEqual(['Default'])
+    expect(addable()).toEqual(['Feedback board', 'Changelog'])
   })
 
   it('says which address the default is when the default row is not shown', () => {
     renderCard({ rows: ['support'], senders: { default: { mode: 'address', id: HELLO.id } } })
-    expect(rowNames()).toEqual(['Support'])
-    expect(options('Support')[0]).toBe('Workspace default')
+    // The card's one setting, named for what it does rather than for the card.
+    expect(rowNames()).toEqual(['Reply from'])
+    expect(options('Reply from')[0]).toBe('Workspace default')
+    expect(screen.queryByRole('button', { name: /Use the default for/ })).toBeNull()
     expect(screen.getByText(`Replies come from ${HELLO.label}.`)).toBeTruthy()
   })
 
@@ -382,11 +442,14 @@ describe('showing only some rows', () => {
 
   it('says nothing more once the row has its own address', () => {
     renderCard({ rows: ['support'], senders: { support: { mode: 'address', id: NEWS.id } } })
-    expect(screen.queryByText(/Sends from/)).toBeNull()
+    expect(screen.queryByText(/Replies come from/)).toBeNull()
   })
 
-  it('keeps the short wording beside the default row', () => {
-    renderCard({ rows: ['default', 'support'] })
-    expect(options('Support')[0]).toBe('Same as default')
+  it('has no way back to the default among the options beside the default row', () => {
+    renderCard({
+      rows: ['default', 'support'],
+      senders: { support: { mode: 'address', id: HELLO.id } },
+    })
+    expect(options('Support')).toEqual([HELLO.label, NEWS.label])
   })
 })
