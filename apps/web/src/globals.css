@@ -580,6 +580,21 @@ a svg,
   @apply rounded-md bg-muted animate-pulse;
 }
 
+/* The portal menu on a row of its own: the page's measure at least, and the
+   menu's width with its padding when that is wider, so a phone scrolls to
+   its last page (portal-header.tsx). */
+@utility qb-menu-row {
+  margin-inline: auto;
+  width: max-content;
+  min-width: min(100%, var(--qb-page-max, 72rem));
+  max-width: var(--qb-page-max, 72rem);
+  padding-inline: 1rem;
+
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+}
+
 /* A 24px target around a small inline control, such as a tag chip. */
 @utility qb-hit-24 {
   position: relative;

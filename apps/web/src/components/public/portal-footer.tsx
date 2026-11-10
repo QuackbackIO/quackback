@@ -34,7 +34,6 @@ export function PortalFooter({
             width={14}
             height={14}
             loading="lazy"
-            decoding="async"
             className="-mt-px opacity-70 transition-opacity group-hover:opacity-100"
           />
           <span>

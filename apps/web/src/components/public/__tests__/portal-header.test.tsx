@@ -416,14 +416,18 @@ describe('PortalHeader — design layouts', () => {
       const classes = holder.className.split(' ')
       // As wide as its content when that is wider than the row, so the end padding
       // counts and the row knows there is more; never narrower than the row.
-      expect(classes, layout).toContain('w-max')
-      expect(
-        classes.some((c) => c.startsWith('min-w-')),
-        layout
-      ).toBe(true)
+      if (layout === 'centered') {
+        expect(classes, layout).toEqual(expect.arrayContaining(['w-max', 'min-w-full']))
+      } else {
+        expect(classes, layout).toContain('qb-menu-row')
+      }
       expect(classes, layout).not.toContain('w-full')
       unmount()
     }
+    const row = portalUtility('qb-menu-row')
+    expect(row).toContain('width: max-content;')
+    expect(row).toContain('min-width: min(100%, var(--qb-page-max, 72rem));')
+    expect(row).toContain('max-width: var(--qb-page-max, 72rem);')
   })
 
   it('follows the draft layout in the preview over the saved one', () => {

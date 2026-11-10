@@ -534,13 +534,12 @@ export function PortalHeader({
 }
 
 /**
- * A menu on a row of its own: the page's width at least, and as wide as the
- * menu and its side padding when that is wider, so on a phone the row
- * scrolls, fades and offers its way on (NavScroller) rather than running the
- * last page's name into the screen's edge.
+ * A menu on a row of its own (qb-menu-row in globals.css): the page's width
+ * at least, and as wide as the menu and its side padding when that is wider,
+ * so on a phone the row scrolls, fades and offers its way on (NavScroller)
+ * rather than running the last page's name into the screen's edge.
  */
-const MENU_ROW =
-  'mx-auto w-max min-w-[min(100%,var(--qb-page-max,72rem))] max-w-[var(--qb-page-max,72rem)] px-4 sm:px-6'
+const MENU_ROW = 'qb-menu-row'
 
 const navItemClass = (isActive: boolean) =>
   cn(
