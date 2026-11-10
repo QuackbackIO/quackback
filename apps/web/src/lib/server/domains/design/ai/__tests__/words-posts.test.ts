@@ -61,10 +61,11 @@ describe('posts wording', () => {
   it('reaches the words the portal is given', () => {
     const words = WORDS_EXAMPLES[0]!.answers.signature
     const idea = { ...words, home_headline: 'Got an idea?', submit: 'Send your idea' }
+    // Home on, so its headline is written too.
+    const design = defaultDesign()
+    design.nav.home.on = true
     const values = (language: string) =>
-      Object.fromEntries(
-        wordsChanges(idea, defaultDesign(), ON, language).map((c) => [c.path, c.value])
-      )
+      Object.fromEntries(wordsChanges(idea, design, ON, language).map((c) => [c.path, c.value]))
     expect(values('en')['pages.home.headline.title']).toBe('Got a post?')
     expect(values('en')['pages.feedback.copy.submit']).toBe('Send your post')
     expect(values('de')['pages.home.headline.title']).toBe('Got an idea?')
