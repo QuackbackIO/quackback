@@ -130,7 +130,7 @@ describe('overrides in the publish summary', () => {
     expect(result.look.map((row) => row.kind)).not.toContain('Other')
   })
 
-  it('notes an override whose part is gone, which nothing draws', () => {
+  it('says in one quiet line that an override whose part is gone is dropped', () => {
     const { overrides } = summary((draft) => {
       draft.overrides = [
         {
@@ -140,10 +140,34 @@ describe('overrides in the publish summary', () => {
         },
       ]
     })
-    expect(overrides.at(-1)).toEqual({
-      kind: 'Not drawn',
-      title: 'Section headings in a block that is gone',
-      detail: 'Its part is gone. Reset it in Theme, under Overrides.',
+    expect(overrides).toEqual([
+      {
+        kind: 'Dropped',
+        title: 'Section headings in a block that is gone',
+        detail: 'Its part is gone',
+      },
+    ])
+  })
+
+  it('folds several gone overrides into that one line', () => {
+    const gone = (block: string) => ({
+      id: `part:block.${block}.heading:heading`,
+      target: {
+        scope: 'part' as const,
+        part: `block.${block}.heading`,
+        element: 'heading' as const,
+      },
+      style: { base: { size: 20 } },
     })
+    const { overrides } = summary((draft) => {
+      draft.overrides = [gone('zzzzzzzz'), gone('yyyyyyyy')]
+    })
+    expect(overrides).toEqual([
+      {
+        kind: 'Dropped',
+        title: 'Section headings in a block that is gone and 1 more',
+        detail: 'Its part is gone',
+      },
+    ])
   })
 })

@@ -138,10 +138,17 @@ export function publishSummary(
   return { menu: menuRows(live, draft, gates), look, overrides: overrideRows(live, draft) }
 }
 
-/** A row for each override added, changed or removed, then each that nothing draws. */
+/**
+ * A row for each override added, changed or removed, then one quiet line for
+ * those whose part is gone, which publishing drops.
+ */
 function overrideRows(live: PortalDesign, draft: PortalDesign): SummaryRow[] {
+  const orphans = orphanedOverrides(draft)
+  const dropped = new Set(orphans.map((o) => o.id))
   const before = new Map((live.overrides ?? []).map((o) => [o.id, o]))
-  const after = new Map((draft.overrides ?? []).map((o) => [o.id, o]))
+  const after = new Map(
+    (draft.overrides ?? []).filter((o) => !dropped.has(o.id)).map((o) => [o.id, o])
+  )
   const scope = (o: StyleOverride) => (o.target.scope === 'part' ? 'This one' : 'This page')
   const rows: SummaryRow[] = []
   for (const [id, o] of after) {
@@ -160,13 +167,17 @@ function overrideRows(live: PortalDesign, draft: PortalDesign): SummaryRow[] {
       })
   }
   for (const [id, o] of before)
-    if (!after.has(id)) rows.push({ kind: 'Removed', title: overrideName(live, o) })
-  for (const o of orphanedOverrides(draft))
+    if (!after.has(id) && !dropped.has(id))
+      rows.push({ kind: 'Removed', title: overrideName(live, o) })
+  if (orphans.length)
     rows.push({
-      kind: 'Not drawn',
-      title: overrideName(draft, o),
-      detail: 'Its part is gone. Reset it in Theme, under Overrides.',
+      kind: 'Dropped',
+      title:
+        orphans.length === 1
+          ? overrideName(draft, orphans[0]!)
+          : `${overrideName(draft, orphans[0]!)} and ${orphans.length - 1} more`,
+      detail: 'Its part is gone',
     })
-  const ORDER = ['Added', 'Changed', 'Removed', 'Not drawn']
+  const ORDER = ['Added', 'Changed', 'Removed', 'Dropped']
   return rows.sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind))
 }

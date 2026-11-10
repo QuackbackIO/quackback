@@ -134,6 +134,30 @@ describe('drafts', () => {
   })
 })
 
+describe('publishing a draft with overrides whose part is gone', () => {
+  it('drops them, keeping every override that still reaches something', async () => {
+    const who = await admin()
+    const doc = withAccent('#0F766E')
+    doc.overrides = [
+      {
+        id: 'part:block.zzzzzzzz.heading:heading',
+        target: { scope: 'part', part: 'block.zzzzzzzz.heading', element: 'heading' },
+        style: { base: { size: 20 } },
+      },
+      {
+        id: 'page:feedback:button',
+        target: { scope: 'page', page: 'feedback', element: 'button' },
+        style: { base: { radius: 6 } },
+      },
+    ]
+    await saveDraft(doc, who)
+    await publishDraft({ ...who, source: 'appearance' })
+    expect((await getPublishedDesign())?.overrides?.map((o) => o.id)).toEqual([
+      'page:feedback:button',
+    ])
+  })
+})
+
 describe('two people saving the same draft', () => {
   it('refuses a save made against a draft that has changed since', async () => {
     const who = await admin()

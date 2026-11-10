@@ -24,6 +24,7 @@ import { ConflictError, NotFoundError } from '@/lib/shared/errors'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { readStoredDesign } from '@/lib/shared/design/stored-design'
 import { sameDesign } from '@/lib/shared/design/diff'
+import { withoutOrphanedOverrides } from '@/lib/shared/design/override-cascade'
 import { logger } from '@/lib/server/logger'
 import { digestOf } from '@/lib/server/utils/canonical-json'
 import { authorKey, recordAuthors, type DraftAuthors } from './draft-authors'
@@ -233,15 +234,19 @@ export async function discardDraft(expectedRevision?: string): Promise<string> {
   })
 }
 
-/** Writes the next revision, makes it the published one, and trims the oldest. */
+/**
+ * Writes the next revision, without overrides whose part is gone, makes it
+ * the published one, and trims the oldest.
+ */
 async function publishDocument(
   tx: Transaction,
   designId: PortalDesignId,
-  document: PortalDesign,
+  given: PortalDesign,
   author: Pick<DesignAuthor, 'principalId'> | null,
   source: PortalDesignSource,
   message: string | null
 ) {
+  const document = withoutOrphanedOverrides(given)
   const [latest] = await tx
     .select({ number: portalDesignRevisions.number })
     .from(portalDesignRevisions)
