@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
 // The public changelog list renders an empty state when there are no entries.
@@ -49,7 +49,7 @@ describe('ChangelogListPublic empty state', () => {
 })
 
 describe('ChangelogListPublic while its entries load', () => {
-  it('keeps a screen of room in the placeholder look, and says it is loading to a screen reader', () => {
+  function renderLoading(entries?: 'timeline' | 'cards' | 'compact') {
     mockUseInfiniteQuery.mockReturnValue({
       data: undefined,
       fetchNextPage: vi.fn(),
@@ -59,13 +59,23 @@ describe('ChangelogListPublic while its entries load', () => {
     })
     const { container } = render(
       <IntlProvider locale="en">
-        <ChangelogListPublic />
+        <ChangelogListPublic entries={entries} />
       </IntlProvider>
     )
-    const busy = container.querySelector('[aria-busy=true]')!
+    return container.querySelector('[aria-busy=true]')!
+  }
+
+  it('keeps a screen of room in the placeholder look, and says it is loading to a screen reader', () => {
+    const busy = renderLoading()
     // A screen of room, so the footer stays below until the entries arrive.
     expect(busy.className.split(' ')).toContain('min-h-screen')
     expect(busy.querySelector('.qb-skeleton')).not.toBeNull()
     expect(screen.getByText('Loading changelog...').className).toContain('sr-only')
+  })
+
+  it('keeps half a screen for compact rows, which a page of fills no more', () => {
+    expect(renderLoading('compact').className.split(' ')).toContain('min-h-[50vh]')
+    cleanup()
+    expect(renderLoading('cards').className.split(' ')).toContain('min-h-screen')
   })
 })
