@@ -75,6 +75,7 @@ export const API_ROUTE_SEGMENTS: ReadonlySet<string> = new Set([
   'moderation',
   'note',
   'openapi',
+  'ops',
   'pending',
   'portal_design',
   'posts',
