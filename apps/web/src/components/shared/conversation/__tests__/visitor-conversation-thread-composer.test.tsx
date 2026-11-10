@@ -5,7 +5,8 @@
  * what was typed, empties after a send, signals typing to the team and looks
  * up help articles for a first message. The editor is a stub that hands the
  * test its onDocumentChange; the thread viewport stub counts the thread's
- * renders.
+ * renders. Reading the thread hands the read hook the visitor's own watermark
+ * and refreshes the unread counts the read changed.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -26,6 +27,7 @@ const probe = vi.hoisted(() => ({
   onSubmit: null as (() => void) | null,
   editorValue: undefined as unknown,
   previewed: [] as string[],
+  markRead: null as null | { readThrough?: string | null; onMarked?: () => void },
 }))
 
 vi.mock('@/components/ui/rich-text-editor', async () => {
@@ -61,7 +63,9 @@ vi.mock('@/components/conversation/thread', async (importOriginal) => {
     },
     useThreadVirtualizer: () => ({ isAtEnd: () => true, scrollToEnd: () => {} }),
     useOlderMessages: () => ({ loadingOlder: false, loadOlder: () => {} }),
-    useMarkReadOnIncoming: () => {},
+    useMarkReadOnIncoming: (args: { readThrough?: string | null; onMarked?: () => void }) => {
+      probe.markRead = args
+    },
   }
 })
 
@@ -97,6 +101,7 @@ vi.mock('@/components/shared/link-preview-card', () => ({
 
 import { VisitorSurfaceRpcProvider, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import { VisitorConversationThread } from '../visitor-conversation-thread'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 
 afterEach(() => {
   cleanup()
@@ -104,9 +109,11 @@ afterEach(() => {
   probe.editorMounts = 0
   probe.onDocumentChange = null
   probe.previewed = []
+  probe.markRead = null
 })
 
 const CONVERSATION_ID = 'conversation_01h00000000000000000000000' as ConversationId
+const VISITOR_READ_AT = '2026-07-02T10:00:00.000Z'
 
 function doc(text: string) {
   return { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }
@@ -137,7 +144,9 @@ function makeRpc(existing: boolean) {
       assistant: null,
       canEmailVisitor: false,
       linkedTicket: null,
-      conversation: existing ? { id: CONVERSATION_ID, status: 'open' } : null,
+      conversation: existing
+        ? { id: CONVERSATION_ID, status: 'open', visitorLastReadAt: VISITOR_READ_AT }
+        : null,
       messages: [],
       hasMore: false,
     })),
@@ -164,7 +173,9 @@ async function renderThread({
   helpSearch,
   linkPreviews = false,
   initialDraft,
+  queryClient = new QueryClient(),
 }: {
+  queryClient?: QueryClient
   existing?: boolean
   helpSearch?: (q: string) => Promise<Array<{ slug: string; title: string }>>
   linkPreviews?: boolean
@@ -172,7 +183,7 @@ async function renderThread({
 } = {}) {
   const rpc = makeRpc(existing)
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={{}} onError={() => {}}>
         <VisitorSurfaceRpcProvider value={rpc as unknown as VisitorSurfaceRpc}>
           <VisitorConversationThread
@@ -280,5 +291,24 @@ describe('VisitorConversationThread composer', () => {
     await renderThread({ linkPreviews: true })
     type('', 'see https://example.com')
     await waitFor(() => expect(probe.previewed.at(-1)).toBe('see https://example.com'))
+  })
+})
+
+describe('VisitorConversationThread reading', () => {
+  it("passes the visitor's own read watermark to the read hook", async () => {
+    await renderThread({ existing: true })
+    await waitFor(() => expect(probe.markRead?.readThrough).toBe(VISITOR_READ_AT))
+  })
+
+  it('refreshes the unread lists and badges once the thread is marked read', async () => {
+    const queryClient = new QueryClient()
+    const list = conversationKeys.widgetConversationList(0)
+    const badge = conversationKeys.widgetMessengerUnread(0)
+    queryClient.setQueryData(list, { conversations: [] })
+    queryClient.setQueryData(badge, { total: 1 })
+    await renderThread({ existing: true, queryClient })
+    act(() => probe.markRead?.onMarked?.())
+    expect(queryClient.getQueryState(list)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(badge)?.isInvalidated).toBe(true)
   })
 })
