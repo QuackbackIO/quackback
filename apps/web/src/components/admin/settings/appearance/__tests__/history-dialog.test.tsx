@@ -19,6 +19,7 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
       number: 2,
       source: 'appearance',
       message: null,
+      publishedBy: 'Sam Rivera',
       createdAt: new Date(),
     },
     {
@@ -26,6 +27,7 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
       number: 1,
       source: 'appearance',
       message: 'First',
+      publishedBy: null,
       createdAt: new Date(),
     },
   ],
@@ -41,6 +43,18 @@ afterEach(() => {
 })
 
 describe('HistoryDialog', () => {
+  it('says who published each version, when it knows', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <HistoryDialog open onOpenChange={() => {}} currentNumber={2} onRestore={vi.fn()} />
+      </QueryClientProvider>
+    )
+    const rows = await screen.findAllByRole('listitem')
+    expect(rows[0]!.textContent).toContain('Appearance · Sam Rivera · ')
+    expect(rows[1]!.textContent).toContain('First · ')
+    expect(rows[1]!.textContent).not.toContain('Sam Rivera')
+  })
+
   it('copies a version into the draft without publishing, and closes', async () => {
     const onCopy = vi.fn(async () => ({ ok: true as const }))
     const onRestore = vi.fn()

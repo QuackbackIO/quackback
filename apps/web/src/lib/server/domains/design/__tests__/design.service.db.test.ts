@@ -134,6 +134,19 @@ describe('drafts', () => {
   })
 })
 
+describe('the versions list', () => {
+  it('names who published each version, and no one for one made by setup', async () => {
+    await testDb.transaction((tx) => publishStartingDesign(tx, defaultDesign()))
+    const who = await admin()
+    await saveDraft(withAccent('#0F766E'), who)
+    await publishDraft({ ...who, source: 'appearance' })
+    expect((await listRevisions()).map((r) => [r.number, r.publishedBy])).toEqual([
+      [2, 'Admin'],
+      [1, null],
+    ])
+  })
+})
+
 describe('publishing a draft with overrides whose part is gone', () => {
   it('drops them, keeping every override that still reaches something', async () => {
     const who = await admin()

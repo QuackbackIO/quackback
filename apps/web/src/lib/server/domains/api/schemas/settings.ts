@@ -236,6 +236,8 @@ const DesignVersionSchema = z
     source: z.enum(['appearance', 'ai', 'api', 'mcp', 'import', 'conversion', 'restore']),
     message: z.string().nullable(),
     principalId: z.string().nullable(),
+    /** The name of who published it; null for a version setup or a former teammate made. */
+    publishedBy: z.string().nullable(),
     createdAt: z.string(),
   })
   .meta({ id: 'PortalDesignVersion' })

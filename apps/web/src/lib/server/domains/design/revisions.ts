@@ -1,5 +1,5 @@
 import type { PortalDesignRevisionId } from '@quackback/ids'
-import { db, desc, eq, portalDesignRevisions } from '@/lib/server/db'
+import { db, desc, eq, portalDesignRevisions, principal, user } from '@/lib/server/db'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { designRow, REVISIONS_KEPT, revision, storedDesign } from './design.service'
 
@@ -18,21 +18,29 @@ export async function draftWaiting(): Promise<boolean> {
   return !!(await designRow(db))?.draft
 }
 
-/** The published versions, newest first. */
+/** The published versions, newest first, each with who published it, if anyone did. */
 export async function listRevisions(limit = REVISIONS_KEPT) {
   const row = await designRow(db)
   if (!row) return []
-  return db
+  const rows = await db
     .select({
       id: portalDesignRevisions.id,
       number: portalDesignRevisions.number,
       source: portalDesignRevisions.source,
       message: portalDesignRevisions.message,
       principalId: portalDesignRevisions.principalId,
+      displayName: principal.displayName,
+      userName: user.name,
       createdAt: portalDesignRevisions.createdAt,
     })
     .from(portalDesignRevisions)
+    .leftJoin(principal, eq(principal.id, portalDesignRevisions.principalId))
+    .leftJoin(user, eq(user.id, principal.userId))
     .where(eq(portalDesignRevisions.designId, row.id))
     .orderBy(desc(portalDesignRevisions.number))
     .limit(limit)
+  return rows.map(({ displayName, userName, ...version }) => ({
+    ...version,
+    publishedBy: displayName ?? userName ?? null,
+  }))
 }
