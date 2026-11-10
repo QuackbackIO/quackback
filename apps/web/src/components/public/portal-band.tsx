@@ -123,20 +123,40 @@ const BAND_FILL = [
  */
 function useBandHeight() {
   const ref = useRef<HTMLElement>(null)
+  const watching = useRef<{ band: HTMLElement; stop: () => void } | null>(null)
+  // Checked after every render, as the band comes and goes with its headline,
+  // but watched afresh only when the band itself changed: a property on the
+  // page's root restyles the whole page, so it is not dropped and set again
+  // each time the band re-renders.
   useEffect(() => {
     const band = ref.current
-    if (!band) return
-    const root = document.documentElement
-    const publish = () => root.style.setProperty('--portal-band-height', `${band.offsetHeight}px`)
-    publish()
-    const observer = new ResizeObserver(publish)
-    observer.observe(band)
-    return () => {
+    if (watching.current?.band === band) return
+    watching.current?.stop()
+    watching.current = band ? watchBandHeight(band) : null
+  })
+  useEffect(
+    () => () => {
+      watching.current?.stop()
+      watching.current = null
+    },
+    []
+  )
+  return ref
+}
+
+function watchBandHeight(band: HTMLElement) {
+  const root = document.documentElement
+  const publish = () => root.style.setProperty('--portal-band-height', `${band.offsetHeight}px`)
+  publish()
+  const observer = new ResizeObserver(publish)
+  observer.observe(band)
+  return {
+    band,
+    stop: () => {
       observer.disconnect()
       root.style.removeProperty('--portal-band-height')
-    }
-  })
-  return ref
+    },
+  }
 }
 
 /**
@@ -344,8 +364,11 @@ export function PortalBand({
         {/* Panel: the words sit on a block of the second colour, in its own text colours. */}
         <div
           className={cn(
-            // The headline measures its size against the words' own width.
-            '[container-type:inline-size]',
+            // The headline measures its size against the words' own width. That
+            // width is the column's, never their content's: a size container has
+            // none of its own, so centred in a grid beside an image it would
+            // shrink to nothing and set the headline a letter to a line.
+            '[container-type:inline-size] w-full',
             SPLIT.words,
             '[[data-qb-band-shape=panel]_&]:max-w-3xl [[data-qb-band-shape=panel]_&]:rounded-[var(--qb-radius-panel,0.75rem)] [[data-qb-band-shape=panel]_&]:bg-[var(--qb-band-panel-bg)] [[data-qb-band-shape=panel]_&]:p-6 sm:[[data-qb-band-shape=panel]_&]:p-10 [[data-qb-band-shape=panel]_&]:[--qb-band-ink:var(--qb-band-panel-ink)] [[data-qb-band-shape=panel]_&]:[--qb-band-muted:var(--qb-band-panel-muted)] [[data-qb-band-shape=panel]_&]:[--qb-band-accent:var(--qb-band-panel-accent)] [[data-qb-band-align=centre]_&]:mx-auto'
           )}
@@ -426,7 +449,9 @@ export function PortalBand({
             alt={image.alt ?? ''}
             data-qb-part="band-image"
             className={cn(
-              'mt-6 max-h-48 w-full rounded-[var(--qb-radius-panel,0.75rem)] object-cover [object-position:var(--qb-image-focus,center)] md:mt-0 md:h-auto md:max-h-[26rem] md:[aspect-ratio:var(--qb-image-aspect,4/3)]',
+              // Its height is kept before it loads, so nothing under it moves when it does:
+              // a fixed strip on phones, the design's aspect wider.
+              'mt-6 h-48 w-full rounded-[var(--qb-radius-panel,0.75rem)] object-cover [object-position:var(--qb-image-focus,center)] md:mt-0 md:h-auto md:max-h-[26rem] md:[aspect-ratio:var(--qb-image-aspect,4/3)]',
               'max-md:[[data-qb-image-phone=hide]_&]:hidden',
               SPLIT.image
             )}

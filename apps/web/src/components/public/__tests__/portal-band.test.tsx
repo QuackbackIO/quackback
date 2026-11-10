@@ -287,6 +287,72 @@ describe('PortalBand', () => {
     expect(band.hasAttribute('data-qb-band-image')).toBe(false)
   })
 
+  it('keeps a side image’s room before it loads, so the page under it never moves', () => {
+    root.portalDesign = {
+      ...view({ title: { en: 'Ideas' }, subtitle: {} }),
+      bandImage: { url: '/api/storage/portal-images/room.jpg', place: 'side' },
+    }
+    mount()
+    const classes = document.querySelector('img[data-qb-part=band-image]')!.className.split(' ')
+    // A phone's strip is a height, not a ceiling the loaded image grows to.
+    expect(classes).toContain('h-48')
+    expect(classes).not.toContain('max-h-48')
+    // Wider, the design's aspect holds the room.
+    expect(classes).toContain('md:[aspect-ratio:var(--qb-image-aspect,4/3)]')
+  })
+
+  it('gives the words their column’s width, so a centred hero beside an image keeps its headline whole', () => {
+    root.portalDesign = {
+      ...view({ title: { en: 'Ideas' }, subtitle: {} }),
+      bandImage: { url: '/api/storage/portal-images/room.jpg', place: 'side' },
+    }
+    mount()
+    const words = document.querySelector('[data-qb-part=headline]')!.parentElement!
+    const classes = words.className.split(' ')
+    // A size container takes no width from its content; centred with auto margins
+    // in the image's grid, it would shrink to nothing without its own.
+    expect(classes).toContain('[container-type:inline-size]')
+    expect(classes).toContain('w-full')
+  })
+
+  it('publishes its height once, not afresh each time it re-renders', () => {
+    const watched: Element[] = []
+    const stopped: number[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(el: Element) {
+          watched.push(el)
+        }
+        disconnect() {
+          stopped.push(1)
+        }
+      }
+    )
+    try {
+      root.portalDesign = view({ title: { en: 'Ideas' }, subtitle: {} }, 'brand')
+      const tree = (title: string) => (
+        <IntlProvider locale="en">
+          <PortalBand words={{ title }} />
+        </IntlProvider>
+      )
+      const { rerender, unmount } = render(tree('One'))
+      const root_ = document.documentElement
+      expect(root_.style.getPropertyValue('--portal-band-height')).not.toBe('')
+      rerender(tree('Two'))
+      rerender(tree('Three'))
+      // One band, watched once and never dropped while it stays.
+      expect(watched).toHaveLength(1)
+      expect(stopped).toHaveLength(0)
+      expect(root_.style.getPropertyValue('--portal-band-height')).not.toBe('')
+      unmount()
+      expect(stopped).toHaveLength(1)
+      expect(root_.style.getPropertyValue('--portal-band-height')).toBe('')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('serves a side image at the size the screen needs, fetched first', () => {
     const srcSet =
       '/api/storage/portal-images/room-640.webp 640w,/api/storage/portal-images/room.webp 2560w'
