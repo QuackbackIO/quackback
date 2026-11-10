@@ -29,6 +29,8 @@ export const savePortalDesignDraftFn = createServerFn({ method: 'POST' })
       design: z.unknown(),
       /** The draft revision the change was made against; a newer draft refuses it. */
       revision: z.string().max(64).optional(),
+      /** Save the draft this replaces aside first: for Keep mine, or a session's first save. */
+      saveAside: z.enum(['keep-mine', 'session']).optional(),
     })
   )
   .handler(async ({ data }) => {
@@ -36,7 +38,7 @@ export const savePortalDesignDraftFn = createServerFn({ method: 'POST' })
     const { designAuthor } = await import('@/lib/server/domains/design/design-author')
     const author = await designAuthor(auth)
     const { saveDesignDraft } = await import('@/lib/server/domains/design/design.actions')
-    return saveDesignDraft(data.design, author, data.revision)
+    return saveDesignDraft(data.design, author, data.revision, data.saveAside)
   })
 
 export const discardPortalDesignDraftFn = createServerFn({ method: 'POST' })

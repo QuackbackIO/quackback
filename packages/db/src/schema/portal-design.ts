@@ -110,8 +110,11 @@ export const portalDesignPreviewLinks = pgTable(
   ]
 )
 
-/** What a saved design is: a named checkpoint of the draft, or a look to apply again. */
-export type PortalDesignSavedKind = 'checkpoint' | 'look'
+/**
+ * What a saved design is: a named checkpoint of the draft, a look to apply
+ * again, or an automatic save of the draft (0317_portal_design_saved_auto.sql).
+ */
+export type PortalDesignSavedKind = 'checkpoint' | 'look' | 'auto'
 
 /**
  * Designs a workspace keeps without publishing them (see
@@ -136,6 +139,6 @@ export const portalDesignSaved = pgTable(
   },
   (table) => [
     index('portal_design_saved_design_kind_idx').on(table.designId, table.kind, table.createdAt),
-    check('portal_design_saved_kind_check', sql`${table.kind} IN ('checkpoint', 'look')`),
+    check('portal_design_saved_kind_check', sql`${table.kind} IN ('checkpoint', 'look', 'auto')`),
   ]
 )

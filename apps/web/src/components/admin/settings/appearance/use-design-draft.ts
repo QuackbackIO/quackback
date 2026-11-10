@@ -9,6 +9,7 @@ import {
   restorePortalDesignVersionFn,
   savePortalDesignDraftFn,
 } from '@/lib/server/functions/portal-design'
+import { savePortalDesignDraftAsideFn } from '@/lib/server/functions/portal-design-saved'
 import { shownChanges } from '@/lib/shared/design/diff'
 import { checkDesign } from '@/lib/shared/design/check-design'
 import { changeLabel } from '@/lib/shared/design/labels'
@@ -112,16 +113,21 @@ export function useDesignDraft() {
   // The save under way, so a reader on the server can wait for it; each waits for the one before.
   // A step that fails never breaks the chain: the next save still runs.
   const inflight = useRef<Promise<void>>(Promise.resolve())
-  const save = useCallback((next: PortalDesign): Promise<void> => {
+  // Whether this editing session has saved yet: its first save keeps the draft it started from.
+  const sessionSaved = useRef(false)
+  const save = useCallback((next: PortalDesign, keeping?: 'keep-mine'): Promise<void> => {
     const run = inflight.current.then(async () => {
       if (blocked.current || frozen.current) return
       const sent = refused.current ? JSON.stringify(next) : null
       if (refused.current && sent === refused.current.doc) return
       setSaving(true)
       try {
+        // The server saves the draft this replaces aside first, for Keep mine and a session's first save.
+        const saveAside = keeping ?? (sessionSaved.current ? undefined : 'session')
         const result = await savePortalDesignDraftFn({
-          data: { design: next, revision: revision.current },
+          data: { design: next, revision: revision.current, saveAside },
         })
+        sessionSaved.current = true
         setFailed(false)
         retry.current.wait = 1000
         if (result.ok) {
@@ -365,16 +371,32 @@ export function useDesignDraft() {
     void router.invalidate()
   }, [fetchEditor, forget, queryClient, router])
 
-  /** After a conflict: replaces this draft with the one someone else saved. */
-  const loadTheirs = useCallback(() => refresh(), [refresh])
+  /**
+   * Saves the draft aside on the server before the builder replaces it, such
+   * as by Copy into draft; with a design, that one, which the server lacks.
+   * A save aside that fails never stops what follows.
+   */
+  const saveAside = useCallback(
+    async (cause: 'copy' | 'load-theirs', design?: PortalDesign) => {
+      await flush()
+      await savePortalDesignDraftAsideFn({ data: { cause, design } }).catch(() => null)
+    },
+    [flush]
+  )
 
-  /** After a conflict: saves this draft over the one someone else saved. */
+  /** After a conflict: replaces this draft with the one someone else saved, saving this one aside. */
+  const loadTheirs = useCallback(async () => {
+    await saveAside('load-theirs', latest.current)
+    await refresh()
+  }, [refresh, saveAside])
+
+  /** After a conflict: saves this draft over the one someone else saved, which the server saves aside. */
   const keepMine = useCallback(async () => {
     revision.current = (await fetchEditor()).revision
     blocked.current = false
     setConflict(false)
     setConflictChange(null)
-    await save(latest.current)
+    await save(latest.current, 'keep-mine')
   }, [fetchEditor, save])
 
   /**
@@ -486,6 +508,7 @@ export function useDesignDraft() {
       failed,
       loadTheirs,
       keepMine,
+      saveAside,
       undo,
       redo,
       begin,
@@ -520,6 +543,7 @@ export function useDesignDraft() {
       failed,
       loadTheirs,
       keepMine,
+      saveAside,
       undo,
       redo,
       begin,

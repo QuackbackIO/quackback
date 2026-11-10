@@ -28,6 +28,7 @@ import {
   type DesignAuthor,
 } from './design.service'
 import { EMPTY_REVISION } from './draft-revision'
+import type { SaveDraftCause } from './draft-saves'
 import { legacyBrandingOf } from './engine'
 import { lintDesignCss, type CssIssue } from './css-lint'
 import { publishDraftWithWorkspaceLogo } from './workspace-logo'
@@ -177,7 +178,8 @@ export async function patchDesignDraft(
     merged !== null && typeof merged === 'object' && !Array.isArray(merged)
       ? tidyDesign(merged as Record<string, unknown>)
       : merged
-  return saveDesignDraft(tidied, author, expectedRevision)
+  // An agent's patch over someone else's draft saves that draft aside first.
+  return saveDesignDraft(tidied, author, expectedRevision, 'agent')
 }
 
 /**
@@ -188,13 +190,15 @@ export async function patchDesignDraft(
 export async function saveDesignDraft(
   input: unknown,
   author: DesignAuthor,
-  expectedRevision?: string
+  expectedRevision?: string,
+  /** Why the draft it replaces is saved aside first, if it is; see draft-saves.ts. */
+  saveAside?: SaveDraftCause
 ): Promise<
   | { ok: true; report: DesignReport; revision: string }
   | (DesignRefusal & { lastChange?: DraftLastChange | null })
 > {
   const result = await refusable(async () => {
-    const revision = await saveDraft(input, author, expectedRevision, convertedDesign)
+    const revision = await saveDraft(input, author, expectedRevision, convertedDesign, saveAside)
     const state = await getDesignState()
     // A draft put back to what visitors see is gone, and what they see is what it was.
     const saved = state?.draft ?? state?.published?.document ?? (await convertedDesign())
@@ -217,7 +221,7 @@ export async function discardDesignDraft(
 > {
   const result = await refusable(async () => ({
     ok: true as const,
-    revision: await discardDraft(expectedRevision),
+    revision: await discardDraft(expectedRevision, viewer),
   }))
   if (result.ok || result.code !== 'REVISION_MISMATCH' || !viewer) return result
   return { ...result, lastChange: await draftLastChange(viewer) }

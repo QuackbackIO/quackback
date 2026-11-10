@@ -27,6 +27,7 @@ import { withoutOrphanedOverrides } from '@/lib/shared/design/override-cascade'
 import { logger } from '@/lib/server/logger'
 import { digestOf } from '@/lib/server/utils/canonical-json'
 import { authorKey, recordAuthors, type DraftAuthors } from './draft-authors'
+import { saveDraftAside, saveDraftAsideBeforeSave, type SaveDraftCause } from './draft-saves'
 import { draftRevision, EMPTY_REVISION } from './draft-revision'
 import { dropDraft, NO_DRAFT } from './no-draft'
 import { assertWritable, storedDesign, storedRead } from './stored-read'
@@ -160,13 +161,15 @@ export async function getPublishedDesign(): Promise<PortalDesign | null> {
 /**
  * Replaces the draft, returning its new revision; refuses a stale
  * `expectedRevision`. Visitors see the published design, or `unpublished`
- * before the first publish.
+ * before the first publish. The draft it replaces is saved aside first when
+ * `saveAside` asks and its reason holds, or when one is due; see draft-saves.ts.
  */
 export async function saveDraft(
   input: unknown,
   author: DesignAuthor,
   expectedRevision?: string,
-  unpublished?: () => Promise<PortalDesign>
+  unpublished?: () => Promise<PortalDesign>,
+  saveAside?: SaveDraftCause
 ): Promise<string> {
   const document = validateDesign(input)
   // Read before the transaction: `unpublished` reads on the global pool, and
@@ -185,6 +188,7 @@ export async function saveDraft(
     await assertWritable(tx, row)
     // Saving the draft as it is changes nothing, so its revision stays where it is.
     if (row.draft && draftDigest(row.draft) === draftDigest(document)) return draftRevision(row)
+    await saveDraftAsideBeforeSave(tx, row, document, author.principalId, saveAside)
     const published = await revision(tx, row.publishedRevisionId)
     const live = published ? storedDesign(published.document, 'published') : fallback
     // A draft put back to what visitors see is no draft, so nothing says one is waiting.
@@ -213,15 +217,19 @@ export async function saveDraft(
 /**
  * Drops the draft, returning the revision the next save names; refuses a
  * stale `expectedRevision`, so a discard never throws away changes someone
- * saved after the person last looked.
+ * saved after the person last looked. The draft is saved aside first.
  */
-export async function discardDraft(expectedRevision?: string): Promise<string> {
+export async function discardDraft(
+  expectedRevision?: string,
+  by?: PrincipalId
+): Promise<string> {
   return db.transaction(async (tx) => {
     const row = await designRow(tx, true)
     if (!row) return EMPTY_REVISION
     if (expectedRevision !== undefined && expectedRevision !== draftRevision(row))
       throw new ConflictError('REVISION_MISMATCH', 'The draft changed since you opened it.')
     await assertWritable(tx, row)
+    await saveDraftAside(tx, row, 'discard', by ?? null)
     return dropDraft(tx, row)
   })
 }
@@ -430,7 +438,7 @@ export async function unpublishDesign(author: DesignAuthor): Promise<void> {
   await invalidateSettingsCache()
 }
 
-/** Publishes an old revision's document as the next revision. A draft in progress is kept. */
+/** Publishes an old revision's document as the next revision. A draft in progress is kept, and saved aside. */
 export async function restoreRevision(
   revisionId: PortalDesignRevisionId,
   author: DesignAuthor
@@ -442,6 +450,7 @@ export async function restoreRevision(
       throw new NotFoundError('REVISION_NOT_FOUND', 'That version no longer exists.')
     }
     await assertWritable(tx, row, old.document)
+    await saveDraftAside(tx, row, 'restore', author.principalId)
     const draft = row.draft
     const document = storedDesign(old.document, `revision ${old.number}`)
     if (!document)

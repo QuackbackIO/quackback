@@ -1,7 +1,8 @@
 /**
  * Designs a workspace keeps without publishing them: named checkpoints of the
- * draft, to copy back into it later, and looks, to apply as presets are. Each
- * holds the design as it was when saved, read back as this build reads it.
+ * draft, to copy back into it later, looks, to apply as presets are, and
+ * automatic draft saves (draft-saves.ts). Each holds the design as it was
+ * when saved, read back as this build reads it.
  */
 import type { PortalDesignSavedId } from '@quackback/ids'
 import {
@@ -11,6 +12,7 @@ import {
   db,
   desc,
   eq,
+  inArray,
   portalDesignSaved as saved,
   portalDesigns,
   principal,
@@ -22,6 +24,7 @@ import { withBlockIds } from '@/lib/shared/design/home'
 import { portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { migrateDesign } from '@/lib/shared/design/migrations'
 import { designRow, storedDesign, type DesignAuthor } from './design.service'
+import { saveDraftAside } from './draft-saves'
 
 /** How many checkpoints a workspace keeps; the oldest goes when another is saved. */
 export const CHECKPOINTS_KEPT = 20
@@ -48,7 +51,7 @@ const NOT_FOUND: SavedRefusal = {
 
 /** Saves a design, the draft as the person sees it, as a checkpoint or a look. */
 export async function saveDesign(
-  kind: PortalDesignSavedKind,
+  kind: Exclude<PortalDesignSavedKind, 'auto'>,
   name: string,
   document: unknown,
   author: DesignAuthor
@@ -95,13 +98,44 @@ export async function saveDesign(
   })
 }
 
-/** The checkpoints and looks kept, newest first; a look comes with what it sets. */
+/**
+ * Saves the draft aside before the builder replaces it, such as by Copy into
+ * draft, or the person's own unsaved draft before they load someone else's,
+ * as an automatic draft save.
+ */
+export async function saveDraftAsideNow(
+  cause: 'copy' | 'load-theirs',
+  author: DesignAuthor,
+  document?: unknown
+): Promise<{ ok: true; saved: boolean } | SavedRefusal> {
+  let design: PortalDesign | undefined
+  if (document !== undefined) {
+    const parsed = portalDesign.safeParse(migrateDesign(document))
+    if (!parsed.success)
+      return { ok: false, code: 'INVALID_DESIGN', message: 'That design could not be read.' }
+    design = withBlockIds(parsed.data)
+  }
+  return db.transaction(async (tx) => {
+    const row = await designRow(tx, true)
+    if (!row) return { ok: true as const, saved: false }
+    return {
+      ok: true as const,
+      saved: await saveDraftAside(tx, row, cause, author.principalId, design ?? row.draft),
+    }
+  })
+}
+
+/**
+ * The checkpoints, looks and automatic draft saves kept, newest first; a look
+ * comes with what it sets.
+ */
 export async function listSaved(): Promise<{
   checkpoints: SavedEntry[]
   looks: Array<SavedEntry & { look: DesignLook }>
+  drafts: SavedEntry[]
 }> {
   const row = await designRow(db)
-  if (!row) return { checkpoints: [], looks: [] }
+  if (!row) return { checkpoints: [], looks: [], drafts: [] }
   const rows = await db
     .select({
       id: saved.id,
@@ -127,10 +161,14 @@ export async function listSaved(): Promise<{
     const design = storedDesign(each.document, `saved look ${each.id}`)
     if (design) looks.push({ ...entry(each), look: lookOf(design) })
   }
-  return { checkpoints: rows.filter((one) => one.kind === 'checkpoint').map(entry), looks }
+  return {
+    checkpoints: rows.filter((one) => one.kind === 'checkpoint').map(entry),
+    looks,
+    drafts: rows.filter((one) => one.kind === 'auto').map(entry),
+  }
 }
 
-/** A checkpoint's design, to copy into the draft. */
+/** A checkpoint's or an automatic draft save's design, to copy into the draft. */
 export async function readCheckpoint(
   id: PortalDesignSavedId
 ): Promise<{ ok: true; design: PortalDesign; name: string } | SavedRefusal> {
@@ -139,7 +177,9 @@ export async function readCheckpoint(
   const [found] = await db
     .select({ name: saved.name, document: saved.document })
     .from(saved)
-    .where(and(eq(saved.id, id), eq(saved.designId, row.id), eq(saved.kind, 'checkpoint')))
+    .where(
+      and(eq(saved.id, id), eq(saved.designId, row.id), inArray(saved.kind, ['checkpoint', 'auto']))
+    )
     .limit(1)
   const design = found ? storedDesign(found.document, `checkpoint ${id}`) : null
   return design && found ? { ok: true, design, name: found.name } : NOT_FOUND

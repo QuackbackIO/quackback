@@ -32,15 +32,30 @@ const server = vi.hoisted(() => ({
   reviewedAgainst: [] as Array<string | undefined>,
   /** The version visitors see, as the server reads it. */
   live: null as { revisionId: PortalDesignRevisionId; number: number } | null,
+  /** Why each save asked the server to save the draft it replaces aside. */
+  saveAside: [] as Array<string | undefined>,
+  /** Each draft the builder asked the server to save aside, and why. */
+  asides: [] as Array<{ cause: string; design?: unknown }>,
 }))
 
 vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ invalidate: async () => {} }) }))
+vi.mock('@/lib/server/functions/portal-design-saved', () => ({
+  savePortalDesignDraftAsideFn: async ({ data }: { data: { cause: string; design?: unknown } }) => {
+    server.asides.push(data)
+    return { ok: true, saved: true }
+  },
+}))
 vi.mock('@/lib/server/functions/portal-design', () => ({
   getPortalDesignFn: async () => editorState(),
   listPortalDesignVersionsFn: async () => [],
-  savePortalDesignDraftFn: async ({ data }: { data: { design: unknown; revision?: string } }) => {
+  savePortalDesignDraftFn: async ({
+    data,
+  }: {
+    data: { design: unknown; revision?: string; saveAside?: string }
+  }) => {
     server.saves.push(data.design)
     server.revisions.push(data.revision)
+    server.saveAside.push(data.saveAside)
     if (server.hold) await server.hold
     const planned = server.results.shift()
     if (planned instanceof Error) throw planned
@@ -116,6 +131,8 @@ beforeEach(() => {
   server.restored = 0
   server.reviewedAgainst = []
   server.live = null
+  server.saveAside = []
+  server.asides = []
 })
 afterEach(() => {
   cleanup()
@@ -242,6 +259,10 @@ describe('useDesignDraft', () => {
       })
       expect(result.current.conflict).toBe(false)
       expect(result.current.design.layout.width).not.toBe('wide')
+      // This person's own draft, never saved, is kept on the server first.
+      expect(server.asides).toEqual([
+        { cause: 'load-theirs', design: expect.objectContaining({ layout: expect.objectContaining({ width: 'wide' }) }) },
+      ])
     })
 
     it('says who changed the draft and when, until the person chooses', async () => {
@@ -275,6 +296,8 @@ describe('useDesignDraft', () => {
       expect(result.current.conflict).toBe(false)
       expect(server.revisions).toEqual(['rev1', 'rev9'])
       expect(server.saves[1]).toMatchObject({ layout: { density: 'compact' } })
+      // The server keeps their draft before mine replaces it.
+      expect(server.saveAside[1]).toBe('keep-mine')
     })
   })
 
@@ -579,6 +602,33 @@ describe('useDesignDraft', () => {
         await result.current.publish()
       })
       expect(server.reviewedAgainst[2]).toBeUndefined()
+    })
+  })
+
+  describe('saving the draft aside on the server', () => {
+    it('asks for it on the first save of the session only', async () => {
+      vi.useFakeTimers()
+      const { result } = setup()
+      act(() => result.current.update((draft) => void (draft.layout.density = 'compact')))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS)
+      })
+      act(() => result.current.update((draft) => void (draft.layout.width = 'wide')))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS)
+      })
+      expect(server.saveAside).toEqual(['session', undefined])
+    })
+
+    it('saves a waiting change first, then asks for the stored draft to be kept', async () => {
+      vi.useFakeTimers()
+      const { result } = setup()
+      act(() => result.current.update((draft) => void (draft.layout.density = 'compact')))
+      await act(async () => {
+        await result.current.saveAside('copy')
+      })
+      expect(server.saves).toHaveLength(1)
+      expect(server.asides).toEqual([{ cause: 'copy', design: undefined }])
     })
   })
 
