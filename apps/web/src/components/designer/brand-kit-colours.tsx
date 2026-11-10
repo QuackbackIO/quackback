@@ -442,7 +442,7 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
           <button
             type="button"
             onClick={() => update((draft) => void delete draft.brand.dark)}
-            className="ms-[100px] rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="ms-[100px] inline-flex min-h-6 items-center rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
           >
             {THEME.resetAllToAuto}
           </button>

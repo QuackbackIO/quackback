@@ -41,6 +41,9 @@ const { LookPicker } = await import('../look-picker')
 const { HomeLayoutPicker } = await import('../home-layout-picker')
 const { usePreviewedDesign, previewOnCanvas } = await import('../look-preview')
 
+/** A target at least 24px tall, as small text links and buttons are given. */
+const at24 = (el: Element) => expect(el.className).toMatch(/(^|\s)(min-h-6|size-6|min-h-7)(\s|$)/)
+
 const ALL_ON = {
   feedback: true,
   roadmap: true,
@@ -140,6 +143,7 @@ describe('LookPicker', () => {
     const studio = DESIGN_PRESETS.find((each) => each.id === 'studio')!
 
     const its = await screen.findByRole('button', { name: 'Studio: use its colours too' })
+    at24(its)
     act(() => its.focus())
     expect(shown.result.current?.brand.light.accent).toBe(studio.look.brand.light.accent)
     fireEvent.click(its)
@@ -170,7 +174,9 @@ describe('LookPicker', () => {
     await waitFor(() =>
       expect(fns.save).toHaveBeenCalledWith({ data: { kind: 'look', name: 'Launch', design } })
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete Teal' }))
+    const remove = await screen.findByRole('button', { name: 'Delete Teal' })
+    at24(remove)
+    fireEvent.click(remove)
     await waitFor(() =>
       expect(fns.remove).toHaveBeenCalledWith({ data: { id: 'portal_design_saved_look' } })
     )

@@ -132,7 +132,7 @@ export function ViewOptions({
       <button
         type="button"
         onClick={onKeys}
-        className="mt-1 rounded-sm text-xs text-muted-foreground underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground"
+        className="mt-1 inline-flex min-h-6 items-center rounded-sm text-xs text-muted-foreground underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground"
       >
         {THEME.keyboardShortcuts}
       </button>

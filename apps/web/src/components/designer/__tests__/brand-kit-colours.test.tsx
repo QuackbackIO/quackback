@@ -11,6 +11,9 @@ import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 
 const { BrandKitColours } = await import('../brand-kit-colours')
 
+/** A target at least 24px tall, as small text links and buttons are given. */
+const at24 = (el: Element) => expect(el.className).toMatch(/(^|\s)(min-h-6|size-6|min-h-7)(\s|$)/)
+
 afterEach(cleanup)
 
 const seen: { design: PortalDesign | null } = { design: null }
@@ -118,6 +121,13 @@ describe('BrandKitColours', () => {
       expect(
         within(dark as HTMLElement).getByRole('button', { name: `Dark mode: ${name}: Auto` })
       ).toBeTruthy()
+  })
+
+  it('gives Reset all to auto a target 24px tall, once dark mode has its own colours', () => {
+    const design = defaultDesign()
+    design.brand.dark = { accent: '#38bdf8' }
+    render(<Harness start={design} />)
+    at24(screen.getByRole('button', { name: 'Reset all to auto' }))
   })
 
   it('shows no dark mode row for a light-only design', () => {

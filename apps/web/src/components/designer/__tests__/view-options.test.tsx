@@ -9,6 +9,9 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 
 const { ViewOptions } = await import('../view-options')
 
+/** A target at least 24px tall, as small text links and buttons are given. */
+const at24 = (el: Element) => expect(el.className).toMatch(/(^|\s)(min-h-6|size-6|min-h-7)(\s|$)/)
+
 afterEach(cleanup)
 
 function setup(mode: 'light' | 'dark' | 'auto') {
@@ -40,6 +43,11 @@ describe('ViewOptions', () => {
     const { onTheme } = setup('auto')
     fireEvent.click(radio('Preview as', 'Dark'))
     expect(onTheme).toHaveBeenCalledWith('dark')
+  })
+
+  it('gives the keyboard shortcuts link a target 24px tall', () => {
+    setup('light')
+    at24(screen.getByRole('button', { name: 'Keyboard shortcuts' }))
   })
 
   it('picks the visitor from tiles, with no paragraph', () => {

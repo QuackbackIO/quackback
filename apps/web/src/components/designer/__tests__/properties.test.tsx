@@ -23,6 +23,9 @@ import { FontField, TokenField } from '../properties/token-field'
 import type { ColourToken, FontToken } from '../properties/tokens'
 import { COLOUR_NAMES, WORDS, resetTo } from '../properties/words'
 
+/** A target at least 24px tall, as small text links and buttons are given. */
+const at24 = (el: Element) => expect(el.className).toMatch(/(^|\s)(min-h-6|size-6|min-h-7)(\s|$)/)
+
 afterEach(cleanup)
 
 describe('the panel frame', () => {
@@ -365,7 +368,9 @@ describe('a brand colour field', () => {
     expect(
       screen.getByRole('button', { name: 'Background: #b0123a' }).getAttribute('data-token-state')
     ).toBe('detached')
-    fireEvent.click(screen.getByRole('button', { name: 'Link to Brand colour' }))
+    const back = screen.getByRole('button', { name: 'Link to Brand colour' })
+    at24(back)
+    fireEvent.click(back)
     expect(onChange).toHaveBeenLastCalledWith('accent')
   })
 

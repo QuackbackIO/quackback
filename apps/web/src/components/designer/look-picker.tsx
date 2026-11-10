@@ -103,7 +103,7 @@ export function LookPicker({
                 type="button"
                 aria-label={`Delete ${each.name}`}
                 onClick={() => void remove(each.id)}
-                className="absolute end-1 top-1 rounded bg-background/90 p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                className="absolute end-0.5 top-0.5 grid size-6 place-items-center rounded bg-background/90 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               >
                 <XMarkIcon className="size-3.5" aria-hidden="true" />
               </button>
@@ -179,7 +179,7 @@ function Tile({
           onFocus={() => previewOnCanvas(whole)}
           onBlur={hide}
           onClick={() => onChoose(look, true)}
-          className="absolute inset-x-2.5 bottom-8 rounded bg-background/95 px-1 py-0.5 text-center text-[11px] leading-tight text-foreground opacity-0 shadow-sm pointer-events-none group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 hover:underline focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="absolute inset-x-1.5 bottom-7 flex min-h-6 items-center justify-center rounded bg-background/95 px-1 text-center text-[11px] leading-tight text-foreground opacity-0 shadow-sm pointer-events-none group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 hover:underline focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           {THEME.useItsColours}
         </button>

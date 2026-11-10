@@ -12,6 +12,9 @@ import { outlineOf, type DesignerPage } from '@/lib/shared/design/outline'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { PagePanel } from '../page-panel'
 
+/** A target at least 24px tall, as small text links and buttons are given. */
+const at24 = (el: Element) => expect(el.className).toMatch(/(^|\s)(min-h-6|size-6|min-h-7)(\s|$)/)
+
 vi.mock('../page-background-settings', () => ({
   PageBackgroundSection: () => <p>Background settings</p>,
 }))
@@ -102,7 +105,11 @@ describe('PagePanel', () => {
     fireEvent.keyDown(within(tree).getByRole('treeitem', { name: 'Board' }), { key: 'Enter' })
     expect(onSelect).toHaveBeenCalledWith('board')
     expect(screen.queryByRole('button', { name: 'Words' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Theme' }))
+    // Every page's Theme is a row as wide as the panel.
+    const theme = screen.getByRole('button', { name: 'Theme' })
+    at24(theme)
+    expect(theme.className).toContain('w-full')
+    fireEvent.click(theme)
     expect(onTheme).toHaveBeenCalledWith(false)
   })
 

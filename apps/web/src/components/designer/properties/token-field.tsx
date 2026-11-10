@@ -211,7 +211,7 @@ export function TokenField({
         <button
           type="button"
           onClick={() => onChange(back.id)}
-          className="truncate rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="min-h-6 truncate rounded py-1 text-[11px] leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
         >
           {linkTo(back.name)}
         </button>
@@ -351,7 +351,7 @@ export function FontField({
         <button
           type="button"
           onClick={() => onChange(linkBack.id)}
-          className="truncate rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          className="min-h-6 truncate rounded py-1 text-[11px] leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
         >
           {linkTo(linkBack.name)}
         </button>
