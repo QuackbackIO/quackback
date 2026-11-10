@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultDesign, portalDesign } from '@/lib/shared/design/schema'
 import { resolveDesign } from '@/lib/shared/design/resolve'
+import { oneSentence } from '@/lib/shared/design/ai-reach'
 import { DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import type { HomeBlockType } from '@/lib/shared/design/home'
 
@@ -649,6 +650,23 @@ describe('any change to the design', () => {
       expect(result.outOfScope, example.request).toEqual([])
       expect(result.done.length, example.request).toBe(example.answer.ops.length)
     }
+  })
+
+  it('shows the model replies of one sentence only, as its own replies must be', () => {
+    for (const example of OPS_EXAMPLES) {
+      expect(oneSentence(example.answer.reply), example.request).toBe(example.answer.reply)
+      // The few-shot JSON is an answer the model's schema takes.
+      expect(editSchema.safeParse(example.answer).success, example.request).toBe(true)
+    }
+  })
+
+  it('shows the model a picked block’s heading set in the second colour', () => {
+    const example = OPS_EXAMPLES.find((each) =>
+      /block's heading in the second colour/i.test(each.request)
+    )
+    expect(example?.answer.ops).toEqual([
+      expect.objectContaining({ op: 'set', key: 'style.heading.base.color', value: 'support' }),
+    ])
   })
 
   it('keeps the answer’s grammar flat: a few strings per operation, no nesting', () => {
