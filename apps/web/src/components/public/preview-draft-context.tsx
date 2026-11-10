@@ -1,7 +1,9 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import { useIntl } from 'react-intl'
+import { useRouteContext } from '@tanstack/react-router'
+import type { PageChoices } from '@/lib/shared/design/page-choices'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import type { BandImage, DesignLogo } from '@/lib/shared/design/view'
+import type { BandImage, DesignLogo, PortalCopy } from '@/lib/shared/design/view'
 import type { PortalNavConfig, PortalWelcomeCard } from '@/lib/shared/types/settings'
 
 /**
@@ -143,8 +145,11 @@ export function usePreviewDesignNav(): PortalDesign['nav'] | undefined {
   return useContext(PreviewPagesContext)?.nav ?? undefined
 }
 
-/** The workspace's own wording for the composer and the empty feed, by language. */
-export type FeedCopy = PortalDesign['pages']['feedback']['copy']
+/**
+ * The workspace's own wording for the composer, the empty feed and the
+ * support page's New request button, by language.
+ */
+export type FeedCopy = PortalCopy
 
 /**
  * The own wording in force: the portal layout's from the saved design, and
@@ -156,7 +161,12 @@ export const FeedCopyContext = createContext<FeedCopy | undefined>(undefined)
  * The own wording in the visitor's language. A language left blank has none,
  * so its strings say the portal's own translation, never another language.
  */
-export function useFeedCopy(): { prompt?: string; submit?: string; emptyTitle?: string } {
+export function useFeedCopy(): {
+  prompt?: string
+  submit?: string
+  emptyTitle?: string
+  request?: string
+} {
   const copy = useContext(FeedCopyContext)
   const locale = useIntl().locale.toLowerCase()
   return useMemo(
@@ -164,6 +174,7 @@ export function useFeedCopy(): { prompt?: string; submit?: string; emptyTitle?: 
       prompt: copy?.prompt?.[locale] || undefined,
       submit: copy?.submit?.[locale] || undefined,
       emptyTitle: copy?.emptyTitle?.[locale] || undefined,
+      request: copy?.request?.[locale] || undefined,
     }),
     [copy, locale]
   )
@@ -245,4 +256,120 @@ export function readPreviewState(message: unknown): Partial<DesignerPreviewState
   if (typeof data.empty === 'boolean') read.empty = data.empty
   if (typeof data.composer === 'boolean') read.composer = data.composer
   return read
+}
+
+// The page choices as the portal reads them, kept in a module every portal
+// page loads already: page-choices.ts holds them as zod schemas over the
+// design options, which a visitor's page has no use for and which would
+// split into several more scripts. Tests hold these lists equal to the schemas.
+
+type ChoiceValue = string | number | boolean
+/** Each page choice's allowed values; `boolean` for a switch. */
+export const PAGE_CHOICE_VALUES = {
+  changelog: {
+    entries: ['timeline', 'cards', 'compact'],
+    images: ['none', 'wide', 'thumbnail'],
+    subscribe: ['beside', 'under'],
+    shipped: 'boolean',
+  },
+  help: {
+    topics: ['cards', 'list'],
+    popular: 'boolean',
+    search: ['standard', 'large'],
+    helpful: 'boolean',
+    related: [0, 2, 4],
+    contact: 'boolean',
+  },
+  roadmap: { board: ['columns', 'list'], votes: 'boolean' },
+  post: {
+    vote: ['title', 'details'],
+    board: 'boolean',
+    tags: 'boolean',
+    date: 'boolean',
+    author: 'boolean',
+    subscribe: ['details', 'comments'],
+    comments: ['newest', 'oldest'],
+  },
+  support: { suggest: 'boolean' },
+} as const satisfies Record<keyof PageChoices, Record<string, 'boolean' | readonly ChoiceValue[]>>
+
+/** Today's pages: what a design without choices draws (PAGE_CHOICE_DEFAULTS). */
+export const PORTAL_PAGE_CHOICES: PageChoices = {
+  changelog: { entries: 'timeline', images: 'none', subscribe: 'beside', shipped: true },
+  help: {
+    topics: 'cards',
+    popular: true,
+    search: 'standard',
+    helpful: true,
+    related: 4,
+    contact: false,
+  },
+  roadmap: { board: 'columns', votes: true },
+  post: {
+    vote: 'title',
+    board: true,
+    tags: true,
+    date: true,
+    author: true,
+    subscribe: 'details',
+    comments: 'newest',
+  },
+  support: { suggest: true },
+}
+
+/** The page choices in force, from the design's attributes; anything absent or unknown is today's. */
+export function readPortalPageChoices(
+  attributes: Readonly<Record<string, string>> | undefined
+): PageChoices {
+  const out = {} as Record<string, Record<string, ChoiceValue>>
+  for (const page of Object.keys(PORTAL_PAGE_CHOICES) as Array<keyof PageChoices>) {
+    const defaults = PORTAL_PAGE_CHOICES[page] as Record<string, ChoiceValue>
+    const allowed = PAGE_CHOICE_VALUES[page] as Record<string, 'boolean' | readonly ChoiceValue[]>
+    const read: Record<string, ChoiceValue> = {}
+    for (const [key, fallback] of Object.entries(defaults)) {
+      const raw = attributes?.[`data-qb-${page}-${key}`]
+      const values = allowed[key]
+      let value: ChoiceValue | undefined
+      if (values === 'boolean') value = raw === 'on' ? true : raw === 'off' ? false : undefined
+      else if (raw !== undefined) {
+        const parsed = typeof fallback === 'number' ? Number(raw) : raw
+        value = values?.includes(parsed) ? parsed : undefined
+      }
+      read[key] = value ?? fallback
+    }
+    out[page] = read
+  }
+  return out as unknown as PageChoices
+}
+
+/**
+ * The Changelog, Help Center, Roadmap, Support and post pages' choices: the
+ * draft's while the designer previews one, else the published design's.
+ * Without a design, or without a choice, each page is drawn as it always was.
+ */
+export function usePageChoices(): PageChoices {
+  const saved = useRouteContext({
+    from: '__root__',
+    select: (context) => {
+      const design = context.settings?.portalDesign
+      return design?.engine === 'v2' ? design.attributes : undefined
+    },
+  })
+  const draft = usePreviewDesignAttributes()
+  const attributes = draft ?? saved
+  return useMemo(() => readPortalPageChoices(attributes), [attributes])
+}
+
+/**
+ * Where a post draws its one vote control: beside the title at every width,
+ * or in the details, which wide screens alone show, so beside the title on
+ * narrower ones. Where the control is beside the title, the details show the
+ * count alone over the team's voters list, or nothing.
+ */
+export function postVotePlaces(
+  vote: PageChoices['post']['vote'],
+  voters: boolean
+): { title: 'always' | 'narrow'; details: 'button' | 'count' | 'none' } {
+  if (vote === 'details') return { title: 'narrow', details: 'button' }
+  return { title: 'always', details: voters ? 'count' : 'none' }
 }

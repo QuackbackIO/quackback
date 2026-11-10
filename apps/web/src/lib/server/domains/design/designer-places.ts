@@ -11,6 +11,7 @@ import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.servic
 import { listPublicCategories } from '@/lib/server/domains/help-center/help-center.category.service'
 import { listPublicArticlesForCategories } from '@/lib/server/domains/help-center/help-center.article.query'
 import { listPublicChangelogs } from '@/lib/server/domains/changelog/changelog.public'
+import { listPublicStatuses } from '@/lib/server/domains/statuses/status.service'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath, hcCollectionPath } from '@/lib/shared/help-center-url'
 import type { DesignerPlaces } from '@/lib/shared/design/page-switcher'
@@ -43,7 +44,7 @@ export function roadmapColumnPlaces(
 }
 
 export async function listDesignerPlaces(): Promise<DesignerPlaces> {
-  const [boards, roadmaps, categories, posts, entries] = await Promise.all([
+  const [boards, roadmaps, categories, posts, entries, statuses] = await Promise.all([
     orNone('boards', () => listPublicBoardsWithStats(ANONYMOUS_ACTOR)),
     orNone('roadmaps', () => listPublicRoadmaps(ANONYMOUS_ACTOR)),
     orNone('categories', () => listPublicCategories(ANONYMOUS_ACTOR)),
@@ -52,6 +53,7 @@ export async function listDesignerPlaces(): Promise<DesignerPlaces> {
       'entries',
       async () => (await listPublicChangelogs({ limit: LIMIT }, ANONYMOUS_ACTOR)).items
     ),
+    orNone('statuses', () => listPublicStatuses()),
   ])
   const topics = categories
     .filter((category) => !category.parentId)
@@ -67,6 +69,7 @@ export async function listDesignerPlaces(): Promise<DesignerPlaces> {
     boards: boards.map((board) => ({ id: board.id, name: board.name, slug: board.slug })),
     roadmaps: roadmaps.map((roadmap) => ({ id: roadmap.id, name: roadmap.name })),
     columns: roadmapColumnPlaces(roadmaps),
+    statuses: statuses.map((status) => ({ id: status.id, name: status.name })),
     categories: topics.map((topic) => ({
       id: topic.id,
       name: topic.name,

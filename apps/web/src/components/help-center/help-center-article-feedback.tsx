@@ -188,3 +188,48 @@ export function HelpCenterArticleFeedback({
     </div>
   )
 }
+
+/**
+ * How an article closes, as the design chooses: "Was this helpful?" (on as
+ * articles always had it) and a Contact support link (off). With the link
+ * there, a "No" does not offer contact a second time. No link while support
+ * is off (`contactHref` null).
+ */
+export function HelpCenterArticleClose({
+  articleId,
+  contactHref,
+  helpful,
+  contact,
+}: {
+  articleId: string
+  contactHref: string | null
+  helpful: boolean
+  contact: boolean
+}) {
+  return (
+    <>
+      {helpful && (
+        <HelpCenterArticleFeedback
+          articleId={articleId}
+          supportHref={contact ? null : contactHref}
+        />
+      )}
+      {contact && contactHref && (
+        <p className="mt-6 text-sm">
+          <span className="text-muted-foreground">
+            <FormattedMessage
+              id="portal.hc.articleFeedback.stillStuck"
+              defaultMessage="Still stuck?"
+            />
+          </span>{' '}
+          <Link to={contactHref} className="font-medium text-primary hover:underline">
+            <FormattedMessage
+              id="portal.hc.articleFeedback.contactSupport"
+              defaultMessage="Contact support"
+            />
+          </Link>
+        </p>
+      )}
+    </>
+  )
+}

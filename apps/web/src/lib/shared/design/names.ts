@@ -27,6 +27,7 @@ export const BLOCK_NAMES: Record<HomeBlockType, string> = {
   status: 'Status',
   contact: 'Contact',
   links: 'Links',
+  boards: 'Boards',
 }
 
 export const PAGE_NAMES: Record<DesignerPage, string> = {

@@ -101,7 +101,7 @@ async function mountHome(
     path: '/',
     component: () => <PortalHome gates={gates} />,
   })
-  const others = ['/feedback', '/roadmap'].map((path) =>
+  const others = ['/feedback', '/roadmap', '/hc', '/support'].map((path) =>
     createRoute({ getParentRoute: () => root, path, component: () => null })
   )
   const router = createRouter({
@@ -181,6 +181,16 @@ describe('Button as the main action', () => {
     })
     const buttons = band(page).querySelectorAll('[data-qb-band-action] :is(a,button)')
     expect([...buttons].map((b) => b.textContent)).toEqual(['Tell us'])
+  })
+
+  it.each([
+    ['help', '/hc', 'Visit the help center'],
+    ['support', '/support', 'Start a conversation'],
+  ])('goes to %s', async (to, href, words) => {
+    const page = await mountHome({ mainAction: 'button', button: { to } })
+    const action = band(page).querySelector<HTMLAnchorElement>('a[data-qb-action]')!
+    expect(action.getAttribute('href')).toBe(href)
+    expect(action.textContent).toBe(words)
   })
 
   it('goes to the composer while the roadmap is off', async () => {

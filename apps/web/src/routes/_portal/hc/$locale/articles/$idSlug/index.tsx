@@ -5,7 +5,7 @@ import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-co
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import { HelpCenterBreadcrumbs } from '@/components/help-center/help-center-breadcrumbs'
 import { HelpCenterPrevNext } from '@/components/help-center/help-center-prev-next'
-import { HelpCenterArticleFeedback } from '@/components/help-center/help-center-article-feedback'
+import { HelpCenterArticleClose } from '@/components/help-center/help-center-article-feedback'
 import { HelpCenterRelatedArticles } from '@/components/help-center/help-center-related-articles'
 import { HelpCenterToc } from '@/components/help-center/help-center-toc'
 import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-utils'
@@ -26,6 +26,7 @@ import {
 } from '@/components/help-center/help-center-head'
 import type { JSONContent } from '@tiptap/react'
 import { useBaseUrl, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { usePageChoices } from '@/components/public/preview-draft-context'
 
 const helpCenterApi = getRouteApi('/_portal/hc')
 
@@ -98,6 +99,8 @@ function ArticleDetailPage() {
     settings?.featureFlags,
     settings?.portalConfig
   )
+  // What each article ends with, as the design chooses.
+  const end = usePageChoices().help
 
   const breadcrumbs = buildCategoryBreadcrumbs({
     allCategories,
@@ -226,14 +229,18 @@ function ArticleDetailPage() {
               )}
             </div>
 
-            <HelpCenterArticleFeedback
-              articleId={article.id}
-              supportHref={supportEnabled ? '/support/new' : null}
-            />
+            <div data-qb-section="article">
+              <HelpCenterArticleClose
+                articleId={article.id}
+                contactHref={supportEnabled ? '/support/new' : null}
+                helpful={end.helpful}
+                contact={end.contact}
+              />
 
-            <HelpCenterPrevNext locale={locale} prev={prev} next={next} />
+              <HelpCenterPrevNext locale={locale} prev={prev} next={next} />
 
-            <HelpCenterRelatedArticles articles={related} locale={locale} />
+              <HelpCenterRelatedArticles articles={related.slice(0, end.related)} locale={locale} />
+            </div>
           </article>
 
           <div className="hidden w-56 shrink-0 xl:block">

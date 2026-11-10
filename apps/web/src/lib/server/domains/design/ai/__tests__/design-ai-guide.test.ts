@@ -28,7 +28,7 @@ describe('the field guide', () => {
       "Home's one main action under the headline: composer, search, button, none"
     )
     expect(guide).toContain('only with the help centre on')
-    expect(guide).toContain('buttonTo says where it goes: composer or roadmap')
+    expect(guide).toContain('buttonTo says where it goes: composer, roadmap, help, support')
   })
 
   it('says exact values come before the choices, and what a shared field reaches', () => {

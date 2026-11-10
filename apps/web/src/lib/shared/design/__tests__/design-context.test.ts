@@ -25,6 +25,7 @@ const places = {
   boards: [{ id: 'board_01h455vb4pex5vsknk084sn02q', name: 'Mobile' }],
   roadmaps: [{ id: 'roadmap_01h455vb4pex5vsknk084sn02q', name: 'Public roadmap' }],
   categories: [{ id: 'kb_category_01h455vb4pex5vsknk084sn02q', name: 'Billing' }],
+  statuses: [{ id: 'post_status_01h455vb4pex5vsknk084sn02q', name: 'Complete' }],
 }
 
 function design(): PortalDesign {
@@ -150,7 +151,7 @@ describe('the context of a request', () => {
       picked: { scope: 'home', blockId: 'ideas00001' },
     })
     expect(text).toContain(
-      'The person picked Top posts (ideas00001); "this" and "it" mean it. Its settings now: heading (its usual); sort new; boardIds Mobile; count 5.'
+      'The person picked Top posts (ideas00001); "this" and "it" mean it. Its settings now: heading (its usual); sort new; boardIds Mobile; statusIds Open posts; count 5.'
     )
   })
 

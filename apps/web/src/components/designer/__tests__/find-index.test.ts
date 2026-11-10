@@ -151,9 +151,18 @@ describe('part settings in quick find', () => {
       place: { kind: 'part', selection: 'feed', page: 'feedback' },
       row: 'feed-sort',
     })
-    expect(byPath(items, 'Hero › Layout › Height')?.target).toEqual({
+    expect(byPath(items, 'Hero › Layout › Align')?.target).toEqual({
       kind: 'row',
       place: { kind: 'part', selection: 'hero', page: 'roadmap' },
+      row: 'hero-align',
+    })
+  })
+
+  it('lead the hero’s height to Home, the one page that sets it', () => {
+    const design = defaultDesign()
+    design.nav.home.on = true
+    expect(byPath(index('roadmap', design), 'Hero › Layout › Height')?.target).toMatchObject({
+      place: { kind: 'part', selection: 'hero', page: 'home' },
       row: 'hero-height',
     })
   })

@@ -34,13 +34,18 @@ export function buttonToOf(home: Pick<Home, 'button'>): ButtonTo {
   return home.button?.to ?? 'composer'
 }
 
+/** Whether the page a call to action goes to is on: the composer is feedback's. */
+const buttonPageOn = (to: ButtonTo, gates: PortalPageGates) =>
+  to === 'composer' ? gates.feedback : gates[to]
+
 /**
- * Where the call to action goes as drawn: the roadmap only while it is on,
- * the composer only while feedback is; null with nowhere to go.
+ * Where the call to action goes as drawn: the roadmap, help or support only
+ * while that page is on, the composer only while feedback is; null with
+ * nowhere to go.
  */
 export function drawnButtonTo(home: Pick<Home, 'button'>, gates: PortalPageGates): ButtonTo | null {
   const to = buttonToOf(home)
-  if (to === 'roadmap' && gates.roadmap) return 'roadmap'
+  if (to !== 'composer' && buttonPageOn(to, gates)) return to
   if (gates.feedback) return 'composer'
   return gates.roadmap ? 'roadmap' : null
 }
@@ -89,9 +94,7 @@ export function mainActionsOffered(gates: PortalPageGates): {
     return false
   }
   const actions = DESIGN_OPTIONS.mainAction.filter((action) => !left(action))
-  const buttonTo = DESIGN_OPTIONS.heroButtonTo.filter((to) =>
-    to === 'roadmap' ? gates.roadmap : gates.feedback
-  )
+  const buttonTo = DESIGN_OPTIONS.heroButtonTo.filter((to) => buttonPageOn(to, gates))
   return {
     actions,
     buttonTo,
@@ -100,7 +103,11 @@ export function mainActionsOffered(gates: PortalPageGates): {
         ...(gates.feedback ? [] : ['The composer needs feedback on.']),
         ...(gates.help ? [] : ['Search needs the help centre on.']),
       ],
-      buttonTo: gates.roadmap ? [] : ['The roadmap needs to be on for a button to go there.'],
+      buttonTo: [
+        ...(gates.roadmap ? [] : ['The roadmap needs to be on for a button to go there.']),
+        ...(gates.help ? [] : ['The help centre needs to be on for a button to go there.']),
+        ...(gates.support ? [] : ['Support needs to be on for a button to go there.']),
+      ],
     },
   }
 }

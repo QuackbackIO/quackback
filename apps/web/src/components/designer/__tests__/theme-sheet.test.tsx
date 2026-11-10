@@ -74,7 +74,13 @@ function imported(): PortalDesign {
 
 function renderTheme(
   start: PortalDesign,
-  { page = null as string | null, gates = ALL_ON, more = false } = {}
+  {
+    page = null as string | null,
+    gates = ALL_ON,
+    more = false,
+    phone = false,
+    onPhone = undefined as ((phone: boolean) => void) | undefined,
+  } = {}
 ) {
   const seen = { design: start, updates: 0, labels: [] as string[] }
   const jumps: string[] = []
@@ -88,6 +94,8 @@ function renderTheme(
         cssWarnings={[]}
         more={more}
         page={page}
+        phone={phone}
+        onPhone={onPhone}
         onOverride={(o) => jumps.push(o.id)}
         update={(change, label) => {
           seen.updates += 1
@@ -323,6 +331,21 @@ describe('Theme', () => {
     // Everywhere, an exact value lives in one place: the tune.
     expect(seen.design.tune).toEqual({ button: { radius: 6 } })
     expect(seen.design.style).toBeUndefined()
+  })
+
+  it('opens an element’s panel at the canvas’s screen: phone values on the Phone canvas', () => {
+    const onPhone = vi.fn()
+    const { seen } = renderTheme(defaultDesign(), { phone: true, onPhone })
+    fireEvent.click(screen.getByRole('button', { name: /^Page headlines/ }))
+    expect(document.querySelector('[data-phone-mode]')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Text size'), { target: { value: '30' } })
+    expect(seen.design.stylePhone?.headline?.base?.size).toBe(30)
+    fireEvent.click(
+      within(screen.getByRole('radiogroup', { name: 'Editing' })).getByRole('radio', {
+        name: 'All screens',
+      })
+    )
+    expect(onPhone).toHaveBeenCalledWith(false)
   })
 
   it('lists only what the pages that are on draw, and no logo: the logo is picked on the page', () => {

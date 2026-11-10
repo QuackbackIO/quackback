@@ -208,7 +208,7 @@ export function writeHero(draft: PortalDesign, hero: HeroBlock, key: HeroKey): v
     case 'secondButton': {
       const { to: _to, second: _second, ...words } = draft.pages.home.button ?? {}
       const button = {
-        ...(hero.buttonTo === 'roadmap' ? { to: 'roadmap' as const } : {}),
+        ...(hero.buttonTo !== 'composer' ? { to: hero.buttonTo } : {}),
         ...(hero.secondButton ? { second: true } : {}),
         ...words,
       }
@@ -254,6 +254,8 @@ export function heroSettingShown(key: HeroKey, design: PortalDesign, page: Desig
     case 'headerBlend':
       return band !== 'none'
     case 'mainAction':
+    case 'height':
+      // The list pages follow Home's look at a compact height of their own.
       return page === 'home'
     case 'composerWidth':
       return (

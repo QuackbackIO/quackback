@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { StageChip } from '@/components/shared/ticket-stage'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
+import { useFeedCopy } from '@/components/public/preview-draft-context'
 
 /** What a row of the list reads from a conversation. */
 export interface SupportListConversation {
@@ -89,6 +90,15 @@ export function SupportPageView({
   const intl = useIntl()
   const designTitles = useDesignTitles()
   const authPopover = useAuthPopoverSafe()
+  const ownWords = useFeedCopy().request
+  // The design's own words for the New request button, edited where they sit.
+  const requestWords = (
+    <span data-qb-words="support.request">
+      {ownWords ?? (
+        <FormattedMessage id="portal.support.newConversation" defaultMessage="New conversation" />
+      )}
+    </span>
+  )
 
   const title = intl.formatMessage({ id: 'portal.support.title', defaultMessage: 'Support' })
   const subtitle = intl.formatMessage({
@@ -97,9 +107,13 @@ export function SupportPageView({
   })
   const newConversation = signedIn && messenger && (
     <Button asChild size="sm">
-      <Link to="/support/$conversationId" params={{ conversationId: 'new' }}>
+      <Link
+        to="/support/$conversationId"
+        params={{ conversationId: 'new' }}
+        data-qb-section="request"
+      >
         <PlusIcon className="me-1.5 h-4 w-4" />
-        <FormattedMessage id="portal.support.newConversation" defaultMessage="New conversation" />
+        {requestWords}
       </Link>
     </Button>
   )
@@ -173,12 +187,13 @@ export function SupportPageView({
             action={
               messenger ? (
                 <Button asChild>
-                  <Link to="/support/$conversationId" params={{ conversationId: 'new' }}>
+                  <Link
+                    to="/support/$conversationId"
+                    params={{ conversationId: 'new' }}
+                    data-qb-section="request"
+                  >
                     <PlusIcon className="me-1.5 h-4 w-4" />
-                    <FormattedMessage
-                      id="portal.support.newConversation"
-                      defaultMessage="New conversation"
-                    />
+                    {requestWords}
                   </Link>
                 </Button>
               ) : undefined

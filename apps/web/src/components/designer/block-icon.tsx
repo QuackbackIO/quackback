@@ -9,6 +9,7 @@ import {
   MegaphoneIcon,
   PencilSquareIcon,
   SignalIcon,
+  Squares2X2Icon,
 } from '@heroicons/react/16/solid'
 import type { HomeBlockType } from '@/lib/shared/design/home'
 import { cn } from '@/lib/shared/utils'
@@ -24,6 +25,7 @@ const ICONS: Record<HomeBlockType, typeof LinkIcon> = {
   status: SignalIcon,
   contact: ChatBubbleLeftRightIcon,
   links: LinkIcon,
+  boards: Squares2X2Icon,
 }
 
 /** A Home block's type as a small icon, beside its name. */

@@ -191,7 +191,9 @@ describe('Look', () => {
 
 describe('Layout', () => {
   it('sets height, alignment and shape as tiles, each its own step, with a dot and Reset', () => {
-    const { seen } = show()
+    const start = defaultDesign()
+    start.nav.home.on = true
+    const { seen } = show(start, 'home')
     expect(names('Height')).toEqual(['Short', 'Roomy', 'Tall'])
     expect(names('Alignment')).toEqual(['Start', 'Centre'])
     expect(names('Shape')).toEqual(['Full', 'Inset', 'Panel', 'Split'])
@@ -317,7 +319,7 @@ describe('Main action', () => {
     expect(screen.queryByRole('radiogroup', { name: 'Goes to' })).toBeNull()
     fireEvent.click(within(group('Main action')).getByRole('radio', { name: 'Button' }))
     expect(screen.queryByRole('radiogroup', { name: 'Composer width' })).toBeNull()
-    expect(names('Goes to')).toEqual(['Composer', 'Roadmap'])
+    expect(names('Goes to')).toEqual(['Composer', 'Roadmap', 'Help', 'Support'])
     fireEvent.click(within(group('Goes to')).getByRole('radio', { name: 'Roadmap' }))
     expect(seen.design.pages.home.button).toEqual({ to: 'roadmap' })
     fireEvent.click(screen.getByRole('switch', { name: 'Second button' }))
@@ -332,9 +334,11 @@ describe('Main action', () => {
     show(start, 'home', { ...ALL_ON, help: false, roadmap: false })
     expect(names('Main action')).toEqual(['Composer', 'Button', 'None'])
     expect(screen.getByRole('img', { name: 'Search needs the help centre on.' })).toBeTruthy()
-    expect(names('Goes to')).toEqual(['Composer'])
+    expect(names('Goes to')).toEqual(['Composer', 'Support'])
     expect(
-      screen.getByRole('img', { name: 'The roadmap needs to be on for a button to go there.' })
+      screen.getByRole('img', {
+        name: 'The roadmap needs to be on for a button to go there. The help centre needs to be on for a button to go there.',
+      })
     ).toBeTruthy()
   })
 
@@ -371,22 +375,49 @@ describe('Main action', () => {
   })
 })
 
-describe('More and the summary rows', () => {
-  it('keeps glow, blend, fade and other pages’ titles under a closed More', () => {
+describe('Home first', () => {
+  /** The panel's section titles, in order. */
+  const sections = () =>
+    [...document.querySelectorAll('[data-hero-panel] h3, [data-hero-panel] h2')]
+      .map((heading) => heading.textContent)
+      .filter((text) => ['Main action', 'Look', 'Image', 'Layout'].includes(text ?? ''))
+
+  it('leads Home’s hero with its main action, then its look, image and height', () => {
+    const start = defaultDesign()
+    start.nav.home.on = true
+    show(start, 'home')
+    expect(sections()).toEqual(['Main action', 'Look', 'Image', 'Layout'])
+    expect(names('Height')).toEqual(['Short', 'Roomy', 'Tall'])
+    expect(within(group('Height')).getByRole('radio', { name: 'Roomy' })).toBeTruthy()
+  })
+
+  it('gives the list pages Home’s look at a fixed height, with no height to set', () => {
+    for (const page of ['feedback', 'roadmap', 'changelog', 'help', 'support'] as const) {
+      show(defaultDesign(), page)
+      expect(screen.queryByRole('radiogroup', { name: 'Height' })).toBeNull()
+      expect(sections()).toEqual(['Look', 'Image', 'Layout'])
+      cleanup()
+    }
+  })
+
+  it('leaves where the page title sits to the page’s own panel', () => {
     const start = defaultDesign()
     start.layout.band = 'brand'
-    const { seen } = show(start)
+    show(start, 'roadmap')
+    expect(screen.queryByRole('radiogroup', { name: 'Other pages’ titles' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Page title' })).toBeNull()
+  })
+})
+
+describe('More and the summary rows', () => {
+  it('keeps glow, blend and fade under a closed More', () => {
+    const start = defaultDesign()
+    start.layout.band = 'brand'
+    show(start)
     const more = screen.getByText('More').closest('details')!
     expect(more.open).toBe(false)
     expect(within(more).getByRole('radiogroup', { name: 'Glow' })).toBeTruthy()
     expect(within(more).queryByRole('radiogroup', { name: 'Blend' })).toBeNull()
-    fireEvent.click(
-      within(within(more).getByRole('radiogroup', { name: 'Other pages’ titles' })).getByRole(
-        'radio',
-        { name: 'In the hero' }
-      )
-    )
-    expect(seen.design.layout.pageTitles).toBe('band')
   })
 
   it('sums up its fill and the page’s background, each opening in place', () => {

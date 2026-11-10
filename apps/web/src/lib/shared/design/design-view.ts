@@ -20,7 +20,7 @@ import {
   themeColours,
 } from './share-card'
 import type { PortalDesign } from './schema'
-import type { BandImage, DesignLogo, PortalDesignView } from './view'
+import type { BandImage, DesignLogo, PortalCopy, PortalDesignView } from './view'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
 
@@ -42,7 +42,8 @@ export function designView(
       welcome: feedbackWelcome(doc),
       headline: doc.pages.feedback.headline,
       defaultSort: doc.pages.feedback.defaultSort,
-      copy: doc.pages.feedback.copy,
+      openOn: doc.pages.feedback.openOn ?? null,
+      copy: portalCopy(doc),
     },
     home: doc.pages.home,
     titles: doc.pages.titles ?? {},
@@ -58,6 +59,12 @@ export function designView(
     },
     statusColours: statusColours(doc, resolved),
   }
+}
+
+/** The design's own words for the portal's controls: the feed's, and the New request button's. */
+function portalCopy(doc: PortalDesign): PortalCopy {
+  const request = doc.pages.support?.request
+  return request ? { ...doc.pages.feedback.copy, request } : doc.pages.feedback.copy
 }
 
 /** The logo's colours for status markers, when the design asks for them, readable on the page and cards. */

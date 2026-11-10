@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { designView } from '../design-view'
-import { defaultDesign } from '../schema'
+import { defaultDesign, portalDesign } from '../schema'
 import { contrastRatio } from '../contrast'
 import { resolveDesign } from '../resolve'
 import { brandStatusColour } from '../status-colours'
@@ -15,6 +15,20 @@ const body = {
 }
 
 describe('designView', () => {
+  it('carries the board the feed opens on, or null for every board', () => {
+    const doc = defaultDesign()
+    expect(designView(doc, null).feedback.openOn).toBeNull()
+    doc.pages.feedback.openOn = 'board_01h455vb4pex5vsknk084sn02q' as never
+    expect(portalDesign.parse(doc).pages.feedback.openOn).toBe('board_01h455vb4pex5vsknk084sn02q')
+    expect(designView(doc, null).feedback.openOn).toBe('board_01h455vb4pex5vsknk084sn02q')
+    expect(
+      portalDesign.safeParse({
+        ...doc,
+        pages: { ...doc.pages, feedback: { ...doc.pages.feedback, openOn: 'bugs' } },
+      }).success
+    ).toBe(false)
+  })
+
   it('carries the design’s own favicon and share image, where it has them', () => {
     const doc = defaultDesign()
     expect(designView(doc, null).icons).toMatchObject({ favicon: null, shareImage: null })
@@ -65,6 +79,17 @@ describe('designView', () => {
     expect(designView(doc, 1).feedback.welcome).toBeNull()
     doc.pages.feedback.welcome = { show: true, body: { type: 'doc', content: [] } }
     expect(designView(doc, 1).feedback.welcome).toBeNull()
+  })
+
+  it('carries the New request button’s own words with the feed’s', () => {
+    const doc = defaultDesign()
+    doc.pages.feedback.copy = { submit: { en: 'Post' } }
+    expect(designView(doc, null).feedback.copy).toEqual({ submit: { en: 'Post' } })
+    doc.pages.support = { suggest: false, request: { en: 'Ask us' } }
+    expect(designView(doc, null).feedback.copy).toEqual({
+      submit: { en: 'Post' },
+      request: { en: 'Ask us' },
+    })
   })
 
   it('carries the feedback page headline', () => {

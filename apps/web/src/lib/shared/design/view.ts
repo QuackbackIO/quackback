@@ -10,6 +10,9 @@ import type { PortalDesign } from './schema'
 /** Text a visitor reads, by locale. */
 export type LocalizedText = Record<string, string>
 
+/** The workspace's own words for the portal's controls, by language. */
+export type PortalCopy = PortalDesign['pages']['feedback']['copy'] & { request?: LocalizedText }
+
 /** A link a portal page's head carries for its design's fonts. */
 export type FontLink =
   | { rel: 'preload'; href: string; as: 'font'; type: 'font/woff2'; crossOrigin: 'anonymous' }
@@ -45,8 +48,13 @@ export type PortalDesignView =
         headline: PortalDesign['pages']['feedback']['headline']
         /** The feed's sort when the visitor has not picked one. */
         defaultSort: 'trending' | 'top' | 'new'
-        /** The workspace's own wording, by language. */
-        copy: PortalDesign['pages']['feedback']['copy']
+        /** The board the feed opens on when the address names none, by id; null is every board. */
+        openOn?: string | null
+        /**
+         * The workspace's own wording, by language: the feed's, and the
+         * support page's New request button (`request`).
+         */
+        copy: PortalCopy
       }
       /** Home's headline and blocks, shown at `/` while the menu has Home on. */
       home: PortalDesign['pages']['home']

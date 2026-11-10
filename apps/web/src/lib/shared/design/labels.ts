@@ -83,6 +83,7 @@ const LABELS: Record<string, string> = {
   'layout.width': 'Page width',
   'layout.filters': 'Filters side',
   'pages.feedback.defaultSort': 'Default sort',
+  'pages.feedback.openOn': 'Feed opens on',
   'brand.logo.display': 'Full logo image',
   'nav.home.on': 'Home page',
   'nav.home.tab': 'Home in the menu',
@@ -115,13 +116,28 @@ const LABELS: Record<string, string> = {
   'pages.changelog.entries': 'Changelog entries',
   'pages.changelog.images': 'Changelog images',
   'pages.changelog.subscribe': 'Subscribe button',
+  'pages.changelog.shipped': 'Shipped from posts',
   'pages.help': 'Help Center page',
   'pages.help.topics': 'Help topics',
   'pages.help.popular': 'Popular articles',
   'pages.help.search': 'Help search size',
+  'pages.help.helpful': 'Was this helpful?',
+  'pages.help.related': 'Related articles',
+  'pages.help.contact': 'Contact link',
+  'pages.support': 'Support page',
+  'pages.support.suggest': 'Suggested articles',
+  'pages.support.request': 'New request button',
   'pages.roadmap': 'Roadmap page',
   'pages.roadmap.board': 'Roadmap board',
   'pages.roadmap.votes': 'Roadmap votes',
+  'pages.post': 'Post page',
+  'pages.post.vote': 'Post vote',
+  'pages.post.board': 'Post board',
+  'pages.post.tags': 'Post tags',
+  'pages.post.date': 'Post date',
+  'pages.post.author': 'Post author',
+  'pages.post.subscribe': 'Post subscribe',
+  'pages.post.comments': 'Comment order',
 }
 
 const COPY_LABELS: Record<string, string> = {
@@ -260,6 +276,8 @@ const CHANGE_GROUPS: Array<[group: string, matches: RegExp]> = [
   ['Roadmap page', /^pages\.roadmap\b/],
   ['Changelog page', /^pages\.changelog\b/],
   ['Help Center page', /^pages\.help\b/],
+  ['Post page', /^pages\.post\b/],
+  ['Support page', /^pages\.support\b/],
 ]
 
 /** The part of the portal a change belongs to, for grouping a review. */

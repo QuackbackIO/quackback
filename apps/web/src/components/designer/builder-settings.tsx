@@ -5,6 +5,7 @@ import type { PanelAction, PanelState, PanelView } from '@/lib/shared/design/bui
 import type { DesignCheck } from '@/lib/shared/design/checks'
 import type { HomeBlockType } from '@/lib/shared/design/home'
 import type { DesignerPage, OutlineNode, Selection } from '@/lib/shared/design/outline'
+import type { TreeRow } from '@/lib/shared/design/page-tree'
 import type { PanelRoute } from '@/lib/shared/design/panel-routes'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -53,7 +54,10 @@ export function BuilderSettings({
   element,
   onOverride,
   onBlock,
+  onTreePick,
 }: {
+  /** A row of the page's tree picked, as a click on the canvas picks it. */
+  onTreePick?: (row: TreeRow) => void
   /** Picks an override's element on the canvas. */
   onOverride?: (o: StyleOverride) => void
   /** Picks a Home block, from Theme's places set differently. */
@@ -122,6 +126,8 @@ export function BuilderSettings({
             drag={drag}
             onOverride={onOverride}
             onBlock={onBlock}
+            phone={phone}
+            onPhone={onPhone}
             onLogo={() => {
               panel.close()
               onSelect('logo')
@@ -150,6 +156,7 @@ export function BuilderSettings({
           onTheme={onTheme}
           logoUrl={logoUrl}
           say={say}
+          onTreePick={onTreePick}
         />
       )}
     </RightPanel>

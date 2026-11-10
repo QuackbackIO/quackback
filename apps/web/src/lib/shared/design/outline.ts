@@ -39,7 +39,14 @@ export type Selection =
   | 'entries'
   | 'topics'
   | 'popular'
+  /** The end of each help article; the support page's way to start a request. */
+  | 'article'
+  | 'request'
   | 'board'
+  /** A post's one vote control, its details and its comments. */
+  | 'vote'
+  | 'details'
+  | 'comments'
   | `block-${string}`
   /** A part of the menu or a page under one, such as `page:help` or `page:post`; see menu.ts. */
   | `page:${DesignerPage}`
@@ -97,8 +104,9 @@ const PAGE_SECTIONS: Record<
       key: 'popular',
       label: design.pages.help?.popular === false ? 'Popular articles (off)' : 'Popular articles',
     },
+    { key: 'article', label: 'End of article' },
   ],
-  support: () => [],
+  support: () => [{ key: 'request', label: 'New request' }],
 }
 
 /** The parts of a page, in the order a visitor meets them, after what every page shares. */
@@ -134,7 +142,13 @@ export function outlineOf(design: PortalDesign, page: DesignerPage): OutlineNode
     nodes.push({ key: 'composer', label: 'Composer' })
     nodes.push({ key: 'feed', label: 'Feed' })
     nodes.push({ key: 'filters', label: 'Filters' })
-  } else if (page !== 'status' && page !== 'post') {
+  } else if (page === 'post') {
+    nodes.push(
+      { key: 'vote', label: 'Vote' },
+      { key: 'details', label: 'Details' },
+      { key: 'comments', label: 'Comments' }
+    )
+  } else if (page !== 'status') {
     nodes.push(...PAGE_SECTIONS[page](design))
   }
   return nodes

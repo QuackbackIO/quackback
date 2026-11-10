@@ -11,7 +11,6 @@ import {
   deviceCaption,
   draftWords,
   escapeStep,
-  pageParts,
   paneWidthOnKey,
   panelBaseOf,
   panelReducer,
@@ -157,8 +156,11 @@ describe('devices', () => {
 
   it('names the width over the canvas for tablet and phone only', () => {
     expect(deviceCaption('desktop')).toBeNull()
-    expect(deviceCaption('tablet')).toBe('Tablet, 768 px wide')
-    expect(deviceCaption('phone')).toBe('Phone, 390 px wide')
+    // Tablet has no values of its own: it shows, and edits, all screens'.
+    expect(deviceCaption('tablet')).toBe(
+      'Tablet, 768 px wide · Tablet shows your all-screens values'
+    )
+    expect(deviceCaption('phone')).toBe('Phone, 390 px wide · Editing phone values')
   })
 })
 
@@ -204,13 +206,27 @@ describe('draftWords', () => {
 
 describe('the Ask AI pane', () => {
   it('opens at its usual width, expanded, with nothing remembered', () => {
-    expect(readAiPane(null)).toEqual({ collapsed: false, width: AI_PANE.width })
+    expect(readAiPane(null)).toEqual({ collapsed: false, width: AI_PANE.width, chosen: false })
+  })
+
+  it('opens collapsed once a brand match has run, unless it was opened or closed by hand', () => {
+    expect(readAiPane(null, true).collapsed).toBe(true)
+    // A width alone is not a choice; an older collapse was.
+    expect(readAiPane(JSON.stringify({ collapsed: false, width: 400 }), true).collapsed).toBe(true)
+    expect(readAiPane(JSON.stringify({ collapsed: true }), false)).toMatchObject({
+      collapsed: true,
+      chosen: true,
+    })
+    expect(readAiPane(JSON.stringify({ collapsed: false, chosen: true }), true).collapsed).toBe(
+      false
+    )
   })
 
   it('remembers a width and whether it was collapsed', () => {
     expect(readAiPane(JSON.stringify({ collapsed: true, width: 420 }))).toEqual({
       collapsed: true,
       width: 420,
+      chosen: true,
     })
   })
 
@@ -220,10 +236,15 @@ describe('the Ask AI pane', () => {
   })
 
   it('shrugs off anything it cannot read', () => {
-    expect(readAiPane('not json')).toEqual({ collapsed: false, width: AI_PANE.width })
+    expect(readAiPane('not json')).toEqual({
+      collapsed: false,
+      width: AI_PANE.width,
+      chosen: false,
+    })
     expect(readAiPane(JSON.stringify({ collapsed: 'yes', width: 'wide' }))).toEqual({
       collapsed: false,
       width: AI_PANE.width,
+      chosen: false,
     })
   })
 
@@ -239,29 +260,5 @@ describe('the Ask AI pane', () => {
     expect(paneWidthOnKey('Home', 400)).toBe(300)
     expect(paneWidthOnKey('End', 400)).toBe(480)
     expect(paneWidthOnKey('a', 400)).toBeNull()
-  })
-})
-
-describe('pageParts', () => {
-  it('lists what can be picked on the page, in reading order, without what every page shares', () => {
-    const parts = pageParts([
-      { key: 'site', label: 'Every page', children: [{ key: 'site:brand', label: 'Brand' }] },
-      { key: 'header', label: 'Header and menu' },
-      { key: 'hero', label: 'Hero' },
-      {
-        key: 'home',
-        label: 'Blocks',
-        children: [
-          { key: 'block-a', label: 'Top posts' },
-          { key: 'block-b', label: 'Status' },
-        ],
-      },
-    ])
-    expect(parts).toEqual([
-      { key: 'header', label: 'Header and menu' },
-      { key: 'hero', label: 'Hero' },
-      { key: 'block-a', label: 'Top posts' },
-      { key: 'block-b', label: 'Status' },
-    ])
   })
 })

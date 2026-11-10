@@ -12,9 +12,20 @@ import { newBlock } from '@/lib/shared/design/home'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 
 const MOBILE = 'board_01h455vb4pex5vsknk084sn02q'
+const PLANNED = 'post_status_01h455vb4pex5vsknk084sn02q'
+const COMPLETE = 'post_status_01h455vb4pex5vsknk084sn02r'
 
 vi.mock('../use-block-sources', () => ({
-  useBlockSources: () => ({ boards: [[MOBILE, 'Mobile']], roadmaps: [], categories: [] }),
+  useBlockSources: () => ({
+    boards: [[MOBILE, 'Mobile']],
+    roadmaps: [],
+    categories: [],
+    statuses: [
+      [PLANNED, 'Planned'],
+      [COMPLETE, 'Complete'],
+    ],
+    shipped: [COMPLETE],
+  }),
 }))
 vi.mock('@/components/admin/settings/branding/welcome-body-editor', () => ({
   WelcomeBodyEditor: () => null,
@@ -92,6 +103,24 @@ describe('the picked block’s panel', () => {
     const ideas = seen.design.pages.home.blocks[1] as { boardIds?: string[] }
     expect(ideas.boardIds).toEqual([MOBILE])
     expect(seen.labels).toEqual(['Top posts: From'])
+  })
+
+  it('lets Top posts draw from chosen statuses', () => {
+    const { seen } = show('block-ideas0001', home())
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Planned' }))
+    expect((seen.design.pages.home.blocks[1] as { statusIds?: string[] }).statusIds).toEqual([
+      PLANNED,
+    ])
+    expect(seen.labels).toEqual(['Top posts: Status'])
+  })
+
+  it('shows recently shipped posts in one step: the shipped statuses, newest first', () => {
+    const { seen } = show('block-ideas0001', home())
+    fireEvent.click(screen.getByRole('button', { name: 'Use' }))
+    const ideas = seen.design.pages.home.blocks[1] as { statusIds?: string[]; sort: string }
+    expect(ideas.statusIds).toEqual([COMPLETE])
+    expect(ideas.sort).toBe('new')
+    expect(seen.labels).toEqual(['Top posts: recently shipped'])
   })
 
   it('names a change for the block and the setting, for undo', () => {
@@ -346,9 +375,8 @@ describe('an element opened from a Home block', () => {
     show('block-status001', three(), false, [], onPhone)
     const menu = await openMenu(screen.getByRole('button', { name: 'Element' }))
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Status markers' }))
-    const more = await screen.findByRole('button', { name: /more actions$/ })
-    const actions = await openMenu(more)
-    fireEvent.click(within(actions).getByRole('menuitem', { name: 'Phone values' }))
+    const chip = await screen.findByRole('radiogroup', { name: 'Editing' })
+    fireEvent.click(within(chip).getByRole('radio', { name: 'Phone' }))
     expect(onPhone).toHaveBeenCalledWith(true)
   })
 })

@@ -162,6 +162,8 @@ export interface AiPlaces {
   categories: readonly NamedThing[]
   /** The public roadmaps' columns, each by its status. */
   columns?: readonly NamedThing[]
+  /** The posts' statuses, such as Planned or Complete. */
+  statuses?: readonly NamedThing[]
 }
 
 /** What a workspace has of one kind, none when it was not read. */
@@ -303,6 +305,7 @@ const BLOCK_ALIASES: Partial<Record<HomeBlockType, readonly string[]>> = {
   contact: ['contact', 'contact us'],
   welcome: ['welcome', 'welcome message'],
   links: ['links'],
+  boards: ['boards', 'board list', 'our boards'],
   roadmap: ['roadmap'],
 }
 
@@ -373,7 +376,12 @@ const SOURCES = {
   roadmaps: 'roadmap',
   categories: 'help topic',
   columns: 'roadmap column',
+  statuses: 'status',
 } as const
+
+/** A kind of thing, more than one. */
+const many = (kind: keyof typeof SOURCES) =>
+  SOURCES[kind].endsWith('s') ? `${SOURCES[kind]}es` : `${SOURCES[kind]}s`
 
 /** A workspace's thing by name or id, or why there is none. */
 function pick(
@@ -386,7 +394,7 @@ function pick(
     things.find((thing) => norm(thing.name) === norm(word)) ??
     things.find((thing) => norm(thing.name).startsWith(norm(word)))
   if (found) return found
-  if (things.length === 0) return `This workspace has no public ${SOURCES[kind]}s`
+  if (things.length === 0) return `This workspace has no public ${many(kind)}`
   return `There is no ${SOURCES[kind]} called ${quoted(word)}; there are ${listed(things.map((thing) => thing.name))}`
 }
 
@@ -457,7 +465,7 @@ function settingValue(
         return { value: ids[0] ?? null }
       }
       if (field.max && ids.length > field.max)
-        return { refusal: `${field.label} takes up to ${field.max} ${SOURCES[field.source]}s` }
+        return { refusal: `${field.label} takes up to ${field.max} ${many(field.source)}` }
       return { value: ids }
     }
     case 'image':
@@ -586,7 +594,7 @@ export function setHero(
 
 /* The pages' sections */
 
-const CHOICE_PAGES = ['changelog', 'help', 'roadmap'] as const
+const CHOICE_PAGES = ['changelog', 'help', 'roadmap', 'post', 'support'] as const
 /** Page settings that are no block of their own: each page's key, its field and its values. */
 const PAGE_EXTRAS: Record<
   string,
@@ -604,6 +612,34 @@ const PAGE_EXTRAS: Record<
   },
 }
 
+/** The board the feed opens on, picked by name like a block's board. */
+const OPENS_ON: Extract<SettingField, { kind: 'source' }> = {
+  kind: 'source',
+  key: 'opensOn',
+  label: 'Feed opens on',
+  source: 'boards',
+  multiple: false,
+  any: 'All boards',
+  about: 'The board the feed opens on when the address names none',
+}
+
+/** Opens the feed on one board, or on every board with none named. */
+function setOpensOn(design: PortalDesign, world: OpWorld, value: unknown): OpResult {
+  const every = typeof value === 'string' && /^(all|every|any)( boards?)?$/.test(norm(value))
+  const read = every ? { value: null } : settingValue(OPENS_ON, value, world.places)
+  if ('refusal' in read) return refuse(read.refusal)
+  const draft = structuredClone(design)
+  if (typeof read.value === 'string')
+    draft.pages.feedback.openOn = read.value as PortalDesign['pages']['feedback']['openOn']
+  else delete draft.pages.feedback.openOn
+  return finish(
+    design,
+    draft,
+    `${OPENS_ON.label}: ${spokenValue(OPENS_ON, read.value, world.places)}`,
+    world
+  )
+}
+
 /** The page a target names, such as "roadmap page", "page:help" or "help center". */
 function pageOf(target: string | undefined): string | null {
   if (!target) return null
@@ -619,7 +655,11 @@ export function pageSettings(page: string): string[] {
   const own = SECTION_TYPES.filter((type) => type.startsWith(`${page}.`)).flatMap((type) =>
     blockOf(type)!.fields.map((field) => field.key)
   )
-  return [...own, ...Object.keys(PAGE_EXTRAS[page] ?? {})]
+  return [
+    ...own,
+    ...Object.keys(PAGE_EXTRAS[page] ?? {}),
+    ...(page === 'feedback' ? [OPENS_ON.key] : []),
+  ]
 }
 
 /** Sets one of a page's own settings: setPageSection(page, key, value). */
@@ -648,6 +688,7 @@ export function setPageSection(
     const label = `${PAGE_NAMES[page as PortalPageType]} ${field.label.toLowerCase()}: ${spokenValue(field, read.value, world.places)}`
     return finish(design, draft, label, world)
   }
+  if (page === 'feedback' && key === OPENS_ON.key) return setOpensOn(design, world, value)
   const extra = key ? PAGE_EXTRAS[page]?.[key] : undefined
   if (extra) {
     if (!extra.values.includes(value as string))

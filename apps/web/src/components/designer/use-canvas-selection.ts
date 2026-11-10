@@ -84,6 +84,14 @@ export function useCanvasSelection({
   /**
    * A click on the page picks the element under it and the block it is in,
    * the block alone on its own box, or lets go on empty canvas.
+   *
+   * The click rule, the same on every page: the first click picks the
+   * innermost thing under the pointer that can be styled on its own
+   * (element-pick.ts pickAt). A listed item, such as a post's title or
+   * excerpt, is that thing wherever posts are listed (a Home block, the
+   * Feedback feed, the roadmap board), never the card around it; else a
+   * registered part; else an element kind. The breadcrumb climbs to the
+   * block, and Escape goes up a level at a time.
    */
   const select = useCallback(
     (section: string | null, link: string | null, target?: Element | null) => {

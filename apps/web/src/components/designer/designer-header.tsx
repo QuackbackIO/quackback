@@ -156,7 +156,6 @@ export function DesignerHeader({
   onExit,
   workspaceName,
   pagePicker,
-  blocks,
   view,
   size,
   onSize,
@@ -179,8 +178,6 @@ export function DesignerHeader({
   workspaceName: string
   /** The page shown, and the way to every other page. */
   pagePicker: ReactNode
-  /** Every block on the page, the keyboard's way to pick one. */
-  blocks?: ReactNode
   /** How the page is shown while editing, beside the device switch. */
   view?: ReactNode
   size: Device
@@ -237,7 +234,6 @@ export function DesignerHeader({
         </span>
       </nav>
       {pagePicker}
-      {blocks}
       <div className="mx-auto flex items-center gap-1">
         <DeviceToggle size={size} onSize={onSize} />
         {view}

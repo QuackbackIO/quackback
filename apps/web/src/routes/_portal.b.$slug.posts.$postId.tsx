@@ -1,11 +1,15 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { createFileRoute, notFound } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { BackLink } from '@/components/ui/back-link'
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { UnsubscribeBanner } from '@/components/public/unsubscribe-banner'
+import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
+import { usePageChoices } from '@/components/public/preview-draft-context'
+import { postVotePlaces } from '@/components/public/preview-draft-context'
+import { cn } from '@/lib/shared/utils'
 import { VoteSidebar, VoteSidebarSkeleton } from '@/components/public/post-detail/vote-sidebar'
 import { PostContentSection } from '@/components/public/post-detail/post-content-section'
 import {
@@ -145,9 +149,32 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   component: PostDetailPage,
 })
 
+/** Subscribe beside the comments' heading, where the design moves it from the details. */
+function CommentsSubscribe({ postId }: { postId: PostId }) {
+  const intl = useIntl()
+  const { data } = useQuery(portalDetailQueries.voteSidebarData(postId))
+  return (
+    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+      {intl.formatMessage({
+        id: 'portal.postDetail.metadata.subscribe',
+        defaultMessage: 'Subscribe',
+      })}
+      <AuthSubscriptionBell
+        postId={postId}
+        initialStatus={
+          data?.subscriptionStatus ?? { subscribed: false, level: 'none', reason: null }
+        }
+        disabled={!data?.isMember}
+      />
+    </span>
+  )
+}
+
 function PostDetailPage() {
   const { postId, slug } = Route.useLoaderData()
   const session = useSessionContext()
+  // The design's choices for the post's parts: its one vote control, its details, its comments.
+  const choices = usePageChoices().post
 
   const intl = useIntl()
   const [isEditingPost, setIsEditingPost] = useState(false)
@@ -254,6 +281,7 @@ function PostDetailPage() {
   }
 
   const currentStatus = statusesQuery.data.find((s) => s.id === post.statusId)
+  const voteAt = postVotePlaces(choices.vote, team.canVoteOnBehalf)
 
   const typedPost: PublicPostDetailView = {
     ...post,
@@ -347,9 +375,19 @@ function PostDetailPage() {
         {/* Post detail card */}
         <div className="bg-card border border-border/40 rounded-lg overflow-hidden">
           <div className="flex">
-            <Suspense fallback={<VoteSidebarSkeleton />}>
-              <VoteSidebar postId={postId} voteCount={post.voteCount} disabled={!!post.mergeInfo} />
-            </Suspense>
+            {/* The post's one vote control: beside the title, or in the details where they show. */}
+            <div
+              data-qb-section="vote"
+              className={cn('flex', voteAt.title === 'narrow' && 'lg:hidden')}
+            >
+              <Suspense fallback={<VoteSidebarSkeleton />}>
+                <VoteSidebar
+                  postId={postId}
+                  voteCount={post.voteCount}
+                  disabled={!!post.mergeInfo}
+                />
+              </Suspense>
+            </div>
 
             <PostContentSection
               post={typedPost}
@@ -402,13 +440,20 @@ function PostDetailPage() {
                 votersCanCreateUser={team.canCreatePeople}
                 onVotersInvalidate={team.invalidateVoters}
                 manageActions={manageActions}
+                portalVote={voteAt.details}
+                rows={choices}
+                hideSubscribe={choices.subscribe !== 'details'}
+                markParts
               />
             </Suspense>
           </div>
         </div>
 
         {/* Comments card */}
-        <div className="bg-card border border-border/40 rounded-lg overflow-hidden mt-4">
+        <div
+          data-qb-section="comments"
+          className="bg-card border border-border/40 rounded-lg overflow-hidden mt-4"
+        >
           <Suspense fallback={<CommentsSectionSkeleton count={post.commentsTotalRootCount} />}>
             <CommentsSection
               postId={postId}
@@ -446,6 +491,10 @@ function PostDetailPage() {
               }
               onImageUpload={uploadMediaWithSession}
               canModerate={canModerate}
+              order={choices.comments}
+              headerAction={
+                choices.subscribe === 'comments' ? <CommentsSubscribe postId={postId} /> : undefined
+              }
             />
           </Suspense>
         </div>

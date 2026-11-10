@@ -16,13 +16,21 @@ const recordFeedback = vi.fn(async (_input: { data: unknown }) => ({
 }))
 const submitReason = vi.fn(async (_input: { data: unknown }) => ({ success: true as const }))
 
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}))
+
 vi.mock('@/lib/server/functions/help-center', () => ({
   recordArticleFeedbackFn: (input: { data: unknown }) => recordFeedback(input),
   submitArticleFeedbackReasonFn: (input: { data: unknown }) => submitReason(input),
 }))
 
 import de from '@/locales/de.json'
-import { HelpCenterArticleFeedback } from '../help-center-article-feedback'
+import { HelpCenterArticleClose, HelpCenterArticleFeedback } from '../help-center-article-feedback'
 
 afterEach(() => {
   cleanup()
@@ -109,5 +117,39 @@ describe('HelpCenterArticleFeedback', () => {
     fireEvent.click(screen.getByRole('button', { name: /Ja/ }))
     expect(await screen.findByText(de['portal.hc.articleFeedback.thanksHelpful'])).toBeTruthy()
     expect(document.body.textContent).not.toMatch(/Was this helpful|Yes|Thanks/)
+  })
+})
+
+describe('HelpCenterArticleClose', () => {
+  const renderClose = (choices: { helpful: boolean; contact: boolean }, href: string | null) =>
+    render(
+      <IntlProvider locale="en" messages={{}} onError={() => {}}>
+        <HelpCenterArticleClose articleId="article_1" contactHref={href} {...choices} />
+      </IntlProvider>
+    )
+
+  it('asks "Was this helpful?" without a Contact link, as articles always did', () => {
+    renderClose({ helpful: true, contact: false }, '/support/new')
+    expect(screen.getByText('Was this helpful?')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Contact support' })).toBeNull()
+  })
+
+  it('leaves the question off, and adds the Contact link, as the design asks', () => {
+    renderClose({ helpful: false, contact: true }, '/support/new')
+    expect(screen.queryByText('Was this helpful?')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Contact support' }).getAttribute('href')).toBe(
+      '/support/new'
+    )
+  })
+
+  it('offers contact once: not again after a "No" while the link is there', async () => {
+    renderClose({ helpful: true, contact: true }, '/support/new')
+    await voteUnhelpful()
+    expect(screen.getAllByRole('link', { name: 'Contact support' })).toHaveLength(1)
+  })
+
+  it('draws no Contact link while support is off', () => {
+    renderClose({ helpful: false, contact: true }, null)
+    expect(screen.queryByRole('link', { name: 'Contact support' })).toBeNull()
   })
 })

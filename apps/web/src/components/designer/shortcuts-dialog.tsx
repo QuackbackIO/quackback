@@ -9,9 +9,11 @@ import {
 const KEYS: Array<[string, string]> = [
   ['Ctrl+Z, Ctrl+Shift+Z', 'Undo and redo'],
   ['Ctrl+K', 'Find a part, page or setting'],
+  ['/', 'Open Ask AI'],
   ['Escape', 'Close a panel, step back from what is picked, or leave Preview'],
-  ['F6', 'Move between the top bar, rail, panel, page and settings'],
-  ['Arrow keys', 'Move through the rail and through Pages'],
+  ['F6', 'Move between the top bar, Ask AI, the canvas and the properties'],
+  ['Arrow keys', 'Move through On this page; Left and Right close and open a part'],
+  ['Alt+Up, Alt+Down', 'Move a block or menu item in On this page'],
   ['Delete', 'Remove the picked block'],
   ['Ctrl+D', 'Copy the picked block'],
   ['?', 'Show these keys'],

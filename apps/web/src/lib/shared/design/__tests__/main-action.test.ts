@@ -39,7 +39,7 @@ function withComposer(): PortalDesign {
 describe('the main action field', () => {
   it('is four choices, the composer first', () => {
     expect(DESIGN_OPTIONS.mainAction).toEqual(['composer', 'search', 'button', 'none'])
-    expect(DESIGN_OPTIONS.heroButtonTo).toEqual(['composer', 'roadmap'])
+    expect(DESIGN_OPTIONS.heroButtonTo).toEqual(['composer', 'roadmap', 'help', 'support'])
   })
 
   it('is optional on Home, with a call to action’s own settings, and only takes its values', () => {
@@ -140,6 +140,16 @@ describe('what Home draws', () => {
     expect(drawnButtonTo(design.pages.home, { ...ALL_ON, roadmap: false })).toBe('composer')
   })
 
+  it('goes to help or support while that page is on, else falls back', () => {
+    const design = withComposer()
+    design.pages.home.button = { to: 'help' }
+    expect(drawnButtonTo(design.pages.home, ALL_ON)).toBe('help')
+    expect(drawnButtonTo(design.pages.home, { ...ALL_ON, help: false })).toBe('composer')
+    design.pages.home.button = { to: 'support' }
+    expect(drawnButtonTo(design.pages.home, ALL_ON)).toBe('support')
+    expect(drawnButtonTo(design.pages.home, { ...ALL_ON, support: false })).toBe('composer')
+  })
+
   it('draws no call to action with nowhere for it to go', () => {
     const design = withComposer()
     design.pages.home.mainAction = 'button'
@@ -153,7 +163,7 @@ describe('mainActionsOffered', () => {
   it('offers every choice with every page on', () => {
     expect(mainActionsOffered(ALL_ON)).toEqual({
       actions: ['composer', 'search', 'button', 'none'],
-      buttonTo: ['composer', 'roadmap'],
+      buttonTo: ['composer', 'roadmap', 'help', 'support'],
       notes: { actions: [], buttonTo: [] },
     })
   })
@@ -161,10 +171,13 @@ describe('mainActionsOffered', () => {
   it('leaves Search out without the help centre and the roadmap without one, saying why', () => {
     const offered = mainActionsOffered({ ...ALL_ON, help: false, roadmap: false })
     expect(offered.actions).toEqual(['composer', 'button', 'none'])
-    expect(offered.buttonTo).toEqual(['composer'])
+    expect(offered.buttonTo).toEqual(['composer', 'support'])
     expect(offered.notes).toEqual({
       actions: ['Search needs the help centre on.'],
-      buttonTo: ['The roadmap needs to be on for a button to go there.'],
+      buttonTo: [
+        'The roadmap needs to be on for a button to go there.',
+        'The help centre needs to be on for a button to go there.',
+      ],
     })
   })
 })

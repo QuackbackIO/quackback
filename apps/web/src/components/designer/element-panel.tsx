@@ -13,6 +13,11 @@
  * smaller on a phone, a text colour is moved so it reads), a muted second
  * line says what is drawn, with Use this. The places that keep their own
  * values are listed at the foot.
+ *
+ * Under the scope line, a chip says which screens a change goes to: all
+ * screens, or phones. On the Phone canvas the scope block is tinted, a row
+ * set for phones has a tinted dot and "Use all-screens value"; on all screens
+ * a row whose phones differ has a tinted dot.
  */
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
@@ -23,7 +28,14 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { pickName, singular, type ElementPick, type Reach } from '@/lib/shared/design/element-pick'
+import { cn } from '@/lib/shared/utils'
+import {
+  pickName,
+  pickScope,
+  singular,
+  type ElementPick,
+  type Reach,
+} from '@/lib/shared/design/element-pick'
 import { partOf } from '@/lib/shared/design/parts-registry'
 import {
   SCOPE_NAMES,
@@ -78,6 +90,7 @@ import {
   type OverridePlace,
   type PanelAction,
 } from './properties/properties-panel'
+import { PHONE_TINT, PHONE_WORDS } from './properties/phone-mode'
 import { ScopeLine, type ScopeOption } from './properties/scope-line'
 import { ScrubNumber } from './properties/scrub-number'
 import { FontField, TokenField } from './properties/token-field'
@@ -109,6 +122,12 @@ export interface DrawnElement {
   size: DrawnSize
   dark: boolean
 }
+
+/**
+ * A count a scope line shows. A scope that holds the pick reaches one at
+ * least, so none is shown rather than a 0 that would be wrong.
+ */
+const counted = (n: number | null | undefined) => (n ? n : undefined)
 
 /** A row's tile for its exact field, after the brand's choices. */
 const CUSTOM = 'custom'
@@ -172,22 +191,28 @@ export function ElementPanel({
 }) {
   const ctx = useMemo(() => contextOf(pick, page), [pick, page])
   const el: StyleElementInfo = STYLE_ELEMENTS[pick.element]
-  const scopes = shared ? (['everywhere'] as ScopeName[]) : scopesFor(ctx)
+  // What a change reaches, in the pick's own noun. A listed item, such as a post's title, is
+  // reached only by its own part, which changes every item where it is listed.
+  const reaches = pickScope(pick, design, ctx.page)
+  const item = !shared && reaches.item
+  const scopes: ScopeName[] = shared ? ['everywhere'] : item ? ['part'] : scopesFor(ctx)
+  const startAt: ScopeName = item ? 'part' : defaultScope(ctx)
   const [scope, setScope] = useState<ScopeName>(() =>
-    initialScope && scopes.includes(initialScope) ? initialScope : defaultScope(ctx)
+    initialScope && scopes.includes(initialScope) ? initialScope : startAt
   )
   /** Rows whose Custom tile is picked, showing their exact field before a value is set. */
   const [customOpen, setCustomOpen] = useState<ReadonlySet<StyleProp>>(new Set())
-  const at = scopes.includes(scope) ? scope : defaultScope(ctx)
+  const at = scopes.includes(scope) ? scope : startAt
   const name = pickName(pick, design, ctx.page)
+  // One of its element kind, which the wider scopes it inherits from are named by.
   const one = singular(pick.element)
   // Under its block in the trail, a part is named alone: "Call to action".
   const crumb = shared ? el.label : (pick.part && partOf(design, pick.part)?.label) || name
   const phone = screen === 'phone'
   const tokens = useMemo(() => colourTokens(design), [design])
   const fonts = useMemo(() => fontTokens(design), [design])
-  const undoName = (what: string) =>
-    `${name}: ${what}, ${SCOPE_NAMES[at].toLowerCase()}${phone ? ', phones' : ''}`
+  const atWords = item ? reaches.phrase : SCOPE_NAMES[at].toLowerCase()
+  const undoName = (what: string) => `${name}: ${what}, ${atWords}${phone ? ', phones' : ''}`
   const allowed = (prop: StyleProp) =>
     (el.props as readonly StyleProp[]).includes(prop) &&
     styleAllows(pick.element, state, prop) &&
@@ -230,6 +255,16 @@ export function ElementPanel({
   }
   const inheritedRaw = (prop: StyleProp): { value: unknown; from: string } | null => {
     const wider = widerValue(design, ctx, at, screen, state, prop)
+    // A listed item takes nothing from wider scopes: none of them reaches it. It has what it is drawn with.
+    if (item) {
+      if (wider && wider.from === at)
+        return {
+          value: wider.value,
+          from: wider.screen !== screen ? 'From all screens' : `From ${STATE_INFO.base.label}`,
+        }
+      const measured = measure?.(prop)
+      return measured !== undefined ? { value: measured, from: WORDS.fromBrand } : null
+    }
     if (wider)
       return {
         value: wider.value,
@@ -394,6 +429,14 @@ export function ElementPanel({
       }
     })()
     const second = inUse(prop, label, here ?? from?.value)
+    // Phones' own value: on a phone it can go back to all screens'; elsewhere a dot says it is there.
+    const phoneRow = {
+      phoneSet:
+        !phone &&
+        (PHONE_PROPS as readonly string[]).includes(prop) &&
+        readAt(design, ctx, at, 'phone', state, prop) !== undefined,
+      onUseAllScreens: phone ? () => write(prop, undefined) : undefined,
+    }
     if (choice) {
       const custom = here !== undefined || customOpen.has(prop)
       return (
@@ -405,6 +448,7 @@ export function ElementPanel({
             source={choice.reach ?? from?.from}
             resetLabel={resetLabel}
             onReset={() => write(prop, undefined)}
+            {...phoneRow}
           >
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <PropertyTiles
@@ -443,6 +487,7 @@ export function ElementPanel({
           source={from?.from}
           resetLabel={resetLabel}
           onReset={() => write(prop, undefined)}
+          {...phoneRow}
         >
           {control}
         </PropertyRow>
@@ -485,7 +530,7 @@ export function ElementPanel({
             id: 'block' as const,
             link: WORDS.thisBlock,
             phrase: `this block’s ${kinds}`,
-            count: reach?.block ?? undefined,
+            count: counted(reach?.block),
           },
         ]
       : []),
@@ -495,7 +540,7 @@ export function ElementPanel({
             id: 'page' as const,
             link: WORDS.thisPage,
             phrase: `${kinds} on ${PAGE_NAMES[page]}`,
-            count: reach?.page,
+            count: counted(reach?.page),
           },
         ]
       : []),
@@ -518,20 +563,13 @@ export function ElementPanel({
     ...(values
       ? [
           {
-            label: `Reset ${scopeWords(at, one)} (${values} ${values === 1 ? 'value' : 'values'})`,
+            label: `Reset ${item ? reaches.phrase : scopeWords(at, one)} (${values} ${values === 1 ? 'value' : 'values'})`,
             onSelect: () =>
               update((draft) => {
                 resetAt(draft, ctx, at, screen)
                 for (const p of homes) writeEverywhere(draft, pick.element, p, undefined)
               }, undoName('reset')),
           },
-        ]
-      : []),
-    ...(onScreen
-      ? [
-          phone
-            ? { label: 'All screens', onSelect: () => onScreen('all') }
-            : { label: 'Phone values', onSelect: () => onScreen('phone') },
         ]
       : []),
   ]
@@ -554,32 +592,32 @@ export function ElementPanel({
       actions={actions}
       overrides={overrides}
       scope={
-        <div className="space-y-2">
+        <div
+          className={cn('space-y-2', phone && PHONE_TINT.block)}
+          data-phone-mode={phone || undefined}
+        >
           <ScopeLine
             one={one}
-            widest={{
-              id: 'everywhere',
-              count: reach?.page,
-              countNote: reach ? 'on this page' : undefined,
-            }}
-            narrower={narrower}
+            widest={
+              item
+                ? { id: 'part', phrase: reaches.phrase, count: counted(reach?.page) }
+                : {
+                    id: 'everywhere',
+                    count: counted(reach?.page),
+                    countNote: counted(reach?.page) ? 'on this page' : undefined,
+                  }
+            }
+            narrower={item ? [] : narrower}
             value={at}
             onChange={setScope}
           />
-          {phone && onScreen && (
-            <p className="text-xs text-muted-foreground">
-              Phone values ·{' '}
-              <button
-                type="button"
-                onClick={() => onScreen('all')}
-                className="rounded underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-              >
-                All screens
-              </button>
-            </p>
-          )}
-          {el.states.length > 1 && (
-            <StateChip states={el.states} value={state} onChange={onState} isSet={statesSet} />
+          {(onScreen || el.states.length > 1) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {onScreen && <ScreenChip value={screen} onChange={onScreen} />}
+              {el.states.length > 1 && (
+                <StateChip states={el.states} value={state} onChange={onState} isSet={statesSet} />
+              )}
+            </div>
           )}
         </div>
       }
@@ -612,6 +650,48 @@ function countAt(design: PortalDesign, ctx: ElementContext, at: ScopeName, scree
   for (const s of el.states)
     for (const p of el.props) if (readAt(design, ctx, at, screen, s, p) !== undefined) n++
   return n
+}
+
+/**
+ * Which screens a change goes to, always in view under the scope line: all
+ * screens, or phones, which shows the canvas as a phone. Phone is tinted.
+ */
+function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Screen) => void }) {
+  const options: Array<[Screen, string]> = [
+    ['all', PHONE_WORDS.allScreens],
+    ['phone', PHONE_WORDS.phone],
+  ]
+  return (
+    <div
+      role="radiogroup"
+      aria-label={PHONE_WORDS.editing}
+      data-screen-chip=""
+      className="inline-flex h-6 items-center rounded-md border border-border p-0.5"
+    >
+      {options.map(([screen, label]) => {
+        const on = value === screen
+        return (
+          <button
+            key={screen}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(screen)}
+            className={cn(
+              'h-full rounded px-1.5 text-[11px] focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              on
+                ? screen === 'phone'
+                  ? PHONE_TINT.chip
+                  : 'bg-foreground text-background'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 /**

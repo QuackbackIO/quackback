@@ -23,7 +23,9 @@ import {
   PAGE_CHOICE_DEFAULTS,
   changelogChoicesSchema,
   helpChoicesSchema,
+  postChoicesSchema,
   roadmapChoicesSchema,
+  supportChoicesSchema,
   type PageChoices,
 } from './page-choices'
 import { homeBlockSchema, type PortalDesign } from './schema'
@@ -43,27 +45,48 @@ export const SECTION_TYPES = [
   'help.topics',
   'help.popular',
   'help.search',
+  'help.article',
   'roadmap.board',
+  'post.vote',
+  'post.details',
+  'post.comments',
+  'support.request',
 ] as const
 export type SectionType = (typeof SECTION_TYPES)[number]
 export type BlockType = HomeBlockType | SectionType | 'hero'
 
 type ChoicePage = keyof PageChoices
 const SECTION_KEYS = {
-  'changelog.entries': ['entries', 'images'],
+  'changelog.entries': ['entries', 'images', 'shipped'],
   'help.topics': ['topics'],
   'help.popular': ['popular'],
   'help.search': ['search'],
+  'help.article': ['helpful', 'related', 'contact'],
   'roadmap.board': ['board', 'votes'],
+  'post.vote': ['vote'],
+  'post.details': ['board', 'tags', 'date', 'author', 'subscribe'],
+  'post.comments': ['comments'],
+  'support.request': ['suggest'],
 } as const satisfies Record<SectionType, readonly string[]>
 
 /** A page section as a block: its type and its choices, today's where the design makes none. */
 export type SectionBlock =
-  | ({ type: 'changelog.entries' } & Pick<PageChoices['changelog'], 'entries' | 'images'>)
+  | ({ type: 'changelog.entries' } & Pick<
+      PageChoices['changelog'],
+      'entries' | 'images' | 'shipped'
+    >)
   | ({ type: 'help.topics' } & Pick<PageChoices['help'], 'topics'>)
   | ({ type: 'help.popular' } & Pick<PageChoices['help'], 'popular'>)
   | ({ type: 'help.search' } & Pick<PageChoices['help'], 'search'>)
+  | ({ type: 'help.article' } & Pick<PageChoices['help'], 'helpful' | 'related' | 'contact'>)
   | ({ type: 'roadmap.board' } & Pick<PageChoices['roadmap'], 'board' | 'votes'>)
+  | ({ type: 'post.vote' } & Pick<PageChoices['post'], 'vote'>)
+  | ({ type: 'post.details' } & Pick<
+      PageChoices['post'],
+      'board' | 'tags' | 'date' | 'author' | 'subscribe'
+    >)
+  | ({ type: 'post.comments' } & Pick<PageChoices['post'], 'comments'>)
+  | ({ type: 'support.request' } & Pick<PageChoices['support'], 'suggest'>)
 export type AnyBlock = HomeBlock | SectionBlock | HeroBlock
 
 type Option<T> = readonly [value: T, name: string]
@@ -140,7 +163,7 @@ export type SettingField = Described &
         kind: 'source'
         key: string
         label: string
-        source: 'roadmaps' | 'categories' | 'boards' | 'columns'
+        source: 'roadmaps' | 'categories' | 'boards' | 'columns' | 'statuses'
         multiple: boolean
         any: string
         max?: number
@@ -349,6 +372,17 @@ const HOME: Record<HomeBlockType, HomeDef> = {
         about: 'The boards its posts come from, by name; none is every public board',
       },
       {
+        kind: 'source',
+        key: 'statusIds',
+        label: 'Status',
+        source: 'statuses',
+        multiple: true,
+        any: 'Open posts',
+        max: 12,
+        about:
+          'The statuses its posts are in, by name, such as the shipped ones; none is the open posts',
+      },
+      {
         kind: 'count',
         key: 'count',
         label: 'How many',
@@ -388,6 +422,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
       'sort',
       'count',
       'boardIds',
+      'statusIds',
       'showVotes',
       'showStatus',
       'showComments',
@@ -402,6 +437,13 @@ const HOME: Record<HomeBlockType, HomeDef> = {
           { op: 'set', target: 'ideas', key: 'sort', value: 'top' },
           { op: 'set', target: 'ideas', key: 'count', value: '5' },
           { op: 'set', target: 'ideas', key: 'boardIds', value: '["Billing"]' },
+        ],
+      },
+      {
+        request: 'Show what we recently shipped',
+        ops: [
+          { op: 'set', target: 'ideas', key: 'statusIds', value: '["Complete"]' },
+          { op: 'set', target: 'ideas', key: 'sort', value: 'new' },
         ],
       },
       {
@@ -664,6 +706,29 @@ const HOME: Record<HomeBlockType, HomeDef> = {
       },
     ],
   },
+  boards: {
+    name: 'Boards',
+    purpose: 'Your boards, with their posts',
+    job: 'hear',
+    own: [
+      {
+        kind: 'switch',
+        key: 'showCounts',
+        label: 'Post counts',
+        default: true,
+        about: 'Whether each board shows how many posts it has',
+      },
+      linkField,
+    ],
+    repeat: 'once',
+    ai: ['heading', 'showCounts', 'link'],
+    examples: [
+      {
+        request: 'List our boards beside the top posts',
+        ops: [{ op: 'add', key: 'boards', target: 'beside:ideas', value: '' }],
+      },
+    ],
+  },
   links: {
     name: 'Links',
     purpose: 'Links to your other places',
@@ -702,6 +767,7 @@ const ADD_ORDER: readonly HomeBlockType[] = [
   'status',
   'composer',
   'ideas',
+  'boards',
   'contact',
   'roadmap',
   'updates',
@@ -747,8 +813,15 @@ const SECTIONS: Record<SectionType, Omit<BlockDef, 'type' | 'pages' | 'addable' 
         },
         about: 'How an entry’s featured image shows',
       },
+      {
+        kind: 'switch',
+        key: 'shipped',
+        label: 'Shipped from posts',
+        about:
+          'Whether an entry linked to posts shows them, with how many and their votes, such as "From 3 posts · 412 votes"',
+      },
     ],
-    ai: ['entries', 'images'],
+    ai: ['entries', 'images', 'shipped'],
     examples: [
       {
         request: 'Show compact changelog entries with small images',
@@ -832,6 +905,64 @@ const SECTIONS: Record<SectionType, Omit<BlockDef, 'type' | 'pages' | 'addable' 
       },
     ],
   },
+  'help.article': {
+    name: 'End of article',
+    purpose: 'What each help article ends with',
+    job: 'answers',
+    fields: [
+      {
+        kind: 'switch',
+        key: 'helpful',
+        label: 'Was this helpful?',
+        about: 'Whether each article ends by asking "Was this helpful?"',
+      },
+      {
+        kind: 'count',
+        key: 'related',
+        label: 'Related articles',
+        options: [0, 2, 4],
+        names: { 0: 'None' },
+        about: 'How many related articles each article ends with; 0 lists none',
+      },
+      {
+        kind: 'switch',
+        key: 'contact',
+        label: 'Contact link',
+        about: 'Whether each article ends with a link to contact support, with support on',
+      },
+    ],
+    ai: ['helpful', 'related', 'contact'],
+    examples: [
+      {
+        request: 'End help articles with a link to contact us, and no related articles',
+        ops: [
+          { op: 'set', target: 'help page', key: 'contact', value: 'true' },
+          { op: 'set', target: 'help page', key: 'related', value: '0' },
+        ],
+      },
+    ],
+  },
+  'support.request': {
+    name: 'New request',
+    purpose: 'How visitors start a request',
+    job: 'hear',
+    fields: [
+      {
+        kind: 'switch',
+        key: 'suggest',
+        label: 'Suggest articles while typing',
+        about:
+          'Whether help articles are suggested as a visitor writes a new request; only with the help center on',
+      },
+    ],
+    ai: ['suggest'],
+    examples: [
+      {
+        request: 'Stop suggesting help articles on new support requests',
+        ops: [{ op: 'set', target: 'support page', key: 'suggest', value: 'false' }],
+      },
+    ],
+  },
   'roadmap.board': {
     name: 'Board',
     purpose: 'How the roadmap’s posts are laid out',
@@ -866,6 +997,97 @@ const SECTIONS: Record<SectionType, Omit<BlockDef, 'type' | 'pages' | 'addable' 
           { op: 'set', target: 'roadmap page', key: 'board', value: 'columns' },
           { op: 'set', target: 'roadmap page', key: 'votes', value: 'true' },
         ],
+      },
+    ],
+  },
+  'post.vote': {
+    name: 'Vote',
+    purpose: 'The post’s one vote control',
+    job: 'hear',
+    fields: [
+      {
+        kind: 'choice',
+        key: 'vote',
+        label: 'Position',
+        options: [
+          ['title', 'Beside title'],
+          ['details', 'In details'],
+        ],
+        looks: {
+          title: 'the vote box beside the post’s title',
+          details: 'the vote count and button at the top of the details',
+        },
+        about: 'Where the post’s one vote control sits',
+      },
+    ],
+    ai: ['vote'],
+    examples: [
+      {
+        request: 'Put the vote button in the post’s details',
+        ops: [{ op: 'set', target: 'post page', key: 'vote', value: 'details' }],
+      },
+    ],
+  },
+  'post.details': {
+    name: 'Details',
+    purpose: 'What shows beside the post; its status always does',
+    job: 'hear',
+    fields: [
+      { kind: 'switch', key: 'board', label: 'Board', group: 'Show', about: 'The post’s board' },
+      { kind: 'switch', key: 'tags', label: 'Tags', about: 'The post’s tags' },
+      { kind: 'switch', key: 'date', label: 'Date', about: 'When the post was made' },
+      { kind: 'switch', key: 'author', label: 'Author', about: 'Who made the post' },
+      {
+        kind: 'choice',
+        key: 'subscribe',
+        label: 'Subscribe',
+        options: [
+          ['details', 'In details'],
+          ['comments', 'Over comments'],
+        ],
+        looks: {
+          details: 'Subscribe at the foot of the details',
+          comments: 'Subscribe beside the comments’ heading, on every screen',
+        },
+        about: 'Where Subscribe sits',
+      },
+    ],
+    ai: ['board', 'tags', 'date', 'author', 'subscribe'],
+    examples: [
+      {
+        request: 'Hide the author and date on posts',
+        ops: [
+          { op: 'set', target: 'post page', key: 'author', value: 'false' },
+          { op: 'set', target: 'post page', key: 'date', value: 'false' },
+        ],
+      },
+    ],
+  },
+  'post.comments': {
+    name: 'Comments',
+    purpose: 'The post’s comments; the pinned reply always leads',
+    job: 'hear',
+    fields: [
+      {
+        kind: 'choice',
+        key: 'comments',
+        label: 'Order',
+        options: [
+          ['newest', 'Newest'],
+          ['oldest', 'Oldest'],
+        ],
+        looks: {
+          newest: 'newest comments first',
+          oldest: 'oldest comments first, as a conversation reads',
+        },
+        about: 'The order the comments read in, after the pinned reply',
+      },
+    ],
+    ai: ['comments'],
+    examples: [
+      {
+        request: 'Show the oldest comments first',
+        ops: [{ op: 'set', target: 'post page', key: 'comments', value: 'oldest' }],
       },
     ],
   },
@@ -1026,7 +1248,8 @@ const HERO: BlockDef = {
         roomy: 'the usual room',
         tall: 'a lot of room, the boldest',
       },
-      about: 'How much room the hero gives its words, top and bottom',
+      about:
+        'How much room Home’s hero gives its words, top and bottom; the other pages’ heroes are always short',
     },
     {
       kind: 'choice',
@@ -1124,20 +1347,24 @@ const HERO: BlockDef = {
       options: [
         ['composer', 'Composer'],
         ['roadmap', 'Roadmap'],
+        ['help', 'Help'],
+        ['support', 'Support'],
       ],
       looks: {
         composer: 'the button opens the post box in the hero',
         roadmap: 'the button goes to the roadmap',
+        help: 'the button goes to the help center',
+        support: 'the button goes to support, to start a request',
       },
       about:
-        'Where Home’s call to action goes: it opens the post box in place, or goes to the roadmap. Only with Button as the main action',
+        'Where Home’s call to action goes: it opens the post box in place, or goes to the roadmap, the help center or support, each only while that page is on. Only with Button as the main action',
     },
     {
       kind: 'switch',
       key: 'secondButton',
       label: 'Second button',
       about:
-        'A quiet second button beside the call to action, going to the other place: the post box, or the roadmap. Only with Button as the main action',
+        'A quiet second button beside the call to action: to the roadmap beside the post box, else to the post box. Only with Button as the main action',
     },
     {
       kind: 'choice',
@@ -1302,15 +1529,25 @@ function heroSummary(block: HeroBlock): string[] {
 
 function sectionSummary(block: SectionBlock): string[] {
   const def = SECTIONS[block.type]
+  if (block.type === 'post.details') {
+    const shown = def.fields
+      .filter((field) => field.kind === 'switch' && (block as Record<string, unknown>)[field.key])
+      .map((field) => field.label.toLowerCase())
+    return [shown.length ? `Status, ${shown.join(', ')}` : 'Status only']
+  }
   return def.fields.map((field) => {
     const value = (block as Record<string, unknown>)[field.key]
+    if (field.kind === 'count')
+      return value === 0
+        ? `no ${field.label.toLowerCase()}`
+        : `${String(value)} ${field.label.toLowerCase()}`
     if (field.kind === 'switch') {
       const shown = value === true
-      return field.key === 'votes'
-        ? `votes ${shown ? 'shown' : 'hidden'}`
-        : shown
-          ? 'Shown'
-          : 'Hidden'
+      if (field.key === 'votes') return `votes ${shown ? 'shown' : 'hidden'}`
+      // A section of several switches names each; one alone is the section itself.
+      if (def.fields.length > 1)
+        return `${field.label.charAt(0).toLowerCase()}${field.label.slice(1)} ${shown ? 'on' : 'off'}`
+      return shown ? 'Shown' : 'Hidden'
     }
     if (field.kind !== 'choice') return String(value)
     if (field.key === 'images') return value === 'none' ? 'no images' : `${String(value)} images`
@@ -1340,6 +1577,8 @@ const SECTION_SCHEMAS = {
   changelog: changelogChoicesSchema,
   help: helpChoicesSchema,
   roadmap: roadmapChoicesSchema,
+  post: postChoicesSchema,
+  support: supportChoicesSchema,
 } as const
 
 const listed = (values: readonly unknown[]) => {

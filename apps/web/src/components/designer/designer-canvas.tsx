@@ -9,6 +9,8 @@ import { samplePath, type SamplePage } from '@/lib/shared/design/sample-pages'
 import { isWordsDoc, type WordsDoc } from '@/lib/shared/design/rich-words'
 import { readWordsField, wordsKindOf, wordsLimitOf } from '@/lib/shared/design/headline-words'
 import { checkedWords } from '@/lib/shared/design/words-schema'
+import { cn } from '@/lib/shared/utils'
+import { PHONE_TINT } from './properties/phone-mode'
 
 /** The widths a visitor's browser lays the portal out at: desktop, tablet and phone. */
 export const CANVAS_WIDTHS = { desktop: 1280, tablet: 768, phone: 390 } as const
@@ -63,6 +65,9 @@ export function canvasScale(room: number, width: number, zoom: CanvasZoom): numb
   if (zoom !== 'fit') return zoom
   return room > 0 ? Math.min(1, room / width) : 1
 }
+
+/** How long a loaded page that never says it is ready keeps its skeleton. */
+const LOADED_GRACE_MS = 3000
 
 /** The frame's border, drawn outside the page so the layer over it lines up exactly. */
 const FRAME_BORDER = 1
@@ -149,6 +154,7 @@ export function DesignerCanvas({
   onLoad,
   onLocation,
   layer,
+  skeleton,
 }: {
   page: DesignerPage
   /** The item the page shows, such as the post on the post page. */
@@ -192,6 +198,8 @@ export function DesignerCanvas({
   onLocation?: (path: string) => void
   /** The editing layer, drawn over the frame. */
   layer?: (canvas: CanvasFrame) => ReactNode
+  /** Shapes of the page's parts, drawn until the frame says its page is ready. */
+  skeleton?: ReactNode
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   // The frame element itself, for the layer: a new one each time the page loads afresh.
@@ -230,6 +238,9 @@ export function DesignerCanvas({
   })
   useEffect(() => tellDesigner(iframeRef.current?.contentWindow), [trying, tellDesigner])
 
+  // The frame that said its page is ready, by its key: a new page loads, and is not, until it says so.
+  const [readyKey, setReadyKey] = useState<string | null>(null)
+  const frameKey = useRef('')
   const handlers = useRef({
     onSelect,
     onFollow,
@@ -262,6 +273,7 @@ export function DesignerCanvas({
       )
         return
       const message = event.data as Record<string, unknown> | null
+      if (message?.type === 'quackback:preview-ready') setReadyKey(frameKey.current)
       const menu = isMenuTarget(message?.menu) ? message.menu : null
       // The element at the point the frame names, read from its own page.
       const target =
@@ -307,22 +319,43 @@ export function DesignerCanvas({
   }, [])
 
   const width = CANVAS_WIDTHS[size]
+  const phoneMode = size === 'phone' && !trying
   const { scale, height, outer, room: drawn } = frameBox(room, width, zoom)
   const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample })
+  const key = `${src}:${refreshKey}:${trying}`
+  frameKey.current = key
+  const ready = readyKey === key
+  // A page that never says it is ready (an error, say) is shown once it has loaded a while.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  useEffect(() => {
+    if (loadedKey !== key || ready) return
+    const timer = setTimeout(() => setReadyKey(key), LOADED_GRACE_MS)
+    return () => clearTimeout(timer)
+  }, [loadedKey, key, ready])
   return (
     <div
       ref={box}
+      data-canvas-box=""
+      aria-busy={skeleton ? !ready : undefined}
       className={`relative h-full min-h-0 w-full flex-1 ${zoom === 'fit' ? 'overflow-hidden' : 'overflow-auto'}`}
     >
       <div
-        className="relative mx-auto overflow-hidden rounded-lg border border-border bg-background shadow-sm"
+        // On a phone a change is a phone value, so the frame is tinted; a preview edits nothing.
+        data-phone-mode={phoneMode || undefined}
+        className={cn(
+          'relative mx-auto overflow-hidden rounded-lg border bg-background shadow-sm',
+          phoneMode ? PHONE_TINT.frame : 'border-border'
+        )}
         style={outer}
       >
         <iframe
           // Leaving Preview loads the page afresh, back where the builder is.
-          key={`${src}:${refreshKey}:${trying}`}
+          key={key}
           ref={frameRef}
-          onLoad={onLoad}
+          onLoad={() => {
+            setLoadedKey(key)
+            onLoad?.()
+          }}
           src={src}
           title={[
             name,
@@ -347,6 +380,19 @@ export function DesignerCanvas({
             transformOrigin: 'top left',
           }}
         />
+        {skeleton && !ready && (
+          <div
+            className="pointer-events-none absolute top-0 left-0 overflow-hidden"
+            style={{
+              width,
+              height,
+              transform: scale < 1 ? `scale(${scale})` : undefined,
+              transformOrigin: 'top left',
+            }}
+          >
+            {skeleton}
+          </div>
+        )}
         {layer?.({ frame, scale, room: drawn })}
       </div>
     </div>

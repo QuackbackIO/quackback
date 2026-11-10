@@ -158,11 +158,17 @@ export const portalQueries = {
    * The posts Home's Top posts block shows: its sort, from the boards it was
    * set to (none is every board), and no more than it displays.
    */
-  homeIdeas: (block: { sort: PublicPostSort; count: number; boardIds?: readonly string[] }) => {
+  homeIdeas: (block: {
+    sort: PublicPostSort
+    count: number
+    boardIds?: readonly string[]
+    statusIds?: readonly string[]
+  }) => {
     const input = {
       sort: block.sort,
       limit: block.count,
       ...(block.boardIds?.length && { boardIds: [...block.boardIds] }),
+      ...(block.statusIds?.length && { statusIds: [...block.statusIds] }),
     }
     return queryOptions({
       queryKey: ['portal', 'posts', 'home-ideas', input],

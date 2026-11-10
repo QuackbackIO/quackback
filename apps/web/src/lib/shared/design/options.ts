@@ -77,8 +77,8 @@ export const DESIGN_OPTIONS = {
   composerWidth: COMPOSER_WIDTHS,
   /** Home's hero's one main action: the composer, the help search, a call to action, or none. */
   mainAction: ['composer', 'search', 'button', 'none'],
-  /** Where the hero's call to action goes: it opens the composer, or goes to the roadmap. */
-  heroButtonTo: ['composer', 'roadmap'],
+  /** Where the hero's call to action goes: it opens the composer, or goes to the roadmap, help or support. */
+  heroButtonTo: ['composer', 'roadmap', 'help', 'support'],
   /**
    * The page behind everything: its own colour, a soft wash of a colour, a
    * gradient, an uploaded image, or a quiet pattern.
@@ -130,6 +130,7 @@ export const DESIGN_OPTIONS = {
     'status',
     'contact',
     'links',
+    'boards',
   ],
   /** A Home block's own look: the site's card, no card, a tint of the brand colour, or the brand colour. */
   blockTone: ['card', 'plain', 'tint', 'brand'],
@@ -148,6 +149,12 @@ export const DESIGN_OPTIONS = {
   searchSize: ['standard', 'large'],
   /** The roadmap's board: a column per status, or one list grouped by status. */
   roadmapBoard: ['columns', 'list'],
+  /** Where a post's one vote control sits: beside its title, or in its details. */
+  postVote: ['title', 'details'],
+  /** Where a post's Subscribe sits: in its details, or over its comments. */
+  postSubscribe: ['details', 'comments'],
+  /** The order a post's comments read in; the pinned reply always leads. */
+  commentOrder: ['newest', 'oldest'],
 } as const
 
 export type DesignOption = keyof typeof DESIGN_OPTIONS
@@ -222,4 +229,5 @@ export const BLOCK_SIZES: Record<
   status: { size: [4, 1], min: [3, 1] },
   contact: { size: [4, 1], min: [3, 1] },
   links: { size: [4, 1], min: [3, 1] },
+  boards: { size: [6, 1], min: [4, 1] },
 }

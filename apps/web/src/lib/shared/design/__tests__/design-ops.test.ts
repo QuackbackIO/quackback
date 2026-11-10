@@ -134,7 +134,7 @@ describe('setBlockSetting', () => {
     expect(setBlockSetting(design(), world, 'ideas', 'colour', 'red')).toMatchObject({
       ok: false,
       refusal: expect.stringContaining(
-        'it has heading, sort, count, boardIds, showVotes, showStatus, showComments, whenEmpty, emptyText or link'
+        'it has heading, sort, count, boardIds, statusIds, showVotes, showStatus, showComments, whenEmpty, emptyText or link'
       ),
     })
   })
@@ -267,6 +267,17 @@ describe('setHero, setPageSection, setTheme and setWords', () => {
     })
   })
 
+  it('opens the feed on a board by its name, and on every board again', () => {
+    const result = ok(setPageSection(design(), world, 'feedback', 'opensOn', 'Web app'))
+    expect(result.design.pages.feedback.openOn).toBe(WEB)
+    expect(result.label).toBe('Feed opens on: Web app')
+    const all = ok(setPageSection(result.design, world, 'feedback', 'opensOn', 'all boards'))
+    expect(all.design.pages.feedback).not.toHaveProperty('openOn')
+    expect(setPageSection(design(), world, 'feedback', 'opensOn', 'Nowhere')).toMatchObject({
+      ok: false,
+    })
+  })
+
   it('leaves a page choice back at its usual value out of the design', () => {
     const d = ok(setPageSection(design(), world, 'help', 'search', 'large')).design
     expect(d.pages.help).toEqual({ search: 'large' })
@@ -275,7 +286,9 @@ describe('setHero, setPageSection, setTheme and setWords', () => {
     ).toBeUndefined()
     expect(setPageSection(design(), world, 'help', 'colour', 'red')).toMatchObject({
       ok: false,
-      refusal: expect.stringContaining('it has topics, popular or search'),
+      refusal: expect.stringContaining(
+        'it has topics, popular, search, helpful, related or contact'
+      ),
     })
   })
 

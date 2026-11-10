@@ -241,14 +241,20 @@ describe('reference brand fixtures', () => {
       // And the hero's main action; main-action.test.ts and hero.test.ts cover it.
       'mainAction',
       'heroButtonTo',
+      // And the post page's parts; post-choices.test.ts covers them.
+      'postVote',
+      'postSubscribe',
+      'commentOrder',
     ])
     for (const [option, values] of Object.entries(DESIGN_OPTIONS))
       for (const value of later.has(option) ? [] : values)
         // `plain` is the menu style for sites with no visible current item, and a `muted` accent
         // a two-tone headline's lighter part, set by a brand match; no reference brand shows either.
+        // The Boards block came after them; blocks.test.ts and home-data-blocks.test.tsx cover it.
         if (
           !(option === 'nav' && value === 'plain') &&
-          !(option === 'headlineAccent' && value === 'muted')
+          !(option === 'headlineAccent' && value === 'muted') &&
+          !(option === 'blockType' && value === 'boards')
         )
           expect(
             seen[option as DesignOption].has(String(value)),

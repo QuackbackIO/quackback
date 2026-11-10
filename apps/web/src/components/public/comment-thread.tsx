@@ -1,4 +1,12 @@
-import { Suspense, lazy, useEffect, useRef, useState, type ComponentProps } from 'react'
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react'
 import { useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
@@ -180,6 +188,10 @@ interface CommentThreadProps {
   /** When set, comment composers expose image insert. */
   onImageUpload?: (file: File) => Promise<string>
   canModerate?: boolean
+  /** Oldest comments first, as a conversation reads; newest first when absent. */
+  oldestFirst?: boolean
+  /** What sits above the comments, under the composer, such as a way to earlier ones. */
+  before?: ReactNode
 }
 
 export function CommentThread({
@@ -211,6 +223,8 @@ export function CommentThread({
   restoringCommentId,
   onImageUpload,
   canModerate = false,
+  oldestFirst = false,
+  before,
 }: CommentThreadProps) {
   const intl = useIntl()
   const sortedComments = [...comments].sort((a, b) => {
@@ -219,7 +233,8 @@ export function CommentThread({
       if (a.id === pinnedCommentId) return -1
       if (b.id === pinnedCommentId) return 1
     }
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    const newer = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    return oldestFirst ? -newer : newer
   })
 
   function renderCommentArea() {
@@ -289,6 +304,8 @@ export function CommentThread({
   return (
     <div className="space-y-6">
       {renderCommentArea()}
+
+      {before}
 
       {comments.length === 0 ? (
         <p className="text-muted-foreground text-center py-4">

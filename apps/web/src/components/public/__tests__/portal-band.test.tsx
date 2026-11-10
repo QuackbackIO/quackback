@@ -23,6 +23,8 @@ const view = (headline: unknown, band = 'none') => ({
   engine: 'v2',
   attributes: { 'data-qb-band': band },
   feedback: { welcome: null, headline },
+  home: { headline, blocks: [] },
+  titles: { roadmap: headline },
 })
 
 afterEach(() => {
@@ -48,11 +50,11 @@ describe('textForLocale', () => {
 })
 
 describe('PortalBand', () => {
-  const mount = (draft?: unknown) =>
+  const mount = (draft?: unknown, page?: 'home' | 'feedback' | 'roadmap') =>
     render(
       <IntlProvider locale="de" defaultLocale="en">
         <PreviewHeadlineContext.Provider value={draft as never}>
-          <PortalBand />
+          <PortalBand page={page} />
         </PreviewHeadlineContext.Provider>
       </IntlProvider>
     )
@@ -121,12 +123,27 @@ describe('PortalBand', () => {
 
   it('pads a phone hero less than a wide one', () => {
     root.portalDesign = view({ title: { en: 'Ideas' }, subtitle: {} }, 'brand')
-    mount()
+    mount(undefined, 'home')
     const band = document.querySelector('[data-qb-part=band]')!
     expect(band.className).toContain('py-8 sm:py-10')
     expect(band.className).toContain('[[data-qb-band-height=tall]_&]:py-10')
     expect(band.className).toContain('sm:[[data-qb-band-height=tall]_&]:py-20')
     expect(band.firstElementChild!.className).toContain('pt-2 sm:pt-6')
+  })
+
+  it('takes the design’s height on Home alone; a list page’s hero is always compact', () => {
+    root.portalDesign = view({ title: { en: 'Ideas' }, subtitle: {} }, 'brand')
+    for (const page of ['feedback', 'roadmap'] as const) {
+      mount(undefined, page)
+      const band = document.querySelector('[data-qb-part=band]')!
+      expect(band.className, page).not.toContain('data-qb-band-height')
+      expect(band.className, page).not.toContain('sm:py-10')
+      cleanup()
+    }
+    mount(undefined, 'feedback')
+    const band = document.querySelector('[data-qb-part=band]')!
+    expect(band.className).toContain('py-5 sm:py-6')
+    expect(band.className).toContain('[--qb-band-pad:1.25rem] sm:[--qb-band-pad:1.5rem]')
   })
 
   it('runs the composer to the words’ full width beside no image, else to a measure', () => {
@@ -369,7 +386,7 @@ describe('PortalBand', () => {
 
   it('gives way to a plain band on phones where the design asks, its foot laid over it so glows end before its edge', () => {
     root.portalDesign = view({ title: { en: 'Ideas' }, subtitle: {} }, 'blend')
-    mount()
+    mount(undefined, 'home')
     const band = document.querySelector('[data-qb-part=band]')!
     // The foot, then the fade over its bottom padding, then the plain phone band (the full band from sm up).
     expect(band.className).toContain(

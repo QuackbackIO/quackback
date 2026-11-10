@@ -137,11 +137,12 @@ function guideLines(
         'layout.blend',
         'layout.bandAlign',
         'layout.bandShape',
+        'layout.bandHeight',
         'layout.headerOnBand',
         'layout.imagePlace',
         'brand.bandImage',
       ],
-      `layout.band (behind a page headline): ${DESIGN_OPTIONS.band.join(', ')}; support fills it with the second colour and blend runs the accent into it, as a line, with layout.blend mesh, a soft mesh beside the words, or with layout.blend ribbon, a diagonal ribbon sweeping past the words. It shows only with a headline; when you add one and there is no headline, write one. layout.bandAlign: ${DESIGN_OPTIONS.bandAlign.join(', ')}. layout.bandShape: full, inset (a rounded panel within the page), panel (the words on a block of the second colour), split (a rounded panel with the words on one half and a side band image flush in the other). layout.headerOnBand: true puts the header in the band's colour. layout.bandColour (the colour a brand, tint or fade band is drawn in): ${DESIGN_OPTIONS.colourRole.join(', ')}, where extra1 and extra2 are brand.light.extra's; leave it out for the brand colour. layout.imagePlace (for an uploaded band image): ${DESIGN_OPTIONS.imagePlace.join(', ')}.`,
+      `layout.band (behind a page headline): ${DESIGN_OPTIONS.band.join(', ')}; support fills it with the second colour and blend runs the accent into it, as a line, with layout.blend mesh, a soft mesh beside the words, or with layout.blend ribbon, a diagonal ribbon sweeping past the words. It shows only with a headline; when you add one and there is no headline, write one. layout.bandAlign: ${DESIGN_OPTIONS.bandAlign.join(', ')}. layout.bandShape: full, inset (a rounded panel within the page), panel (the words on a block of the second colour), split (a rounded panel with the words on one half and a side band image flush in the other). layout.bandHeight: ${DESIGN_OPTIONS.bandHeight.join(', ')}, the room Home's hero gives its words; the other pages' heroes take Home's look at a compact height of their own. layout.headerOnBand: true puts the header in the band's colour. layout.bandColour (the colour a brand, tint or fade band is drawn in): ${DESIGN_OPTIONS.colourRole.join(', ')}, where extra1 and extra2 are brand.light.extra's; leave it out for the brand colour. layout.imagePlace (for an uploaded band image): ${DESIGN_OPTIONS.imagePlace.join(', ')}.`,
     ],
     [
       ['layout.status'],
@@ -179,8 +180,8 @@ function guideLines(
       'pages.feedback.welcome: {show, body}: the message above the feed; body is plain text, a blank line between paragraphs. When you turn it on with no text, write some.',
     ],
     [
-      ['pages.feedback.defaultSort'],
-      `pages.feedback.defaultSort: ${DESIGN_OPTIONS.sort.join(', ')}`,
+      ['pages.feedback.defaultSort', 'pages.feedback.openOn'],
+      `pages.feedback.defaultSort: ${DESIGN_OPTIONS.sort.join(', ')}. pages.feedback.openOn: the id of the board the feed opens on when the address names none; leave it out to open on every board.`,
     ],
     [
       ['pages.feedback.copy'],
@@ -192,15 +193,23 @@ function guideLines(
     ],
     [
       ['pages.changelog'],
-      `The Changelog page; leave a field out for its usual look. pages.changelog.entries: ${DESIGN_OPTIONS.changelogEntries.join(', ')} (timeline puts dates in a column beside each entry, cards puts each entry in a card, compact lists titles with a line of each); pages.changelog.images: ${DESIGN_OPTIONS.entryImage.join(', ')} (an entry's featured image: left off, across the entry, or small beside it); pages.changelog.subscribe: ${DESIGN_OPTIONS.titleAction.join(', ')} (the Subscribe button beside the title or under its words).`,
+      `The Changelog page; leave a field out for its usual look. pages.changelog.entries: ${DESIGN_OPTIONS.changelogEntries.join(', ')} (timeline puts dates in a column beside each entry, cards puts each entry in a card, compact lists titles with a line of each); pages.changelog.images: ${DESIGN_OPTIONS.entryImage.join(', ')} (an entry's featured image: left off, across the entry, or small beside it); pages.changelog.subscribe: ${DESIGN_OPTIONS.titleAction.join(', ')} (the Subscribe button beside the title or under its words); pages.changelog.shipped: true or false (the posts an entry shipped from, with how many and their votes).`,
     ],
     [
       ['pages.help'],
-      `The Help Center's home; leave a field out for its usual look. pages.help.topics: ${DESIGN_OPTIONS.helpTopics.join(', ')}; pages.help.popular: true or false (popular articles under the topics); pages.help.search: ${DESIGN_OPTIONS.searchSize.join(', ')} (the search under the title).`,
+      `The Help Center's home; leave a field out for its usual look. pages.help.topics: ${DESIGN_OPTIONS.helpTopics.join(', ')}; pages.help.popular: true or false (popular articles under the topics); pages.help.search: ${DESIGN_OPTIONS.searchSize.join(', ')} (the search under the title). The end of each article: pages.help.helpful: true or false (asks "Was this helpful?"); pages.help.related: 0, 2 or 4 (how many related articles it ends with); pages.help.contact: true or false (a Contact support link).`,
+    ],
+    [
+      ['pages.support'],
+      `The Support page; leave a field out for its usual look. pages.support.suggest: true or false (help articles suggested while a new request is written, with the help center on); pages.support.request: the New request button's words by language, like the headline, 24 characters; leave it out for the portal's own.`,
     ],
     [
       ['pages.roadmap'],
       `The Roadmap page; leave a field out for its usual look. pages.roadmap.board: ${DESIGN_OPTIONS.roadmapBoard.join(', ')} (a column per status, or one list grouped by status); pages.roadmap.votes: true or false (the vote box on its cards).`,
+    ],
+    [
+      ['pages.post'],
+      `A post's own page, with three fixed parts; leave a field out for its usual look. pages.post.vote: ${DESIGN_OPTIONS.postVote.join(', ')} (where its one vote control sits: beside the title, or at the top of the details). pages.post.board, pages.post.tags, pages.post.date and pages.post.author: true or false (each detail beside the post; the status always shows). pages.post.subscribe: ${DESIGN_OPTIONS.postSubscribe.join(', ')} (Subscribe in the details, or beside the comments' heading). pages.post.comments: ${DESIGN_OPTIONS.commentOrder.join(', ')} (the comments' order; the pinned reply always leads).`,
     ],
     [
       [
@@ -210,11 +219,11 @@ function guideLines(
         'pages.home.mainAction',
         'pages.home.button',
       ],
-      `pages.home.headline: like the feedback headline, for Home. The hero's mainAction setting is Home's one main action under the headline: ${DESIGN_OPTIONS.mainAction.join(', ')} (composer: the post box in the band; search: the help centre's search box, with Ask AI where it is on, and only with the help centre on; button: one call to action; none: the headline and subtitle alone). Outside the hero the composer is a block on the grid. It is the hero's mainAction setting: "put a search box in the hero instead" is mainAction search. With button, the hero's buttonTo says where it goes: ${DESIGN_OPTIONS.heroButtonTo.join(' or ')} (it opens the post box in place, or goes to the roadmap), and secondButton true adds a quiet second button going to the other. pages.home.composer: band puts the composer block in the band under the headline; block keeps it on the grid. pages.home.composerWidth: ${DESIGN_OPTIONS.composerWidth.join(', ')} (how wide the composer is in the band, narrowest first; full is the band's words' width; leave it out for its usual width: wide beside a side image or under centred words, else full; phones always run it full). It is the hero's composerWidth setting: "make the composer narrower" is one step narrower than it draws now.`,
+      `pages.home.headline: like the feedback headline, for Home. The hero's mainAction setting is Home's one main action under the headline: ${DESIGN_OPTIONS.mainAction.join(', ')} (composer: the post box in the band; search: the help centre's search box, with Ask AI where it is on, and only with the help centre on; button: one call to action; none: the headline and subtitle alone). Outside the hero the composer is a block on the grid. It is the hero's mainAction setting: "put a search box in the hero instead" is mainAction search. With button, the hero's buttonTo says where it goes: ${DESIGN_OPTIONS.heroButtonTo.join(', ')} (it opens the post box in place, or goes to the roadmap, the help center or support, each only while that page is on), and secondButton true adds a quiet second button: to the roadmap beside the post box, else to the post box. pages.home.composer: band puts the composer block in the band under the headline; block keeps it on the grid. pages.home.composerWidth: ${DESIGN_OPTIONS.composerWidth.join(', ')} (how wide the composer is in the band, narrowest first; full is the band's words' width; leave it out for its usual width: wide beside a side image or under centred words, else full; phones always run it full). It is the hero's composerWidth setting: "make the composer narrower" is one step narrower than it draws now.`,
     ],
     [
       ['pages.home.blocks'],
-      `pages.home.blocks: Home's blocks on a grid of 12 columns and rows, like a dashboard's panels, at most 12: [{"type":..., "grid":{"x":column from 0,"y":row from 0,"w":columns,"h":rows}}]. Blocks float up to fill gaps and never overlap; one left without a grid goes under the rest at its usual size. Usual and least widths in columns: ${sizes}. Give each block h 1: a row is as tall as the tallest content in it; more rows only add height. Options: ideas {sort, count 3, 5 or 10, showVotes, showStatus, showComments}, roadmap {statusIds: its columns, perColumn 2, 3 or 5, showVotes}, updates {count 2 to 4, showDate, showSummary}, help_search {popular 0, 3 or 5}, help_topics {layout cards or list, showCounts, topArticles 0, 2 or 3}, status {showIncidents}, welcome {body: plain text}, links {title, links: [{label, url}]} with only links the person gave; the show… settings are true or false. Their items are the workspace's own posts, entries, topics and status, never written here. Any block also takes heading {"<locale>": text}: its own heading in place of its usual one, and look {tone, align, colour}: tone ${DESIGN_OPTIONS.blockTone.join(', ')} (card is the site's card, plain has no card, tint is a pale wash of the brand colour, brand fills it with the brand colour), colour ${DESIGN_OPTIONS.colourRole.join(', ')} (the colour tint and brand use in place of the brand colour), align ${DESIGN_OPTIONS.blockAlign.join(', ')}; leave a field out to follow the site. This workspace can show: ${blockTypes.join(', ')}. Side by side, give blocks the same y and h and widths that add up to 12; pair the short ones (composer, status, contact, help_search, welcome with a line or two) with each other or full width, and the lists (ideas, updates, roadmap, help_topics) with each other. To move or resize one block, set pages.home.blocks.<n>.grid.`,
+      `pages.home.blocks: Home's blocks on a grid of 12 columns and rows, like a dashboard's panels, at most 12: [{"type":..., "grid":{"x":column from 0,"y":row from 0,"w":columns,"h":rows}}]. Blocks float up to fill gaps and never overlap; one left without a grid goes under the rest at its usual size. Usual and least widths in columns: ${sizes}. Give each block h 1: a row is as tall as the tallest content in it; more rows only add height. Options: ideas {sort, count 3, 5 or 10, statusIds: the statuses its posts are in (the Complete ones with sort new for recently shipped), showVotes, showStatus, showComments}, boards {showCounts}, roadmap {statusIds: its columns, perColumn 2, 3 or 5, showVotes}, updates {count 2 to 4, showDate, showSummary}, help_search {popular 0, 3 or 5}, help_topics {layout cards or list, showCounts, topArticles 0, 2 or 3}, status {showIncidents}, welcome {body: plain text}, links {title, links: [{label, url}]} with only links the person gave; the show… settings are true or false. Their items are the workspace's own posts, entries, topics and status, never written here. Any block also takes heading {"<locale>": text}: its own heading in place of its usual one, and look {tone, align, colour}: tone ${DESIGN_OPTIONS.blockTone.join(', ')} (card is the site's card, plain has no card, tint is a pale wash of the brand colour, brand fills it with the brand colour), colour ${DESIGN_OPTIONS.colourRole.join(', ')} (the colour tint and brand use in place of the brand colour), align ${DESIGN_OPTIONS.blockAlign.join(', ')}; leave a field out to follow the site. This workspace can show: ${blockTypes.join(', ')}. Side by side, give blocks the same y and h and widths that add up to 12; pair the short ones (composer, status, contact, help_search, welcome with a line or two) with each other or full width, and the lists (ideas, boards, updates, roadmap, help_topics) with each other. To move or resize one block, set pages.home.blocks.<n>.grid.`,
     ],
     [
       ['nav.home'],
@@ -402,7 +411,7 @@ export const OPS_EXAMPLES: Array<{ request: string; picked?: string; answer: Ops
 
 /** The operations and the rules for them, as every Ask AI prompt tells them. */
 export const OPS_RULES = `Operations (${OP_KINDS.join(', ')}):
-- set: target a Home block (its id from the context, or its type when Home has one of it), "hero", or a page ("changelog page", "help page", "roadmap page", "feedback page"); key one of its settings below, or on a Home block its own look, style.<element>.<state>.<property>; value its new value.
+- set: target a Home block (its id from the context, or its type when Home has one of it), "hero", or a page ("changelog page", "help page", "roadmap page", "support page", "feedback page"); key one of its settings below, or on a Home block its own look, style.<element>.<state>.<property>; value its new value.
 - add: key a block type; target where it goes: top, bottom, above:<block>, below:<block> or beside:<block>; value its settings as JSON, such as {"count":5}, or "".
 - move: target a Home block; value where it goes, as for add.
 - resize: target a Home block; value full, half, third, two thirds, wider, narrower, taller, shorter, or columns of 12.

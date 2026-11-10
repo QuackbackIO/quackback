@@ -77,6 +77,10 @@ describe('content kinds', () => {
       'block.abcdefgh.post-title',
       'block.statusbk.incident-title',
       'block.updatesb.entry-title',
+      // A list page's items, picked as themselves as a block's are.
+      'feed.post-title',
+      'feed.post-excerpt',
+      'board.post-title',
     ])
     expect(items[0]).toMatchObject({
       label: 'Post title',
@@ -88,6 +92,13 @@ describe('content kinds', () => {
 
   it('keeps the parts the AI is told of as they were: items are named on the canvas only', () => {
     expect(partsOf(design).some((p) => p.kind === 'dynamic' && p.id.endsWith('-title'))).toBe(false)
+  })
+
+  it('marks each list page item where its cards draw it', () => {
+    for (const part of itemPartsOf(design).filter((p) => !p.block)) {
+      const mark = /data-qb-part=([a-z-]+)/.exec(part.anchor)![1]
+      expect(read(part.files[0]!), part.id).toContain(`data-qb-part="${mark}"`)
+    }
   })
 
   it('marks each item where the blocks draw it, and only for real data', () => {

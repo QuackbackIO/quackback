@@ -28,7 +28,12 @@ export function PanelSheet({
   onOverride,
   onBlock,
   onLogo,
+  phone = false,
+  onPhone,
 }: {
+  /** Whether the canvas shows a phone, which Theme's element panels follow. */
+  phone?: boolean
+  onPhone?: (phone: boolean) => void
   /** Picks the logo on the page, from the brand kit's Size and placement. */
   onLogo?: () => void
   /** Picks an override's element on the canvas. */
@@ -73,6 +78,8 @@ export function PanelSheet({
           more={state.more}
           at={state.at}
           page={page}
+          phone={phone}
+          onPhone={onPhone}
           onOverride={onOverride}
           onBlock={onBlock}
           onLogo={onLogo}

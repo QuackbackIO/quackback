@@ -26,6 +26,12 @@ const cta = { element: 'button', part: 'hero.home.cta', section: 'hero', index: 
 const vote = { element: 'vote', part: null, section: 'block-abcdefgh', index: 1 } as const
 const headline = { element: 'headline', part: null, section: null, index: 0 } as const
 const link = { element: 'link', part: null, section: 'block-abcdefgh', index: 0 } as const
+const postTitle = {
+  element: 'body',
+  part: 'block.abcdefgh.post-title',
+  section: 'block-abcdefgh',
+  index: 1,
+} as const
 
 function home(): PortalDesign {
   return portalDesign.parse({
@@ -49,7 +55,7 @@ function home(): PortalDesign {
 }
 
 function mount(
-  pick: typeof cta | typeof vote | typeof headline | typeof link,
+  pick: typeof cta | typeof vote | typeof headline | typeof link | typeof postTitle,
   design = home(),
   extra: {
     reach?: { page: number; block: number | null }
@@ -57,6 +63,7 @@ function mount(
     shared?: boolean
     initialScope?: 'block'
     drawn?: Parameters<typeof ElementPanel>[0]['drawn']
+    onScreen?: (screen: 'all' | 'phone') => void
   } = {}
 ) {
   const box = { design, labels: [] as Array<string | undefined>, state: 'base' as StyleState }
@@ -81,7 +88,7 @@ function mount(
       state={box.state}
       onState={onState}
       screen={extra.screen ?? 'all'}
-      onScreen={() => {}}
+      onScreen={extra.onScreen ?? (() => {})}
       onUp={() => {}}
       reach={extra.reach}
       shared={extra.shared}
@@ -265,10 +272,70 @@ describe('the picked element’s properties', () => {
     expect(view.container.textContent).not.toContain('Set differently')
   })
 
-  it('says phone values are shown, with the way back', () => {
-    const { view } = mount(cta, home(), { screen: 'phone' })
-    expect(view.container.textContent).toContain('Phone values · All screens')
+  it('shows the screen it edits as a chip under the scope line, not in the ⋯ menu', () => {
+    const onScreen = vi.fn()
+    mount(cta, home(), { onScreen })
+    const chip = within(screen.getByRole('radiogroup', { name: 'Editing' }))
+    expect(chip.getByRole('radio', { name: 'All screens' }).getAttribute('aria-checked')).toBe(
+      'true'
+    )
+    fireEvent.click(chip.getByRole('radio', { name: 'Phone' }))
+    expect(onScreen).toHaveBeenCalledWith('phone')
+    // Nothing set, so there is nothing else for the ⋯ menu to hold.
+    expect(screen.queryByRole('button', { name: /more actions$/ })).toBeNull()
+  })
+
+  it('tints its scope block on a phone, with the chip on Phone and the way back', () => {
+    const onScreen = vi.fn()
+    const { view } = mount(cta, home(), { screen: 'phone', onScreen })
+    expect(view.container.querySelector('[data-phone-mode]')).toBeTruthy()
+    const chip = within(screen.getByRole('radiogroup', { name: 'Editing' }))
+    expect(chip.getByRole('radio', { name: 'Phone' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(chip.getByRole('radio', { name: 'All screens' }))
+    expect(onScreen).toHaveBeenCalledWith('all')
     expect(screen.queryByRole('heading', { name: 'Fill' })).toBeNull()
+  })
+
+  it('marks a row set for phones, and on a phone offers its all-screens value back', () => {
+    const design = home()
+    design.stylePhone = { headline: { base: { size: 31 } } }
+    const sizeRow = () =>
+      screen.getByText('Text size').closest('[data-property-row]')!.parentElement!
+    const wide = mount(headline, design)
+    expect(within(sizeRow()).getByText('Set for phones')).toBeTruthy()
+    expect(wide.view.container.querySelectorAll('[data-phone-dot]')).toHaveLength(1)
+    cleanup()
+    const { box } = mount(headline, design, { screen: 'phone' })
+    expect(within(sizeRow()).queryByRole('button', { name: /^Reset/ })).toBeNull()
+    fireEvent.click(within(sizeRow()).getByRole('button', { name: 'Use all-screens value' }))
+    expect(box.design.stylePhone?.headline?.base?.size).toBeUndefined()
+    expect(box.labels.at(-1)).toBe('Headline: size, everywhere, phones')
+  })
+})
+
+describe('a listed item, such as a post’s title', () => {
+  it('names it as itself and counts what its change reaches, with no scope that misses it', () => {
+    const { view, box } = mount(postTitle, home(), { reach: { page: 3, block: 3 } })
+    expect(line(view)).toBe('Changing every post title in Top posts (3)')
+    expect(view.container.textContent).not.toContain('body text')
+    expect(
+      screen.queryByRole('button', { name: /^(Just this one|This block|This page)/ })
+    ).toBeNull()
+    fireEvent.change(screen.getByLabelText('Text size'), { target: { value: '18' } })
+    expect(
+      findOverride(box.design, {
+        scope: 'part',
+        part: 'block.abcdefgh.post-title',
+        element: 'body',
+      })?.style?.base?.size
+    ).toBe(18)
+    expect(box.labels.at(-1)).toBe('Post title · Top posts: size, every post title in Top posts')
+  })
+
+  it('never says (0) for what is picked, whatever the canvas counted', () => {
+    const { view } = mount(vote, home(), { reach: { page: 0, block: 0 } })
+    expect(line(view)).toBe('Changing every vote box')
+    expect(screen.getByRole('button', { name: 'This block' })).toBeTruthy()
   })
 })
 

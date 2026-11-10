@@ -50,6 +50,12 @@ describe('a draft sent to the canvas', () => {
     expect(designChanges(sent, read)).toEqual([])
   })
 
+  it('arrives with the New request button’s own words', () => {
+    const draft = defaultDesign()
+    draft.pages.support = { request: { en: 'Ask us' } }
+    expect(sentAndRead(draft).read?.copy).toEqual({ request: { en: 'Ask us' } })
+  })
+
   it('keeps the composer in the band, where the live portal draws it', () => {
     const draft = defaultDesign()
     draft.pages.home.blocks = [

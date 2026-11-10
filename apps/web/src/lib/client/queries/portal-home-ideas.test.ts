@@ -49,3 +49,20 @@ describe('the Home Top posts query', () => {
     expect(key([])).toBe(key())
   })
 })
+
+describe('the Home Top posts query by status', () => {
+  const SHIPPED = 'post_status_01h455vb4pex5vsknk084sn02q'
+
+  it('asks for the statuses chosen, in their own cache entry', async () => {
+    await run(portalQueries.homeIdeas({ sort: 'new', count: 5, statusIds: [SHIPPED] as never }))
+    expect(server.fetchPublicPosts).toHaveBeenLastCalledWith({
+      data: { sort: 'new', limit: 5, statusIds: [SHIPPED] },
+    })
+    const key = (statusIds?: string[]) =>
+      JSON.stringify(
+        portalQueries.homeIdeas({ sort: 'new', count: 5, statusIds: statusIds as never }).queryKey
+      )
+    expect(key([SHIPPED])).not.toBe(key())
+    expect(key([])).toBe(key())
+  })
+})

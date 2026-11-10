@@ -1,7 +1,7 @@
 import { useIntl } from 'react-intl'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 import { PortalPageTitle, useDesignTitles } from '@/components/public/portal-page-title'
-import { usePageChoices } from '@/components/public/use-page-choices'
+import { usePageChoices } from '@/components/public/preview-draft-context'
 import type { RoadmapView } from '@/lib/client/hooks/use-roadmaps-query'
 import { cn } from '@/lib/shared/utils'
 

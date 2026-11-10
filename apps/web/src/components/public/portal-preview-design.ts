@@ -79,7 +79,9 @@ export interface DesignPreview {
   titles: Partial<Record<TitledPage, NonNullable<Headline>>>
   nav: Nav | null
   /** The draft's own wording, by language. */
-  copy: Partial<Record<'prompt' | 'submit' | 'emptyTitle', Record<string, string>>> | null
+  copy: Partial<
+    Record<'prompt' | 'submit' | 'emptyTitle' | 'request', Record<string, string>>
+  > | null
   logo: DesignLogo | null
   /** The logo's colours status markers take, when the draft asks for them. */
   statusColours: string[] | null
@@ -135,7 +137,7 @@ function readLogo(value: unknown): DesignLogo | null {
   }
 }
 
-const COPY_FIELDS = ['prompt', 'submit', 'emptyTitle'] as const
+const COPY_FIELDS = ['prompt', 'submit', 'emptyTitle', 'request'] as const
 
 function readCopy(value: unknown): DesignPreview['copy'] {
   if (!value || typeof value !== 'object') return null
@@ -158,6 +160,7 @@ const BLOCK_TYPES = new Set([
   'status',
   'contact',
   'links',
+  'boards',
 ])
 
 const isPlace = (value: unknown) =>

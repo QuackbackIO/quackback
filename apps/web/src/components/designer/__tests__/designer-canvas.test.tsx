@@ -115,6 +115,17 @@ describe('DesignerCanvas', () => {
     return { ...handlers, frame, send }
   }
 
+  it('tints its frame on a phone, where changes are phone values, but not in preview', () => {
+    show()
+    const frameOf = (title: string) => screen.getByTitle(title).parentElement!
+    expect(frameOf('Feedback, phone, light').hasAttribute('data-phone-mode')).toBe(true)
+    cleanup()
+    show(true)
+    expect(
+      frameOf('Feedback, phone, light, preview, links work').hasAttribute('data-phone-mode')
+    ).toBe(false)
+  })
+
   it('hands on a click, the pointer, words and undo from its frame', () => {
     const { send, onSelect, onHover, onWords, onKey } = show()
     send({ type: 'quackback:preview-section', section: 'band' })
@@ -215,6 +226,18 @@ describe('DesignerCanvas', () => {
     const { send, onLocation } = show()
     send({ type: 'quackback:preview-location', path: '/roadmap' })
     expect(onLocation).not.toHaveBeenCalled()
+  })
+
+  it('draws the skeleton, busy, until its own frame says it is ready', () => {
+    const { send, frame } = show(false, { skeleton: <p>Loading shapes</p> })
+    const box = document.querySelector('[data-canvas-box]')!
+    expect(box.getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByText('Loading shapes')).toBeTruthy()
+    send({ type: 'quackback:preview-ready' }, {} as Window)
+    expect(screen.queryByText('Loading shapes')).not.toBeNull()
+    send({ type: 'quackback:preview-ready' }, frame)
+    expect(screen.queryByText('Loading shapes')).toBeNull()
+    expect(box.getAttribute('aria-busy')).toBe('false')
   })
 
   it('offers no Try it of its own', () => {

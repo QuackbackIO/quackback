@@ -9,6 +9,7 @@ import { ChevronUpIcon } from '@heroicons/react/24/outline'
 import type { ChangelogId, PostId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { ShippedFrom } from './changelog-entry-card'
 
 interface LinkedPost {
   id: PostId
@@ -36,6 +37,8 @@ interface ChangelogEntryDetailProps {
   featuredImageUrl: string | null
   linkedPosts: LinkedPost[]
   categories?: CategoryBadge[]
+  /** The posts it shipped from; true unless the design hides them. */
+  shipped?: boolean
 }
 
 /** The entry's date, e.g. "October 1, 2026", in the reader's zone once hydrated. */
@@ -49,6 +52,7 @@ export function ChangelogEntryDetail({
   featuredImageUrl,
   linkedPosts,
   categories = [],
+  shipped = true,
 }: ChangelogEntryDetailProps) {
   return (
     <article>
@@ -115,14 +119,17 @@ export function ChangelogEntryDetail({
           </div>
 
           {/* Linked posts */}
-          {linkedPosts.length > 0 && (
+          {shipped && linkedPosts.length > 0 && (
             <section className="mt-8 pt-8 border-t border-border/40">
-              <h2 className="text-lg font-semibold mb-4">
+              <h2 className="text-lg font-semibold">
                 <FormattedMessage
                   id="portal.changelog.entry.shippedFeatures"
                   defaultMessage="Shipped Features"
                 />
               </h2>
+              <p className="mt-1 mb-4 text-xs text-muted-foreground">
+                <ShippedFrom posts={linkedPosts} />
+              </p>
               <div className="grid gap-2">
                 {linkedPosts.map((post) => (
                   <Link

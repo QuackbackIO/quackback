@@ -244,3 +244,42 @@ describe('the composer’s and the empty feed’s words', () => {
     expect(portalDesign.safeParse(draft).success).toBe(true)
   })
 })
+
+describe('the support page’s New request button words', () => {
+  it('reads its mark as plain words by language, up to 24 characters', () => {
+    const request = readWordsField('support.request')!
+    expect(request).toEqual({ kind: 'support', part: 'request' })
+    expect(readWordsField('support.other')).toBeNull()
+    expect(wordsKindOf(request)).toBe('plain')
+    expect(wordsByLanguage(request)).toBe(true)
+    expect(wordsLimitOf(request)).toBe(24)
+    expect(wordsName(request)).toBe('New request button')
+  })
+
+  it('writes them in one language under the support page, and drops them once emptied', () => {
+    const draft = defaultDesign()
+    const request = readWordsField('support.request')!
+    setWords(draft, request, 'en', 'Ask us anything at all, any time')
+    setWords(draft, request, 'fr', 'Demandez')
+    expect(draft.pages.support).toEqual({
+      request: { en: 'Ask us anything at all, ', fr: 'Demandez' },
+    })
+    expect(docText(wordsDocOf(draft, request, 'fr'))).toBe('Demandez')
+    expect(wordsElsewhere(draft, request, 'fr')).toEqual([
+      { locale: 'en', text: 'Ask us anything at all, ' },
+    ])
+    expect(portalDesign.safeParse(draft).success).toBe(true)
+    setWords(draft, request, 'en', '')
+    setWords(draft, request, 'fr', '')
+    expect(draft.pages).not.toHaveProperty('support')
+  })
+
+  it('keeps the page’s choices when its words go', () => {
+    const draft = defaultDesign()
+    draft.pages.support = { suggest: false }
+    const request = readWordsField('support.request')!
+    setWords(draft, request, 'en', 'Ask')
+    setWords(draft, request, 'en', '')
+    expect(draft.pages.support).toEqual({ suggest: false })
+  })
+})

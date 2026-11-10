@@ -3,7 +3,7 @@
  * signed-out visitor can see. A block on the portal never offers a private one.
  */
 import { describe, expect, it } from 'vitest'
-import { blockSources } from '../use-block-sources'
+import { blockSources, shippedStatusIds } from '../use-block-sources'
 
 describe('blockSources', () => {
   it('offers public roadmaps, help topics and boards visitors can see, by id and name', () => {
@@ -23,11 +23,33 @@ describe('blockSources', () => {
       boards: [['b1', 'Mobile']],
       categories: [['c1', 'Getting started']],
       columns: [],
+      statuses: [],
     })
   })
 
   it('offers nothing while the lists load', () => {
-    expect(blockSources({})).toEqual({ roadmaps: [], boards: [], categories: [], columns: [] })
+    expect(blockSources({})).toEqual({
+      roadmaps: [],
+      boards: [],
+      categories: [],
+      columns: [],
+      statuses: [],
+    })
+  })
+
+  it('offers every status, and knows the shipped ones by their Complete category', () => {
+    const statuses = [
+      { id: 's1', name: 'Planned', category: 'active' },
+      { id: 's2', name: 'Complete', category: 'complete' },
+      { id: 's3', name: 'Closed', category: 'closed' },
+    ]
+    expect(blockSources({ statuses }).statuses).toEqual([
+      ['s1', 'Planned'],
+      ['s2', 'Complete'],
+      ['s3', 'Closed'],
+    ])
+    expect(shippedStatusIds(statuses)).toEqual(['s2'])
+    expect(shippedStatusIds(undefined)).toEqual([])
   })
 
   it('offers top-level help topics only, as a sub-topic is never drawn on its own', () => {
