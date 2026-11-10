@@ -573,6 +573,13 @@ a svg,
  * They stay utilities, so they cascade exactly as those variants did.
  */
 
+/* A placeholder while a portal part loads: ui/Skeleton's look as one class,
+   so the loading markup a portal page carries stays small. The reduced
+   motion rule below rests its pulse. */
+@utility qb-skeleton {
+  @apply rounded-md bg-muted animate-pulse;
+}
+
 /* A 24px target around a small inline control, such as a tag chip. */
 @utility qb-hit-24 {
   position: relative;

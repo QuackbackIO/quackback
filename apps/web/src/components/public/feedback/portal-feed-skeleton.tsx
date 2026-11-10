@@ -14,11 +14,8 @@ import { useFeedHandoff } from './feed-input-handoff'
 
 /** One placeholder bar, sized like the text it stands in for. */
 function Bone({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn('rounded-md bg-muted animate-pulse motion-reduce:animate-none', className)}
-    />
-  )
+  // ui/Skeleton's look (qb-skeleton), as one class: the feed draws dozens.
+  return <div className={cn('qb-skeleton', className)} />
 }
 
 /** Title, body and tag widths per card, so the rows don't read as a stamp. */

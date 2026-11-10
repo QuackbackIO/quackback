@@ -162,17 +162,14 @@ export function RoadmapColumn({
 /**
  * A column's cards while its posts load: room for the first few, so a group
  * down a list does not grow from a heading to its cards and push the rest of
- * the page down when they arrive. The look is ui/Skeleton's, written out, as
+ * the page down when they arrive. The look is ui/Skeleton's (qb-skeleton), as
  * importing it would add its chunk to the roadmap page.
  */
 function CardSkeletons() {
   return (
     <div aria-hidden="true" data-qb-skeleton="roadmap-cards" className="space-y-2">
       {Array.from({ length: LOADING_CARDS }, (_, at) => (
-        <div
-          key={at}
-          className="h-20 rounded-md bg-muted animate-pulse motion-reduce:animate-none"
-        />
+        <div key={at} className="qb-skeleton h-20" />
       ))}
     </div>
   )

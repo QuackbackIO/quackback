@@ -23,7 +23,6 @@ vi.mock('@/lib/client/hooks/use-roadmap-posts-query', () => ({
 vi.mock('@/lib/client/hooks/use-infinite-scroll', () => ({ useInfiniteScroll: () => vi.fn() }))
 
 import { RoadmapColumn } from '../roadmap-column'
-import { Skeleton } from '@/components/ui/skeleton'
 
 afterEach(() => {
   cleanup()
@@ -54,12 +53,10 @@ describe('a roadmap column loading its posts', () => {
     expect(screen.queryByText('No items yet')).toBeNull()
   })
 
-  it('draws its placeholders in the same look as the app’s Skeleton', () => {
+  it('draws its placeholders in the app’s placeholder look', () => {
     const { container } = mount('group')
     const card = container.querySelector('[data-qb-skeleton=roadmap-cards] > div')!
-    const { container: reference } = render(<Skeleton />)
-    const look = reference.querySelector('[data-slot=skeleton]')!.className.split(' ')
-    expect(card.className.split(' ')).toEqual(expect.arrayContaining(look))
+    expect(card.className.split(' ')).toContain('qb-skeleton')
   })
 
   it('says it is empty once its posts are known to be none', () => {

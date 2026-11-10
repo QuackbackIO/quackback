@@ -259,12 +259,6 @@ function BlockCard({
   )
 }
 
-/**
- * A placeholder's look, the same as ui/Skeleton draws: written out here, as
- * importing that module would put its chunk on every portal page.
- */
-const SKELETON = 'rounded-md bg-muted animate-pulse motion-reduce:animate-none'
-
 /** A block waiting on its data: the card's outline, so the grid does not jump. */
 function BlockSkeleton({ block, index }: { block: HomeBlock; index: number }) {
   const area = useArea(index)
@@ -275,7 +269,7 @@ function BlockSkeleton({ block, index }: { block: HomeBlock; index: number }) {
       data-qb-skeleton={`block-${block.id ?? index}`}
       style={area}
       className={cn(
-        'min-h-32 animate-pulse motion-reduce:animate-none rounded-lg bg-muted/40',
+        'min-h-32 animate-pulse rounded-lg bg-muted/40',
         AREA_CLASS,
         phoneHiddenClass(block, samples)
       )}
@@ -553,7 +547,8 @@ function RoadmapColumnPosts({
     return (
       <ul aria-hidden="true" data-qb-skeleton="roadmap-posts" className="space-y-1.5">
         {Array.from({ length: count }, (_, at) => (
-          <li key={at} className={`h-6 ${SKELETON}`} />
+          // ui/Skeleton's look (qb-skeleton): importing it would put its chunk on Home.
+          <li key={at} className="qb-skeleton h-6" />
         ))}
       </ul>
     )

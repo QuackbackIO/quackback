@@ -49,7 +49,7 @@ describe('ChangelogListPublic empty state', () => {
 })
 
 describe('ChangelogListPublic while its entries load', () => {
-  function renderLoading(layout?: 'timeline' | 'cards' | 'compact') {
+  it('keeps a screen of room in the placeholder look, and says it is loading to a screen reader', () => {
     mockUseInfiniteQuery.mockReturnValue({
       data: undefined,
       fetchNextPage: vi.fn(),
@@ -57,27 +57,15 @@ describe('ChangelogListPublic while its entries load', () => {
       isFetchingNextPage: false,
       isLoading: true,
     })
-    return render(
+    const { container } = render(
       <IntlProvider locale="en">
-        <ChangelogListPublic entries={layout} />
+        <ChangelogListPublic />
       </IntlProvider>
     )
-  }
-
-  it('holds room for its first entries in their layout, and says it is loading to a screen reader', () => {
-    const { container } = renderLoading('timeline')
-    const held = container.querySelector('[data-qb-skeleton=changelog]')!
-    expect(held.getAttribute('aria-hidden')).toBe('true')
-    expect(held.children).toHaveLength(3)
-    // Laid out as the entries will be: a timeline's rules and its rows' padding.
-    expect(held.className).toContain('divide-y')
-    expect(held.children[0]!.className).toContain('py-10')
+    const busy = container.querySelector('[aria-busy=true]')!
+    // A screen of room, so the footer stays below until the entries arrive.
+    expect(busy.className.split(' ')).toContain('min-h-screen')
+    expect(busy.querySelector('.qb-skeleton')).not.toBeNull()
     expect(screen.getByText('Loading changelog...').className).toContain('sr-only')
-  })
-
-  it('holds a compact row as a date and a title, as the compact list draws them', () => {
-    const { container } = renderLoading('compact')
-    const row = container.querySelector('[data-qb-skeleton=changelog] > div')!
-    expect(row.children).toHaveLength(2)
   })
 })

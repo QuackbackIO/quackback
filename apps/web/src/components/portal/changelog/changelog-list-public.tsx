@@ -18,11 +18,6 @@ const LIST_CLASS = {
 } as const
 const ROW_CLASS = { timeline: 'py-10 first:pt-0', cards: '', compact: 'py-5 first:pt-0' } as const
 
-/** How many entries the loading list holds room for. */
-const LOADING_ENTRIES = 3
-/** ui/Skeleton's look. */
-const BONE = 'rounded-md bg-muted animate-pulse motion-reduce:animate-none'
-
 /**
  * The public changelog: its label filters and its entries, laid out as the
  * design chooses; without a choice, dates in a column and no images.
@@ -57,31 +52,18 @@ export function ChangelogListPublic({
     ? allEntries.filter((e) => e.categories.some((c) => c.id === activeCategoryId))
     : allEntries
 
-  // While the entries load, room for the first few in the layout they come in,
-  // so the page does not grow from a line of text to its entries under the
-  // visitor (and the footer under it does not jump). The look is ui/Skeleton's,
-  // written out, as importing it would add its chunk to this page.
+  // While the entries load, the page keeps room for them, so it does not grow
+  // under the visitor (and move the footer) when they arrive: the first
+  // entry's placeholder in ui/Skeleton's look (qb-skeleton), and the height of
+  // a screenful of entries. Kept to a few bytes, as every changelog page
+  // carries it.
   if (isLoading) {
     return (
-      <div aria-busy="true">
+      <div aria-busy="true" className="min-h-screen">
+        <div className="qb-skeleton h-40" />
         <span className="sr-only">
           <FormattedMessage id="portal.changelog.loading" defaultMessage="Loading changelog..." />
         </span>
-        <div aria-hidden="true" data-qb-skeleton="changelog" className={LIST_CLASS[layout]}>
-          {Array.from({ length: LOADING_ENTRIES }, (_, at) => (
-            <div key={at} className={cn('space-y-3', ROW_CLASS[layout])}>
-              <div className={cn('h-3 w-24', BONE)} />
-              <div className={cn('h-6 w-1/2', BONE)} />
-              {layout !== 'compact' && (
-                <>
-                  <div className={cn('h-4 w-full', BONE)} />
-                  <div className={cn('h-4 w-11/12', BONE)} />
-                  <div className={cn('h-4 w-2/3', BONE)} />
-                </>
-              )}
-            </div>
-          ))}
-        </div>
       </div>
     )
   }

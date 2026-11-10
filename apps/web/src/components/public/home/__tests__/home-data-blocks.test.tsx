@@ -40,7 +40,6 @@ import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { publicStatusPageQueries } from '@/lib/client/queries/status'
 import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import { popularArticlesQuery } from '../home-prefetch'
-import { Skeleton } from '@/components/ui/skeleton'
 
 const GATES = {
   feedback: true,
@@ -470,11 +469,7 @@ describe('Roadmap', () => {
     }
     expect(screen.queryByText('Nothing here yet')).toBeNull()
     // The app's one placeholder look.
-    const { container: reference } = render(<Skeleton />)
-    const look = reference.querySelector('[data-slot=skeleton]')!.className.split(' ')
-    expect(holders[0]!.querySelector('li')!.className.split(' ')).toEqual(
-      expect.arrayContaining(look)
-    )
+    expect(holders[0]!.querySelector('li')!.className.split(' ')).toContain('qb-skeleton')
   })
 
   it('says a column is empty once its posts are known to be none', async () => {
