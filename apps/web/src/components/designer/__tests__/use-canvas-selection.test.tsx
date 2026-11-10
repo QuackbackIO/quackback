@@ -131,5 +131,10 @@ describe('useCanvasSelection', () => {
     act(() => result.current.stepBack())
     expect(result.current.selection).toBe('block-aaaaaaaa')
     expect(result.current.element).toBeNull()
+    // Escape keeps climbing a level at a time: the block's Blocks, then the page.
+    act(() => result.current.stepBack())
+    expect(result.current.selection).toBe('home')
+    act(() => result.current.stepBack())
+    expect(result.current.selection).toBeNull()
   })
 })

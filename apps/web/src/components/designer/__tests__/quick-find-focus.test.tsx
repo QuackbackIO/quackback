@@ -33,6 +33,7 @@ vi.mock('@/lib/client/builder-events', async (importOriginal) => ({
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useWorkspaceSettings: () => ({ name: 'Acme' }),
   useBaseUrl: () => 'https://acme.test',
+  useSessionContext: () => null,
 }))
 vi.mock('@/lib/client/queries/portal-design', () => ({
   portalDesignQueries: {

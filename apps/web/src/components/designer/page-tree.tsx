@@ -35,9 +35,12 @@ export function PageTree({
   onPick,
   onShown,
   onMove,
+  picked = null,
 }: {
   label: string
   rows: readonly TreeRow[]
+  /** What is picked now: its row is marked selected. */
+  picked?: string | null
   onPick: (row: TreeRow) => void
   onShown: (row: TreeRow, shown: boolean) => void
   onMove: (row: TreeRow, by: -1 | 1) => void
@@ -54,7 +57,17 @@ export function PageTree({
   const refocus = useRef<string | null>(null)
 
   const shown = treeRows(rows, open)
-  const active = shown.find((row) => row.id === current) ?? shown[0]
+  // The picked row is the tree's stop until the keyboard moves it.
+  const pickedRow = picked === null ? undefined : shown.find((row) => row.key === picked)
+  const active = shown.find((row) => row.id === current) ?? pickedRow ?? shown[0]
+  // A new pick scrolls its row into view.
+  const pickedId = pickedRow?.id
+  useEffect(() => {
+    if (!pickedId) return
+    list.current
+      ?.querySelector<HTMLElement>(treeRowSelector(pickedId))
+      ?.scrollIntoView?.({ block: 'nearest' })
+  }, [pickedId])
   const parentOf = (row: TreeRow) =>
     treeRows(rows).find((each) => each.children?.some((child) => child.id === row.id))
   const focusRow = (rowId: string) => {
@@ -130,6 +143,7 @@ export function PageTree({
     const labelId = `${id}-${row.id}-label`
     const hidden = row.hide && !row.hide.shown
     const stop = focused ? 0 : -1
+    const selected = picked !== null && row.key === picked
     return (
       <li
         key={row.id}
@@ -138,6 +152,8 @@ export function PageTree({
         aria-level={row.level}
         aria-expanded={row.children ? isOpen : undefined}
         aria-labelledby={labelId}
+        aria-selected={selected}
+        aria-current={selected ? 'true' : undefined}
         tabIndex={stop}
         data-tree-row={row.id}
         onFocus={(event) => event.target === event.currentTarget && setCurrent(row.id)}
@@ -145,7 +161,10 @@ export function PageTree({
         className={cn('group/row rounded-md', ring)}
       >
         <div
-          className="flex min-h-7 items-center gap-1 rounded-md pe-1 hover:bg-muted"
+          className={cn(
+            'flex min-h-7 items-center gap-1 rounded-md pe-1 hover:bg-muted',
+            selected && 'bg-muted font-medium'
+          )}
           style={{ paddingInlineStart: `${(row.level - 1) * 14 + 2}px` }}
         >
           {row.children ? (
