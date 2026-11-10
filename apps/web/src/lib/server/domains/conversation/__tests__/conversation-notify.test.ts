@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
 import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 import type { Conversation } from '@/lib/server/db'
+import type { HookContext } from '@/lib/server/events/hook-context'
 import { conversationIdFromInboundAddress } from '../conversation.email-channel'
 import { SELF_HOSTED_MAIL_SLUG } from '../conversation.mail-slug'
 
@@ -26,10 +27,7 @@ let limitQueue: Array<Record<string, unknown>[]> = []
 
 const isAnyAgentOnline = vi.fn<() => Promise<boolean>>()
 const isPrincipalOnline = vi.fn<(p: PrincipalId) => Promise<boolean>>()
-const buildHookContext =
-  vi.fn<
-    () => Promise<{ workspaceName: string; portalBaseUrl: string; logoUrl: string | null } | null>
-  >()
+const buildHookContext = vi.fn<() => Promise<HookContext | null>>()
 const sendConversationMessageEmail = vi.fn<(opts: Record<string, unknown>) => Promise<unknown>>()
 const sendCsatRequestEmail = vi.fn<(opts: Record<string, unknown>) => Promise<unknown>>()
 const mintCsatEmailToken =
