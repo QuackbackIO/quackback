@@ -27,7 +27,7 @@ import { sameDesign } from '@/lib/shared/design/diff'
 import { logger } from '@/lib/server/logger'
 import { digestOf } from '@/lib/server/utils/canonical-json'
 import { authorKey, recordAuthors, type DraftAuthors } from './draft-authors'
-import { draftRevision } from './draft-revision'
+import { draftRevision, EMPTY_REVISION } from './draft-revision'
 import { dropDraft, NO_DRAFT } from './no-draft'
 import { validateDesign } from './validate-design'
 
@@ -218,11 +218,19 @@ export async function saveDraft(
   })
 }
 
-export async function discardDraft(): Promise<void> {
-  await db
-    .update(portalDesigns)
-    .set({ ...NO_DRAFT, updatedAt: new Date() })
-    .where(defaultSite())
+/**
+ * Drops the draft, returning the revision the next save names; refuses a
+ * stale `expectedRevision`, so a discard never throws away changes someone
+ * saved after the person last looked.
+ */
+export async function discardDraft(expectedRevision?: string): Promise<string> {
+  return db.transaction(async (tx) => {
+    const row = await designRow(tx, true)
+    if (!row) return EMPTY_REVISION
+    if (expectedRevision !== undefined && expectedRevision !== draftRevision(row))
+      throw new ConflictError('REVISION_MISMATCH', 'The draft changed since you opened it.')
+    return dropDraft(tx, row)
+  })
 }
 
 /** Writes the next revision, makes it the published one, and trims the oldest. */
@@ -462,22 +470,4 @@ export async function restoreRevision(
   })
   await invalidateSettingsCache()
   return result
-}
-
-export async function listRevisions(limit = REVISIONS_KEPT) {
-  const row = await designRow(db)
-  if (!row) return []
-  return db
-    .select({
-      id: portalDesignRevisions.id,
-      number: portalDesignRevisions.number,
-      source: portalDesignRevisions.source,
-      message: portalDesignRevisions.message,
-      principalId: portalDesignRevisions.principalId,
-      createdAt: portalDesignRevisions.createdAt,
-    })
-    .from(portalDesignRevisions)
-    .where(eq(portalDesignRevisions.designId, row.id))
-    .orderBy(desc(portalDesignRevisions.number))
-    .limit(limit)
 }

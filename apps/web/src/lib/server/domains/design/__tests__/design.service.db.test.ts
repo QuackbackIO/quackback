@@ -26,7 +26,6 @@ import {
   discardDraft,
   getDesignState,
   getPublishedDesign,
-  listRevisions,
   publishDraft,
   publishStartingDesign,
   restoreRevision,
@@ -34,7 +33,7 @@ import {
   saveDraft,
 } from '../design.service'
 import { EMPTY_REVISION } from '../draft-revision'
-import { readRevision } from '../revisions'
+import { listRevisions, readRevision } from '../revisions'
 
 const fixture = await createDbTestFixture()
 beforeEach(async () => {
@@ -164,6 +163,26 @@ describe('two people saving the same draft', () => {
     await saveDraft(withAccent('#7A1F35'), who)
     await discardDraft()
     expect((await getDesignState())!.revision).toBe(published)
+  })
+
+  it('refuses a discard made against a draft that has changed since', async () => {
+    const who = await admin()
+    const opened = await saveDraft(withAccent('#0F766E'), who)
+    // A colleague saves on top before the discard lands.
+    await saveDraft(withAccent('#7A1F35'), who, opened)
+    await expect(discardDraft(opened)).rejects.toMatchObject({ code: 'REVISION_MISMATCH' })
+    expect((await getDesignState())?.draft?.brand.light.accent).toBe('#7a1f35')
+  })
+
+  it('discards the draft named by its revision, and moves the draft count on', async () => {
+    const who = await admin()
+    const saved = await saveDraft(withAccent('#0F766E'), who)
+    const [before] = await testDb.select().from(portalDesigns)
+    const next = await discardDraft(saved)
+    const [after] = await testDb.select().from(portalDesigns)
+    expect(after!.draft).toBeNull()
+    expect(after!.draftVersion).toBe(before!.draftVersion + 1)
+    expect(next).toBe((await getDesignState())!.revision)
   })
 
   it('refuses a stale save even when two saves land in the same millisecond', async () => {

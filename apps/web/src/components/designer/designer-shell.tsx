@@ -346,8 +346,9 @@ export function DesignerShell({
   })
   const discard = () => {
     trackBuilder('designer_draft_discarded', { changes: draft.changes.length })
-    void draft.discard()
-    say('Draft discarded. Undo brings it back.')
+    void draft.discard().then((outcome) => {
+      if (outcome.ok) say('Draft discarded. Undo brings it back.')
+    })
   }
   const exit = async () => {
     await draft.flush()

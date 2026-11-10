@@ -21,6 +21,9 @@ const server = vi.hoisted(() => ({
   hold: null as Promise<void> | null,
   /** The revision each publish was asked against. */
   published: [] as Array<string | undefined>,
+  /** The revision each discard was made against, and the next discard's result if set. */
+  discarded: [] as Array<string | undefined>,
+  discardResult: null as unknown,
   workspaceLogo: [] as Array<boolean | undefined>,
   publishResult: { ok: true, revisionId: 'portal_design_revision_1', number: 1 } as unknown,
 }))
@@ -39,7 +42,10 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
     server.revision = `rev${server.saves.length + 1}`
     return { ok: true, report: { adjustments: [], errors: [], css: [] }, revision: server.revision }
   },
-  discardPortalDesignDraftFn: async () => ({ ok: true }),
+  discardPortalDesignDraftFn: async ({ data }: { data: { revision?: string } }) => {
+    server.discarded.push(data.revision)
+    return server.discardResult ?? { ok: true, revision: 'rev-discarded' }
+  },
   publishPortalDesignFn: async ({
     data,
   }: {
@@ -86,6 +92,8 @@ beforeEach(() => {
   server.results = []
   server.revision = 'rev1'
   server.published = []
+  server.discarded = []
+  server.discardResult = null
   server.workspaceLogo = []
   server.publishResult = { ok: true, revisionId: 'portal_design_revision_1', number: 1 }
 })
@@ -405,6 +413,29 @@ describe('useDesignDraft', () => {
       expect(result.current.undoLabel).toBe('Discard draft')
       act(() => result.current.undo())
       expect(result.current.design.layout.width).toBe('wide')
+    })
+
+    it('keeps a draft someone else changed, and asks whose changes to keep', async () => {
+      const { result } = setup()
+      act(() => result.current.update((draft) => void (draft.layout.width = 'wide')))
+      const lastChange = { by: 'Sam', at: '2026-11-10T10:00:00.000Z', kind: 'saved' }
+      server.discardResult = {
+        ok: false,
+        code: 'REVISION_MISMATCH',
+        message: 'The draft changed since you opened it.',
+        lastChange,
+      }
+      let outcome: unknown
+      await act(async () => {
+        outcome = await result.current.discard()
+      })
+      expect(server.discarded).toEqual(['rev1'])
+      expect(outcome).toMatchObject({ ok: false })
+      expect(result.current.conflict).toBe(true)
+      expect(result.current.conflictChange).toEqual(lastChange)
+      // Nothing was thrown away: this person's change is still on screen.
+      expect(result.current.design.layout.width).toBe('wide')
+      expect(result.current.undoLabel).not.toBe('Discard draft')
     })
   })
 

@@ -301,10 +301,19 @@ registerPath('/settings/portal_design/draft', {
     tags: ['Settings'],
     summary: 'Discard the portal design draft',
     description:
-      'Discards the draft. The published design stays as it is. Requires the write:settings scope and the settings.branding permission.',
+      'Discards the draft. The published design stays as it is. With If-Match, a draft that changed since that revision is kept and the discard answers 412. Requires the write:settings scope and the settings.branding permission.',
+    parameters: [
+      {
+        name: 'If-Match',
+        in: 'header',
+        required: false,
+        schema: { type: 'string' },
+        description: 'The revision from the last read.',
+      },
+    ],
     responses: {
       204: { description: 'Discarded' },
-      ...errorResponses(403),
+      ...errorResponses(403, 412),
     },
   },
 })

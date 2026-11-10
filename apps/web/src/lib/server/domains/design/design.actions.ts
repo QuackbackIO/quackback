@@ -3,11 +3,11 @@
  * refusal a caller must explain is returned as a value, not thrown: a thrown
  * error reaches the browser as a bare message, without its code.
  */
-import { readRevision } from './revisions'
+import { listRevisions, readRevision } from './revisions'
 import { draftLastChange, type DraftLastChange } from './draft-last-change'
 import { currentAuthors } from './draft-authors'
 import { authorNames } from './draft-author-names'
-import type { PortalDesignRevisionId } from '@quackback/ids'
+import type { PortalDesignRevisionId, PrincipalId } from '@quackback/ids'
 import { db, type PortalDesignSource } from '@/lib/server/db'
 import { DomainException } from '@/lib/shared/errors'
 import { convertLegacyBranding } from '@/lib/shared/design/convert'
@@ -22,7 +22,6 @@ import type { BrandingConfig } from '@/lib/server/domains/settings/settings.type
 import {
   discardDraft,
   getDesignState,
-  listRevisions,
   publishDraft,
   restoreRevision,
   saveDraft,
@@ -195,9 +194,23 @@ export async function saveDesignDraft(
   return { ...result, lastChange: await draftLastChange(author.principalId) }
 }
 
-export async function discardDesignDraft(): Promise<{ ok: true }> {
-  await discardDraft()
-  return { ok: true }
+/**
+ * Discards the draft and returns the revision the next save names. With
+ * `expectedRevision`, a discard against a draft someone else has changed
+ * since is refused, saying who changed it and when.
+ */
+export async function discardDesignDraft(
+  expectedRevision?: string,
+  viewer?: PrincipalId
+): Promise<
+  { ok: true; revision: string } | (DesignRefusal & { lastChange?: DraftLastChange | null })
+> {
+  const result = await refusable(async () => ({
+    ok: true as const,
+    revision: await discardDraft(expectedRevision),
+  }))
+  if (result.ok || result.code !== 'REVISION_MISMATCH' || !viewer) return result
+  return { ...result, lastChange: await draftLastChange(viewer) }
 }
 
 export async function publishDesign(
