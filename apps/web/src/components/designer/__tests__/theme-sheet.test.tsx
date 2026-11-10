@@ -160,14 +160,20 @@ describe('Theme', () => {
     fireEvent.click(advanced())
     for (const gone of [
       /top of each page/i,
-      // The custom CSS part names (band, band-image) are code, not words.
+      // The custom CSS part names are code, not words.
       /\b(top|the) band\b|\bband (image|look|options|colour)/i,
       /\bhero\b/i,
       /header blends/i,
       /call to action/i,
       /image sits/i,
     ])
-      expect(screen.queryAllByText(gone), String(gone)).toEqual([])
+      expect(
+        // The custom CSS section names parts in code (hero, hero-image): code, not words.
+        screen
+          .queryAllByText(gone)
+          .filter((el) => el.tagName !== 'CODE' && !el.querySelector('code')),
+        String(gone)
+      ).toEqual([])
     expect(screen.queryByLabelText('Image description')).toBeNull()
     expect(screen.queryByRole('radiogroup', { name: 'Art' })).toBeNull()
   })
