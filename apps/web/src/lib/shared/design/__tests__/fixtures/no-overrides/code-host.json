@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mode": "auto",
   "brand": {
     "light": {
@@ -58,13 +58,13 @@
     "menuAlign": "start",
     "nav": "underline",
     "navText": "ink",
-    "band": "none",
-    "bandAlign": "centre",
-    "headerOnBand": false,
+    "hero": "none",
+    "heroAlign": "centre",
+    "headerOnHero": false,
     "status": "colour",
     "tint": "neutral",
     "pageTitles": "plain",
-    "bandArt": "none",
+    "heroArt": "none",
     "cards": "bordered",
     "density": "comfortable",
     "width": "default",

@@ -70,7 +70,7 @@ export function designChecks(design: PortalDesign): DesignCheck[] {
         part,
       })
   }
-  const image = design.brand.bandImage
+  const image = design.brand.heroImage
   if (image && !image.decorative && !image.alt?.trim())
     checks.push({
       id: 'hero-image',

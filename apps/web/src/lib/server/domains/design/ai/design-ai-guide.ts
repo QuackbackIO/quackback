@@ -97,7 +97,7 @@ const CARD_LOOKS: Record<(typeof DESIGN_OPTIONS.cards)[number], string> = {
 
 /** What the fields shared between parts reach. */
 const SHARED =
-  "Shared fields reach more than one part: shape.corners sets the cards, fields and buttons; tune.label styles both the menu and buttons; brand.fonts.heading is also the headlines' face while brand.fonts.display is null; brand.light.support also colours the band, the tint and the call to action. To change one part, prefer its own exact values. People call the band the hero: in replies and says, write hero, never band; the fields keep their names."
+  "Shared fields reach more than one part: shape.corners sets the cards, fields and buttons; tune.label styles both the menu and buttons; brand.fonts.heading is also the headlines' face while brand.fonts.display is null; brand.light.support also colours the band, the tint and the call to action. To change one part, prefer its own exact values. People call the band the hero: in replies and says, write hero, never band."
 
 /** Each line of the guide with the fields it describes. */
 function guideLines(
@@ -132,17 +132,17 @@ function guideLines(
     ],
     [
       [
-        'layout.band',
-        'layout.bandColour',
+        'layout.hero',
+        'layout.heroColour',
         'layout.blend',
-        'layout.bandAlign',
-        'layout.bandShape',
-        'layout.bandHeight',
-        'layout.headerOnBand',
+        'layout.heroAlign',
+        'layout.heroShape',
+        'layout.heroHeight',
+        'layout.headerOnHero',
         'layout.imagePlace',
-        'brand.bandImage',
+        'brand.heroImage',
       ],
-      `layout.band (behind a page headline): ${DESIGN_OPTIONS.band.join(', ')}; support fills it with the second colour and blend runs the accent into it, as a line, with layout.blend mesh, a soft mesh beside the words, or with layout.blend ribbon, a diagonal ribbon sweeping past the words. It shows only with a headline; when you add one and there is no headline, write one. layout.bandAlign: ${DESIGN_OPTIONS.bandAlign.join(', ')}. layout.bandShape: full, inset (a rounded panel within the page), panel (the words on a block of the second colour), split (a rounded panel with the words on one half and a side band image flush in the other). layout.bandHeight: ${DESIGN_OPTIONS.bandHeight.join(', ')}, the room Home's hero gives its words; the other pages' heroes take Home's look at a compact height of their own. layout.headerOnBand: true puts the header in the band's colour. layout.bandColour (the colour a brand, tint or fade band is drawn in): ${DESIGN_OPTIONS.colourRole.join(', ')}, where extra1 and extra2 are brand.light.extra's; leave it out for the brand colour. layout.imagePlace (for an uploaded band image): ${DESIGN_OPTIONS.imagePlace.join(', ')}.`,
+      `layout.hero (behind a page headline): ${DESIGN_OPTIONS.hero.join(', ')}; support fills it with the second colour and blend runs the accent into it, as a line, with layout.blend mesh, a soft mesh beside the words, or with layout.blend ribbon, a diagonal ribbon sweeping past the words. It shows only with a headline; when you add one and there is no headline, write one. layout.heroAlign: ${DESIGN_OPTIONS.heroAlign.join(', ')}. layout.heroShape: full, inset (a rounded panel within the page), panel (the words on a block of the second colour), split (a rounded panel with the words on one half and a side band image flush in the other). layout.heroHeight: ${DESIGN_OPTIONS.heroHeight.join(', ')}, the room Home's hero gives its words; the other pages' heroes take Home's look at a compact height of their own. layout.headerOnHero: true puts the header in the band's colour. layout.heroColour (the colour a brand, tint or fade band is drawn in): ${DESIGN_OPTIONS.colourRole.join(', ')}, where extra1 and extra2 are brand.light.extra's; leave it out for the brand colour. layout.imagePlace (for an uploaded band image): ${DESIGN_OPTIONS.imagePlace.join(', ')}.`,
     ],
     [
       ['layout.status'],
@@ -150,16 +150,16 @@ function guideLines(
     ],
     [
       [
-        'layout.bandArt',
-        'layout.bandGlow',
-        'layout.bandGlowColour',
+        'layout.heroArt',
+        'layout.heroGlow',
+        'layout.heroGlowColour',
         'layout.imageFocus',
         'layout.imagePoint',
         'layout.imagePhone',
         'layout.tint',
         'shape.action',
       ],
-      `layout.bandArt (quiet art in the brand's colours for a band without an image): ${DESIGN_OPTIONS.bandArt.join(', ')}. layout.bandGlow (a soft glow of light on a brand or support band): ${DESIGN_OPTIONS.bandGlow.join(', ')}; layout.bandGlowColour: ${DESIGN_OPTIONS.colourRole.join(', ')} (leave it out for a light of the band's own colour). layout.imageFocus (where a cropped band image keeps its picture): ${DESIGN_OPTIONS.imageFocus.join(', ')}. layout.imagePoint {x, y}: an exact point, in percent, a cropped band image keeps in view. layout.imagePhone: ${DESIGN_OPTIONS.imagePhone.join(', ')} (hide leaves the band image off on phones). layout.tint: neutral, support (the second colour tints the vote box and the current menu item). shape.action: buttons (the band's call to action as the other buttons, the default), accent (in the brand colour while the other buttons are in the text colour), support (in the second colour).`,
+      `layout.heroArt (quiet art in the brand's colours for a band without an image): ${DESIGN_OPTIONS.heroArt.join(', ')}. layout.heroGlow (a soft glow of light on a brand or support band): ${DESIGN_OPTIONS.heroGlow.join(', ')}; layout.heroGlowColour: ${DESIGN_OPTIONS.colourRole.join(', ')} (leave it out for a light of the band's own colour). layout.imageFocus (where a cropped band image keeps its picture): ${DESIGN_OPTIONS.imageFocus.join(', ')}. layout.imagePoint {x, y}: an exact point, in percent, a cropped band image keeps in view. layout.imagePhone: ${DESIGN_OPTIONS.imagePhone.join(', ')} (hide leaves the band image off on phones). layout.tint: neutral, support (the second colour tints the vote box and the current menu item). shape.action: buttons (the band's call to action as the other buttons, the default), accent (in the brand colour while the other buttons are in the text colour), support (in the second colour).`,
     ],
     [
       ['brand.fonts.headlineColour'],

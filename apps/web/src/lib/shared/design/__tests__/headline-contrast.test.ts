@@ -60,7 +60,7 @@ describe('a headline in the band', () => {
     const band = (props: StyleProps) => {
       const d = defaultDesign()
       d.mode = 'light'
-      d.layout.band = 'brand'
+      d.layout.hero = 'brand'
       // A bright orange: black passes 4.5:1 on it, white only 3:1, and white reads clearer.
       d.brand.light.accent = '#fc5f0a'
       d.brand.light.ink = '#0a0a0a'

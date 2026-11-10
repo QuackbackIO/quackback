@@ -73,7 +73,7 @@ const SECTION_FIELDS: Array<[RegExp, DesignerPage, string]> = [
   [/^pages\.home\.headline\b/, 'home', 'hero'],
 ]
 
-const HEADER = /^(layout\.(header|nav|navText|menuAlign|headerOnBand)|nav|brand\.logo)\b/
+const HEADER = /^(layout\.(header|nav|navText|menuAlign|headerOnHero)|nav|brand\.logo)\b/
 
 const isPlain = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value)
@@ -136,7 +136,7 @@ function spotOfField(path: string): ChangeSpot | null {
   if (titled) return { page: titled[1] as DesignerPage, section: 'hero' }
   if (HERO_AI_PATHS.some((field) => path === field || path.startsWith(`${field}.`)))
     return { page: path.startsWith('pages.home.') ? 'home' : null, section: 'hero' }
-  if (path === 'brand.bandImage' || path.startsWith('brand.bandImage.'))
+  if (path === 'brand.heroImage' || path.startsWith('brand.heroImage.'))
     return { page: null, section: 'hero' }
   if (HEADER.test(path)) return { page: null, section: 'header' }
   const background = /^layout\.pageBackgrounds\.(\w+)\b/.exec(path)

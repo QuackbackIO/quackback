@@ -25,8 +25,8 @@ describe('pathChangeAsOp', () => {
     ['shape.corners', 'pill'],
     ['brand.fonts.headingWeight', 700],
     ['tune.headline.size', 60],
-    ['layout.bandHeight', 'compact'],
-    ['layout.bandAlign', 'centre'],
+    ['layout.heroHeight', 'compact'],
+    ['layout.heroAlign', 'centre'],
     ['pages.help.search', 'large'],
     ['pages.feedback.defaultSort', 'new'],
     ['pages.home.headline.title', 'Hello'],
@@ -44,7 +44,7 @@ describe('pathChangeAsOp', () => {
 
   it('leaves Home’s layout, images and CSS as field changes', () => {
     expect(pathChangeAsOp('pages.home.blocks', [])).toBeNull()
-    expect(pathChangeAsOp('brand.bandImage', { key: 'x' })).toBeNull()
+    expect(pathChangeAsOp('brand.heroImage', { key: 'x' })).toBeNull()
     expect(pathChangeAsOp('css', 'a{}')).toBeNull()
   })
 })

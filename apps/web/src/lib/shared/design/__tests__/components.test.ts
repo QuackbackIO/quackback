@@ -64,7 +64,7 @@ describe('a headline’s accent phrase', () => {
     const filled = resolveDesign(
       design((d) => {
         d.brand.light.accent = '#0f766e'
-        d.layout.band = 'brand'
+        d.layout.hero = 'brand'
       })
     ).tokens.light
     const [accent, band] = [filled['--qb-band-accent']!, filled['--qb-band-bg']!]
@@ -195,12 +195,12 @@ describe('buttons’ own shape', () => {
 })
 
 describe('a second brand colour', () => {
-  const withSupport = (band: PortalDesign['layout']['band'], change?: (d: PortalDesign) => void) =>
+  const withSupport = (band: PortalDesign['layout']['hero'], change?: (d: PortalDesign) => void) =>
     resolveDesign(
       design((d) => {
         d.brand.light.accent = '#4a1942'
         d.brand.light.support = '#e58fae'
-        d.layout.band = band
+        d.layout.hero = band
         change?.(d)
       })
     )
@@ -213,7 +213,7 @@ describe('a second brand colour', () => {
   })
 
   it('fills a support band with the accent when there is no second colour', () => {
-    const { light } = resolveDesign(design((d) => (d.layout.band = 'support'))).tokens
+    const { light } = resolveDesign(design((d) => (d.layout.hero = 'support'))).tokens
     expect(light['--qb-band-bg']).toBe(resolveDesign(design()).light!.primary)
   })
 
@@ -233,7 +233,7 @@ describe('a second brand colour', () => {
     const doc = design((d) => {
       d.brand.light.accent = '#22c55e'
       d.brand.light.support = '#1e1b4b'
-      d.layout.band = 'blend'
+      d.layout.hero = 'blend'
     })
     expect(resolveDesign(doc).errors).toEqual([
       'light: no text reaches 4.5:1 across the hero',
@@ -266,7 +266,7 @@ describe('a second brand colour', () => {
       design((d) => {
         d.brand.light.accent = '#4a1942'
         d.brand.light.support = '#e58fae'
-        d.layout.band = 'blend'
+        d.layout.hero = 'blend'
         d.layout.blend = 'mesh'
         d.tune = { subtitle: { colour: '#9a9a9a' } }
       })
@@ -298,7 +298,7 @@ describe('a second brand colour', () => {
     const loud = design((d) => {
       d.brand.light.accent = '#22c55e'
       d.brand.light.support = '#1e1b4b'
-      d.layout.band = 'blend'
+      d.layout.hero = 'blend'
       d.layout.blend = 'ribbon'
     })
     expect(resolveDesign(loud).errors).toEqual([])
@@ -307,14 +307,14 @@ describe('a second brand colour', () => {
   it('runs a blend into the hero colour where one is chosen', () => {
     const { light } = withSupport('blend', (d) => {
       d.brand.light.extra = ['#14c850']
-      d.layout.bandColour = 'extra1'
+      d.layout.heroColour = 'extra1'
     }).tokens
     expect(light['--qb-band-bg']).toBe(
       `linear-gradient(in oklab 110deg, #4a1942 0%, ${blendHue('#4a1942', '#14c850', 0.5)} 50%, #14c850 100%)`
     )
     const mesh = withSupport('blend', (d) => {
       d.brand.light.extra = ['#14c850']
-      d.layout.bandColour = 'extra1'
+      d.layout.heroColour = 'extra1'
       d.layout.blend = 'mesh'
     }).tokens.light
     expect(mesh['--qb-band-bg']).toContain('#14c850')
@@ -324,7 +324,7 @@ describe('a second brand colour', () => {
   it('keeps the page under centred words in a mesh, the colours around them', () => {
     const { light } = withSupport('blend', (d) => {
       d.layout.blend = 'mesh'
-      d.layout.bandAlign = 'centre'
+      d.layout.heroAlign = 'centre'
     }).tokens
     const page = resolveDesign(design()).light!
     expect(light['--qb-band-bg']).toMatch(
@@ -350,7 +350,7 @@ describe('a second brand colour', () => {
     const { light } = resolveDesign(
       design((d) => {
         d.brand.light.support = '#fdecc8'
-        d.layout.band = 'none'
+        d.layout.hero = 'none'
       })
     ).tokens
     expect(light['--qb-band-highlight']).toBe('#fdecc8')
@@ -373,8 +373,8 @@ describe('a panel in the band', () => {
   it('is the second colour, else the card colour, with readable words', () => {
     const plain = resolveDesign(
       design((d) => {
-        d.layout.band = 'brand'
-        d.layout.bandShape = 'panel'
+        d.layout.hero = 'brand'
+        d.layout.heroShape = 'panel'
       })
     )
     expect(plain.tokens.light['--qb-band-panel-bg']).toBe(plain.light!.card)
@@ -382,8 +382,8 @@ describe('a panel in the band', () => {
       design((d) => {
         d.brand.light.accent = '#0058a3'
         d.brand.light.support = '#ffdb00'
-        d.layout.band = 'brand'
-        d.layout.bandShape = 'panel'
+        d.layout.hero = 'brand'
+        d.layout.heroShape = 'panel'
       })
     ).tokens.light
     expect(yellow['--qb-band-panel-bg']).toBe('#ffdb00')
@@ -442,21 +442,21 @@ describe('the second colour at work', () => {
 describe('band art and image focus', () => {
   it('draws art only on a band with colour, and steps aside for an image behind the words', () => {
     const hills = design((d) => {
-      d.layout.band = 'tint'
-      d.layout.bandArt = 'hills'
+      d.layout.hero = 'tint'
+      d.layout.heroArt = 'hills'
     })
     expect(resolveDesign(hills).tokens.light['--qb-band-art']).toMatch(
       /^url\("data:image\/svg\+xml,/
     )
     expect(layoutAttributes(hills)['data-qb-band-art']).toBe('edge')
-    expect(layoutAttributes(design((d) => (d.layout.bandArt = 'dots')))['data-qb-band-art']).toBe(
+    expect(layoutAttributes(design((d) => (d.layout.heroArt = 'dots')))['data-qb-band-art']).toBe(
       'none'
     )
-    hills.brand.bandImage = { key: 'portal-images/a.jpg' }
+    hills.brand.heroImage = { key: 'portal-images/a.jpg' }
     expect(layoutAttributes(hills)['data-qb-band-art']).toBe('edge')
     hills.layout.imagePlace = 'cover'
     expect(layoutAttributes(hills)['data-qb-band-art']).toBe('none')
-    hills.layout.bandArt = 'petals'
+    hills.layout.heroArt = 'petals'
     hills.layout.imagePlace = 'side'
     expect(layoutAttributes(hills)['data-qb-band-art']).toBe('tile')
   })
@@ -487,11 +487,11 @@ describe('band art and image focus', () => {
 
   it('splits a panel with its image inside, only with a side image', () => {
     const split = design((d) => {
-      d.layout.band = 'brand'
-      d.layout.bandShape = 'split'
+      d.layout.hero = 'brand'
+      d.layout.heroShape = 'split'
     })
     expect(layoutAttributes(split)['data-qb-band-shape']).toBe('inset')
-    split.brand.bandImage = { key: 'portal-images/a.jpg' }
+    split.brand.heroImage = { key: 'portal-images/a.jpg' }
     expect(layoutAttributes(split)['data-qb-band-shape']).toBe('split')
     split.layout.imagePlace = 'cover'
     expect(layoutAttributes(split)['data-qb-band-shape']).toBe('inset')
@@ -555,8 +555,8 @@ describe('a logo image that would vanish on its header', () => {
     const onBand = (d: PortalDesign) => {
       d.brand.logo.tone = 'dark'
       d.brand.light.accent = '#163300'
-      d.layout.band = 'brand'
-      d.layout.headerOnBand = true
+      d.layout.hero = 'brand'
+      d.layout.headerOnHero = true
     }
     expect(filter(onBand)).toBe(`url(#${LOGO_FILTER.lift})`)
     expect(filter((d) => (d.brand.logo.tone = 'light'))).toBe(`url(#${LOGO_FILTER.sink})`)
@@ -567,8 +567,8 @@ describe('a logo image that would vanish on its header', () => {
       d.brand.logo.oneInk = true
       d.brand.logo.ink = '#00ccbc'
       d.brand.light.accent = '#00ccbc'
-      d.layout.band = 'brand'
-      d.layout.headerOnBand = true
+      d.layout.hero = 'brand'
+      d.layout.headerOnHero = true
     }
     expect(filter(teal)).toBe(`url(#${LOGO_FILTER.ink})`)
     // On a plain light header, and on the dark one, it reads in its own colour.
@@ -602,7 +602,7 @@ describe('a header on the band', () => {
   const onBand = (change: (d: PortalDesign) => void) =>
     resolveDesign(
       design((d) => {
-        d.layout.headerOnBand = true
+        d.layout.headerOnHero = true
         change(d)
       })
     ).tokens.light
@@ -611,7 +611,7 @@ describe('a header on the band', () => {
     const tokens = onBand((d) => {
       d.brand.light.accent = '#163300'
       d.brand.light.support = '#9fe870'
-      d.layout.band = 'support'
+      d.layout.hero = 'support'
     })
     expect(tokens['--qb-header-bg']).toBe('#9fe870')
     expect(tokens['--qb-header-ink']).toBe(tokens['--qb-band-ink'])
@@ -624,10 +624,10 @@ describe('a header on the band', () => {
   it('shares one surface with a gradient hero: the band’s own background, sized over both', () => {
     for (const blend of ['linear', 'mesh', 'ribbon'] as const) {
       const doc = design((d) => {
-        d.layout.headerOnBand = true
+        d.layout.headerOnHero = true
         d.brand.light.accent = '#4a1942'
         d.brand.light.support = '#e58fae'
-        d.layout.band = 'blend'
+        d.layout.hero = 'blend'
         d.layout.blend = blend
       })
       expect(layoutAttributes(doc)['data-qb-header-span']).toBe('on')
@@ -650,7 +650,7 @@ describe('a header on the band', () => {
     const tokens = onBand((d) => {
       d.brand.light.accent = '#22c55e'
       d.brand.light.support = '#1e1b4b'
-      d.layout.band = 'blend'
+      d.layout.hero = 'blend'
       d.layout.blend = 'mesh'
     })
     expect(tokens['--qb-header-surface']).toMatch(
@@ -663,22 +663,22 @@ describe('a header on the band', () => {
     const attr = (change: (d: PortalDesign) => void) =>
       layoutAttributes(
         design((d) => {
-          d.layout.headerOnBand = true
-          d.layout.band = 'blend'
+          d.layout.headerOnHero = true
+          d.layout.hero = 'blend'
           change(d)
         })
       )['data-qb-header-span']
-    expect(attr((d) => (d.layout.band = 'brand'))).toBe('off')
-    expect(attr((d) => (d.layout.bandShape = 'inset'))).toBe('off')
-    expect(attr((d) => (d.layout.bandArt = 'dots'))).toBe('off')
-    expect(attr((d) => (d.layout.headerOnBand = false))).toBe('off')
+    expect(attr((d) => (d.layout.hero = 'brand'))).toBe('off')
+    expect(attr((d) => (d.layout.heroShape = 'inset'))).toBe('off')
+    expect(attr((d) => (d.layout.heroArt = 'dots'))).toBe('off')
+    expect(attr((d) => (d.layout.headerOnHero = false))).toBe('off')
     expect(attr(() => {})).toBe('on')
   })
 
   it('turns its button to the band’s text where the brand colour would vanish', () => {
     const tokens = onBand((d) => {
       d.brand.light.accent = '#0f766e'
-      d.layout.band = 'brand'
+      d.layout.hero = 'brand'
     })
     expect(tokens['--qb-header-bg']).toBe(tokens['--qb-band-bg'])
     expect(tokens['--qb-header-action-bg']).toBe(tokens['--qb-band-ink'])
@@ -697,7 +697,7 @@ describe('the top band', () => {
   it('is plain for none and readable on the accent for brand', () => {
     expect(resolveDesign(design()).tokens.light['--qb-band-bg']).toBe('transparent')
     const doc = design((d) => {
-      d.layout.band = 'brand'
+      d.layout.hero = 'brand'
       d.brand.light.accent = '#0f766e'
     })
     const resolved = resolveDesign(doc)
@@ -717,7 +717,7 @@ describe('the top band', () => {
 
   it('tints with the brand colour and keeps both text colours readable on it', () => {
     const doc = design((d) => {
-      d.layout.band = 'tint'
+      d.layout.hero = 'tint'
       d.brand.light.accent = '#7a1f35'
     })
     const resolved = resolveDesign(doc)
@@ -745,7 +745,7 @@ describe('the top band', () => {
     const { tokens } = resolveDesign(
       design((d) => {
         d.mode = 'light'
-        d.layout.band = 'tint'
+        d.layout.hero = 'tint'
         d.brand.light.accent = '#1f4d3a'
         d.brand.light.background = '#f3ead8'
       })
@@ -757,7 +757,7 @@ describe('the top band', () => {
   })
 
   it('fades from a tint of the brand colour into the page', () => {
-    const resolved = resolveDesign(design((d) => (d.layout.band = 'fade')))
+    const resolved = resolveDesign(design((d) => (d.layout.hero = 'fade')))
     const { primary, background } = resolved.light!
     expect(resolved.tokens.light['--qb-band-bg']).toBe(
       `linear-gradient(to bottom, ${tintOf(primary!, background!, BAND_FADE)}, ${background})`
@@ -827,8 +827,8 @@ describe('menu text', () => {
         design((d) => {
           d.brand.light.accent = '#163300'
           d.brand.light.support = '#9fe870'
-          d.layout.band = 'tint'
-          d.layout.headerOnBand = true
+          d.layout.hero = 'tint'
+          d.layout.headerOnHero = true
           d.layout.navText = navText
         })
       ).tokens.light
@@ -892,22 +892,22 @@ describe('layoutAttributes', () => {
   it('centres the band under a centred header unless it says otherwise', () => {
     const centred = design((d) => (d.layout.header = 'centered'))
     expect(layoutAttributes(centred)['data-qb-band-align']).toBe('centre')
-    centred.layout.bandAlign = 'left'
+    centred.layout.heroAlign = 'left'
     expect(layoutAttributes(centred)['data-qb-band-align']).toBe('left')
-    const inline = design((d) => (d.layout.bandAlign = 'centre'))
+    const inline = design((d) => (d.layout.heroAlign = 'centre'))
     expect(layoutAttributes(inline)['data-qb-band-align']).toBe('centre')
   })
 
   it('names the band’s shape, and a header on the band only where the band has colour', () => {
     const doc = design((d) => {
-      d.layout.bandShape = 'panel'
-      d.layout.headerOnBand = true
+      d.layout.heroShape = 'panel'
+      d.layout.headerOnHero = true
     })
     expect(layoutAttributes(doc)).toMatchObject({
       'data-qb-band-shape': 'panel',
       'data-qb-header-band': 'off',
     })
-    doc.layout.band = 'brand'
+    doc.layout.hero = 'brand'
     expect(layoutAttributes(doc)['data-qb-header-band']).toBe('on')
   })
 })
@@ -934,7 +934,7 @@ describe('a fade band from its foot', () => {
   it('runs from the page colour at the top to the tint at the foot, and the words read on both', () => {
     const doc = defaultDesign()
     doc.mode = 'light'
-    doc.layout.band = 'fade'
+    doc.layout.hero = 'fade'
     doc.layout.fadeFrom = 'bottom'
     const tokens = resolveDesign(doc).tokens.light
     expect(tokens['--qb-band-bg']).toMatch(/^linear-gradient\(to top,/)
@@ -947,8 +947,8 @@ describe('a glow on a brand-colour band', () => {
       design((d) => {
         d.mode = 'light'
         d.brand.light.accent = '#fc5f0a'
-        d.layout.band = 'brand'
-        d.layout.bandGlow = 'bottom'
+        d.layout.hero = 'brand'
+        d.layout.heroGlow = 'bottom'
         change(d)
       })
     )
@@ -964,12 +964,12 @@ describe('a glow on a brand-colour band', () => {
   it('draws in the colour the design gives it, at the centre it names', () => {
     const top = glowing((d) => {
       d.brand.light.extra = ['#fc9912', '#fbde9a']
-      d.layout.bandGlowColour = 'extra2'
-      d.layout.bandGlow = 'top'
+      d.layout.heroGlowColour = 'extra2'
+      d.layout.heroGlow = 'top'
     }).tokens.light['--qb-band-bg']!
     expect(top).toMatch(/at 50% 0%, /)
     expect(top).toContain('#fbde9a')
-    const corner = glowing((d) => (d.layout.bandGlow = 'corner')).tokens.light['--qb-band-bg']!
+    const corner = glowing((d) => (d.layout.heroGlow = 'corner')).tokens.light['--qb-band-bg']!
     expect(corner).toMatch(/at 100% 0%, /)
   })
 
@@ -991,7 +991,7 @@ describe('a glow on a brand-colour band', () => {
     // A set-in orange panel lit from its foot; the site's subtitle was light.
     const lit = glowing((d) => {
       d.mode = 'auto'
-      d.layout.bandShape = 'inset'
+      d.layout.heroShape = 'inset'
       d.tune = { subtitle: { colour: '#fff8eb' } }
     })
     expect(lit.errors).toEqual([])
@@ -1004,8 +1004,8 @@ describe('a glow on a brand-colour band', () => {
       expect(tokens['--qb-band-plain']).toBe('#fc5f0a')
     }
     const doc = design((d) => {
-      d.layout.band = 'brand'
-      d.layout.bandGlow = 'bottom'
+      d.layout.hero = 'brand'
+      d.layout.heroGlow = 'bottom'
     })
     expect(layoutAttributes(doc)['data-qb-band-glow']).toBe('foot')
     expect(layoutAttributes(design())['data-qb-band-glow']).toBe('none')
@@ -1014,7 +1014,7 @@ describe('a glow on a brand-colour band', () => {
   it('keeps a glow that reaches the words only as strong as every ink there still reads', () => {
     // Along the top the glow meets the headline: light words at 3:1 on orange leave no room for it.
     const top = glowing((d) => {
-      d.layout.bandGlow = 'top'
+      d.layout.heroGlow = 'top'
       d.tune = { subtitle: { colour: '#fff8eb' } }
     }).tokens.light
     expect(top['--qb-band-bg']).toBe('#fc5f0a')
@@ -1022,7 +1022,7 @@ describe('a glow on a brand-colour band', () => {
     // Dark words on a light band keep a glow there.
     const pale = glowing((d) => {
       d.brand.light.accent = '#f6c445'
-      d.layout.bandGlow = 'top'
+      d.layout.heroGlow = 'top'
     }).tokens.light
     expect(pale['--qb-band-bg']).toMatch(/^radial-gradient\(.+at 50% 0%/)
     const rim = /, (#[0-9a-f]{6}) 50%/.exec(pale['--qb-band-bg']!)![1]!
@@ -1030,9 +1030,9 @@ describe('a glow on a brand-colour band', () => {
   })
 
   it('is drawn only on a brand or second-colour band', () => {
-    const tint = glowing((d) => (d.layout.band = 'tint')).tokens.light['--qb-band-bg']!
+    const tint = glowing((d) => (d.layout.hero = 'tint')).tokens.light['--qb-band-bg']!
     expect(tint).not.toContain('radial-gradient')
-    const plain = glowing((d) => delete d.layout.bandGlow).tokens.light['--qb-band-bg']!
+    const plain = glowing((d) => delete d.layout.heroGlow).tokens.light['--qb-band-bg']!
     expect(plain).toBe('#fc5f0a')
   })
 })
@@ -1057,9 +1057,9 @@ describe('the band’s foot', () => {
     for (const blend of ['mesh', 'ribbon'] as const) {
       for (const align of ['left', 'centre'] as const) {
         const resolved = band((d) => {
-          d.layout.band = 'blend'
+          d.layout.hero = 'blend'
           d.layout.blend = blend
-          d.layout.bandAlign = align
+          d.layout.heroAlign = align
         })
         for (const mode of ['light', 'dark'] as const) {
           const page = resolved[mode]!.background
@@ -1073,9 +1073,9 @@ describe('the band’s foot', () => {
 
   it('fades only the foot under a header sharing the band, the shared surface itself unchanged', () => {
     const { tokens, light } = band((d) => {
-      d.layout.band = 'blend'
+      d.layout.hero = 'blend'
       d.layout.blend = 'mesh'
-      d.layout.headerOnBand = true
+      d.layout.headerOnHero = true
     })
     expect(tokens.light['--qb-band-foot']).toBe(
       `linear-gradient(to bottom, transparent max(55%, calc(100% - 8rem)), ${light!.background})`
@@ -1090,7 +1090,7 @@ describe('the band’s foot', () => {
       expect(
         foot((d) => {
           d.brand.light.accent = accent
-          d.layout.band = 'brand'
+          d.layout.hero = 'brand'
         })
       ).toBeUndefined()
     }
@@ -1100,29 +1100,29 @@ describe('the band’s foot', () => {
     // Blue on a darker blue page: one family, an edge between them reads as cut off.
     const blueOnBlue = foot((d) => {
       d.brand.light = { accent: '#3a3fd0', background: '#131573', ink: '#ffffff' }
-      d.layout.band = 'brand'
+      d.layout.hero = 'brand'
     })
     expect(blueOnBlue).toMatch(/^linear-gradient\(to bottom, transparent /)
     // Navy on near black: near enough to read as a seam.
     const navy = foot((d) => {
       d.brand.light = { accent: '#0c1a2a', background: '#0a0a0a', ink: '#ffffff' }
-      d.layout.band = 'brand'
+      d.layout.hero = 'brand'
     })
     expect(navy).toBeDefined()
     // A tint is always near the page.
-    expect(foot((d) => (d.layout.band = 'tint'))).toBeDefined()
+    expect(foot((d) => (d.layout.hero = 'tint'))).toBeDefined()
   })
 
   it('fades over 6rem where the band’s words read on the page too, else only in its bottom padding', () => {
     const resolved = band((d) => {
-      d.layout.band = 'tint'
+      d.layout.hero = 'tint'
     })
     expect(resolved.tokens.light['--qb-band-foot']).toBe(
       `linear-gradient(to bottom, transparent max(55%, calc(100% - 6rem)), ${resolved.light!.background})`
     )
     // A gradient band whose words would not read on the page fades only under them.
     const linear = band((d) => {
-      d.layout.band = 'blend'
+      d.layout.hero = 'blend'
       d.layout.blend = 'linear'
     })
     expect(linear.tokens.light['--qb-band-foot']).toBe('none')
@@ -1133,7 +1133,7 @@ describe('the band’s foot', () => {
   it('fades into a wash of one colour, and leaves a band over a gradient as it is', () => {
     const tint = (background: unknown) =>
       foot((d) => {
-        d.layout.band = 'tint'
+        d.layout.hero = 'tint'
         d.layout.background = background as never
       })
     expect(tint({ kind: 'tint', colour: '#faf9f3' })).toBeDefined()
@@ -1146,14 +1146,14 @@ describe('the band’s foot', () => {
     expect(tint(gradient)).toBeUndefined()
     // Over the gradient no colour is painted: the band fades out itself, over its bottom padding only.
     const over = band((d) => {
-      d.layout.band = 'tint'
+      d.layout.hero = 'tint'
       d.layout.background = gradient as never
     }).tokens.light
     expect(over['--qb-band-fade-out']).toBe('transparent')
     expect(
       layoutAttributes(
         design((d) => {
-          d.layout.band = 'tint'
+          d.layout.hero = 'tint'
           d.layout.background = gradient as never
         })
       )['data-qb-band-over']
@@ -1163,10 +1163,10 @@ describe('the band’s foot', () => {
 
   it('never reads the band’s own padding in a token, as a token is worked out on the page, not the band', () => {
     for (const change of [
-      (d: PortalDesign) => (d.layout.band = 'tint'),
-      (d: PortalDesign) => ((d.layout.band = 'blend'), (d.layout.blend = 'linear')),
-      (d: PortalDesign) => ((d.layout.band = 'blend'), (d.layout.blend = 'mesh')),
-      (d: PortalDesign) => (d.layout.band = 'brand'),
+      (d: PortalDesign) => (d.layout.hero = 'tint'),
+      (d: PortalDesign) => ((d.layout.hero = 'blend'), (d.layout.blend = 'linear')),
+      (d: PortalDesign) => ((d.layout.hero = 'blend'), (d.layout.blend = 'mesh')),
+      (d: PortalDesign) => (d.layout.hero = 'brand'),
     ]) {
       for (const tokens of Object.values(band(change).tokens))
         for (const value of Object.values(tokens)) expect(value).not.toContain('--qb-band-pad')
@@ -1176,7 +1176,7 @@ describe('the band’s foot', () => {
   it('sets the foot in every mode with a band, so light’s never carries into dark', () => {
     // Light on one colour, dark over a gradient: dark must not inherit light's painted foot.
     const { tokens } = band((d) => {
-      d.layout.band = 'tint'
+      d.layout.hero = 'tint'
       d.layout.background = {
         kind: 'solid',
         dark: { kind: 'gradient', stops: ['#7c56cc', 'page'], shape: 'radial', centre: 'middle' },
@@ -1189,8 +1189,8 @@ describe('the band’s foot', () => {
   })
 
   it('leaves no band, and a fade band that already ends in the page, alone', () => {
-    expect(foot((d) => (d.layout.band = 'none'))).toBeUndefined()
-    expect(foot((d) => (d.layout.band = 'fade'))).toBeUndefined()
+    expect(foot((d) => (d.layout.hero = 'none'))).toBeUndefined()
+    expect(foot((d) => (d.layout.hero = 'fade'))).toBeUndefined()
   })
 
   it('keeps a band set in a panel inside the panel’s own edge', () => {
@@ -1201,8 +1201,8 @@ describe('the band’s foot', () => {
       ]) {
         expect(
           foot((d) => {
-            d.layout.band = 'blend'
-            d.layout.bandShape = shape
+            d.layout.hero = 'blend'
+            d.layout.heroShape = shape
             change(d)
           })
         ).toBeUndefined()
@@ -1210,9 +1210,9 @@ describe('the band’s foot', () => {
     }
     expect(
       foot((d) => {
-        d.layout.band = 'blend'
+        d.layout.hero = 'blend'
         d.layout.blend = 'mesh'
-        d.layout.bandShape = 'panel'
+        d.layout.heroShape = 'panel'
       })
     ).toBeDefined()
   })
@@ -1221,9 +1221,9 @@ describe('the band’s foot', () => {
 describe('a hero photo behind the words with its measured veil', () => {
   const photo = (change: (d: PortalDesign) => void = () => {}) =>
     design((d) => {
-      d.layout.band = 'brand'
+      d.layout.hero = 'brand'
       d.brand.light.accent = '#fde047'
-      d.brand.bandImage = {
+      d.brand.heroImage = {
         key: 'portal-images/hero.jpg',
         alt: 'A man at a laptop',
         screenshot: { key: 'portal-images/hero-source.jpg', box: { x: 0, y: 0, w: 1, h: 1 } },
@@ -1264,7 +1264,7 @@ describe('a hero photo behind the words with its measured veil', () => {
 
   it('puts the header on the photo under a deeper veil, its one-ink logo drawn white', () => {
     const doc = photo((d) => {
-      d.layout.headerOnBand = true
+      d.layout.headerOnHero = true
       d.brand.logo.tone = 'dark'
       d.brand.logo.oneInk = true
     })
@@ -1279,16 +1279,16 @@ describe('a hero photo behind the words with its measured veil', () => {
     expect(
       layoutAttributes(
         photo((d) => {
-          d.layout.headerOnBand = true
-          d.brand.bandImage!.homeOnly = true
+          d.layout.headerOnHero = true
+          d.brand.heroImage!.homeOnly = true
         })
       )['data-qb-header-span']
     ).not.toBe('photo')
     expect(
       layoutAttributes(
         photo((d) => {
-          d.layout.headerOnBand = true
-          d.layout.bandShape = 'inset'
+          d.layout.headerOnHero = true
+          d.layout.heroShape = 'inset'
         })
       )['data-qb-header-span']
     ).toBe('off')
@@ -1298,10 +1298,10 @@ describe('a hero photo behind the words with its measured veil', () => {
 describe('text reads on what is actually behind it', () => {
   const photoBand = (accent: string, tone: 'dark' | 'light', under: string) =>
     design((d) => {
-      d.layout.band = 'brand'
+      d.layout.hero = 'brand'
       d.layout.imagePlace = 'cover'
       d.brand.light.accent = accent
-      d.brand.bandImage = {
+      d.brand.heroImage = {
         key: 'portal-images/hero.jpg',
         alt: 'A photo',
         screenshot: { key: 'portal-images/hero-source.jpg', box: { x: 0, y: 0, w: 1, h: 1 } },
@@ -1311,7 +1311,7 @@ describe('text reads on what is actually behind it', () => {
 
   it('keeps the current page readable on its pill in a header on the photo', () => {
     const doc = photoBand('#000000', 'dark', '#866e66')
-    doc.layout.headerOnBand = true
+    doc.layout.headerOnHero = true
     for (const mode of ['light', 'dark'] as const) {
       const tokens = resolveDesign(doc).tokens[mode]
       const ratio = contrastRatio(tokens['--qb-nav-active-ink']!, tokens['--qb-nav-active-bg']!)
@@ -1322,8 +1322,8 @@ describe('text reads on what is actually behind it', () => {
   it('keeps the current page readable on its pill in a header on a mid-tone band', () => {
     for (const accent of ['#866e66', '#7c7c7c', '#3b82f6', '#e11d48']) {
       const doc = design((d) => {
-        d.layout.band = 'brand'
-        d.layout.headerOnBand = true
+        d.layout.hero = 'brand'
+        d.layout.headerOnHero = true
         d.brand.light.accent = accent
       })
       const tokens = resolveDesign(doc).tokens.light
@@ -1345,10 +1345,10 @@ describe('a veil the design did not measure', () => {
     for (const band of ['none', 'tint', 'brand', 'fade'] as const) {
       for (const place of ['cover', 'pattern'] as const) {
         const doc = design((d) => {
-          d.layout.band = band
+          d.layout.hero = band
           d.layout.imagePlace = place
           d.brand.light.accent = '#7c3aed'
-          d.brand.bandImage = { key: 'portal-images/hero.jpg', alt: 'A photo' }
+          d.brand.heroImage = { key: 'portal-images/hero.jpg', alt: 'A photo' }
         })
         for (const mode of ['light', 'dark'] as const) {
           const tokens = resolveDesign(doc).tokens[mode]
@@ -1375,8 +1375,8 @@ describe('the page holding under a header that shares the band', () => {
     resolveDesign(
       design((d) => {
         d.mode = 'dark'
-        d.layout.headerOnBand = true
-        d.layout.band = 'blend'
+        d.layout.headerOnHero = true
+        d.layout.hero = 'blend'
         d.layout.blend = blend
         d.layout.pageTitles = 'band'
         d.brand.light = {

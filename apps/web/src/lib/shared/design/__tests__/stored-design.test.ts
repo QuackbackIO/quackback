@@ -4,6 +4,7 @@ import { DESIGN_OPTIONS } from '../options'
 import { newBlock } from '../home'
 import { migrateDesign } from '../migrations'
 import { readStoredDesign } from '../stored-design'
+import { asFormat2 } from './format2'
 
 type Json = Record<string, unknown>
 
@@ -43,12 +44,12 @@ describe('reading a stored design', () => {
 
   it('reads an option value a newer build added as the default', () => {
     const read = readStoredDesign(
-      written({ 'layout.band': 'panel', 'brand.logo.display': 'banner' })
+      written({ 'layout.hero': 'panel', 'brand.logo.display': 'banner' })
     )
-    expect(read?.design.layout.band).toBe(defaultDesign().layout.band)
+    expect(read?.design.layout.hero).toBe(defaultDesign().layout.hero)
     expect(read?.design.brand.logo.display).toBe(defaultDesign().brand.logo.display)
     expect(read?.design.brand.light.accent).toBe('#0f766e')
-    expect(read?.dropped.sort()).toEqual(['brand.logo.display', 'layout.band'])
+    expect(read?.dropped.sort()).toEqual(['brand.logo.display', 'layout.hero'])
   })
 
   it('drops a menu item of a kind this build does not know', () => {
@@ -74,7 +75,7 @@ describe('reading a stored design', () => {
   })
 
   it('drops the words a design once chose, without counting them as unknown', () => {
-    const doc = written({ vocabulary: { post: 'suggestion', board: 'category' } })
+    const doc = asFormat2(written({ vocabulary: { post: 'suggestion', board: 'category' } }))
     const read = readStoredDesign(doc)
     expect(read).toEqual({ design: stored(), dropped: [] })
     expect(read?.design).not.toHaveProperty('vocabulary')
@@ -82,7 +83,7 @@ describe('reading a stored design', () => {
   })
 
   it('takes in a design that still has its words, without them', () => {
-    const doc = written({ vocabulary: { post: 'idea', board: 'board' } })
+    const doc = asFormat2(written({ vocabulary: { post: 'idea', board: 'board' } }))
     const taken = migrateDesign(doc)
     expect(portalDesign.safeParse(taken).success).toBe(true)
     expect(taken).not.toHaveProperty('vocabulary')
@@ -91,7 +92,7 @@ describe('reading a stored design', () => {
   })
 
   it('takes in a logo that still styles its name, without the retired name styles', () => {
-    const doc = written({})
+    const doc = asFormat2(written({}))
     Object.assign((doc.brand as Json).logo as Json, {
       nameColour: 'accent',
       nameCase: 'upper',
@@ -107,20 +108,22 @@ describe('reading a stored design', () => {
   })
 
   it('takes in a focus ring colour, gone since focus rings stay neutral, keeping its width', () => {
-    const doc = written({
-      style: {
-        button: { focus: { ring: 'accent', ringWidth: 3 } },
-        link: { focus: { ring: '#ff0000' } },
-      },
-      styleDark: { button: { focus: { ring: '#ffffff' } } },
-      overrides: [
-        {
-          id: 'abcdefgh',
-          target: { scope: 'page', page: 'home', element: 'input' },
-          style: { focus: { ring: 'support' } },
+    const doc = asFormat2(
+      written({
+        style: {
+          button: { focus: { ring: 'accent', ringWidth: 3 } },
+          link: { focus: { ring: '#ff0000' } },
         },
-      ],
-    }) as Json
+        styleDark: { button: { focus: { ring: '#ffffff' } } },
+        overrides: [
+          {
+            id: 'abcdefgh',
+            target: { scope: 'page', page: 'home', element: 'input' },
+            style: { focus: { ring: 'support' } },
+          },
+        ],
+      })
+    )
     const read = readStoredDesign(doc)
     expect(read?.dropped).toEqual([])
     expect(read?.design.style).toEqual({ button: { focus: { ringWidth: 3 } } })
@@ -180,11 +183,11 @@ describe('reading a stored design with a value this build does not offer', () =>
     expect(fields.length).toBeGreaterThan(15)
     const paths = fields.map((field) => field.path.join('.'))
     expect(paths).toEqual(
-      expect.arrayContaining(['layout.bandGlow', 'layout.bandShape', 'shape.hover'])
+      expect.arrayContaining(['layout.heroGlow', 'layout.heroShape', 'shape.hover'])
     )
     const used = (list: readonly unknown[]) =>
       fields.some((field) => JSON.stringify(field.options) === JSON.stringify([...list]))
-    expect(used(DESIGN_OPTIONS.bandGlow)).toBe(true)
+    expect(used(DESIGN_OPTIONS.heroGlow)).toBe(true)
     expect(used(DESIGN_OPTIONS.hover)).toBe(true)
   })
 
@@ -206,10 +209,10 @@ describe('reading a stored design with a value this build does not offer', () =>
   )
 
   it('drops an optional field holding the wrong kind of value, keeping the design', () => {
-    const read = readStoredDesign(written({ 'layout.bandGlow': 7, 'shape.hover': { on: true } }))
-    expect(read?.dropped.sort()).toEqual(['layout.bandGlow', 'shape.hover'])
+    const read = readStoredDesign(written({ 'layout.heroGlow': 7, 'shape.hover': { on: true } }))
+    expect(read?.dropped.sort()).toEqual(['layout.heroGlow', 'shape.hover'])
     expect(read?.design.brand.light.accent).toBe('#0f766e')
-    expect(read?.design.layout).not.toHaveProperty('bandGlow')
+    expect(read?.design.layout).not.toHaveProperty('heroGlow')
   })
 
   it('still sets a required option back to the default design value', () => {
@@ -232,7 +235,7 @@ describe('reading a design stored before cards split into post cards and panels'
     }
     doc.styleDark = { card: { base: { borderColor: '#93c5fd' } } }
     doc.stylePhone = { card: { base: { radius: 2 }, hover: { lift: 1 } } }
-    return doc
+    return asFormat2(doc)
   }
 
   it('keeps the look: post cards take all of it, panels its normal look', () => {
@@ -319,7 +322,7 @@ describe('reading a design stored before cards split into post cards and panels'
 
 describe('reading a design stored when Lift was a motion of its own', () => {
   it('writes Lift as post cards’ and main buttons’ hover, keeping their own values', () => {
-    const doc = structuredClone(stored()) as unknown as Json
+    const doc = asFormat2(structuredClone(stored()))
     ;(doc.shape as Json).hover = 'lift'
     doc.style = { button: { hover: { shadow: 'deep' } } }
     const read = readStoredDesign(doc)!

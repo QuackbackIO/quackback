@@ -272,7 +272,7 @@ function behindOf(
   // A headline and its subtitle sit on the hero where there is one.
   if (
     ['headline', 'subtitle'].includes(element) &&
-    design.layout.band !== 'none' &&
+    design.layout.hero !== 'none' &&
     tokens['--qb-band-bg']
   )
     return baseLayer(tokens['--qb-band-bg'])

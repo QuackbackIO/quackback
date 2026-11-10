@@ -115,7 +115,7 @@ describe('the hero’s frame', () => {
 
   it('leaves the header blending into it to the header’s panel', () => {
     const start = defaultDesign()
-    start.layout.band = 'brand'
+    start.layout.hero = 'brand'
     show(start)
     expect(screen.queryByLabelText('Header blends into the hero')).toBeNull()
     expect(screen.queryByRole('switch')).toBeNull()
@@ -135,7 +135,7 @@ describe('Look', () => {
       'Blend',
     ])
     fireEvent.click(screen.getByRole('radio', { name: 'Bold waves' }))
-    expect(seen.design.layout).toMatchObject({ band: 'brand', bandArt: 'waves' })
+    expect(seen.design.layout).toMatchObject({ hero: 'brand', heroArt: 'waves' })
     expect(seen.labels).toEqual(['Hero: Look'])
   })
 
@@ -148,8 +148,8 @@ describe('Look', () => {
 
   it('says on hover when the look is one of its own, or the page’s title sits plain', () => {
     const start = defaultDesign()
-    start.layout.band = 'brand'
-    start.layout.bandArt = 'petals'
+    start.layout.hero = 'brand'
+    start.layout.heroArt = 'petals'
     show(start, 'roadmap')
     const look = screen.getByRole('region', { name: 'Look' })
     const help = within(look).getAllByRole('img')[0]!.getAttribute('title')!
@@ -161,7 +161,7 @@ describe('Look', () => {
 
   it('draws in a brand colour as a token, shown once the look takes one and the brand has two', async () => {
     const start = defaultDesign()
-    start.layout.band = 'brand'
+    start.layout.hero = 'brand'
     show(start)
     expect(screen.queryByRole('button', { name: /^Colour:/ })).toBeNull()
     cleanup()
@@ -170,20 +170,20 @@ describe('Look', () => {
     const chip = screen.getByRole('button', { name: 'Colour: Brand colour' })
     await act(async () => fireEvent.click(chip))
     fireEvent.click(await screen.findByRole('button', { name: 'Second colour' }))
-    expect(seen.design.layout.bandColour).toBe('support')
+    expect(seen.design.layout.heroColour).toBe('support')
     expect(seen.labels).toEqual(['Hero: Colour'])
     fireEvent.click(screen.getByRole('button', { name: 'Reset to brand colour' }))
-    expect(seen.design.layout).not.toHaveProperty('bandColour')
+    expect(seen.design.layout).not.toHaveProperty('heroColour')
   })
 
   it('offers art without an image, as drawn tiles', () => {
     const start = defaultDesign()
-    start.layout.band = 'brand'
+    start.layout.hero = 'brand'
     const { seen } = show(start)
     fireEvent.click(within(group('Art')).getByRole('radio', { name: 'Dots' }))
-    expect(seen.design.layout.bandArt).toBe('dots')
+    expect(seen.design.layout.heroArt).toBe('dots')
     cleanup()
-    start.brand.bandImage = { key: 'portal-images/room.jpg' }
+    start.brand.heroImage = { key: 'portal-images/room.jpg' }
     show(start)
     expect(screen.queryByRole('radiogroup', { name: 'Art' })).toBeNull()
   })
@@ -201,15 +201,15 @@ describe('Layout', () => {
     fireEvent.click(within(group('Alignment')).getByRole('radio', { name: 'Centre' }))
     fireEvent.click(within(group('Shape')).getByRole('radio', { name: 'Panel' }))
     expect(seen.design.layout).toMatchObject({
-      bandHeight: 'tall',
-      bandAlign: 'centre',
-      bandShape: 'panel',
+      heroHeight: 'tall',
+      heroAlign: 'centre',
+      heroShape: 'panel',
     })
     expect(seen.labels).toEqual(['Hero: Height', 'Hero: Alignment', 'Hero: Shape'])
     fireEvent.click(screen.getByRole('button', { name: 'Reset to roomy' }))
     fireEvent.click(screen.getByRole('button', { name: 'Reset to start' }))
-    expect(seen.design.layout).not.toHaveProperty('bandHeight')
-    expect(seen.design.layout).not.toHaveProperty('bandAlign')
+    expect(seen.design.layout).not.toHaveProperty('heroHeight')
+    expect(seen.design.layout).not.toHaveProperty('heroAlign')
   })
 })
 
@@ -226,14 +226,14 @@ describe('Image', () => {
     const file = new File(['x'], 'team.jpg', { type: 'image/jpeg' })
     fireEvent.change(screen.getByLabelText('Add a hero photo'), { target: { files: [file] } })
     await waitFor(() =>
-      expect(seen.design.brand.bandImage).toEqual({ key: 'portal-images/team.jpg' })
+      expect(seen.design.brand.heroImage).toEqual({ key: 'portal-images/team.jpg' })
     )
     expect(uploads.asked).toEqual(['team.jpg'])
   })
 
   it('sits, keeps its focal point and shows on phones or not, with its advice on hover', () => {
     const start = defaultDesign()
-    start.brand.bandImage = { key: 'portal-images/room.jpg' }
+    start.brand.heroImage = { key: 'portal-images/room.jpg' }
     const { seen } = show(start)
     expect(screen.getByRole('img', { name: /A photo or pattern works best/ })).toBeTruthy()
     expect(screen.queryByText(/A photo or pattern works best/)).toBeNull()
@@ -253,32 +253,32 @@ describe('Image', () => {
 
   it('takes alt text, or is marked decorative, and is removed', () => {
     const start = defaultDesign()
-    start.brand.bandImage = { key: 'portal-images/room.jpg' }
+    start.brand.heroImage = { key: 'portal-images/room.jpg' }
     const { seen } = show(start)
     fireEvent.change(screen.getByLabelText('Alt text'), { target: { value: 'Our team at work' } })
-    expect(seen.design.brand.bandImage).toEqual({
+    expect(seen.design.brand.heroImage).toEqual({
       key: 'portal-images/room.jpg',
       alt: 'Our team at work',
     })
     fireEvent.click(screen.getByLabelText('Decorative'))
-    expect(seen.design.brand.bandImage).toMatchObject({ decorative: true })
+    expect(seen.design.brand.heroImage).toMatchObject({ decorative: true })
     expect((screen.getByLabelText('Alt text') as HTMLInputElement).disabled).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Remove image' }))
-    expect(seen.design.brand.bandImage).toBeUndefined()
+    expect(seen.design.brand.heroImage).toBeUndefined()
     expect(new Set(seen.labels)).toEqual(new Set(['Hero: Image']))
   })
 
   it('keeps an image to Home through Just this page, with a dot, Reset and the footer', () => {
     const start = defaultDesign()
     start.nav.home.on = true
-    start.brand.bandImage = { key: 'portal-images/room.jpg' }
+    start.brand.heroImage = { key: 'portal-images/room.jpg' }
     const { seen, view } = show(start, 'home')
     fireEvent.click(screen.getByRole('button', { name: 'Just this page' }))
     expect(line()).toBe('Changing the hero on just this page: Home')
     // Only what a page can keep of its own: the look and layout are every page's.
     expect(screen.queryByRole('radiogroup', { name: 'Look' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Just this page' }))
-    expect(seen.design.brand.bandImage).toEqual({ key: 'portal-images/room.jpg', homeOnly: true })
+    expect(seen.design.brand.heroImage).toEqual({ key: 'portal-images/room.jpg', homeOnly: true })
     const footer = screen.getByRole('contentinfo', { name: 'Set differently' })
     expect(footer.textContent).toContain('Home page: image, just this page')
     fireEvent.click(screen.getByRole('button', { name: 'Back to every page' }))
@@ -286,7 +286,7 @@ describe('Image', () => {
     const row = view.container.querySelector('[data-set]')!
     expect(row.textContent).toContain('Image')
     fireEvent.click(screen.getByRole('button', { name: 'Reset to every page' }))
-    expect(seen.design.brand.bandImage).toEqual({ key: 'portal-images/room.jpg' })
+    expect(seen.design.brand.heroImage).toEqual({ key: 'portal-images/room.jpg' })
     expect(screen.queryByRole('contentinfo', { name: 'Set differently' })).toBeNull()
   })
 })
@@ -402,7 +402,7 @@ describe('Home first', () => {
 
   it('leaves where the page title sits to the page’s own panel', () => {
     const start = defaultDesign()
-    start.layout.band = 'brand'
+    start.layout.hero = 'brand'
     show(start, 'roadmap')
     expect(screen.queryByRole('radiogroup', { name: 'Other pages’ titles' })).toBeNull()
     expect(screen.queryByRole('radiogroup', { name: 'Page title' })).toBeNull()
@@ -412,7 +412,7 @@ describe('Home first', () => {
 describe('More and the summary rows', () => {
   it('keeps glow, blend and fade under a closed More', () => {
     const start = defaultDesign()
-    start.layout.band = 'brand'
+    start.layout.hero = 'brand'
     show(start)
     const more = screen.getByText('More').closest('details')!
     expect(more.open).toBe(false)

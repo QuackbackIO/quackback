@@ -164,7 +164,7 @@ const heroShown =
   (key: HeroKey) =>
   ({ design, page }: FindContext) =>
     heroSettingShown(key, design, page)
-const hasHeroImage = ({ design }: FindContext) => !!design.brand.bandImage
+const hasHeroImage = ({ design }: FindContext) => !!design.brand.heroImage
 
 /** Theme's sections, in the order Theme draws them; its Elements are the element registry's. */
 export const THEME_PANEL: FindPanel = {
@@ -230,7 +230,7 @@ export const PART_PANELS: readonly FindPanel[] = [
         rows: [
           FIND.headerLayout,
           { ...FIND.menuPosition, when: ({ design }) => design.layout.header === 'inline' },
-          { ...FIND.headerBlend, when: ({ design }) => design.layout.band !== 'none' },
+          { ...FIND.headerBlend, when: ({ design }) => design.layout.hero !== 'none' },
         ],
       },
       { title: HEADER_COPY.menu, rows: [FIND.menu, FIND.landing] },

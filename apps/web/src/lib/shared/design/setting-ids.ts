@@ -3,8 +3,13 @@
  * keys the schema names. The keys of a map (such as a language) are dropped,
  * and a path stops at a list or at anything the schema does not name, so an
  * id never carries words, links or colours a person typed.
+ *
+ * Ids are reported to analytics, so the hero's settings keep the ids they had
+ * before format 3 renamed their keys (layout.band, layout.bandShape,
+ * brand.bandImage), and their series run on across the rename.
  */
 import type { z } from 'zod'
+import { heroPathAsBefore, withHeroPath } from './migrations'
 import { portalDesignV2 } from './schema'
 
 type Node = z.core.$ZodType
@@ -35,6 +40,12 @@ function fieldsOf(node: Node): Array<Record<string, Node>> {
 }
 
 export function settingIdOf(path: string): string | null {
+  const id = schemaIdOf(withHeroPath(path))
+  return id === null ? null : heroPathAsBefore(id)
+}
+
+/** A path's id by the keys the schema names now. */
+function schemaIdOf(path: string): string | null {
   const ids: string[] = []
   let node: Node = portalDesignV2
   for (const segment of path.split('.')) {

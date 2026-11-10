@@ -299,10 +299,10 @@ function tuneSurface(
   backgrounds: ModeBackgrounds | null
 ): TuneSurface | null {
   if (!light?.background) return null
-  const panel = doc.layout.band !== 'none' && doc.layout.bandShape === 'panel'
+  const panel = doc.layout.hero !== 'none' && doc.layout.heroShape === 'panel'
   const band = panel ? [tokens['--qb-band-panel-bg']!] : headlineBehind(doc, light, 'light')
   // An image under the words has no one colour to read on.
-  const mixed = !!doc.brand.bandImage && layoutValue(doc.layout, 'imagePlace') !== 'side'
+  const mixed = !!doc.brand.heroImage && layoutValue(doc.layout, 'imagePlace') !== 'side'
   const page = backgrounds ? backgroundsBehind(backgrounds) : []
   const subtitle = tokens['--qb-band-subtitle']
   return {

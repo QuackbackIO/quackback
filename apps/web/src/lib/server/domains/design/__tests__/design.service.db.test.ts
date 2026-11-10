@@ -267,7 +267,7 @@ describe('a design saved by a newer build', () => {
     return {
       ...doc,
       brand: { ...doc.brand, logo: { ...doc.brand.logo, display: 'banner', tagline: 'Hi' } },
-      layout: { ...doc.layout, bandShape: 'panel' },
+      layout: { ...doc.layout, heroShape: 'panel' },
     }
   }
 

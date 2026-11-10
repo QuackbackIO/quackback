@@ -330,7 +330,7 @@ describe('reviseCheck', () => {
         change1_field: 'brand.light.support',
         change1_value: '#0058a3',
         change1_why: 'blue as the second colour',
-        change2_field: 'layout.band',
+        change2_field: 'layout.hero',
         change2_value: 'support',
         change2_why: 'a bolder hero',
         change3_field: 'tune.headline.weight',
@@ -348,9 +348,9 @@ describe('reviseCheck', () => {
         paths: [
           'brand.light.accent',
           'brand.light.support',
-          'layout.band',
-          'layout.bandShape',
-          'layout.bandArt',
+          'layout.hero',
+          'layout.heroShape',
+          'layout.heroArt',
           'layout.tint',
           'layout.density',
           'tune.headline.weight',
@@ -365,9 +365,9 @@ describe('reviseCheck', () => {
     for (const locked of [
       'brand.light.accent',
       'brand.light.support',
-      'layout.band',
-      'layout.bandShape',
-      'layout.bandArt',
+      'layout.hero',
+      'layout.heroShape',
+      'layout.heroArt',
       'layout.tint',
     ])
       expect(REVISABLE).not.toHaveProperty([locked])

@@ -199,13 +199,13 @@ const sideOf = (x: number) => (x < 34 ? 'left' : x > 66 ? 'right' : 'centre')
 export function photoChanges(
   photo: BrandPhoto,
   band: string,
-  had?: PortalDesign['brand']['bandImage'] | null
+  had?: PortalDesign['brand']['heroImage'] | null
 ): BrandChange[] {
   const { plan, placed } = photo
   const stale: BrandChange[] =
     had?.screenshot && !placed
       ? [
-          { path: 'brand.bandImage', value: null, why: 'the photo cut from an earlier screenshot' },
+          { path: 'brand.heroImage', value: null, why: 'the photo cut from an earlier screenshot' },
           {
             path: 'layout.imagePoint',
             value: null,
@@ -224,7 +224,7 @@ export function photoChanges(
   const from = 'the photo from your screenshot: replace it with the original for best quality'
   const changes: BrandChange[] = [
     {
-      path: 'brand.bandImage',
+      path: 'brand.heroImage',
       value: {
         key: placed.key,
         ...(placed.alt ? { alt: placed.alt } : { decorative: true }),
@@ -242,15 +242,15 @@ export function photoChanges(
   if (plan.place === 'cover') {
     changes.push(
       {
-        path: 'layout.band',
+        path: 'layout.hero',
         value: COLOURED.has(band) ? band : 'brand',
         why: 'the site’s photo fills the hero behind the words',
       },
-      { path: 'layout.bandShape', value: 'full', why: 'the site’s photo runs edge to edge' },
+      { path: 'layout.heroShape', value: 'full', why: 'the site’s photo runs edge to edge' },
       { path: 'layout.imagePhone', value: 'show', why: 'the words sit on the photo on phones too' },
       {
         // The photo is Home's only, so the header keeps its own colour on every page.
-        path: 'layout.headerOnBand',
+        path: 'layout.headerOnHero',
         value: false,
         why: 'the photo shows on Home only, so the header keeps its own colour',
       }
@@ -305,7 +305,7 @@ export function photoSaid(
   photo: BrandPhoto,
   design: PortalDesign
 ): { photo: 'placed' | 'offered' | null; photoWhy: string | null } {
-  const placed = !!photo.placed && design.brand.bandImage?.key === photo.placed.key
+  const placed = !!photo.placed && design.brand.heroImage?.key === photo.placed.key
   return {
     photo: placed ? 'placed' : photo.led ? 'offered' : null,
     photoWhy: photo.quality && !photo.quality.ok ? photo.quality.why : null,

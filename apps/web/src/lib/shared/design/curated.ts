@@ -15,10 +15,9 @@ type Layout = PortalDesign['layout']
 
 /**
  * The hero fields a look writes, each one left out set back to its default.
- * The design stores the hero under its older name, band. Height is the hero's
- * own setting beside its look, so a look keeps it.
+ * Height is the hero's own setting beside its look, so a look keeps it.
  */
-type BandFields = Pick<Layout, 'band' | 'blend' | 'bandShape' | 'bandArt'>
+type BandFields = Pick<Layout, 'hero' | 'blend' | 'heroShape' | 'heroArt'>
 
 export interface BandLook {
   id: string
@@ -29,31 +28,31 @@ export interface BandLook {
 }
 
 export const BAND_LOOKS: readonly BandLook[] = [
-  { id: 'plain', label: 'Plain', fields: { band: 'none' } },
-  { id: 'tint', label: 'Tint', fields: { band: 'tint' } },
-  { id: 'fade', label: 'Fade', fields: { band: 'fade' } },
-  { id: 'brand', label: 'Brand colour', fields: { band: 'brand' } },
+  { id: 'plain', label: 'Plain', fields: { hero: 'none' } },
+  { id: 'tint', label: 'Tint', fields: { hero: 'tint' } },
+  { id: 'fade', label: 'Fade', fields: { hero: 'fade' } },
+  { id: 'brand', label: 'Brand colour', fields: { hero: 'brand' } },
   {
     id: 'brand-waves',
     label: 'Brand colour with waves',
-    fields: { band: 'brand', bandArt: 'waves' },
+    fields: { hero: 'brand', heroArt: 'waves' },
   },
-  { id: 'inset', label: 'Brand colour panel', fields: { band: 'brand', bandShape: 'inset' } },
-  { id: 'second', label: 'Second colour', fields: { band: 'support' }, needsSecond: true },
-  { id: 'blend', label: 'Blend', fields: { band: 'blend' } },
+  { id: 'inset', label: 'Brand colour panel', fields: { hero: 'brand', heroShape: 'inset' } },
+  { id: 'second', label: 'Second colour', fields: { hero: 'support' }, needsSecond: true },
+  { id: 'blend', label: 'Blend', fields: { hero: 'blend' } },
 ]
 
 /** The band fields a look sets back to their defaults (DESIGN_DEFAULTS) before writing its own. */
-const BAND_OPTIONAL = ['blend', 'bandShape', 'bandArt'] as const
+const BAND_OPTIONAL = ['blend', 'heroShape', 'heroArt'] as const
 
 /** The band fields that draw: a blend's run only on a blend, art only on a band with colour. */
 function drawnBand(fields: BandFields): Required<BandFields> {
-  const band = fields.band
+  const band = fields.hero
   return {
-    band,
+    hero: band,
     blend: band === 'blend' ? layoutValue(fields, 'blend') : 'linear',
-    bandShape: layoutValue(fields, 'bandShape'),
-    bandArt: band === 'none' ? 'none' : layoutValue(fields, 'bandArt'),
+    heroShape: layoutValue(fields, 'heroShape'),
+    heroArt: band === 'none' ? 'none' : layoutValue(fields, 'heroArt'),
   }
 }
 

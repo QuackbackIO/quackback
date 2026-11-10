@@ -64,9 +64,9 @@ const doc = (text: string) => ({
 export function fixtureDesign(): PortalDesign {
   const design = defaultDesign()
   design.brand.light.accent = '#4f46e5'
-  design.layout.band = 'brand'
-  design.layout.bandArt = 'waves'
-  design.layout.bandHeight = 'tall'
+  design.layout.hero = 'brand'
+  design.layout.heroArt = 'waves'
+  design.layout.heroHeight = 'tall'
   design.nav.home = { on: true, tab: true }
   design.pages.home.headline = { title: { en: 'Acme feedback' }, subtitle: {} }
   design.pages.home.blocks = [
@@ -133,15 +133,15 @@ export function caseDesign(c: EvalCase): PortalDesign {
 
 const HOME = ['pages.home.blocks']
 const HERO = [
-  'layout.band',
+  'layout.hero',
   'layout.blend',
-  'layout.bandShape',
-  'layout.bandArt',
-  'layout.bandHeight',
-  'layout.bandAlign',
-  'layout.bandColour',
+  'layout.heroShape',
+  'layout.heroArt',
+  'layout.heroHeight',
+  'layout.heroAlign',
+  'layout.heroColour',
   'layout.fadeFrom',
-  'layout.headerOnBand',
+  'layout.headerOnHero',
   'shape.action',
 ]
 
@@ -199,12 +199,12 @@ export const EVAL_CASES: EvalCase[] = [
       // A quieter fill, whatever shape the hero takes (a pale tint inset reads as a custom look).
       const quieterLook =
         ['plain', 'tint', 'fade'].includes(h.look) ||
-        ['none', 'tint', 'fade'].includes(d.layout.band)
+        ['none', 'tint', 'fade'].includes(d.layout.hero)
       const quieterSame =
         h.look === b.look &&
         (h.art === 'none' ||
-          rank(DESIGN_OPTIONS.bandHeight, h.height) < rank(DESIGN_OPTIONS.bandHeight, b.height))
-      return quieterLook || quieterSame || (d.layout.band === 'brand' && h.art === 'none')
+          rank(DESIGN_OPTIONS.heroHeight, h.height) < rank(DESIGN_OPTIONS.heroHeight, b.height))
+      return quieterLook || quieterSame || (d.layout.hero === 'brand' && h.art === 'none')
     },
     touches: HERO,
   },
@@ -281,7 +281,7 @@ export const EVAL_CASES: EvalCase[] = [
     request: 'Make the hero shorter',
     ops: [{ op: 'set', target: 'hero', key: 'height', value: 'roomy' }],
     check: (d) =>
-      rank(DESIGN_OPTIONS.bandHeight, heroOf(d).height) < rank(DESIGN_OPTIONS.bandHeight, 'tall'),
+      rank(DESIGN_OPTIONS.heroHeight, heroOf(d).height) < rank(DESIGN_OPTIONS.heroHeight, 'tall'),
     touches: HERO,
   },
   {

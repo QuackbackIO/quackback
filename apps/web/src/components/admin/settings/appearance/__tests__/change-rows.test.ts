@@ -13,7 +13,14 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 import { changeRows, type ChangeRow } from '../change-rows'
 
 const world: OpWorld = {
-  gates: { feedback: true, roadmap: true, changelog: true, help: true, support: true, status: true },
+  gates: {
+    feedback: true,
+    roadmap: true,
+    changelog: true,
+    help: true,
+    support: true,
+    status: true,
+  },
   places: { boards: [], roadmaps: [], categories: [] },
 }
 
@@ -34,15 +41,15 @@ describe('changeRows', () => {
     const result = applyOps(green(), world, [
       { op: 'set', target: 'hero', key: 'look', value: 'brand-waves' },
     ])
-    expect(result.applied.map((change) => change.path)).toEqual(['layout.band', 'layout.bandArt'])
+    expect(result.applied.map((change) => change.path)).toEqual(['layout.hero', 'layout.heroArt'])
     expect(changeRows(result.applied).map(read)).toEqual(['Hero look: Brand colour with waves'])
   })
 
   it('never repeats an operation’s name over each field it touched (the critique’s “Tint” rows)', () => {
     // As the critique saw it: one look, two fields, both carrying the look's label.
     const changes: AppliedDesignChange[] = [
-      { path: 'layout.band', before: 'none', after: 'tint', label: 'Hero look: Tint' },
-      { path: 'layout.bandColour', before: null, after: 'auto', label: 'Hero look: Tint' },
+      { path: 'layout.hero', before: 'none', after: 'tint', label: 'Hero look: Tint' },
+      { path: 'layout.heroColour', before: null, after: 'auto', label: 'Hero look: Tint' },
     ]
     const rows = changeRows(changes).map(read)
     expect(rows).toEqual(['Hero look: Tint'])
@@ -78,7 +85,9 @@ describe('changeRows', () => {
       {
         path: 'style',
         before: null,
-        after: { button: { hover: { background: 'oklch(from var(--primary) calc(l - 0.1) c h)' } } },
+        after: {
+          button: { hover: { background: 'oklch(from var(--primary) calc(l - 0.1) c h)' } },
+        },
       },
       { path: 'style.link.hover.color', before: null, after: 'accent' },
     ]

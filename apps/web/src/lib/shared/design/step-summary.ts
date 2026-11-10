@@ -8,7 +8,7 @@ const PARTS: Array<[part: string, matches: RegExp]> = [
   ['logo', /^brand\.(logo|favicon|shareImage)\b/],
   [
     'hero',
-    /^(brand\.bandImage|layout\.(band\w*|blend|fadeFrom|imagePlace|imageFocus|headerOnBand))\b/,
+    /^(brand\.heroImage|layout\.(hero\w*|blend|fadeFrom|imagePlace|imageFocus|headerOnHero))\b/,
   ],
   [
     'colours',

@@ -68,10 +68,10 @@ describe('hero rules', () => {
       header: '#a3e870',
       intensity: 'bold' as const,
     }
-    expect(ruleHero(lime)).toMatchObject({ band: 'support', headerOnBand: true, by: 'rule' })
+    expect(ruleHero(lime)).toMatchObject({ band: 'support', headerOnHero: true, by: 'rule' })
     expect(ruleHero({ ...lime, measuredRole: 'accent', header: '#ffffff' })).toMatchObject({
       band: 'brand',
-      headerOnBand: false,
+      headerOnHero: false,
     })
   })
 
@@ -267,8 +267,8 @@ describe('dark heroes, dark bands and one-colour graphics', () => {
       measuredColour: '#0f2f35',
       brandColour: '#32e6e0',
     }
-    expect(ruleHero(teal)).toMatchObject({ band: 'brand', fill: '#0f2f35', headerOnBand: false })
-    expect(ruleHero({ ...teal, header: '#0f2f36' })).toMatchObject({ headerOnBand: true })
+    expect(ruleHero(teal)).toMatchObject({ band: 'brand', fill: '#0f2f35', headerOnHero: false })
+    expect(ruleHero({ ...teal, header: '#0f2f36' })).toMatchObject({ headerOnHero: true })
     // In a role, the role draws it.
     expect(ruleHero({ ...teal, measuredRole: 'accent' })).toMatchObject({
       band: 'brand',
@@ -430,17 +430,17 @@ describe('the header on the hero', () => {
       ruleHero({ ...ribbon, surface: { ...ribbon.surface, joinsHeader: true } })
     ).toMatchObject({
       band: 'blend',
-      headerOnBand: true,
+      headerOnHero: true,
     })
     expect(
       ruleHero({ ...ribbon, surface: { ...ribbon.surface, joinsHeader: false } })
     ).toMatchObject({
-      headerOnBand: false,
+      headerOnHero: false,
     })
     // A plain hero has no surface to share.
     expect(ruleHero({ ...PLAIN, surface: { ...QUIET, joinsHeader: true } })).toMatchObject({
       band: 'none',
-      headerOnBand: false,
+      headerOnHero: false,
     })
   })
 
@@ -453,7 +453,7 @@ describe('the header on the hero', () => {
     const look = answer({ look: 'bold_gradient', header_on_hero: 'separate' })
     expect(await decideHero(open, caller(look, look).call, null)).toMatchObject({
       band: 'blend',
-      headerOnBand: true,
+      headerOnHero: true,
     })
   })
 })

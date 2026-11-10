@@ -113,7 +113,7 @@ export function imageSrcSet(image: {
 }
 
 function bandImage(doc: PortalDesign): BandImage | null {
-  const image = doc.brand.bandImage
+  const image = doc.brand.heroImage
   if (!image) return null
   const srcSet = imageSrcSet(image)
   return {

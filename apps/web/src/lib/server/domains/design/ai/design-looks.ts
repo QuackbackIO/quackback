@@ -38,11 +38,11 @@ export const lookSchema = z.object({
   nav: z.enum(DESIGN_OPTIONS.nav),
   /** A second brand colour, or "" for none. */
   support: hex,
-  band: z.enum(DESIGN_OPTIONS.band),
+  hero: z.enum(DESIGN_OPTIONS.hero),
   blend: z.enum(DESIGN_OPTIONS.blend),
-  bandAlign: z.enum(DESIGN_OPTIONS.bandAlign),
-  bandShape: z.enum(DESIGN_OPTIONS.bandShape),
-  headerOnBand: z.boolean(),
+  heroAlign: z.enum(DESIGN_OPTIONS.heroAlign),
+  heroShape: z.enum(DESIGN_OPTIONS.heroShape),
+  headerOnHero: z.boolean(),
   pageTitles: z.enum(DESIGN_OPTIONS.pageTitles),
   scale: z.enum(DESIGN_OPTIONS.typeScale),
   tracking: z.enum(DESIGN_OPTIONS.tracking),
@@ -55,7 +55,7 @@ export const lookSchema = z.object({
   fill: z.enum(DESIGN_OPTIONS.fill),
   status: z.enum(DESIGN_OPTIONS.status),
   composer: z.enum(DESIGN_OPTIONS.composerPlace),
-  bandArt: z.enum(DESIGN_OPTIONS.bandArt),
+  heroArt: z.enum(DESIGN_OPTIONS.heroArt),
   headlineColour: z.enum(DESIGN_OPTIONS.inkOrAccent),
   tint: z.enum(DESIGN_OPTIONS.tint),
   action: z.enum(DESIGN_OPTIONS.action),
@@ -113,11 +113,11 @@ export const DIRECTIONS_EXAMPLE: Look = {
   header: 'inline',
   nav: 'pills',
   support: '',
-  band: 'brand',
+  hero: 'brand',
   blend: 'linear',
-  bandAlign: 'left',
-  bandShape: 'full',
-  headerOnBand: false,
+  heroAlign: 'left',
+  heroShape: 'full',
+  headerOnHero: false,
   pageTitles: 'band',
   scale: 'large',
   tracking: 'tight',
@@ -129,7 +129,7 @@ export const DIRECTIONS_EXAMPLE: Look = {
   fill: 'accent',
   status: 'colour',
   composer: 'band',
-  bandArt: 'none',
+  heroArt: 'none',
   headlineColour: 'ink',
   tint: 'neutral',
   action: 'buttons',
@@ -183,9 +183,9 @@ How a brand becomes each choice:
 - corners: sharp for strict or editorial brands, subtle for most software, rounded for friendly ones, pill for playful ones.
 - header: stacked (logo above the menu), inline (one row, for software), centered (for consumer and editorial brands). nav: tabs, underline, pills or plain.
 - band, behind the headlines: brand when they fill large areas with their colour, such as a hero; support when that colour is their second one; blend when their brand uses a gradient, with blend linear for a bold sweep and mesh for soft colour beside the words on a white page; tint or fade for most light brands; none for minimal and monochrome brands. A dark site takes none (its own dark page) or brand, never fade, which muddies a dark page.
-- bandAlign: centre for consumer and campaign-style heroes, left for software. bandShape: inset when their hero sits in a large rounded card, panel when their hero sets the words on a block of colour over another colour or a photo, full otherwise. headerOnBand: true when their header shares their hero's colour. pageTitles: band when their site's other pages open on a coloured hero as their home page does, plain when they open on a simple title.
+- heroAlign: centre for consumer and campaign-style heroes, left for software. heroShape: inset when their hero sits in a large rounded card, panel when their hero sets the words on a block of colour over another colour or a photo, full otherwise. headerOnHero: true when their header shares their hero's colour. pageTitles: band when their site's other pages open on a coloured hero as their home page does, plain when they open on a simple title.
 - composer: band for most looks, putting the composer in the hero under Home's headline; block keeps it on the grid. With it in the band, give the contact block the full width.
-- bandArt, for a band with colour and no image: none for most software; hills or waves for outdoor, travel, food and drink brands; petals or confetti for playful consumer ones; dots, grid or lines for a quiet texture. It is drawn in their colours.
+- heroArt, for a band with colour and no image: none for most software; hills or waves for outdoor, travel, food and drink brands; petals or confetti for playful consumer ones; dots, grid or lines for a quiet texture. It is drawn in their colours.
 - headlineColour: accent when their headlines are set in their brand colour, ink otherwise.
 - cards: filled when their site puts content on soft panels without edges, its own colour against a tinted page; give surface then.
 - tint: support when they have a second colour that suits the vote box and the current menu item, such as a soft or bright one; neutral otherwise. action: support when their main call to action is in their second colour; accent when it is in their brand colour while their other buttons are dark text-coloured ones; buttons otherwise.

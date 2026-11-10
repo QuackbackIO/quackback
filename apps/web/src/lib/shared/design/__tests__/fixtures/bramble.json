@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mode": "light",
   "brand": {
     "light": {
@@ -39,7 +39,7 @@
       "key": "fixtures/bramble/favicon.png"
     },
     "shareImage": null,
-    "bandImage": {
+    "heroImage": {
       "key": "portal-images/bramble-kitchen.jpg"
     }
   },
@@ -53,16 +53,16 @@
   "layout": {
     "header": "stacked",
     "nav": "pills",
-    "band": "fade",
+    "hero": "fade",
     "cards": "bordered",
     "density": "comfortable",
     "width": "default",
     "filters": "start",
-    "bandShape": "panel",
-    "bandAlign": "centre",
-    "bandArt": "petals",
+    "heroShape": "panel",
+    "heroAlign": "centre",
+    "heroArt": "petals",
     "imageFocus": "left",
-    "bandHeight": "tall",
+    "heroHeight": "tall",
     "fadeFrom": "bottom"
   },
   "pages": {

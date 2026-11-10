@@ -31,10 +31,10 @@ const ALL_ON = {
 /** A design as Quackback AI or a website import leaves it: values no set makes. */
 function imported(): PortalDesign {
   const design = defaultDesign()
-  design.layout.band = 'brand'
-  design.layout.bandShape = 'split'
-  design.layout.bandArt = 'petals'
-  design.layout.bandHeight = 'tall'
+  design.layout.hero = 'brand'
+  design.layout.heroShape = 'split'
+  design.layout.heroArt = 'petals'
+  design.layout.heroHeight = 'tall'
   design.brand.fonts.heading = { kind: 'bundled', id: 'bodoni-moda' }
   design.brand.fonts.body = { kind: 'bundled', id: 'karla' }
   design.brand.fonts.display = { kind: 'bundled', id: 'unbounded' }
@@ -77,11 +77,11 @@ describe('the curated sets', () => {
   it('writes every band field a look covers, clearing what the last one left', () => {
     const design = imported()
     takeBandLook(design, 'tint')
-    expect(design.layout.band).toBe('tint')
-    expect(design.layout.bandShape).toBeUndefined()
-    expect(design.layout.bandArt).toBeUndefined()
+    expect(design.layout.hero).toBe('tint')
+    expect(design.layout.heroShape).toBeUndefined()
+    expect(design.layout.heroArt).toBeUndefined()
     // Height is the hero's own setting, beside its look.
-    expect(design.layout.bandHeight).toBe('tall')
+    expect(design.layout.heroHeight).toBe('tall')
     expect(bandLookOf(design)).toBe('tint')
   })
 
@@ -106,10 +106,10 @@ describe('the curated sets', () => {
 
   it('reads a field that only repeats its default as the set it matches', () => {
     const design = defaultDesign()
-    design.layout.band = 'brand'
-    design.layout.bandShape = 'full'
-    design.layout.bandHeight = 'roomy'
-    design.layout.bandArt = 'none'
+    design.layout.hero = 'brand'
+    design.layout.heroShape = 'full'
+    design.layout.heroHeight = 'roomy'
+    design.layout.heroArt = 'none'
     expect(bandLookOf(design)).toBe('brand')
     // A fade's start and a blend's run only count where they draw.
     design.layout.fadeFrom = 'bottom'

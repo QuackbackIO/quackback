@@ -57,7 +57,7 @@ describe('a look’s lints', () => {
       ...good,
       pageWords: ['Roadmap', 'Coming soon', '', 'x'],
       headline: good.homeHeadline,
-      band: 'support',
+      hero: 'support',
       support: '',
       homeBlocks: [],
     })

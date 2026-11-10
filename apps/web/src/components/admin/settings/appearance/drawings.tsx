@@ -7,7 +7,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 
 type Layout = PortalDesign['layout']
 
-export function BandDrawing({ band }: { band: Layout['band'] }) {
+export function BandDrawing({ band }: { band: Layout['hero'] }) {
   return (
     <span className="flex h-full w-full flex-col">
       <span
@@ -49,7 +49,7 @@ export function ImagePlaceDrawing({ place }: { place: NonNullable<Layout['imageP
   )
 }
 
-export function BandArtDrawing({ art }: { art: NonNullable<Layout['bandArt']> }) {
+export function BandArtDrawing({ art }: { art: NonNullable<Layout['heroArt']> }) {
   const tile: Partial<Record<typeof art, string>> = {
     dots: 'bg-[radial-gradient(circle,color-mix(in_oklch,var(--primary)_55%,transparent)_1.2px,transparent_1.6px)] bg-[length:7px_7px]',
     grid: 'bg-[linear-gradient(color-mix(in_oklch,var(--primary)_35%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_oklch,var(--primary)_35%,transparent)_1px,transparent_1px)] bg-[length:8px_8px]',

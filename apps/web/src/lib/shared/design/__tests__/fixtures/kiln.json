@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mode": "auto",
   "brand": {
     "light": {
@@ -64,14 +64,14 @@
   "layout": {
     "header": "centered",
     "nav": "tabs",
-    "band": "support",
+    "hero": "support",
     "cards": "bordered",
     "density": "compact",
     "width": "default",
     "filters": "end",
-    "bandShape": "inset",
+    "heroShape": "inset",
     "status": "ink",
-    "bandArt": "lines",
+    "heroArt": "lines",
     "pageTitles": "plain",
     "postCardHides": ["meta"]
   },

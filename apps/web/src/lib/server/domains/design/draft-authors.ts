@@ -5,6 +5,7 @@
  * a change put back drops its author with it.
  */
 import { designChanges } from '@/lib/shared/design/diff'
+import { heroPathAsBefore } from '@/lib/shared/design/migrations'
 import type { PrincipalId } from '@quackback/ids'
 
 /** A field's dotted path to who changed it last: a principal id, or `ai:` and one. */
@@ -35,7 +36,10 @@ export function currentAuthors(
 ): DraftAuthors {
   if (!authors) return {}
   const current: DraftAuthors = {}
-  for (const change of designChanges(live, draft))
-    if (authors[change.path]) current[change.path] = authors[change.path]!
+  for (const change of designChanges(live, draft)) {
+    // A draft saved before format 3 marked the hero's fields by their band names.
+    const author = authors[change.path] ?? authors[heroPathAsBefore(change.path)]
+    if (author) current[change.path] = author
+  }
   return current
 }

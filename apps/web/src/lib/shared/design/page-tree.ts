@@ -108,7 +108,7 @@ function heroRows(design: PortalDesign, gates: PortalPageGates, page: DesignerPa
   const drawn: Record<string, boolean> = {
     headline: true,
     subtitle: true,
-    image: !!design.brand.bandImage,
+    image: !!design.brand.heroImage,
     composer: action === 'composer',
     cta: action === 'button',
   }

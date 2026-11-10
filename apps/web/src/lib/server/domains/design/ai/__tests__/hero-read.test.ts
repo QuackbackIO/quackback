@@ -32,12 +32,12 @@ describe('the faithful look’s hero, as the screenshot shows it', () => {
       confirmedBy(['#9fe870', '#163300', '#ffffff'])
     )
     expect(next).toMatchObject({
-      band: 'support',
+      hero: 'support',
       support: '#9fe870',
-      bandAlign: 'centre',
-      headerOnBand: true,
+      heroAlign: 'centre',
+      headerOnHero: true,
       headlineCase: 'upper',
-      bandShape: 'full',
+      heroShape: 'full',
     })
   })
 
@@ -48,29 +48,29 @@ describe('the faithful look’s hero, as the screenshot shows it', () => {
       hero({ colour: '#0058a3', panel: true, panelColour: '#ffdb00' }),
       confirmedBy(['#0058a3', '#ffdb00'])
     )
-    expect(next).toMatchObject({ band: 'brand', bandShape: 'panel', support: '#ffdb00' })
+    expect(next).toMatchObject({ hero: 'brand', heroShape: 'panel', support: '#ffdb00' })
   })
 
   it('an inset card, and art along the foot (Coralbank, Harbor)', () => {
     const look = { ...DIRECTIONS_EXAMPLE, accent: '#ff4f40' }
     expect(
       withHero(look, hero({ colour: '#112231', card: true }), confirmedBy(['#112231']))
-    ).toMatchObject({ band: 'support', support: '#112231', bandShape: 'inset' })
-    expect(withHero(look, hero({ fill: 'page', art: 'hills' }), confirmedBy([])).bandArt).toBe(
+    ).toMatchObject({ hero: 'support', support: '#112231', heroShape: 'inset' })
+    expect(withHero(look, hero({ fill: 'page', art: 'hills' }), confirmedBy([])).heroArt).toBe(
       'hills'
     )
   })
 
   it('leaves the band to the look when the hero is the plain page (Paylane)', () => {
-    const look = { ...DIRECTIONS_EXAMPLE, band: 'blend' as const, headerOnBand: false }
+    const look = { ...DIRECTIONS_EXAMPLE, hero: 'blend' as const, headerOnHero: false }
     const next = withHero(look, hero({ fill: 'page', headerOnHero: true }), confirmedBy([]))
-    expect(next.band).toBe('blend')
-    expect(next.headerOnBand).toBe(false)
+    expect(next.hero).toBe('blend')
+    expect(next.headerOnHero).toBe(false)
   })
 
   it('leaves a colour the screenshot does not show, and a logo, to the look', () => {
-    const look = { ...DIRECTIONS_EXAMPLE, accent: '#163300', band: 'brand' as const }
-    expect(withHero(look, hero({ colour: '#0081ba' }), confirmedBy(['#9fe870'])).band).toBe('brand')
+    const look = { ...DIRECTIONS_EXAMPLE, accent: '#163300', hero: 'brand' as const }
+    expect(withHero(look, hero({ colour: '#0081ba' }), confirmedBy(['#9fe870'])).hero).toBe('brand')
     expect(withHero(look, null, confirmedBy([]))).toBe(look)
   })
 })

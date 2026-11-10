@@ -58,9 +58,9 @@ describe('design AI scopes', () => {
   it('keeps an element to its own fields', () => {
     const result = applyDesignChanges(
       defaultDesign(),
-      [{ path: 'layout.band', value: 'brand' }],
+      [{ path: 'layout.hero', value: 'brand' }],
       'button'
     )
-    expect(result.outOfScope).toEqual(['layout.band'])
+    expect(result.outOfScope).toEqual(['layout.hero'])
   })
 })

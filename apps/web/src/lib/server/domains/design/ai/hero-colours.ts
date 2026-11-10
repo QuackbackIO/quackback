@@ -37,16 +37,16 @@ export function heroColourChanges(
   if (filled) {
     const at = extras.length < 2 ? extras.length : 1
     extras[at] = hero.fill!
-    out.push(change('layout.bandColour', at === 0 ? 'extra1' : 'extra2', why))
+    out.push(change('layout.heroColour', at === 0 ? 'extra1' : 'extra2', why))
   } else if (hero.colour)
-    out.push(change('layout.bandColour', hero.colour, 'the hero is in a third colour of the logo'))
-  else out.push(change('layout.bandColour', null, 'the hero in the brand’s own colours'))
+    out.push(change('layout.heroColour', hero.colour, 'the hero is in a third colour of the logo'))
+  else out.push(change('layout.heroColour', null, 'the hero in the brand’s own colours'))
   const glowing = !!hero.glow && (hero.band === 'brand' || hero.band === 'support')
-  out.push(change('layout.bandGlow', glowing ? hero.glow : null, why))
+  out.push(change('layout.heroGlow', glowing ? hero.glow : null, why))
   const fill = glowing ? hero.glowFill : null
   let at = fill ? extras.findIndex((c) => nearColour(c, fill)) : -1
   if (fill && at < 0 && extras.length < 2) at = extras.push(fill) - 1
-  out.push(change('layout.bandGlowColour', at < 0 ? null : at === 0 ? 'extra1' : 'extra2', why))
+  out.push(change('layout.heroGlowColour', at < 0 ? null : at === 0 ? 'extra1' : 'extra2', why))
   if (filled || extras.length !== before)
     out.push(change('brand.light.extra', extras, `the hero's colour: ${why}`))
   return out

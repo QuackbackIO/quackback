@@ -14,6 +14,7 @@ import { convertLegacyBranding } from '@/lib/shared/design/convert'
 import { designChanges } from '@/lib/shared/design/diff'
 import { withBlockIds } from '@/lib/shared/design/home'
 import { mergePatch } from '@/lib/shared/design/merge-patch'
+import { withHeroKeys } from '@/lib/shared/design/migrations'
 import { resolveDesign, type DesignAdjustment } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { parseJsonOrNull, parsePortalConfig } from '@/lib/server/domains/settings/settings.helpers'
@@ -152,7 +153,8 @@ export async function readDraftForChange(): Promise<
 /**
  * Applies a JSON merge patch to the design being edited and saves the result
  * as the draft. With `expectedRevision`, a patch made against an older state
- * is refused.
+ * is refused. A patch written for format 2, naming the hero's keys as a band
+ * (layout.bandShape), still applies: its keys take format 3's names first.
  */
 export async function patchDesignDraft(
   patch: unknown,
@@ -162,7 +164,11 @@ export async function patchDesignDraft(
   const current = await readDraftForChange()
   // The save checks the revision under the draft's lock, so a change landing
   // between this read and that save is refused too.
-  return saveDesignDraft(mergePatch(current.design, patch), author, expectedRevision)
+  const named =
+    patch !== null && typeof patch === 'object' && !Array.isArray(patch)
+      ? withHeroKeys(patch as Record<string, unknown>)
+      : patch
+  return saveDesignDraft(mergePatch(current.design, named), author, expectedRevision)
 }
 
 /**

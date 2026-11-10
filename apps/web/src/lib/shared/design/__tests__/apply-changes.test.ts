@@ -164,13 +164,13 @@ describe('applyDesignChanges', () => {
     const result = applyDesignChanges(
       defaultDesign(),
       [
-        { path: 'layout.band', value: 'brand' },
+        { path: 'layout.hero', value: 'brand' },
         { path: 'layout.nav', value: 'pills' },
         { path: 'css', value: 'body {}' },
       ],
       'header'
     )
-    expect(result.outOfScope).toEqual(['layout.band', 'css'])
+    expect(result.outOfScope).toEqual(['layout.hero', 'css'])
     expect(result.applied.map((change) => change.path)).toEqual(['layout.nav'])
   })
 
@@ -198,7 +198,7 @@ describe('applyDesignChanges', () => {
     expect(scopeFields('header')).toEqual([
       'layout.header',
       'layout.nav',
-      'layout.headerOnBand',
+      'layout.headerOnHero',
       'nav',
       'brand.logo',
       'tune.label',
@@ -276,13 +276,40 @@ describe('applyDesignChanges', () => {
     expect(placed.design.brand.logo.wordmark.light).toEqual({ key: 'header-logos/site-abc.svg' })
     const named = applyDesignChanges(
       defaultDesign(),
-      [{ path: 'brand.bandImage', value: { key: 'portal-images/other.jpg' } }],
+      [{ path: 'brand.heroImage', value: { key: 'portal-images/other.jpg' } }],
       'site',
       untrusted
     )
     expect(named.refused).toEqual([
-      { path: 'brand.bandImage', reason: 'images and fonts are uploaded in Brand' },
+      { path: 'brand.heroImage', reason: 'images and fonts are uploaded in Brand' },
     ])
+  })
+
+  it('takes the hero keys as format 2 named them from the model, under their new names', () => {
+    const untrusted = {
+      blockTypes: [],
+      links: new Set<string>(),
+      checkCss: () => null,
+      files: new Set<string>(),
+    }
+    const result = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'layout.band', value: 'brand' },
+        { path: 'layout.bandShape', value: 'inset' },
+        { path: 'layout', value: { ...defaultDesign().layout, hero: 'brand', bandArt: 'waves' } },
+      ],
+      'site',
+      untrusted
+    )
+    expect(result.refused).toEqual([])
+    expect(result.applied.map((change) => change.path)).toEqual([
+      'layout.hero',
+      'layout.heroShape',
+      'layout',
+    ])
+    expect(result.design.layout).toMatchObject({ hero: 'brand', heroArt: 'waves' })
+    expect(result.design.layout).not.toHaveProperty('bandArt')
   })
 
   it('keeps the rest of a Home layout from the model when a block’s page is off', () => {

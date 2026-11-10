@@ -308,7 +308,7 @@ describe('a step keeps to what was picked and how far the chip says it reaches',
       page: 'home',
     })
     if (!reply.ok) throw new Error(reply.message)
-    expect(reply.design.layout.band).toBe('tint')
+    expect(reply.design.layout.hero).toBe('tint')
   })
 
   it('reports a style outside the pick as left alone, never drops it silently', async () => {

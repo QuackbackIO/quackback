@@ -181,13 +181,13 @@ describe('part settings in quick find', () => {
 
   it('offer a row only where its panel draws it', () => {
     const plain = defaultDesign()
-    plain.layout.band = 'none'
+    plain.layout.hero = 'none'
     plain.layout.header = 'stacked'
     const labels = index('roadmap', plain).map(findPath)
     expect(labels).not.toContain('Header and menu › Layout › Blend into hero')
     expect(labels).not.toContain('Header and menu › Layout › Menu position')
     const banded = defaultDesign()
-    banded.layout.band = 'brand'
+    banded.layout.hero = 'brand'
     banded.layout.header = 'inline'
     const more = index('roadmap', banded).map(findPath)
     expect(more).toContain('Header and menu › Layout › Blend into hero')

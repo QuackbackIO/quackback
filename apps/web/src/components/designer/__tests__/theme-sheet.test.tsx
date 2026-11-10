@@ -66,9 +66,9 @@ const ALL_ON: PortalPageGates = {
 /** A band as Quackback AI leaves it. */
 function imported(): PortalDesign {
   const design = defaultDesign()
-  design.layout.band = 'brand'
-  design.layout.bandShape = 'split'
-  design.layout.bandArt = 'petals'
+  design.layout.hero = 'brand'
+  design.layout.heroShape = 'split'
+  design.layout.heroArt = 'petals'
   return design
 }
 
@@ -154,7 +154,7 @@ describe('Theme', () => {
 
   it('keeps brand-wide settings only: the hero’s are in its own panel', () => {
     const start = defaultDesign()
-    start.brand.bandImage = { key: 'portal-images/room.jpg' }
+    start.brand.heroImage = { key: 'portal-images/room.jpg' }
     start.brand.light.support = '#0ea5e9'
     renderTheme(start)
     fireEvent.click(advanced())

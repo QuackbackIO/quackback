@@ -63,7 +63,7 @@ describe('a brand band in dark mode', () => {
   const band = (accent: string, change: (d: PortalDesign) => void = () => {}) =>
     resolveDesign(
       design(accent, (d) => {
-        d.layout.band = 'brand'
+        d.layout.hero = 'brand'
         change(d)
       })
     ).tokens.dark['--qb-band-bg']

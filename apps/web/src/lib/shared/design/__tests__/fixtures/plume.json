@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mode": "light",
   "brand": {
     "light": {
@@ -44,7 +44,7 @@
       "key": "fixtures/plume/favicon.png"
     },
     "shareImage": null,
-    "bandImage": {
+    "heroImage": {
       "key": "portal-images/plume-desk.jpg"
     }
   },
@@ -56,14 +56,14 @@
     "header": "inline",
     "menuAlign": "centre",
     "nav": "pills",
-    "band": "blend",
+    "hero": "blend",
     "cards": "list",
     "density": "spacious",
     "width": "default",
     "filters": "start",
     "imagePlace": "cover",
     "tint": "support",
-    "bandArt": "confetti",
+    "heroArt": "confetti",
     "imageFocus": "right",
     "postCardHides": ["excerpt", "tags"]
   },

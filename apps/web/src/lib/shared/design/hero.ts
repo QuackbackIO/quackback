@@ -3,10 +3,11 @@
  * on Home, often the composer, an image or art. It is one block on every page
  * that has one, picked like any other, and its settings live in its own panel.
  *
- * The design document stores the hero under its older name, `band` (layout.band,
- * layout.bandShape, brand.bandImage, and so on). Stored designs and Quackback
- * AI's structured output use those keys, so they stay; only the words people
- * read say "hero".
+ * The design document stores the hero's settings as layout.hero,
+ * layout.heroShape, brand.heroImage and so on; up to format 2 they were named
+ * for a "band" (migrations.ts). What visitors' pages and workspace CSS can
+ * name, the `--qb-band-*` properties and `data-qb-*band*` attributes, keep
+ * the older word.
  *
  * A hero's settings are the site's: its look is the same on every page. The
  * composer's place is Home's alone, and the words are each page's own, edited
@@ -35,17 +36,17 @@ export interface HeroBlock {
   type: 'hero'
   /** A curated look's id, or `custom`. */
   look: string
-  image: NonNullable<PortalDesign['brand']['bandImage']> | null
+  image: NonNullable<PortalDesign['brand']['heroImage']> | null
   imagePlace: (typeof DESIGN_OPTIONS.imagePlace)[number]
   imagePhone: (typeof DESIGN_OPTIONS.imagePhone)[number]
-  art: (typeof DESIGN_OPTIONS.bandArt)[number]
-  glow: (typeof DESIGN_OPTIONS.bandGlow)[number]
+  art: (typeof DESIGN_OPTIONS.heroArt)[number]
+  glow: (typeof DESIGN_OPTIONS.heroGlow)[number]
   blend: (typeof DESIGN_OPTIONS.blend)[number]
   fadeFrom: (typeof DESIGN_OPTIONS.fadeFrom)[number]
   colour: (typeof DESIGN_OPTIONS.colourRole)[number]
-  height: (typeof DESIGN_OPTIONS.bandHeight)[number]
-  align: (typeof DESIGN_OPTIONS.bandAlign)[number]
-  shape: (typeof DESIGN_OPTIONS.bandShape)[number]
+  height: (typeof DESIGN_OPTIONS.heroHeight)[number]
+  align: (typeof DESIGN_OPTIONS.heroAlign)[number]
+  shape: (typeof DESIGN_OPTIONS.heroShape)[number]
   headerBlend: boolean
   titles: (typeof DESIGN_OPTIONS.pageTitles)[number]
   /** Home's one main action under the headline (main-action.ts). */
@@ -84,14 +85,14 @@ export const heroSchema = z
     image: image.nullable(),
     imagePlace: z.enum(DESIGN_OPTIONS.imagePlace),
     imagePhone: z.enum(DESIGN_OPTIONS.imagePhone),
-    art: z.enum(DESIGN_OPTIONS.bandArt),
-    glow: z.enum(DESIGN_OPTIONS.bandGlow),
+    art: z.enum(DESIGN_OPTIONS.heroArt),
+    glow: z.enum(DESIGN_OPTIONS.heroGlow),
     blend: z.enum(DESIGN_OPTIONS.blend),
     fadeFrom: z.enum(DESIGN_OPTIONS.fadeFrom),
     colour: z.enum(DESIGN_OPTIONS.colourRole),
-    height: z.enum(DESIGN_OPTIONS.bandHeight),
-    align: z.enum(DESIGN_OPTIONS.bandAlign),
-    shape: z.enum(DESIGN_OPTIONS.bandShape),
+    height: z.enum(DESIGN_OPTIONS.heroHeight),
+    align: z.enum(DESIGN_OPTIONS.heroAlign),
+    shape: z.enum(DESIGN_OPTIONS.heroShape),
     headerBlend: z.boolean(),
     titles: z.enum(DESIGN_OPTIONS.pageTitles),
     mainAction: z.enum(DESIGN_OPTIONS.mainAction),
@@ -107,19 +108,19 @@ export const heroSchema = z
  * look writes several at once; the image's crop is part of the image.
  */
 export const HERO_PATHS: Record<HeroKey, readonly string[]> = {
-  look: ['layout.band', 'layout.blend', 'layout.bandShape', 'layout.bandArt'],
-  image: ['brand.bandImage', 'layout.imageFocus', 'layout.imagePoint'],
+  look: ['layout.hero', 'layout.blend', 'layout.heroShape', 'layout.heroArt'],
+  image: ['brand.heroImage', 'layout.imageFocus', 'layout.imagePoint'],
   imagePlace: ['layout.imagePlace'],
   imagePhone: ['layout.imagePhone'],
-  art: ['layout.bandArt'],
-  glow: ['layout.bandGlow', 'layout.bandGlowColour'],
+  art: ['layout.heroArt'],
+  glow: ['layout.heroGlow', 'layout.heroGlowColour'],
   blend: ['layout.blend'],
   fadeFrom: ['layout.fadeFrom'],
-  colour: ['layout.bandColour'],
-  height: ['layout.bandHeight'],
-  align: ['layout.bandAlign'],
-  shape: ['layout.bandShape'],
-  headerBlend: ['layout.headerOnBand'],
+  colour: ['layout.heroColour'],
+  height: ['layout.heroHeight'],
+  align: ['layout.heroAlign'],
+  shape: ['layout.heroShape'],
+  headerBlend: ['layout.headerOnHero'],
   titles: ['layout.pageTitles'],
   mainAction: ['pages.home.composer', 'pages.home.mainAction'],
   composerWidth: ['pages.home.composerWidth'],
@@ -137,18 +138,18 @@ export function heroOf(design: PortalDesign): HeroBlock {
   return {
     type: 'hero',
     look: bandLookOf(design) ?? CUSTOM_LOOK,
-    image: design.brand.bandImage ?? null,
+    image: design.brand.heroImage ?? null,
     imagePlace: layoutValue(layout, 'imagePlace'),
     imagePhone: layoutValue(layout, 'imagePhone'),
-    art: layoutValue(layout, 'bandArt'),
-    glow: layoutValue(layout, 'bandGlow'),
+    art: layoutValue(layout, 'heroArt'),
+    glow: layoutValue(layout, 'heroGlow'),
     blend: layoutValue(layout, 'blend'),
     fadeFrom: layoutValue(layout, 'fadeFrom'),
-    colour: layoutValue(layout, 'bandColour'),
-    height: layoutValue(layout, 'bandHeight'),
-    align: layout.bandAlign ?? (layout.header === 'centered' ? 'centre' : 'left'),
-    shape: layoutValue(layout, 'bandShape'),
-    headerBlend: layout.headerOnBand === true,
+    colour: layoutValue(layout, 'heroColour'),
+    height: layoutValue(layout, 'heroHeight'),
+    align: layout.heroAlign ?? (layout.header === 'centered' ? 'centre' : 'left'),
+    shape: layoutValue(layout, 'heroShape'),
+    headerBlend: layout.headerOnHero === true,
     titles: layoutValue(layout, 'pageTitles'),
     mainAction: mainActionOf(design.pages.home),
     composerWidth: composerWidthOf(design),
@@ -162,14 +163,14 @@ export function heroOf(design: PortalDesign): HeroBlock {
 const LAYOUT_FIELDS = {
   imagePlace: ['imagePlace', DESIGN_DEFAULTS.layout.imagePlace],
   imagePhone: ['imagePhone', DESIGN_DEFAULTS.layout.imagePhone],
-  art: ['bandArt', DESIGN_DEFAULTS.layout.bandArt],
-  glow: ['bandGlow', DESIGN_DEFAULTS.layout.bandGlow],
+  art: ['heroArt', DESIGN_DEFAULTS.layout.heroArt],
+  glow: ['heroGlow', DESIGN_DEFAULTS.layout.heroGlow],
   blend: ['blend', DESIGN_DEFAULTS.layout.blend],
   fadeFrom: ['fadeFrom', DESIGN_DEFAULTS.layout.fadeFrom],
-  colour: ['bandColour', DESIGN_DEFAULTS.layout.bandColour],
-  height: ['bandHeight', DESIGN_DEFAULTS.layout.bandHeight],
-  shape: ['bandShape', DESIGN_DEFAULTS.layout.bandShape],
-  headerBlend: ['headerOnBand', DESIGN_DEFAULTS.layout.headerOnBand],
+  colour: ['heroColour', DESIGN_DEFAULTS.layout.heroColour],
+  height: ['heroHeight', DESIGN_DEFAULTS.layout.heroHeight],
+  shape: ['heroShape', DESIGN_DEFAULTS.layout.heroShape],
+  headerBlend: ['headerOnHero', DESIGN_DEFAULTS.layout.headerOnHero],
   titles: ['pageTitles', DESIGN_DEFAULTS.layout.pageTitles],
 } as const satisfies Partial<Record<HeroKey, readonly [keyof PortalDesign['layout'], unknown]>>
 
@@ -185,9 +186,9 @@ export function writeHero(draft: PortalDesign, hero: HeroBlock, key: HeroKey): v
       if (hero.look !== CUSTOM_LOOK) takeBandLook(draft, hero.look)
       return
     case 'image': {
-      const was = draft.brand.bandImage?.key
-      if (hero.image) draft.brand.bandImage = { ...hero.image }
-      else delete draft.brand.bandImage
+      const was = draft.brand.heroImage?.key
+      if (hero.image) draft.brand.heroImage = { ...hero.image }
+      else delete draft.brand.heroImage
       // A new image starts from its centre.
       if (hero.image?.key !== was) {
         delete draft.layout.imagePoint
@@ -196,7 +197,7 @@ export function writeHero(draft: PortalDesign, hero: HeroBlock, key: HeroKey): v
       return
     }
     case 'align':
-      draft.layout.bandAlign = hero.align
+      draft.layout.heroAlign = hero.align
       return
     case 'action':
       if (hero.action === 'buttons') delete draft.shape.action
@@ -236,8 +237,8 @@ export function writeHero(draft: PortalDesign, hero: HeroBlock, key: HeroKey): v
  * one and the look draws in it.
  */
 export function heroSettingShown(key: HeroKey, design: PortalDesign, page: DesignerPage): boolean {
-  const { band } = design.layout
-  const hasImage = !!design.brand.bandImage
+  const { hero: band } = design.layout
+  const hasImage = !!design.brand.heroImage
   switch (key) {
     case 'imagePlace':
     case 'imagePhone':

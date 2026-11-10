@@ -100,28 +100,28 @@ export function withHero(
   confirm: (colour: string) => boolean
 ): Look {
   if (!hero) return look
-  const next: Look = { ...look, bandAlign: hero.align }
+  const next: Look = { ...look, heroAlign: hero.align }
   if (hero.upper) next.headlineCase = 'upper'
-  if (hero.art === 'hills' || hero.art === 'waves' || hero.art === 'dots') next.bandArt = hero.art
+  if (hero.art === 'hills' || hero.art === 'waves' || hero.art === 'dots') next.heroArt = hero.art
   // A plain hero leaves the band to the look: a brand can carry colour in art or a
   // gradient beside the words, which the look can give the band. Only a hero with
   // a fill of its own says what the band is, and whether the header shares it.
-  if (hero.fill === 'gradient') next.band = 'blend'
-  if (hero.fill === 'colour' || hero.fill === 'gradient') next.headerOnBand = hero.headerOnHero
+  if (hero.fill === 'gradient') next.hero = 'blend'
+  if (hero.fill === 'colour' || hero.fill === 'gradient') next.headerOnHero = hero.headerOnHero
   const colour = hero.fill === 'colour' && confirm(hero.colour) ? hero.colour.toLowerCase() : null
   if (colour) {
-    if (same(colour, next.accent)) next.band = 'brand'
+    if (same(colour, next.accent)) next.hero = 'brand'
     else {
-      next.band = 'support'
+      next.hero = 'support'
       next.support = colour
     }
   }
   const panel = hero.panel && confirm(hero.panelColour) ? hero.panelColour.toLowerCase() : null
   // A panel takes the second colour, so it reads within a band of the brand colour.
   if (panel && colour && same(colour, next.accent)) {
-    next.bandShape = 'panel'
+    next.heroShape = 'panel'
     next.support = panel
-  } else if (hero.card) next.bandShape = 'inset'
-  else if (!panel) next.bandShape = 'full'
+  } else if (hero.card) next.heroShape = 'inset'
+  else if (!panel) next.heroShape = 'full'
   return next
 }

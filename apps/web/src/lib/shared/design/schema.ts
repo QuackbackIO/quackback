@@ -2,10 +2,11 @@
  * The portal design document: the one typed value that Appearance, presets,
  * AI, REST and MCP read and write. Every choice comes from DESIGN_OPTIONS.
  *
- * "Band" in a key (layout.band, layout.bandShape, brand.bandImage, home's
- * composer 'band', and the rest) is the hero, as people call it: the top of
- * each page with its headline (see hero.ts). The keys keep the older word so
- * stored designs and Quackback AI's structured output keep working.
+ * The hero is the top of each page with its headline (see hero.ts). Its keys
+ * (layout.hero, layout.heroShape, brand.heroImage and the rest) were named for
+ * a "band" up to format 2, and migrations.ts renames them as a design is read
+ * (HERO_KEYS). Some option values keep the older word, such as Home's composer
+ * 'band' and layout.pageTitles 'band': they are values, not keys, and stay.
  */
 import { z } from 'zod'
 import { tuneSchema } from './tune'
@@ -350,7 +351,7 @@ const navItem = z.discriminatedUnion('type', [
 
 export const portalDesignV2 = z
   .object({
-    version: z.literal(2),
+    version: z.literal(3),
     /** The preset a design started from. Provenance only, never read back. */
     basedOn: z.string().max(40).optional(),
     mode: z.enum(DESIGN_OPTIONS.mode),
@@ -427,7 +428,7 @@ export const portalDesignV2 = z
          * An image for the band, such as a photo or a pattern, with what it
          * shows for those who cannot see it, or marked as decoration.
          */
-        bandImage: asset
+        heroImage: asset
           .extend({
             alt: z.string().trim().max(200).optional(),
             decorative: z.boolean().optional(),
@@ -472,25 +473,25 @@ export const portalDesignV2 = z
         nav: z.enum(DESIGN_OPTIONS.nav),
         /** The menu's other pages in the text colour; absent is the softer grey. */
         navText: z.enum(DESIGN_OPTIONS.navText).optional(),
-        band: z.enum(DESIGN_OPTIONS.band),
+        hero: z.enum(DESIGN_OPTIONS.hero),
         /** How a blend band runs; absent is linear. */
         blend: z.enum(DESIGN_OPTIONS.blend).optional(),
         /** Absent follows the header: centred under a centred header, else left. */
-        bandAlign: z.enum(DESIGN_OPTIONS.bandAlign).optional(),
+        heroAlign: z.enum(DESIGN_OPTIONS.heroAlign).optional(),
         /** Absent is full. */
-        bandShape: z.enum(DESIGN_OPTIONS.bandShape).optional(),
+        heroShape: z.enum(DESIGN_OPTIONS.heroShape).optional(),
         /** Absent is roomy. */
-        bandHeight: z.enum(DESIGN_OPTIONS.bandHeight).optional(),
+        heroHeight: z.enum(DESIGN_OPTIONS.heroHeight).optional(),
         /** The colour a brand-colour, tint or fade band is drawn in; absent is the brand colour. */
-        bandColour: z.enum(DESIGN_OPTIONS.colourRole).optional(),
+        heroColour: z.enum(DESIGN_OPTIONS.colourRole).optional(),
         /** Absent is the top. */
         fadeFrom: z.enum(DESIGN_OPTIONS.fadeFrom).optional(),
         /** A glow of light on a brand or second-colour band, and where it sits; absent is none. */
-        bandGlow: z.enum(DESIGN_OPTIONS.bandGlow).optional(),
+        heroGlow: z.enum(DESIGN_OPTIONS.heroGlow).optional(),
         /** The glow's colour; absent is a light of the band's own colour. */
-        bandGlowColour: z.enum(DESIGN_OPTIONS.colourRole).optional(),
+        heroGlowColour: z.enum(DESIGN_OPTIONS.colourRole).optional(),
         /** The header in the band's colour, so the two read as one. */
-        headerOnBand: z.boolean().optional(),
+        headerOnHero: z.boolean().optional(),
         /** Absent is coloured dots. */
         status: z.enum(DESIGN_OPTIONS.status).optional(),
         /** Absent is neutral. */
@@ -509,7 +510,7 @@ export const portalDesignV2 = z
         /** The other pages' titles on the band, as Home's headline is; absent is plain. */
         pageTitles: z.enum(DESIGN_OPTIONS.pageTitles).optional(),
         /** Art in the brand's colours for a band without an image; absent is none. */
-        bandArt: z.enum(DESIGN_OPTIONS.bandArt).optional(),
+        heroArt: z.enum(DESIGN_OPTIONS.heroArt).optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),
         density: z.enum(DESIGN_OPTIONS.density),
         width: z.enum(DESIGN_OPTIONS.width),
@@ -621,7 +622,7 @@ const EMPTY_DOC = { type: 'doc', content: [{ type: 'paragraph' }] }
 /** Today's portal, as a design: what an unbranded workspace renders. */
 export function defaultDesign(): PortalDesign {
   return {
-    version: 2,
+    version: 3,
     mode: 'auto',
     brand: {
       light: { accent: 'oklch(0.886 0.176 86)', background: '#ffffff', ink: '#0a0a0a' },
@@ -642,7 +643,7 @@ export function defaultDesign(): PortalDesign {
     layout: {
       header: 'stacked',
       nav: 'tabs',
-      band: 'none',
+      hero: 'none',
       cards: 'bordered',
       density: 'comfortable',
       width: 'default',

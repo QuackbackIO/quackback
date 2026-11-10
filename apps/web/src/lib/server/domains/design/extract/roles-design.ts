@@ -23,7 +23,7 @@ export interface ColourDesign {
     logoColours?: string[]
   }
   shape: { fill?: 'accent' | 'ink'; action?: 'accent' | 'support' }
-  layout: { tint?: 'neutral' | 'support'; bandColour?: 'accent' | 'support' | 'extra1' }
+  layout: { tint?: 'neutral' | 'support'; heroColour?: 'accent' | 'support' | 'extra1' }
   tune?: { button?: { fill: string; ink?: string }; link?: { colour: string } }
   /** Not design fields: hints for the decisions made next (hero look, tints, follow-up offers). */
   hints: {
@@ -160,7 +160,7 @@ export function rolesToDesign(roles: ColourRoles): ColourDesign {
   // The hero: a solid band in the colour's role, a blend for a gradient, an image for a photo.
   const h = roles.hero
   if (h.look === 'solid' && h.role) {
-    out.layout.bandColour = h.role
+    out.layout.heroColour = h.role
     out.hints.heroLook = h.role === 'support' ? 'support' : 'brand'
   } else if (h.look === 'gradient') out.hints.heroLook = support ? 'blend' : 'tint'
   else if (h.look === 'photo') out.hints.heroLook = 'image'

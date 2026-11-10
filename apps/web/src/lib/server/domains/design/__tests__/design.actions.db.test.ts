@@ -363,6 +363,19 @@ describe('patchDesignDraft', () => {
     })
   })
 
+  it('takes a patch written for format 2, with the hero keys named for the band', async () => {
+    const who = await author()
+    const result = await actions.patchDesignDraft(
+      { layout: { band: 'brand', bandShape: 'inset', headerOnBand: true } },
+      who
+    )
+    expect(result.ok).toBe(true)
+    const { design } = await actions.readDesignForEditing()
+    expect(design.version).toBe(3)
+    expect(design.layout).toMatchObject({ hero: 'brand', heroShape: 'inset', headerOnHero: true })
+    expect(design.layout).not.toHaveProperty('band')
+  })
+
   it('refuses a patch that breaks the design', async () => {
     const who = await author()
     expect(await actions.patchDesignDraft({ layout: { density: 'roomy' } }, who)).toMatchObject({

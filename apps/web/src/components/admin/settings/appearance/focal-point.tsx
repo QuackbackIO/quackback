@@ -15,7 +15,7 @@ const clamp = (value: number) => Math.min(100, Math.max(0, Math.round(value)))
  * there, the arrow keys nudge it. What stays in view as the hero crops.
  */
 export function FocalPoint({ design, update }: { design: PortalDesign; update: Update }) {
-  const image = design.brand.bandImage
+  const image = design.brand.heroImage
   if (!image) return null
   const point = design.layout.imagePoint ?? { x: 50, y: 50 }
   const set = (x: number, y: number) =>

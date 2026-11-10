@@ -106,7 +106,7 @@ describe('with analytics off', () => {
     setAnalyticsClient(null)
     designerOpened('portal')
     trackBuilder('designer_page_switched', { page: 'roadmap' })
-    designerChanged(...changed((d) => void (d.layout.band = 'brand')), 'home')
+    designerChanged(...changed((d) => void (d.layout.hero = 'brand')), 'home')
     designerClosed()
     expect(capture).not.toHaveBeenCalled()
   })
@@ -145,7 +145,7 @@ describe('a visit', () => {
 
 describe('designerChanged', () => {
   it('counts a change once by its setting id, never its value', () => {
-    designerChanged(...changed((d) => void (d.layout.band = 'brand')), 'home')
+    designerChanged(...changed((d) => void (d.layout.hero = 'brand')), 'home')
     expect(sent()).toEqual([['designer_setting_changed', { setting: 'layout.band' }]])
   })
 
@@ -186,7 +186,7 @@ describe('designerChanged', () => {
     designerOpened('direct')
     designerLookChosen('preset')
     const [before, after] = changed((d) => {
-      d.layout.band = 'brand'
+      d.layout.hero = 'brand'
       d.shape.corners = 'sharp'
     })
     designerChanged(before, after, 'home')
@@ -313,6 +313,6 @@ describe('partIdOf', () => {
 
 describe('settingId', () => {
   it('is the only way to a setting id', () => {
-    expect(settingId('layout.band')).toBe('layout.band')
+    expect(settingId('layout.hero')).toBe('layout.band')
   })
 })

@@ -280,7 +280,7 @@ describe('AskAiPanel', () => {
   })
 
   it('says one row per operation, in words, with no swatch for a relative value', () => {
-    draft.layout.band = 'tint'
+    draft.layout.hero = 'tint'
     draft.style = { button: { hover: { background: 'oklch(from var(--primary) l c h)' } } }
     mount({
       turns: [
@@ -289,8 +289,8 @@ describe('AskAiPanel', () => {
           text: 'Calmer.',
           changes: [
             // One look, two fields, each carrying the look's name, as the critique saw it.
-            { path: 'layout.band', before: 'none', after: 'tint', label: 'Hero look: Tint' },
-            { path: 'layout.bandArt', before: 'dots', after: null, label: 'Hero look: Tint' },
+            { path: 'layout.hero', before: 'none', after: 'tint', label: 'Hero look: Tint' },
+            { path: 'layout.heroArt', before: 'dots', after: null, label: 'Hero look: Tint' },
             {
               path: 'style',
               before: null,
@@ -311,7 +311,7 @@ describe('AskAiPanel', () => {
   })
 
   it('offers Show on each row the canvas can point at, which goes to the change', () => {
-    draft.layout.band = 'tint'
+    draft.layout.hero = 'tint'
     draft.shape.corners = 'pill'
     const go = vi.fn()
     mount({
@@ -321,7 +321,7 @@ describe('AskAiPanel', () => {
           role: 'assistant',
           text: 'Calmer.',
           changes: [
-            { path: 'layout.band', before: 'none', after: 'tint', label: 'Hero look: Tint' },
+            { path: 'layout.hero', before: 'none', after: 'tint', label: 'Hero look: Tint' },
             { path: 'shape.corners', before: 'rounded', after: 'pill', label: 'Corners to pill' },
           ],
         },
@@ -335,7 +335,7 @@ describe('AskAiPanel', () => {
     expect(shows[0]!.textContent).toBe('Show')
     fireEvent.click(shows[0]!)
     expect(go).toHaveBeenCalledWith(
-      { path: 'layout.band', before: 'none', after: 'tint' },
+      { path: 'layout.hero', before: 'none', after: 'tint' },
       'Hero look: Tint'
     )
   })

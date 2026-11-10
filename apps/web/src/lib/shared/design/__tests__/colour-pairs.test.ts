@@ -43,7 +43,7 @@ describe('colourPairs', () => {
   it('checks the headline on a coloured band', () => {
     const design = defaultDesign()
     design.mode = 'light'
-    design.layout.band = 'brand'
+    design.layout.hero = 'brand'
     expect(colourPairs(design).some((p) => p.on === 'the hero')).toBe(true)
   })
 
@@ -51,8 +51,8 @@ describe('colourPairs', () => {
     const design = defaultDesign()
     design.mode = 'light'
     design.brand.light.accent = '#14532d'
-    design.layout.band = 'brand'
-    design.layout.headerOnBand = true
+    design.layout.hero = 'brand'
+    design.layout.headerOnHero = true
     const ring = colourPairs(design).filter((p) => p.text === 'The focus ring')
     expect(ring.map((p) => p.on)).toEqual(
       expect.arrayContaining(['the page', 'cards', 'the hero', 'the header'])

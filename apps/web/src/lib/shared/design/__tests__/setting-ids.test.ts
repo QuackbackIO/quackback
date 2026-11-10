@@ -9,6 +9,14 @@ describe('settingIdOf', () => {
     expect(settingIdOf('css')).toBe('css')
   })
 
+  it('keeps the hero settings’ ids from before their keys were renamed', () => {
+    expect(settingIdOf('layout.hero')).toBe('layout.band')
+    expect(settingIdOf('layout.heroShape')).toBe('layout.bandShape')
+    expect(settingIdOf('layout.headerOnHero')).toBe('layout.headerOnBand')
+    expect(settingIdOf('brand.heroImage.alt')).toBe('brand.bandImage.alt')
+    expect(settingIdOf('layout.bandGlowColour')).toBe('layout.bandGlowColour')
+  })
+
   it('reads through optional, nullable and union parts', () => {
     expect(settingIdOf('brand.fonts.heading.id')).toBe('brand.fonts.heading.id')
     expect(settingIdOf('brand.dark.accent')).toBe('brand.dark.accent')
@@ -32,6 +40,8 @@ describe('settingIdOf', () => {
 describe('isSettingId', () => {
   it('accepts only paths the schema names', () => {
     expect(isSettingId('layout.band')).toBe(true)
+    expect(isSettingId('brand.bandImage.alt')).toBe(true)
+    expect(isSettingId('layout.heroShape')).toBe(false)
     expect(isSettingId('pages.feedback.copy.prompt')).toBe(true)
     expect(isSettingId('pages.feedback.copy.prompt.en')).toBe(false)
     expect(isSettingId('layout.Acme rebrand')).toBe(false)

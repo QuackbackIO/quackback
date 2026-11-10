@@ -342,7 +342,7 @@ describe('brandMatch', () => {
     expect(result.design.brand.fonts.heading).toEqual({ kind: 'bundled', id: 'inter' })
     expect(result.design.brand.fonts.headingWeight).toBe(700)
     expect(Math.abs(Number(at(result, 'tune.headline.size')?.after) / 48 - 1)).toBeLessThan(0.1)
-    expect(at(result, 'layout.band')).toBeUndefined() // already none
+    expect(at(result, 'layout.hero')).toBeUndefined() // already none
     expect(at(result, 'pages.home.headline.title')?.after).toMatchObject({
       en: WORDS.home_headline,
     })
@@ -364,7 +364,7 @@ describe('brandMatch', () => {
     // For the check: what was measured as a fingerprint, and every field set, unchanged ones too.
     expect(result.target?.fingerprint.headline?.size).toBeCloseTo(48, -1)
     expect(result.target?.fingerprint.page).toMatch(/^rgb\(/)
-    expect(result.target?.paths).toContain('layout.band')
+    expect(result.target?.paths).toContain('layout.hero')
     expect(result.target?.paths).toContain('tune.headline.size')
     expect(result.target?.checkable).toBe(true)
   })
@@ -449,7 +449,7 @@ describe('brandMatch', () => {
       'words_pick',
     ])
     expect(result.notes.join(' ')).not.toMatch(/could not settle the hero/)
-    expect(at(result, 'layout.band')).toBeUndefined()
+    expect(at(result, 'layout.hero')).toBeUndefined()
   })
 
   it('keeps the measured hero when the hero call fails, and says so', async () => {

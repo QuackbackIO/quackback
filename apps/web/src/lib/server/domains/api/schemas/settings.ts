@@ -204,7 +204,8 @@ registerPath('/settings/receipts/{receiptId}/undo', {
 const DesignStateSchema = z
   .object({
     design: z.record(z.string(), z.unknown()).meta({
-      description: 'The portal design document: brand, shape, layout, pages, menu and words.',
+      description:
+        "The portal design document: brand, shape, layout, pages, menu and words. Its version is 3, which names the hero's keys hero (layout.hero, layout.heroShape, brand.heroImage); version 2 named them band.",
     }),
     live: z.record(z.string(), z.unknown()).meta({
       description:
@@ -262,7 +263,7 @@ registerPath('/settings/portal_design', {
     tags: ['Settings'],
     summary: 'Change the portal design draft',
     description:
-      'Applies a JSON merge patch to the design being edited and saves the result as the draft. Nothing goes live until a person publishes the draft in Settings › Portal. If-Match must carry the revision you read: 428 when missing, 412 when stale. A design that fails the schema answers 400 with INVALID_DESIGN, and one whose ink cannot be read answers 400 with UNREADABLE_DESIGN. Requires the write:settings scope and the settings.branding permission.',
+      'Applies a JSON merge patch to the design being edited and saves the result as the draft. Nothing goes live until a person publishes the draft in Settings › Portal. If-Match must carry the revision you read: 428 when missing, 412 when stale. A design that fails the schema answers 400 with INVALID_DESIGN, and one whose ink cannot be read answers 400 with UNREADABLE_DESIGN. A patch written for version 2, with the hero keys named band (layout.band, layout.bandShape, brand.bandImage), is still accepted: its keys take their version 3 names. Requires the write:settings scope and the settings.branding permission.',
     parameters: [
       {
         name: 'If-Match',

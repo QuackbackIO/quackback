@@ -369,10 +369,10 @@ export async function brandMatch(
       ...heroChanges({
         hero,
         layout,
-        hasBandImage: !!input.design.brand.bandImage || !!photo.placed,
+        hasBandImage: !!input.design.brand.heroImage || !!photo.placed,
         extras: colour.brand.light.extra,
       }),
-      ...heroPhoto.photoChanges(photo, hero.band, input.design.brand.bandImage),
+      ...heroPhoto.photoChanges(photo, hero.band, input.design.brand.heroImage),
       ...wordChanges,
       // A two-tone headline's second part, set apart on the headlines just written.
       ...headlineAccentChanges(tone, wordChanges, input.allows.language ?? 'en'),
@@ -412,7 +412,7 @@ export async function brandMatch(
   done('apply')
 
   // 6. Reply.
-  const band = applied.design.layout.band
+  const band = applied.design.layout.hero
   const said = brandReply({
     shots: input.shots.length,
     roles,

@@ -501,7 +501,7 @@ export function pageBackgroundCss(
   drawn: { light: ModeBackgrounds | null; dark: ModeBackgrounds | null }
 ): string {
   if (!hasPageBackground(doc)) return ''
-  const header = !(doc.layout.headerOnBand === true && doc.layout.band !== 'none')
+  const header = !(doc.layout.headerOnHero === true && doc.layout.hero !== 'none')
   const both = !!drawn.light && !!drawn.dark
   const rules: string[] = []
   const add = (scopes: string[], modeDrawn: ModeBackgrounds) => {

@@ -21,8 +21,8 @@ const SECTIONS = {
  * they have no row: what they read as is worked out from other fields.
  */
 const NO_SINGLE_DEFAULT: Record<string, string> = {
-  'layout.bandAlign': 'follows the header: centred under a centred header, else left',
-  'layout.bandGlowColour': 'a light of the band’s own colour',
+  'layout.heroAlign': 'follows the header: centred under a centred header, else left',
+  'layout.heroGlowColour': 'a light of the band’s own colour',
   'layout.background': 'the page colour, as designs always had',
   'brand.logo.tone': 'unknown: the logo image is not one ink',
   'brand.logo.ink': 'a colour, only with oneInk',
@@ -90,10 +90,10 @@ describe('DESIGN_DEFAULTS', () => {
 
   it('reads a field from the design, or its default when absent', () => {
     const doc = defaultDesign()
-    delete doc.layout.bandShape
-    expect(layoutValue(doc.layout, 'bandShape')).toBe('full')
-    doc.layout.bandShape = 'panel'
-    expect(layoutValue(doc.layout, 'bandShape')).toBe('panel')
+    delete doc.layout.heroShape
+    expect(layoutValue(doc.layout, 'heroShape')).toBe('full')
+    doc.layout.heroShape = 'panel'
+    expect(layoutValue(doc.layout, 'heroShape')).toBe('panel')
     delete doc.shape.fill
     expect(shapeValue(doc.shape, 'fill')).toBe('accent')
     delete doc.brand.fonts.scale

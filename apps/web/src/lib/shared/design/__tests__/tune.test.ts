@@ -211,7 +211,7 @@ describe('a headline colour on a band of more than one colour', () => {
   it('applies where the words sit on one colour, such as the page under a mesh', () => {
     const doc = defaultDesign()
     doc.mode = 'light'
-    doc.layout.band = 'blend'
+    doc.layout.hero = 'blend'
     doc.layout.blend = 'mesh'
     doc.tune = { headline: { colour: '#163300' } }
     expect(renderDesignCss(resolveDesign(doc))).toContain(

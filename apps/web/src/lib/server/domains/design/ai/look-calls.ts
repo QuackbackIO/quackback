@@ -46,7 +46,7 @@ export function lookLints(look: Look): string[] {
   )
     lints.push('headline repeats homeHeadline; give the feedback page its own')
   if (
-    (look.band === 'support' || look.tint === 'support' || look.action === 'support') &&
+    (look.hero === 'support' || look.tint === 'support' || look.action === 'support') &&
     !look.support
   )
     lints.push('the band, tint or action uses the second colour, but support is empty')
