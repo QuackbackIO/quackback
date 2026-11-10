@@ -254,6 +254,13 @@ describe('a Home block’s layout', () => {
     )
     fireEvent.click(within(width).getByRole('radio', { name: '⅓' }))
     expect(seen.design.pages.home.blocks[1]!.grid.w).toBe(4)
+    // The grid's numbers are under More.
+    const layout = screen.getByRole('region', { name: 'Layout' })
+    const more = within(layout).getByText('More').closest('details')!
+    expect(more.open).toBe(false)
+    expect(more.contains(screen.getByRole('spinbutton', { name: 'Column' }))).toBe(true)
+    expect(more.contains(screen.getByRole('spinbutton', { name: 'Row' }))).toBe(true)
+    expect(more.contains(screen.getByRole('spinbutton', { name: 'Rows' }))).toBe(true)
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Column' }), {
       target: { value: '5' },
     })
@@ -261,6 +268,31 @@ describe('a Home block’s layout', () => {
     expect(seen.design.pages.home.blocks.find((b) => b.id === 'ideas0001')!.grid.x).toBe(4)
     expect(seen.labels).toEqual(['Top posts: width', 'Top posts: column'])
     expect(say).toHaveBeenCalledWith(expect.stringMatching(/^Top posts resized to 4 columns/))
+  })
+
+  it('moves the block a row up or down, and sets its height to fit or taller', () => {
+    const design = home()
+    design.pages.home.blocks[1]!.grid = { x: 0, y: 1, w: 6, h: 1 }
+    const { seen } = show('block-ideas0001', design)
+    const grid = () => seen.design.pages.home.blocks.find((b) => b.id === 'ideas0001')!.grid
+    const height = screen.getByRole('radiogroup', { name: 'Height' })
+    expect(within(height).getByRole('radio', { name: 'Fit' }).getAttribute('aria-checked')).toBe(
+      'true'
+    )
+    fireEvent.click(within(height).getByRole('radio', { name: 'Taller' }))
+    expect(grid().h).toBeGreaterThan(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Move up a row' }))
+    expect(grid().y).toBe(0)
+    expect(
+      (screen.getByRole('button', { name: 'Move up a row' }) as HTMLButtonElement).disabled
+    ).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Move down a row' }))
+    expect(grid().y).toBe(1)
+    expect(seen.labels).toEqual([
+      'Top posts: height',
+      'Top posts: move up a row',
+      'Top posts: move down a row',
+    ])
   })
 })
 

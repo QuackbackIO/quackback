@@ -296,6 +296,14 @@ export const BLOCK_WORDS = {
   column: 'Column',
   row: 'Row',
   height: 'Height',
+  /** The height in grid rows, under More. */
+  rows: 'Rows',
+  /** The least height, that grows to fit what is in it. */
+  fit: 'Fit',
+  taller: 'Taller',
+  move: 'Move',
+  moveUp: 'Move up a row',
+  moveDown: 'Move down a row',
   /** On a phone, in place of Layout's rows. */
   stacks: 'Stacks in reading order',
   background: 'Background',
