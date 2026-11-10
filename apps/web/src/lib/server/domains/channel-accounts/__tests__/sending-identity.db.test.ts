@@ -953,11 +953,9 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
       vi.stubEnv('EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY', 'secret')
     })
 
-    it('un-verifies a domain whose ownership record has been deleted', async () => {
-      // The failure a button cannot catch. The customer verified months ago and
-      // has since removed the TXT record, so nothing now shows this workspace
-      // controls the zone it is sending as. Nobody is going to click Re-check
-      // to find that out.
+    it('keeps a domain verified after its ownership record has been deleted', async () => {
+      // Ownership is established once. An owner who removes the record after
+      // verifying keeps sending as the domain while the provider still signs.
       const teamId = await seedTeam()
       const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
       ownershipResolves.mockResolvedValue(true)
@@ -965,8 +963,8 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
       expect((await refreshSendingDomain(row.id))?.status).toBe('verified')
 
       ownershipResolves.mockResolvedValue(false)
-      expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 1 })
-      expect((await getSendingDomain(row.id))?.status).toBe('pending')
+      expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 0 })
+      expect((await getSendingDomain(row.id))?.status).toBe('verified')
     })
 
     it('un-verifies a domain whose MAIL FROM MX has gone', async () => {

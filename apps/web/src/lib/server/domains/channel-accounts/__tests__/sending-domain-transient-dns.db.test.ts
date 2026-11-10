@@ -1,6 +1,8 @@
 /**
- * A verified sending domain survives a lookup that went unanswered, and loses
- * its status only when the zone says its proof is gone.
+ * A verified sending domain survives a lookup that went unanswered, and keeps
+ * its status when its ownership record is later removed: ownership is proven
+ * once, and after that only the provider's verdict on signing and MAIL FROM
+ * can demote it.
  *
  * The real ownership checker runs here, over a fake zone that can make any
  * name time out or fail, so the line between "the record is not there" and
@@ -36,8 +38,9 @@ vi.mock('@quackback/email/ses-identity', async (importOriginal) => ({
     preexisting: providerState.has(domain),
   }),
   getSesDomainIdentity: async (domain: string) => providerState.get(domain) ?? null,
-  putSesMailFromDomain: async () => undefined,
+  putSesMailFromDomain: async (domain: string, mailFrom: string) => putMailFrom(domain, mailFrom),
 }))
+const putMailFrom = vi.fn<(domain: string, mailFrom: string) => Promise<void>>()
 
 type ZoneEntry = {
   TXT?: string[][]
@@ -126,6 +129,13 @@ function publish(domain: string, records: SendingDomainDnsRecord[]) {
   }
 }
 
+/** The full name of a provider-keyed row's ownership TXT. */
+function ownershipName(row: EmailSendingDomain): string {
+  const record = row.dnsRecords.find((r) => r.purpose === 'ownership')
+  if (!record) throw new Error('row has no ownership record')
+  return `${record.host}.${row.domain}`
+}
+
 /** The full name of the row's ownership proof: its own signing key. */
 function proofName(row: EmailSendingDomain): string {
   const key = row.dnsRecords.find((r) => r.type === 'TXT' && r.purpose === 'dkim')
@@ -182,6 +192,7 @@ describe.skipIf(!fixture.available)('sending domain checks on unanswered DNS', (
     unanswered.clear()
     txtLookups.length = 0
     sentAttention.mockReset()
+    putMailFrom.mockReset().mockResolvedValue()
     const [team] = await testDb.insert(teams).values({ name: 'Support' }).returning()
     teamId = team.id
     admin = await seedAdmin()
@@ -230,14 +241,16 @@ describe.skipIf(!fixture.available)('sending domain checks on unanswered DNS', (
     expect(txtLookups).not.toContain(`system ${proofName(row)}`)
   })
 
-  it('demotes and tells the managers when the proof record is really gone', async () => {
+  it('keeps a verified domain verified when its key record is removed and the provider still signs', async () => {
     const row = await verifiedDomain()
     zone.delete(proofName(row))
 
-    expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 1 })
-    expect((await getSendingDomain(row.id))?.status).toBe('pending')
-    expect(await attentionBells(admin)).toHaveLength(1)
-    expect(sentAttention).toHaveBeenCalledTimes(1)
+    expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 0 })
+    const after = await getSendingDomain(row.id)
+    expect(after?.status).toBe('verified')
+    expect(after?.verifiedAt).toEqual(row.verifiedAt)
+    expect(await attentionBells(admin)).toHaveLength(0)
+    expect(sentAttention).not.toHaveBeenCalled()
   })
 
   it('demotes on the provider’s word even while the proof lookup times out', async () => {
@@ -260,5 +273,125 @@ describe.skipIf(!fixture.available)('sending domain checks on unanswered DNS', (
     expect(after?.verifiedAt).toBeNull()
     // Read with the single try a background check of a pending row uses.
     expect(txtLookups).toContain(`system ${proofName(row)}`)
+  })
+  /**
+   * A row on the provider's own keys, proven with its `_quackback` token,
+   * which the provider signs for and whose records are all published.
+   */
+  async function verifiedEasyDomain(domain = 'b.example'): Promise<EmailSendingDomain> {
+    const [row] = await testDb
+      .insert(emailSendingDomains)
+      .values({
+        owningTeamId: teamId,
+        domain,
+        mailFromLabel: 'qb-bounce',
+        autoCheckUntil: new Date(Date.now() + 3600_000),
+      })
+      .returning()
+    providerState.set(domain, verifiedIdentity(domain))
+    // The first check mints the token; nothing is published yet.
+    const first = await refreshSendingDomain(row.id)
+    expect(first?.status).toBe('pending')
+    publish(domain, first?.dnsRecords ?? [])
+    const checked = await refreshSendingDomain(row.id)
+    expect(checked?.status).toBe('verified')
+    expect(checked?.verifiedAt).not.toBeNull()
+    return checked as EmailSendingDomain
+  }
+
+  it('keeps a verified domain verified when its ownership TXT is removed and the provider still signs', async () => {
+    const row = await verifiedEasyDomain()
+    zone.delete(ownershipName(row))
+
+    expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 0 })
+    const after = await getSendingDomain(row.id)
+    expect(after?.status).toBe('verified')
+    expect(after?.verifiedAt).toEqual(row.verifiedAt)
+    expect(await attentionBells(admin)).toHaveLength(0)
+    expect(sentAttention).not.toHaveBeenCalled()
+  })
+
+  it('demotes on a DKIM failure after the ownership TXT is removed, naming signing as the problem', async () => {
+    const row = await verifiedEasyDomain()
+    zone.delete(ownershipName(row))
+    providerState.set('b.example', {
+      ...verifiedIdentity('b.example'),
+      dkimStatus: 'FAILED',
+      verifiedForSending: false,
+    })
+
+    expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 1 })
+    expect((await getSendingDomain(row.id))?.status).toBe('failed')
+    expect(await attentionBells(admin)).toHaveLength(1)
+    expect(sentAttention).toHaveBeenCalledTimes(1)
+    // The ownership record is not required any more, so it is not the one named.
+    expect(sentAttention.mock.calls[0][0]).toMatchObject({ record: 'signing-key' })
+  })
+
+  it('demotes when the MAIL FROM stops verifying after the ownership TXT is removed', async () => {
+    const row = await verifiedEasyDomain()
+    zone.delete(ownershipName(row))
+    providerState.set('b.example', {
+      ...verifiedIdentity('b.example'),
+      mailFrom: { domain: 'qb-bounce.b.example', status: 'FAILED' },
+    })
+
+    expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 1 })
+    expect((await getSendingDomain(row.id))?.status).toBe('pending')
+  })
+
+  it('puts back on the daily sweep a verified-once domain that lost its status to a missing ownership TXT', async () => {
+    const row = await verifiedEasyDomain()
+    zone.delete(ownershipName(row))
+    // As an earlier check left it: demoted, out of its automatic check window.
+    await testDb
+      .update(emailSendingDomains)
+      .set({ status: 'pending', autoCheckUntil: new Date(Date.now() - 1000) })
+      .where(eq(emailSendingDomains.id, row.id))
+
+    expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 0 })
+    const after = await getSendingDomain(row.id)
+    expect(after?.status).toBe('verified')
+    // The date it first became trustworthy is kept.
+    expect(after?.verifiedAt).toEqual(row.verifiedAt)
+  })
+
+  it('leaves a never-verified domain pending while its ownership TXT is absent', async () => {
+    const [row] = await testDb
+      .insert(emailSendingDomains)
+      .values({
+        owningTeamId: teamId,
+        domain: 'c.example',
+        mailFromLabel: 'qb-bounce',
+        autoCheckUntil: new Date(Date.now() + 3600_000),
+      })
+      .returning()
+    providerState.set('c.example', verifiedIdentity('c.example'))
+    const first = await refreshSendingDomain(row.id)
+    // Everything but the ownership TXT is published.
+    publish(
+      'c.example',
+      (first?.dnsRecords ?? []).filter((r) => r.purpose !== 'ownership')
+    )
+
+    const after = await refreshSendingDomain(row.id)
+    expect(after?.status).toBe('pending')
+    expect(after?.verifiedAt).toBeNull()
+  })
+
+  it('attaches a missing MAIL FROM only on a check that finds the ownership TXT', async () => {
+    const row = await verifiedEasyDomain()
+    zone.delete(ownershipName(row))
+    providerState.set('b.example', { ...verifiedIdentity('b.example'), mailFrom: null })
+
+    expect((await refreshSendingDomain(row.id))?.status).toBe('pending')
+    expect(putMailFrom).not.toHaveBeenCalled()
+
+    publish(
+      'b.example',
+      row.dnsRecords.filter((r) => r.purpose === 'ownership')
+    )
+    await refreshSendingDomain(row.id)
+    expect(putMailFrom).toHaveBeenCalledWith('b.example', 'qb-bounce.b.example')
   })
 })

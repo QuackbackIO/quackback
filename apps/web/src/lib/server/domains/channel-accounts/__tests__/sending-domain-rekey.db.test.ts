@@ -286,6 +286,22 @@ describe.skipIf(!fixture.available)('re-keying a squatted identity (real DB, rol
     expect(putDkimKey).toHaveBeenCalledTimes(1)
   })
 
+  it('re-keys only on a check that finds the key record, even on a row verified before', async () => {
+    await squat('PENDING')
+    const owner = await provisionSendingDomain({ owningTeamId: await seedTeam(), domain: DOMAIN })
+    const sealed = await storedKey(owner.id)
+    // A verified stamp keeps a status; it is not proof for a write on the identity.
+    await testDb
+      .update(emailSendingDomains)
+      .set({ verifiedAt: new Date(Date.now() - 86_400_000) })
+      .where(eq(emailSendingDomains.id, owner.id))
+
+    const checked = await refreshSendingDomain(owner.id)
+    expect(putDkimKey).not.toHaveBeenCalled()
+    expect(checked?.dkimMode).toBe('shared')
+    expect(await storedKey(owner.id)).toBe(sealed)
+  })
+
   it('keeps an identity that already signs: no key held, no re-key, shared as before', async () => {
     // Someone published that identity's key, so it works; whoever proves
     // ownership next joins it rather than replacing what signs.

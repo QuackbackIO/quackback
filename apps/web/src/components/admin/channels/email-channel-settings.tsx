@@ -29,6 +29,7 @@ import { DomainSetupPanel } from './domain-setup-panel'
 import { SendingPausedNotice } from './sending-paused-notice'
 import {
   domainPhase,
+  failingRecord,
   failingRecordName,
   signingKeyFailing,
   signingKeyProblem,
@@ -301,7 +302,7 @@ function pendingMeta(
   if (signingKeyFailing(domain, phase)) return `${signingKeyProblem(domain.domain)}${fallback}`
   if (phase === 'not-found') return `Records not found after 72 hours.${fallback}`
   if (phase === 'attention') {
-    const failing = domain.dnsRecords.find((r) => r.check && r.check.state !== 'found')
+    const failing = failingRecord(domain)
     const name = failingRecordName(domain)
     if (failing && name) {
       const what =

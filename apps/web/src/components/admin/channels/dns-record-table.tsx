@@ -10,7 +10,13 @@ import {
   type DnsRecordState,
 } from '@/components/shared/dns-record-table'
 import type { DnsRecordDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
-import { recordLabel, recordTypeLabel, signingMode, type DomainPhase } from './sending-domain-view'
+import {
+  ownershipSettled,
+  recordLabel,
+  recordTypeLabel,
+  signingMode,
+  type DomainPhase,
+} from './sending-domain-view'
 
 /** A record's state and, when it needs fixing, the one sentence that says how. */
 export function recordStatus(
@@ -70,7 +76,10 @@ export function SendingRecordTable({
   return (
     <DnsRecordTable
       records={domain.dnsRecords.map((r): DnsRecordRow => {
-        const status = recordStatus(r, { domain: domain.domain, phase })
+        // A verified domain's ownership record is done with, whatever DNS says now.
+        const status: { state: DnsRecordState; fix?: string } = ownershipSettled(domain, r)
+          ? { state: 'found' }
+          : recordStatus(r, { domain: domain.domain, phase })
         return {
           label: recordLabel(r, signingMode(domain)),
           type: recordTypeLabel(r),

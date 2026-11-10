@@ -55,18 +55,31 @@ export async function sendingDomainManagers(): Promise<Manager[]> {
   return managers
 }
 
-/** The first record whose own check says it is wrong, in the order they are published. */
+/**
+ * Whether a record only proves ownership: the ownership TXT, or the row's own
+ * key TXT on an identity that signs with another key.
+ */
+function provesOwnershipOnly(domain: EmailSendingDomain, record: SendingDomainDnsRecord): boolean {
+  return record.purpose === 'ownership' || (domain.dkimMode === 'shared' && isKeyRecord(record))
+}
+
+/**
+ * The first record whose own check says it is wrong, in the order they are
+ * published. A domain that has verified before has established its ownership
+ * once and for all, so a missing ownership record is never what failed it.
+ */
 export function failingRecord(domain: EmailSendingDomain): SendingDomainAttentionProblem {
+  const established = domain.verifiedAt != null
   const failing = (domain.dnsRecords ?? []).find(
-    (r: SendingDomainDnsRecord) => r.check && r.check.state !== 'found'
+    (r: SendingDomainDnsRecord) =>
+      r.check && r.check.state !== 'found' && !(established && provesOwnershipOnly(domain, r))
   )
   // Every listed record looks right (or the key signing the mail is not one of
   // them), yet the domain stopped verifying: the signing key is what failed.
   if (!failing?.check || failing.check.state === 'found') return 'signing-key'
   // On a row whose identity already had a key, the row's own key TXT proves
   // ownership and signs nothing, so it is named as the ownership record.
-  const purpose =
-    domain.dkimMode === 'shared' && isKeyRecord(failing) ? 'ownership' : failing.purpose
+  const purpose = provesOwnershipOnly(domain, failing) ? 'ownership' : failing.purpose
   return {
     purpose,
     type: failing.type,

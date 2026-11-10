@@ -8,8 +8,10 @@ import { recordStatus } from '../dns-record-table'
 import {
   failingRecordName,
   instructionsText,
+  ownershipSettled,
   recordLabel,
   recordTypeLabel,
+  signingKeyFailing,
 } from '../sending-domain-view'
 
 const CHECKED = '2026-11-03T10:00:00.000Z'
@@ -96,5 +98,53 @@ describe('a return path that is one CNAME', () => {
       state: 'problem',
       fix: 'This name has a different value: ws-other.bounces.example.net. Replace it with the value above.',
     })
+  })
+})
+
+describe('an ownership record on a domain that has verified', () => {
+  const ownership: DnsRecordDTO = {
+    type: 'TXT',
+    host: '_quackback',
+    value: 'quackback-verification=abc',
+    purpose: 'ownership',
+    check: { state: 'missing', checkedAt: CHECKED },
+  }
+  const returnPathMx: DnsRecordDTO = {
+    type: 'MX',
+    host: 'qb-bounce',
+    value: 'feedback-smtp.eu-west-2.amazonses.com',
+    priority: 10,
+    purpose: 'mail-from',
+    check: { state: 'found', checkedAt: CHECKED },
+  }
+  const domainWith = (verifiedAt: string | null) =>
+    ({
+      domain: 'acme.com',
+      verifiedAt,
+      dkimMode: 'easy',
+      dnsRecords: [ownership, returnPathMx],
+    }) as SendingDomainDTO
+
+  it('is not named as the record to fix once the domain has verified', () => {
+    expect(failingRecordName(domainWith(CHECKED))).toBeNull()
+    expect(signingKeyFailing(domainWith(CHECKED), 'attention')).toBe(true)
+  })
+
+  it('is still the record to fix before the domain has ever verified', () => {
+    expect(failingRecordName(domainWith(null))).toBe('ownership record')
+    expect(signingKeyFailing(domainWith(null), 'not-found')).toBe(false)
+  })
+
+  it('treats a shared domain’s own key record the same way', () => {
+    const shared = {
+      domain: 'acme.com',
+      verifiedAt: CHECKED,
+      dkimMode: 'shared',
+      dnsRecords: [key({ state: 'missing', checkedAt: CHECKED }), returnPathMx],
+    } as SendingDomainDTO
+    expect(ownershipSettled(shared, shared.dnsRecords[0])).toBe(true)
+    expect(failingRecordName(shared)).toBeNull()
+    // On a domain that signs with that key, it is a signing record and still required.
+    expect(ownershipSettled({ ...shared, dkimMode: 'byo' }, shared.dnsRecords[0])).toBe(false)
   })
 })

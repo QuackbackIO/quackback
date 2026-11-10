@@ -223,9 +223,10 @@ export function normalizeSendingDomain(
 /**
  * What a domain's status should be, given both authorities.
  *
- * Verified means every one of: this workspace proved it owns the zone, the
- * provider will sign for the domain, and the custom MAIL FROM is in place. The
- * last of those is required rather than treated as a bonus, because a domain
+ * Verified means every one of: this workspace has proved it owns the zone
+ * (once is enough; see `sweepSendingDomains`), the provider will sign for the
+ * domain, and the custom MAIL FROM is in place. The last of those is required
+ * rather than treated as a bonus, because a domain
  * verified without it has no aligned SPF and rests on DKIM alone — which is the
  * arrangement that fails as soon as a message is forwarded and rewritten.
  *
@@ -490,9 +491,9 @@ export async function refreshSendingDomain(
       ? existing
       : [ownershipRecord(ownershipToken ?? '')]
 
-  // A verified row is read with two tries, so one dropped packet does not cost
-  // a live domain its status; a pending row has nothing to lose and keeps the
-  // single bounded try.
+  // A verified row is read with two tries, so one dropped packet does not
+  // show a live domain's records as missing; a pending row has nothing to
+  // lose and keeps the single bounded try.
   const wasVerified = stored.status === 'verified'
   const resolver = wasVerified ? interactiveResolver : systemResolver
   const readZone: ZoneReader = (host) => resolver.resolveTxt(host)
@@ -501,11 +502,14 @@ export async function refreshSendingDomain(
     checkSendingDomainOwnership(stored.domain, proofRecords, readZone),
   ])
   // Proven only on a read that found the proof: the owner-only writes below
-  // need it. A verified row whose lookup went unanswered keeps the proof it
-  // already has for its status, so only the zone saying the record is gone, or
-  // the provider changing its answer, can demote it.
+  // need it. The status needs ownership established once, not held forever:
+  // a row that has ever verified keeps its proof whatever the zone says now,
+  // so an owner who tidies the record away after verifying keeps sending as
+  // the domain, and only the provider's verdict on signing and MAIL FROM can
+  // demote it.
   const ownershipProven = ownership === 'proven'
   const ownershipKept = wasVerified && ownership === 'unknown'
+  const ownershipEstablished = ownershipProven || ownershipKept || stored.verifiedAt != null
   if (ownershipKept) {
     log.warn(
       { sending_domain_id: id, domain: stored.domain },
@@ -515,7 +519,9 @@ export async function refreshSendingDomain(
 
   let identity = found
   // A row holding its own key re-keys the identity once, after it proves
-  // ownership; until then the identity's key is not one anybody can publish.
+  // ownership on this read; until then the identity's key is not one anybody
+  // can publish. An earlier verification is not enough for a write on the
+  // identity.
   const rekey = await rekeyToHeldSigningKey(stored, identity, ownershipProven)
   const row = rekey.row
   if (rekey.rekeyed) identity = (await getSesDomainIdentity(row.domain)) ?? identity
@@ -531,10 +537,7 @@ export async function refreshSendingDomain(
 
   // A row still holding its key is waiting to replace the identity's key, so
   // that key failing is not this row's verdict.
-  const verdict = sendingDomainStatusFrom({
-    identity,
-    ownershipProven: ownershipProven || ownershipKept,
-  })
+  const verdict = sendingDomainStatusFrom({ identity, ownershipProven: ownershipEstablished })
   const status = verdict === 'failed' && row.pendingSigningKey ? 'pending' : verdict
 
   const now = new Date()
@@ -631,11 +634,13 @@ export async function restartSendingDomainChecks(
  * ## Why a schedule and not a button
  *
  * Verification is a statement about the present tense that a button can only
- * make about the past. Three things can stop being true after a row is marked
- * verified, and none of them announces itself:
+ * make about the past. Ownership is the exception: the ownership record is
+ * required to verify a domain, not to keep it verified, so once a row has
+ * verified, removing that record changes nothing here. What is watched
+ * continuously is what the provider does with the mail, and two things can
+ * stop being true after a row is marked verified without announcing
+ * themselves:
  *
- * - the ownership TXT is deleted, so the workspace no longer demonstrably
- *   controls the zone it is sending as;
  * - the MAIL FROM MX is removed or moved, so the envelope sender falls back to
  *   the provider's own domain and SPF stops aligning, leaving DMARC resting on
  *   DKIM alone — the arrangement that fails as soon as a message is forwarded;
@@ -644,9 +649,11 @@ export async function restartSendingDomainChecks(
  *
  * Each demotes the row here, and a row that is not verified is not an identity
  * the send guard will hand out, so the workspace drops back to the platform
- * sender. That is a visible, honest degradation instead of three silent ones,
- * and it is the reason the provider's MAIL FROM failure behaviour can be the
- * lenient one.
+ * sender. That is a visible, honest degradation instead of a silent one, and
+ * it is the reason the provider's MAIL FROM failure behaviour can be the
+ * lenient one. Every row is checked, not only verified ones, so a row that
+ * has verified before and is pending again goes back to verified on the first
+ * check that finds the provider signing for it.
  *
  * ## Why it does nothing when identity provisioning is not configured
  *
