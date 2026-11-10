@@ -2,8 +2,17 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { afterEach, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import { AutomaticBrandingNotice } from '../automatic-branding-notice'
 import type { AutomaticBrandingStatus } from '@/lib/shared/website-branding'
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, children, ...props }: { to: string; children: ReactNode }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
+}))
 
 afterEach(cleanup)
 
@@ -73,6 +82,18 @@ it('offers a weak logo with Use it and Not now and no Undo', () => {
   expect(accept).toHaveBeenCalledTimes(1)
   fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
   expect(dismiss).toHaveBeenCalledTimes(1)
+  expect(undo).not.toHaveBeenCalled()
+})
+
+it('sends a drafted logo to the builder to review and publish, with no Undo', () => {
+  const { undo, view } = mount({ ...base, status: 'drafted', canUndo: false })
+  expect(screen.getByText('Logo and color from example.com')).toBeVisible()
+  expect(view.container.querySelector('img')).toHaveAttribute('src', base.logoUrl)
+  expect(screen.getByRole('link', { name: 'Review and publish' })).toHaveAttribute(
+    'href',
+    '/design'
+  )
+  expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
   expect(undo).not.toHaveBeenCalled()
 })
 

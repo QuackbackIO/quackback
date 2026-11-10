@@ -161,6 +161,7 @@ export function HomeGettingStarted({
   const branding = useAutomaticWebsiteBranding({ enabled: planShown })
   const brandingShown =
     branding.status?.status === 'applied' ||
+    branding.status?.status === 'drafted' ||
     (branding.status?.status === 'offered' && branding.status.canUse)
   const brandingNotice = brandingShown && (
     <AutomaticBrandingNotice

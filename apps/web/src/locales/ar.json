@@ -1565,6 +1565,7 @@
   "onboarding.branding.use": "استخدمه",
   "onboarding.branding.notNow": "ليس الآن",
   "onboarding.branding.undo": "تراجع",
+  "onboarding.branding.review": "راجع وانشر",
   "onboarding.branding.undoConflict": "تغيّرت العلامة التجارية منذ ذلك الحين. التراجع غير متاح.",
   "onboarding.branding.permissionRequired": "اطلب من مالك مساحة العمل تغيير العلامة التجارية.",
   "onboarding.branding.unavailable": "لم يعد تغيير العلامة التجارية هذا متاحًا.",

@@ -16,6 +16,11 @@ vi.mock('@/lib/server/domains/settings/settings.media', () => ({
   getCustomCss: async () => null,
 }))
 
+// The legacy engine: no design view, so the launcher reads the branding settings.
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getWorkspaceSettings: async () => null,
+}))
+
 const mockGetTierLimits = vi.fn()
 vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: mockGetTierLimits,

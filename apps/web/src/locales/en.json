@@ -1565,6 +1565,7 @@
   "onboarding.branding.use": "Use it",
   "onboarding.branding.notNow": "Not now",
   "onboarding.branding.undo": "Undo",
+  "onboarding.branding.review": "Review and publish",
   "onboarding.branding.undoConflict": "The branding changed since then. Undo is unavailable.",
   "onboarding.branding.permissionRequired": "Ask a workspace Owner to change the branding.",
   "onboarding.branding.unavailable": "This branding change is no longer available.",

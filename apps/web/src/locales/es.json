@@ -1565,6 +1565,7 @@
   "onboarding.branding.use": "Usarlo",
   "onboarding.branding.notNow": "Ahora no",
   "onboarding.branding.undo": "Deshacer",
+  "onboarding.branding.review": "Revisar y publicar",
   "onboarding.branding.undoConflict": "La marca cambió desde entonces. No se puede deshacer.",
   "onboarding.branding.permissionRequired": "Pide a un propietario del espacio de trabajo que cambie la marca.",
   "onboarding.branding.unavailable": "Este cambio de marca ya no está disponible.",

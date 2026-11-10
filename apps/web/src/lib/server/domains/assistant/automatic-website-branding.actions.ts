@@ -138,15 +138,18 @@ async function lockedLookup(tx: Transaction, actor: Actor) {
 }
 
 /**
- * "Use it": apply an offered logo, with Undo after. On a portal drawn from a
- * published design the logo and colour also go into the design's draft,
- * where the portal reads its brand; the settings alone would not show.
+ * "Use it": apply an offered logo, with Undo after. On the design engine the
+ * design is the brand's one home, so the logo and colour go into its draft
+ * only, to review and publish in the builder (see website-branding-draft.ts);
+ * the workspace logo and branding colours stay as they are.
  */
 export async function acceptWebsiteBrandingOffer(
   actor: Actor
 ): Promise<AutomaticBrandingStatus | null> {
   const customColors = await customColorsAllowed()
-  const { status, draft } = await db.transaction(async (tx) => {
+  const { designOwnsBrand } = await import('@/lib/server/domains/design/website-branding-draft')
+  if (await designOwnsBrand()) return acceptIntoDesignDraft(actor, customColors)
+  const status = await db.transaction(async (tx) => {
     const { row, person, lookup } = await lockedLookup(tx, actor)
     if (lookup?.status !== 'offered' || row.logoKey) throw automaticBrandingUnavailable()
     const receipt = await applyOffer(tx, person, row, lookup.offer, {
@@ -161,32 +164,53 @@ export async function acceptWebsiteBrandingOffer(
     })
     await auditAutomaticBranding(tx, person, 'branding.website.applied', row.id, next, receipt)
     const [after] = await tx.select().from(settings).limit(1)
-    return {
-      status: presentLookup(after, next, person.permissions),
-      draft: {
-        found: {
-          logoKey: after.logoKey ?? null,
-          colour:
-            customColors && person.permissions.has(PERMISSIONS.SETTINGS_BRANDING)
-              ? lookup.offer.color
-              : null,
-        },
-        author: {
-          principalId: person.actor.principalId!,
-          actor: { userId: person.userId, email: person.email, role: person.role, type: 'user' },
-        } satisfies DesignAuthor,
-      },
-    }
+    return presentLookup(after, next, person.permissions)
   })
   await invalidateSettingsCache()
-  try {
-    const { websiteBrandingIntoDraft } =
-      await import('@/lib/server/domains/design/website-branding-draft')
-    await websiteBrandingIntoDraft(draft.found, draft.author)
-  } catch (error) {
-    // The settings are applied; the draft is a second home, so its failure is logged, not thrown.
-    log.error({ err: error }, 'website branding could not reach the design draft')
-  }
+  return status
+}
+
+/**
+ * The offer written into the design's draft. The draft is saved first, so a
+ * failed save leaves the offer standing to try again; a design that already
+ * has its own icon and colour keeps them, and the offer closes as answered.
+ */
+async function acceptIntoDesignDraft(
+  actor: Actor,
+  customColors: boolean
+): Promise<AutomaticBrandingStatus | null> {
+  const { person, lookup } = await db.transaction(async (tx) => {
+    const locked = await lockedLookup(tx, actor)
+    if (locked.lookup?.status !== 'offered' || locked.row.logoKey)
+      throw automaticBrandingUnavailable()
+    return { person: locked.person, lookup: locked.lookup }
+  })
+  const colour =
+    customColors && person.permissions.has(PERMISSIONS.SETTINGS_BRANDING)
+      ? lookup.offer.color
+      : null
+  const { websiteBrandingIntoDraft } =
+    await import('@/lib/server/domains/design/website-branding-draft')
+  const drafted = await websiteBrandingIntoDraft({ logoKey: lookup.offer.logoKey, colour }, {
+    principalId: person.actor.principalId!,
+    actor: { userId: person.userId, email: person.email, role: person.role, type: 'user' },
+  } satisfies DesignAuthor)
+  const status = await db.transaction(async (tx) => {
+    const { row, lookup: current } = await lockedLookup(tx, actor)
+    // Answered meanwhile (Not now, or a logo set by hand): the draft keeps what it got.
+    if (current?.status !== 'offered' || current.claimId !== lookup.claimId || row.logoKey)
+      throw automaticBrandingUnavailable()
+    const completedAt = new Date().toISOString()
+    const next = await storeLookup(
+      tx,
+      drafted
+        ? { ...current, status: 'drafted', completedAt, colorDrafted: colour !== null }
+        : { ...current, status: 'declined', completedAt }
+    )
+    log.info({ drafted }, 'website branding offer answered in the design draft')
+    return presentLookup(row, next, person.permissions)
+  })
+  await invalidateSettingsCache()
   return status
 }
 

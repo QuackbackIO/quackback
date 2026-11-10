@@ -1,5 +1,4 @@
 import { db, eq, settings } from '@/lib/server/db'
-import { deleteObject } from '@/lib/server/storage/s3'
 import { ValidationError } from '@/lib/shared/errors'
 import { advancedCssRemainder } from '@/lib/shared/theme/generator'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
@@ -103,6 +102,16 @@ export async function updateCustomCss(css: string): Promise<string> {
 // ============================================================================
 // S3 Key Storage Functions
 // ============================================================================
+//
+// These only move the settings' pointers; no stored image is deleted here.
+// The same key can be named by the portal design (its draft, a published or
+// kept revision, a preview link or a saved look, see convert.ts and
+// workspace-logo.ts), and a settings Undo can point back at it. Deleting it
+// would break the live portal header, favicon, share card and emails with no
+// way to restore the bytes. Images nothing names any more are left in
+// storage; removing them safely needs a sweep that checks every one of those
+// references first, which files.retention.ts does not do (it sweeps `files/`
+// rows only).
 
 /**
  * Save the logo key while retaining the previous image for Undo.
@@ -131,28 +140,13 @@ export async function saveLogoKey(
 }
 
 /**
- * Delete logo from S3 and clear the key. The favicon is derived from the
- * logo at upload, so removing the logo clears both keys.
+ * Clear the logo key. The favicon is derived from the logo at upload, so
+ * removing the logo clears both keys. The images stay in storage (see above).
  */
 export async function deleteLogoKey(): Promise<{ success: true }> {
   log.info('delete logo key')
   try {
     const org = await requireSettings()
-
-    if (org.logoKey) {
-      try {
-        await deleteObject(org.logoKey)
-      } catch (err) {
-        log.warn({ err, logo_key: org.logoKey }, 'failed to delete logo s3 object')
-      }
-    }
-    if (org.faviconKey) {
-      try {
-        await deleteObject(org.faviconKey)
-      } catch (err) {
-        log.warn({ err, favicon_key: org.faviconKey }, 'failed to delete favicon s3 object')
-      }
-    }
 
     await db
       .update(settings)
@@ -194,20 +188,12 @@ export async function saveFaviconKey(
 }
 
 /**
- * Delete favicon from S3 and clear the key.
+ * Clear the favicon key. The image stays in storage (see above).
  */
 export async function deleteFaviconKey(): Promise<{ success: true }> {
   log.info('delete favicon key')
   try {
     const org = await requireSettings()
-
-    if (org.faviconKey) {
-      try {
-        await deleteObject(org.faviconKey)
-      } catch (err) {
-        log.warn({ err, favicon_key: org.faviconKey }, 'failed to delete favicon s3 object')
-      }
-    }
 
     await db.update(settings).set({ faviconKey: null }).where(eq(settings.id, org.id))
     await invalidateSettingsCache()
@@ -220,23 +206,12 @@ export async function deleteFaviconKey(): Promise<{ success: true }> {
 }
 
 /**
- * Save header logo S3 key and delete old image if exists.
+ * Save the header logo key. The previous image stays in storage (see above).
  */
 export async function saveHeaderLogoKey(key: string): Promise<{ success: true; key: string }> {
   log.info('save header logo key')
   try {
     const org = await requireSettings()
-
-    if (org.headerLogoKey) {
-      try {
-        await deleteObject(org.headerLogoKey)
-      } catch (err) {
-        log.warn(
-          { err, header_logo_key: org.headerLogoKey },
-          'failed to delete old header logo s3 object'
-        )
-      }
-    }
 
     await db.update(settings).set({ headerLogoKey: key }).where(eq(settings.id, org.id))
     await invalidateSettingsCache()
@@ -249,23 +224,12 @@ export async function saveHeaderLogoKey(key: string): Promise<{ success: true; k
 }
 
 /**
- * Delete header logo from S3 and clear the key.
+ * Clear the header logo key. The image stays in storage (see above).
  */
 export async function deleteHeaderLogoKey(): Promise<{ success: true }> {
   log.info('delete header logo key')
   try {
     const org = await requireSettings()
-
-    if (org.headerLogoKey) {
-      try {
-        await deleteObject(org.headerLogoKey)
-      } catch (err) {
-        log.warn(
-          { err, header_logo_key: org.headerLogoKey },
-          'failed to delete header logo s3 object'
-        )
-      }
-    }
 
     await db.update(settings).set({ headerLogoKey: null }).where(eq(settings.id, org.id))
     await invalidateSettingsCache()

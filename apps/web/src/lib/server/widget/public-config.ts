@@ -13,6 +13,12 @@ export interface PublicServerTheme {
   darkPrimaryForeground?: string
   radius?: string
   themeMode?: 'light' | 'dark' | 'user'
+  /**
+   * The published design revision these colours come from, on the design
+   * engine; absent on the legacy engine and before a first publish. A client
+   * may key a cache on it.
+   */
+  revision?: number
 }
 
 export interface PublicServerConfig {
@@ -112,6 +118,61 @@ export async function getPublicServerConfig(): Promise<{
     deviceId: stored.visitorDeviceTracking,
   })
 
+  const theme = (await designLauncherTheme()) ?? (await legacyLauncherTheme())
+
+  return {
+    enabled: true,
+    config: {
+      theme: Object.keys(theme).length > 0 ? theme : undefined,
+      tabs: widgetConfig.tabs,
+      hmacRequired: widgetConfig.hmacRequired,
+      visitorAnalytics: tracking.analytics,
+      visitorDeviceTracking: tracking.deviceTracking,
+      launcherGreeting: widgetConfig.launcherGreeting?.trim() || undefined,
+      launcherLabel: widgetConfig.launcherLabel?.trim() || undefined,
+      position:
+        widgetConfig.position === 'bottom-left'
+          ? 'left'
+          : widgetConfig.position === 'bottom-right'
+            ? 'right'
+            : undefined,
+    },
+  }
+}
+
+/**
+ * On the design engine the launcher takes the design the portal and the
+ * widget panel draw with, from the cached settings, so a publish repaints it
+ * and the branding settings no longer reach it. Null on the legacy engine.
+ */
+async function designLauncherTheme(): Promise<PublicServerTheme | null> {
+  try {
+    const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+    const view = (await getWorkspaceSettings())?.portalDesign
+    // A view cached before the launcher colours existed falls back until it is rebuilt.
+    if (view?.engine !== 'v2' || !view.launcher) return null
+    const { light, dark, radius } = view.launcher
+    const theme: PublicServerTheme = {
+      themeMode: view.mode === 'auto' ? 'user' : view.mode,
+      radius,
+    }
+    if (light) {
+      theme.lightPrimary = light.accent
+      theme.lightPrimaryForeground = light.onAccent
+    }
+    if (dark) {
+      theme.darkPrimary = dark.accent
+      theme.darkPrimaryForeground = dark.onAccent
+    }
+    if (view.revision !== null) theme.revision = view.revision
+    return theme
+  } catch {
+    return null
+  }
+}
+
+/** The launcher theme from the branding settings and the custom CSS, as the legacy engine has it. */
+async function legacyLauncherTheme(): Promise<PublicServerTheme> {
   const theme: PublicServerTheme = {}
   try {
     const { getBrandingConfig, getCustomCss } =
@@ -142,23 +203,5 @@ export async function getPublicServerConfig(): Promise<{
   } catch {
     // Fall back to SDK defaults — theme stays empty
   }
-
-  return {
-    enabled: true,
-    config: {
-      theme: Object.keys(theme).length > 0 ? theme : undefined,
-      tabs: widgetConfig.tabs,
-      hmacRequired: widgetConfig.hmacRequired,
-      visitorAnalytics: tracking.analytics,
-      visitorDeviceTracking: tracking.deviceTracking,
-      launcherGreeting: widgetConfig.launcherGreeting?.trim() || undefined,
-      launcherLabel: widgetConfig.launcherLabel?.trim() || undefined,
-      position:
-        widgetConfig.position === 'bottom-left'
-          ? 'left'
-          : widgetConfig.position === 'bottom-right'
-            ? 'right'
-            : undefined,
-    },
-  }
+  return theme
 }

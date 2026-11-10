@@ -80,7 +80,20 @@ export type PortalDesignView =
         card?: string
         themeColor?: { light: string | null; dark: string | null }
       }
+      /** The widget launcher's colours on a customer's own site; see {@link LauncherColours}. */
+      launcher?: LauncherColours
     }
+
+/**
+ * The brand colour and the text on it, as hex, for each mode the design
+ * shows (null for a mode it does not), and the corner radius. The widget's
+ * public config sends these, so the launcher matches the portal.
+ */
+export interface LauncherColours {
+  light: { accent: string; onAccent: string } | null
+  dark: { accent: string; onAccent: string } | null
+  radius: string
+}
 
 export interface BandImage {
   url: string

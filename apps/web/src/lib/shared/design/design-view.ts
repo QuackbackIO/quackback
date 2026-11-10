@@ -15,7 +15,8 @@ import { readableStatusColours } from './status-colours'
 import { shortHash, squareIconPath } from './share-card'
 import { shareCardFacts, shareCardVersion, themeColours } from './share-card-facts'
 import type { PortalDesign } from './schema'
-import type { BandImage, DesignLogo, PortalCopy, PortalDesignView } from './view'
+import type { BandImage, DesignLogo, LauncherColours, PortalCopy, PortalDesignView } from './view'
+import { oklchToHex } from '@/lib/shared/theme/colors'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { layoutValue } from './defaults'
@@ -54,6 +55,23 @@ export function designView(
       themeColor: themeColours(resolved),
     },
     statusColours: statusColours(doc, resolved),
+    launcher: launcherColours(resolved),
+  }
+}
+
+/** Hex for clients that take nothing else; the resolver may give oklch(). */
+const hex = (colour: string) => (colour.startsWith('#') ? colour.toLowerCase() : oklchToHex(colour))
+
+/** The resolved brand colour and the text on it, per mode, for the widget launcher. */
+export function launcherColours(resolved: ResolvedDesign): LauncherColours {
+  const pair = (vars: ResolvedDesign['light']) =>
+    vars?.primary && vars.primaryForeground
+      ? { accent: hex(vars.primary), onAccent: hex(vars.primaryForeground) }
+      : null
+  return {
+    light: pair(resolved.light),
+    dark: pair(resolved.dark),
+    radius: (resolved.light ?? resolved.dark)?.radius ?? '0.5rem',
   }
 }
 

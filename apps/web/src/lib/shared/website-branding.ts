@@ -5,15 +5,25 @@
  * - `pending`: a lookup is fetching the website.
  * - `offered`: a weak logo waits for "Use it" or "Not now".
  * - `applied`: the logo (and maybe the color) changed, with Undo.
+ * - `drafted`: on the design engine, the logo (and maybe the color) went into
+ *   the design's draft, to review and publish in the builder.
  * - the rest are quiet end states.
  */
 export type AutomaticBrandingStatus = {
   domain: string
   status:
-    'eligible' | 'pending' | 'offered' | 'applied' | 'declined' | 'undone' | 'skipped' | 'failed'
+    | 'eligible'
+    | 'pending'
+    | 'offered'
+    | 'applied'
+    | 'drafted'
+    | 'declined'
+    | 'undone'
+    | 'skipped'
+    | 'failed'
   /** The stored logo for a thumbnail, while offered or applied. */
   logoUrl: string | null
-  /** Whether the applied change also set the brand color. */
+  /** Whether the applied or drafted change also set the brand color. */
   colorApplied: boolean
   /** Undo for an applied change. */
   canUndo: boolean
