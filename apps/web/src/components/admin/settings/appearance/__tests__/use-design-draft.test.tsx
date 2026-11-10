@@ -52,7 +52,7 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
   restorePortalDesignVersionFn: async () => ({ ok: true }),
 }))
 
-const { useDesignDraft, DRAFT_SAVE_DELAY_MS, UNDO_MERGE_MS, nameOfChange } =
+const { useDesignDraft, DRAFT_SAVE_DELAY_MS, UNDO_MERGE_MS, nameOfChange, designPreviewCss } =
   await import('../use-design-draft')
 const { portalDesignQueries } = await import('@/lib/client/queries/portal-design')
 
@@ -66,6 +66,7 @@ function editorState() {
     revision: server.revision,
     authors: {},
     draftSavedAt: null,
+    waiting: 0,
     canPublish: true,
   }
 }
@@ -112,7 +113,9 @@ describe('useDesignDraft', () => {
     expect(result.current.changes).toEqual([])
     act(() => result.current.update((draft) => void (draft.brand.light.accent = '#0f766e')))
     expect(result.current.changes.map((c) => c.path)).toEqual(['brand.light.accent'])
-    expect(result.current.preview.css).toContain('--qb-accent: #0f766e;')
+    // The preview frame takes the draft whole, and draws it with the server's code.
+    expect(result.current.preview).toBe(result.current.design)
+    expect(designPreviewCss(result.current.preview)).toContain('--qb-accent: #0f766e;')
   })
 
   it('reports a refused publish', async () => {

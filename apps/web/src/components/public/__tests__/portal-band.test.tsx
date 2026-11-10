@@ -17,7 +17,16 @@ const frame = vi.hoisted(() => ({ current: null as null | { visitor: 'in' | 'out
 vi.mock('@/lib/client/designer-frame', () => ({ thisDesignerFrame: () => frame.current }))
 
 import { PortalBand, textForLocale } from '../portal-band'
-import { PreviewHeadlineContext, PreviewPagesContext } from '../preview-draft-context'
+import { PreviewDesignContext } from '../preview-draft-context'
+
+/** The builder's draft, as the frame provides it: the published view with a draft feedback headline. */
+const draftView = (headline: unknown) =>
+  headline === undefined
+    ? undefined
+    : ({
+        ...(root.portalDesign as object),
+        feedback: { ...(root.portalDesign as { feedback: object }).feedback, headline },
+      } as never)
 
 const view = (headline: unknown, band = 'none') => ({
   engine: 'v2',
@@ -53,9 +62,9 @@ describe('PortalBand', () => {
   const mount = (draft?: unknown, page?: 'home' | 'feedback' | 'roadmap') =>
     render(
       <IntlProvider locale="de" defaultLocale="en">
-        <PreviewHeadlineContext.Provider value={draft as never}>
+        <PreviewDesignContext.Provider value={draftView(draft)}>
           <PortalBand page={page} />
-        </PreviewHeadlineContext.Provider>
+        </PreviewDesignContext.Provider>
       </IntlProvider>
     )
 
@@ -181,11 +190,17 @@ describe('PortalBand', () => {
     const withComposer = (draft?: unknown) =>
       render(
         <IntlProvider locale="en">
-          <PreviewPagesContext.Provider value={draft as never}>
+          <PreviewDesignContext.Provider
+            value={
+              draft
+                ? ({ ...(root.portalDesign as object), ...(draft as object) } as never)
+                : undefined
+            }
+          >
             <PortalBand page="home">
               <form data-testid="composer" />
             </PortalBand>
-          </PreviewPagesContext.Provider>
+          </PreviewDesignContext.Provider>
         </IntlProvider>
       )
     withComposer()
@@ -406,9 +421,9 @@ describe('the placeholder hero', () => {
   const mount = (draft?: unknown) =>
     render(
       <IntlProvider locale="en" defaultLocale="en">
-        <PreviewHeadlineContext.Provider value={draft as never}>
+        <PreviewDesignContext.Provider value={draftView(draft)}>
           <PortalBand />
-        </PreviewHeadlineContext.Provider>
+        </PreviewDesignContext.Provider>
       </IntlProvider>
     )
 
@@ -439,9 +454,9 @@ describe('the placeholder hero', () => {
     expect(container.querySelector('[data-qb-placeholder]')).toBeTruthy()
     rerender(
       <IntlProvider locale="en" defaultLocale="en">
-        <PreviewHeadlineContext.Provider value={{ title: { en: 'Ideas' }, subtitle: {} } as never}>
+        <PreviewDesignContext.Provider value={draftView({ title: { en: 'Ideas' }, subtitle: {} })}>
           <PortalBand />
-        </PreviewHeadlineContext.Provider>
+        </PreviewDesignContext.Provider>
       </IntlProvider>
     )
     expect(container.querySelector('[data-qb-placeholder]')).toBeNull()

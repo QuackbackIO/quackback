@@ -1,79 +1,68 @@
+/**
+ * The frame reads the draft the builder posts with the design schema before
+ * anything uses it, then builds its view with the server's code, keeping
+ * images from the workspace's storage only.
+ */
 import { describe, expect, it } from 'vitest'
-import { readDesignPreview } from '../portal-preview-design'
+import { designView } from '@/lib/shared/design/design-view'
+import { defaultDesign } from '@/lib/shared/design/schema'
+import { readDraftView } from '../portal-preview-design'
 
-const message = (extra: Record<string, unknown>) =>
-  readDesignPreview({ css: '', attributes: {}, fontIds: [], ...extra })!
+/** The draft as it arrives: a structured clone of what the builder posted. */
+const posted = (value: unknown) => readDraftView(structuredClone(value))
 
 describe('a draft design read from the preview message', () => {
-  it('keeps the logo, with its icon and full logo files only from the workspace’s storage', () => {
-    expect(
-      message({
-        logo: {
-          display: 'wordmark',
-          name: 'Harbor',
-          wordmark: { light: '/api/storage/logos/a.svg', dark: 'https://evil.example/x.svg' },
-          mark: { light: '/api/storage/logos/icon.png', dark: 'javascript:alert(1)' },
-        },
-      }).logo
-    ).toEqual({
+  it('builds the view the server builds for the same design', () => {
+    const draft = defaultDesign()
+    draft.pages.feedback.headline = { title: { en: 'Ideas' }, subtitle: { en: 'Tell us' } }
+    expect(posted(draft)).toEqual(designView(draft, null))
+  })
+
+  it('reads nothing from a message the schema does not accept', () => {
+    expect(posted(null)).toBeNull()
+    expect(posted(undefined)).toBeNull()
+    expect(posted('design')).toBeNull()
+    // The old resolved shape, or a forged one, is not a design.
+    expect(posted({ css: ':root{}', attributes: { onload: 'x' }, fontIds: [] })).toBeNull()
+    expect(posted({ ...defaultDesign(), mode: 'neon' })).toBeNull()
+    expect(posted({ ...defaultDesign(), script: 'alert(1)' })).toBeNull()
+  })
+
+  it('keeps the logo’s files only from the workspace’s storage', () => {
+    const draft = defaultDesign()
+    draft.brand.logo.display = 'wordmark'
+    draft.brand.logo.wordmark = {
+      light: { key: 'header-logos/a.svg' },
+      dark: { key: 'x.svg?u=https://evil.example' },
+    }
+    draft.brand.logo.mark = {
+      light: { key: 'header-logos/icon.png' },
+      dark: { key: 'icon.png#"onerror' },
+    }
+    expect(posted(draft)?.logo).toEqual({
       display: 'wordmark',
-      name: 'Harbor',
-      wordmark: { light: '/api/storage/logos/a.svg', dark: null },
-      mark: { light: '/api/storage/logos/icon.png', dark: null },
+      name: null,
+      wordmark: { light: '/api/storage/header-logos/a.svg', dark: null },
+      mark: { light: '/api/storage/header-logos/icon.png', dark: null },
     })
-    expect(message({ logo: { display: 'banner' } }).logo).toBeNull()
   })
 
-  it('keeps status colours a design can store, and nothing else', () => {
-    expect(
-      message({ statusColours: ['#ecb22e', 'oklch(0.7 0.1 200)', 'url(x)', 4] }).statusColours
-    ).toEqual(['#ecb22e', 'oklch(0.7 0.1 200)'])
-    expect(message({ statusColours: ['red'] }).statusColours).toBeNull()
-  })
+  it('keeps a band image and its smaller copies only from storage', () => {
+    const draft = defaultDesign()
+    draft.brand.bandImage = {
+      key: 'portal-images/room.webp',
+      width: 2560,
+      variants: [{ key: 'portal-images/room-640.webp', w: 640 }],
+    }
+    expect(posted(draft)?.bandImage).toEqual(designView(draft, null).bandImage)
+    expect(posted(draft)?.bandImage?.srcSet).toContain('640w')
 
-  it('keeps a band image only from storage, in a place it knows', () => {
-    expect(
-      message({ bandImage: { url: '/api/storage/portal-images/a.jpg', place: 'edge' } }).bandImage
-    ).toEqual({ url: '/api/storage/portal-images/a.jpg', place: 'edge' })
-    expect(
-      message({ bandImage: { url: 'https://x.example/a.jpg', place: 'edge' } }).bandImage
-    ).toBeNull()
-    expect(
-      message({ bandImage: { url: '/api/storage/a.jpg', place: 'float' } }).bandImage
-    ).toBeNull()
-  })
+    // A copy whose key could end a srcset candidate is no design at all.
+    draft.brand.bandImage.variants = [{ key: 'room 640.webp, //evil.example/x', w: 640 }]
+    expect(posted(draft)).toBeNull()
 
-  it('keeps a headline’s accent only in a shape it knows', () => {
-    const title = { en: 'Make it better' }
-    expect(
-      message({
-        headline: { title, subtitle: {}, accent: { style: 'highlight', text: { en: 'better' } } },
-      }).headline
-    ).toEqual({ title, subtitle: {}, accent: { style: 'highlight', text: { en: 'better' } } })
-    expect(
-      message({ headline: { title, subtitle: {}, accent: { style: 'blink', text: { en: 'x' } } } })
-        .headline
-    ).toEqual({ title, subtitle: {} })
-  })
-
-  it('keeps an accent’s colour role, and only a colour role', () => {
-    const title = { en: 'Make it better' }
-    const accent = { style: 'colour', text: { en: 'better' } }
-    expect(
-      message({ headline: { title, subtitle: {}, accent: { ...accent, colour: 'support' } } })
-        .headline
-    ).toEqual({ title, subtitle: {}, accent: { ...accent, colour: 'support' } })
-    expect(
-      message({ headline: { title, subtitle: {}, accent: { ...accent, colour: 'red' } } }).headline
-    ).toEqual({ title, subtitle: {}, accent })
-  })
-
-  it('keeps a lighter (two-tone) accent, as the builder’s Lighter sets it', () => {
-    const title = { en: 'Make it better' }
-    expect(
-      message({
-        headline: { title, subtitle: {}, accent: { style: 'muted', text: { en: 'better' } } },
-      }).headline
-    ).toEqual({ title, subtitle: {}, accent: { style: 'muted', text: { en: 'better' } } })
+    delete draft.brand.bandImage.variants
+    draft.brand.bandImage.key = 'room.webp?x=1'
+    expect(posted(draft)?.bandImage).toBeNull()
   })
 })

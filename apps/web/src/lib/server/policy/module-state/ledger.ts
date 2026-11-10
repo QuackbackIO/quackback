@@ -1471,6 +1471,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'and never written after. It is the same 256 numbers for everyone.',
   },
   {
+    file: 'apps/web/src/lib/shared/design/resolve.ts',
+    name: 'resolvedByDesign',
+    category: 'content-addressed',
+    reason:
+      'A WeakMap from one design object to its resolved colours and CSS. The key is the object ' +
+      'itself, which only whoever parsed or built that design holds, and the value is a pure ' +
+      'function of it, so a hit is identical to resolving again. Never keyed by content, so ' +
+      'two workspaces with equal designs share nothing; entries go with the object.',
+  },
+  {
     file: 'apps/web/src/lib/shared/design/history.ts',
     name: 'immer',
     category: 'process-lifetime',

@@ -9,7 +9,7 @@ import { mixOklch } from './color'
 import { bandContrast, headlineBehind } from './components'
 import { roleFill } from './colour-roles'
 import { contrastRatio, solveContrast } from './contrast'
-import { resolveDesign } from './resolve'
+import { resolveDesignCached } from './resolve'
 import type { PortalDesign } from './schema'
 import { drawnSurfaces, type Drawn } from './surfaces'
 
@@ -107,7 +107,7 @@ function tonePairs(doc: PortalDesign, vars: ThemeVariables, mode: ColourPair['mo
 
 /** Every pair the design draws, the failing ones first. */
 export function colourPairs(doc: PortalDesign): ColourPair[] {
-  const resolved = resolveDesign(doc)
+  const resolved = resolveDesignCached(doc)
   const pairs: ColourPair[] = []
   for (const mode of ['light', 'dark'] as const) {
     const vars = resolved[mode]

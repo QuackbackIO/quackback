@@ -69,8 +69,8 @@
     "ui:portal-load": {
       "dbQueries": 7,
       "serverRequests": 2,
-      "requests": 145,
-      "jsRequests": 140,
+      "requests": 146,
+      "jsRequests": 141,
       "jsKB": 496.4,
       "htmlTransferKB": 22,
       "componentRenders": 465
@@ -267,8 +267,8 @@
     "ui:admin-settings-click-through": {
       "dbQueries": 52,
       "serverRequests": 7,
-      "requests": 67,
-      "jsRequests": 63,
+      "requests": 68,
+      "jsRequests": 64,
       "jsKB": 312.3,
       "htmlTransferKB": 0,
       "componentRenders": 673
@@ -748,8 +748,8 @@
     "sweep:ui:admin:/admin/settings/portal": {
       "dbQueries": 40,
       "serverRequests": 6,
-      "requests": 292,
-      "jsRequests": 279,
+      "requests": 294,
+      "jsRequests": 281,
       "jsKB": 1167.4,
       "htmlTransferKB": 34.3,
       "componentRenders": 1517
@@ -917,8 +917,8 @@
     "sweep:ui:anon:/support": {
       "dbQueries": 0,
       "serverRequests": 2,
-      "requests": 88,
-      "jsRequests": 83,
+      "requests": 89,
+      "jsRequests": 84,
       "jsKB": 384.4,
       "htmlTransferKB": 15.9,
       "componentRenders": 152
@@ -982,8 +982,8 @@
     "sweep:ui:admin:/support": {
       "dbQueries": 10,
       "serverRequests": 3,
-      "requests": 92,
-      "jsRequests": 86,
+      "requests": 93,
+      "jsRequests": 87,
       "jsKB": 387.2,
       "htmlTransferKB": 16.4,
       "componentRenders": 240

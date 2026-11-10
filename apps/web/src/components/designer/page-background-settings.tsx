@@ -31,7 +31,7 @@ import {
   type BackgroundTarget,
   type PageBackground,
 } from '@/lib/shared/design/page-background'
-import { resolveDesign } from '@/lib/shared/design/resolve'
+import { resolveDesignCached } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import { cn } from '@/lib/shared/utils'
@@ -250,7 +250,7 @@ function ImageStrength({
   idPrefix: string
 }) {
   const strength = fill.strength ?? 35
-  const light = useMemo(() => resolveDesign(design).light, [design])
+  const light = useMemo(() => resolveDesignCached(design).light, [design])
   const shows = light
     ? Math.round(
         (1 -

@@ -1,9 +1,6 @@
 import { useCallback, useRef } from 'react'
 import { useDesignAi } from '@/components/admin/settings/appearance/use-design-ai'
-import {
-  designPreview,
-  type useDesignDraft,
-} from '@/components/admin/settings/appearance/use-design-draft'
+import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
 import { openCheckFrame } from '@/lib/client/check-frame'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { canvasSrc } from './designer-canvas'
@@ -27,7 +24,6 @@ const openHome = (locale: SupportedLocale) => (design: PortalDesign) =>
       visitor: 'out',
     }),
     design,
-    preview: designPreview,
   })
 
 /**

@@ -65,12 +65,9 @@ vi.mock('@tanstack/react-router', () => ({
     return opts?.select ? opts.select(context as never) : context
   },
 }))
-vi.mock('@/components/public/preview-draft-context', () => ({
+vi.mock('@/components/public/preview-draft-context', async (actual) => ({
+  ...(await actual<typeof import('@/components/public/preview-draft-context')>()),
   usePreviewWelcomeCard: () => null,
-  usePreviewHeadline: () => undefined,
-  usePreviewTitles: () => undefined,
-  usePreviewHome: () => undefined,
-  usePreviewBandImage: () => undefined,
 }))
 vi.mock('@/components/public/feedback/portal-welcome-card', () => ({
   PortalWelcomeCard: () => null,

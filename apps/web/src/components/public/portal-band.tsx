@@ -1,17 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
-import { useRouteContext } from '@tanstack/react-router'
 import type { CSSProperties, ReactNode, RefObject } from 'react'
 import { thisDesignerFrame } from '@/lib/client/designer-frame'
 import { composerWidthClass } from '@/lib/shared/design/composer-width'
 import { focusPoint, photoSpan } from '@/lib/shared/design/photo-span'
 import { cn } from '@/lib/shared/utils'
-import {
-  usePreviewBandImage,
-  usePreviewHeadline,
-  usePreviewHome,
-  usePreviewTitles,
-} from './preview-draft-context'
+import { usePortalDesign } from './preview-draft-context'
 import { ACCENT_CLASS } from '@/lib/shared/design/accent-class'
 import type { ColourRole } from '@/lib/shared/design/rich-words'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -263,18 +257,10 @@ export function PortalBand({
   children?: ReactNode
 }) {
   const intl = useIntl()
-  const design = useRouteContext({
-    from: '__root__',
-    select: (context) => context.settings?.portalDesign,
-  })
-  const draftHeadline = usePreviewHeadline()
-  const draftHome = usePreviewHome()
-  const draftImage = usePreviewBandImage()
-  const draftTitles = usePreviewTitles()
+  const design = usePortalDesign()
   const inBuilder = useInBuilder()
   const bandRef = useBandHeight()
-  const shownImage =
-    design?.engine === 'v2' ? (draftImage !== undefined ? draftImage : design.bandImage) : null
+  const shownImage = design?.engine === 'v2' ? design.bandImage : null
   usePhotoSpan(
     bandRef,
     shownImage?.place === 'cover' &&
@@ -284,22 +270,19 @@ export function PortalBand({
       : null
   )
   if (design?.engine !== 'v2') return null
-  const home = page === 'home' ? (draftHome ?? design.home) : null
   const headline =
     page === 'home'
-      ? home?.headline
+      ? design.home.headline
       : page === 'feedback'
-        ? draftHeadline !== undefined
-          ? draftHeadline
-          : design.feedback.headline
-        : (draftTitles ?? design.titles)[page]
+        ? design.feedback.headline
+        : design.titles[page]
   const title = textForLocale(headline?.title, intl.locale) || words?.title
   const subtitle = textForLocale(headline?.subtitle, intl.locale) || words?.subtitle
   // The other pages' titles sit a step below Home's headline.
   const titled = page !== 'home' && page !== 'feedback'
   const phrase = textForLocale(headline?.accent?.text, intl.locale)
   if (!title && !subtitle && !children) return inBuilder ? <PlaceholderHero /> : null
-  const shown = draftImage !== undefined ? draftImage : design.bandImage
+  const shown = design.bandImage
   // A title keeps its band short: an image behind the words stays, one beside
   // or under them is Home's and the feed's.
   const image =
@@ -423,7 +406,7 @@ export function PortalBand({
                 'mt-6 sm:mt-7 [[data-qb-band-align=centre]_&]:mx-auto [[data-qb-band-align=centre]_&]:text-left',
                 // Home's own step, else beside an image or centred a measure, and otherwise the
                 // words' full width, as the cards run.
-                composerWidthClass(home?.composerWidth, side)
+                composerWidthClass(page === 'home' ? design.home.composerWidth : undefined, side)
               )}
             >
               {children}

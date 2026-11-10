@@ -27,6 +27,15 @@ import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
 import { normaliseColor } from './color'
 import { BUNDLED_FONT_IDS, DESIGN_OPTIONS } from './options'
 import { GRID_COLUMNS, MAX_ROWS } from './home-grid'
+import { boardsSchema } from './blocks/boards.schema'
+import { composerSchema } from './blocks/composer.schema'
+import { contactSchema } from './blocks/contact.schema'
+import { helpSearchSchema } from './blocks/help-search.schema'
+import { helpTopics } from './blocks/help-topics'
+import { ideas } from './blocks/ideas'
+import { roadmap } from './blocks/roadmap'
+import { statusSchema } from './blocks/status.schema'
+import { updatesSchema } from './blocks/updates.schema'
 import { withGridPlaces } from './home-legacy'
 import {
   changelogChoicesSchema,
@@ -250,17 +259,23 @@ const whenEmpty = {
   emptyText: localizedUpTo(80).optional(),
 }
 const shown = z.boolean().optional()
+/** One of the counts a block's module offers (blocks/*.ts), as the panel and the AI offer them. */
+const countOf = <const T extends readonly number[]>(counts: T) =>
+  z.union(counts.map((count) => z.literal(count)) as Array<z.ZodLiteral<T[number]>>)
+/** What every Home block's schema is built of; each block's module builds its own from these. */
+const blockParts = { own, linkWords, whenEmpty, shown, localizedUpTo, countOf }
+export type BlockSchemaParts = typeof blockParts
 
 /** Home blocks. `roadmapId: null` is the first public roadmap; empty `categoryIds` the first public categories; absent or empty `boardIds` every board. */
 export const homeBlockSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('welcome'), ...own, body: tiptapContentSchema }).strict(),
-  z.object({ type: z.literal('composer'), ...own }).strict(),
+  composerSchema(blockParts),
   z
     .object({
       type: z.literal('ideas'),
       ...own,
       sort,
-      count: z.union([z.literal(3), z.literal(5), z.literal(10)]),
+      count: countOf(ideas.counts.count),
       /** Public boards to draw from; absent or empty is every board. */
       boardIds: z.array(boardIdSchema).max(10).optional(),
       /** The statuses its posts are in, such as the shipped ones; absent or empty is the open ones. */
@@ -281,34 +296,15 @@ export const homeBlockSchema = z.discriminatedUnion('type', [
       /** The columns it shows, by their statuses; absent or empty is every column. */
       statusIds: z.array(postStatusIdSchema).max(12).optional(),
       /** Posts in each column; absent is 2. */
-      perColumn: z.union([z.literal(2), z.literal(3), z.literal(5)]).optional(),
+      perColumn: countOf(roadmap.counts.perColumn).optional(),
       /** Each post's votes beside it; absent is off. */
       showVotes: shown,
       ...linkWords,
       ...whenEmpty,
     })
     .strict(),
-  z
-    .object({
-      type: z.literal('updates'),
-      ...own,
-      count: z.union([z.literal(2), z.literal(3), z.literal(4)]),
-      /** Each entry's date (absent is on) and the start of its words (absent is off). */
-      showDate: shown,
-      showSummary: shown,
-      ...linkWords,
-      ...whenEmpty,
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal('help_search'),
-      ...own,
-      /** How many popular articles it lists under the search; absent is 5. */
-      popular: z.union([z.literal(0), z.literal(3), z.literal(5)]).optional(),
-      ...linkWords,
-    })
-    .strict(),
+  updatesSchema(blockParts),
+  helpSearchSchema(blockParts),
   z
     .object({
       type: z.literal('help_topics'),
@@ -319,39 +315,14 @@ export const homeBlockSchema = z.discriminatedUnion('type', [
       /** Each topic's article count; absent is on. */
       showCounts: shown,
       /** How many of each topic's articles it lists under it; absent is none. */
-      topArticles: z.union([z.literal(0), z.literal(2), z.literal(3)]).optional(),
+      topArticles: countOf(helpTopics.counts.topArticles).optional(),
       ...linkWords,
       ...whenEmpty,
     })
     .strict(),
-  z
-    .object({
-      type: z.literal('status'),
-      ...own,
-      /** The incidents under way, under the status; absent is on. */
-      showIncidents: shown,
-      ...linkWords,
-      ...whenEmpty,
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal('contact'),
-      ...own,
-      /** Its line of words; absent is its usual one. */
-      text: localizedUpTo(160).optional(),
-      ...linkWords,
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal('boards'),
-      ...own,
-      /** How many posts each board has; absent is on. */
-      showCounts: shown,
-      ...linkWords,
-    })
-    .strict(),
+  statusSchema(blockParts),
+  contactSchema(blockParts),
+  boardsSchema(blockParts),
   z
     .object({
       type: z.literal('links'),

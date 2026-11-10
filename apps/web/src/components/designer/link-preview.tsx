@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useBaseUrl, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { designAssetUrl } from '@/lib/shared/design/design-view'
 import { fontStack } from '@/lib/shared/design/fonts'
-import { resolveDesign } from '@/lib/shared/design/resolve'
+import { resolveDesignCached } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { shareCardFacts } from '@/lib/shared/design/share-card'
 import { portalHeadWords } from '@/lib/shared/portal-head'
@@ -17,7 +17,7 @@ import { cn } from '@/lib/shared/utils'
 export function LinkPreview({ design, className }: { design: PortalDesign; className?: string }) {
   const settings = useWorkspaceSettings()
   const baseUrl = useBaseUrl()
-  const facts = useMemo(() => shareCardFacts(design, resolveDesign(design)), [design])
+  const facts = useMemo(() => shareCardFacts(design, resolveDesignCached(design)), [design])
   const title = design.brand.logo.name?.trim() || settings?.name || ''
   const description = portalHeadWords(settings).portal(title)
   const host = hostOf(baseUrl)

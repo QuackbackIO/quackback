@@ -7,7 +7,6 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import { restorePortalDesignVersionFn } from '@/lib/server/functions/portal-design'
-import { designChanges } from '@/lib/shared/design/diff'
 import { BUNDLED_FONTS } from '@/lib/shared/design/fonts'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
@@ -99,7 +98,8 @@ export function AppearanceView() {
   const versions = useQuery(portalDesignQueries.versions())
   const queryClient = useQueryClient()
   const [history, setHistory] = useState(false)
-  const waiting = data.source === 'draft' ? designChanges(data.live, data.design).length : 0
+  // Counted on the server, so this page does not load the design diff and the Home model.
+  const waiting = data.waiting
   const latest = versions.data?.[0]
   const settings = useWorkspaceSettings()
   const name = data.live.brand.logo.name ?? settings?.name ?? ''

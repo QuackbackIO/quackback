@@ -23,6 +23,7 @@ import type { PortalDesign } from './schema'
 import type { BandImage, DesignLogo, PortalCopy, PortalDesignView } from './view'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { layoutValue } from './defaults'
 
 export function designView(
   doc: PortalDesign,
@@ -118,7 +119,7 @@ function bandImage(doc: PortalDesign): BandImage | null {
   return {
     url: designAssetUrl(image.key),
     ...(srcSet ? { srcSet } : {}),
-    place: doc.layout.imagePlace ?? 'side',
+    place: layoutValue(doc.layout, 'imagePlace'),
     ...(image.alt && !image.decorative ? { alt: image.alt } : {}),
     ...(image.homeOnly ? { homeOnly: true } : {}),
     ...(photoShade(doc) ? { shaded: true } : {}),
@@ -144,4 +145,15 @@ function designLogo(doc: PortalDesign): DesignLogo {
 function feedbackWelcome(doc: PortalDesign): TiptapContent | null {
   const { show, body } = doc.pages.feedback.welcome
   return show && !isEmptyTiptapDoc(body as TiptapContent) ? (body as TiptapContent) : null
+}
+
+/**
+ * The stylesheet a preview frame draws a view with: its theme, then its own
+ * CSS, as the portal's head carries them. The builder matches the frame's
+ * text against it to know a design has been drawn.
+ */
+export function previewStylesheet(
+  view: Pick<Extract<PortalDesignView, { engine: 'v2' }>, 'themeStyles' | 'customCss'>
+): string {
+  return [view.themeStyles, view.customCss].filter(Boolean).join('\n')
 }

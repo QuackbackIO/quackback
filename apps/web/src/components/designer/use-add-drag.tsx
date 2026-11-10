@@ -2,18 +2,14 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { createPortal } from 'react-dom'
 import { addDropRefusal, addedWords, dropCell } from '@/lib/shared/design/add-drop'
 import { measureGrid, placeRect } from '@/lib/shared/design/grid-geometry'
-import {
-  insertHomeBlockAt,
-  newBlock,
-  type HomeBlock,
-  type HomeBlockType,
-} from '@/lib/shared/design/home'
+import { newBlock, type HomeBlock, type HomeBlockType } from '@/lib/shared/design/home'
 import type { GridPlace } from '@/lib/shared/design/home-grid'
 import { toLayerRect, type Rect } from '@/lib/shared/design/layer-geometry'
 import { BLOCK_NAMES, type DesignerPage } from '@/lib/shared/design/outline'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { CanvasFrame } from './designer-canvas'
+import { dispatcher } from './dispatcher'
 import { playReflow, snapshotBlocks } from './frame-reflow'
 import { BlockIcon } from './block-icon'
 import { useFrameRects } from './use-frame-rects'
@@ -101,12 +97,11 @@ export function useAddDrag({
     if (!before) return
     const doc = canvas.current?.frame?.contentDocument ?? null
     const shot = snapshotBlocks(doc)
-    let landed: GridPlace | null = null
-    update((draft) => {
-      draft.pages.home.blocks = structuredClone(before.pages.home.blocks)
-      if (cell) landed = insertHomeBlockAt(draft, gates, structuredClone(drag.block), cell)
-    }, `Add ${drag.name}`)
-    drag.landed = cell ? landed : null
+    const done = dispatcher(design, update)(
+      { op: 'block.drop', block: drag.block, at: cell, gates, from: before.pages.home.blocks },
+      `Add ${drag.name}`
+    )
+    drag.landed = cell && done.ok ? (done.place ?? null) : null
     playReflow(doc, shot)
   }
 

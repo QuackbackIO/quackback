@@ -9,6 +9,7 @@ import type { DesignElement } from './elements'
 import { closestWeight, type BundledFontId } from './fonts'
 import type { PortalPageGates } from './paths'
 import type { PortalDesign } from './schema'
+import { layoutValue } from './defaults'
 
 type Layout = PortalDesign['layout']
 
@@ -42,17 +43,17 @@ export const BAND_LOOKS: readonly BandLook[] = [
   { id: 'blend', label: 'Blend', fields: { band: 'blend' } },
 ]
 
-/** Each band field as it reads when left out. */
-const BAND_DEFAULTS = { blend: 'linear', bandShape: 'full', bandArt: 'none' }
+/** The band fields a look sets back to their defaults (DESIGN_DEFAULTS) before writing its own. */
+const BAND_OPTIONAL = ['blend', 'bandShape', 'bandArt'] as const
 
 /** The band fields that draw: a blend's run only on a blend, art only on a band with colour. */
 function drawnBand(fields: BandFields): Required<BandFields> {
   const band = fields.band
   return {
     band,
-    blend: band === 'blend' ? (fields.blend ?? 'linear') : 'linear',
-    bandShape: fields.bandShape ?? 'full',
-    bandArt: band === 'none' ? 'none' : (fields.bandArt ?? 'none'),
+    blend: band === 'blend' ? layoutValue(fields, 'blend') : 'linear',
+    bandShape: layoutValue(fields, 'bandShape'),
+    bandArt: band === 'none' ? 'none' : layoutValue(fields, 'bandArt'),
   }
 }
 
@@ -73,7 +74,7 @@ export function takeBandLook(draft: PortalDesign, id: string): void {
   const look = BAND_LOOKS.find((each) => each.id === id)
   if (!look) return
   const layout = draft.layout as Record<string, unknown>
-  for (const key of Object.keys(BAND_DEFAULTS)) delete layout[key]
+  for (const key of BAND_OPTIONAL) delete layout[key]
   Object.assign(draft.layout, look.fields)
 }
 

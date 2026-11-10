@@ -12,14 +12,11 @@ import {
   setDesignerPreview,
   subscribeDesignerPreview,
 } from '@/components/public/preview-draft-context'
-import {
-  setFeedWords,
-  setRequestWords,
-  type FeedWordsPart,
-} from '@/lib/shared/design/headline-words'
+import type { FeedWordsPart, WordsField } from '@/lib/shared/design/headline-words'
 import { inLanguage } from '@/lib/shared/design/labels'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { WordsRow } from './block-sections'
+import { dispatcher } from './dispatcher'
 import { PropertyRow, PropertySection } from './properties/properties-panel'
 import { FIND, type FindRow } from './find-rows'
 import { WORDS } from './properties/words'
@@ -27,6 +24,19 @@ import { editOnCanvas } from './words/edit-on-canvas'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
+
+/** Gives words back to the portal's own, in one language. */
+const clearWords = (
+  design: PortalDesign,
+  update: NamedUpdate,
+  field: WordsField,
+  locale: string,
+  label: string
+) =>
+  dispatcher(design, update)(
+    { op: 'words.set', field, locale, doc: { type: 'doc', content: [] } },
+    label
+  )
 
 /** What the portal says without words of its own, in English as the block rows show it. */
 const USUAL: Record<FeedWordsPart, string> = {
@@ -71,7 +81,7 @@ function FeedWordsRow({
       set={!!own}
       others={others}
       resetLabel={`${WORDS.reset} to “${USUAL[part]}”`}
-      onReset={() => update((draft) => setFeedWords(draft, part, locale, ''), `${label}: words`)}
+      onReset={() => clearWords(design, update, { kind: 'feed', part }, locale, `${label}: words`)}
       onEdit={() => {
         onEdit?.()
         editOnCanvas(`feedback.${part}`)
@@ -171,7 +181,15 @@ export function RequestWords({
         set={!!own}
         others={others}
         resetLabel={`${WORDS.reset} to “${REQUEST_USUAL}”`}
-        onReset={() => update((draft) => setRequestWords(draft, locale, ''), `${label}: words`)}
+        onReset={() =>
+          clearWords(
+            design,
+            update,
+            { kind: 'support', part: 'request' },
+            locale,
+            `${label}: words`
+          )
+        }
         onEdit={() => editOnCanvas('support.request')}
       />
     </PropertySection>

@@ -18,6 +18,7 @@ import { ScrubNumber } from './properties/scrub-number'
 import { FontFaces, FontField } from './properties/token-field'
 import { fontTokens } from './properties/tokens'
 import { FONT_NAMES, SECTIONS, STYLE_CHOICES, WORDS } from './properties/words'
+import { fontValue, layoutValue, shapeValue } from '@/lib/shared/design/defaults'
 
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
 type DesignFont = PortalDesign['brand']['fonts']['body']
@@ -50,14 +51,14 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
   const second = !!design.brand.light.support
   const tint: TileChoice = {
     label: 'Current',
-    value: layout.tint ?? 'neutral',
+    value: layoutValue(layout, 'tint'),
     options: tiles(STYLE_CHOICES.tint),
     apply: (draft, v) => void (draft.layout.tint = v as typeof layout.tint),
     reach: 'The current menu item and vote boxes',
   }
   const labelCase: TileChoice = {
     label: 'Capitals',
-    value: fonts.labelCase ?? 'sentence',
+    value: fontValue(fonts, 'labelCase'),
     options: tiles(STYLE_CHOICES.capitals),
     apply: capitals(),
     prop: 'case',
@@ -69,7 +70,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
       return [
         {
           label: 'Shape',
-          value: shape.buttons ?? 'match',
+          value: shapeValue(shape, 'buttons'),
           options: tiles(STYLE_CHOICES.buttonShape),
           apply: (draft, v) => void (draft.shape.buttons = v as typeof shape.buttons),
           prop: 'radius',
@@ -95,7 +96,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
         },
         {
           label: 'Text',
-          value: layout.navText ?? 'muted',
+          value: layoutValue(layout, 'navText'),
           options: tiles(STYLE_CHOICES.menuText),
           apply: (draft, v) => void (draft.layout.navText = v as typeof layout.navText),
           prop: 'color',
@@ -150,7 +151,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
       return [
         {
           label: 'Status',
-          value: layout.status ?? 'colour',
+          value: layoutValue(layout, 'status'),
           options: tiles(STYLE_CHOICES.status).filter(
             ([status]) => status !== 'brand' || (design.brand.logoColours?.length ?? 0) > 1
           ),
@@ -171,7 +172,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
       return [
         {
           label: 'Scale',
-          value: fonts.scale ?? 'standard',
+          value: fontValue(fonts, 'scale'),
           options: tiles(STYLE_CHOICES.scale),
           apply: (draft, v) => void (draft.brand.fonts.scale = v as Fonts['scale']),
           prop: 'size',
@@ -179,7 +180,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
         },
         {
           label: 'Spacing',
-          value: fonts.tracking ?? 'normal',
+          value: fontValue(fonts, 'tracking'),
           options: tiles(STYLE_CHOICES.spacing),
           apply: (draft, v) => void (draft.brand.fonts.tracking = v as Fonts['tracking']),
           prop: 'tracking',
@@ -187,7 +188,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
         },
         {
           label: 'Capitals',
-          value: fonts.headlineCase ?? 'sentence',
+          value: fontValue(fonts, 'headlineCase'),
           options: tiles(STYLE_CHOICES.capitals),
           apply: (draft, v) => void (draft.brand.fonts.headlineCase = v as Fonts['headlineCase']),
           prop: 'case',
@@ -195,7 +196,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
         },
         {
           label: 'Colour',
-          value: fonts.headlineColour ?? 'ink',
+          value: fontValue(fonts, 'headlineColour'),
           options: tiles(STYLE_CHOICES.fill),
           apply: (draft, v) =>
             void (draft.brand.fonts.headlineColour = v as Fonts['headlineColour']),

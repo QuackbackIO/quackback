@@ -25,6 +25,7 @@ import { drawFill, fillFor, hasPageBackground, type BackgroundPage } from './pag
 import type { DESIGN_OPTIONS } from './options'
 import type { PortalDesign } from './schema'
 import { accentRoleTokens, wordsColourTokens, type AccentGround } from './words-colour'
+import { fontValue, layoutValue, shapeValue } from './defaults'
 
 type Mode = 'light' | 'dark'
 export type TokenMap = Record<`--qb-${string}`, string>
@@ -102,17 +103,17 @@ const CASE = { sentence: 'none', upper: 'uppercase' } as const
 
 /** Headline and label type: absent choices are today's. */
 function typeTokens(fonts: Fonts): TokenMap {
-  const [size, leading] = HEADLINE[fonts.scale ?? 'standard']
-  const labels = fonts.labelCase ?? 'sentence'
+  const [size, leading] = HEADLINE[fontValue(fonts, 'scale')]
+  const labels = fontValue(fonts, 'labelCase')
   return {
     '--qb-headline-size': size,
     '--qb-headline-leading': leading,
-    '--qb-page-title-size': PAGE_TITLE[fonts.scale ?? 'standard'],
+    '--qb-page-title-size': PAGE_TITLE[fontValue(fonts, 'scale')],
     // A headline's line grows with it, so it never reads as a caption under a poster.
-    '--qb-subtitle-size': SUBTITLE[fonts.scale ?? 'standard'],
+    '--qb-subtitle-size': SUBTITLE[fontValue(fonts, 'scale')],
     // Tight tracking is for the page headline; smaller headings keep today's.
     '--qb-headline-tracking': fonts.tracking === 'tight' ? '-0.03em' : '-0.02em',
-    '--qb-headline-case': CASE[fonts.headlineCase ?? 'sentence'],
+    '--qb-headline-case': CASE[fontValue(fonts, 'headlineCase')],
     // However a brand sizes it, a headline leads: well above the cards' titles and its own
     // subtitle, and short of a poster that fills the first screen.
     '--qb-headline-floor':
@@ -249,7 +250,7 @@ function bandWords(
   surface: BandSurface
 ): { headline: string; subtitle: string; large: boolean } | null {
   if (doc.layout.band !== 'brand' && doc.layout.band !== 'support') return null
-  if ((doc.layout.bandShape ?? 'full') === 'panel' || doc.brand.bandImage) return null
+  if (layoutValue(doc.layout, 'bandShape') === 'panel' || doc.brand.bandImage) return null
   // A headline set smaller than large text anywhere reads as body text does.
   if (!largeHeadline(doc)) return null
   const light = [t.background, t.foreground, NEAR_WHITE, '#ffffff'].filter(isLight)
@@ -439,7 +440,7 @@ function headerBandTokens(doc: PortalDesign, t: Required<ThemeVariables>, mode: 
  */
 export const headerOverPhoto = (doc: PortalDesign) =>
   headerOnBand(doc) &&
-  (doc.layout.bandShape ?? 'full') === 'full' &&
+  layoutValue(doc.layout, 'bandShape') === 'full' &&
   !doc.brand.bandImage?.homeOnly &&
   photoShade(doc) !== null
 
@@ -455,7 +456,7 @@ const HEADER_VEIL = 15
 export const headerSpans = (doc: PortalDesign) =>
   headerOnBand(doc) &&
   (doc.layout.band === 'blend' || doc.layout.band === 'fade') &&
-  (doc.layout.bandShape ?? 'full') === 'full' &&
+  layoutValue(doc.layout, 'bandShape') === 'full' &&
   !doc.brand.bandImage &&
   (!doc.layout.bandArt || doc.layout.bandArt === 'none')
 
@@ -580,10 +581,10 @@ function footTokens(
     '--qb-band-fade-out': fadeOut ? 'transparent' : 'black',
   })
   const { band } = doc.layout
-  const shape = doc.layout.bandShape ?? 'full'
+  const shape = layoutValue(doc.layout, 'bandShape')
   if (band === 'none') return {}
   if (band === 'fade' || shape === 'inset' || shape === 'split') return foot(CLEAN_EDGE)
-  const blend = doc.layout.blend ?? 'linear'
+  const blend = layoutValue(doc.layout, 'blend')
   const glows = band === 'blend' && blend !== 'linear'
   const gradient = band === 'blend'
   if (!gradient && !fadesIntoPage(surface.behind, t.background)) return foot(CLEAN_EDGE)
@@ -692,9 +693,9 @@ export function photoShade(
 ): NonNullable<NonNullable<PortalDesign['brand']['bandImage']>['shade']> | null {
   const image = doc.brand.bandImage
   if (!image?.shade || doc.layout.band === 'none') return null
-  if ((doc.layout.imagePlace ?? 'side') !== 'cover') return null
-  if ((doc.layout.imagePhone ?? 'show') === 'hide') return null
-  const shape = doc.layout.bandShape ?? 'full'
+  if (layoutValue(doc.layout, 'imagePlace') !== 'cover') return null
+  if (layoutValue(doc.layout, 'imagePhone') === 'hide') return null
+  const shape = layoutValue(doc.layout, 'bandShape')
   return shape === 'full' ? image.shade : null
 }
 
@@ -919,7 +920,7 @@ function bandSurface(doc: PortalDesign, t: Required<ThemeVariables>, mode: Mode)
 /** Size tokens, the same in both modes. */
 export function baseTokens(doc: PortalDesign): TokenMap {
   const [control, field, panel] = RADII[doc.shape.corners]
-  const buttons = doc.shape.buttons ?? 'match'
+  const buttons = shapeValue(doc.shape, 'buttons')
   const [button, composer] = buttons === 'match' ? [control, field] : BUTTON_RADII[buttons]
   const [padding, gap, title] = DENSITY[doc.layout.density]
   return {
@@ -939,10 +940,10 @@ export function baseTokens(doc: PortalDesign): TokenMap {
     '--qb-page-max': PAGE_MAX[doc.layout.width],
     '--qb-image-focus': doc.layout.imagePoint
       ? `${doc.layout.imagePoint.x}% ${doc.layout.imagePoint.y}%`
-      : { left: 'left', centre: 'center', right: 'right' }[doc.layout.imageFocus ?? 'centre'],
+      : { left: 'left', centre: 'center', right: 'right' }[layoutValue(doc.layout, 'imageFocus')],
     // Focused to one side, a side image crops to a portrait in a narrower column.
-    '--qb-image-aspect': (doc.layout.imageFocus ?? 'centre') === 'centre' ? '4 / 3' : '4 / 5',
-    '--qb-image-column': (doc.layout.imageFocus ?? 'centre') === 'centre' ? '0.85fr' : '0.55fr',
+    '--qb-image-aspect': layoutValue(doc.layout, 'imageFocus') === 'centre' ? '4 / 3' : '4 / 5',
+    '--qb-image-column': layoutValue(doc.layout, 'imageFocus') === 'centre' ? '0.85fr' : '0.55fr',
     '--qb-font-body': fontStack(doc.brand.fonts.body),
     '--qb-font-heading': fontStack(doc.brand.fonts.heading),
     '--qb-font-display': fontStack(doc.brand.fonts.display ?? doc.brand.fonts.heading),
@@ -967,11 +968,11 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     // A split panel needs a side image to split with; without one it is a panel within the page.
     'data-qb-band-shape':
       doc.layout.bandShape === 'split' &&
-      !(doc.brand.bandImage && (doc.layout.imagePlace ?? 'side') === 'side')
+      !(doc.brand.bandImage && layoutValue(doc.layout, 'imagePlace') === 'side')
         ? 'inset'
-        : (doc.layout.bandShape ?? 'full'),
-    'data-qb-image-phone': doc.layout.imagePhone ?? 'show',
-    'data-qb-band-height': doc.layout.bandHeight ?? 'roomy',
+        : layoutValue(doc.layout, 'bandShape'),
+    'data-qb-image-phone': layoutValue(doc.layout, 'imagePhone'),
+    'data-qb-band-height': layoutValue(doc.layout, 'bandHeight'),
     // A glow rising from the band's foot, which a short title band leaves off.
     'data-qb-band-glow':
       doc.layout.bandGlow === 'bottom' && (band === 'brand' || band === 'support')
@@ -983,7 +984,7 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
       : 'fill',
     'data-qb-header-band': headerOnBand(doc) ? 'on' : 'off',
     'data-qb-header-span': headerSpans(doc) ? 'on' : headerOverPhoto(doc) ? 'photo' : 'off',
-    'data-qb-status': doc.layout.status ?? 'colour',
+    'data-qb-status': layoutValue(doc.layout, 'status'),
     // In the brand colour, a headline takes the band's accent, read where the headline sits.
     'data-qb-headline': doc.brand.fonts.headlineColour === 'accent' ? 'accent' : 'ink',
     // Titles go on the band only where there is one.
@@ -993,7 +994,7 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
       !doc.layout.bandArt ||
       doc.layout.bandArt === 'none' ||
       band === 'none' ||
-      (doc.brand.bandImage && (doc.layout.imagePlace ?? 'side') !== 'side')
+      (doc.brand.bandImage && layoutValue(doc.layout, 'imagePlace') !== 'side')
         ? 'none'
         : EDGE_ART.has(doc.layout.bandArt)
           ? 'edge'
@@ -1001,7 +1002,7 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     'data-qb-tint':
       doc.layout.tint === 'support' && doc.brand.light.support ? 'support' : 'neutral',
     'data-qb-cards': cards,
-    'data-qb-fill': doc.shape.fill ?? 'accent',
+    'data-qb-fill': shapeValue(doc.shape, 'fill'),
     // The band's button in the second colour, rather than as the other buttons are.
     'data-qb-band-action':
       doc.shape.action === 'support' && doc.brand.light.support
@@ -1010,8 +1011,8 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
           ? 'accent'
           : 'buttons',
     'data-qb-filters': filters,
-    'data-qb-menu-align': header === 'inline' ? (doc.layout.menuAlign ?? 'start') : 'start',
-    'data-qb-hover': doc.shape.hover ?? 'none',
+    'data-qb-menu-align': header === 'inline' ? layoutValue(doc.layout, 'menuAlign') : 'start',
+    'data-qb-hover': shapeValue(doc.shape, 'hover'),
     // What post cards leave out, each on or off.
     'data-qb-card-excerpt': doc.layout.postCardHides?.includes('excerpt') ? 'off' : 'on',
     'data-qb-card-tags': doc.layout.postCardHides?.includes('tags') ? 'off' : 'on',

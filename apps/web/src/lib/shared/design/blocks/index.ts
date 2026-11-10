@@ -10,15 +10,46 @@
  * they belong to Theme. The hero, at the top of each page, is the one block
  * whose look is its own: it is never added or removed, and its settings
  * reach every page.
+ *
+ * One module per Home block. Each Home block lives in this folder in up to
+ * three modules, so that what visitors load stays small:
+ *
+ * - `<block>.ts`, its view: type, grid sizes, the page it needs, what a new
+ *   one holds and the counts it offers. Plain values only; the portal loads
+ *   these (through view.ts, options.ts and home.ts). The list of block types
+ *   (DESIGN_OPTIONS.blockType), BLOCK_SIZES, the pages blocks need
+ *   (homeBlockTypes, blockPageOff) and new blocks' defaults (newBlock) are
+ *   derived from HOME_BLOCK_VIEWS.
+ * - `<block>.schema.ts`, its part of the design document's schema, built from
+ *   the parts schema.ts hands it (BlockSchemaParts); homeBlockSchema lists them.
+ * - `<block>.def.ts`, what the builder and Quackback AI know of it
+ *   (HomeBlockDef): name, purpose, Add sheet job, panel rows (`own`, after the
+ *   shared heading), the settings the AI may change, its examples, the other
+ *   words it is called by (design-ops' blockTypeOf) and its summary.
+ *
+ * Moved so far: composer, updates, help_search, status, contact, boards.
+ * Their views exist for every block; still inline are the defs (HOME below)
+ * and schemas (schema.ts) of welcome, ideas, roadmap, help_topics and links.
+ *
+ * To move one: cut its HOME entry into `<block>.def.ts` as
+ * `<block>Def: HomeBlockDef<'<type>'>`, taking its case of homeSummary into
+ * `summary`; cut its z.object from homeBlockSchema into `<block>.schema.ts` as
+ * `<block>Schema(parts)`, reading counts from its view; then import both
+ * here and in schema.ts in its old place. Nothing else changes.
+ *
+ * Adding a block still touches what draws it, outside this folder: its
+ * renderer (components/public/home/home-blocks.tsx, block-content.ts,
+ * home-prefetch.ts, home-empty.tsx), its icon (designer/block-icon.tsx), the
+ * elements it draws (designer/block-panel.ts), its name for the outline
+ * (names.ts), ADD_ORDER below, and the AI guide's words for it.
  */
 import type { z } from 'zod'
-import type { FlatOp } from './design-ops'
-import type { HomeBlock, HomeBlockType } from './home'
-import { CUSTOM_LOOK, HERO_AI_PATHS, heroSchema, type HeroBlock } from './hero'
-import { BAND_LOOKS } from './curated'
-import { BLOCK_SIZES } from './options'
-import type { BackgroundKind } from './page-background'
-import type { DesignerPage } from './outline'
+import type { HomeBlock, HomeBlockType } from '../home'
+import { CUSTOM_LOOK, HERO_AI_PATHS, heroSchema, type HeroBlock } from '../hero'
+import { BAND_LOOKS } from '../curated'
+import { BLOCK_SIZES } from '../options'
+import type { BackgroundKind } from '../page-background'
+import type { DesignerPage } from '../outline'
 import {
   PAGE_CHOICE_DEFAULTS,
   changelogChoicesSchema,
@@ -27,17 +58,39 @@ import {
   roadmapChoicesSchema,
   supportChoicesSchema,
   type PageChoices,
-} from './page-choices'
-import { homeBlockSchema, type PortalDesign } from './schema'
+} from '../page-choices'
+import { homeBlockSchema, type PortalDesign } from '../schema'
+import { boardsDef } from './boards.def'
+import { composerDef } from './composer.def'
+import { contactDef } from './contact.def'
+import {
+  BLOCK_JOBS,
+  emptyFields,
+  heading,
+  linkField,
+  plural,
+  type BlockExample,
+  type BlockJob,
+  type HomeBlockDef,
+  type Option,
+  type SettingField,
+  type SummaryNames,
+} from './fields'
+import { helpSearchDef } from './help-search.def'
+import { helpTopics } from './help-topics'
+import { ideas } from './ideas'
+import { roadmap } from './roadmap'
+import { statusDef } from './status.def'
+import { updatesDef } from './updates.def'
 
-/** What a block is for, as the Add sheet groups them, in its order. */
-export const BLOCK_JOBS = {
-  answers: 'Help people find answers',
-  hear: 'Hear from customers',
-  progress: 'Show progress',
-  own: 'Your own',
-} as const
-export type BlockJob = keyof typeof BLOCK_JOBS
+export {
+  BLOCK_JOBS,
+  type BlockExample,
+  type BlockJob,
+  type HomeBlockDef,
+  type SettingField,
+  type SummaryNames,
+}
 
 /** The sections of the portal's own pages a visitor would know as blocks of their own. */
 export const SECTION_TYPES = [
@@ -89,99 +142,6 @@ export type SectionBlock =
   | ({ type: 'support.request' } & Pick<PageChoices['support'], 'suggest'>)
 export type AnyBlock = HomeBlock | SectionBlock | HeroBlock
 
-type Option<T> = readonly [value: T, name: string]
-
-/** What every setting says of itself, for the panel's tooltips and for Quackback AI. */
-interface Described {
-  /** What the setting does, in a plain sentence. */
-  about: string
-  /**
-   * Shown in the panel only while another setting is one value: `key`'s
-   * value, or `otherwise` while the block leaves it out, is `is`.
-   */
-  when?: { key: string; is: string; otherwise: string }
-  /** Words edited where they sit on the page, never in the panel; Quackback AI may still set them. */
-  inPlace?: boolean
-  /** A group of switches' shared name, shown over the first of them. */
-  group?: string
-  /**
-   * A setting Quackback AI is not told of in its catalogue, nor shown until
-   * the block sets it: a block's empty state and its words other than its
-   * heading. Listed, they led the AI to write colour marks into headings.
-   */
-  aiUntold?: boolean
-}
-
-/** One setting, as its panel draws it. `key` is the block's own field in the design. */
-export type SettingField = Described &
-  /** Words in the visitor's language; empty is the block's usual words. */
-  (
-    | {
-        kind: 'text'
-        key: string
-        label: string
-        max: number
-        /** What an empty field reads as, in English; the block's name when absent. */
-        placeholder?: string
-      }
-    /**
-     * A few named choices side by side; `looks` says what each value looks
-     * like on the page, by value.
-     */
-    | {
-        kind: 'choice'
-        key: string
-        label: string
-        options: ReadonlyArray<Option<string>>
-        looks: Readonly<Record<string, string>>
-        /** The value a block that leaves it out draws by. */
-        default?: string
-      }
-    /** How many, side by side. */
-    | {
-        kind: 'count'
-        key: string
-        label: string
-        options: readonly number[]
-        /** The value a block that leaves it out draws by. */
-        default?: number
-        /** A count's own name in its tile, such as None for 0. */
-        names?: Readonly<Record<number, string>>
-      }
-    | {
-        kind: 'switch'
-        key: string
-        label: string
-        /** Whether a block that leaves it out shows it. */
-        default?: boolean
-      }
-    /**
-     * Something the workspace has, picked from a list: one roadmap, or up to
-     * `max` help topics. `any` names leaving it to the portal (null, or none picked).
-     */
-    | {
-        kind: 'source'
-        key: string
-        label: string
-        source: 'roadmaps' | 'categories' | 'boards' | 'columns' | 'statuses'
-        multiple: boolean
-        any: string
-        max?: number
-      }
-    /** Its own words, written in the builder's rich text editor. */
-    | { kind: 'words'; key: string; label: string }
-    /** A list of named web addresses. */
-    | { kind: 'links'; key: string; label: string }
-    /** An uploaded image, with what it shows for those who cannot see it. */
-    | { kind: 'image'; key: string; label: string }
-  )
-
-/** A request a person might make of a block, and the operations that make it. */
-export interface BlockExample {
-  request: string
-  ops: readonly FlatOp[]
-}
-
 export interface BlockDef {
   type: BlockType
   name: string
@@ -206,6 +166,8 @@ export interface BlockDef {
   ai: readonly string[]
   /** Requests a person might make of it, each with the operations that make it. */
   examples: readonly BlockExample[]
+  /** Other words a person or Quackback AI may call it by; a Home block's. */
+  aliases?: readonly string[]
   /** Whether it is added from the Add sheet; a page's own sections are always there. */
   addable: boolean
   /**
@@ -215,19 +177,6 @@ export interface BlockDef {
   grid?: { w: number; h: number; minW: number; minH: number }
 }
 
-/** The names a summary can use for what a block points at, by id. */
-export interface SummaryNames {
-  roadmaps?: Readonly<Record<string, string>>
-  boards?: Readonly<Record<string, string>>
-}
-
-const heading: SettingField = {
-  kind: 'text',
-  key: 'heading',
-  label: 'Heading',
-  max: 60,
-  about: 'The title over the block, in place of its usual one; empty gives the usual one back',
-}
 const SORTS: ReadonlyArray<Option<string>> = [
   ['trending', 'Trending'],
   ['top', 'Most votes'],
@@ -251,55 +200,7 @@ const SORT_LOOKS = {
   new: 'the most recent posts first',
 }
 
-/** A block's way on, in its own words, edited where it sits. */
-const linkField: SettingField = {
-  kind: 'text',
-  key: 'link',
-  label: 'Link',
-  max: 40,
-  inPlace: true,
-  aiUntold: true,
-  about: 'The words of its link on, such as "See all posts", in place of its usual ones',
-}
-
-/** What a block of the workspace's data does with nothing to show, and its message then. */
-function emptyFields(usually: 'hide' | 'message', message: string): SettingField[] {
-  return [
-    {
-      kind: 'choice',
-      key: 'whenEmpty',
-      label: 'When there’s nothing',
-      options: [
-        ['hide', 'Hide the block'],
-        ['message', 'Show a message'],
-      ],
-      looks: {
-        hide: 'the block is left out until there is something to show',
-        message: 'the block stays and says its message',
-      },
-      default: usually,
-      aiUntold: true,
-      about: `What it does with nothing to show; usually ${usually === 'hide' ? 'hide' : 'message'}`,
-    },
-    {
-      kind: 'text',
-      key: 'emptyText',
-      label: 'Message',
-      max: 80,
-      placeholder: message,
-      when: { key: 'whenEmpty', is: 'message', otherwise: usually },
-      aiUntold: true,
-      about: `What it says with nothing to show, in place of "${message}"`,
-    },
-  ]
-}
-
-type HomeDef = Omit<BlockDef, 'type' | 'pages' | 'addable' | 'fields'> & {
-  /** Its settings after its heading. */
-  own: readonly SettingField[]
-}
-
-const HOME: Record<HomeBlockType, HomeDef> = {
+const HOME: { [T in HomeBlockType]: HomeBlockDef<T> } = {
   welcome: {
     name: 'Welcome',
     purpose: 'A few words of your own',
@@ -315,6 +216,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
     ],
     repeat: 'many',
     ai: ['heading', 'body'],
+    aliases: ['welcome', 'welcome message'],
     examples: [
       {
         request: 'Change the welcome to: Hi! Tell us how we can help',
@@ -334,20 +236,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
       },
     ],
   },
-  composer: {
-    name: 'Write a post',
-    purpose: 'A box visitors post from',
-    job: 'hear',
-    own: [],
-    repeat: 'once',
-    ai: ['heading'],
-    examples: [
-      {
-        request: 'Put the post box at the top',
-        ops: [{ op: 'move', target: 'composer', value: 'top' }],
-      },
-    ],
-  },
+  composer: composerDef,
   ideas: {
     name: 'Top posts',
     purpose: 'The posts visitors vote for most',
@@ -386,7 +275,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
         kind: 'count',
         key: 'count',
         label: 'How many',
-        options: [3, 5, 10],
+        options: ideas.counts.count,
         about: 'How many posts it lists',
       },
       {
@@ -430,6 +319,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
       'emptyText',
       'link',
     ],
+    aliases: ['posts', 'top posts', 'popular posts', 'ideas'],
     examples: [
       {
         request: 'List the 5 most voted posts from the Billing board',
@@ -484,7 +374,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
         kind: 'count',
         key: 'perColumn',
         label: 'Posts per column',
-        options: [2, 3, 5],
+        options: roadmap.counts.perColumn,
         default: 2,
         about: 'How many posts each column lists',
       },
@@ -509,6 +399,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
       'emptyText',
       'link',
     ],
+    aliases: ['roadmap'],
     examples: [
       {
         request: 'Point the roadmap block at our Public roadmap',
@@ -523,71 +414,8 @@ const HOME: Record<HomeBlockType, HomeDef> = {
       },
     ],
   },
-  updates: {
-    name: 'Latest updates',
-    purpose: 'Your latest changelog entries',
-    job: 'progress',
-    own: [
-      {
-        kind: 'count',
-        key: 'count',
-        label: 'How many',
-        options: [2, 3, 4],
-        about: 'How many changelog entries it lists',
-      },
-      {
-        kind: 'switch',
-        key: 'showDate',
-        label: 'Date',
-        group: 'Each update shows',
-        default: true,
-        about: 'Whether each entry shows its date',
-      },
-      {
-        kind: 'switch',
-        key: 'showSummary',
-        label: 'Summary',
-        group: 'Each update shows',
-        default: false,
-        about: 'Whether each entry shows the start of its words, in two lines',
-      },
-      ...emptyFields('hide', 'No updates yet.'),
-      linkField,
-    ],
-    repeat: 'once',
-    ai: ['heading', 'count', 'showDate', 'showSummary', 'whenEmpty', 'emptyText', 'link'],
-    examples: [
-      {
-        request: 'Show just 2 updates',
-        ops: [{ op: 'set', target: 'updates', key: 'count', value: '2' }],
-      },
-    ],
-  },
-  help_search: {
-    name: 'Help search',
-    purpose: 'Search your help center',
-    job: 'answers',
-    own: [
-      {
-        kind: 'count',
-        key: 'popular',
-        label: 'Popular articles',
-        options: [0, 3, 5],
-        names: { 0: 'None' },
-        default: 5,
-        about: 'How many popular articles it lists under the search; 0 lists none',
-      },
-      linkField,
-    ],
-    repeat: 'once',
-    ai: ['heading', 'popular', 'link'],
-    examples: [
-      {
-        request: 'Put help search under the welcome',
-        ops: [{ op: 'move', target: 'help_search', value: 'below:welcome' }],
-      },
-    ],
-  },
+  updates: updatesDef,
+  help_search: helpSearchDef,
   help_topics: {
     name: 'Help topics',
     purpose: 'Your help center’s topics',
@@ -626,7 +454,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
         kind: 'count',
         key: 'topArticles',
         label: 'Top articles',
-        options: [0, 2, 3],
+        options: helpTopics.counts.topArticles,
         names: { 0: 'None' },
         default: 0,
         about: 'How many of each topic’s articles it lists under the topic; 0 lists none',
@@ -645,6 +473,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
       'emptyText',
       'link',
     ],
+    aliases: ['help topics', 'topics'],
     examples: [
       {
         request: 'Show every help topic again',
@@ -652,83 +481,9 @@ const HOME: Record<HomeBlockType, HomeDef> = {
       },
     ],
   },
-  status: {
-    name: 'Status',
-    purpose: 'Whether everything is working',
-    job: 'answers',
-    own: [
-      {
-        kind: 'switch',
-        key: 'showIncidents',
-        label: 'Show incidents',
-        default: true,
-        about: 'Whether it lists the incidents under way',
-      },
-      ...emptyFields('hide', 'No status to show yet.'),
-      linkField,
-    ],
-    repeat: 'once',
-    ai: ['heading', 'showIncidents', 'whenEmpty', 'emptyText', 'link'],
-    examples: [
-      {
-        request: 'Put status next to the post box',
-        ops: [{ op: 'move', target: 'status', value: 'beside:composer' }],
-      },
-    ],
-  },
-  contact: {
-    name: 'Contact',
-    purpose: 'A way to reach your team',
-    job: 'hear',
-    own: [
-      {
-        kind: 'text',
-        key: 'text',
-        label: 'Words',
-        max: 160,
-        inPlace: true,
-        aiUntold: true,
-        about:
-          'Its line of words under the heading, in place of "Ask a question or tell us about a problem, and we will get back to you."',
-      },
-      {
-        ...linkField,
-        aiUntold: true,
-        about: 'The words of its button, in place of "Start a conversation"',
-      },
-    ],
-    repeat: 'once',
-    ai: ['heading', 'text', 'link'],
-    examples: [
-      {
-        request: 'Move contact to the bottom',
-        ops: [{ op: 'move', target: 'contact', value: 'bottom' }],
-      },
-    ],
-  },
-  boards: {
-    name: 'Boards',
-    purpose: 'Your boards, with their posts',
-    job: 'hear',
-    own: [
-      {
-        kind: 'switch',
-        key: 'showCounts',
-        label: 'Post counts',
-        default: true,
-        about: 'Whether each board shows how many posts it has',
-      },
-      linkField,
-    ],
-    repeat: 'once',
-    ai: ['heading', 'showCounts', 'link'],
-    examples: [
-      {
-        request: 'List our boards beside the top posts',
-        ops: [{ op: 'add', key: 'boards', target: 'beside:ideas', value: '' }],
-      },
-    ],
-  },
+  status: statusDef,
+  contact: contactDef,
+  boards: boardsDef,
   links: {
     name: 'Links',
     purpose: 'Links to your other places',
@@ -744,6 +499,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
     ],
     repeat: 'many',
     ai: ['heading', 'links'],
+    aliases: ['links'],
     examples: [
       {
         request: 'Add a link to our docs at https://docs.example.com at the bottom',
@@ -1458,7 +1214,6 @@ export function aiKeysOf(type: string): readonly string[] {
 
 /* Summaries */
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 const nameOf = (options: ReadonlyArray<Option<string>>, value: string) =>
   options.find(([option]) => option === value)?.[1] ?? value
 
@@ -1487,6 +1242,8 @@ function boardWords(ids: readonly string[] | undefined, names: SummaryNames): st
 }
 
 function homeSummary(block: HomeBlock, names: SummaryNames): string[] {
+  const own = (HOME[block.type] as HomeBlockDef).summary
+  if (own) return own(block, names)
   switch (block.type) {
     case 'welcome': {
       const words = firstWords(block.body)
@@ -1498,8 +1255,6 @@ function homeSummary(block: HomeBlock, names: SummaryNames): string[] {
         plural(block.count, 'post', 'posts'),
         boardWords(block.boardIds, names),
       ]
-    case 'updates':
-      return [plural(block.count, 'latest entry', 'latest entries')]
     case 'roadmap':
       return [
         block.roadmapId === null

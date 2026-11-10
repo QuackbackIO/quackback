@@ -109,10 +109,13 @@ describe('readDesignForEditing', () => {
     expect(state).toMatchObject({ source: 'published', published: { number: 1 } })
     expect(state.design.brand.light.accent).toBe('#0f766e')
     expect(state.live).toEqual(state.design)
+    expect(state.waiting).toBe(0)
     await actions.saveDesignDraft(defaultDesign(), who)
     const drafted = await actions.readDesignForEditing()
     expect(drafted.live.brand.light.accent).toBe('#0f766e')
     expect(drafted.design.brand.light.accent).not.toBe('#0f766e')
+    // The changes waiting are counted here, for Settings > Portal.
+    expect(drafted.waiting).toBeGreaterThan(0)
   })
 
   it('says when the draft was last saved, and nothing without a draft', async () => {

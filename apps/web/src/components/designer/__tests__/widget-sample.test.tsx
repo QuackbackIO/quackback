@@ -6,6 +6,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
+import { defaultDesign } from '@/lib/shared/design/schema'
 import { WidgetFrame, widgetSampleSrc, widgetScale } from '../widget-sample'
 
 afterEach(cleanup)
@@ -22,12 +23,7 @@ describe('the widget sample', () => {
   })
 
   it('posts the design into the widget once it is ready', () => {
-    const design = {
-      css: ':root{--primary:#123456}',
-      attributes: {},
-      fontIds: [],
-      headline: null,
-    }
+    const design = defaultDesign()
     render(<WidgetFrame design={design} theme="light" locale="en" title="Widget" />)
     const frame = screen.getByTitle<HTMLIFrameElement>('Widget')
     expect(frame.getAttribute('src')).toBe('/widget?theme=light&locale=en&preview=true')

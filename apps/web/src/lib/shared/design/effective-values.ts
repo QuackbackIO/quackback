@@ -8,6 +8,7 @@
 import type { PortalDesign } from './schema'
 import type { StyleElement, StylePaint, StyleProps } from './style-tokens'
 import { TUNE_COLOUR_ROLES, tuneHexes, tuneRoleHex, type TuneColourRole } from './tune'
+import { fontValue, shapeValue } from './defaults'
 
 /** What each choice gives at desktop width, in px, as components.ts sets it. */
 export const HEADLINE_PX = { standard: 30, large: 48, display: 76 } as const
@@ -48,12 +49,12 @@ export function brandValues(design: PortalDesign) {
   const tune = tuneHexes(design) ?? {}
   const fonts = design.brand.fonts
   const radii = RADII_PX[design.shape.corners]
-  const buttons = design.shape.buttons ?? 'match'
+  const buttons = shapeValue(design.shape, 'buttons')
   return {
     headline: {
-      size: tune.headline?.size ?? HEADLINE_PX[fonts.scale ?? 'standard'],
+      size: tune.headline?.size ?? HEADLINE_PX[fontValue(fonts, 'scale')],
       weight: tune.headline?.weight ?? fonts.headingWeight,
-      tracking: tune.headline?.tracking ?? TRACKING_EM[fonts.tracking ?? 'normal'],
+      tracking: tune.headline?.tracking ?? TRACKING_EM[fontValue(fonts, 'tracking')],
     },
     heading: {
       size: tune.heading?.size ?? HEADING_PX,

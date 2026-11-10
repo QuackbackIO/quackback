@@ -4,7 +4,7 @@
  * the design shows, or its face.
  */
 import { BUNDLED_FONTS, fontStack } from '@/lib/shared/design/fonts'
-import { resolveDesign } from '@/lib/shared/design/resolve'
+import { resolveDesignCached } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { styleColourValue } from '@/lib/shared/design/style-css'
 import { COLOUR_ROLES, type ColourRoleName } from '@/lib/shared/design/style-tokens'
@@ -55,7 +55,7 @@ export function colourTokens(
   design: PortalDesign,
   roles: readonly ColourRoleName[] = COLOUR_ROLES
 ): ColourToken[] {
-  const resolved = resolveDesign(design)
+  const resolved = resolveDesignCached(design)
   const has = designRoles(design)
   const at = (vars: ThemeVariables | null, mode: 'light' | 'dark', role: ColourRoleName) =>
     vars ? styleColourValue(role, design, vars as Required<ThemeVariables>, mode) : undefined

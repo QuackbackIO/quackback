@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef } from 'react'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import {
   readWordsField,
-  setWordsDoc,
   wordsChangeLabel,
   wordsDocOf,
   wordsKindOf,
@@ -10,6 +9,7 @@ import {
 import { fitDoc, oneLine, plainDoc, sameWords, type WordsDoc } from '@/lib/shared/design/rich-words'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
+import { dispatcher } from './dispatcher'
 
 const EMPTY = { type: 'doc', content: [] } as TiptapContent
 
@@ -39,7 +39,10 @@ export function useCanvasInput(
       const before = wordsDocOf(latest.current, field, locale)
       const kind = wordsKindOf(field)
       if (sameWords(fitDoc(before, kind), fitDoc(doc, kind))) return
-      update((next) => setWordsDoc(next, field, locale, doc), wordsChangeLabel(field, before, doc))
+      dispatcher(latest.current, update)(
+        { op: 'words.set', field, locale, doc },
+        wordsChangeLabel(field, before, doc)
+      )
     },
     [update, locale]
   )

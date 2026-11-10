@@ -12,7 +12,7 @@ import {
 import { designChanges } from '@/lib/shared/design/diff'
 import { checkDesign } from '@/lib/shared/design/check-design'
 import { changeLabel } from '@/lib/shared/design/labels'
-import { designView } from '@/lib/shared/design/design-view'
+import { designView, previewStylesheet } from '@/lib/shared/design/design-view'
 import { createHistory, patchesBetween, type Author } from '@/lib/shared/design/history'
 import { releaseOverrides } from '@/lib/shared/design/overrides'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -381,8 +381,8 @@ export function useDesignDraft() {
 
   const changes = useMemo(() => designChanges(data.live, design), [data.live, design])
   // The preview follows a step behind fast typing, so drawing it never holds up a keystroke.
-  const shownDesign = useDeferredValue(design)
-  const preview = useMemo(() => designPreview(shownDesign), [shownDesign])
+  // The frame takes the design whole and builds its view there, as the server does.
+  const preview = useDeferredValue(design)
 
   // The same object while nothing in it changes, so what reads the draft renders only when it does.
   return useMemo(
@@ -464,20 +464,7 @@ export function nameOfChange(before: PortalDesign, after: PortalDesign): string 
   return changed.length === 1 ? changed[0]! : `${changed[0]} and ${changed.length - 1} more`
 }
 
-/** A design as the preview frame takes it, resolved with the code the server uses. */
-export function designPreview(design: PortalDesign) {
-  const view = designView(design, null)
-  return {
-    css: `${view.themeStyles}\n${view.customCss}`,
-    attributes: view.attributes,
-    fontIds: view.fontIds,
-    headline: view.feedback.headline,
-    home: view.home,
-    titles: view.titles,
-    nav: view.nav,
-    copy: view.feedback.copy,
-    logo: view.logo,
-    statusColours: view.statusColours,
-    bandImage: view.bandImage,
-  }
+/** The stylesheet the preview frame draws a design with, built with the code the server uses. */
+export function designPreviewCss(design: PortalDesign): string {
+  return previewStylesheet(designView(design, null))
 }

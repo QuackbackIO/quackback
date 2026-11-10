@@ -25,6 +25,7 @@ import {
   screenshotSourceSchema,
   type PortalDesign,
 } from './schema'
+import { DESIGN_DEFAULTS, layoutValue, shapeValue } from './defaults'
 
 /** The look a hero has when no curated look makes it, such as one Quackback AI drew. */
 export const CUSTOM_LOOK = 'custom'
@@ -137,39 +138,39 @@ export function heroOf(design: PortalDesign): HeroBlock {
     type: 'hero',
     look: bandLookOf(design) ?? CUSTOM_LOOK,
     image: design.brand.bandImage ?? null,
-    imagePlace: layout.imagePlace ?? 'side',
-    imagePhone: layout.imagePhone ?? 'show',
-    art: layout.bandArt ?? 'none',
-    glow: layout.bandGlow ?? 'none',
-    blend: layout.blend ?? 'linear',
-    fadeFrom: layout.fadeFrom ?? 'top',
-    colour: layout.bandColour ?? 'accent',
-    height: layout.bandHeight ?? 'roomy',
+    imagePlace: layoutValue(layout, 'imagePlace'),
+    imagePhone: layoutValue(layout, 'imagePhone'),
+    art: layoutValue(layout, 'bandArt'),
+    glow: layoutValue(layout, 'bandGlow'),
+    blend: layoutValue(layout, 'blend'),
+    fadeFrom: layoutValue(layout, 'fadeFrom'),
+    colour: layoutValue(layout, 'bandColour'),
+    height: layoutValue(layout, 'bandHeight'),
     align: layout.bandAlign ?? (layout.header === 'centered' ? 'centre' : 'left'),
-    shape: layout.bandShape ?? 'full',
+    shape: layoutValue(layout, 'bandShape'),
     headerBlend: layout.headerOnBand === true,
-    titles: layout.pageTitles ?? 'plain',
+    titles: layoutValue(layout, 'pageTitles'),
     mainAction: mainActionOf(design.pages.home),
     composerWidth: composerWidthOf(design),
     buttonTo: buttonToOf(design.pages.home),
     secondButton: design.pages.home.button?.second === true,
-    action: design.shape.action ?? 'buttons',
+    action: shapeValue(design.shape, 'action'),
   }
 }
 
 /** Each layout field a setting stores, and the value it reads as when left out. */
 const LAYOUT_FIELDS = {
-  imagePlace: ['imagePlace', 'side'],
-  imagePhone: ['imagePhone', 'show'],
-  art: ['bandArt', 'none'],
-  glow: ['bandGlow', 'none'],
-  blend: ['blend', 'linear'],
-  fadeFrom: ['fadeFrom', 'top'],
-  colour: ['bandColour', 'accent'],
-  height: ['bandHeight', 'roomy'],
-  shape: ['bandShape', 'full'],
-  headerBlend: ['headerOnBand', false],
-  titles: ['pageTitles', 'plain'],
+  imagePlace: ['imagePlace', DESIGN_DEFAULTS.layout.imagePlace],
+  imagePhone: ['imagePhone', DESIGN_DEFAULTS.layout.imagePhone],
+  art: ['bandArt', DESIGN_DEFAULTS.layout.bandArt],
+  glow: ['bandGlow', DESIGN_DEFAULTS.layout.bandGlow],
+  blend: ['blend', DESIGN_DEFAULTS.layout.blend],
+  fadeFrom: ['fadeFrom', DESIGN_DEFAULTS.layout.fadeFrom],
+  colour: ['bandColour', DESIGN_DEFAULTS.layout.bandColour],
+  height: ['bandHeight', DESIGN_DEFAULTS.layout.bandHeight],
+  shape: ['bandShape', DESIGN_DEFAULTS.layout.bandShape],
+  headerBlend: ['headerOnBand', DESIGN_DEFAULTS.layout.headerOnBand],
+  titles: ['pageTitles', DESIGN_DEFAULTS.layout.pageTitles],
 } as const satisfies Partial<Record<HeroKey, readonly [keyof PortalDesign['layout'], unknown]>>
 
 /**
