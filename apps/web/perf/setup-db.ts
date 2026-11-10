@@ -47,4 +47,7 @@ for (let i = 1; i <= 5; i++) {
     `Bench conversation ${i}`,
   ])
 }
+// A published design for the builder journeys to edit. The design engine stays
+// off for every other journey; the builder journeys turn it on for themselves.
+run('publish the starting design', ['bun', 'apps/web/perf/seed-design.ts'])
 console.log(`Bench database ready: ${dbName}`)
