@@ -1185,7 +1185,14 @@ describe('a paused workspace', () => {
   it('shows the line without a reason when none is kept', () => {
     renderSettings({ view: 'support', sendingPaused: { cause: null } })
     expect(screen.getByText(LINE).textContent).toBe(
-      'Sending is paused by the email provider because of bounces or complaints.'
+      'Sending is paused by the email provider because of bounces or complaints. Contact support to resume. Sign-in email is not affected.'
+    )
+  })
+
+  it('points a workspace on its own server to its administrator', () => {
+    renderSettings({ view: 'support', sendingPaused: { cause: null }, addressMode: 'any' })
+    expect(screen.getByText(LINE).textContent).toBe(
+      'Sending is paused by the email provider because of bounces or complaints. Your administrator can resume it with the provider. Sign-in email is not affected.'
     )
   })
 })
