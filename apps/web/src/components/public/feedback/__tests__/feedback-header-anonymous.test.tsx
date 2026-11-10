@@ -59,7 +59,7 @@ vi.mock('@/components/public/feedback/posting-to-board', () => ({
   },
 }))
 vi.mock('framer-motion', async () => {
-  const { createElement, forwardRef } = await import('react')
+  const { createContext, createElement, forwardRef } = await import('react')
   const MOTION_PROPS = new Set(['initial', 'animate', 'exit', 'transition', 'variants', 'layout'])
   const make = (tag: string) =>
     forwardRef<HTMLElement, Record<string, unknown>>((props, ref) => {
@@ -76,7 +76,7 @@ vi.mock('framer-motion', async () => {
   )
   return {
     AnimatePresence: ({ children }: { children?: ReactNode }) => children,
-    MotionConfig: ({ children }: { children?: ReactNode }) => children,
+    MotionConfigContext: createContext({}),
     motion: proxy,
     m: proxy,
   }

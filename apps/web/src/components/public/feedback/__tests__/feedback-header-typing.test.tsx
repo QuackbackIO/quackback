@@ -77,12 +77,17 @@ vi.mock('@/components/public/feedback/posting-to-board', () => ({
   },
 }))
 vi.mock('framer-motion', async () => {
-  const { createElement, forwardRef } = await import('react')
+  const { createContext, createElement, forwardRef, useContext } = await import('react')
   const MOTION_PROPS = new Set(['initial', 'animate', 'exit', 'transition', 'variants', 'layout'])
+  const config = createContext<{ reducedMotion?: string }>({})
   const make = (tag: string) =>
     forwardRef<HTMLElement, Record<string, unknown>>((props, ref) => {
       const { children, ...rest } = props
-      const dom: Record<string, unknown> = { ref }
+      // Marks the motion preference each element is drawn under, for the test below.
+      const dom: Record<string, unknown> = {
+        ref,
+        'data-reduced-motion': useContext(config).reducedMotion,
+      }
       for (const [key, value] of Object.entries(rest)) {
         if (!MOTION_PROPS.has(key)) dom[key] = value
       }
@@ -94,9 +99,7 @@ vi.mock('framer-motion', async () => {
   )
   return {
     AnimatePresence: ({ children }: { children?: ReactNode }) => children,
-    // Marks where the composer sets its motion preference, for the test below.
-    MotionConfig: ({ children, reducedMotion }: { children?: ReactNode; reducedMotion?: string }) =>
-      createElement('div', { 'data-reduced-motion': reducedMotion }, children as ReactNode),
+    MotionConfigContext: config,
     motion: proxy,
     m: proxy,
   }
@@ -200,7 +203,7 @@ describe('feedback header title', () => {
   it('honours the visitor’s reduced motion for the whole composer, not the portal', () => {
     renderHeader()
     const composer = document.querySelector('[data-qb-part=composer]')!
-    expect(composer.parentElement!.getAttribute('data-reduced-motion')).toBe('user')
+    expect(composer.getAttribute('data-reduced-motion')).toBe('user')
   })
 
   it('cuts a long draft to the title limit, so it can be submitted', async () => {

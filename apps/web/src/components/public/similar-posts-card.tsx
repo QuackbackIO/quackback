@@ -2,10 +2,11 @@
 import { StatusColourDot } from '@/components/ui/status-badge'
 
 import { memo, useLayoutEffect, useRef, useState } from 'react'
-import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useIntl } from 'react-intl'
 import { LightBulbIcon } from '@heroicons/react/24/outline'
 import { VoteButton } from '@/components/public/vote-button'
+import { MotionAsAsked } from '@/components/public/motion-as-asked'
 import type { SimilarPost } from '@/lib/client/hooks/use-similar-posts'
 import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
@@ -57,7 +58,7 @@ export const SimilarPostsCard = memo(function SimilarPostsCard({
 
   // Reduced motion as the visitor's device asks, here rather than at the portal's root.
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionAsAsked>
       <AnimatePresence>
         {showCard && (
           <motion.div
@@ -121,6 +122,6 @@ export const SimilarPostsCard = memo(function SimilarPostsCard({
           </motion.div>
         )}
       </AnimatePresence>
-    </MotionConfig>
+    </MotionAsAsked>
   )
 })
