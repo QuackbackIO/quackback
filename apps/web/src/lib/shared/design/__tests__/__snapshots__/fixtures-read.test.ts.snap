@@ -12,7 +12,7 @@ exports[`design fixtures > juniper.json builds the same design view 1`] = `"1535
 
 exports[`design fixtures > juniper.json resolves to the same CSS 1`] = `"12241 ee00f2dd794234497eb0976cea01c2acbb8c57f3217f313b696b154ba2295eca"`;
 
-exports[`design fixtures > kiln.json builds the same design view 1`] = `"16969 f2e05cee5b1c45c4e86f14f8afd10d1aa4bbfaefc9ccc5bc0c13b768ac8b336a"`;
+exports[`design fixtures > kiln.json builds the same design view 1`] = `"16939 01194301f0170e3e21ef08fbea5fc2082e4f6f5a401c9861df3673944bb3e83c"`;
 
 exports[`design fixtures > kiln.json resolves to the same CSS 1`] = `"14510 f7601729466c13ec08b77ef915cbfbc12906deafb8fdfc66ae97b02f23d42ab2"`;
 

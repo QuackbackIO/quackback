@@ -28,8 +28,6 @@ interface RoadmapBoardProps {
   isTeamMember?: boolean
   /** A column per status across the page, or one list grouped by status. */
   layout?: PageChoices['roadmap']['board']
-  /** The vote box on the cards. */
-  votes?: boolean
 }
 
 export function RoadmapBoard({
@@ -37,7 +35,6 @@ export function RoadmapBoard({
   initialSelectedRoadmapId,
   isTeamMember,
   layout = 'columns',
-  votes = true,
 }: RoadmapBoardProps): React.ReactElement {
   const intl = useIntl()
   const { selectedRoadmapId, setSelectedRoadmap } = usePublicRoadmapSelection()
@@ -164,7 +161,6 @@ export function RoadmapBoard({
               color={column.color}
               filters={filters}
               layout="group"
-              votes={votes}
             />
           ))}
         </div>
@@ -191,7 +187,6 @@ export function RoadmapBoard({
                   icon={column.icon}
                   color={column.color}
                   filters={filters}
-                  votes={votes}
                 />
               </div>
             ))}

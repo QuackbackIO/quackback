@@ -34,7 +34,9 @@ describe('the portal’s page choices', () => {
         string,
         { safeParse: (v: unknown) => { success: boolean } }
       >
-      expect(Object.keys(keys).sort()).toEqual(Object.keys(shape).sort())
+      // The roadmap's votes switch is retired: still parsed from a stored design, never read.
+      const live = Object.keys(shape).filter((key) => !(page === 'roadmap' && key === 'votes'))
+      expect(Object.keys(keys).sort()).toEqual(live.sort())
       for (const [key, values] of Object.entries(keys)) {
         const list = values === 'boolean' ? [true, false] : [...values]
         for (const value of list) expect(shape[key]!.safeParse(value).success).toBe(true)

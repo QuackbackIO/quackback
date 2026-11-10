@@ -23,8 +23,6 @@ interface RoadmapColumnProps {
   filters?: RoadmapFilters
   /** A column on a board, or a group down a list. */
   layout?: 'column' | 'group'
-  /** The vote box on its cards. */
-  votes?: boolean
 }
 
 export function RoadmapColumn({
@@ -36,7 +34,6 @@ export function RoadmapColumn({
   color,
   filters,
   layout = 'column',
-  votes = true,
 }: RoadmapColumnProps) {
   const headingId = `roadmap-group-${statusId ?? bucketId ?? title}`
   const intl = useIntl()
@@ -72,7 +69,6 @@ export function RoadmapColumn({
         board={{ id: post.board.id, slug: post.board.slug, name: post.board.name }}
         eta={post.eta}
         voting
-        votes={votes}
       />
     </div>
   ))
