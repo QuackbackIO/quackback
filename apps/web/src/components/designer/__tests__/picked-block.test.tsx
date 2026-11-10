@@ -155,6 +155,34 @@ describe('the picked block’s panel', () => {
   it('says nothing of phones on a wider canvas', () => {
     show('block-ideas0001', home())
     expect(screen.queryByText(/Stacks in reading order/)).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Show on phones' })).toBeNull()
+  })
+
+  it('leaves a block off phones from the Phone canvas, and shows it there again', () => {
+    const { seen } = show('block-ideas0001', home(), true)
+    const toggle = screen.getByRole('switch', { name: 'Show on phones' })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(toggle)
+    expect(seen.design.pages.home.blocks[1].look?.phone?.hidden).toBe(true)
+    expect(seen.labels).toEqual(['Top posts: show on phones'])
+    expect(
+      screen.getByRole('switch', { name: 'Show on phones' }).getAttribute('aria-checked')
+    ).toBe('false')
+    fireEvent.click(screen.getByRole('switch', { name: 'Show on phones' }))
+    // Shown again, the block keeps no trace of it.
+    expect(seen.design.pages.home.blocks[1].look).toBeUndefined()
+  })
+
+  it('keeps a block’s phone sizes when it is shown on phones again', () => {
+    const design = home()
+    design.pages.home.blocks[1].look = {
+      phone: { hidden: true, heading: { base: { size: 14 } } },
+    } as never
+    const { seen } = show('block-ideas0001', design, true)
+    fireEvent.click(screen.getByRole('switch', { name: 'Show on phones' }))
+    expect(seen.design.pages.home.blocks[1].look).toEqual({
+      phone: { heading: { base: { size: 14 } } },
+    })
   })
 
   it('says in its panel what the checks found in the block', () => {

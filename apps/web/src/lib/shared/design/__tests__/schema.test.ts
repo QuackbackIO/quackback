@@ -190,3 +190,30 @@ describe('defaultDesign', () => {
     expect(defaultDesign().layout.header).toBe('stacked')
   })
 })
+
+describe('a Home block’s phone layer', () => {
+  const withPhone = (phone: unknown) => {
+    const doc = base()
+    doc.pages.home.blocks = [
+      {
+        id: 'links00001',
+        type: 'links',
+        links: [{ label: 'Docs', url: 'https://docs.example' }],
+        grid: { x: 0, y: 0, w: 12, h: 1 },
+        look: { phone } as never,
+      },
+    ]
+    return doc
+  }
+
+  it('can leave the block off phones, beside its phone sizes', () => {
+    const result = parse(withPhone({ hidden: true, heading: { base: { size: 14 } } }))
+    expect(result.error?.issues ?? []).toEqual([])
+    expect(result.data?.pages.home.blocks[0].look?.phone?.hidden).toBe(true)
+  })
+
+  it('takes only true or false for it, and still no unknown key', () => {
+    expect(parse(withPhone({ hidden: 'yes' })).success).toBe(false)
+    expect(parse(withPhone({ shown: false })).success).toBe(false)
+  })
+})

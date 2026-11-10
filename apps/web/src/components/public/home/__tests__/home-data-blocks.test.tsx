@@ -472,3 +472,27 @@ describe('a block on a tablet', () => {
     expect(section.className.split(/\s+/)).toContain('md:max-lg:self-start')
   })
 })
+
+describe('a block left off phones', () => {
+  const links = (look?: Record<string, unknown>) =>
+    block({ type: 'links', links: [{ label: 'Docs', url: 'https://docs.example' }], look })
+
+  it('is gone below the phone breakpoint for visitors, and drawn on wider screens', async () => {
+    const drawnBlock = await drawn(show(links({ phone: { hidden: true } })))
+    expect(drawnBlock?.className.split(' ')).toContain('max-md:hidden')
+    expect(drawnBlock?.className).not.toMatch(/(^|\s)hidden(\s|$)/)
+    expect(drawnBlock?.hasAttribute('data-qb-phone-hidden')).toBe(true)
+  })
+
+  it('stays in the builder, faded on phones, to be picked', async () => {
+    const drawnBlock = await drawn(show(links({ phone: { hidden: true } }), {}, { samples: true }))
+    expect(drawnBlock?.className).not.toContain('max-md:hidden')
+    expect(drawnBlock?.className.split(' ')).toContain('max-md:opacity-50')
+  })
+
+  it('is not set apart while phones show it', async () => {
+    const drawnBlock = await drawn(show(links()))
+    expect(drawnBlock?.className).not.toContain('max-md:')
+    expect(drawnBlock?.hasAttribute('data-qb-phone-hidden')).toBe(false)
+  })
+})
