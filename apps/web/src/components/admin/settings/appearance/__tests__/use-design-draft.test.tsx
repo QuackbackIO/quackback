@@ -159,8 +159,7 @@ describe('useDesignDraft', () => {
     act(() => result.current.update((draft) => void (draft.brand.light.accent = '#0f766e')))
     expect(result.current.changes.map((c) => c.path)).toEqual(['brand.light.accent'])
     // The preview frame takes the draft whole, and draws it with the server's code.
-    expect(result.current.preview).toBe(result.current.design)
-    expect(designPreviewCss(result.current.preview)).toContain('--qb-accent: #0f766e;')
+    expect(designPreviewCss(result.current.design)).toContain('--qb-accent: #0f766e;')
   })
 
   it('reports a refused publish', async () => {

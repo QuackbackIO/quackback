@@ -55,6 +55,27 @@ export function readDraftView(value: unknown): DraftDesignView | null {
   return storedFilesOnly(designView(parsed.data, null))
 }
 
+/**
+ * The view `next`, keeping each part equal to `prev`'s as the very object it
+ * was, and `prev` itself when nothing in it changed: a draft sent again, or a
+ * change the frame's page draws no differently, then draws nothing anew.
+ */
+export function sharedView(
+  prev: DraftDesignView | null,
+  next: DraftDesignView | null
+): DraftDesignView | null {
+  if (!prev || !next) return next
+  const keys = Object.keys(next) as (keyof DraftDesignView)[]
+  let changed = keys.length !== Object.keys(prev).length
+  const shared: Record<string, unknown> = {}
+  for (const key of keys) {
+    const kept = prev[key] === next[key] || JSON.stringify(prev[key]) === JSON.stringify(next[key])
+    shared[key] = kept ? prev[key] : next[key]
+    if (!kept) changed = true
+  }
+  return changed ? (shared as DraftDesignView) : prev
+}
+
 /** The stylesheet the frame draws a view with (the builder waits for this very text). */
 export const draftStylesheet = previewStylesheet
 

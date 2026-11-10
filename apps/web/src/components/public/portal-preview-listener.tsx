@@ -90,6 +90,8 @@ export function PortalPreviewProvider({
   const [draft, setDraft] = useState<StructuralDraft | null>(null)
   const [design, setDesign] = useState<DraftDesignView | null>(null)
   const designChannel = useRef<DesignChannel | null>(null)
+  // The design drawn now, which an equal one sent again keeps.
+  const shownDesign = useRef<DraftDesignView | null>(null)
   // In the designer: its own click handling; the builder draws what is picked.
   const [designer, setDesigner] = useState<DesignerChannel | null>(null)
   // Trying the page as a visitor: clicks act, nothing is picked or written.
@@ -112,7 +114,14 @@ export function PortalPreviewProvider({
         const value = msg.design
         void import('./portal-preview-design').then((channel) => {
           designChannel.current = channel
-          setDesign(channel.readDraftView(value))
+          const next = channel.sharedView(shownDesign.current, channel.readDraftView(value))
+          if (next && next === shownDesign.current) {
+            // Already drawn: the builder may send its next design at once.
+            window.parent.postMessage({ type: 'quackback:preview-drawn' }, window.location.origin)
+            return
+          }
+          shownDesign.current = next
+          setDesign(next)
         })
       } else if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
         setCss(msg.css)
@@ -138,18 +147,24 @@ export function PortalPreviewProvider({
   }, [active, design])
 
   const stylesheet = useMemo(() => (css ? previewStylesheet(css) : ''), [css])
+  // Built once per design drawn, not on every render of the page around it.
+  const designSheet = useMemo(
+    () => (design && designChannel.current ? designChannel.current.draftStylesheet(design) : ''),
+    [design]
+  )
   // While a draft is previewed: its attributes on <html> (the saved ones come
-  // back when it changes), and a click on a section tells Appearance which.
+  // back when they change), and a click on a section tells Appearance which.
+  const attributes = design?.attributes
   useEffect(() => {
     const channel = designChannel.current
-    if (!design || !channel) return
-    const restore = channel.applyDesignAttributes(design.attributes)
+    if (!attributes || !channel) return
+    const restore = channel.applyDesignAttributes(attributes)
     const stopPicking = active && !designer ? channel.startSectionPicking() : () => {}
     return () => {
       restore()
       stopPicking()
     }
-  }, [design, active, designer])
+  }, [attributes, active, designer])
   useEffect(
     () =>
       active && designer
@@ -207,9 +222,7 @@ export function PortalPreviewProvider({
         </PreviewSamplesContext.Provider>
       </PreviewDesignContext.Provider>
       {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
-      {design && designChannel.current ? (
-        <style data-preview-design="">{designChannel.current.draftStylesheet(design)}</style>
-      ) : null}
+      {designSheet ? <style data-preview-design="">{designSheet}</style> : null}
       {designer ? <style data-preview-designer="">{designer.DESIGNER_CSS}</style> : null}
       {/* Appearance's own hover outline; in the designer the builder draws it. */}
       {design && designChannel.current && !designer ? (

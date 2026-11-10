@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useStore } from 'zustand'
@@ -477,9 +477,6 @@ export function useDesignDraft() {
   )
 
   const changes = useMemo(() => shownChanges(data.live, design), [data.live, design])
-  // The preview follows a step behind fast typing, so drawing it never holds up a keystroke.
-  // The frame takes the design whole and builds its view there, as the server does.
-  const preview = useDeferredValue(design)
 
   // The same object while nothing in it changes, so what reads the draft renders only when it does.
   return useMemo(
@@ -517,7 +514,6 @@ export function useDesignDraft() {
       undoLabel,
       redoLabel,
       saving,
-      preview,
       discard,
       publish,
       restore,
@@ -551,7 +547,6 @@ export function useDesignDraft() {
       undoLabel,
       redoLabel,
       saving,
-      preview,
       discard,
       publish,
       restore,

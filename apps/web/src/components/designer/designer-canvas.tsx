@@ -218,6 +218,8 @@ export function DesignerCanvas({
     draftDirty: true,
     design,
     onReady: tellDesigner,
+    // The page says when it drew each design, so it follows a change on the next frame.
+    paced: true,
   })
   useEffect(() => tellDesigner(iframeRef.current?.contentWindow), [trying, tellDesigner])
 

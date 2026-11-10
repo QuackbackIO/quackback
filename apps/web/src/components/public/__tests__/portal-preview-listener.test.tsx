@@ -27,7 +27,7 @@ import {
   usePreviewWelcomeCard,
 } from '../preview-draft-context'
 
-const renders = { nav: 0, welcomeCard: 0, css: 0 }
+const renders = { nav: 0, welcomeCard: 0, css: 0, pages: 0 }
 
 function NavReader() {
   renders.nav++
@@ -46,6 +46,7 @@ function DraftReader() {
   return <p data-testid="draft">{usePreviewDraft() ? 'draft' : 'none'}</p>
 }
 function PagesReader() {
+  renders.pages++
   const design = usePortalDesign()
   const v2 = design?.engine === 'v2' ? design : undefined
   return (
@@ -90,6 +91,7 @@ beforeEach(() => {
   renders.nav = 0
   renders.welcomeCard = 0
   renders.css = 0
+  renders.pages = 0
   // The provider listens only inside a frame.
   vi.spyOn(window, 'top', 'get').mockReturnValue(framer)
   vi.spyOn(window, 'parent', 'get').mockReturnValue(framer)
@@ -168,7 +170,7 @@ describe('PortalPreviewProvider', () => {
     post({ type: 'quackback:preview-css', css: ':root { --font-sans: Inter }' })
 
     expect(screen.getByTestId('css').textContent).toBe(':root { --font-sans: Inter }')
-    expect(renders).toEqual({ nav: 1, welcomeCard: 1, css: 2 })
+    expect(renders).toMatchObject({ nav: 1, welcomeCard: 1, css: 2 })
   })
 
   it('keeps the navigation as it was when only the welcome card changes', () => {
@@ -180,7 +182,7 @@ describe('PortalPreviewProvider', () => {
 
     expect(screen.getByTestId('welcome').textContent).toBe('Hello')
     expect(screen.getByTestId('nav').textContent).toBe(JSON.stringify(nav))
-    expect(renders).toEqual({ nav: 2, welcomeCard: 3, css: 1 })
+    expect(renders).toMatchObject({ nav: 2, welcomeCard: 3, css: 1 })
   })
 
   // The saved theme sets the font and radius on body (and the font family with
@@ -226,6 +228,22 @@ describe('a design draft in the preview', () => {
     expect(drawn()).toEqual([])
     await postDesign({ type: 'quackback:preview-design', design: draftDesign() })
     expect(drawn()).toEqual([[{ type: 'quackback:preview-drawn' }, window.location.origin]])
+  })
+
+  it('says at once that it drew a design sent again, drawing nothing anew', async () => {
+    const drawn = () =>
+      vi
+        .mocked(framer.postMessage)
+        .mock.calls.filter(
+          ([message]) => (message as { type?: string }).type === 'quackback:preview-drawn'
+        ).length
+    await postDesign({ type: 'quackback:preview-design', design: draftDesign() })
+    const pages = renders.pages
+    expect(drawn()).toBe(1)
+    // The same design afresh, as the builder reads it back after a publish.
+    await postDesign({ type: 'quackback:preview-design', design: draftDesign() })
+    expect(drawn()).toBe(2)
+    expect(renders.pages).toBe(pages)
   })
 
   it('draws the draft with the view the server builds for it, then puts the saved one back', async () => {

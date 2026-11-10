@@ -139,7 +139,9 @@ export function DesignerShell({
   // Quackback AI's conversation.
   const { ai } = useDesignerAi(draft, { page, locale }, workspaceName, onAiApplied)
   const [now] = useState(() => new Date())
-  const canvasDesign = useCanvasDesign(draft.preview)
+  // The frame takes the design whole and builds its view there, as the server does. It is
+  // sent once a frame (see usePreviewPosting), so the builder draws each change only once.
+  const canvasDesign = useCanvasDesign(design)
   const checks = useMemo(() => designChecks(design), [design])
 
   const { said, say, undo, redo } = useSaid(draft)
@@ -342,7 +344,7 @@ export function DesignerShell({
         locale={locale}
         sort={design.pages.feedback.defaultSort}
         live={draft.live}
-        draft={draft.preview}
+        draft={design}
       />
     ),
   })
