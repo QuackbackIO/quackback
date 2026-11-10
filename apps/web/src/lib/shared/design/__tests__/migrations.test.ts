@@ -99,7 +99,7 @@ const AFTER: Record<string, (doc: Json) => void> = {
     }),
   'hover-lift': (doc) => {
     expect(doc.shape).not.toHaveProperty('hover')
-    expect((doc.style as Json).postCard).toEqual({ hover: { lift: 2, shadow: 'floating' } })
+    expect((doc.style as Json).postCard).toEqual({ hover: { lift: 2, shadow: 'lift' } })
   },
   'drop-ring-colours': (doc) => {
     expect(doc.style).toEqual({ button: { focus: { ringWidth: 3 } } })
@@ -188,7 +188,7 @@ describe('design migrations', () => {
     // Lift lands on post cards the split made, keeping the card look's own hover.
     expect((migrated.style as Json).postCard).toEqual({
       base: { radius: 4 },
-      hover: { lift: 2, shadow: 'floating' },
+      hover: { lift: 2, shadow: 'lift' },
     })
     expect(migrated).not.toHaveProperty('vocabulary')
     expect(portalDesign.safeParse(migrated).success).toBe(true)

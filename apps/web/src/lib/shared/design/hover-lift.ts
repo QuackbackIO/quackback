@@ -12,8 +12,8 @@ export type HoverTile = 'none' | 'lift' | 'arrow'
 
 /** What Lift writes, as the old motion drew it: up 2px, with a soft shadow below. */
 export const LIFT_LOOKS = {
-  postCard: { lift: 2, shadow: 'floating' },
-  button: { lift: 2, shadow: 'floating' },
+  postCard: { lift: 2, shadow: 'lift' },
+  button: { lift: 2, shadow: 'lift' },
 } as const satisfies Partial<Record<keyof StyleSheet, StyleProps>>
 
 const LIFTED = Object.keys(LIFT_LOOKS) as Array<keyof typeof LIFT_LOOKS>

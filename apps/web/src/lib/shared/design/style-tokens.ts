@@ -98,8 +98,11 @@ export const stylePaint = z.union([
 ])
 export type StylePaint = z.output<typeof stylePaint>
 
-/** Shadows, shallowest first; glow is a soft ring of the brand colour. */
-export const STYLE_SHADOWS = ['none', 'soft', 'lifted', 'floating', 'deep', 'glow'] as const
+/**
+ * Shadows, shallowest first; glow is a soft ring of the brand colour. Lift is
+ * the one the Hover tile's Lift draws (hover-lift.ts): stored, never offered.
+ */
+export const STYLE_SHADOWS = ['none', 'soft', 'lifted', 'floating', 'deep', 'glow', 'lift'] as const
 
 /* Properties */
 
@@ -653,7 +656,10 @@ function propSchema(prop: StyleProp): z.ZodType {
     case 'number':
       return z.number().min(info.min).max(info.max)
     case 'choice':
-      return z.enum(Object.keys(info.looks) as [string, ...string[]])
+      // A shadow may also be Lift's own, which only the Hover tile writes.
+      return prop === 'shadow'
+        ? z.enum(STYLE_SHADOWS)
+        : z.enum(Object.keys(info.looks) as [string, ...string[]])
   }
 }
 

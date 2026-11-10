@@ -151,6 +151,19 @@ describe('the style token registry', () => {
     }
   })
 
+  it('draws Lift with the shadow the old Lift motion drew, offered nowhere as a choice', async () => {
+    const { withHoverLift, LIFT_LOOKS } = await import('../hover-lift')
+    const old = { ...defaultDesign(), shape: { ...defaultDesign().shape, hover: 'lift' } }
+    const r = resolveDesign(portalDesign.parse(withHoverLift(old as never)))
+    const lifted = '0 6px 16px -4px rgb(0 0 0 / 0.18)'
+    expect(r.tokens.light['--qb-st-postCard-hover-shadow']).toBe(lifted)
+    expect(r.tokens.light['--qb-st-button-hover-shadow']).toBe(lifted)
+    expect(LIFT_LOOKS.postCard.shadow).toBe('lift')
+    // Not a shadow anyone picks: the panel and the AI never offer it.
+    expect(Object.keys(STYLE_PROPS.shadow.looks)).not.toContain('lift')
+    expect(styleText()).toContain('shadow (none|soft|lifted|floating|deep|glow)')
+  })
+
   it('bounds a text size as an exact value does, so either layer holds the same sizes', () => {
     expect(STYLE_PROPS.size).toMatchObject({ min: 10, max: 200 })
     expect(tuneSchema.shape.headline.safeParse({ size: 200 }).success).toBe(true)
