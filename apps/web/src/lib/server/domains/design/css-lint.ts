@@ -56,7 +56,8 @@ const LOADERS = new Set([
 ])
 
 /** A loading function anywhere in raw text, such as a custom property's value. */
-const LOADER_TEXT = /(?:^|[^\w-])(?:url|(?:-webkit-)?image-set|src|image|(?:-webkit-)?cross-fade)\s*\(/i
+const LOADER_TEXT =
+  /(?:^|[^\w-])(?:url|(?:-webkit-)?image-set|src|image|(?:-webkit-)?cross-fade)\s*\(/i
 
 /** An identifier with its CSS escapes read, so `\69 mage-set` is image-set. */
 function unescapeCss(text: string): string {

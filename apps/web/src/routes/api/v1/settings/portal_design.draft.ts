@@ -20,9 +20,7 @@ export const Route = createFileRoute('/api/v1/settings/portal_design/draft')({
           const { normalizeRevision } =
             await import('@/lib/server/domains/settings-registry/service')
           const { discardDesignDraft } = await import('@/lib/server/domains/design/design.actions')
-          const result = await discardDesignDraft(
-            ifMatch ? normalizeRevision(ifMatch) : undefined
-          )
+          const result = await discardDesignDraft(ifMatch ? normalizeRevision(ifMatch) : undefined)
           if (!result.ok) return http.refusalResponse(result)
           return noContentResponse()
         } catch (error) {
