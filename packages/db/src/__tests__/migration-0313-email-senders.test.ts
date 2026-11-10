@@ -6,8 +6,10 @@ import { createDb, type Database } from '../client'
 
 /**
  * 0313 records which address each kind of email sends from. Every existing
- * email keeps the sender it had: support and changelog keep their addresses,
- * feedback and status stay on the platform address, and no default is written.
+ * email keeps the sender it had: support replies from the inbox where there is
+ * one, with its support address behind that, and from its address otherwise;
+ * changelog keeps its address; feedback and status stay on the platform
+ * address, and no default is written.
  * The file is applied twice against scratch tables, and the second run must
  * change nothing, even after an admin has cleared a sender in between.
  */
@@ -123,25 +125,33 @@ describe.skipIf(!dbAvailable)('migration 0313 email senders', () => {
     expect(second).toEqual(first)
   })
 
-  it('replies from the inbox when it forwards a different address than support sends from', async () => {
-    const { first } = await backfill([
-      { ...INBOUND, forwardingTarget: 'support@acme.com' },
-      { address: 'help@acme.com', module: 'support' },
-    ])
-    expect(first).toEqual([{ surface: 'support', mode: 'inbox', address: null }])
+  it('keeps the support address behind the inbox, whatever address is forwarded', async () => {
+    for (const forwardingTarget of ['support@acme.com', 'Help@Acme.com']) {
+      const { first, second } = await backfill([
+        { ...INBOUND, forwardingTarget },
+        { address: 'help@acme.com', module: 'support' },
+        { address: 'later@acme.com', module: 'support' },
+      ])
+      expect(first).toEqual([{ surface: 'support', mode: 'inbox', address: 'help@acme.com' }])
+      expect(second).toEqual(first)
+    }
   })
 
-  it('keeps the support address when it is the one forwarded in', async () => {
-    const { first } = await backfill([
-      { ...INBOUND, forwardingTarget: 'Support@Acme.com' },
-      { address: 'support@acme.com', module: 'support' },
-    ])
-    expect(first).toEqual([{ surface: 'support', mode: 'address', address: 'support@acme.com' }])
-  })
-
-  it('keeps the support address beside the platform route, which forwards nothing', async () => {
+  it('keeps the support address behind the platform route, which forwards nothing', async () => {
     const { first } = await backfill([INBOUND, { address: 'help@acme.com', module: 'support' }])
-    expect(first).toEqual([{ surface: 'support', mode: 'address', address: 'help@acme.com' }])
+    expect(first).toEqual([{ surface: 'support', mode: 'inbox', address: 'help@acme.com' }])
+  })
+
+  it('puts no other address behind the inbox', async () => {
+    const { first } = await backfill([
+      INBOUND,
+      { address: 'news@acme.com', module: 'changelog' },
+      { address: 'gone@acme.com', module: 'support', deleted: true },
+    ])
+    expect(first).toEqual([
+      { surface: 'changelog', mode: 'address', address: 'news@acme.com' },
+      { surface: 'support', mode: 'inbox', address: null },
+    ])
   })
 
   it('chooses the inbox for the platform route alone', async () => {
@@ -162,7 +172,7 @@ describe.skipIf(!dbAvailable)('migration 0313 email senders', () => {
   it('does not write back a sender cleared after it ran', async () => {
     const { first, second } = await backfill(
       [{ address: 'help@acme.com', module: 'support' }],
-      'DELETE FROM "_m0311_email_senders"'
+      'DELETE FROM "_m0313_email_senders"'
     )
     expect(first).toEqual([{ surface: 'support', mode: 'address', address: 'help@acme.com' }])
     expect(second).toEqual([])
