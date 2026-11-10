@@ -135,6 +135,19 @@ describe('the launch path', () => {
     )
   })
 
+  it('leads the polish with the brand where the goal’s customers see the portal', () => {
+    const polish = (status: LaunchStatus) =>
+      launchPath(status).later.filter((task) => task.classification !== 'prerequisite')
+    // The other picked goal's step (Messenger) still comes first.
+    expect(ids(launchPath(base).later)[0]).toBe('connect-messenger')
+    expect(ids(polish(base))[0]).toBe('customize-branding')
+    expect(ids(polish({ ...base, goals: ['help_center'] }))[0]).toBe('customize-branding')
+    // Support leads with its own steps and keeps the polish in its order.
+    expect(ids(polish({ ...base, goals: ['customer_support', 'product_feedback'] }))[0]).not.toBe(
+      'customize-branding'
+    )
+  })
+
   it('never offers an integration below the plan that includes it', () => {
     expect(ids(buildLaunchTasks(base))).not.toContain('connect-integration')
     expect(ids(buildLaunchTasks({ ...base, features: undefined }))).not.toContain(

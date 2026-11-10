@@ -226,3 +226,36 @@ it('polls only a pending lookup, and only a bounded number of times', () => {
   expect(brandingPollInterval(null, 0)).toBe(false)
   expect(brandingPollInterval(undefined, 0)).toBe(false)
 })
+
+it('reads the launch plan again once a lookup it watched lands, for the brand step’s link', async () => {
+  const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries')
+  let finish!: (value: AutomaticBrandingStatus) => void
+  server.get.mockImplementation(noArgs(async () => status('eligible')))
+  server.start.mockImplementation(
+    noArgs(
+      () =>
+        new Promise<AutomaticBrandingStatus>((resolve) => {
+          finish = resolve
+        })
+    )
+  )
+  const { client } = await mount()
+  await waitFor(() => expect(server.start).toHaveBeenCalledTimes(1))
+  expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['admin', 'onboarding'] })
+  finish(status('failed'))
+  await waitFor(() =>
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['admin', 'onboarding'] })
+  )
+  invalidate.mockRestore()
+  client.clear()
+})
+
+it('leaves the launch plan alone for a lookup that landed before it was opened', async () => {
+  const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries')
+  server.get.mockImplementation(noArgs(async () => applied))
+  const { client } = await mount()
+  await screen.findByText('Logo from example.com')
+  expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['admin', 'onboarding'] })
+  invalidate.mockRestore()
+  client.clear()
+})
