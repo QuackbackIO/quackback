@@ -50,6 +50,16 @@ describe('chipPlacement', () => {
     })
   })
 
+  it('keeps wholly clear of something about as small as itself, such as the logo', () => {
+    // At the top of the canvas: below it, never over it.
+    const logo = { left: 50, top: 10, width: 70, height: 16 }
+    const placed = chipPlacement(logo, chip, room)!
+    expect(placed.top).toBeGreaterThanOrEqual(logo.top + logo.height)
+    // With room above: above it.
+    const lower = chipPlacement({ ...logo, top: 100 }, chip, room)!
+    expect(lower.top + chip.height).toBeLessThanOrEqual(100)
+  })
+
   it('stays at the top of what shows of a block scrolled partly out of view', () => {
     const placed = chipPlacement({ left: 40, top: -150, width: 400, height: 300 }, chip, room)
     expect(placed).toEqual({ left: 52, top: 8, inside: true })
