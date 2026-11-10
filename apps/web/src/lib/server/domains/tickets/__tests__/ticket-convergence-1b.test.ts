@@ -614,9 +614,10 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(conversation.visitorPrincipalId).toBe(requesterP)
       expect(conversation.channel).toBe('messenger')
 
-      // The opening message is the agent's summary, conversation-parented;
-      // the pipeline claims the conversation for the filing principal — the
-      // same born-owned shape the ticket gets from createTicket's defaults.
+      // The opening message is the agent's summary, conversation-parented.
+      // The ticket is born owned by the filing principal (createTicket's
+      // defaults); the conversation is not, because a service principal never
+      // claims a conversation by replying.
       const messages = await testDb
         .select()
         .from(conversationMessages)
@@ -624,7 +625,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(messages).toHaveLength(1)
       expect(messages[0].senderType).toBe('agent')
       expect(messages[0].principalId).toBe(agentP)
-      expect(conversation.assignedAgentPrincipalId).toBe(agentP)
+      expect(conversation.assignedAgentPrincipalId).toBeNull()
       const ticket = await readTicket(dto.id as TicketId)
       expect(ticket.assigneePrincipalId).toBe(agentP)
       // An opening message is never a first response, whichever parent it
