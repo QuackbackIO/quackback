@@ -17,8 +17,9 @@ import { Quackback } from '@quackback/widget'
 
 Quackback.init({ instanceUrl: 'https://feedback.yourcompany.com' })
 
-// When you know who the user is:
-Quackback.identify({ id: 'u_123', email: 'ada@example.com', name: 'Ada' })
+// When you know who the user is, pass a short-lived token your server signed
+// with the widget secret (HS256). Never sign tokens in the browser.
+Quackback.identify({ ssoToken })
 
 // Deep-link to a specific view:
 Quackback.open({ view: 'new-post', title: 'Bug:', board: 'bugs' })
@@ -34,7 +35,7 @@ function App() {
 
   useQuackbackInit({
     instanceUrl: 'https://feedback.yourcompany.com',
-    identity: user ? { id: user.id, email: user.email, name: user.name } : undefined,
+    identity: user ? { ssoToken: user.quackbackToken } : undefined, // signed by your server
   })
 
   useQuackbackEvent('post:created', (post) => {
@@ -107,7 +108,7 @@ Quackback.init({
     'pl' |
     'th' |
     'uk', // override auto-detect
-  identity: { id, email, name } | { ssoToken }, // bundle identify into init
+  identity: { ssoToken }, // bundle identify into init
   tracking: true, // false = no pageview beacons or new device id until tracking(true)
 })
 ```
@@ -129,11 +130,10 @@ The launcher and panel work either way; only pageview tracking waits for consent
 
 ```ts
 Quackback.identify() // anonymous
-Quackback.identify({ id: 'u_123', email: 'ada@x.com', name: 'Ada' }) // unverified
-Quackback.identify({ ssoToken: 'eyJ...' }) // verified
+Quackback.identify({ ssoToken: 'eyJ...' }) // signed by your server
 ```
 
-See the [Identify users guide](https://quackback.io/docs/widget/identify-users) for JWT claims and server examples.
+The server only accepts a signed `ssoToken`. An unsigned `{ id, email, name }` identity is rejected with `VALIDATION_ERROR`, so nobody can pose as another user. See the [Identify users guide](https://feedback.quackback.io/hc/en/articles/55-identify-users) for the JWT claims and server examples.
 
 ### `open` deep-links
 
@@ -174,7 +174,7 @@ unsubscribe()
 
 ## Docs
 
-Full documentation: https://quackback.io/docs/widget
+Full documentation: https://feedback.quackback.io/hc
 
 ## License
 
