@@ -517,12 +517,13 @@ async function getSeats7d(): Promise<ScaleBracket> {
 /**
  * The daily snapshot, and the workspace id a hosted ping is grouped under.
  * The id is returned beside the payload, never inside it: a self-hosted
- * ping carries no workspace identifier.
+ * ping carries no workspace identifier. Null when the instance has no stored
+ * id yet, so nothing is sent.
  */
 export async function buildPayload(): Promise<{
   payload: TelemetryPayload
   workspaceId: string | null
-}> {
+} | null> {
   const [instanceId, features, workspace, scale, seats7d, extras, activity] = await Promise.all([
     getOrCreateInstanceId(),
     getCapabilityFeatures(),
@@ -532,6 +533,7 @@ export async function buildPayload(): Promise<{
     getIntegrationsAndLocales(),
     getActivity(),
   ])
+  if (!instanceId) return null
   const [platform, auth] = await Promise.all([
     getPlatform(workspace.configFile),
     getAuth(workspace.authConfig),
