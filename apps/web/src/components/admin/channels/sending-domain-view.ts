@@ -188,14 +188,9 @@ export function dnsHostGuide(
   const host = domain.preflight.dnsHost
   if (!host || host === 'other') return null
   const { name, url } = DNS_HOSTS[host]
+  // The one host with a setting that breaks these records when left on.
   const proxies = host === 'cloudflare' && domain.dnsRecords.some((r) => r.type === 'CNAME')
-  const tip = proxies
-    ? 'Add each CNAME as DNS only, not proxied.'
-    : // Only claimed when the zone is known: a subdomain's names are not
-      // relative to the zone otherwise.
-      domain.preflight.zone
-      ? `It adds ${zoneOf(domain)} to each name itself, so enter the names as shown.`
-      : null
+  const tip = proxies ? 'Add each CNAME as DNS only, not proxied.' : null
   return { name, tip, url: url ?? null }
 }
 
@@ -228,10 +223,6 @@ export function instructionsText(domain: SendingDomainDTO): string {
     ...lines,
   ].join('\n')
 }
-
-/** A new email carrying those instructions, for whoever manages the domain's DNS. */
-export const instructionsMailto = (domain: SendingDomainDTO): string =>
-  `mailto:?subject=${encodeURIComponent(`DNS records for ${domain.domain}`)}&body=${encodeURIComponent(instructionsText(domain))}`
 
 /**
  * What adding an address does about its domain, as the server will decide it:

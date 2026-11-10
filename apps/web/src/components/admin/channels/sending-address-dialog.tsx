@@ -136,7 +136,7 @@ function SendingAddressForm({
   const bringsRecords = setsUpDomains && standing?.kind === 'new'
   const name = senderName.trim() || workspaceName
   // Shown once there is an address to show: the sender line as an inbox has it.
-  const preview = adding && !found ? null : name ? `${name} <${typed}>` : typed
+  const preview = !adding || !found ? null : name ? `${name} <${typed}>` : typed
 
   const submit = () => {
     setError(null)

@@ -202,18 +202,8 @@ const useClipboardMock = () =>
     configurable: true,
   })
 
-/** Open the menu that passes the records on, as someone who does not manage the DNS would. */
-async function openSendMenu() {
-  const user = userEvent.setup()
-  // userEvent brings a clipboard of its own; the test's is put back over it.
-  useClipboardMock()
-  await user.click(screen.getByRole('button', { name: 'Send to whoever manages DNS' }))
-  return user
-}
-
 async function copyInstructions() {
-  const user = await openSendMenu()
-  await user.click(await screen.findByRole('menuitem', { name: 'Copy instructions' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Copy instructions' }))
   await waitFor(() => expect(clipboard).toHaveBeenCalled())
   return clipboard.mock.calls[0][0]
 }
@@ -779,25 +769,13 @@ describe('the record table', () => {
     expect(document.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(0)
   })
 
-  it('copies instructions as plain text with relative names, and says it did', async () => {
+  it('copies instructions as plain text with relative names', async () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [domain()] })
     const text = await copyInstructions()
     expect(text).toContain('TXT  _quackback  quackback-domain-verification=abc')
     expect(text).toContain('MX 10  qb-bounce  feedback-smtp.example.com')
     expect(text).not.toContain('_quackback.acme.com')
-    expect(toastSuccess).toHaveBeenCalledWith('Instructions copied')
-  })
-
-  it('offers the same instructions as a new email', async () => {
-    renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [domain()] })
-    await openSendMenu()
-    const href = (await screen.findByRole('menuitem', { name: 'Write an email' })).getAttribute(
-      'href'
-    )
-    expect(href).toMatch(/^mailto:\?subject=DNS%20records%20for%20acme\.com&body=/)
-    expect(decodeURIComponent(href ?? '')).toContain(
-      'TXT  _quackback  quackback-domain-verification=abc'
-    )
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy()
   })
 })
 
@@ -824,35 +802,22 @@ describe('guidance while records are wanted', () => {
       addresses: [address('a1', 'help@acme.com')],
       domains: [domain({ preflight: { dnsHost: 'cloudflare', zone: 'acme.com' } })],
     })
-    expect(
-      within(panel()).getByText(
-        'Your DNS is at Cloudflare. Add each CNAME as DNS only, not proxied.'
-      )
-    ).toBeTruthy()
+    expect(panel().querySelector('[data-slot="dns-host"]')?.textContent).toBe(
+      'Your DNS is at Cloudflare. Add each CNAME as DNS only, not proxied. Open Cloudflare'
+    )
     const link = within(panel()).getByRole('link', { name: 'Open Cloudflare' })
     expect(link.getAttribute('href')).toMatch(/^https:\/\/dash\.cloudflare\.com\//)
     expect(link.getAttribute('target')).toBe('_blank')
   })
 
-  it('says the host adds the zone itself where proxying is not the risk', () => {
+  it('names a host with nothing to watch for in as few words', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com')],
       domains: [domain({ preflight: { dnsHost: 'godaddy', zone: 'acme.com' } })],
     })
-    expect(
-      within(panel()).getByText(
-        'Your DNS is at GoDaddy. It adds acme.com to each name itself, so enter the names as shown.'
-      )
-    ).toBeTruthy()
-    expect(within(panel()).getByRole('link', { name: 'Open GoDaddy' })).toBeTruthy()
-  })
-
-  it('makes no claim about names when the zone is not known', () => {
-    renderSettings({
-      addresses: [address('a1', 'help@updates.acme.com')],
-      domains: [domain({ domain: 'updates.acme.com', preflight: { dnsHost: 'namecheap' } })],
-    })
-    expect(within(panel()).getByText('Your DNS is at Namecheap.')).toBeTruthy()
+    expect(panel().querySelector('[data-slot="dns-host"]')?.textContent).toBe(
+      'Your DNS is at GoDaddy. Open GoDaddy'
+    )
   })
 
   it('says nothing about a host it does not recognise', () => {
@@ -893,7 +858,9 @@ describe('guidance while records are wanted', () => {
         }),
       ],
     })
-    expect(within(panel()).getByText('No DMARC record on acme.com')).toBeTruthy()
+    expect(panel().querySelector('[data-slot="dmarc-advisory"]')?.textContent).toContain(
+      'No DMARC record on acme.com.'
+    )
     // Not among the records to publish: it is optional.
     expect(panel().querySelectorAll('[data-slot="dns-record"]')).toHaveLength(3)
     fireEvent.click(within(panel()).getByRole('button', { name: 'Show the record' }))

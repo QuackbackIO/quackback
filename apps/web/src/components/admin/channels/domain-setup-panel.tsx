@@ -3,29 +3,19 @@
  * it: what to publish while it is being set up or needs fixing, and what to
  * keep in place once it is live.
  *
- * While records are still wanted it also says how many were found, where the
- * domain's DNS is managed when its nameservers say, and offers the records in
- * a form to pass on, since the person setting this up often does not manage
- * the DNS themselves.
+ * While records are still wanted it also says how many were found and where
+ * the domain's DNS is managed when its nameservers say, each in one line, and
+ * copies the records for whoever manages the DNS.
  */
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { ArrowTopRightOnSquareIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
-import { toast } from 'sonner'
 import { DnsRecordTable } from '@/components/shared/dns-record-table'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { SendingRecordTable } from './dns-record-table'
 import {
   dnsHostGuide,
-  instructionsMailto,
   instructionsText,
   lacksDmarc,
   lastCheckedAt,
@@ -62,7 +52,7 @@ export function DomainSetupPanel({
       data-slot="domain-setup-panel"
       className="space-y-3 border-t border-border/50 bg-muted/20 px-4 py-3 sm:px-6"
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="text-sm font-medium">
           {phase === 'live'
             ? domain.domain
@@ -71,37 +61,28 @@ export function DomainSetupPanel({
               : `Set up ${domain.domain}`}
         </h3>
         {phase !== 'live' && total > 0 && (
-          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {found} of {total} records found
-            <span
-              aria-hidden="true"
-              className="block h-1.5 w-24 overflow-hidden rounded-full bg-muted"
-            >
-              <span
-                className="block h-full rounded-full bg-success transition-all duration-300"
-                style={{ width: `${(found / total) * 100}%` }}
-              />
-            </span>
           </p>
         )}
       </div>
       {host && (
-        <div
-          data-slot="dns-host"
-          className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-field border border-border/60 bg-card px-3 py-2"
-        >
-          <p className="min-w-48 flex-1 text-[13px]">
-            Your DNS is at {host.name}.{host.tip ? ` ${host.tip}` : ''}
-          </p>
+        <p data-slot="dns-host" className="text-[13px] text-muted-foreground">
+          Your DNS is at {host.name}.{host.tip ? ` ${host.tip}` : ''}
           {host.url && (
-            <Button size="sm" variant="outline" asChild>
-              <a href={host.url} target="_blank" rel="noreferrer">
+            <>
+              {' '}
+              <a
+                href={host.url}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+              >
                 Open {host.name}
-                <ArrowTopRightOnSquareIcon className="size-3.5" aria-hidden="true" />
               </a>
-            </Button>
+            </>
           )}
-        </div>
+        </p>
       )}
       <SendingRecordTable domain={domain} phase={phase} />
       {signsWithUnlistedKey(domain) && (
@@ -134,7 +115,7 @@ export function DomainSetupPanel({
             <Button size="sm" variant="outline" disabled={checking} onClick={onCheckAgain}>
               Check now
             </Button>
-            <SendInstructionsMenu domain={domain} />
+            <CopyInstructionsButton domain={domain} />
           </div>
         )}
       </div>
@@ -143,62 +124,39 @@ export function DomainSetupPanel({
 }
 
 /**
- * A domain with no DMARC record still verifies, so this is said beside the
+ * A domain with no DMARC record still verifies, so this is one line beside the
  * records, not among them, and the record itself is one press away.
  */
 function DmarcAdvisory({ domain }: { domain: SendingDomainDTO }) {
   const [shown, setShown] = useState(false)
   return (
-    <div
-      data-slot="dmarc-advisory"
-      className="rounded-field border border-dashed border-border px-3 py-2"
-    >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="min-w-48 flex-1">
-          <p className="text-[13px] font-medium">No DMARC record on {zoneOf(domain)}</p>
-          <p className="text-xs text-muted-foreground">
-            Optional, but Gmail and Yahoo expect one from anyone sending in bulk.
-          </p>
-        </div>
+    <div data-slot="dmarc-advisory" className="space-y-2">
+      <p className="text-xs text-muted-foreground">
+        No DMARC record on {zoneOf(domain)}. Optional, but Gmail and Yahoo expect one from anyone
+        sending in bulk.{' '}
         <Button
+          variant="link"
           size="sm"
-          variant="outline"
           aria-expanded={shown}
           onClick={() => setShown((s) => !s)}
+          className="h-auto p-0 text-xs"
         >
           {shown ? 'Hide the record' : 'Show the record'}
         </Button>
-      </div>
+      </p>
       {shown && (
-        <div className="mt-2">
-          <DnsRecordTable records={[{ label: 'DMARC', state: 'waiting', ...SUGGESTED_DMARC }]} />
-        </div>
+        <DnsRecordTable records={[{ label: 'DMARC', state: 'waiting', ...SUGGESTED_DMARC }]} />
       )}
     </div>
   )
 }
 
-/** The records in a form to pass on: copied as plain text, or in a new email. */
-function SendInstructionsMenu({ domain }: { domain: SendingDomainDTO }) {
-  const { copy } = useCopyToClipboard()
+/** Copies the records as plain text, for whoever manages the domain's DNS. */
+function CopyInstructionsButton({ domain }: { domain: SendingDomainDTO }) {
+  const { copied, copy } = useCopyToClipboard()
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button size="sm" variant="outline" />}>
-        Send to whoever manages DNS
-        <ChevronDownIcon className="size-3.5" aria-hidden="true" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          onClick={async () => {
-            if (await copy(instructionsText(domain))) toast.success('Instructions copied')
-          }}
-        >
-          Copy instructions
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <a href={instructionsMailto(domain)}>Write an email</a>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Button size="sm" variant="outline" onClick={() => copy(instructionsText(domain))}>
+      {copied ? 'Copied' : 'Copy instructions'}
+    </Button>
   )
 }
