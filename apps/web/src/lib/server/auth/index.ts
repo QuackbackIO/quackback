@@ -518,12 +518,18 @@ async function createAuth() {
         const settings = await db.query.settings.findFirst({
           columns: { name: true, logoKey: true, featureFlags: true },
         })
-        const { logoUrl, brand } = await emailBranding({
+        const { logoUrl, brand, title } = await emailBranding({
           name: settings?.name,
           logoKey: settings?.logoKey,
           featureFlags: settings?.featureFlags,
         })
-        await sendPasswordResetEmail({ to, resetLink: url, logoUrl, brand })
+        await sendPasswordResetEmail({
+          to,
+          resetLink: url,
+          workspaceName: title,
+          logoUrl,
+          brand,
+        })
       },
       resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24 hours
       // Completing a reset proves inbox ownership (the user received and

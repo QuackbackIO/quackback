@@ -11,7 +11,7 @@ export async function sendVerifyAddressCode(email: string, code: string): Promis
   const settings = await db.query.settings.findFirst({
     columns: { name: true, logoKey: true, featureFlags: true },
   })
-  const { logoUrl, brand } = await emailBranding({
+  const { logoUrl, brand, title } = await emailBranding({
     name: settings?.name,
     logoKey: settings?.logoKey,
     featureFlags: settings?.featureFlags,
@@ -19,7 +19,7 @@ export async function sendVerifyAddressCode(email: string, code: string): Promis
   await sendVerifyAddressEmail({
     to: email,
     code,
-    workspaceName: settings?.name ?? undefined,
+    workspaceName: title,
     logoUrl,
     brand,
   })
