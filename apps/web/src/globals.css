@@ -1055,5 +1055,8 @@ a svg,
   *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    /* A looping animation run once, so a spinner or pulse rests rather than flickers. */
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }

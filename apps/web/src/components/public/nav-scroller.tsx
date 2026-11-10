@@ -37,7 +37,8 @@ export function NavScroller({ className, children }: { className?: string; child
     const row = ref.current
     if (!row) return
     const ahead = getComputedStyle(row).direction === 'rtl' ? -1 : 1
-    row.scrollBy({ left: ahead * row.clientWidth * 0.6, behavior: 'smooth' })
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    row.scrollBy({ left: ahead * row.clientWidth * 0.6, behavior: still ? 'auto' : 'smooth' })
   }
   return (
     <div className={cn('relative', className)}>
