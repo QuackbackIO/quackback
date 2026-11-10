@@ -854,7 +854,7 @@ describe('notifyCsatRequestEmail', () => {
     expect(call.fromDisplayName).toBeUndefined()
     // The id that went out is recorded, so a reply quoting it routes home.
     expect(call.messageId).toEqual(expect.any(String))
-    expect(recordOutboundEmail).toHaveBeenCalledWith(call.messageId, conversationId, 'csat')
+    expect(recordOutboundEmail).toHaveBeenCalledWith(call.messageId, conversationId)
   })
 
   it('asks the rating from the address the thread is already being answered from', async () => {

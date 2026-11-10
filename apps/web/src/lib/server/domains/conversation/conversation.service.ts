@@ -422,7 +422,7 @@ export async function sendVisitorMessage(
     // see applyVisitorReopenStatus's doc.
     const visitorNextStatus = applyVisitorReopenStatus(
       conversation.status,
-      !!resolvedBlockReply || input.answersSurvey === true,
+      !!resolvedBlockReply,
       getChannelDescriptor(conversation.channel)?.reopenOnReply ?? 'always'
     )
     const [updated] = await tx

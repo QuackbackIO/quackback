@@ -69,8 +69,6 @@ export const conversationOutboundEmails = pgTable(
   {
     messageId: text('message_id').primaryKey(),
     conversationId: typeIdColumn('conversation')('conversation_id').notNull(),
-    /** `csat` for a satisfaction survey, whose replies leave the conversation closed. */
-    kind: text('kind'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
