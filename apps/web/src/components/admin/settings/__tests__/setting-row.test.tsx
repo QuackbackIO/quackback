@@ -77,3 +77,12 @@ describe('SettingRow', () => {
     expect(wrap?.children.length).toBe(2)
   })
 })
+
+describe('a setting’s description', () => {
+  it('is read with its control', () => {
+    render(<Harness onChange={() => {}} />)
+    const control = screen.getByRole('switch')
+    const id = control.getAttribute('aria-describedby')
+    expect(id && document.getElementById(id)?.textContent).toBe('Visitors can comment on posts.')
+  })
+})

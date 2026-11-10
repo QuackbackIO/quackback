@@ -24,6 +24,13 @@ export function useCopilotStatusLine(availableOverride?: boolean) {
   const intl = useIntl()
   const settingsQuery = useQuery(assistantQueries.settings())
   const available = availableOverride ?? settingsQuery.data?.aiAvailable !== false
+  if (settingsQuery.data?.aiConfigIssue === 'multiple-providers') {
+    return intl.formatMessage({
+      id: 'automation.copilot.deployment.multipleProviders',
+      defaultMessage:
+        'AI is off because both OPENAI_API_KEY and ANTHROPIC_API_KEY are set. Keep one.',
+    })
+  }
   if (!available) {
     return intl.formatMessage({
       id: 'automation.copilot.deployment.unavailable',

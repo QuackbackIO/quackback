@@ -138,7 +138,7 @@ export function primaryLabel(chips: AddChip[]): string {
   return `${verb} ${peopleCount(chips.length)}`
 }
 
-/** The toast after a successful add: "Maya Chen is now a Member. Their ideas, votes and comments stay with them." */
+/** The toast after a successful add: "Maya Chen is now a Member. Their posts, votes and comments stay with them." */
 export function successMessage(
   added: Array<{ name: string }>,
   invited: Array<{ email: string }>,
