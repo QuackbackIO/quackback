@@ -13,7 +13,14 @@ import { blockOf } from '../blocks'
 import { defaultDesign, type PortalDesign } from '../schema'
 
 const world: OpWorld = {
-  gates: { feedback: true, roadmap: true, changelog: true, help: true, support: true, status: true },
+  gates: {
+    feedback: true,
+    roadmap: true,
+    changelog: true,
+    help: true,
+    support: true,
+    status: true,
+  },
   places: { boards: [], roadmaps: [], categories: [] },
 }
 
@@ -42,10 +49,16 @@ describe('changeSpots', () => {
 
   it('puts a hover style on its element, in its hover state', () => {
     const d = design()
-    const { applied, design: after } = applyStep(d, world, STYLE_REGISTRY, [], [
-      { element: 'button', state: 'hover', property: 'background', value: 'darker', block: '' },
-      { element: 'button', state: 'hover', property: 'color', value: 'page', block: '' },
-    ])
+    const { applied, design: after } = applyStep(
+      d,
+      world,
+      STYLE_REGISTRY,
+      [],
+      [
+        { element: 'button', state: 'hover', property: 'background', value: 'darker', block: '' },
+        { element: 'button', state: 'hover', property: 'color', value: 'page', block: '' },
+      ]
+    )
     expect(spotsOf(after, applied)).toEqual([{ page: null, element: 'button', state: 'hover' }])
   })
 
@@ -75,14 +88,16 @@ describe('changeSpots', () => {
     ])
     expect(applied.length).toBe(1)
     expect(spotsOf(after, applied)).toEqual([])
-    expect(changeSpots(d, { path: 'brand.light.accent', before: '#000000', after: '#16a34a' })).toEqual([])
+    expect(
+      changeSpots(d, { path: 'brand.light.accent', before: '#000000', after: '#16a34a' })
+    ).toEqual([])
   })
 
   it('reads a patch’s path into Home’s blocks by the block at that place', () => {
     const d = design()
-    expect(changeSpots(d, { path: 'pages.home.blocks.1.showIncidents', before: false, after: true })).toEqual([
-      { page: 'home', section: 'block-statusbk' },
-    ])
+    expect(
+      changeSpots(d, { path: 'pages.home.blocks.1.showIncidents', before: false, after: true })
+    ).toEqual([{ page: 'home', section: 'block-statusbk' }])
   })
 })
 
@@ -121,5 +136,43 @@ describe('spotsBetween', () => {
     )
     expect(spotsBetween(d, step.design)).toHaveLength(3)
     expect(spotsBetween(d, d)).toEqual([])
+  })
+
+  it('sees a page’s, a part’s and a block’s own look, where each is drawn', () => {
+    const d = design()
+    const step = applyOps(d, world, [
+      { op: 'set', target: 'part:hero.home.cta', key: 'style.hover.background', value: '#ff0000' },
+      {
+        op: 'set',
+        target: '',
+        key: 'overrides.page:roadmap:button.style.base.background',
+        value: '#ff0000',
+      },
+    ])
+    expect(step.refused).toEqual([])
+    expect(spotsBetween(d, step.design)).toEqual([
+      { page: 'home', section: 'hero', element: 'button', state: 'hover' },
+      { page: 'roadmap', element: 'button' },
+    ])
+    // Taken back, each still points where it was.
+    expect(spotsBetween(step.design, d)).toEqual([
+      { page: 'home', section: 'hero', element: 'button', state: 'hover' },
+      { page: 'roadmap', element: 'button' },
+    ])
+    expect(spotsOfChanges(step.design, step.applied)).toHaveLength(2)
+    // An override as the AI names it, and a Home block's.
+    expect(
+      spotsOfChanges(d, [
+        {
+          path: 'overrides.part:block.updates1.heading:heading.phone.base.fontSize',
+          before: null,
+          after: '20px',
+        },
+        { path: 'overrides.block:statusbk.style.base.color', before: null, after: '#000' },
+      ])
+    ).toEqual([
+      { page: 'home', section: 'block-updates1', element: 'heading' },
+      { page: 'home', section: 'block-statusbk' },
+    ])
   })
 })
