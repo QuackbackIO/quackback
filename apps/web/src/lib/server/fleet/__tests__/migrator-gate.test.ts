@@ -391,6 +391,7 @@ describe('replayGateVerdict', () => {
       '0314_portal_design_saved',
       '0315_design_publish_permission',
       '0316_site_captures',
+      '0317_portal_design_saved_auto',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)
