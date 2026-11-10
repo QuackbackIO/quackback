@@ -436,6 +436,8 @@ export async function restoreRevision(
     const document = storedDesign(old.document, `revision ${old.number}`)
     if (!document)
       throw new NotFoundError('REVISION_NOT_FOUND', 'That version can no longer be read.')
+    // A version's CSS goes live again only on a plan that has it, unless visitors see it now.
+    await assertCssAllowed(tx, document, row.publishedRevisionId)
     const published = await publishDocument(
       tx,
       row.id,
