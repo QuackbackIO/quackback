@@ -329,7 +329,8 @@ export const emailSenders = pgTable(
     scopeType: text('scope_type').notNull().default('workspace'),
     scopeId: text('scope_id'),
     /** `address`: send as `channelAccountId`. `inbox` (support only): reply from
-     *  the address the customer wrote to, else the default; names no identity. */
+     *  the address the customer wrote to; `channelAccountId`, when set, is the
+     *  address other support email leaves from, before the default. */
     mode: text('mode').$type<EmailSenderMode>().notNull().default('address'),
     channelAccountId: typeIdColumnNullable('channel_account')('channel_account_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
