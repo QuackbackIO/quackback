@@ -60,7 +60,7 @@ Edges (29):
 ## 3. Server domains (lib/server/domains)
 
 Nodes (56): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, design, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (148):
+Edges (156):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -132,7 +132,15 @@ Edges (148):
 - conversation-attributes -> conversation
 - conversation-attributes -> settings
 - conversation-attributes -> workflows
+- design -> ai
+- design -> api
+- design -> boards
+- design -> changelog
+- design -> help-center
+- design -> posts
+- design -> roadmaps
 - design -> settings
+- design -> settings-registry
 - domain-proof -> channel-accounts
 - domain-proof -> settings
 - embeddings -> ai
@@ -215,6 +223,4 @@ Edges (148):
 
 Strongly connected components with more than one domain. A new entry here is a new cycle and needs an explicit decision.
 
-- ai <-> design <-> settings <-> sla
-- assistant <-> channel-accounts <-> channels <-> conversation <-> conversation-attributes <-> inbox <-> tickets <-> workflows
-- changelog <-> embeddings <-> merge-suggestions <-> posts <-> subscriptions
+- activity <-> ai <-> api <-> api-keys <-> assistant <-> boards <-> changelog <-> channel-accounts <-> channels <-> comments <-> conversation <-> conversation-attributes <-> design <-> embeddings <-> files <-> help-center <-> inbox <-> merge-suggestions <-> posts <-> principals <-> roadmaps <-> roles <-> settings <-> settings-registry <-> sla <-> status <-> subscriptions <-> tickets <-> users <-> webhooks <-> workflows

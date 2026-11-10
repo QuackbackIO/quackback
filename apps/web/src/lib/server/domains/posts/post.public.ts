@@ -20,6 +20,7 @@ import {
 } from '@/lib/server/db'
 import {
   toUuid,
+  type BoardId,
   type PostId,
   type PostStatusId,
   type PostTagId,
@@ -37,6 +38,7 @@ import {
 import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { chosenBoardsCondition } from './post.public.boards'
 import { feedViewCondition, feedViewFor } from './post.public.views'
 import {
   changelogLinkColumn,
@@ -140,6 +142,11 @@ export interface PostWithVotesAndAvatars {
 
 export interface PostListParams {
   boardSlug?: string
+  /**
+   * Restrict to these public boards (the Home "Top posts" block). Private,
+   * deleted and unknown ids are ignored, and with none left every board shows.
+   */
+  boardIds?: BoardId[]
   search?: string
   statusIds?: PostStatusId[]
   statusSlugs?: string[]
@@ -205,6 +212,10 @@ export function buildPostFilterConditions(
 
   if (boardSlug && !omit.includes('board')) {
     conditions.push(eq(boards.slug, boardSlug))
+  }
+
+  if (params.boardIds && params.boardIds.length > 0 && !omit.includes('board')) {
+    conditions.push(chosenBoardsCondition(params.boardIds))
   }
 
   if (omit.includes('status')) {
@@ -498,15 +509,4 @@ export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<
     if (row.canonicalPostId) ids.add(row.canonicalPostId)
   }
   return ids
-}
-
-export async function getBoardByPostId(
-  postId: PostId
-): Promise<import('@quackback/db').Board | null> {
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-    with: { board: true },
-  })
-
-  return post?.board || null
 }

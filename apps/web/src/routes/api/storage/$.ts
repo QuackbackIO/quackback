@@ -183,7 +183,9 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
     isAllowedImageType,
     MAX_FILE_SIZE,
   } = await import('@/lib/server/storage/s3')
-  const { sniffImageMime } = await import('@/lib/server/content/magic-bytes')
+  const { sniffImageMime, sniffFontFormat } = await import('@/lib/server/content/magic-bytes')
+  const { FONT_FORMATS, FONT_UPLOADS, fontExtension, fontTypeExtension } =
+    await import('@/lib/shared/design/fonts')
 
   // Browser uploads always come through this route. A 403 "proxy off" used
   // to send the client to a presigned object-store URL, which CORS-fails on
@@ -215,10 +217,23 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
 
   // The token authenticates which (key, ct) may be written, not that the bytes
   // are that type — apply the same magic-byte check as the multipart path.
-  // Every presigned flow signs an allowed image type, so non-image cts are
-  // rejected outright.
-  const sniffed = sniffImageMime(Buffer.from(body.buffer, body.byteOffset, body.byteLength))
-  if (!isAllowedImageType(ct) || sniffed !== ct) {
+  // Every presigned flow signs an allowed image type or, for a portal font,
+  // a font file under `fonts/` whose name, type and signature agree, so any
+  // other ct is rejected outright.
+  const bytes = Buffer.from(body.buffer, body.byteOffset, body.byteLength)
+  const fontType = fontTypeExtension(ct)
+  if (fontType) {
+    if (
+      !key.startsWith(`${FONT_UPLOADS.prefix}/`) ||
+      fontExtension(key) !== fontType ||
+      sniffFontFormat(bytes) !== fontType
+    ) {
+      return Response.json({ error: 'File content does not match its type' }, { status: 400 })
+    }
+    if (bytes.byteLength > FONT_FORMATS[fontType].maxBytes) {
+      return Response.json({ error: 'File too large' }, { status: 413 })
+    }
+  } else if (!isAllowedImageType(ct) || sniffImageMime(bytes) !== ct) {
     return Response.json({ error: 'File content does not match its type' }, { status: 400 })
   }
 
@@ -381,7 +396,10 @@ async function serveStorageGet(request: Request): Promise<Response> {
   // Force proxy for email embeds (?email=1), since email clients don't follow
   // redirects, and for the file viewer's fetch (?proxy=1), since a script
   // cannot read a cross-origin redirect target the bucket has no CORS grant for.
-  const forceProxy = url.searchParams.has('email') || url.searchParams.has('proxy')
+  // A portal font is fetched in CORS mode by @font-face, so it is served from
+  // this origin rather than wherever the bucket answers.
+  const forceProxy =
+    url.searchParams.has('email') || url.searchParams.has('proxy') || key.startsWith('fonts/')
   const requestedRange = request.headers.get('range')
   if (requestedRange && !isSingleByteRange(requestedRange)) {
     return new Response(null, { status: 416, headers: { 'Accept-Ranges': 'bytes' } })

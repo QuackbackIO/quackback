@@ -87,7 +87,8 @@ export function toAgeBracket(
   return '365d+'
 }
 
-export type AiProvider = 'none' | 'openai' | 'openrouter' | 'azure' | 'google' | 'local' | 'other'
+export type AiProvider =
+  'none' | 'openai' | 'openrouter' | 'azure' | 'google' | 'local' | 'other' | 'anthropic'
 
 const PRIVATE_HOST_RE =
   /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|host\.docker\.internal$)|\.local$/
@@ -102,7 +103,13 @@ function onDomain(host: string, domain: string): boolean {
  * fixed label. The base URL itself never leaves the box: a self-hosted
  * gateway's hostname can name the company running it.
  */
-export function aiProviderOf(apiKey: string | undefined, baseUrl: string | undefined): AiProvider {
+export function aiProviderOf(
+  apiKey: string | undefined,
+  baseUrl: string | undefined,
+  anthropicApiKey?: string
+): AiProvider {
+  // Both keys set leaves AI off (see domains/ai/provider).
+  if (anthropicApiKey) return apiKey ? 'none' : 'anthropic'
   if (!apiKey) return 'none'
   if (!baseUrl) return 'openai'
   let host: string

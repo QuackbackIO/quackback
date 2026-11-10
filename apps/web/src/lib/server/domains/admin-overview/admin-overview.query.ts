@@ -517,7 +517,7 @@ async function selectFeedbackRows(
 }
 
 /**
- * Ideas to review, and with a changelog to announce them in, shipped ideas
+ * Posts to review, and with a changelog to announce them in, shipped posts
  * not announced yet.
  */
 async function loadFeedback(viewerId: PrincipalId | null, now: Date, changelogOn: boolean) {

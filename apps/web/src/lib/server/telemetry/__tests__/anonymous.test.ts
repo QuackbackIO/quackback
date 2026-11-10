@@ -57,6 +57,12 @@ describe('aiProviderOf', () => {
     expect(aiProviderOf(undefined, 'https://openrouter.ai/api/v1')).toBe('none')
   })
 
+  it('is anthropic with only ANTHROPIC_API_KEY, and none with both keys (AI is off)', () => {
+    expect(aiProviderOf(undefined, undefined, 'sk-ant')).toBe('anthropic')
+    expect(aiProviderOf(undefined, 'https://openrouter.ai/api/v1', 'sk-ant')).toBe('anthropic')
+    expect(aiProviderOf('k', 'https://openrouter.ai/api/v1', 'sk-ant')).toBe('none')
+  })
+
   it('names the provider from the base URL host, never the URL itself', () => {
     expect(aiProviderOf('k', undefined)).toBe('openai')
     expect(aiProviderOf('k', 'https://api.openai.com/v1')).toBe('openai')

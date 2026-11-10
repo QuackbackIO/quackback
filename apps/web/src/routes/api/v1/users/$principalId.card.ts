@@ -12,7 +12,7 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 import type { PrincipalId, UserId } from '@quackback/ids'
-import { auth } from '@/lib/server/auth'
+import { getSessionOfRequest } from '@/lib/server/auth/request-session'
 import { db, principal, user, eq } from '@/lib/server/db'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 
@@ -35,7 +35,8 @@ export async function handlePrincipalCard({
   request: Request
   params: { principalId: string }
 }): Promise<Response> {
-  const session = await auth.api.getSession({ headers: request.headers })
+  // The designer's signed-out frame is answered as nobody, as every portal read is.
+  const session = await getSessionOfRequest(request)
   if (!session?.user) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }

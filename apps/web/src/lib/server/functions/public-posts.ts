@@ -443,7 +443,7 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     if (!actor.testFeedback?.canSubmit && !workspaceAllowsAnonymous(settings.portalConfig)) {
       throw new Error('Anonymous interaction is not enabled')
     }
-    // Boards can take ideas without an account, so cap how many one address
+    // Boards can take posts without an account, so cap how many one address
     // can post in an hour, across every anonymous identity it mints.
     if (!actor.testFeedback?.canSubmit && !(await reserveAnonPostSlot(clientIp()))) {
       throw new Error('Too many posts, please try again later')

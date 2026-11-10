@@ -8,7 +8,6 @@
 import { z } from 'zod'
 import { db, postSentiment, posts, eq, and, gte, lte, sql, count, isNull } from '@/lib/server/db'
 import { createId, type PostId } from '@quackback/ids'
-import { config } from '@/lib/server/config'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
@@ -83,7 +82,7 @@ export async function analyzeSentiment(
   await enforceAiTokenBudget()
 
   const model = getChatModel('sentiment')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return null
+  if (!isAiClientConfigured() || !model) return null
 
   const truncatedContent = (content || '(no content)').slice(0, MAX_CONTENT_LENGTH)
   const text = `Title: ${title}\n\nContent: ${truncatedContent}`

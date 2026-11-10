@@ -22,9 +22,15 @@ export const getAssistantSettingsFn = createServerFn({ method: 'GET' }).handler(
   assertAnyPermission(await requireAuth(), AI_ANY_PERMISSIONS)
   const { getAssistantSettings } = await import('@/lib/server/domains/settings/settings.assistant')
   const { isAssistantConfigured } = await import('@/lib/server/domains/assistant/assistant.runtime')
+  const { getAiConfigIssue } = await import('@/lib/server/domains/ai/provider')
   // `aiAvailable` is whether an AI model is configured at all, so the pages can
   // say Copilot has nowhere to run instead of offering controls that do nothing.
-  return { ...(await getAssistantSettings()), aiAvailable: isAssistantConfigured() }
+  // `aiConfigIssue` says why AI is off although keys were set (both providers).
+  return {
+    ...(await getAssistantSettings()),
+    aiAvailable: isAssistantConfigured(),
+    aiConfigIssue: getAiConfigIssue(),
+  }
 })
 
 function configActor(ctx: Awaited<ReturnType<typeof requireAuth>>) {

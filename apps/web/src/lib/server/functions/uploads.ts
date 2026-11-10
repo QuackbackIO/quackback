@@ -55,7 +55,15 @@ const imageUploadSchema = z.object({
  */
 async function presignedImageUpload(
   data: z.infer<typeof imageUploadSchema>,
-  opts: { label: string; prefix: string }
+  opts: {
+    label: string
+    prefix: string
+    /**
+     * Also SVG, for a wordmark. Storage serves SVG as a sandboxed download,
+     * which an <img> still shows, so it never runs as a page.
+     */
+    svg?: boolean
+  }
 ) {
   log.debug(
     { content_type: data.contentType, file_size: data.fileSize },
@@ -66,8 +74,11 @@ async function presignedImageUpload(
     throw new Error('File storage is not configured. Contact your administrator.')
   }
 
-  if (!isAllowedImageType(data.contentType)) {
-    throw new Error(`Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`)
+  const svg = opts.svg === true && data.contentType === 'image/svg+xml'
+  if (!svg && !isAllowedImageType(data.contentType)) {
+    throw new Error(
+      `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP${opts.svg ? ', SVG' : ''}.`
+    )
   }
 
   const key = generateStorageKey(opts.prefix, data.filename)
@@ -203,8 +214,8 @@ export const getLogoUploadUrlFn = createServerFn({ method: 'POST' })
 export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
   .validator(imageUploadSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    return presignedImageUpload(data, { label: 'favicon', prefix: 'favicons' })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return presignedImageUpload(data, { label: 'favicon', prefix: 'favicons', svg: true })
   })
 
 /**
@@ -215,6 +226,37 @@ export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     return presignedImageUpload(data, { label: 'header logo', prefix: 'header-logos' })
+  })
+
+/**
+ * Get a presigned URL for uploading a portal design's wordmark, light or dark.
+ * Unlike the workspace logo, which emails carry, it may be an SVG.
+ */
+export const getWordmarkUploadUrlFn = createServerFn({ method: 'POST' })
+  .validator(imageUploadSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return presignedImageUpload(data, { label: 'wordmark', prefix: 'header-logos', svg: true })
+  })
+
+/**
+ * Get a presigned URL for uploading the image a portal design shows in its band.
+ */
+export const getBandImageUploadUrlFn = createServerFn({ method: 'POST' })
+  .validator(imageUploadSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return presignedImageUpload(data, { label: 'band image', prefix: 'portal-images' })
+  })
+
+/**
+ * Get a presigned URL for uploading the image a portal design shares its pages with.
+ */
+export const getShareImageUploadUrlFn = createServerFn({ method: 'POST' })
+  .validator(imageUploadSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return presignedImageUpload(data, { label: 'share image', prefix: 'portal-images' })
   })
 
 /**
@@ -256,4 +298,69 @@ export const getAssistantAvatarUploadUrlFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.AI_CUSTOMER_MANAGE })
     return presignedImageUpload(data, { label: 'assistant avatar', prefix: 'assistant-avatars' })
+  })
+
+const fontUploadSchema = z.object({
+  filename: z.string().min(1).max(255),
+  fileSize: z.number().int().positive(),
+})
+
+export type FontUploadResult =
+  | { ok: true; uploadUrl: string; key: string; contentType: string }
+  | {
+      ok: false
+      code: 'STORAGE_UNAVAILABLE' | 'NOT_A_FONT' | 'TOO_LARGE' | 'TIER_LIMIT_EXCEEDED'
+      message: string
+    }
+
+/**
+ * Get a presigned URL for uploading one file of a portal font: woff2 (up to
+ * 400 KB), woff, ttf or otf; the upload itself checks the file's signature. Uploading
+ * fonts is part of custom CSS on the workspace's plan.
+ */
+export const getFontUploadUrlFn = createServerFn({ method: 'POST' })
+  .validator(fontUploadSchema)
+  .handler(async ({ data }): Promise<FontUploadResult> => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const { FONT_FORMATS, FONT_UPLOADS, fontExtension, sizeLabel } =
+      await import('@/lib/shared/design/fonts')
+    if (!isS3Usable()) {
+      return {
+        ok: false,
+        code: 'STORAGE_UNAVAILABLE',
+        message: 'Uploading fonts needs file storage.',
+      }
+    }
+    const ext = fontExtension(data.filename)
+    if (!ext) {
+      return {
+        ok: false,
+        code: 'NOT_A_FONT',
+        message: `${data.filename} is not a woff2, woff, ttf or otf file.`,
+      }
+    }
+    if (data.fileSize > FONT_FORMATS[ext].maxBytes) {
+      return {
+        ok: false,
+        code: 'TOO_LARGE',
+        message: `${data.filename} is over ${sizeLabel(FONT_FORMATS[ext].maxBytes)}.`,
+      }
+    }
+    const [{ assertTierFeature }, { TierLimitError }] = await Promise.all([
+      import('@/lib/server/domains/settings/tier-enforce'),
+      import('@/lib/server/errors/tier-limit-error'),
+    ])
+    try {
+      await assertTierFeature('customCss', 'Uploading fonts')
+    } catch (error) {
+      if (error instanceof TierLimitError) {
+        return { ok: false, code: 'TIER_LIMIT_EXCEEDED', message: error.message }
+      }
+      throw error
+    }
+    const key = generateStorageKey(FONT_UPLOADS.prefix, data.filename)
+    const contentType = FONT_FORMATS[ext].type
+    const { uploadUrl } = await generatePresignedUploadUrl(key, contentType)
+    log.info({ key }, 'font upload url issued')
+    return { ok: true, uploadUrl, key, contentType }
   })

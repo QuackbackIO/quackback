@@ -74,7 +74,7 @@ vi.mock('@tanstack/ai-openai/compatible', () => ({
 }))
 
 vi.mock('@/lib/server/domains/ai/config', () => ({
-  isAiClientConfigured: (apiKey?: string, baseUrl?: string) => Boolean(apiKey) && Boolean(baseUrl),
+  isAiClientConfigured: () => Boolean(mockConfig.openaiApiKey) && Boolean(mockConfig.openaiBaseUrl),
   structuredOutputProviderOptions: () => ({}),
 }))
 // Stands in for the usage row write: chat() starts it, settled() awaits it.

@@ -34,6 +34,7 @@ const hoisted = vi.hoisted(() => ({
   updateAssistantToolRules: vi.fn(),
   updateWidgetAssistantDeployment: vi.fn(),
   isAssistantConfigured: vi.fn(),
+  getAiConfigIssue: vi.fn<() => string | null>(() => null),
   requestHeaders: new Headers({
     'user-agent': 'assistant-settings-test',
     'x-request-id': 'request_1',
@@ -56,6 +57,10 @@ vi.mock('@/lib/server/domains/settings/settings.assistant', async (importOrigina
 
 vi.mock('@/lib/server/domains/assistant/assistant.runtime', () => ({
   isAssistantConfigured: hoisted.isAssistantConfigured,
+}))
+
+vi.mock('@/lib/server/domains/ai/provider', () => ({
+  getAiConfigIssue: hoisted.getAiConfigIssue,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
@@ -232,6 +237,15 @@ describe('assistant settings availability', () => {
     hoisted.isAssistantConfigured.mockReturnValue(true)
     await expect(getAssistantSettingsFn()).resolves.toMatchObject({ aiAvailable: true })
   })
+
+  it('says why AI is off when both provider keys are set', async () => {
+    hoisted.isAssistantConfigured.mockReturnValue(false)
+    hoisted.getAiConfigIssue.mockReturnValueOnce('multiple-providers')
+    await expect(getAssistantSettingsFn()).resolves.toMatchObject({
+      aiAvailable: false,
+      aiConfigIssue: 'multiple-providers',
+    })
+  })
 })
 
 describe('assistant settings V2 boundary', () => {
@@ -239,6 +253,7 @@ describe('assistant settings V2 boundary', () => {
     await expect(getAssistantSettingsFn()).resolves.toEqual({
       ...SETTINGS_RESULT,
       aiAvailable: true,
+      aiConfigIssue: null,
     })
     expect(hoisted.getAssistantSettings).toHaveBeenCalledOnce()
   })

@@ -19,7 +19,6 @@ import {
   sql,
   notInArray,
 } from '@/lib/server/db'
-import { config } from '@/lib/server/config'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { getChatModel } from '@/lib/server/domains/ai/models'
@@ -124,7 +123,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
   await enforceAiTokenBudget()
 
   const model = getChatModel('summary')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return
+  if (!isAiClientConfigured() || !model) return
 
   // Fetch post (include existing summary for continuity on updates)
   const post = await db.query.posts.findFirst({
@@ -224,8 +223,7 @@ export async function refreshStaleSummaries(): Promise<void> {
   // Fast-path skip when AI is off OR the summary model is unset/disabled —
   // otherwise the sweep would query a batch and per-post no-op until the
   // circuit breaker trips.
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !getChatModel('summary'))
-    return
+  if (!isAiClientConfigured() || !getChatModel('summary')) return
   // Same gate `generateAndSavePostSummary` applies per post, asked once up front.
   // Without it a workspace on a plan without AI insights queried a batch of stale
   // posts every sweep and failed each one with TIER_LIMIT_EXCEEDED, for ever.

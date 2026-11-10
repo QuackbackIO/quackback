@@ -20,7 +20,7 @@ const NAMED_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quo
 /** Decode the named HTML entities plus decimal and hex character references.
  *  Single pass so produced characters are never re-interpreted as entities
  *  ("&amp;lt;" decodes to "&lt;", not "<"). */
-function decodeEntities(s: string): string {
+export function decodeEntities(s: string): string {
   return s.replace(/&(?:(amp|lt|gt|quot)|#x([0-9a-f]+)|#(\d+));/gi, (_, name, hex, dec) => {
     if (name) return NAMED_ENTITIES[name.toLowerCase()]
     return fromCodePointSafe(hex ? parseInt(hex, 16) : Number(dec))
@@ -45,7 +45,7 @@ function cap(s: string | null, max: number): string | null {
  * Handles both `attr="val"` and `attr='val'` and unquoted values.
  * Attribute order is irrelevant.
  */
-function extractAttr(tag: string, attr: string): string | null {
+export function extractAttr(tag: string, attr: string): string | null {
   const re = new RegExp(`(?:^|\\s)${attr}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s/>]*))`, 'i')
   const m = re.exec(tag)
   if (!m) return null
@@ -57,7 +57,7 @@ function extractAttr(tag: string, attr: string): string | null {
  * within maxLen. Returns null on a malformed URL or a disallowed scheme, so the
  * caller can fall through to a default.
  */
-function resolveHttpUrl(href: string, baseUrl: string, maxLen = Infinity): string | null {
+export function resolveHttpUrl(href: string, baseUrl: string, maxLen = Infinity): string | null {
   try {
     const u = new URL(href, baseUrl)
     if ((u.protocol === 'http:' || u.protocol === 'https:') && u.href.length <= maxLen) {

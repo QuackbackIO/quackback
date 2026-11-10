@@ -10,17 +10,37 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   getWorkspaceSettings: vi.fn(),
-  handlers: [] as Array<() => Promise<unknown>>,
+  getOptionalAuth: vi.fn(),
+  switchPreviewView: vi.fn(),
+  sharedPreviewView: vi.fn(),
+  handlers: [] as Array<(input: { data: unknown }) => Promise<unknown>>,
+  validate: (data: unknown) => data,
 }))
 
 vi.mock('@tanstack/react-start', () => ({
   createServerOnlyFn: <T>(fn: T) => fn,
-  createServerFn: () => ({
-    handler(fn: () => Promise<unknown>) {
-      hoisted.handlers.push(fn)
-      return fn
-    },
-  }),
+  createServerFn: () => {
+    const builder = {
+      validator(validate: (data: unknown) => unknown) {
+        hoisted.validate = validate
+        return builder
+      },
+      handler(fn: (input: { data: unknown }) => Promise<unknown>) {
+        hoisted.handlers.push(fn)
+        return fn
+      },
+    }
+    return builder
+  },
+}))
+vi.mock('@/lib/server/functions/auth-helpers', () => ({
+  getOptionalAuth: hoisted.getOptionalAuth,
+}))
+vi.mock('@/lib/server/domains/design/switch', () => ({
+  switchPreviewView: hoisted.switchPreviewView,
+}))
+vi.mock('@/lib/server/domains/design/preview-links', () => ({
+  sharedPreviewView: hoisted.sharedPreviewView,
 }))
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers({ host: 'feedback.example' }),
@@ -97,11 +117,17 @@ function workspaceSettings(rawSetupState: string) {
   }
 }
 
-async function getBootstrapData() {
+async function getBootstrapData(input?: unknown) {
   if (hoisted.handlers.length === 0) await import('../bootstrap')
-  return (await hoisted.handlers[0]!()) as {
-    settings: { name: string; settings: object; statusConfig: object } | null
+  return (await hoisted.handlers[0]!({ data: hoisted.validate(input) })) as {
+    settings: {
+      name: string
+      settings: object
+      statusConfig: object
+      portalDesign?: { engine: string }
+    } | null
     onboarding: { complete: boolean; needsSetupWizard: boolean }
+    sharedPreview: string | null
   }
 }
 
@@ -159,5 +185,105 @@ describe('getBootstrapData response', () => {
 
     expect(data.settings).toBeNull()
     expect(data.onboarding).toEqual({ complete: false, needsSetupWizard: false })
+  })
+})
+
+describe('the switch preview frame', () => {
+  const switched = { engine: 'v2', attributes: {} }
+  const editor = { scope: 'dashboard', permissions: ['settings.branding'] }
+
+  beforeEach(() => {
+    hoisted.getWorkspaceSettings.mockReset()
+    hoisted.getWorkspaceSettings.mockResolvedValue(workspaceSettings(setupState()))
+    hoisted.getOptionalAuth.mockReset()
+    hoisted.switchPreviewView.mockReset()
+    hoisted.switchPreviewView.mockResolvedValue(switched)
+  })
+
+  it('draws the portal switched for someone who can edit its branding', async () => {
+    hoisted.getOptionalAuth.mockResolvedValue(editor)
+    const data = await getBootstrapData({ designPreview: 'switch' })
+    expect(data.settings?.portalDesign).toEqual(switched)
+    expect(data.settings?.settings).toEqual({})
+  })
+
+  it('draws it as it is for anyone else, or for an unknown request', async () => {
+    hoisted.getOptionalAuth.mockResolvedValue(null)
+    expect(
+      (await getBootstrapData({ designPreview: 'switch' })).settings?.portalDesign
+    ).toBeUndefined()
+    hoisted.getOptionalAuth.mockResolvedValue({ ...editor, permissions: ['posts.read'] })
+    expect(
+      (await getBootstrapData({ designPreview: 'switch' })).settings?.portalDesign
+    ).toBeUndefined()
+    hoisted.getOptionalAuth.mockResolvedValue({ ...editor, scope: 'widget' })
+    expect(
+      (await getBootstrapData({ designPreview: 'switch' })).settings?.portalDesign
+    ).toBeUndefined()
+
+    hoisted.getOptionalAuth.mockResolvedValue(editor)
+    expect(
+      (await getBootstrapData({ designPreview: 'other' })).settings?.portalDesign
+    ).toBeUndefined()
+    expect((await getBootstrapData()).settings?.portalDesign).toBeUndefined()
+    expect(hoisted.switchPreviewView).toHaveBeenCalledTimes(0)
+  })
+
+  it('draws it as it is when there is nothing to switch', async () => {
+    hoisted.getOptionalAuth.mockResolvedValue(editor)
+    hoisted.switchPreviewView.mockResolvedValue(null)
+    expect(
+      (await getBootstrapData({ designPreview: 'switch' })).settings?.portalDesign
+    ).toBeUndefined()
+  })
+})
+
+describe('a shared preview link', () => {
+  const token = `qbp_${'a'.repeat(43)}`
+  const draft = { engine: 'v2', attributes: { 'data-preview': '' } }
+  const designed = () => {
+    const settings = workspaceSettings(setupState())
+    return { ...settings, featureFlags: { ...settings.featureFlags, portalDesignV2: true } }
+  }
+
+  beforeEach(() => {
+    hoisted.getWorkspaceSettings.mockReset()
+    hoisted.getWorkspaceSettings.mockResolvedValue(designed())
+    hoisted.getOptionalAuth.mockReset()
+    hoisted.getOptionalAuth.mockResolvedValue(null)
+    hoisted.sharedPreviewView.mockReset()
+    hoisted.sharedPreviewView.mockResolvedValue({ state: 'shown', view: draft })
+  })
+
+  it('draws the portal with the link’s design for anyone holding it, signed in or not', async () => {
+    const data = await getBootstrapData({ previewToken: token })
+    expect(hoisted.sharedPreviewView).toHaveBeenCalledWith(token)
+    expect(data.settings?.portalDesign).toEqual(draft)
+    expect(data.sharedPreview).toBe('shown')
+    expect(data.settings?.settings).toEqual({})
+  })
+
+  it('draws the live portal, saying so, once the link has ended', async () => {
+    hoisted.sharedPreviewView.mockResolvedValue({ state: 'ended' })
+    const data = await getBootstrapData({ previewToken: token })
+    expect(data.settings?.portalDesign).toBeUndefined()
+    expect(data.sharedPreview).toBe('ended')
+  })
+
+  it('draws the live portal for a token no link has', async () => {
+    hoisted.sharedPreviewView.mockResolvedValue(null)
+    const data = await getBootstrapData({ previewToken: token })
+    expect(data.settings?.portalDesign).toBeUndefined()
+    expect(data.sharedPreview).toBeNull()
+  })
+
+  it('never looks up something that is not a token, or with the design off', async () => {
+    for (const previewToken of ['short', `${token}x`, 42, `qbx_${'a'.repeat(43)}`]) {
+      expect((await getBootstrapData({ previewToken })).sharedPreview).toBeNull()
+    }
+    expect((await getBootstrapData()).sharedPreview).toBeNull()
+    hoisted.getWorkspaceSettings.mockResolvedValue(workspaceSettings(setupState()))
+    expect((await getBootstrapData({ previewToken: token })).sharedPreview).toBeNull()
+    expect(hoisted.sharedPreviewView).not.toHaveBeenCalled()
   })
 })

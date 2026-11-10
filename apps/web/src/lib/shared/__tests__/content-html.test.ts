@@ -269,3 +269,51 @@ describe('generateContentHTML', () => {
     expect(html).toBe('<h2 id="getting-started">Getting started</h2>')
   })
 })
+
+describe('rich words: alignment and colours from the brand', () => {
+  const words = (text: string, marks?: JSONContent['marks']): JSONContent =>
+    marks ? { type: 'text', text, marks } : { type: 'text', text }
+
+  it('aligns a paragraph or heading to the centre or the end', () => {
+    expect(
+      generateContentHTML({
+        type: 'doc',
+        content: [
+          { type: 'paragraph', attrs: { textAlign: 'center' }, content: [words('Hi')] },
+          { type: 'heading', attrs: { level: 2, textAlign: 'end' }, content: [words('Title')] },
+        ],
+      })
+    ).toBe('<p style="text-align: center">Hi</p><h2 id="title" style="text-align: end">Title</h2>')
+  })
+
+  it('leaves any other alignment unset', () => {
+    expect(
+      generateContentHTML({
+        type: 'doc',
+        content: [
+          { type: 'paragraph', attrs: { textAlign: 'start' }, content: [words('a')] },
+          { type: 'paragraph', attrs: { textAlign: 'red;}x{' }, content: [words('b')] },
+        ],
+      })
+    ).toBe('<p>a</p><p>b</p>')
+  })
+
+  it('draws words in a colour role, and only a colour role', () => {
+    expect(
+      generateContentHTML({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              words('Vote', [{ type: 'colour', attrs: { role: 'support' } }, { type: 'bold' }]),
+              words(' now', [{ type: 'colour', attrs: { role: 'red"><script>' } }]),
+            ],
+          },
+        ],
+      })
+    ).toBe(
+      '<p><strong><span data-qb-colour="support" style="color: var(--qb-words-support, var(--qb-role-support, var(--qb-accent-text, var(--primary))))">Vote</span></strong> now</p>'
+    )
+  })
+})

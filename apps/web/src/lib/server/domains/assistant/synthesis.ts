@@ -11,7 +11,6 @@
 
 import { z } from 'zod'
 import type { StreamChunk } from '@tanstack/ai'
-import { config } from '@/lib/server/config'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { logger } from '@/lib/server/logger'
@@ -64,10 +63,7 @@ export class AskAiNotConfiguredError extends Error {
 
 /** Whether Ask AI can run: AI client plus an effective chat model. */
 export function isAskAiConfigured(): boolean {
-  return (
-    isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) &&
-    getChatModel('helpCenterAnswers') !== null
-  )
+  return isAiClientConfigured() && getChatModel('helpCenterAnswers') !== null
 }
 
 const answerSchema = z.object({
@@ -139,7 +135,7 @@ export function buildAskAiSystemPrompts(articles: RetrievedKbArticle[]): string[
  */
 export async function synthesizeAnswer(params: SynthesizeAnswerParams): Promise<AskAiAnswer> {
   const model = getChatModel('helpCenterAnswers')
-  if (!model || !isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl)) {
+  if (!model || !isAiClientConfigured()) {
     throw new AskAiNotConfiguredError()
   }
 

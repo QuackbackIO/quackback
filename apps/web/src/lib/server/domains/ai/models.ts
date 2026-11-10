@@ -6,9 +6,14 @@
  * even when the role default is set. An unset role default means that
  * capability is off — there is no built-in default model and no implied
  * provider. See #180 for why a missing/invalid default must mean "disabled".
+ * The one exception is the Claude API (ANTHROPIC_API_KEY), whose model names
+ * are known: there the chat role defaults to Claude Haiku 5.5 (see
+ * ./provider), and embeddings are always off because it has no embeddings
+ * endpoint.
  */
 
 import { config } from '@/lib/server/config'
+import { defaultChatModelFor, getAiProvider, providerSupportsEmbeddings } from './provider'
 
 const DISABLED_VALUES = new Set(['off', 'none', 'false'])
 
@@ -31,6 +36,9 @@ export type ChatFeature =
   // Phase 1): one structured-output call per classification moment, over all
   // ai_detect=true attributes for a conversation.
   | 'classification'
+  // Quackback AI in Appearance: starting looks and design changes. Without its
+  // own model it rides the assistant's.
+  | 'design'
 
 /**
  * Resolve an effective model: per-feature override wins over the role default;
@@ -64,12 +72,20 @@ export function getChatModel(feature: ChatFeature): string | null {
     assistant: config.aiAssistantModel,
     inboxTranslation: config.aiInboxTranslationModel,
     classification: config.aiClassificationModel,
+    design: config.aiDesignModel ?? config.aiAssistantModel,
   }
-  return resolveModel(overrides[feature], config.aiChatModel)
+  return resolveModel(
+    overrides[feature],
+    config.aiChatModel ?? defaultChatModelFor(getAiProvider())
+  )
 }
 
 /** Effective embedding model, or null when embeddings are disabled. */
 export function getEmbeddingModel(): string | null {
+  const provider = getAiProvider()
+  // The Claude API has no embeddings endpoint: semantic paths fall back to
+  // keyword search where one exists.
+  if (provider !== null && !providerSupportsEmbeddings(provider)) return null
   return resolveModel(undefined, config.aiEmbeddingModel)
 }
 

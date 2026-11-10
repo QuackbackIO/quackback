@@ -26,7 +26,8 @@ import {
   type StreamChunk,
   type TextPart,
 } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { createChatAdapter } from '@/lib/server/domains/ai/chat-adapter'
+import { getAiProvider } from '@/lib/server/domains/ai/provider'
 import { jsonrepair } from 'jsonrepair'
 import type { z } from 'zod'
 import { config } from '@/lib/server/config'
@@ -239,10 +240,7 @@ async function streamOnce<TContext>(
   opts: RunAttemptOptions<TContext>,
   controller: AbortController
 ): Promise<AttemptOutcome> {
-  const adapter = openaiCompatibleText(opts.model, {
-    baseURL: config.openaiBaseUrl!,
-    apiKey: config.openaiApiKey!,
-  })
+  const adapter = createChatAdapter(opts.model)
   // TOOLS AND response_format MUST NOT SHARE A REQUEST. The compatible
   // adapter reports combined tools+schema support (the API accepts it), but
   // under constrained decoding models stop CALLING tools: generation is
@@ -253,7 +251,10 @@ async function streamOnce<TContext>(
   // structured finalization request) restores reliable tool calling; the
   // finalization emits the same structured-output.* events, one extra model
   // call per tool-using turn. Tool-less calls keep the single-request stream.
-  if (opts.tools && !config.aiCombinedToolsAndSchema) {
+  // The Claude API holds tool calling under output_config.format, and its
+  // adapter's split path (a forced tool call) is rejected by current models, so
+  // the split applies to the OpenAI-compatible endpoint only.
+  if (opts.tools && !config.aiCombinedToolsAndSchema && getAiProvider() !== 'anthropic') {
     ;(
       adapter as { supportsCombinedToolsAndSchema?: (modelOptions?: unknown) => boolean }
     ).supportsCombinedToolsAndSchema = () => false

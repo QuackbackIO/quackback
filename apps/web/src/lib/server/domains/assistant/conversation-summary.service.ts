@@ -25,10 +25,9 @@
  * (events/event-reactions.ts) that runs it.
  */
 import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { createChatAdapter } from '@/lib/server/domains/ai/chat-adapter'
 import { z } from 'zod'
 import { db, conversations, conversationSummaries, eq, sql } from '@/lib/server/db'
-import { config } from '@/lib/server/config'
 import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
@@ -85,7 +84,7 @@ async function loadConversationSummaryInput(
   await enforceAiTokenBudget()
 
   const model = getChatModel('summary')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return null
+  if (!isAiClientConfigured() || !model) return null
   if (!(await isCurrentClose('conversation', conversationId, close))) return null
 
   const [conversationRow, messages] = await Promise.all([
@@ -140,10 +139,7 @@ export async function summarizeConversationOnClose(
     // counts as on-demand Summarize-chip calls; this fire-and-forget path
     // must meter against aiTokensPerMonth without inflating that report.
     const object = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+      adapter: createChatAdapter(model),
       systemPrompts: [SYSTEM_PROMPT],
       messages: [{ role: 'user', content: transcript }],
       outputSchema: ConversationSummarySchema,

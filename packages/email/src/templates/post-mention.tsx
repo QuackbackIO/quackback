@@ -56,7 +56,7 @@ export function PostMentionEmail({
             color: colors.textMuted,
           }}
         >
-          Feedback
+          Post
         </Text>
         <Text style={{ ...typography.text, marginTop: '0', marginBottom: '0', fontWeight: '600' }}>
           {postTitle}
@@ -85,7 +85,7 @@ export function PostMentionEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={postUrl}>
-          View Feedback
+          View post
         </Button>
       </Section>
 

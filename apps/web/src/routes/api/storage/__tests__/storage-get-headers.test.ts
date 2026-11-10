@@ -34,7 +34,7 @@ vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 vi.mock('@/lib/server/storage/s3', () => ({
   isS3Usable: vi.fn(() => true),
   getStorageSigningSecret: vi.fn(() => 'test-secret'),
-  isPublicStorageKey: vi.fn((key: string) => key.startsWith('logos/')),
+  isPublicStorageKey: vi.fn((key: string) => /^(logos|fonts)\//.test(key)),
   hasExpiringReadToken: vi.fn((key: string) => key.startsWith('files/')),
   verifyStorageReadToken: vi.fn(
     (_secret: string, _key: string, sig: string | null) => sig === 'ok'
@@ -302,5 +302,19 @@ describe('handleStorageGet — the viewer fetch (?proxy=1)', () => {
     expect(pulled).toBeLessThanOrEqual(1)
     await res.arrayBuffer()
     expect(pulled).toBeGreaterThan(3)
+  })
+})
+
+describe('handleStorageGet — a portal font', () => {
+  it('serves it from this origin even without S3_PROXY, since @font-face fetches in CORS mode', async () => {
+    getS3Object.mockResolvedValueOnce({
+      body: new Blob([new Uint8Array([0x77, 0x4f, 0x46, 0x32])]).stream(),
+      contentType: 'font/woff2',
+    })
+    const res = await get('/api/storage/fonts/2026/10/abc-brand.woff2')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toBe('font/woff2')
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
+    expect(generatePresignedGetUrl).not.toHaveBeenCalled()
   })
 })

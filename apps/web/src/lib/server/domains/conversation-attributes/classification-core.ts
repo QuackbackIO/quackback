@@ -15,9 +15,8 @@
  * definition) and only reach here once they're committed to spending a call.
  */
 import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { createChatAdapter } from '@/lib/server/domains/ai/chat-adapter'
 import { z } from 'zod'
-import { config } from '@/lib/server/config'
 import { structuredOutputProviderOptions } from '@/lib/server/domains/ai/config'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 
@@ -148,10 +147,7 @@ export async function runClassificationCall(
   ].join('\n')
 
   const object = await chat({
-    adapter: openaiCompatibleText(model, {
-      baseURL: config.openaiBaseUrl!,
-      apiKey: config.openaiApiKey!,
-    }),
+    adapter: createChatAdapter(model),
     systemPrompts: [CLASSIFICATION_SYSTEM_PROMPT],
     messages: [{ role: 'user', content: userContent }],
     outputSchema: ClassificationResponseSchema,

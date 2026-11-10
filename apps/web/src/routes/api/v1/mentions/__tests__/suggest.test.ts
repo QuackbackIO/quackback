@@ -57,6 +57,11 @@ vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: (...args: unknown[]) => mockIncrementBucket(...args),
 }))
 
+// The designer's signed-out frame asks for nobody; its viewer may change branding.
+vi.mock('@/lib/server/policy/permissions', () => ({
+  permissionsForPrincipal: async () => new Set(['settings.branding']),
+}))
+
 vi.mock('@/lib/server/storage/s3', () => ({
   getPublicUrlOrNull: (key: string | null | undefined) =>
     key ? `https://cdn.example.com/${key}` : null,
@@ -367,5 +372,17 @@ describe('GET /api/v1/mentions/suggest', () => {
     const res = await handleMentionSuggest({ request: makeRequest('jane') })
     expect(res.status).toBe(429)
     expect(mockSelect).not.toHaveBeenCalled()
+  })
+
+  it("answers the designer's signed-out frame as nobody", async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValue(userPrincipal)
+    const framed = new Request('http://localhost/api/v1/mentions/suggest?q=ja', {
+      headers: { 'x-qb-preview-visitor': 'out' },
+    })
+
+    const res = await handleMentionSuggest({ request: framed })
+
+    expect(res.status).toBe(403)
   })
 })

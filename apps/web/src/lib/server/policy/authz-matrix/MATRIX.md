@@ -102,7 +102,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 761 surfaces
+### Server functions (`requireAuth`) — 789 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -540,6 +540,28 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::fetchPlatformCredentialsMaskedFn | integration.manage |
 | `lib/server/functions/portal-access.ts`::updatePortalAccessFn | settings.manage |
+| `lib/server/functions/portal-design-ai.ts`::getPortalDesignAiStatusFn | settings.branding |
+| `lib/server/functions/portal-design-ai.ts`::askPortalDesignAiFn | settings.branding |
+| `lib/server/functions/portal-design-ai.ts`::designAgentStepFn | settings.branding |
+| `lib/server/functions/portal-design-ai.ts`::readBrandShotsFn | settings.branding |
+| `lib/server/functions/portal-design-preview.ts`::listPortalDesignPreviewLinksFn | settings.branding |
+| `lib/server/functions/portal-design-preview.ts`::createPortalDesignPreviewLinkFn | settings.branding |
+| `lib/server/functions/portal-design-preview.ts`::revokePortalDesignPreviewLinkFn | settings.branding |
+| `lib/server/functions/portal-design-saved.ts`::listPortalDesignSavedFn | settings.branding |
+| `lib/server/functions/portal-design-saved.ts`::savePortalDesignFn | settings.branding |
+| `lib/server/functions/portal-design-saved.ts`::getPortalDesignCheckpointFn | settings.branding |
+| `lib/server/functions/portal-design-saved.ts`::deletePortalDesignSavedFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::getPortalDesignFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::savePortalDesignDraftFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::discardPortalDesignDraftFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::publishPortalDesignFn | design.publish |
+| `lib/server/functions/portal-design.ts`::listPortalDesignVersionsFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::getPortalDesignVersionFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::getPortalDesignSwitchFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::switchPortalDesignFn | design.publish |
+| `lib/server/functions/portal-design.ts`::switchBackPortalDesignFn | design.publish |
+| `lib/server/functions/portal-design.ts`::restorePortalDesignVersionFn | design.publish |
+| `lib/server/functions/portal-design.ts`::getPortalDesignDraftWaitingFn | settings.branding |
 | `lib/server/functions/portal-invites.ts`::sendPortalInviteFn | settings.manage |
 | `lib/server/functions/portal-invites.ts`::cancelPortalInviteFn | settings.manage |
 | `lib/server/functions/portal-invites.ts`::resendPortalInviteFn | settings.manage |
@@ -649,6 +671,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::getEmailChannelStatusFn | settings.manage |
 | `lib/server/functions/settings.ts`::updateModerationDefaultFn | settings.moderation |
 | `lib/server/functions/sign-in-again.ts`::getSignInAgainOptionsFn | END_USER (any authenticated) |
+| `lib/server/functions/site-capture.ts`::readWebsiteFn | settings.branding |
+| `lib/server/functions/site-capture.ts`::siteCaptureUsageFn | settings.manage |
 | `lib/server/functions/sla.ts`::listSlaPoliciesFn | sla.manage |
 | `lib/server/functions/sla.ts`::listSlaPolicyOptionsFn | conversation.view |
 | `lib/server/functions/sla.ts`::getSlaOfficeHoursFn | sla.manage |
@@ -806,12 +830,16 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/uploads.ts`::getChangelogImageUploadUrlFn | changelog.manage |
 | `lib/server/functions/uploads.ts`::getPostImageUploadUrlFn | post.create |
 | `lib/server/functions/uploads.ts`::getLogoUploadUrlFn | settings.manage |
-| `lib/server/functions/uploads.ts`::getFaviconUploadUrlFn | settings.manage |
+| `lib/server/functions/uploads.ts`::getFaviconUploadUrlFn | settings.branding |
 | `lib/server/functions/uploads.ts`::getHeaderLogoUploadUrlFn | settings.manage |
+| `lib/server/functions/uploads.ts`::getWordmarkUploadUrlFn | settings.branding |
+| `lib/server/functions/uploads.ts`::getBandImageUploadUrlFn | settings.branding |
+| `lib/server/functions/uploads.ts`::getShareImageUploadUrlFn | settings.branding |
 | `lib/server/functions/uploads.ts`::getIdentityProviderLogoUploadUrlFn | auth.manage |
 | `lib/server/functions/uploads.ts`::getWidgetHeroUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getAvatarUploadUrlFn | END_USER (any authenticated) |
 | `lib/server/functions/uploads.ts`::getAssistantAvatarUploadUrlFn | ai.customer.manage |
+| `lib/server/functions/uploads.ts`::getFontUploadUrlFn | settings.branding |
 | `lib/server/functions/user-attributes.ts`::listUserAttributesFn | user_attribute.view |
 | `lib/server/functions/user-attributes.ts`::createUserAttributeFn | user_attribute.manage |
 | `lib/server/functions/user-attributes.ts`::updateUserAttributeFn | user_attribute.manage |
@@ -868,10 +896,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workspace-api-key-settings.ts`::fetchWorkspaceKeyRolesFn | api_key.manage |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 131 surfaces
+### Public REST API (`withApiKeyAuth`) — 137 surfaces
 
 | Surface | Enforces |
 | --- | --- |
+| `routes/api/admin/design/brand-check.ts`::handleBrandCheck | settings.branding |
+| `routes/api/admin/design/brand-match.ts`::handleBrandMatch | settings.branding |
 | `routes/api/billing/session.ts`::POST | billing.manage |
 | `routes/api/billing/trial.ts`::POST | billing.manage |
 | `routes/api/export.companies.ts`::GET | company.view |
@@ -959,6 +989,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/settings/$area.ts`::GET | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `routes/api/v1/settings/$area.ts`::PATCH | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `routes/api/v1/settings/index.ts`::GET | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
+| `routes/api/v1/settings/portal_design.draft.ts`::DELETE | DYNAMIC (settings.branding) |
+| `routes/api/v1/settings/portal_design.ts`::GET | DYNAMIC (settings.branding) |
+| `routes/api/v1/settings/portal_design.ts`::PATCH | DYNAMIC (settings.branding) |
+| `routes/api/v1/settings/portal_design.versions.ts`::GET | DYNAMIC (settings.branding) |
 | `routes/api/v1/settings/receipts.$receiptId.undo.ts`::POST | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `routes/api/v1/status/-service-handlers.ts`::listStatusComponentsHandler | PUBLIC (any valid key) |
 | `routes/api/v1/status/-service-handlers.ts`::createStatusComponentHandler | status_page.manage |
@@ -1084,7 +1118,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-228 of 1099 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+232 of 1137 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1140,6 +1174,10 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | server-fn |
 | `lib/server/functions/portal-access.ts`::evaluateMyPortalAccessFn | server-fn |
 | `lib/server/functions/portal-access.ts`::recordPortalAccessDeniedFn | server-fn |
+| `lib/server/functions/portal-designer.ts`::getDesignerAccessFn | server-fn |
+| `lib/server/functions/portal-designer.ts`::getDesignerSampleFn | server-fn |
+| `lib/server/functions/portal-designer.ts`::listDesignerPlacesFn | server-fn |
+| `lib/server/functions/portal-designer.ts`::listDesignerPostsFn | server-fn |
 | `lib/server/functions/portal-invites.ts`::acceptPortalInviteFn | server-fn |
 | `lib/server/functions/portal-permissions.ts`::getMyPortalPermissionsFn | server-fn |
 | `lib/server/functions/portal.ts`::fetchAvatars | server-fn |

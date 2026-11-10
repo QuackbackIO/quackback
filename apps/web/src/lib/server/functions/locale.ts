@@ -13,11 +13,15 @@ import {
  * `PortalIntlProvider` the in-portal pages get from `_portal.tsx` — without
  * it `useIntl`/`<FormattedMessage>` in the auth forms would have no provider.
  */
-export const getPortalLocaleFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getRequestHeaders } = await import('@tanstack/react-start/server')
-  const acceptLanguage = getRequestHeaders().get('accept-language')
-  return resolveLocale(acceptLanguage)
-})
+export const getPortalLocaleFn = createServerFn({ method: 'GET' })
+  .validator((data: { preferred?: string } | undefined) => ({
+    preferred: typeof data?.preferred === 'string' ? data.preferred.slice(0, 16) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    const acceptLanguage = getRequestHeaders().get('accept-language')
+    return resolveLocale(acceptLanguage, data.preferred)
+  })
 
 /**
  * Resolve the locale AND load its catalog for a route loader, so the page
@@ -30,11 +34,11 @@ export const getPortalLocaleFn = createServerFn({ method: 'GET' }).handler(async
  * catalog (see PORTAL_MESSAGE_PREFIXES), so the SSR HTML doesn't carry the
  * admin/inbox strings the portal never renders.
  */
-export async function loadPortalIntl(): Promise<{
+export async function loadPortalIntl(preferred?: string): Promise<{
   locale: SupportedLocale
   messages: Record<string, string>
 }> {
-  const locale = await getPortalLocaleFn()
+  const locale = await getPortalLocaleFn({ data: { preferred } })
   const messages = await loadPortalMessages(locale)
   return { locale, messages }
 }

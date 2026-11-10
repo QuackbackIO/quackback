@@ -5,7 +5,6 @@
  */
 
 import { z } from 'zod'
-import { config } from '@/lib/server/config'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
@@ -110,8 +109,7 @@ export async function assessMergeCandidates(
 ): Promise<MergeAssessment[]> {
   await enforceAiTokenBudget()
 
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || candidates.length === 0)
-    return []
+  if (!isAiClientConfigured() || candidates.length === 0) return []
 
   const userPrompt = buildPrompt(sourcePost, candidates)
 

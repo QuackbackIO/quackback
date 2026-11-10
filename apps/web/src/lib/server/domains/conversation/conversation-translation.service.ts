@@ -57,9 +57,8 @@ import {
 import type { ConversationId, ConversationMessageId, UserId } from '@quackback/ids'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { createChatAdapter } from '@/lib/server/domains/ai/chat-adapter'
 import { z } from 'zod'
-import { config } from '@/lib/server/config'
 import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
@@ -220,7 +219,7 @@ async function callInboxTranslationModel<T>(
   outputSchema: z.ZodType<T>
 ): Promise<T | null> {
   const model = getChatModel('inboxTranslation')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return null
+  if (!isAiClientConfigured() || !model) return null
 
   // Counted, never blocked: see inboxTranslationOverAllowance.
   await inboxTranslationOverAllowance()
@@ -234,10 +233,7 @@ async function callInboxTranslationModel<T>(
     metadata: { stage, ...metadata },
   })
   const result = await chat({
-    adapter: openaiCompatibleText(model, {
-      baseURL: config.openaiBaseUrl!,
-      apiKey: config.openaiApiKey!,
-    }),
+    adapter: createChatAdapter(model),
     systemPrompts: [system],
     messages: [{ role: 'user', content: user }],
     outputSchema,

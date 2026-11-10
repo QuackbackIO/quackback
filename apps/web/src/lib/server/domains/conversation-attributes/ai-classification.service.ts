@@ -40,7 +40,6 @@
  */
 import { db, conversations, conversationMessages, eq } from '@/lib/server/db'
 import type { ConversationId } from '@quackback/ids'
-import { config } from '@/lib/server/config'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
@@ -184,7 +183,7 @@ export async function classifyConversationAttributes(
 ): Promise<ClassificationOutcome[]> {
   try {
     const model = getChatModel('classification')
-    if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return []
+    if (!isAiClientConfigured() || !model) return []
     // A teammate's test thread spends no AI tokens.
     const { isTestConversation } = await import('@/lib/server/test-data')
     if (await isTestConversation(conversationId)) return []

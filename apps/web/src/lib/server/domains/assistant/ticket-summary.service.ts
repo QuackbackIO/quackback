@@ -30,10 +30,9 @@
  * exactly as the conversation-close reaction runs its sibling.
  */
 import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { createChatAdapter } from '@/lib/server/domains/ai/chat-adapter'
 import { z } from 'zod'
 import { db, tickets, ticketSummaries, eq, sql } from '@/lib/server/db'
-import { config } from '@/lib/server/config'
 import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
@@ -97,7 +96,7 @@ export async function summarizeTicketOnClose(
     await enforceAiTokenBudget()
 
     const model = getChatModel('summary')
-    if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return
+    if (!isAiClientConfigured() || !model) return
     if (!(await isCurrentClose('ticket', ticketId, close))) return
 
     const [ticketRow, thread] = await Promise.all([
@@ -125,10 +124,7 @@ export async function summarizeTicketOnClose(
     // chip's 'copilot_summary' (analytics/copilot-usage.ts counts only the
     // latter), matching how the conversation on-close path stays off that report.
     const object = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+      adapter: createChatAdapter(model),
       systemPrompts: [SYSTEM_PROMPT],
       messages: [{ role: 'user', content: truncated }],
       outputSchema: TicketSummarySchema,

@@ -58,7 +58,7 @@ export function FeedbackLinkedEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={postUrl}>
-          View Feedback
+          View post
         </Button>
       </Section>
 
