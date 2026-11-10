@@ -3,7 +3,7 @@
  * draft bar's count and the review before publishing.
  */
 import { describe, expect, it } from 'vitest'
-import { designChanges } from '../diff'
+import { designChanges, shownChanges } from '../diff'
 import { defaultDesign } from '../schema'
 
 describe('designChanges', () => {
@@ -47,5 +47,18 @@ describe('designChanges', () => {
     expect(designChanges(read, named)).toEqual([])
     named.pages.home.blocks[0]!.grid.x = 4
     expect(designChanges(read, named)).toHaveLength(1)
+  })
+})
+
+describe('shownChanges', () => {
+  it('never lists when a match ran, or the face it could not match', () => {
+    const before = defaultDesign()
+    const after = defaultDesign()
+    after.brand.matchedAt = '2026-11-10T06:13:54.644Z'
+    after.brand.unmatchedFont = { family: 'Acme Grotesk', slot: 'heading' }
+    after.brand.light.accent = '#0058a3'
+    expect(shownChanges(before, after).map((change) => change.path)).toEqual(['brand.light.accent'])
+    // The draft still differs: only the list leaves them out.
+    expect(designChanges(before, after).length).toBeGreaterThan(1)
   })
 })
