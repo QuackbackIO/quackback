@@ -67,6 +67,8 @@ type Words = {
   status: (name: string) => string
   incident: (title: string, name: string) => string
   post: (title: string, board: string) => string
+  /** A missing page's name, before the site's in its title. */
+  notFound: string
 }
 
 /**
@@ -85,6 +87,7 @@ export interface PortalHeadTemplates {
   status: string
   incident: string
   post: string
+  notFound: string
 }
 
 const ENGLISH: PortalHeadTemplates = {
@@ -103,6 +106,7 @@ const ENGLISH: PortalHeadTemplates = {
   status: 'Live status and incident history for {name}.',
   incident: '{title}. A status update from {name}.',
   post: '{title}. Vote and comment on this post in {board}.',
+  notFound: 'Not found',
 }
 
 const fill = (template: string, values: Record<string, string>) =>
@@ -121,6 +125,7 @@ export function portalHeadWords(settings: PortalHeadSettings | null | undefined)
     status: (name) => fill(t.status, { name }),
     incident: (title, name) => fill(t.incident, { title, name }),
     post: (title, board) => fill(t.post, { title, board }),
+    notFound: t.notFound,
   }
 }
 

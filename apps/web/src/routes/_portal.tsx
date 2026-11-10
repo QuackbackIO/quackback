@@ -337,8 +337,14 @@ export const Route = createFileRoute('/_portal')({
     const card = portalShareImage(settings, loaderData?.baseUrl)
     const ogImage = card ?? resolvePortalOgImageUrl(settings?.brandingData, loaderData?.baseUrl)
 
+    // A path nothing answers, or a page whose post or entry is gone, says so in the tab.
+    const notFound = matches.some(
+      (match) =>
+        (match as { status?: string }).status === 'notFound' ||
+        (match as { _notFound?: boolean })._notFound
+    )
     const meta: Array<Record<string, string>> = [
-      { title: siteName },
+      { title: notFound ? `${portalHeadWords(settings).notFound} · ${siteName}` : siteName },
       { name: 'description', content: description },
       { property: 'og:site_name', content: siteName },
       { property: 'og:title', content: siteName },

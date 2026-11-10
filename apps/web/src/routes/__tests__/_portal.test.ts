@@ -306,4 +306,18 @@ describe('_portal head: the brand reaches the tab and link previews', () => {
     expect(content('twitter:card')).toBe('summary_large_image')
     expect(content('description')).not.toMatch(/feature request/i)
   })
+
+  it('titles a missing page as not found, then the brand', async () => {
+    const settings = await settingsWithDesign()
+    const titleOf = (matches: Array<Record<string, unknown>>) =>
+      head({
+        loaderData: { gate: null, baseUrl: 'https://acme.test' },
+        matches: [{ context: { settings } }, ...matches],
+      }).meta.find((m) => 'title' in m)?.title
+    expect(titleOf([{ routeId: '/_portal', _notFound: true }])).toBe('Not found · GitHub')
+    expect(titleOf([{ routeId: '/_portal/b/$slug', status: 'notFound' }])).toBe(
+      'Not found · GitHub'
+    )
+    expect(titleOf([{ routeId: '/_portal', status: 'success' }])).toBe('GitHub')
+  })
 })
