@@ -13,8 +13,11 @@ import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { portalPreviewSrc } from '@/components/admin/settings/branding/portal-preview'
 import { HistoryDialog } from './history-dialog'
 
-/** The width a desktop visitor's browser lays the portal out at. */
-const DESKTOP_WIDTH = 1280
+/**
+ * The width the picture lays the portal out at: the narrowest desktop width,
+ * so its words and logo are as large as the box lets them be.
+ */
+const DESKTOP_WIDTH = 1024
 
 /** The builder, and its Brand kit's match row. */
 export const BUILDER_HREF = '/design?path=%2F&from=appearance'
@@ -49,8 +52,8 @@ function logoOf(design: PortalDesign, workspaceLogo: string | null): string | nu
 }
 
 /**
- * The live portal, small: its home laid out at desktop width and scaled to
- * the box. A picture, not a page to use: it takes no focus or clicks.
+ * The live portal, small: the page visitors land on, laid out at desktop
+ * width and scaled to the box. A picture, not a page to use: it takes no focus or clicks.
  */
 function PortalThumbnail() {
   const box = useRef<HTMLDivElement>(null)
@@ -72,7 +75,7 @@ function PortalThumbnail() {
     >
       <ClientOnly>
         <iframe
-          src={portalPreviewSrc('light')}
+          src={portalPreviewSrc('light', 'trending', 'landing')}
           title="Your portal"
           loading="lazy"
           tabIndex={-1}

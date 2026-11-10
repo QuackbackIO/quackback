@@ -10,6 +10,7 @@ import { Route as PortalLayout } from '@/routes/_portal'
 import { Route as PortalHome } from '@/routes/_portal/index'
 import { Route as PortalFeed } from '@/routes/_portal/feedback'
 import { portalPreviewSrc } from '../portal-preview'
+import { hasFeedSearch } from '@/components/public/feedback/feed-route'
 
 type Validate = (search: Record<string, unknown>) => Record<string, unknown>
 
@@ -48,5 +49,13 @@ describe('portalPreviewSrc', () => {
     )
     expect(canonical).toEqual(search)
     expect(search).toMatchObject(page === 'home' ? { page: 'home' } : { sort: 'top' })
+  })
+
+  it('frames the landing page at the root with no feed search, so Home is not sent on to the feed', () => {
+    const src = portalPreviewSrc('light', 'top', 'landing')
+    expect(src.startsWith('/?')).toBe(true)
+    const search = defaultParseSearch(src.slice(1))
+    expect(hasFeedSearch(homeSearch.parse(search))).toBe(false)
+    expect(search).toEqual({ theme: 'light', preview: true })
   })
 })

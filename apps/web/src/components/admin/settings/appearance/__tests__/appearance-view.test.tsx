@@ -123,7 +123,10 @@ describe('AppearanceView', () => {
   it('shows the live portal: a picture of it, its logo, colours and fonts', () => {
     mount({ changed: true })
     const picture = screen.getByTitle('Your portal')
-    expect(picture.getAttribute('src')).toBe('/?theme=light&preview=true&sort=trending')
+    // The page visitors land on: no feed search, which sends the root on to the feed while Home is on.
+    expect(picture.getAttribute('src')).toBe('/?theme=light&preview=true')
+    // Laid out at the narrowest desktop width, so its logo and words read as large as they can.
+    expect((picture as HTMLIFrameElement).style.width).toBe('1024px')
     expect(picture.closest('[inert]')).toBeTruthy()
     // The live design's, not the draft's: the draft's teal waits to publish.
     const swatches = screen.getByRole('list', { name: 'Colours' })
