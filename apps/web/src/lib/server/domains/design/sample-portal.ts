@@ -33,7 +33,7 @@ const STATUSES: Array<[string, string, Status['category'], boolean]> = [
 ]
 
 const BOARDS: Array<[string, string]> = [
-  ['Feature requests', 'Ideas for what to build next.'],
+  ['Feature requests', 'Posts about what to build next.'],
   ['Bugs', 'Something not working as it should.'],
 ]
 

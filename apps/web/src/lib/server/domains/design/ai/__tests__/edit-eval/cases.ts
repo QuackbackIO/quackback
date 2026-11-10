@@ -15,6 +15,7 @@ import { landingOf, menuParts } from '@/lib/shared/design/menu'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { readingOrder } from '@/lib/shared/design/home-grid'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
+import { findOverride } from '@/lib/shared/design/style-overrides'
 import type { AiPlaces, FlatOp } from '@/lib/shared/design/design-ops'
 import type { AiElementPick } from '@/lib/shared/design/apply-changes'
 import { hexToOklch } from '@/lib/shared/theme/colors'
@@ -492,6 +493,27 @@ export const EVAL_CASES: EvalCase[] = [
  */
 export const HELD_OUT_CASES: EvalCase[] = [
   ...styleCases(),
+  {
+    // Another site's feel, asked of one picked part, is that part's look: the
+    // brand (and a whole-site match) stays out of it.
+    name: 'a picked hero button like another site: that button only, no brand change',
+    request: 'Make this button feel like stripe.com',
+    picked: { scope: 'band', element: { element: 'button', part: 'hero.home.cta' } },
+    ops: [
+      {
+        op: 'override',
+        target: 'part:hero.home.cta',
+        key: 'button.base.background',
+        value: '#635bff',
+      },
+      { op: 'override', target: 'part:hero.home.cta', key: 'button.base.radius', value: '999' },
+    ],
+    check: (d, before) =>
+      !!findOverride(d, 'part:hero.home.cta:button')?.style &&
+      JSON.stringify(d.brand) === JSON.stringify(before.brand) &&
+      !d.style?.button,
+    touches: ['overrides'],
+  },
   {
     name: 'hero main action: the help search',
     request: 'Put a search box in the hero instead',

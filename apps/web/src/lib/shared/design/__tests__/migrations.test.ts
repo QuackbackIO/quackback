@@ -75,6 +75,19 @@ const BEFORE: Record<string, () => Json> = {
     return doc
   },
   'hero-keys': () => everyHeroKey().v2,
+  'neutral-focus': () => {
+    const doc = current()
+    doc.style = { button: { focus: { borderColor: 'accent', shadow: 'glow', ringWidth: 3 } } }
+    doc.styleDark = { input: { focus: { borderColor: '#2563eb' } } }
+    doc.overrides = [
+      {
+        id: 'abcdefgh',
+        target: { scope: 'page', page: 'home', element: 'input' },
+        style: { focus: { shadow: 'glow' }, hover: { borderColor: 'accent' } },
+      },
+    ]
+    return doc
+  },
 }
 
 /** What each step leaves, for the document above. */
@@ -86,7 +99,7 @@ const AFTER: Record<string, (doc: Json) => void> = {
     }),
   'hover-lift': (doc) => {
     expect(doc.shape).not.toHaveProperty('hover')
-    expect((doc.style as Json).postCard).toEqual({ hover: { lift: 2, shadow: 'floating' } })
+    expect((doc.style as Json).postCard).toEqual({ hover: { lift: 2, shadow: 'lift' } })
   },
   'drop-ring-colours': (doc) => {
     expect(doc.style).toEqual({ button: { focus: { ringWidth: 3 } } })
@@ -99,6 +112,18 @@ const AFTER: Record<string, (doc: Json) => void> = {
   'drop-logo-name-styles': (doc) => {
     expect((doc.brand as Json).logo).not.toHaveProperty('nameColour')
     expect((doc.brand as Json).logo).not.toHaveProperty('nameCase')
+  },
+  'neutral-focus': (doc) => {
+    // The ring's width stays; a colour or glow on focus goes, and hover keeps its own.
+    expect(doc.style).toEqual({ button: { focus: { ringWidth: 3 } } })
+    expect(doc).not.toHaveProperty('styleDark')
+    expect(doc.overrides).toEqual([
+      {
+        id: 'abcdefgh',
+        target: { scope: 'page', page: 'home', element: 'input' },
+        style: { hover: { borderColor: 'accent' } },
+      },
+    ])
   },
   'hero-keys': (doc) => {
     const { v3 } = everyHeroKey()
@@ -163,7 +188,7 @@ describe('design migrations', () => {
     // Lift lands on post cards the split made, keeping the card look's own hover.
     expect((migrated.style as Json).postCard).toEqual({
       base: { radius: 4 },
-      hover: { lift: 2, shadow: 'floating' },
+      hover: { lift: 2, shadow: 'lift' },
     })
     expect(migrated).not.toHaveProperty('vocabulary')
     expect(portalDesign.safeParse(migrated).success).toBe(true)

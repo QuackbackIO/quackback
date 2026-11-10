@@ -106,6 +106,7 @@ export async function notifyConversationClosed(opts: {
       inReplyTo: inReplyTo ?? undefined,
       references,
       conversationId: opts.conversationId,
+      brand: ctx.emailBrand,
     })
     const outboundMessageId =
       result?.messageId === undefined ? messageId : (result.messageId ?? undefined)

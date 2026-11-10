@@ -14,7 +14,7 @@ import { convertLegacyBranding } from '@/lib/shared/design/convert'
 import { designChanges } from '@/lib/shared/design/diff'
 import { withBlockIds } from '@/lib/shared/design/home'
 import { mergePatch } from '@/lib/shared/design/merge-patch'
-import { withHeroKeys } from '@/lib/shared/design/migrations'
+import { tidyDesign, withHeroKeys } from '@/lib/shared/design/migrations'
 import { resolveDesign, type DesignAdjustment } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { parseJsonOrNull, parsePortalConfig } from '@/lib/server/domains/settings/settings.helpers'
@@ -167,7 +167,13 @@ export async function patchDesignDraft(
     patch !== null && typeof patch === 'object' && !Array.isArray(patch)
       ? withHeroKeys(patch as Record<string, unknown>)
       : patch
-  return saveDesignDraft(mergePatch(current.design, named), author, expectedRevision)
+  // Keys written as format 2 had them (one card look, Lift as a motion) are tidied as a stored design's are.
+  const merged = mergePatch(current.design, named)
+  const tidied =
+    merged !== null && typeof merged === 'object' && !Array.isArray(merged)
+      ? tidyDesign(merged as Record<string, unknown>)
+      : merged
+  return saveDesignDraft(tidied, author, expectedRevision)
 }
 
 /**

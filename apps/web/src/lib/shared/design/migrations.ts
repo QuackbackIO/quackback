@@ -53,22 +53,29 @@ export function stepApplies(step: DesignMigration, version: unknown): boolean {
   return typeof version !== 'number' || version <= step.version
 }
 
-/** A focus ring's colour, gone since focus rings stay neutral grey; its width stays. */
-const RETIRED_STYLE_PROP = 'ring'
+/** Which style properties a tidy takes out, by state and property. */
+type Drops = (state: string, prop: string) => boolean
 
-/** Whether a style sheet ({ element: { state: props } }) still names a ring colour. */
-const sheetHasRing = (sheet: unknown): boolean =>
+/** A focus ring's colour, gone since focus rings stay neutral grey; its width stays. */
+const ringColour: Drops = (_state, prop) => prop === 'ring'
+
+/** An edge colour or a shadow on focus, gone since focus stays neutral: no brand colour, no glow. */
+const focusPaint: Drops = (state, prop) =>
+  state === 'focus' && (prop === 'borderColor' || prop === 'shadow')
+
+/** Whether a style sheet ({ element: { state: props } }) names a property to drop. */
+const sheetHas = (sheet: unknown, drops: Drops): boolean =>
   isRecord(sheet) &&
   Object.values(sheet).some(
     (states) =>
       isRecord(states) &&
-      Object.values(states).some(
-        (props) => isRecord(props) && Object.hasOwn(props, RETIRED_STYLE_PROP)
+      Object.entries(states).some(
+        ([state, props]) => isRecord(props) && Object.keys(props).some((p) => drops(state, p))
       )
   )
 
-/** A style sheet without ring colours, dropping a state or element left empty; the one given stays. */
-function sheetWithoutRing(sheet: Json): Json | undefined {
+/** A style sheet without the dropped properties, dropping a state or element left empty; the one given stays. */
+function sheetWithout(sheet: Json, drops: Drops): Json | undefined {
   const out: Json = {}
   for (const [element, states] of Object.entries(sheet)) {
     if (!isRecord(states)) {
@@ -77,11 +84,11 @@ function sheetWithoutRing(sheet: Json): Json | undefined {
     }
     const kept: Json = {}
     for (const [state, props] of Object.entries(states)) {
-      if (!isRecord(props) || !Object.hasOwn(props, RETIRED_STYLE_PROP)) {
+      if (!isRecord(props) || !Object.keys(props).some((p) => drops(state, p))) {
         kept[state] = props
         continue
       }
-      const { [RETIRED_STYLE_PROP]: _ring, ...rest } = props
+      const rest = Object.fromEntries(Object.entries(props).filter(([p]) => !drops(state, p)))
       if (Object.keys(rest).length) kept[state] = rest
     }
     if (Object.keys(kept).length) out[element] = kept
@@ -89,12 +96,12 @@ function sheetWithoutRing(sheet: Json): Json | undefined {
   return Object.keys(out).length ? out : undefined
 }
 
-/** Replaces each of a record's sheets that names a ring colour, deleting one left empty. */
-function stripRings(holder: Json, keys: readonly string[]): void {
+/** Replaces each of a record's sheets that names a dropped property, deleting one left empty. */
+function stripSheets(holder: Json, keys: readonly string[], drops: Drops): void {
   for (const key of keys) {
     const sheet = holder[key]
-    if (!sheetHasRing(sheet)) continue
-    const next = sheetWithoutRing(sheet as Json)
+    if (!sheetHas(sheet, drops)) continue
+    const next = sheetWithout(sheet as Json, drops)
     if (next) holder[key] = next
     else delete holder[key]
   }
@@ -102,35 +109,40 @@ function stripRings(holder: Json, keys: readonly string[]): void {
 
 /** An override's looks, each one element's states. */
 const OVERRIDE_LAYERS = ['style', 'styleDark', 'phone'] as const
+/** A design's own sheets, and a Home block look's. */
+const SITE_SHEETS = ['style', 'styleDark', 'stylePhone'] as const
+const BLOCK_SHEETS = ['style', 'phone'] as const
 
 /**
- * A design without focus ring colours, in its site, block and override looks.
- * A copy where one is found; the document given otherwise.
+ * A design without the dropped style properties, in its site, block and
+ * override looks. A copy where one is found; the document given otherwise.
  */
-function withoutRingColours(doc: Json): Json {
+function withoutStyleProps(doc: Json, drops: Drops): Json {
   const has =
-    sheetHasRing(doc.style) ||
-    sheetHasRing(doc.styleDark) ||
+    SITE_SHEETS.some((key) => sheetHas(doc[key], drops)) ||
     (Array.isArray(doc.overrides) &&
       doc.overrides.some(
-        (o) => isRecord(o) && OVERRIDE_LAYERS.some((layer) => sheetHasRing({ one: o[layer] }))
+        (o) => isRecord(o) && OVERRIDE_LAYERS.some((layer) => sheetHas({ one: o[layer] }, drops))
       )) ||
     (isRecord(doc.pages) &&
       isRecord(doc.pages.home) &&
       Array.isArray(doc.pages.home.blocks) &&
       doc.pages.home.blocks.some(
-        (b) => isRecord(b) && isRecord(b.look) && sheetHasRing(b.look.style)
+        (b) =>
+          isRecord(b) &&
+          isRecord(b.look) &&
+          BLOCK_SHEETS.some((key) => sheetHas((b.look as Json)[key], drops))
       ))
   if (!has) return doc
   const out = structuredClone(doc)
-  stripRings(out, ['style', 'styleDark'])
+  stripSheets(out, SITE_SHEETS, drops)
   if (Array.isArray(out.overrides)) {
     for (const o of out.overrides) {
       if (!isRecord(o)) continue
       for (const layer of OVERRIDE_LAYERS) {
         // An override's look is one element's states: as a sheet of one.
-        if (!sheetHasRing({ one: o[layer] })) continue
-        const states = sheetWithoutRing({ one: o[layer] })?.one
+        if (!sheetHas({ one: o[layer] }, drops)) continue
+        const states = sheetWithout({ one: o[layer] }, drops)?.one
         if (states) o[layer] = states
         else delete o[layer]
       }
@@ -145,11 +157,14 @@ function withoutRingColours(doc: Json): Json {
   if (Array.isArray(blocks))
     for (const b of blocks) {
       if (!isRecord(b) || !isRecord(b.look)) continue
-      stripRings(b.look, ['style'])
+      stripSheets(b.look, BLOCK_SHEETS, drops)
       if (!Object.keys(b.look).length) delete b.look
     }
   return out
 }
+
+const withoutRingColours = (doc: Json) => withoutStyleProps(doc, ringColour)
+const withNeutralFocus = (doc: Json) => withoutStyleProps(doc, focusPaint)
 
 /** Keys a design once had: the words for posts and boards, now fixed, and footer links. */
 const RETIRED_KEYS = ['vocabulary', 'footer']
@@ -254,7 +269,22 @@ export const DESIGN_MIGRATIONS: readonly DesignMigration[] = [
   { name: 'drop-logo-name-styles', version: 2, up: withoutLogoNameStyles },
   // Format 3: the hero's keys named for the hero, no longer the band (HERO_KEYS).
   { name: 'hero-keys', version: 2, to: 3, up: withHeroKeys },
+  // Focus stays neutral: an edge colour or a shadow (glow is the brand's) set on focus is dropped.
+  { name: 'neutral-focus', version: 3, up: withNeutralFocus },
 ]
+
+/**
+ * A design, or what a patch or a change makes of one, with every tidy run
+ * whatever its version: a format 3 design patched with a key only format 2
+ * had (one card look, Lift as a motion, a ring colour) reads as a stored one
+ * does. Format changes are left to migrateDesign. The same document when no
+ * tidy has anything to do.
+ */
+export function tidyDesign(given: Json): Json {
+  let doc = given
+  for (const step of DESIGN_MIGRATIONS) if (step.to === undefined) doc = step.up(doc)
+  return doc
+}
 
 /**
  * A stored, sent or written design document as this build reads it: every

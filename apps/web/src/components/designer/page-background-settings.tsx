@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { prepareBackgroundImage, type PreparedBackground } from '@/lib/client/background-image'
 import { PAGE_BACKGROUND_SETTINGS } from '@/lib/shared/design/blocks'
 import { designAssetUrl } from '@/lib/shared/design/design-view'
+import { fillValue } from '@/lib/shared/design/defaults'
 import {
   BACKGROUND_NAMES,
   BACKGROUND_PAGE_NAMES,
@@ -249,7 +250,7 @@ function ImageStrength({
   onChange: (strength: number) => void
   idPrefix: string
 }) {
-  const strength = fill.strength ?? 35
+  const strength = fillValue(fill, 'strength')
   const light = useMemo(() => resolveDesignCached(design).light, [design])
   const shows = light
     ? Math.round(
@@ -319,7 +320,7 @@ function FillSettings({
           />
           <TileRow
             label={THEME.strength}
-            value={fill.strength ?? (exact ? 'given' : 'soft')}
+            value={fill.strength ?? (exact ? 'given' : fillValue(fill, 'strength'))}
             options={[
               ...(exact ? [['given', THEME.asChosen] as const] : []),
               ...strengthOf('tint'),
@@ -333,19 +334,19 @@ function FillSettings({
       )
     }
     case 'gradient': {
-      const radial = fill.shape === 'radial'
+      const radial = fillValue(fill, 'shape') === 'radial'
       return (
         <>
           <TileRow
             label="Shape"
-            value={fill.shape ?? 'linear'}
+            value={fillValue(fill, 'shape')}
             options={options('shape') as ReadonlyArray<readonly ['linear' | 'radial', string]>}
             onChange={(shape) => onChange({ ...fill, shape }, 'Shape')}
           />
           {radial ? (
             <TileRow
               label="Glow from"
-              value={fill.centre ?? 'top'}
+              value={fillValue(fill, 'centre')}
               options={
                 options('centre') as ReadonlyArray<readonly ['top' | 'middle' | 'corner', string]>
               }
@@ -354,7 +355,7 @@ function FillSettings({
           ) : (
             <TileRow
               label="Direction"
-              value={fill.direction ?? 'down'}
+              value={fillValue(fill, 'direction')}
               options={
                 options('direction') as ReadonlyArray<
                   readonly [NonNullable<typeof fill.direction>, string]
@@ -403,7 +404,7 @@ function FillSettings({
           )}
           <TileRow
             label={THEME.strength}
-            value={fill.strength ?? 'faint'}
+            value={fillValue(fill, 'strength')}
             options={strengthOf('gradient')}
             onChange={(strength) => onChange({ ...fill, strength }, 'Strength')}
           />
@@ -429,12 +430,12 @@ function FillSettings({
             design={design}
             id={`${idPrefix}-colour`}
             label={THEME.colour}
-            value={fill.colour ?? 'accent'}
+            value={fillValue(fill, 'colour')}
             onChange={(colour) => onChange({ ...fill, colour }, 'Colour')}
           />
           <TileRow
             label="Size"
-            value={fill.scale ?? 'medium'}
+            value={fillValue(fill, 'scale')}
             options={
               options('scale') as ReadonlyArray<readonly ['small' | 'medium' | 'large', string]>
             }
@@ -442,7 +443,7 @@ function FillSettings({
           />
           <TileRow
             label={THEME.strength}
-            value={fill.strength ?? 'faint'}
+            value={fillValue(fill, 'strength')}
             options={strengthOf('pattern')}
             onChange={(strength) => onChange({ ...fill, strength }, 'Strength')}
           />
@@ -464,7 +465,7 @@ function FillSettings({
           />
           <TileRow
             label="Fit"
-            value={fill.fit ?? 'cover'}
+            value={fillValue(fill, 'fit')}
             options={
               options('fit') as ReadonlyArray<readonly ['cover' | 'contain' | 'tile', string]>
             }
@@ -474,7 +475,7 @@ function FillSettings({
             <PropertyMore>
               <TileRow
                 label="Keep in view"
-                value={fill.position ?? 'centre'}
+                value={fillValue(fill, 'position')}
                 options={
                   options('position') as ReadonlyArray<
                     readonly ['top' | 'centre' | 'bottom', string]
@@ -484,7 +485,7 @@ function FillSettings({
               />
               <TileRow
                 label="On scroll"
-                value={fill.scroll ?? 'scroll'}
+                value={fillValue(fill, 'scroll')}
                 options={options('scroll') as ReadonlyArray<readonly ['scroll' | 'fixed', string]>}
                 onChange={(scroll) => onChange({ ...fill, scroll }, 'On scroll')}
               />

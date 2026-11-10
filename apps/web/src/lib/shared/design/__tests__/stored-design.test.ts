@@ -375,7 +375,7 @@ describe('reading a design stored when Lift was a motion of its own', () => {
     expect(read.design.shape).not.toHaveProperty('hover')
     expect(read.design.style).toEqual({
       button: { hover: { lift: 2, shadow: 'deep' } },
-      postCard: { hover: { lift: 2, shadow: 'floating' } },
+      postCard: { hover: { lift: 2, shadow: 'lift' } },
     })
   })
 

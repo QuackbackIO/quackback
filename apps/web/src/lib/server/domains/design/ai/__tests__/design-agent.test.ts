@@ -326,6 +326,22 @@ describe('a step keeps to what was picked and how far the chip says it reaches',
     expect(reply.outcome.outOfScope).toEqual(['Post cards on hover'])
   })
 
+  it('never restyles the whole site from a part-scoped request, whatever the model answers', async () => {
+    const answer = { ...hoverDarker, match_website: 'https://stripe.com' }
+    const scoped = await step(answer, {
+      message: 'Make this button feel like stripe.com',
+      scope: 'band',
+      within: 'every',
+      page: 'home',
+    })
+    if (!scoped.ok) throw new Error(scoped.message)
+    expect(scoped.answer.match_website).toBe('')
+    // Asked about the whole site, the same answer keeps it.
+    const site = await step(answer, { message: 'Make the portal feel like stripe.com' })
+    if (!site.ok) throw new Error(site.message)
+    expect(site.answer.match_website).toBe('https://stripe.com')
+  })
+
   it('tells the model how far it may reach', async () => {
     await step(calmer, { message: 'Make this calmer', scope: 'band', within: 'page', page: 'home' })
     const system = model.calls[0]!.systemPrompts.join('\n')

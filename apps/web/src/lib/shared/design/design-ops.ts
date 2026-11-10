@@ -1704,7 +1704,12 @@ function opInScope(
   if (within.blockId) {
     if (!['set', 'move', 'resize', 'remove'].includes(op.op)) return false
     const found = findBlock(before, op.target)
-    return found.ok && found.block.id === within.blockId
+    if (!found.ok || found.block.id !== within.blockId) return false
+    // Naming the block is not enough: "roadmap" is a block and a page, and a
+    // page's own setting lands on the page, outside what was picked.
+    return fields.every(
+      (field) => under(field, 'pages.home.blocks') || pathInScope(field, within.scope)
+    )
   }
   if (!fields.every((field) => pathInScope(field, within.scope))) return false
   return fieldsInReach(before, after, fields, within)

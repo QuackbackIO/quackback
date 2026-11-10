@@ -2,6 +2,7 @@ import type { ConversationId, ConversationMessageId, PrincipalId } from '@quackb
 import type { Channel } from '@/lib/shared/channels'
 import type { JSONContent } from '@tiptap/core'
 import type { ConversationAttachment } from '@/lib/server/db'
+import type { EmailBrand } from '@quackback/email'
 
 export type LifecycleKind = 'closed' | 'auto_closed' | 'reopened'
 
@@ -18,6 +19,8 @@ export interface AgentMessageDeliveryCtx {
   ctaUrl: string
   workspaceName: string
   logoUrl: string | null
+  /** The published design's email colours; absent keeps Quackback gold. */
+  emailBrand?: EmailBrand
   direction: 'agent_reply' | 'agent_started'
   attachments?: ConversationAttachment[]
 }
@@ -30,6 +33,8 @@ export interface CsatDeliveryCtx {
   ratingUrls: [string, string, string, string, string]
   workspaceName: string
   logoUrl: string | null
+  /** The published design's email colours; absent keeps Quackback gold. */
+  brand?: EmailBrand
   from?: string
 }
 

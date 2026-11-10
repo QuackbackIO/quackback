@@ -312,6 +312,37 @@ describe('applyDesignChanges', () => {
     expect(result.design.layout).not.toHaveProperty('bandArt')
   })
 
+  it('takes a card look and Lift as format 2 wrote them, tidied as a stored design is', () => {
+    const untrusted = {
+      blockTypes: [],
+      links: new Set<string>(),
+      checkCss: () => null,
+      files: new Set<string>(),
+    }
+    const result = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'style', value: { card: { base: { radius: 4 } } } },
+        { path: 'shape.hover', value: 'lift' },
+      ],
+      'site',
+      untrusted
+    )
+    expect(result.refused).toEqual([])
+    expect(result.design.style?.panel).toEqual({ base: { radius: 4 } })
+    expect(result.design.style?.postCard).toMatchObject({ base: { radius: 4 }, hover: { lift: 2 } })
+    expect(result.design.shape).not.toHaveProperty('hover')
+    // Each lands as a change its undo can take back.
+    expect(result.applied.length).toBeGreaterThanOrEqual(2)
+    const undone = applyDesignChanges(
+      result.design,
+      [...result.applied].reverse().map((change) => ({ path: change.path, value: change.before })),
+      'site'
+    ).design
+    expect(undone.style).toEqual(defaultDesign().style)
+    expect(undone.shape).toEqual(defaultDesign().shape)
+  })
+
   it('keeps the rest of a Home layout from the model when a block’s page is off', () => {
     const result = applyDesignChanges(
       defaultDesign(),

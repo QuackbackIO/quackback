@@ -112,6 +112,8 @@ export function largeHeadline(doc: PortalDesign): boolean {
 export const STYLE_SHADOW_CSS = {
   ...SHADOW,
   glow: '0 0 0 4px color-mix(in oklch, var(--qb-accent) 22%, transparent)',
+  // Lift's own, exactly as the motion it replaced drew it.
+  lift: '0 6px 16px -4px rgb(0 0 0 / 0.18)',
 } as const
 
 /** The roles an exact colour can be, to draw it as that role's own in dark mode. */

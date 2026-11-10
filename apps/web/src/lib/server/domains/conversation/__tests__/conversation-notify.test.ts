@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
 import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 import type { Conversation } from '@/lib/server/db'
+import type { HookContext } from '@/lib/server/events/hook-context'
 import { conversationIdFromInboundAddress } from '../conversation.email-channel'
 import { SELF_HOSTED_MAIL_SLUG } from '../conversation.mail-slug'
 
@@ -26,10 +27,7 @@ let limitQueue: Array<Record<string, unknown>[]> = []
 
 const isAnyAgentOnline = vi.fn<() => Promise<boolean>>()
 const isPrincipalOnline = vi.fn<(p: PrincipalId) => Promise<boolean>>()
-const buildHookContext =
-  vi.fn<
-    () => Promise<{ workspaceName: string; portalBaseUrl: string; logoUrl: string | null } | null>
-  >()
+const buildHookContext = vi.fn<() => Promise<HookContext | null>>()
 const sendConversationMessageEmail = vi.fn<(opts: Record<string, unknown>) => Promise<unknown>>()
 const sendCsatRequestEmail = vi.fn<(opts: Record<string, unknown>) => Promise<unknown>>()
 const mintCsatEmailToken =
@@ -1335,5 +1333,80 @@ describe('threading headers (P4.6 regression guard)', () => {
         expect(recordEmailIdentity).toHaveBeenCalled()
       })
     })
+  })
+})
+
+// A sender that is not handed the brand falls back to Quackback gold, so a
+// customer's visitors would get support mail in someone else's colours.
+describe('workspace brand on conversation mail', () => {
+  const visitorPrincipalId = 'principal_visitor' as PrincipalId
+  const brand = { accent: '#0a7d4f', accentText: '#ffffff', link: '#0a6b44' }
+  beforeEach(() => {
+    buildHookContext.mockResolvedValue({ ...ctx, emailBrand: brand })
+  })
+
+  it('brands the team copy of a visitor message', async () => {
+    isAnyAgentOnline.mockResolvedValue(false)
+    teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'help',
+      authorName: 'Jane',
+      isFirstMessage: true,
+    })
+
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+    expect(sendConversationMessageEmail.mock.calls[0][0].brand).toEqual(brand)
+  })
+
+  it('brands an agent reply to the visitor and to every added customer', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'v@x.com' }]
+    listParticipantReplyRecipients.mockResolvedValue([
+      { principalId: 'principal_p1' as PrincipalId, email: 'second@example.com' },
+    ])
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'fixed',
+      agentName: 'Agent',
+      channel: 'email',
+    })
+
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(2)
+    for (const [call] of sendConversationMessageEmail.mock.calls) {
+      expect(call.brand).toEqual(brand)
+    }
+  })
+
+  it('brands the first message of an agent-started conversation', async () => {
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    const { notifyConversationStarted } = await import('../conversation.notify')
+
+    await notifyConversationStarted({
+      conversationId,
+      visitorPrincipalId,
+      content: 'welcome',
+      agentName: 'Agent',
+    })
+
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+    expect(sendConversationMessageEmail.mock.calls[0][0].brand).toEqual(brand)
+  })
+
+  it('brands a CSAT rating request', async () => {
+    limitQueue = [
+      [{ channel: 'email', visitorPrincipalId }],
+      [{ type: 'user', email: 'visitor@example.com', contactEmail: null }],
+    ]
+    mintCsatEmailToken.mockReturnValue('signed-token')
+    sendCsatRequestEmail.mockResolvedValue({ sent: true })
+
+    await notifyCsatRequestEmail(conversationId, 'How did we do?')
+
+    expect(sendCsatRequestEmail).toHaveBeenCalledTimes(1)
+    expect(sendCsatRequestEmail.mock.calls[0][0].brand).toEqual(brand)
   })
 })

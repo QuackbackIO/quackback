@@ -98,8 +98,11 @@ export const stylePaint = z.union([
 ])
 export type StylePaint = z.output<typeof stylePaint>
 
-/** Shadows, shallowest first; glow is a soft ring of the brand colour. */
-export const STYLE_SHADOWS = ['none', 'soft', 'lifted', 'floating', 'deep', 'glow'] as const
+/**
+ * Shadows, shallowest first; glow is a soft ring of the brand colour. Lift is
+ * the one the Hover tile's Lift draws (hover-lift.ts): stored, never offered.
+ */
+export const STYLE_SHADOWS = ['none', 'soft', 'lifted', 'floating', 'deep', 'glow', 'lift'] as const
 
 /* Properties */
 
@@ -114,6 +117,8 @@ export type StylePropInfo = PropKind & {
   about: string
   /** Only in these states, where it means something only there. */
   states?: readonly StyleState[]
+  /** Never in these states. */
+  notStates?: readonly StyleState[]
 }
 
 const num = (min: number, max: number, step: number, unit: 'px' | 'em' | '' = 'px') =>
@@ -122,7 +127,13 @@ const num = (min: number, max: number, step: number, unit: 'px' | 'em' | '' = 'p
 export const STYLE_PROPS = {
   background: { kind: 'paint', label: 'Background', about: 'its fill: a colour or a gradient' },
   color: { kind: 'colour', label: 'Text', about: 'its text colour; moved until it reads' },
-  borderColor: { kind: 'colour', label: 'Edge colour', about: 'the colour of its edge' },
+  borderColor: {
+    kind: 'colour',
+    label: 'Edge colour',
+    about: 'the colour of its edge',
+    // Focus stays neutral: the ring is grey, and an edge cannot paint it in the brand.
+    notStates: ['focus'],
+  },
   borderWidth: { ...num(0, 8, 1), label: 'Edge width', about: 'its edge, 0 for none' },
   borderStyle: {
     kind: 'choice',
@@ -143,6 +154,8 @@ export const STYLE_PROPS = {
     },
     label: 'Shadow',
     about: 'how far it floats',
+    // Glow is a ring of the brand colour: on focus it would be a brand focus ring.
+    notStates: ['focus'],
   },
   paddingX: { ...num(0, 64, 1), label: 'Padding across', about: 'room at its sides' },
   paddingY: { ...num(0, 64, 1), label: 'Padding down', about: 'room above and below' },
@@ -626,7 +639,8 @@ export function styleAllows(element: string, state: string, prop: string): boole
   return (
     (el.states as readonly string[]).includes(state) &&
     (el.props as readonly string[]).includes(prop) &&
-    (!info.states || (info.states as readonly string[]).includes(state))
+    (!info.states || (info.states as readonly string[]).includes(state)) &&
+    !(info.notStates as readonly string[] | undefined)?.includes(state)
   )
 }
 
@@ -642,7 +656,10 @@ function propSchema(prop: StyleProp): z.ZodType {
     case 'number':
       return z.number().min(info.min).max(info.max)
     case 'choice':
-      return z.enum(Object.keys(info.looks) as [string, ...string[]])
+      // A shadow may also be Lift's own, which only the Hover tile writes.
+      return prop === 'shadow'
+        ? z.enum(STYLE_SHADOWS)
+        : z.enum(Object.keys(info.looks) as [string, ...string[]])
   }
 }
 
@@ -892,5 +909,5 @@ export function styleText(): string {
   const props = STYLE_PROP_NAMES.map(propText).join(', ')
   const roles = COLOUR_ROLES.map((role) => `${role} (${COLOUR_ROLE_INFO[role]})`).join(', ')
   const states = STYLE_STATES.map((state) => `${state} (${STATE_INFO[state].about})`).join(', ')
-  return `style: each element's look in a state, over everything above; set one with op theme, key style.<element>.<state>.<property> (the state may be left out for base), such as style.button.hover.background; null clears it. Elements: ${elements}. States: ${states}. Properties: ${props}; ringWidth only in focus (the focus ring is always neutral grey and has no colour to set), lift only in hover and active. Colours: a role, drawn as each mode's own so dark mode follows by itself: ${roles}; or a hex. Left out: hover and pressed fills of buttons, menu items, tags and vote boxes are a little darker than a set normal fill; text on any set fill is moved until it reads, and a fill without text takes the text or page colour. styleDark.<element>.<state>.<background|color|borderColor> (op theme): dark mode's own colour, only where dark should differ from the role or colour light uses, such as {"op":"theme","key":"styleDark.link.base.color","value":"#93c5fd"}. A Home block's own look: op set, target the block, key style.<${BLOCK_STYLE_ELEMENTS.join('|')}>.<state>.<property>, where block is its container and the rest are what sits inside it. Prefer the choices and exact values above where one says it exactly; use style for a state (hover, pressed, current, focus), an element no choice reaches, a trait no choice offers, or one block. Capitals of one element are style.<element>.base.case (upper, lower, capitalize): statuses in capitals are style.badge.base.case upper, section headings in capitals style.heading.base.case upper, headlines in lower case style.headline.base.case lower (headlineCase and labelCase take only sentence or upper).`
+  return `style: each element's look in a state, over everything above; set one with op theme, key style.<element>.<state>.<property> (the state may be left out for base), such as style.button.hover.background; null clears it. Elements: ${elements}. States: ${states}. Properties: ${props}; ringWidth only in focus (the focus ring is always neutral grey and has no colour to set), borderColor and shadow never in focus (focus stays neutral), lift only in hover and active. Colours: a role, drawn as each mode's own so dark mode follows by itself: ${roles}; or a hex. Left out: hover and pressed fills of buttons, menu items, tags and vote boxes are a little darker than a set normal fill; text on any set fill is moved until it reads, and a fill without text takes the text or page colour. styleDark.<element>.<state>.<background|color|borderColor> (op theme): dark mode's own colour, only where dark should differ from the role or colour light uses, such as {"op":"theme","key":"styleDark.link.base.color","value":"#93c5fd"}. A Home block's own look: op set, target the block, key style.<${BLOCK_STYLE_ELEMENTS.join('|')}>.<state>.<property>, where block is its container and the rest are what sits inside it. Prefer the choices and exact values above where one says it exactly; use style for a state (hover, pressed, current, focus), an element no choice reaches, a trait no choice offers, or one block. Capitals of one element are style.<element>.base.case (upper, lower, capitalize): statuses in capitals are style.badge.base.case upper, section headings in capitals style.heading.base.case upper, headlines in lower case style.headline.base.case lower (headlineCase and labelCase take only sentence or upper).`
 }

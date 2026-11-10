@@ -31,6 +31,7 @@ export const emailAdapter: ChannelAdapter = {
       ratingUrls: ctx.ratingUrls,
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl ?? undefined,
+      brand: ctx.brand,
       from,
       conversationId: ctx.conversationId,
     })
