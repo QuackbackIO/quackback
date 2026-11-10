@@ -4,7 +4,7 @@
  * suggested logo box is fitted to the mark's own pixels.
  */
 import { describe, expect, it } from 'vitest'
-import { looksDimmed, snapToMark } from '../brand-shots'
+import { keyOutGround, looksDimmed, snapToMark } from '../brand-shots'
 
 type Rgb = [number, number, number]
 const W = 200
@@ -79,5 +79,59 @@ describe('the suggested icon box, snapped to the mark', () => {
   it('keeps the box when nothing stands out from the page in it', () => {
     const box = { x: 0.5, y: 0.5, w: 0.1, h: 0.1 }
     expect(snapToMark(page().data, W, H, box)).toEqual(box)
+  })
+})
+
+describe('a logo cut from a screenshot, the page around it keyed out', () => {
+  const alpha = (data: Uint8ClampedArray, x: number, y: number) => data[(y * W + x) * 4 + 3]
+  /** A green "o" (a ring with a counter) and a block with a large white face, on white. */
+  function logo(background: Rgb = [255, 255, 255]) {
+    const { data, paint } = page(background)
+    paint(20, 20, 40, 40, () => [88, 204, 2])
+    paint(30, 30, 20, 20, () => background) // a counter: 400 px of a 1600+ px mark, enclosed
+    paint(100, 20, 80, 80, () => [88, 204, 2])
+    paint(110, 30, 60, 60, () => [255, 255, 255]) // an inner face: 3600 px, kept
+    return data
+  }
+
+  it('clears the page and a letter’s counter, keeping the ink and a large inner face', () => {
+    const data = logo()
+    expect(keyOutGround(data, W, H)).toBe(true)
+    expect(alpha(data, 2, 2)).toBe(0) // the page
+    expect(alpha(data, 90, 60)).toBe(0) // between the marks
+    expect(alpha(data, 25, 25)).toBe(255) // the ink
+    expect(alpha(data, 40, 40)).toBe(0) // the counter
+    expect(alpha(data, 140, 60)).toBe(255) // the inner face
+    expect([...data.slice((60 * W + 140) * 4, (60 * W + 140) * 4 + 3)]).toEqual([255, 255, 255])
+  })
+
+  it('keys out a page of any uniform colour, give or take its compression noise', () => {
+    const { data, paint } = page([246, 244, 238])
+    paint(0, 0, W, H, (x, y) => [246 + ((x + y) % 3) - 1, 244, 238 - ((x * y) % 3)])
+    paint(60, 40, 40, 40, () => [20, 20, 20])
+    expect(keyOutGround(data, W, H)).toBe(true)
+    expect(alpha(data, 5, 5)).toBe(0)
+    expect(alpha(data, 80, 60)).toBe(255)
+  })
+
+  it('fades the anti-aliased rim, with the page’s colour taken out of it', () => {
+    const { data, paint } = page()
+    paint(60, 40, 40, 40, () => [0, 0, 0])
+    paint(59, 40, 1, 40, () => [128, 128, 128]) // half the ink over white
+    keyOutGround(data, W, H)
+    const p = (60 * W + 59) * 4
+    expect(data[p + 3]).toBeGreaterThan(64)
+    expect(data[p + 3]).toBeLessThan(255)
+    // Unblended toward the ink, not left grey-white.
+    expect(data[p]!).toBeLessThan(60)
+  })
+
+  it('leaves a crop whose edge is not one colour as it was', () => {
+    const { data, paint } = page()
+    paint(0, 0, W / 2, H, () => [10, 80, 200]) // half the edge is a photo's blue
+    paint(120, 40, 20, 20, () => [0, 0, 0])
+    const before = data.slice()
+    expect(keyOutGround(data, W, H)).toBe(false)
+    expect(data).toEqual(before)
   })
 })
