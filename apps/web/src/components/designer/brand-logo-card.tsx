@@ -14,6 +14,7 @@ import type { ShotBox } from '@/lib/shared/design/brand-shots'
 import { MATCH_BRAND } from '@/lib/shared/design/match-brand'
 import { IconCrop } from './icon-crop'
 import { CROP } from './properties/words'
+import { IconButton } from './icon-button'
 
 /** The part of a screenshot a box takes, drawn as a background so nothing is cut ahead of time. */
 function CropPreview({ logo }: { logo: BrandLogo }) {
@@ -55,29 +56,27 @@ export function BrandLogoCard({
       </p>
       <div className="flex items-center gap-3">
         <CropPreview logo={logo} />
-        {!logo.full && logo.title && <span className="min-w-0 truncate text-sm">{logo.title}</span>}
+        {!logo.full && logo.title && (
+          <span className="min-w-0 truncate text-sm" title={logo.title}>
+            {logo.title}
+          </span>
+        )}
         <span className="ms-auto flex shrink-0 gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={CROP.crop}
-            title={CROP.crop}
+          <IconButton
+            tip={CROP.crop}
             onClick={() => {
               setBox(logo.box)
               setAdjusting(true)
             }}
           >
             <ScissorsIcon className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={logo.full ? MATCH_BRAND.asIcon : MATCH_BRAND.asFullLogo}
-            title={logo.full ? MATCH_BRAND.asIcon : MATCH_BRAND.asFullLogo}
+          </IconButton>
+          <IconButton
+            tip={logo.full ? MATCH_BRAND.asIcon : MATCH_BRAND.asFullLogo}
             onClick={() => onChange({ full: !logo.full })}
           >
             <ArrowsRightLeftIcon className="size-4" aria-hidden="true" />
-          </Button>
+          </IconButton>
         </span>
       </div>
       <Dialog open={adjusting} onOpenChange={setAdjusting}>

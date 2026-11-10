@@ -99,11 +99,20 @@ describe('the hero’s frame', () => {
     expect(screen.queryByText('This page')).toBeNull()
   })
 
-  it('narrows to just this page on Home alone, saying why elsewhere', () => {
+  it('narrows to just this page on Home alone, saying why elsewhere', async () => {
     show(defaultDesign(), 'roadmap')
     const narrow = screen.getByRole('button', { name: 'Just this page' }) as HTMLButtonElement
-    expect(narrow.disabled).toBe(true)
-    expect(narrow.title).toBe('Only Home can keep an image of its own')
+    // Not pickable, yet still focusable, so its tip says why from the keyboard too.
+    expect(narrow.getAttribute('aria-disabled')).toBe('true')
+    expect(narrow.disabled).toBe(false)
+    expect(narrow.hasAttribute('title')).toBe(false)
+    const before = line()
+    fireEvent.click(narrow)
+    expect(line()).toBe(before)
+    fireEvent.focus(narrow)
+    expect(
+      (await screen.findAllByText('Only Home can keep an image of its own')).length
+    ).toBeGreaterThan(0)
   })
 
   it('has no words fields: the headline and subtitle are edited on the page', () => {

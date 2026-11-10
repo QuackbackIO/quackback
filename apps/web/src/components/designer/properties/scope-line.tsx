@@ -11,6 +11,7 @@
  */
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/shared/utils'
+import { Tip } from './properties-panel'
 import { appliesTo, backToEvery, everyOf } from './words'
 
 /** A scope a change can be made at. */
@@ -80,16 +81,23 @@ export function ScopeLine<T extends string>({
           narrower.map((o, i) => (
             <span key={o.id} className="flex items-center gap-1.5">
               {i > 0 && <span aria-hidden="true">·</span>}
-              <button
-                type="button"
-                className={link}
-                disabled={!!o.disabled}
-                title={o.disabled}
-                onClick={() => onChange(o.id)}
-              >
-                {o.link}
-                {counted({ count: o.count })}
-              </button>
+              <Tip text={o.disabled}>
+                <button
+                  type="button"
+                  className={cn(
+                    link,
+                    'aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:no-underline'
+                  )}
+                  // Still focusable when it cannot be picked, so its tip can say why.
+                  aria-disabled={o.disabled ? true : undefined}
+                  onClick={() => {
+                    if (!o.disabled) onChange(o.id)
+                  }}
+                >
+                  {o.link}
+                  {counted({ count: o.count })}
+                </button>
+              </Tip>
             </span>
           ))
         )}

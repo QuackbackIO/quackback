@@ -30,6 +30,7 @@ import {
   PropertySection,
   ROW_INDENT_MARGIN,
   ROW_LABEL,
+  Tip,
 } from './properties/properties-panel'
 import { COLOUR_NAMES, THEME, WORDS, resetToValue } from './properties/words'
 import { Swatch } from './swatch'
@@ -332,16 +333,16 @@ function FromLogo({
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
         {offered.map((colour) => (
-          <button
-            key={colour}
-            type="button"
-            aria-label={THEME.useAsBrand(colour)}
-            title={colour}
-            onClick={() => onPick(colour)}
-            className="grid size-6 place-items-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-          >
-            <Swatch colour={hexOrNone(colour)} className="size-4" />
-          </button>
+          <Tip key={colour} text={THEME.useAsBrand(colour)}>
+            <button
+              type="button"
+              aria-label={THEME.useAsBrand(colour)}
+              onClick={() => onPick(colour)}
+              className="grid size-6 place-items-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            >
+              <Swatch colour={hexOrNone(colour)} className="size-4" />
+            </button>
+          </Tip>
         ))}
       </span>
     </div>
