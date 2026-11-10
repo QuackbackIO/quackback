@@ -3,7 +3,8 @@
     "htmlKB": 0.05,
     "htmlTransferKB": 0.05,
     "jsKB": 0.02,
-    "componentRenders": 0.1
+    "componentRenders": 0.1,
+    "canvasPosts": 0.25
   },
   "journeys": {
     "doc:portal-home": {
@@ -1054,6 +1055,106 @@
       "jsKB": 403.1,
       "htmlTransferKB": 30.5,
       "componentRenders": 321
+    },
+    "ui:builder-fold-ai": {
+      "dbQueries": 0,
+      "serverRequests": 0,
+      "requests": 0,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 686,
+      "canvasPosts": 0
+    },
+    "ui:builder-open": {
+      "dbQueries": 61,
+      "serverRequests": 6,
+      "requests": 277,
+      "jsRequests": 265,
+      "jsKB": 1460.5,
+      "htmlTransferKB": 15.3,
+      "componentRenders": 1076,
+      "canvasPosts": 12
+    },
+    "ui:builder-open-theme": {
+      "dbQueries": 6,
+      "serverRequests": 1,
+      "requests": 1,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 872,
+      "canvasPosts": 0
+    },
+    "ui:builder-pick-block": {
+      "dbQueries": 22,
+      "serverRequests": 4,
+      "requests": 4,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 1613,
+      "canvasPosts": 0
+    },
+    "ui:builder-publish": {
+      "dbQueries": 39,
+      "serverRequests": 4,
+      "requests": 5,
+      "jsRequests": 1,
+      "jsKB": 0.3,
+      "htmlTransferKB": 0,
+      "componentRenders": 2246,
+      "canvasPosts": 0
+    },
+    "ui:builder-scrub-size": {
+      "dbQueries": 11,
+      "serverRequests": 1,
+      "requests": 1,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 7959,
+      "canvasPosts": 20
+    },
+    "ui:builder-switch-page-device": {
+      "dbQueries": 28,
+      "serverRequests": 4,
+      "requests": 106,
+      "jsRequests": 99,
+      "jsKB": 445.9,
+      "htmlTransferKB": 0,
+      "componentRenders": 1153,
+      "canvasPosts": 7
+    },
+    "ui:builder-switch-theme": {
+      "dbQueries": 0,
+      "serverRequests": 0,
+      "requests": 0,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 947,
+      "canvasPosts": 2
+    },
+    "ui:builder-type-headline": {
+      "dbQueries": 11,
+      "serverRequests": 1,
+      "requests": 1,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 1664,
+      "canvasPosts": 1
+    },
+    "ui:builder-undo-redo": {
+      "dbQueries": 10,
+      "serverRequests": 1,
+      "requests": 1,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 8026,
+      "canvasPosts": 20
     }
   },
   "$comment": "Ceilings for bun perf/bench.ts. Lowered with --update whenever a journey comes in under; raised only with --update --allow-increase, which a reviewer should question."

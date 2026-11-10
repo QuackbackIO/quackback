@@ -494,6 +494,9 @@ const GATED = [
   'htmlKB',
   'htmlTransferKB',
   'componentRenders',
+  // The messages a builder journey sends its canvas: never more than its changes, and
+  // fewer on a slower machine, which runs several changes into one.
+  'canvasPosts',
 ]
 
 function compare(budgets: Budgets, name: string, metrics: Metrics) {
