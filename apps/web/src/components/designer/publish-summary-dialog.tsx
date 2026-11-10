@@ -114,6 +114,15 @@ export function PublishSummaryDialog({
   const [workspaceLogo, setWorkspaceLogo] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
+  // Published, it closes as it was, still publishing; opened again, it starts afresh.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setPublishing(false)
+      setWorkspaceLogo(false)
+    }
+  }
   const publish = async () => {
     setPublishing(true)
     setRefusal(null)
@@ -121,9 +130,10 @@ export function PublishSummaryDialog({
       ok: false as const,
       message: 'Publishing did not reach the server. Try again.',
     }))
-    setPublishing(false)
-    if (!outcome.ok) return setRefusal(outcome.message)
-    setWorkspaceLogo(false)
+    if (!outcome.ok) {
+      setPublishing(false)
+      return setRefusal(outcome.message)
+    }
     onOpenChange(false)
   }
   return (

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { ReviewPublishDialog } from '@/components/admin/settings/appearance/review-publish-dialog'
 import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
@@ -10,6 +10,9 @@ import type { PortalAddress } from '@/lib/shared/design/portal-address'
 import { opensFullReview, publishSummary } from '@/lib/shared/design/publish-summary'
 import { newWorkspaceLogo } from '@/lib/shared/design/workspace-logo'
 import { fullReviewReason, PublishSummaryDialog } from './publish-summary-dialog'
+
+/** A summary with nothing in it, until there is one to show. */
+const NO_SUMMARY = { menu: [], look: [], overrides: [] }
 
 /** What publishing reads from the draft. */
 export type PublishDraft = Pick<
@@ -85,14 +88,30 @@ export function usePublishFlow({
     () => (step ? publishSummary(draft.live, draft.design, draft.changes, gates) : null),
     [step, draft.live, draft.design, draft.changes, gates]
   )
+  // What the dialogs show while open, kept as it was while one closes: publishing empties
+  // the draft's changes, and a dialog fading out with its content gone collapses to a stub.
+  const current = {
+    count,
+    summary: summary ?? NO_SUMMARY,
+    changes: draft.changes,
+    report: draft.report,
+    newLogo,
+    design: draft.design,
+    compare: step === 'full' ? compare() : null,
+  }
+  const kept = useRef(current)
+  useLayoutEffect(() => {
+    if (step) kept.current = current
+  })
+  const shown = step ? current : kept.current
   const dialogs = (
     <>
       <PublishSummaryDialog
         open={step === 'summary'}
         onOpenChange={(open) => !open && setStep((now) => (now === 'summary' ? null : now))}
-        count={count}
-        summary={summary ?? { menu: [], look: [], overrides: [] }}
-        newLogo={newLogo}
+        count={shown.count}
+        summary={shown.summary}
+        newLogo={shown.newLogo}
         checks={checks}
         onShowCheck={(part) => {
           setStep(null)
@@ -104,15 +123,15 @@ export function usePublishFlow({
       <ReviewPublishDialog
         open={step === 'full'}
         onOpenChange={(open) => !open && setStep(null)}
-        changes={draft.changes}
-        menu={summary?.menu ?? []}
-        report={draft.report}
-        newLogo={newLogo}
+        changes={shown.changes}
+        menu={shown.summary.menu}
+        report={shown.report}
+        newLogo={shown.newLogo}
         reason={reason}
         onPublish={(message, options) => publish(true, message, options)}
         canPublish={draft.canPublish}
-        compare={step === 'full' ? compare() : null}
-        design={draft.design}
+        compare={shown.compare}
+        design={shown.design}
       />
     </>
   )

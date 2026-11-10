@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
+import { useRouteContext, useRouter } from '@tanstack/react-router'
 import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
 import { BrandStatusColours } from './brand-status-colours'
 import {
   FeedCopyContext,
+  PREVIEW_THEME,
   PreviewDraftProvider,
   PreviewDesignContext,
   PreviewSamplesContext,
@@ -90,6 +91,8 @@ export function PortalPreviewProvider({
   const [draft, setDraft] = useState<StructuralDraft | null>(null)
   const [design, setDesign] = useState<DraftDesignView | null>(null)
   const designChannel = useRef<DesignChannel | null>(null)
+  // The design drawn now, which an equal one sent again keeps.
+  const shownDesign = useRef<DraftDesignView | null>(null)
   // In the designer: its own click handling; the builder draws what is picked.
   const [designer, setDesigner] = useState<DesignerChannel | null>(null)
   // Trying the page as a visitor: clicks act, nothing is picked or written.
@@ -97,6 +100,9 @@ export function PortalPreviewProvider({
 
   // Only a framed, explicitly preview-flagged document listens.
   const active = enabled && typeof window !== 'undefined' && window.self !== window.top
+  const router = useRouter()
+  const routerRef = useRef(router)
+  routerRef.current = router
 
   useEffect(() => {
     if (!active) return
@@ -112,8 +118,27 @@ export function PortalPreviewProvider({
         const value = msg.design
         void import('./portal-preview-design').then((channel) => {
           designChannel.current = channel
-          setDesign(channel.readDraftView(value))
+          const next = channel.sharedView(shownDesign.current, channel.readDraftView(value))
+          if (next && next === shownDesign.current) {
+            // Already drawn: the builder may send its next design at once.
+            window.parent.postMessage({ type: 'quackback:preview-drawn' }, window.location.origin)
+            return
+          }
+          shownDesign.current = next
+          setDesign(next)
         })
+      } else if (msg?.type === PREVIEW_THEME) {
+        // Light or dark, in place: the address says which, as the frame was loaded with it,
+        // and the page keeps its scroll and what it drew.
+        const theme = (msg as { theme?: unknown }).theme
+        const shown = new URLSearchParams(window.location.search).get('theme')
+        if ((theme === 'light' || theme === 'dark') && theme !== shown)
+          void routerRef.current.navigate({
+            to: '.',
+            search: (prev) => ({ ...prev, theme }),
+            replace: true,
+            resetScroll: false,
+          })
       } else if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
         setCss(msg.css)
       } else if (msg?.type === 'quackback:preview-draft' && msg.draft) {
@@ -138,18 +163,24 @@ export function PortalPreviewProvider({
   }, [active, design])
 
   const stylesheet = useMemo(() => (css ? previewStylesheet(css) : ''), [css])
+  // Built once per design drawn, not on every render of the page around it.
+  const designSheet = useMemo(
+    () => (design && designChannel.current ? designChannel.current.draftStylesheet(design) : ''),
+    [design]
+  )
   // While a draft is previewed: its attributes on <html> (the saved ones come
-  // back when it changes), and a click on a section tells Appearance which.
+  // back when they change), and a click on a section tells Appearance which.
+  const attributes = design?.attributes
   useEffect(() => {
     const channel = designChannel.current
-    if (!design || !channel) return
-    const restore = channel.applyDesignAttributes(design.attributes)
+    if (!attributes || !channel) return
+    const restore = channel.applyDesignAttributes(attributes)
     const stopPicking = active && !designer ? channel.startSectionPicking() : () => {}
     return () => {
       restore()
       stopPicking()
     }
-  }, [design, active, designer])
+  }, [attributes, active, designer])
   useEffect(
     () =>
       active && designer
@@ -159,6 +190,17 @@ export function PortalPreviewProvider({
         : undefined,
     [active, designer, trying]
   )
+  // While designing, the page's links are not followed, so pointing at one fetches nothing
+  // ahead for it; trying the page as a visitor, they load ahead as on the portal.
+  useEffect(() => {
+    if (!active || !designer || trying) return
+    const router = routerRef.current
+    const preload = router.preloadRoute
+    router.preloadRoute = async () => undefined
+    return () => {
+      router.preloadRoute = preload
+    }
+  }, [active, designer, trying])
   // The designer's frame says so in its address: until designing starts, a click
   // or a form does nothing, so nothing navigates or posts in the first moment.
   useEffect(() => {
@@ -207,9 +249,7 @@ export function PortalPreviewProvider({
         </PreviewSamplesContext.Provider>
       </PreviewDesignContext.Provider>
       {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
-      {design && designChannel.current ? (
-        <style data-preview-design="">{designChannel.current.draftStylesheet(design)}</style>
-      ) : null}
+      {designSheet ? <style data-preview-design="">{designSheet}</style> : null}
       {designer ? <style data-preview-designer="">{designer.DESIGNER_CSS}</style> : null}
       {/* Appearance's own hover outline; in the designer the builder draws it. */}
       {design && designChannel.current && !designer ? (

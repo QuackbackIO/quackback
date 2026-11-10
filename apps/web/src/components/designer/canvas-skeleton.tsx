@@ -39,7 +39,11 @@ export function CanvasSkeleton({ parts }: { parts: readonly SkeletonPart[] }) {
   const hero = parts.find((part) => part.kind === 'hero')
   const rest = parts.filter((part) => part.kind === 'part')
   return (
-    <div data-canvas-skeleton="" aria-hidden="true" className="flex flex-col bg-background">
+    <div
+      data-canvas-skeleton=""
+      aria-hidden="true"
+      className="flex min-h-full flex-col bg-background"
+    >
       {header && (
         <div
           data-skeleton-part=""

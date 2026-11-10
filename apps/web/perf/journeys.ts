@@ -7,10 +7,10 @@
  * worth keeping if its counts come out identical on every run; the bench
  * checks that with --repeat.
  */
-import type { APIRequestContext, Locator, Page } from '@playwright/test'
+import type { APIRequestContext, Browser, Locator, Page, Request } from '@playwright/test'
 import postgres from 'postgres'
 import { buildWidgetInstallSnippet } from '../src/lib/shared/widget/install-prompt'
-import { BENCH_DATABASE_URL, BENCH_PORT } from './config'
+import { BENCH_DATABASE_URL, BENCH_PORT, BENCH_URL } from './config'
 
 export type Actor = 'anon' | 'admin'
 
@@ -36,6 +36,12 @@ export interface BrowserJourney {
   teardown?: () => Promise<void>
   /** Part of the breadth sweep over every page (skipped by --core). */
   sweep?: boolean
+  /**
+   * Also measures what the run felt like (see interaction.ts): long tasks, the
+   * slowest event to paint, missed frames, messages across frames and the
+   * renders in child frames.
+   */
+  interaction?: boolean
 }
 
 export type Journey = DocumentJourney | BrowserJourney
@@ -761,3 +767,455 @@ export const journeys: Journey[] = [
 
   ...sweepJourneys(),
 ]
+
+// ---------------------------------------------------------------------------
+// The customer portal builder, /design
+// ---------------------------------------------------------------------------
+
+/*
+ * The design engine is a Labs switch, off in the bench data, so every journey
+ * above measures the portal as it is. Each builder journey turns the engine on
+ * in its setup and off in its teardown, as an admin does in Labs, from a
+ * context of its own, so the measured page starts blank. What the journey
+ * wrote to the draft, or published, is put back as it was.
+ */
+
+/** The bench admin's session, which bench.ts saves before any journey runs. */
+const ADMIN_STATE = new URL('./.results/admin-state.json', import.meta.url).pathname
+
+/** The bench's browser, kept from a setup for the teardown that follows it. */
+let builderBrowser: Browser | null = null
+
+/** Turns the design engine on or off in Labs, and reads the settings back in once it moved. */
+async function switchDesignEngine(browser: Browser, on: boolean): Promise<void> {
+  const context = await browser.newContext({ baseURL: BENCH_URL, storageState: ADMIN_STATE })
+  try {
+    const page = await context.newPage()
+    await page.goto('/admin/settings/labs')
+    const toggle = page.locator('#labs-portalDesignV2')
+    await toggle.waitFor()
+    if ((await toggle.getAttribute('aria-checked')) === String(on)) return
+    // A click before the page has hydrated is lost, so it is made until the switch moves.
+    await untilQuiet(page, async () => {
+      await clickUntil(toggle, page.locator(`#labs-portalDesignV2[aria-checked="${on}"]`))
+    })
+    // The switch emptied the settings cache; the next journey finds it full again, as before.
+    await page.reload()
+    await toggle.waitFor()
+    await context.request.get('/')
+  } finally {
+    await context.close()
+  }
+}
+
+/** The published design and its draft, saved before a builder journey and put back after it. */
+function savedDesign() {
+  let saved: { row: string; revision: number; at: string; event: string; job: string } | null = null
+  return {
+    async save() {
+      const [design] = await db()<{ row: string }[]>`
+        SELECT row_to_json(portal_designs)::text AS row FROM portal_designs`
+      if (!design) throw new Error('no portal design: run bun perf/setup-db.ts')
+      const [marks] = await db()<{ revision: number; at: string; event: string; job: string }[]>`
+        SELECT (SELECT coalesce(max(number), 0) FROM portal_design_revisions)::int AS revision,
+               now()::text AS at,
+               (SELECT coalesce(max(id), 0) FROM events)::text AS event,
+               (SELECT coalesce(max(id), 0) FROM job_queue)::text AS job`
+      saved = { row: design.row, ...marks! }
+    },
+    async restore() {
+      if (!saved) return
+      const { row, revision, at, event, job } = saved
+      saved = null
+      const { id } = JSON.parse(row) as { id: string }
+      const columns = Object.keys(JSON.parse(row)).filter((column) => column !== 'id')
+      await db().begin(async (tx) => {
+        await tx`UPDATE portal_designs SET (${tx(columns)}) = (
+          SELECT ${tx(columns)} FROM json_populate_record(NULL::portal_designs, ${row}::text::json))
+          WHERE id = ${id}`
+        await tx`DELETE FROM portal_design_revisions WHERE design_id = ${id} AND number > ${revision}`
+        await tx`DELETE FROM portal_design_saved WHERE created_at >= ${at}::timestamptz`
+        await tx`DELETE FROM audit_log WHERE occurred_at >= ${at}::timestamptz`
+        await tx`DELETE FROM job_queue WHERE id > ${job}`
+        await tx`DELETE FROM events WHERE id > ${event}`
+      })
+    },
+  }
+}
+
+const builderDesign = savedDesign()
+
+const canvas = (page: Page) => page.frameLocator('iframe[data-designer-canvas]')
+const properties = (page: Page) => page.getByRole('complementary', { name: 'Properties' })
+const topBar = (page: Page) => page.getByRole('banner')
+
+/** Until the canvas draws the page the builder shows, ready to pick from. */
+async function canvasReady(page: Page) {
+  await page.locator('[data-canvas-box][aria-busy="false"]').waitFor()
+  await canvas(page).locator('style[data-preview-designer]').waitFor({ state: 'attached' })
+  await canvas(page).locator('[data-qb-section]').first().waitFor()
+}
+
+/** Whether a request is the draft's save, which follows a change by a moment. */
+const isDraftSave = (request: Request) =>
+  request.method() === 'POST' && /"design","revision"/.test(request.postData() ?? '')
+
+/** Runs `action`, then waits until the save of the draft it changed has finished. */
+async function untilDraftSaved(page: Page, action: () => Promise<void>) {
+  const saved = page.waitForResponse((res) => isDraftSave(res.request()))
+  await action()
+  await saved
+}
+
+/** Runs `action`, a change, then waits until the draft's save has started (settling waits out the rest). */
+async function untilDraftSaving(page: Page, action: () => Promise<void>) {
+  const saving = page.waitForRequest(isDraftSave)
+  await action()
+  await saving
+}
+
+/**
+ * The lead-in every builder journey shares: the engine on, the design saved to
+ * put back, the one-time hints taken as seen (so none covers what a journey
+ * works), and with `open`, the builder open on Home with its canvas drawn.
+ */
+async function builderSetup(page: Page, { open = true } = {}) {
+  builderBrowser = page.context().browser()
+  await switchDesignEngine(builderBrowser!, true)
+  await builderDesign.save()
+  await page.addInitScript(() => {
+    const get = Storage.prototype.getItem
+    Storage.prototype.getItem = function (key: string) {
+      return key.startsWith('quackback:designer-coach-') ? '1' : get.call(this, key)
+    }
+  })
+  if (!open) return
+  await page.goto('/design?path=/')
+  await canvasReady(page)
+}
+
+async function builderTeardown() {
+  await builderDesign.restore()
+  if (builderBrowser) await switchDesignEngine(builderBrowser, false)
+}
+
+/** Home's headline on the canvas, which these journeys retype and restyle. */
+const headline = (page: Page) => canvas(page).locator('[data-qb-words="home.title"]')
+
+/** Picks Home's headline on the canvas, so its own settings show. */
+async function pickHeadline(page: Page) {
+  await headline(page).click()
+  await properties(page).getByRole('heading', { name: 'Headline', level: 2 }).waitFor()
+}
+
+/** The headline's size as the canvas draws it. */
+const headlineSize = (page: Page) =>
+  headline(page).evaluate((element) => getComputedStyle(element).fontSize)
+
+/** Waits until the canvas draws the headline at `size`. */
+async function untilHeadlineSize(page: Page, size: string) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if ((await headlineSize(page).catch(() => null)) === size) return
+    await page.waitForTimeout(25)
+  }
+  throw new Error(`the canvas never drew the headline at ${size}`)
+}
+
+/** Waits until the canvas draws the headline at a size other than `from`, and holds it. */
+async function untilHeadlineResized(page: Page, from: string) {
+  let last = from
+  let held = 0
+  for (let attempt = 0; attempt < 200 && held < 4; attempt++) {
+    const now = await headlineSize(page).catch(() => from)
+    held = now !== from && now === last ? held + 1 : 0
+    last = now
+    await page.waitForTimeout(25)
+  }
+  if (held < 4) throw new Error(`the canvas never drew the headline at a new size`)
+}
+
+/** A tile of the picked part's settings, such as a text size, in the group named `group`. */
+const tile = (page: Page, group: 'Text size' | 'Text colour', name: string) =>
+  properties(page)
+    .getByRole('radiogroup', { name: group })
+    .getByRole('radio', { name, exact: true })
+
+/** What the headline is retyped to, letter by letter (about 20 characters). */
+const TYPED_HEADLINE = 'Tell us what to build'
+
+/** How far a scrub drags: one step every SCRUB_PX (4 px), twenty steps. */
+const SCRUB_STEPS = 20
+const SCRUB_PX = 4
+
+/**
+ * The ten steps the undo and redo journey walks: the headline's text size and
+ * its colour by turns, so no two in a row are the same change, which undo
+ * would take back as one.
+ */
+const UNDO_STEPS = [
+  ['Large', 'Brand colour'],
+  ['Display', 'Text'],
+  ['Standard', 'Brand colour'],
+  ['Large', 'Text'],
+  ['Display', 'Brand colour'],
+].flatMap(([size, colour]) => [
+  { group: 'Text size' as const, name: size! },
+  { group: 'Text colour' as const, name: colour! },
+])
+
+/** The headline's size once the publish journey's change is drawn. */
+let publishedSize = ''
+
+journeys.push(
+  {
+    // From a blank tab to the canvas showing the portal, ready to pick from.
+    kind: 'browser',
+    name: 'ui:builder-open',
+    as: 'admin',
+    interaction: true,
+    setup: (page) => builderSetup(page, { open: false }),
+    run: async (page) => {
+      await page.goto('/design?path=/')
+      await canvasReady(page)
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // A click on a Home block on the canvas: the block is picked, its settings open.
+    // Then the block beside it, which the outline and chip glide to.
+    kind: 'browser',
+    name: 'ui:builder-pick-block',
+    as: 'admin',
+    interaction: true,
+    setup: (page) => builderSetup(page),
+    run: async (page) => {
+      const blocks = canvas(page).locator('[data-qb-section^="block-"]')
+      const heading = (name: string) =>
+        properties(page).getByRole('heading', { name, level: 2 }).waitFor()
+      await blocks.nth(2).click({ position: { x: 6, y: 6 } })
+      await heading('Top posts')
+      await page
+        .locator('[data-chip-for="' + (await blocks.nth(2).getAttribute('data-qb-section')) + '"]')
+        .waitFor()
+      const next = await blocks.nth(3).getAttribute('data-qb-section')
+      await blocks.nth(3).click({ position: { x: 6, y: 6 } })
+      await heading('Latest updates')
+      await page.locator(`[data-chip-for="${next}"]`).waitFor()
+      // Until the outline has glided to it.
+      await page.waitForTimeout(250)
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // Retyping Home's headline where it sits on the canvas, then keeping it with Enter.
+    kind: 'browser',
+    name: 'ui:builder-type-headline',
+    as: 'admin',
+    interaction: true,
+    setup: async (page) => {
+      await builderSetup(page)
+      await headline(page).dblclick()
+      await canvas(page)
+        .locator('[data-qb-words-editing] [contenteditable="true"]')
+        .waitFor({ state: 'visible' })
+    },
+    run: async (page) => {
+      await untilDraftSaving(page, async () => {
+        await page.keyboard.type(TYPED_HEADLINE, { delay: 30 })
+        await page.keyboard.press('Enter')
+        await canvas(page)
+          .locator('[data-qb-words="home.title"]', { hasText: TYPED_HEADLINE })
+          .waitFor()
+      })
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // Dragging the headline's own text size through twenty steps, as a scrub does.
+    kind: 'browser',
+    name: 'ui:builder-scrub-size',
+    as: 'admin',
+    interaction: true,
+    setup: async (page) => {
+      await builderSetup(page)
+      await pickHeadline(page)
+      // Custom shows the size's own field, unset until it changes.
+      await tile(page, 'Text size', 'Custom').click()
+      await properties(page)
+        .getByRole('slider', { name: /text size/i })
+        .waitFor()
+    },
+    run: async (page) => {
+      const handle = properties(page).getByRole('slider', { name: /text size/i })
+      const from = Number(await handle.getAttribute('aria-valuenow'))
+      const drawn = await headlineSize(page)
+      const box = (await handle.boundingBox())!
+      const y = box.y + box.height / 2
+      await untilDraftSaving(page, async () => {
+        await page.mouse.move(box.x + box.width / 2, y)
+        await page.mouse.down()
+        for (let step = 1; step <= SCRUB_STEPS; step++) {
+          await page.mouse.move(box.x + box.width / 2 + step * SCRUB_PX + 1, y)
+          await page.waitForTimeout(16)
+        }
+        await page.mouse.up()
+        await handle.and(page.locator(`[aria-valuenow="${from + SCRUB_STEPS}"]`)).waitFor()
+        await untilHeadlineResized(page, drawn)
+      })
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // Another page from the switcher, then the phone's width.
+    kind: 'browser',
+    name: 'ui:builder-switch-page-device',
+    as: 'admin',
+    interaction: true,
+    setup: (page) => builderSetup(page),
+    run: async (page) => {
+      await topBar(page)
+        .getByRole('button', { name: /^Page:/ })
+        .click()
+      await page.getByRole('option', { name: 'Changelog', exact: true }).click()
+      await topBar(page)
+        .getByRole('button', { name: /^Page:\s*Changelog/ })
+        .waitFor()
+      await canvasReady(page)
+      await page.getByRole('radio', { name: 'Phone' }).click()
+      await page.getByText('Phone, 390 px wide').waitFor()
+      await page.waitForFunction(
+        () =>
+          document.querySelector<HTMLIFrameElement>('iframe[data-designer-canvas]')?.style.width ===
+          '390px'
+      )
+      await canvasReady(page)
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // The canvas in dark, from the View menu, and back to light: the page the canvas
+    // shows, drawn in the other mode.
+    kind: 'browser',
+    name: 'ui:builder-switch-theme',
+    as: 'admin',
+    interaction: true,
+    setup: (page) => builderSetup(page),
+    run: async (page) => {
+      for (const [theme, drawn] of [
+        ['Dark', 'html.dark'],
+        ['Light', 'html:not(.dark)'],
+      ] as const) {
+        await page.locator('[data-view-menu]').click()
+        await page
+          .getByRole('radiogroup', { name: 'Preview as' })
+          .getByRole('radio', { name: theme, exact: true })
+          .click()
+        await page.keyboard.press('Escape')
+        await canvas(page).locator(drawn).waitFor({ state: 'attached' })
+        await canvasReady(page)
+      }
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // The Theme sheet, over the properties.
+    kind: 'browser',
+    name: 'ui:builder-open-theme',
+    as: 'admin',
+    interaction: true,
+    setup: (page) => builderSetup(page),
+    run: async (page) => {
+      await page.locator('[data-sheet-button="theme"]').click()
+      const sheet = page.getByRole('region', { name: 'Theme' })
+      await sheet.waitFor()
+      await sheet.getByText('Brand colour').first().waitFor()
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // Folding Ask AI's pane to its rail and opening it again, the canvas taking the room.
+    kind: 'browser',
+    name: 'ui:builder-fold-ai',
+    as: 'admin',
+    interaction: true,
+    setup: (page) => builderSetup(page),
+    run: async (page) => {
+      const pane = page.locator('#designer-ai-pane')
+      const open = Math.round((await pane.boundingBox())?.width ?? 0)
+      await pane.getByRole('button', { name: 'Collapse Ask AI' }).click()
+      await page.waitForFunction(
+        () => (document.getElementById('designer-ai-pane')?.getBoundingClientRect().width ?? 0) < 60
+      )
+      await pane.getByRole('button', { name: 'Ask AI', exact: true }).click()
+      await page.waitForFunction(
+        (to) =>
+          Math.round(
+            document.getElementById('designer-ai-pane')?.getBoundingClientRect().width ?? 0
+          ) === to,
+        open
+      )
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // Ten steps back with Ctrl+Z and ten forward again.
+    kind: 'browser',
+    name: 'ui:builder-undo-redo',
+    as: 'admin',
+    interaction: true,
+    setup: async (page) => {
+      await builderSetup(page)
+      await pickHeadline(page)
+      await untilDraftSaved(page, async () => {
+        for (const { group, name } of UNDO_STEPS) await tile(page, group, name).click()
+      })
+    },
+    run: async (page) => {
+      const undo = topBar(page).getByRole('button', { name: 'Undo', exact: true })
+      const redo = topBar(page).getByRole('button', { name: 'Redo', exact: true })
+      await untilDraftSaving(page, async () => {
+        // As a held key repeats them, about 25 a second.
+        for (let i = 0; i < UNDO_STEPS.length; i++) {
+          await page.keyboard.press('ControlOrMeta+z')
+          await page.waitForTimeout(40)
+        }
+        await undo.and(page.locator('[aria-disabled="true"]')).waitFor()
+        for (let i = 0; i < UNDO_STEPS.length; i++) {
+          await page.keyboard.press('ControlOrMeta+Shift+z')
+          await page.waitForTimeout(40)
+        }
+        await redo.and(page.locator('[aria-disabled="true"]')).waitFor()
+      })
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // Publish, from the click to the dialog closed, the canvas drawing the published
+    // design and the top bar saying there is nothing left to publish.
+    kind: 'browser',
+    name: 'ui:builder-publish',
+    as: 'admin',
+    interaction: true,
+    setup: async (page) => {
+      await builderSetup(page)
+      await pickHeadline(page)
+      await untilDraftSaved(page, () => tile(page, 'Text size', 'Large').click())
+      await topBar(page)
+        .getByRole('button', { name: /1 change/ })
+        .waitFor()
+      publishedSize = await headlineSize(page)
+    },
+    run: async (page) => {
+      await topBar(page).getByRole('button', { name: 'Publish', exact: true }).click()
+      const dialog = page.getByRole('dialog', { name: /Publish 1 change/ })
+      await dialog.getByRole('button', { name: 'Publish', exact: true }).click()
+      await dialog.waitFor({ state: 'hidden' })
+      await topBar(page)
+        .getByRole('button', { name: /No changes/ })
+        .waitFor()
+      await canvasReady(page)
+      await untilHeadlineSize(page, publishedSize)
+    },
+    teardown: builderTeardown,
+  }
+)

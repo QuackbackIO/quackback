@@ -210,14 +210,50 @@ describe('DesignerCanvas', () => {
     const { send, frame } = show()
     send({ type: 'quackback:preview-ready' })
     const told = vi.mocked(frame.postMessage).mock.calls.map(([message]) => message)
-    expect(told.at(-1)).toStrictEqual({ type: 'quackback:preview-designer', trying: false })
+    expect(told.slice(-2)).toStrictEqual([
+      { type: 'quackback:preview-designer', trying: false },
+      { type: 'quackback:preview-theme', theme: 'light' },
+    ])
+  })
+
+  it('draws light or dark in the page it shows, and loads another page afresh', () => {
+    const { frame } = show()
+    const props = {
+      page: 'feedback' as const,
+      size: 'phone' as const,
+      locale: 'en',
+      sort: 'trending' as const,
+      design: null,
+      structural: {},
+      onSelect: vi.fn(),
+      onWords: vi.fn(),
+      onKey: vi.fn(),
+    }
+    const before = screen.getByTitle('Feedback, phone, light') as HTMLIFrameElement
+    const src = before.getAttribute('src')
+    cleanup()
+    const view = render(<DesignerCanvas {...props} theme="light" />)
+    const shown = view.container.querySelector('iframe')!
+    Object.defineProperty(shown, 'contentWindow', { configurable: true, get: () => frame })
+    vi.mocked(frame.postMessage).mockClear()
+    view.rerender(<DesignerCanvas {...props} theme="dark" />)
+    // The same frame, at the address it loaded, told to draw dark.
+    expect(view.container.querySelector('iframe')).toBe(shown)
+    expect(shown.getAttribute('src')).toBe(src)
+    expect(frame.postMessage).toHaveBeenCalledWith(
+      { type: 'quackback:preview-theme', theme: 'dark' },
+      window.location.origin
+    )
+    view.rerender(<DesignerCanvas {...props} theme="dark" page="roadmap" />)
+    expect(view.container.querySelector('iframe')).not.toBe(shown)
+    expect(view.container.querySelector('iframe')!.getAttribute('src')).toContain('theme=dark')
   })
 
   it('in Preview, tells the frame to act as a visitor’s and takes Tab', () => {
     const { send, frame } = show(true)
     send({ type: 'quackback:preview-ready' })
     const told = vi.mocked(frame.postMessage).mock.calls.map(([message]) => message)
-    expect(told.at(-1)).toMatchObject({ type: 'quackback:preview-designer', trying: true })
+    expect(told).toContainEqual({ type: 'quackback:preview-designer', trying: true })
     expect(screen.getByTitle(/preview, links work/).tabIndex).toBe(0)
   })
 
@@ -253,15 +289,22 @@ describe('DesignerCanvas', () => {
     expect(onLocation).not.toHaveBeenCalled()
   })
 
+  /** Whether the skeleton covers the frame: it covers all of it, then fades out of sight. */
+  const covered = () => {
+    const cover = screen.getByText('Loading shapes').closest<HTMLElement>('[data-canvas-cover]')!
+    expect(cover.classList.contains('bg-background')).toBe(true)
+    return !cover.classList.contains('invisible')
+  }
+
   it('draws the skeleton, busy, until its own frame says it is ready', () => {
     const { send, frame } = show(false, { skeleton: <p>Loading shapes</p> })
     const box = document.querySelector('[data-canvas-box]')!
     expect(box.getAttribute('aria-busy')).toBe('true')
-    expect(screen.getByText('Loading shapes')).toBeTruthy()
+    expect(covered()).toBe(true)
     send({ type: 'quackback:preview-ready' }, {} as Window)
-    expect(screen.queryByText('Loading shapes')).not.toBeNull()
+    expect(covered()).toBe(true)
     send({ type: 'quackback:preview-ready' }, frame)
-    expect(screen.queryByText('Loading shapes')).toBeNull()
+    expect(covered()).toBe(false)
     expect(box.getAttribute('aria-busy')).toBe('false')
   })
 
@@ -269,11 +312,11 @@ describe('DesignerCanvas', () => {
     const { send, frame } = show(false, { skeleton: <p>Loading shapes</p>, untilDrawn: true })
     send({ type: 'quackback:preview-ready' }, frame)
     // Ready, but still drawing the published design: the skeleton stays.
-    expect(screen.queryByText('Loading shapes')).not.toBeNull()
+    expect(covered()).toBe(true)
     send({ type: 'quackback:preview-drawn' }, {} as Window)
-    expect(screen.queryByText('Loading shapes')).not.toBeNull()
+    expect(covered()).toBe(true)
     send({ type: 'quackback:preview-drawn' }, frame)
-    expect(screen.queryByText('Loading shapes')).toBeNull()
+    expect(covered()).toBe(false)
   })
 
   it('offers no Try it of its own', () => {

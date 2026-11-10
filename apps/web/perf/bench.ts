@@ -45,6 +45,7 @@ import { parseArgs } from 'node:util'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { journeys, type Actor, type BrowserJourney, type DocumentJourney } from './journeys'
 import { BENCH_URL, signedInContext, startBenchServer } from './config'
+import { INTERACTION_SCRIPT, readInteraction, startInteraction } from './interaction'
 
 const { values: args } = parseArgs({
   options: {
@@ -193,6 +194,8 @@ const INIT_SCRIPT = `
 
 interface FrameSnapshot {
   at: number
+  /** When the document's clock started, which tells one document from the next. */
+  origin: number
   commits: number
   renders: number
   byComponent: Record<string, number>
@@ -212,6 +215,7 @@ function frameSnapshot(frame: Frame, withNavigation: boolean): Promise<FrameSnap
   return frame.evaluate(
     (navigation) => ({
       at: performance.now(),
+      origin: performance.timeOrigin,
       commits: (window as unknown as { __perfCommits: number }).__perfCommits,
       renders: (window as unknown as { __perfRenders: number }).__perfRenders,
       byComponent: {
@@ -331,6 +335,7 @@ async function measureBrowser(
     storageState: storage[journey.as],
   })
   await context.addInitScript(INIT_SCRIPT)
+  if (journey.interaction) await context.addInitScript(INTERACTION_SCRIPT)
   const page = await context.newPage()
   const inflight = trackInflight(page)
   const cdp = await context.newCDPSession(page)
@@ -366,11 +371,13 @@ async function measureBrowser(
     const before = journey.setup ? await snapshot(page) : null
     const cdpBefore = await cdpMetrics(cdp)
     if (opts.instrument) await cdp.send('Profiler.takePreciseCoverage')
+    if (journey.interaction) await startInteraction(page, cdp)
 
     const started = performance.now()
     await journey.run(page)
     const doneMs = performance.now() - started
     const quiet = await settle(page, inflight)
+    const felt = journey.interaction ? await readInteraction(page, cdp) : null
 
     let jsCalls = 0
     if (opts.instrument) {
@@ -382,13 +389,15 @@ async function measureBrowser(
     }
     const after = await snapshot(page)
     const cdpAfter = await cdpMetrics(cdp)
-    const since = before?.at ?? 0
+    // A run that loads a new document counts all of it: its clock and counters start afresh.
+    const start = before?.origin === after.origin ? before : null
+    const since = start?.at ?? 0
     const loaded = after.resources.filter((r) => r.start >= since)
     let childCommits = 0
     let childRenders = 0
-    const byComponent = diffCounts(after.byComponent, before?.byComponent)
+    const byComponent = diffCounts(after.byComponent, start?.byComponent)
     for (const [frame, child] of after.frames) {
-      const earlier = before?.frames.get(frame)
+      const earlier = start?.frames.get(frame)
       loaded.push(...child.resources.filter((r) => r.start >= (earlier?.at ?? 0)))
       childCommits += child.commits - (earlier?.commits ?? 0)
       childRenders += child.renders - (earlier?.renders ?? 0)
@@ -411,13 +420,16 @@ async function measureBrowser(
       jsRequests: scripts.length,
       jsKB: kb(scripts.reduce((sum, r) => sum + r.bytes, 0)),
       htmlTransferKB: kb(navigation?.bytes ?? 0),
-      reactCommits: after.commits - (before?.commits ?? 0) + childCommits,
-      componentRenders: after.renders - (before?.renders ?? 0) + childRenders,
+      reactCommits: after.commits - (start?.commits ?? 0) + childCommits,
+      componentRenders: after.renders - (start?.renders ?? 0) + childRenders,
       layouts: cdpAfter.LayoutCount - cdpBefore.LayoutCount,
       styleRecalcs: cdpAfter.RecalcStyleCount - cdpBefore.RecalcStyleCount,
       domElements: after.elements,
     }
     if (opts.instrument) metrics.jsCalls = jsCalls
+    // What the journey felt like, and how long its run took, wall clock; the renders in child frames too.
+    if (felt)
+      Object.assign(metrics, felt, { frameRenders: childRenders, runMs: Math.round(doneMs) })
     return {
       id,
       quiet,
@@ -482,6 +494,9 @@ const GATED = [
   'htmlKB',
   'htmlTransferKB',
   'componentRenders',
+  // The messages a builder journey sends its canvas: never more than its changes, and
+  // fewer on a slower machine, which runs several changes into one.
+  'canvasPosts',
 ]
 
 function compare(budgets: Budgets, name: string, metrics: Metrics) {
