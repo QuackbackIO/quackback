@@ -28,6 +28,7 @@ import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { accountDisplayName } from '@/lib/shared/greeting-name'
 import { workspaceAuthTrustedOrigins } from './trusted-origins'
 import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
+import { reconcileMcpOauthClientScopes } from './reconcile-mcp-oauth-client-scopes'
 import { HTTP_DISABLED_AUTH_PATHS } from './http-disabled-paths'
 
 const log = logger.child({ component: 'auth-config' })
@@ -388,6 +389,9 @@ async function createAuth() {
       allowedScopes: API_KEY_SCOPES,
     })
   }
+  // Authorize asks for the whole catalogue, so every client row must allow it.
+  // Never throws.
+  await reconcileMcpOauthClientScopes({ db, log })
 
   // Origin allowlist. Better Auth rejects an auth POST whose Origin is
   // absent. The list is the documented per-request callback
