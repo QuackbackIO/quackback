@@ -22,6 +22,7 @@ vi.mock('@/lib/server/domains/design/design.service', () => ({
   getDesignState: hoisted.getDesignState,
 }))
 vi.mock('@/lib/server/storage/s3', () => ({ getEmailSafeUrl: () => null }))
+vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://acme.example' } }))
 vi.mock('@quackback/email', () => ({ renderSignInEmailSample: hoisted.render }))
 
 import { getSignInEmailSampleFn } from '../portal-design-email'
