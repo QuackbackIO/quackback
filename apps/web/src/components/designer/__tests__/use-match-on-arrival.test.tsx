@@ -56,6 +56,15 @@ describe('arrivalAction', () => {
     expect(arrivalAction({ from: 'appearance', aiAvailable: true })).toBeNull()
   })
 
+  it("opens publish from onboarding's matched brand waiting in the draft", () => {
+    expect(arrivalAction({ publish: 'open', from: 'onboarding', aiAvailable: true })).toEqual({
+      kind: 'publish',
+    })
+    expect(arrivalAction({ publish: 'open', from: 'onboarding', aiAvailable: false })).toEqual({
+      kind: 'publish',
+    })
+  })
+
   it('does nothing on an ordinary visit', () => {
     expect(arrivalAction({ from: 'portal', aiAvailable: true })).toBeNull()
     expect(arrivalAction({ aiAvailable: true })).toBeNull()
@@ -63,7 +72,12 @@ describe('arrivalAction', () => {
 })
 
 describe('useMatchOnArrival', () => {
-  const hooks = () => ({ start: vi.fn(), showAi: vi.fn(), openBrandKit: vi.fn() })
+  const hooks = () => ({
+    start: vi.fn(),
+    showAi: vi.fn(),
+    openBrandKit: vi.fn(),
+    openPublish: vi.fn(),
+  })
 
   it('runs the brand match once, into Ask AI, and clears the address so a reload does not', () => {
     router.search = { match: 'acme.com', from: 'onboarding' }
@@ -107,12 +121,27 @@ describe('useMatchOnArrival', () => {
     expect(call.search({ from: 'appearance', brand: 'match', path: '/' }).brand).toBeUndefined()
   })
 
+  it('opens publish once, and clears the request from the address', () => {
+    router.search = { publish: 'open', from: 'onboarding' }
+    const on = hooks()
+    const { rerender } = renderHook(() => useMatchOnArrival(on))
+    rerender()
+    expect(on.openPublish).toHaveBeenCalledOnce()
+    expect(on.start).not.toHaveBeenCalled()
+    expect(on.openBrandKit).not.toHaveBeenCalled()
+    const call = router.navigate.mock.calls[0]![0] as {
+      search: (prev: Record<string, string>) => Record<string, string | undefined>
+    }
+    expect(call.search({ publish: 'open', from: 'onboarding', path: '/' }).publish).toBeUndefined()
+  })
+
   it('leaves an ordinary visit alone', () => {
     router.search = { from: 'portal' }
     const on = hooks()
     renderHook(() => useMatchOnArrival(on))
     expect(on.start).not.toHaveBeenCalled()
     expect(on.openBrandKit).not.toHaveBeenCalled()
+    expect(on.openPublish).not.toHaveBeenCalled()
     expect(router.navigate).not.toHaveBeenCalled()
   })
 })

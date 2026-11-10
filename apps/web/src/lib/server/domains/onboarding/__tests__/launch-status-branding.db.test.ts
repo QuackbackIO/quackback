@@ -1,8 +1,9 @@
 /**
  * The launch plan's branding step. With the portal in the builder, it is done
- * when a brand match has run or the Brand kit carries the brand (icon, colour
- * and font), never on a workspace logo alone, and it names the website the
- * builder's brand match starts from. A portal on the legacy theme keeps the
+ * when the PUBLISHED design carries the brand (a match that left a colour, or
+ * an icon, colour and font), never on a workspace logo alone; a branded draft
+ * waits as "matched, not published". It names the website the builder's brand
+ * match starts from. A portal on the legacy theme keeps the
  * workspace logo rule.
  */
 import { randomUUID } from 'node:crypto'
@@ -99,13 +100,49 @@ describe('the branding step in the builder', () => {
     expect(status.hasBranding).toBe(false)
   })
 
-  it('is done once a brand match has run into the draft', async () => {
+  it('is not done while a brand match waits in the draft, which it names as matched', async () => {
     await workspace({ flagOn: true })
     const author = await admin()
     const doc = defaultDesign()
     doc.brand.matchedAt = new Date().toISOString()
+    doc.brand.light.accent = '#0f766e'
     await saveDraft(doc, author)
-    expect((await statusFor(author.principalId)).hasBranding).toBe(true)
+    const status = await statusFor(author.principalId)
+    expect(status.hasBranding).toBe(false)
+    expect(status.brandDrafted).toBe(true)
+  })
+
+  it('is done once the brand match is published', async () => {
+    await workspace({ flagOn: true })
+    const author = await admin()
+    const doc = defaultDesign()
+    doc.brand.matchedAt = new Date().toISOString()
+    doc.brand.light.accent = '#0f766e'
+    await saveDraft(doc, author)
+    await publishDraft({ ...author, source: 'api' })
+    const status = await statusFor(author.principalId)
+    expect(status.hasBranding).toBe(true)
+    expect(status.brandDrafted).toBe(false)
+  })
+
+  it('is not done, nor waiting, after a published match that used only a favicon', async () => {
+    await workspace({ flagOn: true })
+    const author = await admin()
+    const doc = defaultDesign()
+    doc.brand.matchedAt = new Date().toISOString()
+    doc.brand.favicon = { key: 'logos/acme-favicon.png' }
+    await saveDraft(doc, author)
+    await publishDraft({ ...author, source: 'api' })
+    const status = await statusFor(author.principalId)
+    expect(status.hasBranding).toBe(false)
+    expect(status.brandDrafted).toBe(false)
+  })
+
+  it('is not waiting when the draft carries no brand', async () => {
+    await workspace({ flagOn: true })
+    const author = await admin()
+    await saveDraft(defaultDesign(), author)
+    expect((await statusFor(author.principalId)).brandDrafted).toBe(false)
   })
 
   it('is done when the published Brand kit has an icon, a colour and a font', async () => {
@@ -145,5 +182,6 @@ describe('the branding step on the legacy theme', () => {
     const status = await statusFor(author.principalId)
     expect(status.brandInBuilder).toBe(false)
     expect(status.hasBranding).toBe(true)
+    expect(status.brandDrafted).toBe(false)
   })
 })

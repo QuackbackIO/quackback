@@ -1,7 +1,9 @@
 /**
  * Whether a design carries the brand, for the launch plan's branding step: a
- * brand match has run, or the Brand kit has an icon, a brand colour and a
- * font of its own. A logo alone, as onboarding used to leave it, is not a brand.
+ * brand match has run and left a brand colour, or the Brand kit has an icon, a
+ * brand colour and a font of its own. A logo alone, as onboarding used to leave
+ * it, is not a brand, and neither is a match that used only a favicon or a logo:
+ * the portal still shows in the default colour.
  */
 import { normaliseColor } from './color'
 import { defaultDesign, type PortalDesign } from './schema'
@@ -15,9 +17,9 @@ const colourOf = (value: string) => normaliseColor(value) ?? value
 
 export function brandIsSet(design: PortalDesign): boolean {
   const { brand } = design
-  if (brand.matchedAt) return true
-  const icon = !!(brand.logo.mark.light ?? brand.logo.mark.dark)
   const colour = colourOf(brand.light.accent) !== colourOf(DEFAULT.light.accent)
+  if (brand.matchedAt) return colour
+  const icon = !!(brand.logo.mark.light ?? brand.logo.mark.dark)
   const font =
     !sameFont(brand.fonts.heading, DEFAULT.fonts.heading) ||
     !sameFont(brand.fonts.body, DEFAULT.fonts.body)
