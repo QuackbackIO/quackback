@@ -14,7 +14,10 @@ import {
   bundledFontStack,
   closestWeight,
   designFontIds,
+  fallbackFontFaces,
+  fontStack,
   fontWeights,
+  standInFace,
   tunedWeights,
   uploadedFontFaces,
   uploadedFontFile,
@@ -22,6 +25,7 @@ import {
   WORD_GAP_FLOOR,
 } from '../fonts'
 import { designView } from '../design-view'
+import { FONT_FALLBACKS } from '../font-fallbacks'
 import { BUNDLED_FONT_IDS } from '../options'
 import { defaultDesign, portalDesign, UPLOADED_FONT_KEY } from '../schema'
 
@@ -244,7 +248,9 @@ describe('uploaded fonts', () => {
     expect(mixed).toContain('e-kiln-700.otf") format("opentype")')
     expect(mixed).toContain('f-kiln-300.woff") format("woff")')
     expect(designView(doc, null).themeStyles.startsWith(faces)).toBe(true)
-    expect(designView(doc, null).fontSans).toBe(`"Unbounded", ${bundledFontStack('space-grotesk')}`)
+    expect(designView(doc, null).fontSans).toBe(
+      `"Unbounded", "Unbounded Fallback", ${bundledFontStack('space-grotesk')}`
+    )
   })
 
   it('pick the upright file nearest a weight', () => {
@@ -264,5 +270,80 @@ describe('closestWeight', () => {
     // Lora loads 400 to 700: a 300 headline had jumped to 600, an 800 one down to 600.
     expect(closestWeight(lora, 300)).toBe(400)
     expect(closestWeight(lora, 800)).toBe(700)
+  })
+})
+
+describe('stand-in faces', () => {
+  it('size a system face for every bundled family but the system ones, which never swap', () => {
+    for (const id of BUNDLED_FONT_IDS) {
+      const metrics = FONT_FALLBACKS[id]
+      if (BUNDLED_FONTS[id].category === 'system') {
+        expect(metrics, id).toBeUndefined()
+        continue
+      }
+      // Run scripts/font-fallbacks.ts after adding a family.
+      expect(metrics, id).toBeDefined()
+      expect(metrics!.size, id).toBeGreaterThan(70)
+      expect(metrics!.size, id).toBeLessThan(150)
+      expect(metrics!.ascent + metrics!.descent, id).toBeGreaterThan(90)
+    }
+    // A serif stands in as Times New Roman, a monospace as Courier New, the rest as Arial.
+    expect(FONT_FALLBACKS.fraunces!.system).toBe('serif')
+    expect(FONT_FALLBACKS['fira-code']!.system).toBe('mono')
+    expect(FONT_FALLBACKS.inter!.system).toBe('sans')
+  })
+
+  it('sit straight after the family in its stack, before the generic faces', () => {
+    expect(fontStack({ kind: 'bundled', id: 'fraunces' })).toBe(
+      '"Fraunces", "Fraunces Fallback", ui-serif, Georgia, serif'
+    )
+    expect(fontStack({ kind: 'bundled', id: 'inter' })).toBe(
+      '"Inter Variable", "Inter", "Inter Variable Fallback", ui-sans-serif, system-ui, sans-serif'
+    )
+    expect(fontStack({ kind: 'bundled', id: 'system' })).toBe(bundledFontStack('system'))
+  })
+
+  it('are drawn for the design’s families, an uploaded one sized as its bundled match', () => {
+    const doc = defaultDesign()
+    doc.brand.fonts.heading = { kind: 'bundled', id: 'fraunces' }
+    doc.brand.fonts.body = {
+      kind: 'uploaded',
+      family: 'Kiln Text',
+      files: [{ key: 'fonts/kiln/kiln-400.woff2', weight: 400, style: 'normal' }],
+      fallback: 'lato',
+    }
+    const faces = fallbackFontFaces(doc)
+    expect(faces.match(/@font-face/g)).toHaveLength(2)
+    expect(faces).toContain(standInFace('Fraunces', FONT_FALLBACKS.fraunces!))
+    expect(faces).toContain(standInFace('Kiln Text', FONT_FALLBACKS.lato!))
+    expect(standInFace('Fraunces', FONT_FALLBACKS.fraunces!)).toMatch(
+      /^@font-face \{ font-family: "Fraunces Fallback"; src: local\("Times New Roman"\), local\("Liberation Serif"\); size-adjust: [\d.]+%; ascent-override: [\d.]+%; descent-override: [\d.]+%; line-gap-override: [\d.]+%; \}$/
+    )
+    expect(designView(doc, null).themeStyles).toContain(faces)
+    expect(
+      fallbackFontFaces({
+        ...doc,
+        brand: {
+          ...doc.brand,
+          fonts: {
+            ...doc.brand.fonts,
+            heading: { kind: 'bundled', id: 'system' },
+            body: { kind: 'bundled', id: 'system' },
+          },
+        },
+      })
+    ).toBe('')
+  })
+
+  it('include Inter’s, in the app’s own stylesheet, with the same numbers', () => {
+    const css = readFileSync(path.join(import.meta.dirname, '../../../../globals.css'), 'utf8')
+    const rule = standInFace('Inter Variable', FONT_FALLBACKS.inter!)
+    const declarations = rule
+      .replace(/^@font-face \{ | \}$/g, '')
+      .split('; ')
+      .map((d) => d.replace(/;$/, ''))
+    const block = css.match(/@font-face \{[^}]*Inter Variable Fallback[^}]*\}/)?.[0] ?? ''
+    for (const declaration of declarations) expect(block).toContain(`${declaration};`)
+    expect(css).toContain('--font-sans: "Inter Variable", "Inter", "Inter Variable Fallback",')
   })
 })

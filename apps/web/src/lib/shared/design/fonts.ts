@@ -1,6 +1,7 @@
 import { DEFAULT_FONT_SANS } from '@/lib/shared/theme/expand'
 import type { PortalDesign } from './schema'
 import type { BUNDLED_FONT_IDS } from './options'
+import { FONT_FALLBACKS, SYSTEM_FACES, type FallbackMetrics } from './font-fallbacks'
 
 export type BundledFontId = (typeof BUNDLED_FONT_IDS)[number]
 type DesignFont = PortalDesign['brand']['fonts']['body']
@@ -337,10 +338,59 @@ export function bundledFontIdForStack(stack: string): BundledFontId | null {
   return entry ? (entry[0] as BundledFontId) : null
 }
 
-/** The CSS font-family stack for a design font; an uploaded family falls back to its bundled match. */
+/**
+ * The CSS font-family stack for a design font; an uploaded family falls back to
+ * its bundled match. Straight after the family comes its stand-in, a system
+ * face sized to take the family's room (fallbackFontFaces), so text drawn
+ * before the family's file arrives keeps its lines when the file swaps in.
+ */
 export function fontStack(font: DesignFont): string {
-  if (font.kind === 'bundled') return bundledFontStack(font.id)
-  return `"${font.family}", ${bundledFontStack(font.fallback)}`
+  if (font.kind === 'bundled') {
+    const stack = bundledFontStack(font.id)
+    if (!FONT_FALLBACKS[font.id]) return stack
+    const families = stack.split(', ')
+    // After every named face of the family ("Inter Variable", "Inter"), before the generic ones.
+    const named = families.findIndex((family) => !family.startsWith('"'))
+    const at = named < 0 ? families.length : named
+    const standIn = `"${standInFamily(leadingFamily(stack))}"`
+    return [...families.slice(0, at), standIn, ...families.slice(at)].join(', ')
+  }
+  const standIn = FONT_FALLBACKS[font.fallback] ? `"${standInFamily(font.family)}", ` : ''
+  return `"${font.family}", ${standIn}${bundledFontStack(font.fallback)}`
+}
+
+/** A stack's first family, unquoted. */
+const leadingFamily = (stack: string) => stack.split(',')[0]!.trim().replace(/^"|"$/g, '')
+
+/** The name a family's stand-in goes by. */
+export const standInFamily = (family: string) => `${family} Fallback`
+
+/** One stand-in face: the system face sized and spaced as the family it stands in for. */
+export function standInFace(family: string, metrics: FallbackMetrics): string {
+  const src = SYSTEM_FACES[metrics.system].map((name) => `local("${name}")`).join(', ')
+  return (
+    `@font-face { font-family: "${standInFamily(family)}"; src: ${src}; ` +
+    `size-adjust: ${metrics.size}%; ascent-override: ${metrics.ascent}%; ` +
+    `descent-override: ${metrics.descent}%; line-gap-override: ${metrics.lineGap}%; }`
+  )
+}
+
+/**
+ * The stand-in faces a design's fonts name in their stacks (fontStack): one
+ * per family, sized from the bundled family's own metrics, or, for an uploaded
+ * family, from the bundled family the brand picked as its nearest match.
+ */
+export function fallbackFontFaces(doc: PortalDesign): string {
+  const rules = new Set<string>()
+  const { body, heading, display } = doc.brand.fonts
+  for (const font of [body, heading, display]) {
+    if (!font) continue
+    const metrics = FONT_FALLBACKS[font.kind === 'bundled' ? font.id : font.fallback]
+    if (!metrics) continue
+    const family = font.kind === 'bundled' ? leadingFamily(bundledFontStack(font.id)) : font.family
+    rules.add(standInFace(family, metrics))
+  }
+  return [...rules].join(' ')
 }
 
 /**
@@ -448,9 +498,7 @@ type HeadingWeight = PortalDesign['brand']['fonts']['headingWeight']
 export const HEADING_WEIGHTS = [300, 400, 500, 600, 700, 800] as const
 
 export function closestWeight(font: DesignFont, current: HeadingWeight): HeadingWeight {
-  const offered = HEADING_WEIGHTS.filter((weight) =>
-    fontWeights(font).includes(weight)
-  )
+  const offered = HEADING_WEIGHTS.filter((weight) => fontWeights(font).includes(weight))
   if (!offered.length) return 600
   return offered.reduce((best, w) => (Math.abs(w - current) < Math.abs(best - current) ? w : best))
 }

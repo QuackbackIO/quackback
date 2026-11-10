@@ -19,6 +19,18 @@
    the family name matching the value FONT_OPTIONS/presets.ts store. */
 @import "@fontsource-variable/inter/index.css";
 
+/* Inter's stand-in until its file arrives: Arial (Liberation Sans on Linux)
+   sized and spaced as Inter, so the swap keeps every line where it was. The
+   numbers are FONT_FALLBACKS.inter (lib/shared/design/font-fallbacks.ts). */
+@font-face {
+  font-family: "Inter Variable Fallback";
+  src: local("Arial"), local("Liberation Sans");
+  size-adjust: 106.39%;
+  ascent-override: 91.06%;
+  descent-override: 22.67%;
+  line-gap-override: 0%;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /* ==============================================
@@ -85,7 +97,7 @@
     --sidebar-accent-foreground: #0a0a0a;
     --sidebar-border: #e5e5e5;
     --sidebar-ring: var(--accent-ink);
-    --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Inter Variable", "Inter", "Inter Variable Fallback", ui-sans-serif, system-ui, sans-serif;
     --font-serif: ui-serif, Georgia, Cambria, serif;
     --font-mono: ui-monospace, SFMono-Regular, monospace;
     --radius: 0.5rem;
