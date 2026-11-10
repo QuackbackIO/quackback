@@ -47,3 +47,37 @@ describe('ChangelogListPublic empty state', () => {
     expect(screen.queryByText('No updates yet')).not.toBeInTheDocument()
   })
 })
+
+describe('ChangelogListPublic while its entries load', () => {
+  function renderLoading(layout?: 'timeline' | 'cards' | 'compact') {
+    mockUseInfiniteQuery.mockReturnValue({
+      data: undefined,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: true,
+    })
+    return render(
+      <IntlProvider locale="en">
+        <ChangelogListPublic entries={layout} />
+      </IntlProvider>
+    )
+  }
+
+  it('holds room for its first entries in their layout, and says it is loading to a screen reader', () => {
+    const { container } = renderLoading('timeline')
+    const held = container.querySelector('[data-qb-skeleton=changelog]')!
+    expect(held.getAttribute('aria-hidden')).toBe('true')
+    expect(held.children).toHaveLength(3)
+    // Laid out as the entries will be: a timeline's rules and its rows' padding.
+    expect(held.className).toContain('divide-y')
+    expect(held.children[0]!.className).toContain('py-10')
+    expect(screen.getByText('Loading changelog...').className).toContain('sr-only')
+  })
+
+  it('holds a compact row as a date and a title, as the compact list draws them', () => {
+    const { container } = renderLoading('compact')
+    const row = container.querySelector('[data-qb-skeleton=changelog] > div')!
+    expect(row.children).toHaveLength(2)
+  })
+})

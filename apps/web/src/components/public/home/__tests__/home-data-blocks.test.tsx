@@ -40,6 +40,7 @@ import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { publicStatusPageQueries } from '@/lib/client/queries/status'
 import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import { popularArticlesQuery } from '../home-prefetch'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const GATES = {
   feedback: true,
@@ -68,6 +69,8 @@ interface World {
   components?: number
   categories?: Array<{ id: string; parentId: string | null; name: string }>
   boards?: Array<{ id: string; slug: string; name: string; postCount: number }>
+  /** The roadmap columns' posts: still loading, none, or four each (the default). */
+  roadmapPosts?: 'loading' | 'none'
 }
 
 function client(world: World, block: HomeBlock): QueryClient {
@@ -132,11 +135,13 @@ function client(world: World, block: HomeBlock): QueryClient {
       ],
     },
   ] as never)
-  for (const statusId of ['status_planned', 'status_shipped'])
+  for (const statusId of world.roadmapPosts === 'loading'
+    ? []
+    : ['status_planned', 'status_shipped'])
     qc.setQueryData(roadmapPostsKeys.portal('roadmap_1' as never, statusId as never), {
       pages: [
         {
-          items: [1, 2, 3, 4].map((n) => ({
+          items: (world.roadmapPosts === 'none' ? [] : [1, 2, 3, 4]).map((n) => ({
             id: `${statusId}_${n}`,
             title: `${statusId} post ${n}`,
             voteCount: n * 10,
@@ -452,6 +457,29 @@ describe('Roadmap', () => {
     show(roadmap({ statusIds: ['status_shipped'] }))
     await screen.findByText('Shipped')
     expect(screen.queryByText('Planned')).toBeNull()
+  })
+
+  it('holds a row for each post while a column loads, and never calls it empty before it knows', async () => {
+    const container = show(roadmap({ perColumn: 3 }), { roadmapPosts: 'loading' })
+    await screen.findByText('Planned')
+    const holders = container.querySelectorAll('[data-qb-skeleton=roadmap-posts]')
+    expect(holders).toHaveLength(2)
+    for (const holder of holders) {
+      expect(holder.getAttribute('aria-hidden')).toBe('true')
+      expect(holder.querySelectorAll('li')).toHaveLength(3)
+    }
+    expect(screen.queryByText('Nothing here yet')).toBeNull()
+    // The app's one placeholder look.
+    const { container: reference } = render(<Skeleton />)
+    const look = reference.querySelector('[data-slot=skeleton]')!.className.split(' ')
+    expect(holders[0]!.querySelector('li')!.className.split(' ')).toEqual(
+      expect.arrayContaining(look)
+    )
+  })
+
+  it('says a column is empty once its posts are known to be none', async () => {
+    show(roadmap(), { roadmapPosts: 'none' })
+    expect(await screen.findAllByText('Nothing here yet')).toHaveLength(2)
   })
 })
 

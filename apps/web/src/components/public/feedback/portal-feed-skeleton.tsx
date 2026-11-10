@@ -14,7 +14,11 @@ import { useFeedHandoff } from './feed-input-handoff'
 
 /** One placeholder bar, sized like the text it stands in for. */
 function Bone({ className }: { className?: string }) {
-  return <div className={cn('rounded bg-muted animate-pulse', className)} />
+  return (
+    <div
+      className={cn('rounded-md bg-muted animate-pulse motion-reduce:animate-none', className)}
+    />
+  )
 }
 
 /** Title, body and tag widths per card, so the rows don't read as a stamp. */

@@ -106,7 +106,7 @@ export function RoadmapColumn({
           </Badge>
         </div>
         {isLoading ? (
-          <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
+          <CardSkeletons />
         ) : posts.length === 0 ? (
           empty
         ) : (
@@ -141,9 +141,7 @@ export function RoadmapColumn({
       <CardContent className="flex-1 min-h-0 p-0">
         <ScrollArea className="h-full px-6 pb-6">
           {isLoading ? (
-            <div className="h-full flex items-center justify-center py-8 animate-in fade-in duration-200">
-              <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
+            <CardSkeletons />
           ) : posts.length === 0 ? (
             <div className="h-full flex items-center justify-center py-8 animate-in fade-in duration-200">
               {empty}
@@ -160,3 +158,25 @@ export function RoadmapColumn({
     </Card>
   )
 }
+
+/**
+ * A column's cards while its posts load: room for the first few, so a group
+ * down a list does not grow from a heading to its cards and push the rest of
+ * the page down when they arrive. The look is ui/Skeleton's, written out, as
+ * importing it would add its chunk to the roadmap page.
+ */
+function CardSkeletons() {
+  return (
+    <div aria-hidden="true" data-qb-skeleton="roadmap-cards" className="space-y-2">
+      {Array.from({ length: LOADING_CARDS }, (_, at) => (
+        <div
+          key={at}
+          className="h-20 rounded-md bg-muted animate-pulse motion-reduce:animate-none"
+        />
+      ))}
+    </div>
+  )
+}
+
+/** How many cards a loading column holds room for. */
+const LOADING_CARDS = 3

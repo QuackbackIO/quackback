@@ -259,6 +259,12 @@ function BlockCard({
   )
 }
 
+/**
+ * A placeholder's look, the same as ui/Skeleton draws: written out here, as
+ * importing that module would put its chunk on every portal page.
+ */
+const SKELETON = 'rounded-md bg-muted animate-pulse motion-reduce:animate-none'
+
 /** A block waiting on its data: the card's outline, so the grid does not jump. */
 function BlockSkeleton({ block, index }: { block: HomeBlock; index: number }) {
   const area = useArea(index)
@@ -269,7 +275,7 @@ function BlockSkeleton({ block, index }: { block: HomeBlock; index: number }) {
       data-qb-skeleton={`block-${block.id ?? index}`}
       style={area}
       className={cn(
-        'min-h-32 animate-pulse rounded-lg bg-muted/40',
+        'min-h-32 animate-pulse motion-reduce:animate-none rounded-lg bg-muted/40',
         AREA_CLASS,
         phoneHiddenClass(block, samples)
       )}
@@ -541,6 +547,16 @@ function RoadmapColumnPosts({
 }) {
   const intl = useIntl()
   const { data } = usePublicRoadmapPosts({ roadmapId, statusId })
+  // While the column's posts load, a row's room for each, so nothing moves when
+  // they arrive and no column says it is empty before it knows.
+  if (!data)
+    return (
+      <ul aria-hidden="true" data-qb-skeleton="roadmap-posts" className="space-y-1.5">
+        {Array.from({ length: count }, (_, at) => (
+          <li key={at} className={`h-6 ${SKELETON}`} />
+        ))}
+      </ul>
+    )
   const posts = flattenRoadmapViewPosts(data).slice(0, count)
   if (posts.length === 0)
     return (
