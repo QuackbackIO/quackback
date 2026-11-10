@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 
-import { DomainsCard } from '../domains-cards'
+import { DomainsCard, hostnameRecords } from '../domains-cards'
 import { FULL_NAMES_NOTE } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import type { ShownProofSource } from '@/lib/shared/domain-proof'
@@ -227,6 +227,27 @@ describe('<DomainsCard>', () => {
     expect(
       screen.getByText("We couldn't confirm these records. Check each name and value, then verify.")
     ).toBeTruthy()
+  })
+
+  it('marks every record found for a ready hostname from an older operator', () => {
+    const records = hostnameRecords({ ...challenged(null), readiness: 'ready' })
+    expect(records.map((r) => [r.label, r.state])).toEqual([
+      ['Routing', 'found'],
+      ['Ownership', 'found'],
+    ])
+  })
+
+  it('treats a proven zone from an older operator as verified ownership', () => {
+    renderCard([
+      {
+        ...challenged('email-sending'),
+        ownership: 'proven-zone',
+        ownershipSource: 'email-sending',
+      },
+    ])
+    expect(rowTexts()).toEqual(['Waiting: Routingfeedback.example.comCNAMEedge.example.net'])
+    expect(screen.queryByText('proof-1')).toBeNull()
+    expect(screen.getByText('Already verified through email sending')).toBeTruthy()
   })
 
   it('names no hosting provider in its description', () => {

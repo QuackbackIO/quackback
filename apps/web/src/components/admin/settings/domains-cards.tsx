@@ -87,7 +87,7 @@ const READINESS_STATE = {
  * its own state when the operator reports one, else the hostname's overall
  * readiness. A failure is explained once, under the last record not yet found.
  */
-function hostnameRecords(domain: HostnameRow): DnsRecordRow[] {
+export function hostnameRecords(domain: HostnameRow): DnsRecordRow[] {
   const failed = domain.readiness === 'failed'
   const records: DnsRecordRow[] = [
     {
@@ -98,13 +98,23 @@ function hostnameRecords(domain: HostnameRow): DnsRecordRow[] {
       state: READINESS_STATE[domain.routing ?? domain.readiness],
     },
   ]
-  if (isTxtRecord(domain.ownershipProof)) {
+  // An operator that does not report ownershipVerified signals accepted
+  // ownership only through a proven zone; otherwise its TXT follows readiness.
+  const reportsOwnership = domain.ownershipVerified !== undefined
+  const provenZone = !reportsOwnership && domain.ownership === 'proven-zone'
+  if (!provenZone && isTxtRecord(domain.ownershipProof)) {
     records.push({
       label: 'Ownership',
       type: 'TXT',
       name: domain.ownershipProof.name,
       value: domain.ownershipProof.value,
-      state: domain.ownershipVerified === true ? 'found' : failed ? 'problem' : 'waiting',
+      state: !reportsOwnership
+        ? READINESS_STATE[domain.readiness]
+        : domain.ownershipVerified
+          ? 'found'
+          : failed
+            ? 'problem'
+            : 'waiting',
     })
   }
   const unresolved = records.filter((record) => record.state !== 'found').at(-1)
