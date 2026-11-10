@@ -20,6 +20,7 @@ export const PERMISSIONS = {
   // category 'workspace' — workspace-level admin singletons (all in WORKSPACE_ADMIN_PERMISSIONS)
   SETTINGS_MANAGE: 'settings.manage', // portal, widget, developer, general (branding + moderation split out in Phase 3)
   SETTINGS_BRANDING: 'settings.branding', // theme, logos, custom CSS, workspace name
+  DESIGN_PUBLISH: 'design.publish', // make the portal design live: publish, restore, switch
   SETTINGS_MODERATION: 'settings.moderation', // workspace moderation default
   SETTINGS_NOTIFICATIONS: 'settings.notifications', // RESERVED: no OSS surface yet
   SETTINGS_CUSTOM_DOMAIN: 'settings.custom_domain', // Settings → Domains (cloud identity gateway)
@@ -217,6 +218,12 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
     key: PERMISSIONS.SETTINGS_BRANDING,
     category: 'workspace',
     description: 'Manage branding: theme, logos, custom CSS, and workspace name',
+  },
+  {
+    key: PERMISSIONS.DESIGN_PUBLISH,
+    category: 'workspace',
+    description:
+      'Publish the portal design, restore an earlier version, and switch the portal to or from it',
   },
   {
     key: PERMISSIONS.SETTINGS_MODERATION,
@@ -620,6 +627,7 @@ export type SystemRoleKey = (typeof SYSTEM_ROLES)[keyof typeof SYSTEM_ROLES]
 export const WORKSPACE_ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   PERMISSIONS.SETTINGS_MANAGE,
   PERMISSIONS.SETTINGS_BRANDING,
+  PERMISSIONS.DESIGN_PUBLISH,
   PERMISSIONS.SETTINGS_MODERATION,
   PERMISSIONS.SETTINGS_NOTIFICATIONS,
   PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,

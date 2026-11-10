@@ -1,0 +1,252 @@
+{
+  "version": 2,
+  "mode": "auto",
+  "brand": {
+    "light": {
+      "accent": "#000000",
+      "background": "#fefefe",
+      "ink": "#000000",
+      "extra": ["#74432f"]
+    },
+    "dark": {
+      "accent": "oklch(0.886 0.176 86)",
+      "background": "#0a0a0a",
+      "ink": "#fafafa"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "work-sans"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "inter"
+      },
+      "headingWeight": 400,
+      "scale": "standard",
+      "tracking": "tight",
+      "headlineCase": "sentence"
+    },
+    "logo": {
+      "mark": {
+        "light": null,
+        "dark": null
+      },
+      "wordmark": {
+        "light": {
+          "key": "logos/fixture/06eed9832b2d3888c6241ef1.png"
+        },
+        "dark": null
+      },
+      "display": "wordmark",
+      "tone": "dark",
+      "oneInk": true
+    },
+    "logoColours": ["#000000", "#030303"],
+    "favicon": {
+      "key": "logos/fixture/favicon-186020c47f9bb6aa6cbd8b18.webp"
+    },
+    "shareImage": {
+      "key": "logos/fixture/share-6da367d5bc7c741363aacb7b.webp"
+    }
+  },
+  "shape": {
+    "corners": "sharp",
+    "buttons": "square",
+    "fill": "ink"
+  },
+  "layout": {
+    "header": "inline",
+    "menuAlign": "centre",
+    "nav": "underline",
+    "navText": "ink",
+    "band": "tint",
+    "bandAlign": "left",
+    "bandHeight": "tall",
+    "bandColour": "extra1",
+    "headerOnBand": false,
+    "status": "ink",
+    "tint": "neutral",
+    "imagePlace": "side",
+    "pageTitles": "band",
+    "bandArt": "none",
+    "cards": "bordered",
+    "density": "comfortable",
+    "width": "wide",
+    "filters": "end"
+  },
+  "pages": {
+    "home": {
+      "headline": {
+        "title": {
+          "en": "Fixture words"
+        },
+        "subtitle": {
+          "en": "Fixture words"
+        }
+      },
+      "blocks": [
+        {
+          "type": "composer",
+          "id": "0lwdmij6tn",
+          "grid": {
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 1
+          }
+        },
+        {
+          "type": "contact",
+          "id": "xxhkffx0en",
+          "grid": {
+            "x": 0,
+            "y": 1,
+            "w": 12,
+            "h": 1
+          }
+        },
+        {
+          "type": "ideas",
+          "id": "p8zlxwjy15",
+          "grid": {
+            "x": 0,
+            "y": 2,
+            "w": 6,
+            "h": 1
+          },
+          "sort": "trending",
+          "count": 3
+        },
+        {
+          "type": "updates",
+          "id": "xte37jfd6m",
+          "grid": {
+            "x": 6,
+            "y": 2,
+            "w": 6,
+            "h": 1
+          },
+          "count": 3
+        },
+        {
+          "type": "roadmap",
+          "id": "u2jmbvoxr3",
+          "grid": {
+            "x": 0,
+            "y": 3,
+            "w": 12,
+            "h": 1
+          },
+          "roadmapId": null
+        },
+        {
+          "type": "help_search",
+          "id": "f2y9fo8cwn",
+          "grid": {
+            "x": 0,
+            "y": 4,
+            "w": 12,
+            "h": 1
+          }
+        },
+        {
+          "type": "help_topics",
+          "id": "4gwtsf3kok",
+          "grid": {
+            "x": 0,
+            "y": 5,
+            "w": 12,
+            "h": 1
+          },
+          "categoryIds": []
+        }
+      ],
+      "composer": "band"
+    },
+    "feedback": {
+      "headline": {
+        "title": {
+          "en": "Fixture words"
+        },
+        "subtitle": {
+          "en": "Fixture words"
+        }
+      },
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {
+        "prompt": {
+          "en": "Fixture words"
+        },
+        "submit": {
+          "en": "Fixture words"
+        }
+      }
+    }
+  },
+  "nav": {
+    "home": {
+      "on": true,
+      "tab": true
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true
+      },
+      {
+        "type": "help",
+        "shown": true
+      },
+      {
+        "type": "support",
+        "shown": true
+      },
+      {
+        "type": "status",
+        "shown": true
+      }
+    ]
+  },
+  "tune": {
+    "headline": {
+      "size": 20,
+      "weight": 400,
+      "tracking": -0.035
+    },
+    "subtitle": {
+      "colour": "#090909"
+    },
+    "heading": {
+      "colour": "#020202"
+    },
+    "label": {
+      "size": 14
+    },
+    "button": {
+      "radius": 0
+    },
+    "link": {
+      "colour": "#000000"
+    }
+  }
+}

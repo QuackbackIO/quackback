@@ -11,6 +11,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | --- | --- | :---: | :---: |
 | settings.manage | workspace | ✓ | · |
 | settings.branding | workspace | ✓ | · |
+| design.publish | workspace | ✓ | · |
 | settings.moderation | workspace | ✓ | · |
 | settings.notifications | workspace | ✓ | · |
 | settings.custom_domain | workspace | ✓ | · |

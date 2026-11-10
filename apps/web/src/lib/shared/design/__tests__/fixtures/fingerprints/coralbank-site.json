@@ -1,0 +1,56 @@
+{
+  "page": "rgb(255, 255, 255)",
+  "headline": {
+    "family": "CoralbankSansDisplay, sans-serif",
+    "size": 48.8288,
+    "weight": 800,
+    "tracking": 0,
+    "leading": 1.2000008191886755,
+    "transform": "none",
+    "color": "rgb(255, 255, 255)"
+  },
+  "heading": {
+    "family": "CoralbankSansDisplay, sans-serif",
+    "size": 39.0624,
+    "weight": 800,
+    "tracking": 0,
+    "leading": 1.2000005120013106,
+    "transform": "none",
+    "color": "rgb(9, 23, 35)"
+  },
+  "body": {
+    "family": "CoralbankSansText, sans-serif",
+    "size": 20,
+    "weight": 400,
+    "tracking": 0,
+    "leading": 1.4,
+    "transform": "none",
+    "color": "rgb(255, 255, 255)"
+  },
+  "button": {
+    "bg": "rgb(9, 23, 35)",
+    "color": "rgb(255, 255, 255)",
+    "radius": 999,
+    "height": 51.1875,
+    "borderWidth": 1,
+    "borderColor": "rgb(9, 23, 35)",
+    "shadow": false,
+    "size": 16,
+    "weight": 600,
+    "transform": "none",
+    "family": "CoralbankSansText, sans-serif",
+    "padX": 24
+  },
+  "buttonText": "Sign up",
+  "link": {
+    "family": "CoralbankSansText, sans-serif",
+    "size": 16,
+    "weight": 400,
+    "tracking": 0,
+    "leading": 1.4,
+    "transform": "none",
+    "color": "rgba(9, 23, 35, 0.6)"
+  },
+  "card": null,
+  "field": null
+}

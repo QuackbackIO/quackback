@@ -75,7 +75,7 @@ describe('platform-schema.generated.json parity', () => {
 
     const aiKeys = committed.ai.keys.map((k) => k.key)
     expect(new Set(aiKeys).size).toBe(aiKeys.length)
-    expect(aiKeys.every((k) => /^(?:AI|OPENAI)_/.test(k))).toBe(true)
+    expect(aiKeys.every((k) => /^(?:AI|OPENAI|ANTHROPIC)_/.test(k))).toBe(true)
   })
 
   it('marks a key sensitive if and only if it is a secret', () => {

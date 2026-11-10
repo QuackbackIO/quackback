@@ -10,7 +10,8 @@ import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters
 const tiptapAttrValue = z.union([z.string(), z.number(), z.boolean(), z.null()])
 
 const tiptapMarkSchema = z.object({
-  type: z.enum(['bold', 'italic', 'underline', 'strike', 'code', 'link']),
+  // `colour` is rich words' colour from a brand colour role (design/rich-words.ts).
+  type: z.enum(['bold', 'italic', 'underline', 'strike', 'code', 'link', 'colour']),
   attrs: z.record(z.string(), tiptapAttrValue).optional(),
 })
 

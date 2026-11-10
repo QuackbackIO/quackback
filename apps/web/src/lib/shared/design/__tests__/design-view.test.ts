@@ -1,0 +1,140 @@
+/**
+ * The design as a portal page applies it. The feedback page's welcome message
+ * shows only when the design turns it on and it has something to say.
+ */
+import { describe, expect, it } from 'vitest'
+import { designView } from '../design-view'
+import { defaultDesign } from '../schema'
+import { contrastRatio } from '../contrast'
+import { resolveDesign } from '../resolve'
+import { brandStatusColour } from '../status-colours'
+
+const body = {
+  type: 'doc',
+  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }],
+}
+
+describe('designView', () => {
+  it('carries the design’s own favicon and share image, where it has them', () => {
+    const doc = defaultDesign()
+    expect(designView(doc, null).icons).toEqual({ favicon: null, shareImage: null })
+    doc.brand.favicon = { key: 'favicons/a.png' }
+    doc.brand.shareImage = { key: 'portal-images/b.png' }
+    expect(designView(doc, null).icons).toEqual({
+      favicon: '/api/storage/favicons/a.png',
+      shareImage: '/api/storage/portal-images/b.png',
+    })
+  })
+
+  it('carries the welcome message when it is on and has text', () => {
+    const doc = defaultDesign()
+    doc.pages.feedback.welcome = { show: true, body }
+    expect(designView(doc, 1).feedback.welcome).toEqual(body)
+  })
+
+  it('leaves the welcome message out when it is off or empty', () => {
+    const doc = defaultDesign()
+    doc.pages.feedback.welcome = { show: false, body }
+    expect(designView(doc, 1).feedback.welcome).toBeNull()
+    doc.pages.feedback.welcome = { show: true, body: { type: 'doc', content: [] } }
+    expect(designView(doc, 1).feedback.welcome).toBeNull()
+  })
+
+  it('carries the feedback page headline', () => {
+    const doc = defaultDesign()
+    doc.pages.feedback.headline = { title: { en: 'Ideas' }, subtitle: {} }
+    expect(designView(doc, null).feedback.headline).toEqual({
+      title: { en: 'Ideas' },
+      subtitle: {},
+    })
+  })
+
+  it('carries how the header shows the brand, with its wordmark files', () => {
+    const doc = defaultDesign()
+    doc.brand.logo = {
+      ...doc.brand.logo,
+      display: 'wordmark',
+      wordmark: { light: { key: 'logos/ink.svg' }, dark: null },
+    }
+    expect(designView(doc, 1).logo).toEqual({
+      display: 'wordmark',
+      name: null,
+      wordmark: { light: '/api/storage/logos/ink.svg', dark: null },
+      mark: { light: null, dark: null },
+    })
+  })
+
+  it('carries the logo’s colours for status markers only when the design asks for them', () => {
+    const doc = defaultDesign()
+    doc.brand.logoColours = ['#ecb22e', '#36c5f0']
+    expect(designView(doc, 1).statusColours).toBeNull()
+    doc.layout.status = 'brand'
+    expect(designView(doc, 1).statusColours).toHaveLength(2)
+    doc.brand.logoColours = []
+    expect(designView(doc, 1).statusColours).toBeNull()
+  })
+
+  it('raises each status marker colour to 3:1 on the page and the cards, keeping its hue', () => {
+    const doc = defaultDesign()
+    doc.layout.status = 'brand'
+    doc.brand.logoColours = ['#0058a3', '#ffdb00']
+    const view = designView(doc, 1)
+    const light = resolveDesign(doc).light!
+    expect(view.statusColours![0]).toBe('#0058a3')
+    const yellow = view.statusColours![1]!
+    expect(yellow).not.toBe('#ffdb00')
+    for (const bg of [light.background!, light.card!])
+      expect(contrastRatio(yellow, bg)).toBeGreaterThanOrEqual(3)
+    expect(brandStatusColour('#eab308', view.statusColours!)).toBe(yellow)
+  })
+
+  it('raises them against the dark page for a dark design', () => {
+    const doc = defaultDesign()
+    doc.mode = 'dark'
+    doc.layout.status = 'brand'
+    doc.brand.logoColours = ['#0058a3']
+    const dark = resolveDesign(doc).dark!
+    const [blue] = designView(doc, 1).statusColours!
+    expect(contrastRatio(blue!, dark.background!)).toBeGreaterThanOrEqual(3)
+  })
+
+  it('carries the band image and where it sits, beside the words unless it says', () => {
+    const doc = defaultDesign()
+    expect(designView(doc, 1).bandImage).toBeNull()
+    doc.brand.bandImage = { key: 'portal-images/room.jpg' }
+    expect(designView(doc, 1).bandImage).toEqual({
+      url: '/api/storage/portal-images/room.jpg',
+      place: 'side',
+    })
+    doc.layout.imagePlace = 'pattern'
+    expect(designView(doc, 1).bandImage?.place).toBe('pattern')
+  })
+
+  it('says when the band image is Home’s only and when its words sit on a measured veil', () => {
+    const doc = defaultDesign()
+    doc.layout.band = 'brand'
+    doc.layout.imagePlace = 'cover'
+    doc.brand.bandImage = {
+      key: 'portal-images/room.jpg',
+      homeOnly: true,
+      shade: { tone: 'dark', strength: 40, under: '#333333' },
+    }
+    expect(designView(doc, 1).bandImage).toMatchObject({ homeOnly: true, shaded: true })
+    doc.layout.imagePlace = 'side'
+    expect(designView(doc, 1).bandImage).not.toHaveProperty('shaded')
+  })
+
+  it('describes the band image for those who cannot see it, unless it is decoration', () => {
+    const doc = defaultDesign()
+    doc.brand.bandImage = { key: 'portal-images/room.jpg', alt: 'Our team at work' }
+    expect(designView(doc, 1).bandImage?.alt).toBe('Our team at work')
+    doc.brand.bandImage.decorative = true
+    expect(designView(doc, 1).bandImage).not.toHaveProperty('alt')
+  })
+
+  it('carries a name the header shows in place of the workspace’s', () => {
+    const doc = defaultDesign()
+    doc.brand.logo = { ...doc.brand.logo, display: 'name', name: 'Harbor & Pine' }
+    expect(designView(doc, 1).logo).toMatchObject({ display: 'name', name: 'Harbor & Pine' })
+  })
+})

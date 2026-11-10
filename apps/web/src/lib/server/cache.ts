@@ -44,8 +44,15 @@ const log = logger.child({ component: 'cache' })
  * column cannot be bypassed by concatenation; the worst a malformed key can do
  * is collide with another key of the same workspace.
  */
+/**
+ * The build that shaped the cached workspace settings. A release can change
+ * what the settings carry, so each build keeps its own copy and never reads a
+ * shape an older build wrote, as on the first requests after an upgrade.
+ */
+const SETTINGS_BUILD = typeof __BUILD_TIME__ === 'string' ? __BUILD_TIME__ : 'dev'
+
 export const CACHE_KEYS = {
-  WORKSPACE_SETTINGS: 'settings:workspace',
+  WORKSPACE_SETTINGS: `settings:workspace:${SETTINGS_BUILD}`,
   INTEGRATION_MAPPINGS: 'hooks:integration-mappings',
   // v2 invalidates rows cached before migration 0123 added the
   // conversation.csat_comment_added subscription.

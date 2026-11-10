@@ -1415,4 +1415,39 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'a log line: a wrong hit would drop one informational line, never change which providers ' +
       'are trusted.',
   },
+  {
+    file: 'apps/web/src/lib/server/domains/design/extract/fonts/files.ts',
+    name: 'source',
+    category: 'fleet-wide',
+    reason:
+      'Where this server’s bundled font files live on disk, found once from the module’s own ' +
+      'path. It is the same directory for every workspace the process serves and holds no ' +
+      'workspace data; a shared value can only point at the same install.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/design/extract/fonts/woff.ts',
+    name: 'fonts',
+    category: 'fleet-wide',
+    reason:
+      'Parsed glyph tables of the fonts bundled with the server, keyed by face id and weight. ' +
+      'They come from files in the install, never from a workspace, so every workspace would ' +
+      'parse the same bytes into the same tables. Bounded by the bundled faces and weights.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/design/extract/png.ts',
+    name: 'CRC',
+    category: 'fleet-wide',
+    reason:
+      'The constant CRC-32 lookup table PNG chunks are checksummed with, filled once at load ' +
+      'and never written after. It is the same 256 numbers for everyone.',
+  },
+  {
+    file: 'apps/web/src/lib/shared/design/history.ts',
+    name: 'immer',
+    category: 'process-lifetime',
+    reason:
+      'An Immer instance configured not to freeze drafts, so the builder’s history can apply ' +
+      'patches to state it keeps editing. It holds configuration only, no drafts or patches; ' +
+      'each history store keeps its own steps, so sharing the instance shares no workspace data.',
+  },
 ]

@@ -2010,6 +2010,55 @@
       "when": 1791001400000,
       "tag": "0309_api_key_kinds",
       "breakpoints": true
+    },
+    {
+      "idx": 287,
+      "version": "7",
+      "when": 1791001500000,
+      "tag": "0310_portal_designs",
+      "breakpoints": true
+    },
+    {
+      "idx": 288,
+      "version": "7",
+      "when": 1791001600000,
+      "tag": "0311_portal_design_draft_authors",
+      "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "7",
+      "when": 1791001700000,
+      "tag": "0312_portal_design_preview_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 290,
+      "version": "7",
+      "when": 1791001800000,
+      "tag": "0313_portal_design_draft_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 291,
+      "version": "7",
+      "when": 1791001900000,
+      "tag": "0314_portal_design_saved",
+      "breakpoints": true
+    },
+    {
+      "idx": 292,
+      "version": "7",
+      "when": 1791002000000,
+      "tag": "0315_design_publish_permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 293,
+      "version": "7",
+      "when": 1791002100000,
+      "tag": "0316_site_captures",
+      "breakpoints": true
     }
   ]
 }

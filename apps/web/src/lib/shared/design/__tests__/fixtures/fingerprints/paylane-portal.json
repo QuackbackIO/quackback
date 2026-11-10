@@ -1,0 +1,82 @@
+{
+  "page": "rgb(255, 255, 255)",
+  "headline": {
+    "family": "\"Inter Tight\", ui-sans-serif, system-ui, sans-serif",
+    "size": 48,
+    "weight": 500,
+    "tracking": -0.03,
+    "leading": 1.0999999999999999,
+    "transform": "none",
+    "color": "rgb(6, 27, 49)"
+  },
+  "heading": {
+    "family": "\"Inter Tight\", ui-sans-serif, system-ui, sans-serif",
+    "size": 20.9952,
+    "weight": 400,
+    "tracking": 0,
+    "leading": 1.5555555555555554,
+    "transform": "none",
+    "color": "rgb(6, 27, 49)"
+  },
+  "body": {
+    "family": "\"Inter Tight\", ui-sans-serif, system-ui, sans-serif",
+    "size": 18,
+    "weight": 400,
+    "tracking": 0,
+    "leading": 1.375,
+    "transform": "none",
+    "color": "rgb(82, 82, 82)"
+  },
+  "button": {
+    "bg": "rgb(83, 58, 253)",
+    "color": "rgb(255, 255, 255)",
+    "radius": 4,
+    "height": 32,
+    "borderWidth": 0,
+    "borderColor": "rgb(212, 212, 212)",
+    "shadow": false,
+    "size": 13,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Inter Tight\", ui-sans-serif, system-ui, sans-serif",
+    "padX": 12
+  },
+  "buttonText": "Sign up",
+  "link": {
+    "family": "\"Inter Tight\", ui-sans-serif, system-ui, sans-serif",
+    "size": 14,
+    "weight": 500,
+    "tracking": 0,
+    "leading": 1.4285714285714286,
+    "transform": "none",
+    "color": "rgb(6, 27, 49)"
+  },
+  "card": {
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(6, 27, 49)",
+    "radius": 0,
+    "height": 66.65625,
+    "borderWidth": 1,
+    "borderColor": "oklab(0.869938 0.0000396967 0.0000174046 / 0.4)",
+    "shadow": false,
+    "size": 16,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Inter Tight\", ui-sans-serif, system-ui, sans-serif",
+    "padX": 16
+  },
+  "field": {
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(6, 27, 49)",
+    "radius": 4,
+    "height": 62,
+    "borderWidth": 1,
+    "borderColor": "rgb(212, 212, 212)",
+    "shadow": false,
+    "size": 16,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Inter Tight\", ui-sans-serif, system-ui, sans-serif",
+    "padX": 0
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "page": "rgb(255, 255, 255)",
+  "headline": {
+    "family": "\"Fernway Sans\", Inter, Rubik, \"Noto Sans SC\", \"Zen Kaku Gothic Antique\", \"Noto Sans KR\", \"Noto Sans Thai\", \"Noto Sans Hebrew\", sans-serif",
+    "size": 103.5,
+    "weight": 800,
+    "tracking": 0,
+    "leading": 0.8730000000000001,
+    "transform": "none",
+    "color": "rgb(22, 51, 0)"
+  },
+  "heading": {
+    "family": "\"Fernway Sans\", Inter, Rubik, \"Noto Sans SC\", \"Zen Kaku Gothic Antique\", \"Noto Sans KR\", \"Noto Sans Thai\", \"Noto Sans Hebrew\", sans-serif",
+    "size": 58,
+    "weight": 800,
+    "tracking": 0,
+    "leading": 0.9380000000000001,
+    "transform": "none",
+    "color": "rgb(22, 51, 0)"
+  },
+  "body": {
+    "family": "Inter, Vazirmatn, \"Noto Sans SC\", \"Zen Kaku Gothic Antique\", \"Noto Sans KR\", \"Noto Sans Thai\", \"Noto Sans Hebrew\", Helvetica, Arial, sans-serif",
+    "size": 16,
+    "weight": 400,
+    "tracking": 0.01,
+    "leading": 1.5,
+    "transform": "none",
+    "color": "rgb(22, 51, 0)"
+  },
+  "button": {
+    "bg": "rgb(22, 51, 0)",
+    "color": "rgb(159, 232, 112)",
+    "radius": 999,
+    "height": 32,
+    "borderWidth": 0,
+    "borderColor": "rgb(159, 232, 112)",
+    "shadow": false,
+    "size": 18,
+    "weight": 600,
+    "transform": "none",
+    "family": "Inter, Vazirmatn, \"Noto Sans SC\", \"Zen Kaku Gothic Antique\", \"Noto Sans KR\", \"Noto Sans Thai\", \"Noto Sans Hebrew\", Helvetica, Arial, sans-serif",
+    "padX": 12
+  },
+  "buttonText": "Sign up",
+  "link": {
+    "family": "Inter, Vazirmatn, \"Noto Sans SC\", \"Zen Kaku Gothic Antique\", \"Noto Sans KR\", \"Noto Sans Thai\", \"Noto Sans Hebrew\", Helvetica, Arial, sans-serif",
+    "size": 18,
+    "weight": 600,
+    "tracking": -0.006,
+    "leading": 1.4444444444444444,
+    "transform": "none",
+    "color": "rgb(22, 51, 0)"
+  },
+  "card": {
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(22, 51, 0)",
+    "radius": 10,
+    "height": 428.75,
+    "borderWidth": 1,
+    "borderColor": "rgba(22, 51, 0, 0.12)",
+    "shadow": false,
+    "size": 18,
+    "weight": 600,
+    "transform": "none",
+    "family": "Inter, Vazirmatn, \"Noto Sans SC\", \"Zen Kaku Gothic Antique\", \"Noto Sans KR\", \"Noto Sans Thai\", \"Noto Sans Hebrew\", Helvetica, Arial, sans-serif",
+    "padX": 0
+  },
+  "field": {
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(22, 51, 0)",
+    "radius": 0,
+    "height": 46.796875,
+    "borderWidth": 0,
+    "borderColor": "rgb(22, 51, 0)",
+    "shadow": false,
+    "size": 52,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Fernway Sans\", Inter, sans-serif",
+    "padX": 0
+  }
+}

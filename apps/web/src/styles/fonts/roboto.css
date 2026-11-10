@@ -3,6 +3,7 @@
    src/lib/shared/theme/font-loader.ts (dynamic import, Vite code-splits CSS
    from dynamic imports into its own stylesheet). Keep weights in sync with
    the FONT_OPTIONS entry in use-branding-state.ts. */
+@import "@fontsource/roboto/300.css";
 @import "@fontsource/roboto/400.css";
 @import "@fontsource/roboto/500.css";
 @import "@fontsource/roboto/600.css";

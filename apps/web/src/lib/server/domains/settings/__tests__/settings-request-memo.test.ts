@@ -53,6 +53,7 @@ const { getWorkspaceSettings } = await import('../settings.service')
 const { invalidateSettingsCache } = await import('../settings.helpers')
 const { runWithLogContext } = await import('@/lib/server/log-context')
 const { forgetCachedKeys, SETTINGS_LOCAL_TTL_MS } = await import('@/lib/server/local-cache')
+const { CACHE_KEYS } = await import('@/lib/server/cache')
 
 const COMPLETE_SETUP = JSON.stringify({
   version: 2,
@@ -84,9 +85,9 @@ function inRequest<T>(fn: () => Promise<T>): Promise<T> {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  forgetCachedKeys('settings:workspace')
+  forgetCachedKeys(CACHE_KEYS.WORKSPACE_SETTINGS)
   kvRows.clear()
-  kvRows.set('settings:workspace', cachedSettings('First'))
+  kvRows.set(CACHE_KEYS.WORKSPACE_SETTINGS, cachedSettings('First'))
 })
 
 describe('getWorkspaceSettings within a request', () => {
@@ -133,7 +134,7 @@ describe('getWorkspaceSettings within a request', () => {
 
   it('reads again in the next request', async () => {
     await inRequest(() => getWorkspaceSettings())
-    kvRows.set('settings:workspace', cachedSettings('Later'))
+    kvRows.set(CACHE_KEYS.WORKSPACE_SETTINGS, cachedSettings('Later'))
     const later = await inRequest(() => getWorkspaceSettings())
     expect(later?.name).toBe('Later')
     expect(mockKvGet).toHaveBeenCalledTimes(2)
@@ -159,7 +160,7 @@ describe('getWorkspaceSettings across requests, in production', () => {
 
   it('sees a write made by another process once its copy has expired', async () => {
     await inRequest(() => getWorkspaceSettings())
-    kvRows.set('settings:workspace', cachedSettings('Written elsewhere'))
+    kvRows.set(CACHE_KEYS.WORKSPACE_SETTINGS, cachedSettings('Written elsewhere'))
 
     vi.advanceTimersByTime(SETTINGS_LOCAL_TTL_MS - 1)
     expect((await inRequest(() => getWorkspaceSettings()))?.name).toBe('First')
@@ -194,7 +195,7 @@ describe('getWorkspaceSettings across requests, in production', () => {
     expect(mockKvGet).toHaveBeenCalledTimes(2)
 
     vi.stubEnv('QUACKBACK_SETTINGS_CACHE_MS', '60000')
-    forgetCachedKeys('settings:workspace')
+    forgetCachedKeys(CACHE_KEYS.WORKSPACE_SETTINGS)
     await inRequest(() => getWorkspaceSettings())
     vi.advanceTimersByTime(SETTINGS_LOCAL_TTL_MS + 1)
     await inRequest(() => getWorkspaceSettings())

@@ -24,6 +24,39 @@ import {
 } from '@/lib/shared/utils/sanitize'
 import { collectHeadings, createHeadingIds } from './heading-ids'
 
+/** A paragraph's or heading's alignment, as a style, when it is one rich words keep. */
+// The colour roles and alignments rich words carry, here rather than in
+// design/rich-words.ts so rendering stored words on the portal does not load
+// the builder's markup rules; rich-words re-exports them.
+/** The brand's colour roles; the design options read them from here. */
+export const COLOUR_ROLES = ['accent', 'support', 'extra1', 'extra2'] as const
+
+export type ColourRole = (typeof COLOUR_ROLES)[number]
+
+/** The alignments rich words keep; the start is the default and left unset. */
+export const RICH_ALIGNS = ['center', 'end'] as const
+
+/** Whether a value is one of the brand's colour roles. */
+export const isColourRole = (value: unknown): value is ColourRole =>
+  (COLOUR_ROLES as readonly unknown[]).includes(value)
+
+/**
+ * The colour words in a role are drawn in: the design's colour for words in
+ * that role, moved until it reads where the words sit (words-colour.ts),
+ * else the role's own colour, else the brand colour.
+ */
+export function wordsColour(role: ColourRole): string {
+  const brand = 'var(--qb-accent-text, var(--primary))'
+  return role === 'accent'
+    ? `var(--qb-words-accent, ${brand})`
+    : `var(--qb-words-${role}, var(--qb-role-${role}, ${brand}))`
+}
+
+function alignStyle(node: JSONContent): string {
+  const align = node.attrs?.textAlign
+  return (RICH_ALIGNS as readonly unknown[]).includes(align) ? ` style="text-align: ${align}"` : ''
+}
+
 // Emoji nodes carry their Unicode character; reading never needs the dataset.
 
 export function generateContentHTML(content: JSONContent): string {
@@ -38,7 +71,7 @@ export function generateContentHTML(content: JSONContent): string {
 
       case 'paragraph': {
         const pContent = node.content?.map(renderNode).join('') ?? ''
-        return pContent ? `<p>${pContent}</p>` : '<p></p>'
+        return `<p${alignStyle(node)}>${pContent}</p>`
       }
 
       case 'heading': {
@@ -47,7 +80,7 @@ export function generateContentHTML(content: JSONContent): string {
         const headingContent = node.content?.map(renderNode).join('') ?? ''
         const id = headingIds.get(node) ?? ''
         const idAttr = id ? ` id="${escapeHtmlAttr(id)}"` : ''
-        return `<h${level}${idAttr}>${headingContent}</h${level}>`
+        return `<h${level}${idAttr}${alignStyle(node)}>${headingContent}</h${level}>`
       }
 
       case 'text': {
@@ -73,6 +106,13 @@ export function generateContentHTML(content: JSONContent): string {
               case 'code':
                 text = `<code class="bg-muted px-1 py-0.5 rounded text-sm">${text}</code>`
                 break
+              case 'colour': {
+                // Words in one of the brand's colour roles, never a free colour.
+                const role = mark.attrs?.role
+                if (isColourRole(role))
+                  text = `<span data-qb-colour="${role}" style="color: ${wordsColour(role)}">${text}</span>`
+                break
+              }
               case 'link': {
                 const rawHref = mark.attrs?.href ?? ''
                 const href = escapeHtmlAttr(sanitizeUrl(rawHref))

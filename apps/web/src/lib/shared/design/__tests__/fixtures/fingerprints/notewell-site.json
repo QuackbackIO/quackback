@@ -1,0 +1,56 @@
+{
+  "page": "rgb(255, 255, 255)",
+  "headline": {
+    "family": "NotewellInter, Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+    "size": 96,
+    "weight": 600,
+    "tracking": -0.04791666666666666,
+    "leading": 1.0416666666666667,
+    "transform": "none",
+    "color": "rgba(0, 0, 0, 0.95)"
+  },
+  "heading": {
+    "family": "NotewellInter, Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+    "size": 54,
+    "weight": 700,
+    "tracking": -0.03472240740740741,
+    "leading": 1.037037037037037,
+    "transform": "none",
+    "color": "rgba(0, 0, 0, 0.95)"
+  },
+  "body": {
+    "family": "NotewellInter, Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+    "size": 20,
+    "weight": 400,
+    "tracking": -0.00625,
+    "leading": 1.4,
+    "transform": "none",
+    "color": "rgba(0, 0, 0, 0.898)"
+  },
+  "button": {
+    "bg": "rgb(0, 117, 222)",
+    "color": "rgb(255, 255, 255)",
+    "radius": 8,
+    "height": 36,
+    "borderWidth": 1,
+    "borderColor": "rgba(255, 255, 255, 0)",
+    "shadow": false,
+    "size": 16,
+    "weight": 500,
+    "transform": "none",
+    "family": "NotewellInter, Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+    "padX": 14
+  },
+  "buttonText": "Get Notewell free",
+  "link": {
+    "family": "NotewellInter, Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+    "size": 16,
+    "weight": 400,
+    "tracking": 0,
+    "leading": 1.5,
+    "transform": "none",
+    "color": "rgba(0, 0, 0, 0.898)"
+  },
+  "card": null,
+  "field": null
+}

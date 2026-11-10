@@ -3,5 +3,6 @@
    src/lib/shared/theme/font-loader.ts (dynamic import, Vite code-splits CSS
    from dynamic imports into its own stylesheet). Keep weights in sync with
    the FONT_OPTIONS entry in use-branding-state.ts. Lato ships 400/700 only. */
+@import "@fontsource/lato/300.css";
 @import "@fontsource/lato/400.css";
 @import "@fontsource/lato/700.css";

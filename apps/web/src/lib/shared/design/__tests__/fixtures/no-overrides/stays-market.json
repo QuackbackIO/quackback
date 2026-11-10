@@ -1,0 +1,235 @@
+{
+  "version": 2,
+  "mode": "auto",
+  "brand": {
+    "light": {
+      "accent": "#ff385c",
+      "background": "#f9f9f9",
+      "ink": "#0a0a0a"
+    },
+    "dark": {
+      "accent": "oklch(0.886 0.176 86)",
+      "background": "#0a0a0a",
+      "ink": "#fafafa"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "figtree"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "figtree"
+      },
+      "headingWeight": 500,
+      "scale": "large",
+      "headlineCase": "sentence"
+    },
+    "logo": {
+      "mark": {
+        "light": null,
+        "dark": null
+      },
+      "wordmark": {
+        "light": {
+          "key": "logos/fixture/92f201fc19954172c5807e41.png"
+        },
+        "dark": null
+      },
+      "display": "wordmark",
+      "oneInk": true
+    },
+    "logoColours": ["#fa3a61", "#d44c65"],
+    "favicon": {
+      "key": "logos/fixture/favicon-34ef20800623f6f8e5e0d0c9.png"
+    },
+    "shareImage": null
+  },
+  "shape": {
+    "corners": "rounded",
+    "fill": "accent"
+  },
+  "layout": {
+    "header": "inline",
+    "menuAlign": "centre",
+    "nav": "underline",
+    "navText": "muted",
+    "band": "none",
+    "bandAlign": "left",
+    "headerOnBand": false,
+    "status": "colour",
+    "tint": "neutral",
+    "pageTitles": "plain",
+    "bandArt": "none",
+    "cards": "bordered",
+    "density": "comfortable",
+    "width": "default",
+    "filters": "end",
+    "background": {
+      "kind": "tint",
+      "colour": "#f8f8f8"
+    }
+  },
+  "pages": {
+    "home": {
+      "headline": {
+        "title": {
+          "en": "Fixture words"
+        },
+        "subtitle": {
+          "en": "Fixture words"
+        }
+      },
+      "blocks": [
+        {
+          "type": "composer",
+          "id": "zuil88alxm",
+          "grid": {
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 1
+          }
+        },
+        {
+          "type": "contact",
+          "id": "9xjwse9scb",
+          "grid": {
+            "x": 0,
+            "y": 1,
+            "w": 12,
+            "h": 1
+          }
+        },
+        {
+          "type": "ideas",
+          "id": "58frgwryo1",
+          "grid": {
+            "x": 0,
+            "y": 2,
+            "w": 6,
+            "h": 1
+          },
+          "sort": "trending",
+          "count": 3
+        },
+        {
+          "type": "updates",
+          "id": "lugnf5h3jv",
+          "grid": {
+            "x": 6,
+            "y": 2,
+            "w": 6,
+            "h": 1
+          },
+          "count": 3
+        },
+        {
+          "type": "roadmap",
+          "id": "h3n9clfzdv",
+          "grid": {
+            "x": 0,
+            "y": 3,
+            "w": 12,
+            "h": 1
+          },
+          "roadmapId": null
+        },
+        {
+          "type": "help_search",
+          "id": "f0jtdmir2m",
+          "grid": {
+            "x": 0,
+            "y": 4,
+            "w": 12,
+            "h": 1
+          }
+        },
+        {
+          "type": "help_topics",
+          "id": "1oryee9s07",
+          "grid": {
+            "x": 0,
+            "y": 5,
+            "w": 12,
+            "h": 1
+          },
+          "categoryIds": []
+        }
+      ],
+      "composer": "band"
+    },
+    "feedback": {
+      "headline": {
+        "title": {
+          "en": "Fixture words"
+        },
+        "subtitle": {
+          "en": "Fixture words"
+        }
+      },
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {
+        "prompt": {
+          "en": "Fixture words"
+        },
+        "submit": {
+          "en": "Fixture words"
+        }
+      }
+    }
+  },
+  "nav": {
+    "home": {
+      "on": true,
+      "tab": true
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true
+      },
+      {
+        "type": "help",
+        "shown": true
+      },
+      {
+        "type": "support",
+        "shown": true
+      },
+      {
+        "type": "status",
+        "shown": true
+      }
+    ]
+  },
+  "tune": {
+    "headline": {
+      "size": 23,
+      "weight": 500,
+      "tracking": -0.025
+    },
+    "heading": {
+      "colour": "#212121"
+    }
+  }
+}

@@ -238,6 +238,16 @@ describe('RBAC permission catalogue', () => {
     expect(SYSTEM_ROLE_PERMISSIONS.contributor).toContain(PERMISSIONS.COPILOT_USE)
   })
 
+  it('publishing the design is its own key, held by every preset that edits branding', () => {
+    expect(PERMISSIONS.DESIGN_PUBLISH).toBe('design.publish')
+    expect(WORKSPACE_ADMIN_PERMISSIONS).toContain(PERMISSIONS.DESIGN_PUBLISH)
+    for (const [role, keys] of Object.entries(SYSTEM_ROLE_PERMISSIONS)) {
+      const brands = keys.includes(PERMISSIONS.SETTINGS_BRANDING)
+      expect([role, keys.includes(PERMISSIONS.DESIGN_PUBLISH)]).toEqual([role, brands])
+    }
+    expect(SYSTEM_ROLE_PERMISSIONS.admin).toContain(PERMISSIONS.DESIGN_PUBLISH)
+  })
+
   it('does not expose the removed data-connector permission', () => {
     expect(ALL_PERMISSIONS).not.toContain('connector.manage')
   })

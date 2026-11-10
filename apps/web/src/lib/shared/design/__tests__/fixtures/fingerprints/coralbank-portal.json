@@ -1,0 +1,82 @@
+{
+  "page": "rgb(255, 255, 255)",
+  "headline": {
+    "family": "\"Libre Franklin\", ui-sans-serif, system-ui, sans-serif",
+    "size": 49,
+    "weight": 500,
+    "tracking": -0.03,
+    "leading": 1.2,
+    "transform": "none",
+    "color": "rgb(17, 34, 49)"
+  },
+  "heading": {
+    "family": "\"Libre Franklin\", ui-sans-serif, system-ui, sans-serif",
+    "size": 22,
+    "weight": 800,
+    "tracking": -0.02,
+    "leading": 1.5555545454545454,
+    "transform": "none",
+    "color": "rgb(17, 34, 49)"
+  },
+  "body": {
+    "family": "\"DM Sans\", ui-sans-serif, system-ui, sans-serif",
+    "size": 16.9,
+    "weight": 400,
+    "tracking": 0,
+    "leading": 1.3750000000000002,
+    "transform": "none",
+    "color": "rgb(17, 34, 49)"
+  },
+  "button": {
+    "bg": "rgb(9, 23, 35)",
+    "color": "rgb(255, 255, 255)",
+    "radius": 999,
+    "height": 44,
+    "borderWidth": 0,
+    "borderColor": "rgb(212, 212, 212)",
+    "shadow": false,
+    "size": 13,
+    "weight": 600,
+    "transform": "none",
+    "family": "\"DM Sans\", ui-sans-serif, system-ui, sans-serif",
+    "padX": 19.8
+  },
+  "buttonText": "Sign up",
+  "link": {
+    "family": "\"DM Sans\", ui-sans-serif, system-ui, sans-serif",
+    "size": 14,
+    "weight": 500,
+    "tracking": 0,
+    "leading": 1.4285714285714286,
+    "transform": "none",
+    "color": "rgb(17, 34, 49)"
+  },
+  "card": {
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(17, 34, 49)",
+    "radius": 8,
+    "height": 68.21875,
+    "borderWidth": 1,
+    "borderColor": "rgba(0, 0, 0, 0)",
+    "shadow": true,
+    "size": 16,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"DM Sans\", ui-sans-serif, system-ui, sans-serif",
+    "padX": 16
+  },
+  "field": {
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(17, 34, 49)",
+    "radius": 28,
+    "height": 62,
+    "borderWidth": 1,
+    "borderColor": "rgb(212, 212, 212)",
+    "shadow": true,
+    "size": 16,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"DM Sans\", ui-sans-serif, system-ui, sans-serif",
+    "padX": 0
+  }
+}
