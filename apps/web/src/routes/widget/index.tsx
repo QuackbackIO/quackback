@@ -43,6 +43,7 @@ import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { portalBrandMark } from '@/lib/shared/portal-head'
 import {
   CONVERSATION_PRESENCE_QUERY_KEY,
   useConversationPresence,
@@ -118,15 +119,6 @@ const searchSchema = z.object({
   // deep link in agent-reply emails. Navigation only; carries no capability.
   c: z.string().optional(),
 })
-
-/** The published design's icon, its dark one when it has only that; inline so the widget loads nothing more. */
-function designMark(
-  design:
-    { engine: string; logo?: { mark?: { light: string | null; dark: string | null } } } | undefined
-) {
-  const mark = design?.engine === 'v2' ? design.logo?.mark : undefined
-  return mark?.light || mark?.dark || null
-}
 
 export const Route = createFileRoute('/widget/')({
   validateSearch: searchSchema,
@@ -294,8 +286,9 @@ export const Route = createFileRoute('/widget/')({
       // Home surface customisation (greeting, hero style, quick-link cards).
       home: settings?.publicWidgetConfig?.home ?? null,
       // The brand's icon for the Home header, as the portal's header shows it:
-      // the design's own, then the workspace logo (branding config).
-      logoUrl: designMark(settings?.portalDesign) ?? settings?.brandingData?.logoUrl ?? null,
+      // the design's own, then the workspace logo (branding config). The
+      // portal's head reads it too, so it is in the entry chunk already.
+      logoUrl: portalBrandMark(settings),
       // Top help articles for the Home search card (public; SSR'd).
       topArticles,
       // Team label for widget surfaces (changelog header, messages fallback):
