@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { LinkPreview } from '@/components/designer/link-preview'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
+  getShareCardSampleFn,
   getSignInEmailSampleFn,
   type EmailSampleResult,
 } from '@/lib/server/functions/portal-design-email'
@@ -22,12 +23,27 @@ export function VisitorsAlsoSee({ design }: { design?: PortalDesign }) {
             <span aria-hidden="true" className="text-xs text-muted-foreground">
               Link preview
             </span>
-            <LinkPreview design={design} />
+            <LinkPreviewSample design={design} />
           </div>
         )}
       </div>
     </section>
   )
+}
+
+/** The link preview with the image the server draws, so it never promises another card. */
+function LinkPreviewSample({ design }: { design: PortalDesign }) {
+  const [image, setImage] = useState<string>()
+  useEffect(() => {
+    let live = true
+    getShareCardSampleFn()
+      .then((result) => live && result.ok && setImage(result.src))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
+  return <LinkPreview design={design} image={image} />
 }
 
 function SignInEmailSample() {

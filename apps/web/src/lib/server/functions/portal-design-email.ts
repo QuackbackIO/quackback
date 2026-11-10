@@ -37,3 +37,27 @@ export const getSignInEmailSampleFn = createServerFn({ method: 'GET' }).handler(
     }
   }
 )
+
+export type ShareCardSampleResult = { ok: true; src: string } | { ok: false; message: string }
+
+/** The link preview's image as visitors will get it once the draft is published. */
+export const getShareCardSampleFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<ShareCardSampleResult> => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    try {
+      const [{ getDesignState }, { brandImageDeps, shareCardSample }, { getWorkspaceSettings }] =
+        await Promise.all([
+          import('@/lib/server/domains/design/design.service'),
+          import('@/lib/server/domains/design/share-card/serve'),
+          import('@/lib/server/domains/settings/settings.service'),
+        ])
+      const [state, settings] = await Promise.all([getDesignState(), getWorkspaceSettings()])
+      const doc = state?.draft ?? state?.published?.document ?? null
+      if (!doc || !settings) return { ok: false, message: 'No design to show yet.' }
+      return { ok: true, src: await shareCardSample(doc, settings, brandImageDeps()) }
+    } catch (err) {
+      log.warn({ err }, 'share card sample failed')
+      return { ok: false, message: 'The link preview could not be drawn.' }
+    }
+  }
+)

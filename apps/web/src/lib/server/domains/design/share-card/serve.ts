@@ -8,16 +8,19 @@
  */
 import { logger } from '@/lib/server/logger'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
-import { designAssetUrl } from '@/lib/shared/design/design-view'
+import { designAssetUrl, designView } from '@/lib/shared/design/design-view'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
+  cardCanDraw,
   isShareCardPage,
   shareCardFacts,
   shareCardVersion,
   shortHash,
+  type ShareCardFacts,
 } from '@/lib/shared/design/share-card'
 import { portalHeadWords, portalSiteName, type PortalHeadSettings } from '@/lib/shared/portal-head'
+import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import { nameInitial } from '@/lib/shared/utils/initial'
 import { decodeImage, type Image } from '../extract/image'
 import { CARD, drawInitialTile, drawShareCard, drawSquareIcon, encodeShareCard } from './render'
@@ -123,18 +126,41 @@ export async function serveBrandImage(
   if (kept) return png(kept, asked === version)
 
   const started = performance.now()
-  const icon = facts.iconKey ? await pixels(deps, facts.iconKey, CARD.icon) : null
-  const bytes = encodeShareCard(
-    drawShareCard({
-      ...facts,
-      title,
-      pageName: shownPage ? portalHeadWords(settings).pages[shownPage] : null,
-      icon,
-    })
-  )
+  const pageName = shownPage ? portalHeadWords(settings).pages[shownPage] : null
+  const bytes = await drawCard(deps, facts, title, pageName)
   cache.set(key, bytes)
   log.debug({ ms: Math.round(performance.now() - started), page: shownPage }, 'share card drawn')
   return png(bytes, asked === version)
+}
+
+/** The card as a PNG: the design's facts, its icon read from storage, the title and page name. */
+async function drawCard(
+  deps: Pick<BrandImageDeps, 'readObject'>,
+  facts: ShareCardFacts,
+  title: string,
+  pageName: string | null
+): Promise<Uint8Array> {
+  const icon = facts.iconKey ? await pixels(deps, facts.iconKey, CARD.icon) : null
+  return encodeShareCard(drawShareCard({ ...facts, title, pageName, icon }))
+}
+
+/**
+ * What a link to the portal would show with this design published, for the
+ * publish review: the design's share image, else the card exactly as
+ * /brand.png draws it (as a data URL), else, for a title the card cannot
+ * draw, the logo the portal's head falls back to.
+ */
+export async function shareCardSample(
+  doc: PortalDesign,
+  settings: PortalHeadSettings,
+  deps: Pick<BrandImageDeps, 'readObject'>
+): Promise<string> {
+  if (doc.brand.shareImage) return designAssetUrl(doc.brand.shareImage.key)
+  const view = { ...settings, portalDesign: designView(doc, null) }
+  const title = portalSiteName(view)
+  if (!cardCanDraw(title)) return resolvePortalOgImageUrl(settings.brandingData)
+  const bytes = await drawCard(deps, shareCardFacts(doc, resolveDesign(doc)), title, null)
+  return `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`
 }
 
 /** The largest stored icon read, in bytes. */

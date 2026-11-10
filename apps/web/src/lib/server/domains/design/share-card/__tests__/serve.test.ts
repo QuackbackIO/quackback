@@ -3,7 +3,7 @@ import { designView } from '@/lib/shared/design/design-view'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { portalFavicon, portalShareImage } from '@/lib/shared/portal-head'
 import { decodePng, encodePng } from '../../extract/png'
-import { serveBrandImage, type BrandImageDeps } from '../serve'
+import { serveBrandImage, shareCardSample, type BrandImageDeps } from '../serve'
 
 const red = () => {
   const data = new Uint8Array(40 * 20 * 4)
@@ -144,5 +144,32 @@ describe('serveBrandImage', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('image/png')
     expect(res.headers.get('cache-control')).not.toContain('immutable')
+  })
+})
+
+describe('shareCardSample', () => {
+  it('is the very card /brand.png serves once the design is published', async () => {
+    const doc = defaultDesign()
+    doc.brand.logo.mark.light = { key: 'logos/i.png' }
+    const { value, settings } = deps(doc, red())
+    const served = await serveBrandImage(queryOf(portalShareImage(settings, '')), value)
+    const sample = await shareCardSample(doc, { name: 'Acme Corp' }, value)
+    expect(sample.startsWith('data:image/png;base64,')).toBe(true)
+    expect(
+      Buffer.from(sample.split(',')[1]!, 'base64').equals(Buffer.from(await served.arrayBuffer()))
+    ).toBe(true)
+  })
+
+  it('is the share image, or the logo where the card cannot draw the title', async () => {
+    const { value } = deps(defaultDesign())
+    const own = defaultDesign()
+    own.brand.shareImage = { key: 'portal-images/s.png' }
+    expect(await shareCardSample(own, { name: 'Acme' }, value)).toBe(
+      '/api/storage/portal-images/s.png'
+    )
+    const cjk = defaultDesign()
+    cjk.brand.logo.name = '反馈中心'
+    const settings = { name: 'Acme', brandingData: { logoUrl: '/api/storage/logo.png' } }
+    expect(await shareCardSample(cjk, settings, value)).toBe('/api/storage/logo.png')
   })
 })
