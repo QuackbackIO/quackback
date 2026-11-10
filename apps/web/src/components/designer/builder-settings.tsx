@@ -13,6 +13,7 @@ import type { StyleElement } from '@/lib/shared/design/style-tokens'
 import { PanelSheet } from './panel-sheet'
 import { PickedSettings } from './picked-settings'
 import { RightPanel } from './right-panel'
+import { TreePane } from './tree-pane'
 import type { AddDrag } from './use-add-drag'
 import type { MenuEditing } from './use-menu-editing'
 
@@ -109,6 +110,19 @@ export function BuilderSettings({
       open={open}
       hidden={hidden}
       showing={element ? 'element' : (selection ?? 'page')}
+      pinned={
+        <TreePane
+          page={page}
+          design={design}
+          update={update}
+          nodes={nodes}
+          gates={gates}
+          picked={selection}
+          onPick={(row) => (onTreePick ? onTreePick(row) : onSelect(row.key))}
+          act={menu.act}
+          say={say}
+        />
+      }
       sheet={
         shown.sheet && (
           <PanelSheet
@@ -146,7 +160,6 @@ export function BuilderSettings({
           selection={selection}
           page={page}
           pages={pages}
-          nodes={nodes}
           design={design}
           update={update}
           gates={gates}
@@ -160,7 +173,6 @@ export function BuilderSettings({
           onTheme={onTheme}
           logoUrl={logoUrl}
           say={say}
-          onTreePick={onTreePick}
         />
       )}
     </RightPanel>

@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { useState } from 'react'
 import { newBlock } from '@/lib/shared/design/home'
 import { addMenuLink } from '@/lib/shared/design/menu'
-import { outlineOf, type DesignerPage, type Selection } from '@/lib/shared/design/outline'
+import type { DesignerPage, Selection } from '@/lib/shared/design/outline'
 import { panelFor } from '@/lib/shared/design/panel-routes'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { defaultDesign } from '@/lib/shared/design/schema'
@@ -57,14 +57,12 @@ function show(selection: Selection | null, page: DesignerPage, start = defaultDe
   const menu = { act: vi.fn(), land: vi.fn(), setAdding: vi.fn() }
   function Harness() {
     const [design, setDesign] = useState(start)
-    const nodes = outlineOf(design, page)
     return (
       <PickedSettings
         route={panelFor(selection, false, page)}
         selection={selection}
         page={page}
         pages={5}
-        nodes={nodes}
         design={design}
         update={(fn, label) => {
           const next = structuredClone(seen.design)
