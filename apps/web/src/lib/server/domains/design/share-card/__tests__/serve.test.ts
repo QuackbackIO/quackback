@@ -27,6 +27,7 @@ const ENGLISH_HEAD: PortalHeadTemplates = {
   status: '{name}',
   incident: '{title}',
   post: '{title}',
+  notFound: 'Not found · {name}',
 }
 
 function deps(doc: PortalDesign | null, icon: Uint8Array | null = null) {

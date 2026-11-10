@@ -320,13 +320,13 @@ describe('askDesignAi', () => {
       { type: 'roadmap', id: 'roadmapaaa', roadmapId: null, grid: { x: 0, y: 0, w: 12, h: 4 } },
     ]
     model.answer = {
-      reply: 'Votes are off.',
-      // "roadmap" names the block and the page; votes is the page's setting.
-      ops: [op({ op: 'set', target: 'roadmap', key: 'votes', value: 'false' }, 'roadmap votes')],
+      reply: 'The roadmap is a list now.',
+      // "roadmap" names the block and the page; board is the page's setting.
+      ops: [op({ op: 'set', target: 'roadmap', key: 'board', value: 'list' }, 'roadmap as a list')],
       outOfScope: false,
     }
     const result = await askDesignAi({
-      message: 'Hide the votes',
+      message: 'Show it as a list',
       design,
       scope: 'home',
       blockId: 'roadmapaaa',
@@ -337,7 +337,7 @@ describe('askDesignAi', () => {
     expect(result.applied).toEqual([])
     expect(result.design.pages.roadmap).toEqual(design.pages.roadmap)
     expect(result.reply).toBe('That is outside the Roadmap block on Home, so nothing changed.')
-    expect(result.reply).not.toMatch(/votes/i)
+    expect(result.reply).not.toMatch(/list/i)
   })
 
   it('keeps a request about one Home block to that block', async () => {

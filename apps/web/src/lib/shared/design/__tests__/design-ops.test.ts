@@ -413,14 +413,14 @@ describe('applyOps', () => {
   })
 
   it('keeps a picked block from reaching the page of the same name', () => {
-    // "roadmap" names a Home block and a page; votes is the page's setting.
+    // "roadmap" names a Home block and a page; board is the page's setting.
     const d = ok(addBlock(design(), world, 'roadmap')).design
     const roadmap = d.pages.home.blocks.find((block) => block.type === 'roadmap')!
-    const op = { op: 'set', target: 'roadmap', key: 'votes', value: 'false' } as const
+    const op = { op: 'set', target: 'roadmap', key: 'board', value: 'list' } as const
     // Unscoped, the operation does change the roadmap page.
     const unscoped = applyOps(d, model, [op])
     expect(unscoped.applied.map((change) => change.path)).toEqual(['pages.roadmap'])
-    expect(unscoped.design.pages.roadmap).toMatchObject({ votes: false })
+    expect(unscoped.design.pages.roadmap).toMatchObject({ board: 'list' })
     const result = applyOps(d, model, [op], { scope: 'home', blockId: roadmap.id })
     expect(result.done).toEqual([])
     expect(result.applied).toEqual([])
