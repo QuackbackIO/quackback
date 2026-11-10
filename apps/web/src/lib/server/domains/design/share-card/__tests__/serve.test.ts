@@ -113,13 +113,36 @@ describe('serveBrandImage', () => {
     expect(old.headers.get('cache-control')).not.toContain('immutable')
   })
 
-  it('draws the initial tile in PNG for an SVG icon, which mail cannot show', async () => {
+  it('draws an SVG icon to PNG for the favicon square and the card', async () => {
     const doc = defaultDesign()
     doc.brand.logo.mark.light = { key: 'logos/i.svg' }
-    const { value, read } = deps(doc, new TextEncoder().encode('<svg/>'))
+    doc.brand.light.background = '#ffffff'
+    const mark = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#dc1414"/></svg>'
+    )
+    const { value } = deps(doc, mark)
+    const res = await serveBrandImage(new URLSearchParams('v=x&kind=icon'), value)
+    expect(res.status).toBe(200)
+    const img = decodePng(new Uint8Array(await res.arrayBuffer()))
+    expect([...img.data.subarray(0, 4)]).toEqual([0xdc, 0x14, 0x14, 255])
+    // The card shows the icon where it sits, not the initial tile.
+    const card = decodePng(
+      new Uint8Array(await (await serveBrandImage(new URLSearchParams('v=y'), value)).arrayBuffer())
+    )
+    const o = (150 * card.width + 150) * 4
+    expect([...card.data.subarray(o, o + 3)]).toEqual([0xdc, 0x14, 0x14])
+  })
+
+  it('draws the initial tile for an SVG icon it cannot draw', async () => {
+    const doc = defaultDesign()
+    doc.brand.logo.mark.light = { key: 'logos/t.svg' }
+    const { value } = deps(
+      doc,
+      new TextEncoder().encode('<svg viewBox="0 0 9 9"><text>A</text></svg>')
+    )
     const res = await serveBrandImage(new URLSearchParams('v=x&kind=icon'), value)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('image/png')
-    expect(read).not.toHaveBeenCalled()
+    expect(res.headers.get('cache-control')).not.toContain('immutable')
   })
 })

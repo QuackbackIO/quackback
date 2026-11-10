@@ -53,24 +53,17 @@ describe('emailBranding', () => {
     expect(result.logoUrl).toBe('https://files.example/design/icon.png')
   })
 
-  it('falls back to the workspace logo when the icon is an SVG', async () => {
+  it('sends an SVG icon as the PNG the portal draws of it', async () => {
     publish((d) => (d.brand.logo.mark.light = { key: 'design/icon.svg' }))
     const result = await emailBranding({ logoKey: 'logos/acme.png', featureFlags: FLAG_ON })
-    expect(result.logoUrl).toBe('https://files.example/logos/acme.png')
+    expect(result.logoUrl).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=\w+&kind=icon$/)
+    expect(result.logoUrl).not.toMatch(/svg/)
   })
 
   it('sends the brand initial tile, never the Quackback duck, when there is no image to show', async () => {
     publish(() => {})
     const none = await emailBranding({ logoKey: null, featureFlags: FLAG_ON, name: 'Acme' })
     expect(none.logoUrl).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=\w+&kind=icon$/)
-    // An SVG icon cannot go in mail; with no workspace logo the tile stands in.
-    publish((d) => (d.brand.logo.mark.light = { key: 'design/icon.svg' }))
-    const svg = await emailBranding({
-      logoKey: 'logos/acme.svg',
-      featureFlags: FLAG_ON,
-      name: 'Acme',
-    })
-    expect(svg.logoUrl).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=\w+&kind=icon$/)
     // The tile shows the design's title, so a new title is a new address.
     publish((d) => (d.brand.logo.name = 'Other'))
     const renamed = await emailBranding({ logoKey: null, featureFlags: FLAG_ON, name: 'Acme' })

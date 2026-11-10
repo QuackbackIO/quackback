@@ -18,7 +18,13 @@ import { getEmailSafeUrl } from '@/lib/server/storage/s3'
 import { emailIconKey, emailPalette } from '@/lib/shared/design/email-palette'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import { initialTilePath, shareCardFacts, shareCardVersion } from '@/lib/shared/design/share-card'
+import {
+  initialTilePath,
+  shareCardFacts,
+  shareCardVersion,
+  shortHash,
+  squareIconPath,
+} from '@/lib/shared/design/share-card'
 
 const log = logger.child({ component: 'email-brand' })
 
@@ -40,20 +46,26 @@ function workspaceLogo(logoKey: string | null | undefined): string | undefined {
 }
 
 /**
- * The portal's drawn initial tile, absolute, for a brand with no image mail
- * can show: the same PNG the portal's favicon is (share-card/serve.ts).
+ * The portal's own PNG of the brand icon, absolute, for an icon mail cannot
+ * show as stored (an SVG), or the initial tile for a brand with no image at
+ * all: the same /brand.png the portal's favicon is (share-card/serve.ts).
  */
-function initialTileUrl(doc: PortalDesign, workspaceName: string | null | undefined) {
+function drawnIconUrl(doc: PortalDesign, workspaceName: string | null | undefined) {
   const base = config.baseUrl
   if (!base) return undefined
+  const key = (doc.brand.logo.mark.light ?? doc.brand.logo.mark.dark)?.key
   const title = doc.brand.logo.name?.trim() || workspaceName || 'Quackback'
-  const path = initialTilePath(shareCardVersion(shareCardFacts(doc, resolveDesign(doc))), title)
+  const path =
+    key && isSvg(key)
+      ? squareIconPath(shortHash(key))
+      : initialTilePath(shareCardVersion(shareCardFacts(doc, resolveDesign(doc))), title)
   return `${base.replace(/\/+$/, '')}${path}`
 }
 
 /**
  * A design's email brand: its colours, and its icon where mail clients draw
- * it, else the workspace logo, else the brand's initial tile.
+ * it (an SVG one drawn to PNG by the portal), else the workspace logo, else
+ * the brand's initial tile.
  */
 export function designEmailBranding(
   doc: PortalDesign,
@@ -61,13 +73,15 @@ export function designEmailBranding(
   workspaceName?: string | null
 ): EmailBranding {
   const icon = emailIconKey(doc)
+  const key = (doc.brand.logo.mark.light ?? doc.brand.logo.mark.dark)?.key
   const title = doc.brand.logo.name?.trim() || workspaceName || undefined
   return {
     ...(title && { title }),
     logoUrl:
       (icon ? getEmailSafeUrl(icon) : null) ??
+      (key && isSvg(key) ? drawnIconUrl(doc, workspaceName) : undefined) ??
       workspaceLogo(logoKey) ??
-      initialTileUrl(doc, workspaceName),
+      drawnIconUrl(doc, workspaceName),
     brand: emailPalette(doc),
   }
 }
