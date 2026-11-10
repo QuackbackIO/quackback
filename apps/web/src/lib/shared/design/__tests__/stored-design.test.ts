@@ -221,6 +221,44 @@ describe('reading a stored design with a value this build does not offer', () =>
     expect(read?.dropped).toEqual(['layout.nav'])
   })
 
+  it('reads a format-4 design as this format, keeping the brand', () => {
+    const read = readStoredDesign({ ...stored(), version: 4, future: { on: true } })
+    expect(read?.design).toEqual(stored())
+    expect(read?.dropped.sort()).toEqual(['future', 'version'])
+  })
+
+  it('drops a display font this build cannot read, whatever the parse says of it', () => {
+    for (const display of [
+      { kind: 'bundled', id: 'from-a-newer-build' },
+      { kind: 'variable', id: 'inter', axes: { wght: [100, 900] } },
+    ]) {
+      const read = readStoredDesign(written({ 'brand.fonts.display': display }))
+      expect(read?.design).toEqual(stored())
+      expect(read?.dropped).toEqual(['brand.fonts.display'])
+    }
+  })
+
+  it('sets a heading font of a newer kind back to the default, keeping the rest', () => {
+    const read = readStoredDesign(
+      written({
+        'brand.fonts.heading': {
+          kind: 'variable',
+          family: 'Brand',
+          files: [{ key: 'fonts/a.woff2' }],
+        },
+      })
+    )
+    expect(read?.design.brand.fonts.heading).toEqual(defaultDesign().brand.fonts.heading)
+    expect(read?.design.brand.light.accent).toBe('#0f766e')
+  })
+
+  it('sets a heading weight this build does not offer back to the default', () => {
+    const read = readStoredDesign(written({ 'brand.fonts.headingWeight': 650 }))
+    expect(read?.design.brand.fonts.headingWeight).toBe(defaultDesign().brand.fonts.headingWeight)
+    expect(read?.design.brand.light.accent).toBe('#0f766e')
+    expect(read?.dropped).toEqual(['brand.fonts.headingWeight'])
+  })
+
   it('still refuses a design whose required field is the wrong kind of value', () => {
     expect(readStoredDesign(written({ 'layout.nav': 7 }))).toBeNull()
   })
