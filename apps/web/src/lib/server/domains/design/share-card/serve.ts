@@ -89,51 +89,15 @@ export async function serveBrandImage(
   const asked = query.get('v') ?? ''
   const facts = shareCardFacts(doc, resolveDesign(doc))
 
-  // The full logo for email headers, fitted into their square; an SVG drawn to PNG.
-  if (query.get('kind') === 'logo' && facts.logoKey) {
-    const version = shortHash(facts.logoKey)
-    const key = `logo:${version}`
-    const kept = cache.get(key)
-    if (kept) return png(kept, asked === version)
-    const logo = await pixels(deps, facts.logoKey, ICON_SIDE)
-    if (logo) {
-      const bytes = encodeShareCard(drawSquareIcon(logo, ICON_SIDE))
-      cache.set(key, bytes)
-      return png(bytes, asked === version)
-    }
-  }
-
-  if (query.get('kind') === 'icon' || query.get('kind') === 'logo') {
-    if (facts.iconKey) {
-      const version = shortHash(facts.iconKey)
-      const key = `icon:${version}`
-      const kept = cache.get(key)
-      if (kept) return png(kept, asked === version)
-      const icon = await pixels(deps, facts.iconKey, ICON_SIDE)
-      if (icon) {
-        const bytes = encodeShareCard(drawSquareIcon(icon, ICON_SIDE))
-        cache.set(key, bytes)
-        return png(bytes, asked === version)
-      }
-      // An icon this cannot read (an ICO or WebP) is served as it is stored;
-      // an SVG it cannot draw takes the initial tile, as mail cannot show SVG.
-      if (!isSvg(facts.iconKey))
-        return new Response(null, {
-          status: 302,
-          headers: { Location: designAssetUrl(facts.iconKey), 'Cache-Control': BRIEFLY },
-        })
-    }
-    // No icon: the initial tile, as the header and the card draw it.
-    const title = portalSiteName(settings)
-    const version = `${shareCardVersion(facts)}${shortHash(title)}`
-    const key = `tile:${version}`
-    const kept = cache.get(key)
-    if (kept) return png(kept, asked === version)
-    const bytes = encodeShareCard(
-      drawInitialTile({ ...facts, initial: nameInitial(title) }, ICON_SIDE)
-    )
-    cache.set(key, bytes)
-    return png(bytes, asked === version)
+  const kind = query.get('kind')
+  if (kind === 'icon' || kind === 'logo') {
+    const square = await brandSquare(deps, facts, portalSiteName(settings), kind)
+    if ('redirect' in square)
+      return new Response(null, {
+        status: 302,
+        headers: { Location: square.redirect, 'Cache-Control': BRIEFLY },
+      })
+    return png(square.bytes, asked === square.version)
   }
 
   const page = query.get('page')
@@ -150,6 +114,72 @@ export async function serveBrandImage(
   cache.set(key, bytes)
   log.debug({ ms: Math.round(performance.now() - started), page: shownPage }, 'share card drawn')
   return png(bytes, asked === version)
+}
+
+/** A drawn square of the brand, with the version its address carries; or where a stored icon is. */
+type BrandSquare = { bytes: Uint8Array; version: string } | { redirect: string }
+
+/**
+ * The brand fitted into a square, as the favicon and email headers show it:
+ * for `logo`, the full logo when the design has one; else the icon, drawn
+ * when stored as SVG; else the initial tile of the title, as the header and
+ * the card draw it. Each is kept by version.
+ */
+async function brandSquare(
+  deps: Pick<BrandImageDeps, 'readObject'>,
+  facts: ShareCardFacts,
+  title: string,
+  kind: 'icon' | 'logo'
+): Promise<BrandSquare> {
+  const drawn = async (key: string, version: string, imageKey: string) => {
+    const kept = cache.get(key)
+    if (kept) return { bytes: kept, version }
+    const image = await pixels(deps, imageKey, ICON_SIDE)
+    if (!image) return null
+    const bytes = encodeShareCard(drawSquareIcon(image, ICON_SIDE))
+    cache.set(key, bytes)
+    return { bytes, version }
+  }
+  // The full logo for email headers, fitted into their square; an SVG drawn to PNG.
+  if (kind === 'logo' && facts.logoKey) {
+    const version = shortHash(facts.logoKey)
+    const logo = await drawn(`logo:${version}`, version, facts.logoKey)
+    if (logo) return logo
+  }
+  if (facts.iconKey) {
+    const version = shortHash(facts.iconKey)
+    const icon = await drawn(`icon:${version}`, version, facts.iconKey)
+    if (icon) return icon
+    // An icon this cannot read (an ICO or WebP) is served as it is stored;
+    // an SVG it cannot draw takes the initial tile, as mail cannot show SVG.
+    if (!isSvg(facts.iconKey)) return { redirect: designAssetUrl(facts.iconKey) }
+  }
+  // No icon: the initial tile, as the header and the card draw it.
+  const version = `${shareCardVersion(facts)}${shortHash(title)}`
+  const key = `tile:${version}`
+  const kept = cache.get(key)
+  if (kept) return { bytes: kept, version }
+  const bytes = encodeShareCard(drawInitialTile({ ...facts, initial: nameInitial(title) }, ICON_SIDE))
+  cache.set(key, bytes)
+  return { bytes, version }
+}
+
+const dataUrl = (bytes: Uint8Array) =>
+  `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`
+
+/**
+ * The brand's square as /brand.png would draw it with this design
+ * published, for the publish review's email sample: a PNG data URL, so the
+ * sample shows the draft's icon, logo or initial and never the live one.
+ */
+export async function brandSquareSample(
+  doc: PortalDesign,
+  title: string,
+  kind: 'icon' | 'logo',
+  deps: Pick<BrandImageDeps, 'readObject'>
+): Promise<string> {
+  const square = await brandSquare(deps, shareCardFacts(doc, resolveDesign(doc)), title, kind)
+  return 'redirect' in square ? square.redirect : dataUrl(square.bytes)
 }
 
 /** The card as a PNG: the design's facts, its icon read from storage, the title and page name. */
@@ -182,8 +212,7 @@ export async function shareCardSample(
   const view = { ...settings, portalDesign: designView(doc, null) }
   const title = portalSiteName(view)
   if (!cardCanDraw(title)) return resolvePortalOgImageUrl(settings.brandingData)
-  const bytes = await drawCard(deps, shareCardFacts(doc, resolveDesign(doc)), title, null)
-  return `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`
+  return dataUrl(await drawCard(deps, shareCardFacts(doc, resolveDesign(doc)), title, null))
 }
 
 /** The largest stored icon read, in bytes. */
