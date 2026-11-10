@@ -193,6 +193,7 @@ describe('Layout', () => {
   it('sets height, alignment and shape as tiles, each its own step, with a dot and Reset', () => {
     const start = defaultDesign()
     start.nav.home.on = true
+    start.layout.hero = 'brand'
     const { seen } = show(start, 'home')
     expect(names('Height')).toEqual(['Short', 'Roomy', 'Tall'])
     expect(names('Alignment')).toEqual(['Start', 'Centre'])
@@ -385,10 +386,30 @@ describe('Home first', () => {
   it('leads Home’s hero with its main action, then its look, image and height', () => {
     const start = defaultDesign()
     start.nav.home.on = true
+    start.layout.hero = 'brand'
     show(start, 'home')
     expect(sections()).toEqual(['Main action', 'Look', 'Image', 'Layout'])
     expect(names('Height')).toEqual(['Short', 'Roomy', 'Tall'])
     expect(within(group('Height')).getByRole('radio', { name: 'Roomy' })).toBeTruthy()
+  })
+
+  it('draws the Look tiles in the design’s own colours, not the builder’s', () => {
+    const start = defaultDesign()
+    start.nav.home.on = true
+    start.brand.light.accent = '#c6ff00'
+    start.brand.light.ink = '#0b1b3a'
+    show(start, 'home')
+    const drawing = document.querySelector<HTMLElement>('[data-look-drawing]')!
+    expect(drawing.style.getPropertyValue('--primary')).toBe('#c6ff00')
+    expect(drawing.style.getPropertyValue('--foreground')).toBe('#0b1b3a')
+  })
+
+  it('offers no height for a plain hero, where it would change nothing', () => {
+    const start = defaultDesign()
+    start.nav.home.on = true
+    start.layout.hero = 'none'
+    show(start, 'home')
+    expect(screen.queryByRole('radiogroup', { name: 'Height' })).toBeNull()
   })
 
   it('gives the list pages Home’s look at a fixed height, with no height to set', () => {
