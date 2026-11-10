@@ -19,6 +19,8 @@ export const CARD = {
   pad: 96,
   /** The icon's side. */
   icon: 144,
+  /** The widest a full logo is drawn, in place of the icon, as tall as it. */
+  logo: 480,
   /** The brand colour's strip along the foot. */
   foot: 12,
 } as const
@@ -37,6 +39,8 @@ export interface ShareCardSpec {
   headingWeight: number
   bodyFont: string
   icon: Image | null
+  /** The icon is the full logo, drawn wider. */
+  wide?: boolean
 }
 
 type Rgb = [number, number, number]
@@ -116,8 +120,8 @@ function roundedCoverage(px: number, py: number, size: number, radius: number): 
 }
 
 /** The image scaled to fit a box, kept in proportion, its pixels averaged when shrunk. */
-function fitInto(src: Image, box: number): { img: Image; x: number; y: number } {
-  const scale = Math.min(box / src.width, box / src.height)
+function fitInto(src: Image, box: number, boxHeight = box): { img: Image; x: number; y: number } {
+  const scale = Math.min(box / src.width, boxHeight / src.height)
   const w = Math.max(1, Math.round(src.width * scale))
   const h = Math.max(1, Math.round(src.height * scale))
   const out = new Uint8Array(w * h * 4)
@@ -149,7 +153,7 @@ function fitInto(src: Image, box: number): { img: Image; x: number; y: number } 
   return {
     img: { width: w, height: h, data: out },
     x: Math.floor((box - w) / 2),
-    y: Math.floor((box - h) / 2),
+    y: Math.floor((boxHeight - h) / 2),
   }
 }
 
@@ -229,7 +233,10 @@ export function drawShareCard(spec: ShareCardSpec): Image {
   const fallback = fontOf('inter', spec.headingWeight)
 
   if (spec.icon) {
-    const fitted = fitInto(spec.icon, side)
+    // A full logo in place of an icon has a wider box, and starts at the margin.
+    const fitted = spec.wide
+      ? { ...fitInto(spec.icon, CARD.logo, side), x: 0 }
+      : fitInto(spec.icon, side)
     const { img: icon } = fitted
     for (let y = 0; y < icon.height; y++)
       for (let x = 0; x < icon.width; x++) {

@@ -147,6 +147,46 @@ describe('serveBrandImage', () => {
   })
 })
 
+describe('a brand with a full logo and no icon', () => {
+  const svgLogo = new TextEncoder().encode(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 10"><rect width="40" height="10" fill="#1414dc"/></svg>'
+  )
+  const withLogo = () => {
+    const doc = defaultDesign()
+    doc.brand.light.background = '#ffffff'
+    doc.brand.logo.wordmark.light = { key: 'logos/full.svg' }
+    return doc
+  }
+
+  it('draws the full logo on the card, wide, in place of the initial', async () => {
+    const { value } = deps(withLogo(), svgLogo)
+    const card = decodePng(
+      new Uint8Array(await (await serveBrandImage(new URLSearchParams('v=x'), value)).arrayBuffer())
+    )
+    const blue = (x: number, y: number) => {
+      const o = (y * card.width + x) * 4
+      return [...card.data.subarray(o, o + 3)]
+    }
+    // 480 wide from the margin, a quarter as tall, centred on the icon's row.
+    expect(blue(100, 168)).toEqual([0x14, 0x14, 0xdc])
+    expect(blue(560, 168)).toEqual([0x14, 0x14, 0xdc])
+    expect(blue(600, 168)).toEqual([0xff, 0xff, 0xff])
+  })
+
+  it('serves the full logo for email headers, and keeps the initial tile as the favicon', async () => {
+    const { value, settings } = deps(withLogo(), svgLogo)
+    const logo = await serveBrandImage(new URLSearchParams('v=x&kind=logo'), value)
+    const img = decodePng(new Uint8Array(await logo.arrayBuffer()))
+    expect(img.width).toBe(img.height)
+    const mid = (img.height / 2) * img.width * 4 + (img.width / 2) * 4
+    expect([...img.data.subarray(mid, mid + 3)]).toEqual([0x14, 0x14, 0xdc])
+    expect(portalFavicon(settings)).toMatch(/kind=icon$/)
+    const favicon = await serveBrandImage(queryOf(portalFavicon(settings)), value)
+    const tile = decodePng(new Uint8Array(await favicon.arrayBuffer()))
+    expect([...tile.data.subarray(mid, mid + 3)]).not.toEqual([0x14, 0x14, 0xdc])
+  })
+})
+
 describe('shareCardSample', () => {
   it('is the very card /brand.png serves once the design is published', async () => {
     const doc = defaultDesign()

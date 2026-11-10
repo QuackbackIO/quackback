@@ -20,6 +20,7 @@ import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   initialTilePath,
+  logoImagePath,
   shareCardFacts,
   shareCardVersion,
   shortHash,
@@ -46,26 +47,30 @@ function workspaceLogo(logoKey: string | null | undefined): string | undefined {
 }
 
 /**
- * The portal's own PNG of the brand icon, absolute, for an icon mail cannot
- * show as stored (an SVG), or the initial tile for a brand with no image at
- * all: the same /brand.png the portal's favicon is (share-card/serve.ts).
+ * The portal's own PNGs of the brand, absolute, from the same /brand.png
+ * the favicon is (share-card/serve.ts): the icon, drawn when stored as SVG;
+ * the full logo fitted into the header's square; or the initial tile.
  */
-function drawnIconUrl(doc: PortalDesign, workspaceName: string | null | undefined) {
+function drawnBrandUrl(doc: PortalDesign, workspaceName: string | null | undefined) {
   const base = config.baseUrl
-  if (!base) return undefined
-  const key = (doc.brand.logo.mark.light ?? doc.brand.logo.mark.dark)?.key
+  if (!base) return {}
+  const at = (path: string) => `${base.replace(/\/+$/, '')}${path}`
+  const facts = shareCardFacts(doc, resolveDesign(doc))
   const title = doc.brand.logo.name?.trim() || workspaceName || 'Quackback'
-  const path =
-    key && isSvg(key)
-      ? squareIconPath(shortHash(key))
-      : initialTilePath(shareCardVersion(shareCardFacts(doc, resolveDesign(doc))), title)
-  return `${base.replace(/\/+$/, '')}${path}`
+  return {
+    svgIcon:
+      facts.iconKey && isSvg(facts.iconKey)
+        ? at(squareIconPath(shortHash(facts.iconKey)))
+        : undefined,
+    fullLogo: facts.logoKey ? at(logoImagePath(facts.logoKey)) : undefined,
+    tile: at(initialTilePath(shareCardVersion(facts), title)),
+  }
 }
 
 /**
  * A design's email brand: its colours, and its icon where mail clients draw
- * it (an SVG one drawn to PNG by the portal), else the workspace logo, else
- * the brand's initial tile.
+ * it (an SVG one drawn to PNG by the portal), else its full logo, else the
+ * workspace logo, else the brand's initial tile.
  */
 export function designEmailBranding(
   doc: PortalDesign,
@@ -73,15 +78,16 @@ export function designEmailBranding(
   workspaceName?: string | null
 ): EmailBranding {
   const icon = emailIconKey(doc)
-  const key = (doc.brand.logo.mark.light ?? doc.brand.logo.mark.dark)?.key
+  const drawn = drawnBrandUrl(doc, workspaceName)
   const title = doc.brand.logo.name?.trim() || workspaceName || undefined
   return {
     ...(title && { title }),
     logoUrl:
       (icon ? getEmailSafeUrl(icon) : null) ??
-      (key && isSvg(key) ? drawnIconUrl(doc, workspaceName) : undefined) ??
+      drawn.svgIcon ??
+      drawn.fullLogo ??
       workspaceLogo(logoKey) ??
-      drawnIconUrl(doc, workspaceName),
+      drawn.tile,
     brand: emailPalette(doc),
   }
 }

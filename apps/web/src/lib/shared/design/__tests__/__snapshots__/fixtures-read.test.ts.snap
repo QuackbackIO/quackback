@@ -20,7 +20,7 @@ exports[`design fixtures > ledger.json builds the same design view 1`] = `"14392
 
 exports[`design fixtures > ledger.json resolves to the same CSS 1`] = `"11884 efaf019cedffe104a079b941c4d3733e1f3f3692e34b5d330a7f07f2f0e43fb2"`;
 
-exports[`design fixtures > no-overrides/beauty-shop.json builds the same design view 1`] = `"16944 2ece9cc14cb5d9212f6f95a5afeac374c4be0df618548735fc453d5440ebef40"`;
+exports[`design fixtures > no-overrides/beauty-shop.json builds the same design view 1`] = `"16945 f54cfddcd4bacd88a2cbe45d1ef0ae4e9f0bb2f2fc58c7f94fcd5b091390439b"`;
 
 exports[`design fixtures > no-overrides/beauty-shop.json resolves to the same CSS 1`] = `"14453 97f67f7835a2d3876459d3ecae17774b5756d49bf622c3b0b14850fff6a2ee9d"`;
 
@@ -32,15 +32,15 @@ exports[`design fixtures > no-overrides/notes-app.json builds the same design vi
 
 exports[`design fixtures > no-overrides/notes-app.json resolves to the same CSS 1`] = `"14756 655a1228ff99c3e2d9a2257dedeb073b5f663d190db9e548d853ab8b19daec43"`;
 
-exports[`design fixtures > no-overrides/stays-market.json builds the same design view 1`] = `"16868 adb4f321648278c1ed0a5f0bf1c26c28622e293c8bf6ee705978b513ee0edb01"`;
+exports[`design fixtures > no-overrides/stays-market.json builds the same design view 1`] = `"16869 74289cf45a56895d6db8e43f083aa42faf66e6f1d80182bb842f65c64c3cf588"`;
 
 exports[`design fixtures > no-overrides/stays-market.json resolves to the same CSS 1`] = `"14466 0f2da7818faf60fc5061cf7db40ea2f39a85133daefe47455119df1f5a959769"`;
 
-exports[`design fixtures > no-overrides/terminal-tool.json builds the same design view 1`] = `"17063 2e9e5c2cb39e205a4d5fae651ecf118384bc40503b2974ace414c6e06ba891f8"`;
+exports[`design fixtures > no-overrides/terminal-tool.json builds the same design view 1`] = `"17063 3b0b6268cdcfc45ec9fc38b01f7503a4585e5397eec786afd7b6d8a8665dc528"`;
 
 exports[`design fixtures > no-overrides/terminal-tool.json resolves to the same CSS 1`] = `"14806 e0cb62d07136122a27cde9c42bd17c9b002b53184294fc17aa40a298ded3667b"`;
 
-exports[`design fixtures > no-overrides/terminal-tool-styled.json builds the same design view 1`] = `"19845 7b2b0afe9c155e1bbadc42a071c4f4bd09a96789ce0266fd71e4f79cfc7366cb"`;
+exports[`design fixtures > no-overrides/terminal-tool-styled.json builds the same design view 1`] = `"19845 6a3b8f6ebe4756065b98d4ed7630cb611d668920abae4e0354c65166c4fe34ba"`;
 
 exports[`design fixtures > no-overrides/terminal-tool-styled.json resolves to the same CSS 1`] = `"17588 46b279b76521de460c9c2cc308c9afec92810395aaa31ee6d56ac812c3da3e46"`;
 

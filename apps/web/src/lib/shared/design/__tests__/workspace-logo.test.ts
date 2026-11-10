@@ -23,4 +23,23 @@ describe('newWorkspaceLogo', () => {
   it('is never an SVG, which many email apps do not show', () => {
     expect(newWorkspaceLogo(withMark(null), withMark('header-logos/a.SVG'))).toBe(null)
   })
+
+  it('offers a full logo when the design has no icon, by the same rules', () => {
+    const full = (key: string) => {
+      const design = defaultDesign()
+      design.brand.logo.wordmark.light = { key }
+      return design
+    }
+    expect(newWorkspaceLogo(withMark(null), full('header-logos/full.png'))).toBe(
+      'header-logos/full.png'
+    )
+    expect(newWorkspaceLogo(full('header-logos/full.png'), full('header-logos/full.png'))).toBe(
+      null
+    )
+    expect(newWorkspaceLogo(withMark(null), full('header-logos/full.svg'))).toBe(null)
+    // The icon goes first where there is one.
+    const both = full('header-logos/full.png')
+    both.brand.logo.mark.light = { key: 'header-logos/a.png' }
+    expect(newWorkspaceLogo(withMark(null), both)).toBe('header-logos/a.png')
+  })
 })

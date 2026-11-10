@@ -84,6 +84,12 @@ describe('emailBranding', () => {
     ).toBe('Acme')
   })
 
+  it('sends the full logo, drawn by the portal, when the brand has no icon', async () => {
+    publish((d) => (d.brand.logo.wordmark.light = { key: 'design/full.svg' }))
+    const result = await emailBranding({ logoKey: 'logos/acme.png', featureFlags: FLAG_ON })
+    expect(result.logoUrl).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=\w+&kind=logo$/)
+  })
+
   it('never sends an SVG workspace logo', async () => {
     const result = await emailBranding({ logoKey: 'logos/acme.svg', featureFlags: FLAG_ON })
     expect(result.logoUrl).toBeUndefined()

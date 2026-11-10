@@ -84,7 +84,21 @@ export async function serveBrandImage(
   const asked = query.get('v') ?? ''
   const facts = shareCardFacts(doc, resolveDesign(doc))
 
-  if (query.get('kind') === 'icon') {
+  // The full logo for email headers, fitted into their square; an SVG drawn to PNG.
+  if (query.get('kind') === 'logo' && facts.logoKey) {
+    const version = shortHash(facts.logoKey)
+    const key = `logo:${version}`
+    const kept = cache.get(key)
+    if (kept) return png(kept, asked === version)
+    const logo = await pixels(deps, facts.logoKey, ICON_SIDE)
+    if (logo) {
+      const bytes = encodeShareCard(drawSquareIcon(logo, ICON_SIDE))
+      cache.set(key, bytes)
+      return png(bytes, asked === version)
+    }
+  }
+
+  if (query.get('kind') === 'icon' || query.get('kind') === 'logo') {
     if (facts.iconKey) {
       const version = shortHash(facts.iconKey)
       const key = `icon:${version}`
@@ -141,7 +155,11 @@ async function drawCard(
   pageName: string | null
 ): Promise<Uint8Array> {
   const icon = facts.iconKey ? await pixels(deps, facts.iconKey, CARD.icon) : null
-  return encodeShareCard(drawShareCard({ ...facts, title, pageName, icon }))
+  // No icon: the full logo, when it has one, in place of the initial.
+  const logo = !icon && facts.logoKey ? await pixels(deps, facts.logoKey, CARD.logo) : null
+  return encodeShareCard(
+    drawShareCard({ ...facts, title, pageName, icon: icon ?? logo, wide: !icon && !!logo })
+  )
 }
 
 /**
