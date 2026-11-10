@@ -168,11 +168,17 @@ export function QuickFind({
         setOpen(true)
       }
     }
-    // The canvas hands its Ctrl+K over, from this page's own frames only.
+    // The canvas hands its Ctrl+K over, from the canvas's own frame only.
     const onMessage = (event: MessageEvent) => {
       const message = event.data as { type?: unknown; key?: unknown } | null
+      const fromCanvas =
+        !!event.source &&
+        [...document.querySelectorAll<HTMLIFrameElement>('[data-canvas-box] iframe')].some(
+          (frame) => frame.contentWindow === event.source
+        )
       if (
         event.origin === window.location.origin &&
+        fromCanvas &&
         message?.type === 'quackback:preview-key' &&
         message.key === 'find'
       )
