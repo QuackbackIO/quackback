@@ -190,11 +190,12 @@ export function PageTree({
             }}
             className={cn(
               'flex min-h-7 min-w-0 flex-1 cursor-default items-center gap-1.5 text-xs',
-              hidden && 'text-muted-foreground'
+              (hidden || row.note) && 'text-muted-foreground'
             )}
           >
             {row.blockType && <BlockIcon type={row.blockType} />}
             <span className="truncate">{row.label}</span>
+            {row.note && <span className="shrink-0 text-[11px]">· {row.note}</span>}
           </span>
           {row.hide?.shown && row.hide.locked && (
             <span id={`${labelId}-locked`} className="shrink-0 text-[11px] text-muted-foreground">

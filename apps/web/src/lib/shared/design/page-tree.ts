@@ -6,14 +6,14 @@
  * hidden, through a show field the design already has, or move, among Home's
  * blocks or the menu's items.
  */
-import { drawnMainAction } from './main-action'
+import { composerInHero, drawnMainAction } from './main-action'
 import { menuParts, type MenuPartId } from './menu'
 import { menuStep, movableParts } from './menu-actions'
 import type { DesignerPage, OutlineNode, Selection } from './outline'
 import { partsOnPage } from './parts-registry'
 import type { PortalPageGates } from './paths'
 import type { PortalDesign } from './schema'
-import type { HomeBlockType } from './home'
+import { homeBlockTypes, type HomeBlockType } from './home'
 
 export interface TreeRow {
   /** Stable across renders and moves, so focus can find the row again. */
@@ -31,6 +31,8 @@ export interface TreeRow {
   children?: TreeRow[]
   /** Whether it shows, where it can be hidden; `locked` when it has to stay. */
   hide?: { shown: boolean; locked: boolean }
+  /** Where it is drawn when not where the tree puts it: "Shown in the hero". Its row is dimmed. */
+  note?: string
   /** Which ways it can move one place, where it can move. */
   move?: { up: boolean; down: boolean }
 }
@@ -140,6 +142,9 @@ function plainRow(node: OutlineNode, design: PortalDesign, level: number): TreeR
   }
 }
 
+/** The note on Home's composer block while the hero draws it. */
+export const SHOWN_IN_HERO = 'Shown in the hero'
+
 /** The page's parts as a tree, in the order a visitor meets them. */
 export function pageTree(
   design: PortalDesign,
@@ -158,11 +163,15 @@ export function pageTree(
       }
       if (node.key === 'home' && row.children) {
         const count = row.children.length
+        // The composer block is drawn in the hero, not on the grid, while the hero has it.
+        const inHero =
+          composerInHero(design.pages.home) && homeBlockTypes(gates).includes('composer')
         return {
           ...row,
           children: row.children.map((child, at) => ({
             ...child,
             move: { up: at > 0, down: at < count - 1 },
+            ...(inHero && child.blockType === 'composer' ? { note: SHOWN_IN_HERO } : {}),
           })),
         }
       }
