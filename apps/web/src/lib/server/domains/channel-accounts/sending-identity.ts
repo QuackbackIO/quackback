@@ -562,7 +562,7 @@ export async function refreshSendingDomain(
   // DMARC is read on every check because it is one lookup and the owner may
   // add one while setting up; a failed read keeps what was there.
   const [dnsRecords, dmarc] = await Promise.all([
-    checkRecords(row.domain, composed, resolver, now),
+    checkRecords(row.domain, composed, resolver, now, row.preflight?.zone),
     readDmarc(row.domain, resolver),
   ])
   // Every field but the move to verified, which is made below on its own. A
