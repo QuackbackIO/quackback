@@ -57,7 +57,6 @@ import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
 import {
   resolveConversationByMessageIds,
   resolvePrincipalIdByEmail,
-  answersSurveyEmail,
 } from './conversation.email-store'
 import {
   assertConversationSendRate,
@@ -582,17 +581,11 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
     plainText || converted?.text || (media.attachments.length > 0 ? '' : '(no plain-text body)')
   const contentJson = converted?.contentJson ?? null
 
-  // A "thanks" sent back to a satisfaction survey is kept on the conversation
-  // but is not the customer reopening it.
-  const answersSurvey =
-    conversation.status === 'closed' && (await answersSurveyEmail(conversationId, parsed.inReplyTo))
-
   await sendVisitorMessage(
     {
       conversationId,
       content,
       metadata: { source: 'email', emailMessageId: dedupeKey ?? undefined },
-      answersSurvey,
       ...(media.attachments.length > 0 ? { attachments: media.attachments } : {}),
     },
     { principalId: visitorPrincipalId, displayName: visitor.displayName },

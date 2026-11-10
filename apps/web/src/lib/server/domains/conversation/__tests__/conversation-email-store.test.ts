@@ -186,13 +186,7 @@ describe('recordOutboundEmail', () => {
     expect(insertedValues).toEqual({
       messageId: 'c.abc.n1@domain.example',
       conversationId: 'conversation_abc',
-      kind: null,
     })
-  })
-
-  it('marks a satisfaction survey so a reply to it can be told apart', async () => {
-    await recordOutboundEmail('<c.abc.n2@domain.example>', 'conversation_abc' as never, 'csat')
-    expect(insertedValues).toMatchObject({ kind: 'csat' })
   })
 })
 

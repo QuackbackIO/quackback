@@ -33,10 +33,6 @@ export interface SendVisitorMessageInput {
    *  error when invalid, stale, or a second reply to an already-answered
    *  block. */
   blockReply?: BlockReplyInput
-  /** Answers a satisfaction survey email sent after the conversation closed,
-   *  so, like a matched block reply, it leaves a closed conversation closed.
-   *  Set only by the inbound email path, from the stored survey Message-ID. */
-  answersSurvey?: boolean
 }
 
 export interface SendVisitorMessageResult {
