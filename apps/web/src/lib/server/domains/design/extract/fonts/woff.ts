@@ -236,7 +236,8 @@ export function loadFont(buf: Uint8Array): Font {
 }
 
 // ---------- rasterizer (exact area coverage, nonzero approximated by |accumulated|) ----------
-function rasterize(paths: Path, w: number, h: number): Float32Array {
+/** Coverage (0 to 1) of closed contours, by nonzero, or even-odd when asked (SVG's fill-rule). */
+export function rasterize(paths: Path, w: number, h: number, evenOdd = false): Float32Array {
   const acc = new Float32Array(w * h + 2)
   const line = (p0x: number, p0y: number, p1x: number, p1y: number) => {
     if (Math.abs(p0y - p1y) < 1e-9) return
@@ -299,7 +300,8 @@ function rasterize(paths: Path, w: number, h: number): Float32Array {
     let s = 0
     for (let x = 0; x < w; x++) {
       s += acc[y * w + x]!
-      out[y * w + x] = Math.min(1, Math.abs(s))
+      const t = Math.abs(s)
+      out[y * w + x] = evenOdd ? (t % 2 > 1 ? 2 - (t % 2) : t % 2) : Math.min(1, t)
     }
   }
   return out

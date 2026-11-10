@@ -11,6 +11,7 @@ import {
   helpCenterAbsoluteUrl,
   helpCenterHeadMessages,
   helpCenterHeadPortal,
+  helpShareImage,
 } from '@/components/help-center/help-center-head'
 import { listPublicCategoriesFn } from '@/lib/server/functions/help-center'
 import { localizedHcPath } from '@/lib/shared/help-center-url'
@@ -92,7 +93,7 @@ export const Route = createFileRoute('/_portal/hc/$locale/')({
         { name: 'description', content: description },
         { property: 'og:title', content: pageTitle },
         { property: 'og:description', content: description },
-        { property: 'og:image', content: logoUrl },
+        ...helpShareImage(matches, baseUrl, logoUrl),
       ],
       links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }

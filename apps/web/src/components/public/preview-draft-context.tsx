@@ -249,7 +249,7 @@ export const PAGE_CHOICE_VALUES = {
     related: [0, 2, 4],
     contact: 'boolean',
   },
-  roadmap: { board: ['columns', 'list'], votes: 'boolean' },
+  roadmap: { board: ['columns', 'list'] },
   post: {
     vote: ['title', 'details'],
     board: 'boolean',
@@ -273,7 +273,7 @@ export const PORTAL_PAGE_CHOICES: PageChoices = {
     related: 4,
     contact: false,
   },
-  roadmap: { board: 'columns', votes: true },
+  roadmap: { board: 'columns' },
   post: {
     vote: 'title',
     board: true,

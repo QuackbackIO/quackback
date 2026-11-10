@@ -18,6 +18,7 @@ vi.mock('framer-motion', () => ({
     presence.renders++
     return children
   },
+  MotionConfig: ({ children }: { children?: ReactNode }) => children,
   motion: { div: ({ children }: { children?: ReactNode }) => <div>{children}</div> },
 }))
 vi.mock('@/components/public/vote-button', () => ({ VoteButton: () => null }))

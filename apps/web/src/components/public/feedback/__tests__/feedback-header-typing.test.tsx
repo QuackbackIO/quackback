@@ -94,6 +94,9 @@ vi.mock('framer-motion', async () => {
   )
   return {
     AnimatePresence: ({ children }: { children?: ReactNode }) => children,
+    // Marks where the composer sets its motion preference, for the test below.
+    MotionConfig: ({ children, reducedMotion }: { children?: ReactNode; reducedMotion?: string }) =>
+      createElement('div', { 'data-reduced-motion': reducedMotion }, children as ReactNode),
     motion: proxy,
     m: proxy,
   }
@@ -192,6 +195,12 @@ describe('feedback header title', () => {
     } finally {
       Element.prototype.scrollIntoView = scrollIntoView
     }
+  })
+
+  it('honours the visitor’s reduced motion for the whole composer, not the portal', () => {
+    renderHeader()
+    const composer = document.querySelector('[data-qb-part=composer]')!
+    expect(composer.parentElement!.getAttribute('data-reduced-motion')).toBe('user')
   })
 
   it('cuts a long draft to the title limit, so it can be submitted', async () => {

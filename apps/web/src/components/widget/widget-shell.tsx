@@ -373,7 +373,7 @@ export function WidgetShell({
         </p>
       )}
 
-      <div className="relative z-10 flex-1 overflow-hidden min-h-0">{children}</div>
+      <main className="relative z-10 flex-1 overflow-hidden min-h-0">{children}</main>
 
       {/* Bottom tab bar + footer — solid so the hero backdrop never bleeds through. */}
       <div

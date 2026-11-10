@@ -321,13 +321,10 @@ export const EVAL_CASES: EvalCase[] = [
     touches: ['pages.changelog'],
   },
   {
-    name: 'roadmap list without votes',
-    request: 'Show the roadmap page as one list instead of columns, and hide the votes',
-    ops: [
-      { op: 'set', target: 'roadmap', key: 'board', value: 'list' },
-      { op: 'set', target: 'roadmap', key: 'votes', value: 'false' },
-    ],
-    check: (d) => d.pages.roadmap?.board === 'list' && d.pages.roadmap?.votes === false,
+    name: 'roadmap list',
+    request: 'Show the roadmap page as one list instead of columns',
+    ops: [{ op: 'set', target: 'roadmap', key: 'board', value: 'list' }],
+    check: (d) => d.pages.roadmap?.board === 'list',
     touches: ['pages.roadmap'],
   },
   {
@@ -574,13 +571,6 @@ export const HELD_OUT_CASES: EvalCase[] = [
     ops: [{ op: 'set', target: 'updates001', key: 'count', value: '4' }],
     check: (d) => (one(d, 'updates') as { count: number }).count === 4,
     touches: HOME,
-  },
-  {
-    name: 'roadmap page without votes',
-    request: 'Can the roadmap page stop showing vote counts on cards?',
-    ops: [{ op: 'set', target: 'roadmap page', key: 'votes', value: 'false' }],
-    check: (d) => d.pages.roadmap?.votes === false,
-    touches: ['pages.roadmap'],
   },
   {
     name: 'no popular articles',

@@ -21,8 +21,6 @@ interface RoadmapCardProps {
   eta?: Date | string | null
   /** Votes here by the board's rules; without it the count is shown alone. */
   voting?: boolean
-  /** The vote box at all; off leaves the card to its title. */
-  votes?: boolean
 }
 
 export function RoadmapCard({
@@ -33,7 +31,6 @@ export function RoadmapCard({
   board,
   eta,
   voting = false,
-  votes = true,
 }: RoadmapCardProps): React.ReactElement {
   const locale = useContext(IntlContext)?.locale
   const etaLabel = formatMonthYear(eta, locale)
@@ -45,7 +42,7 @@ export function RoadmapCard({
       data-qb-post=""
       className="roadmap-card relative flex bg-[var(--post-card-background)] [border-radius:var(--radius)] border border-[var(--post-card-border)]/50 shadow-sm hover:bg-[var(--post-card-background)]/80 transition-colors"
     >
-      {!votes ? null : voting ? (
+      {voting ? (
         <div className="roadmap-card__vote relative z-10 flex shrink-0 p-2 pe-0">
           <PortalVote post={{ id, voteCount, board: board.id ? { id: board.id } : null }} pill />
         </div>

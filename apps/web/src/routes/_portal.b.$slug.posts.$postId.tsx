@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { createFileRoute, notFound } from '@tanstack/react-router'
+import type { QueryClient } from '@tanstack/react-query'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { BackLink } from '@/components/ui/back-link'
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
@@ -97,20 +98,20 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
         queryFn: () => getPostPermissionsFn({ data: { postId } }),
         staleTime: 30_000,
       }),
-    ]).catch((error: unknown) => {
+    ]).catch(async (error: unknown) => {
       // fetchPublicPostDetail returns null for a post the viewer can't see
       // (missing, deleted, or board access denied) and the queryFn surfaces
       // that as an error. Render it as the not-found page rather than the
       // generic error boundary — a denied viewer must get the same page as
       // a nonexistent post.
       if (error instanceof Error && error.message === 'Post not found') {
-        throw notFound()
+        throw notFound({ data: { board: await boardIfListed(queryClient, slug) } })
       }
       throw error
     })
 
     if (!post || post.board.slug !== slug) {
-      throw notFound()
+      throw notFound({ data: { board: post?.board.slug ?? null } })
     }
 
     // Prefetch similar posts now that we have the title (non-blocking)
@@ -544,4 +545,13 @@ function PostDetailPage() {
       </div>
     </>
   )
+}
+
+/**
+ * The address's board when the visitor can see it, for the not-found page's
+ * way on; null for a board that is not there. Read only on that page's path.
+ */
+async function boardIfListed(queryClient: QueryClient, slug: string): Promise<string | null> {
+  const boards = await queryClient.ensureQueryData(portalQueries.boards()).catch(() => [])
+  return boards.some((board) => board.slug === slug) ? slug : null
 }

@@ -12,7 +12,12 @@ const hoisted = vi.hoisted(() => ({
   // through the plugin's send callback, so the double returns one too.
   mockCreateVerificationOTP: vi.fn(async () => '123456'),
   mockSendMagicLinkEmail: vi.fn(async () => undefined),
-  settings: null as null | { name: string; logoKey: string | null },
+  settings: null as null | { name: string; logoKey: string | null; featureFlags?: string },
+  published: null as null | { document: unknown; number: number },
+}))
+
+vi.mock('@/lib/server/domains/design/design.service', () => ({
+  getPublishedRevision: vi.fn(async () => hoisted.published),
 }))
 
 vi.mock('../magic-link-mint', () => ({ mintMagicLinkUrl: hoisted.mockMintMagicLinkUrl }))
@@ -117,6 +122,24 @@ describe('requestEmailSignin: the sign-in email', () => {
     hoisted.settings = null
     expect(hoisted.mockSendMagicLinkEmail).toHaveBeenCalledWith(
       expect.objectContaining({ code: '123456', workspaceName: 'Acme' })
+    )
+  })
+
+  it('names the portal by its Brand kit title, as the sign-in wall does', async () => {
+    const { defaultDesign } = await import('@/lib/shared/design/schema')
+    const doc = defaultDesign()
+    doc.brand.logo.name = 'GitHub'
+    hoisted.published = { document: doc, number: 1 }
+    hoisted.settings = {
+      name: 'Acme',
+      logoKey: null,
+      featureFlags: JSON.stringify({ portalDesignV2: true }),
+    }
+    await requestEmailSignin({ email: 'jess@example.com', callbackURL: '/' })
+    hoisted.settings = null
+    hoisted.published = null
+    expect(hoisted.mockSendMagicLinkEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceName: 'GitHub' })
     )
   })
 })

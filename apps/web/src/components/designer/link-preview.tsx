@@ -14,7 +14,16 @@ import { cn } from '@/lib/shared/utils'
  * page colour, the icon and the title, as /brand.png draws it), then the
  * address, the title and the description in the workspace's main language.
  */
-export function LinkPreview({ design, className }: { design: PortalDesign; className?: string }) {
+export function LinkPreview({
+  design,
+  className,
+  image,
+}: {
+  design: PortalDesign
+  className?: string
+  /** The image the server draws for the link, as visitors will get it; in place of the sketch. */
+  image?: string
+}) {
   const settings = useWorkspaceSettings()
   const baseUrl = useBaseUrl()
   const facts = useMemo(() => shareCardFacts(design, resolveDesignCached(design)), [design])
@@ -29,9 +38,9 @@ export function LinkPreview({ design, className }: { design: PortalDesign; class
       aria-label="Link preview"
       className={cn('m-0 overflow-hidden rounded-md border border-border bg-card', className)}
     >
-      {shareImage ? (
+      {image || shareImage ? (
         <img
-          src={designAssetUrl(shareImage.key)}
+          src={image ?? designAssetUrl(shareImage!.key)}
           alt=""
           className="aspect-[1200/630] w-full object-cover"
         />

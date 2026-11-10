@@ -119,6 +119,15 @@ const searchSchema = z.object({
   c: z.string().optional(),
 })
 
+/** The published design's icon, its dark one when it has only that; inline so the widget loads nothing more. */
+function designMark(
+  design:
+    { engine: string; logo?: { mark?: { light: string | null; dark: string | null } } } | undefined
+) {
+  const mark = design?.engine === 'v2' ? design.logo?.mark : undefined
+  return mark?.light || mark?.dark || null
+}
+
 export const Route = createFileRoute('/widget/')({
   validateSearch: searchSchema,
   loader: async ({ context, location }) => {
@@ -284,8 +293,9 @@ export const Route = createFileRoute('/widget/')({
       },
       // Home surface customisation (greeting, hero style, quick-link cards).
       home: settings?.publicWidgetConfig?.home ?? null,
-      // Workspace logo for the Home header (branding config).
-      logoUrl: settings?.brandingData?.logoUrl ?? null,
+      // The brand's icon for the Home header, as the portal's header shows it:
+      // the design's own, then the workspace logo (branding config).
+      logoUrl: designMark(settings?.portalDesign) ?? settings?.brandingData?.logoUrl ?? null,
       // Top help articles for the Home search card (public; SSR'd).
       topArticles,
       // Team label for widget surfaces (changelog header, messages fallback):

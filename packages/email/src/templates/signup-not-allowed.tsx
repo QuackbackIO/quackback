@@ -23,7 +23,12 @@ interface SignupNotAllowedEmailProps {
 export function SignupNotAllowedEmail({ workspaceName, logoUrl }: SignupNotAllowedEmailProps) {
   const where = workspaceName ? `${workspaceName}` : 'this workspace'
   return (
-    <EmailLayout preview="About your sign-in request" logoUrl={logoUrl} showPoweredBy={false}>
+    <EmailLayout
+      preview="About your sign-in request"
+      logoUrl={logoUrl}
+      logoAlt={workspaceName || undefined}
+      showPoweredBy={false}
+    >
       <Heading style={{ ...typography.h1, textAlign: 'center' }}>
         No account for this address
       </Heading>

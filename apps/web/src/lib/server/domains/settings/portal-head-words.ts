@@ -29,6 +29,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'Live status and incident history for {name}.',
     incident: '{title}. A status update from {name}.',
     post: '{title}. Vote and comment on this post in {board}.',
+    notFound: 'Not found',
   },
   de: {
     pages: {
@@ -46,6 +47,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'Aktueller Status und Störungsverlauf von {name}.',
     incident: '{title}. Eine Statusmeldung von {name}.',
     post: '{title}. Stimme ab und kommentiere diesen Beitrag in {board}.',
+    notFound: 'Nicht gefunden',
   },
   fr: {
     pages: {
@@ -64,6 +66,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'Statut en direct et historique des incidents de {name}.',
     incident: '{title}. Une mise à jour du statut de {name}.',
     post: '{title}. Votez et commentez cette publication dans {board}.',
+    notFound: 'Introuvable',
   },
   es: {
     pages: {
@@ -81,6 +84,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'Estado en vivo e historial de incidentes de {name}.',
     incident: '{title}. Una actualización de estado de {name}.',
     post: '{title}. Vota y comenta esta publicación en {board}.',
+    notFound: 'No encontrado',
   },
   ar: {
     pages: {
@@ -98,6 +102,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'الحالة المباشرة وسجل الحوادث لـ {name}.',
     incident: '{title}. تحديث للحالة من {name}.',
     post: '{title}. صوّت وعلّق على هذا المنشور في {board}.',
+    notFound: 'غير موجود',
   },
   ru: {
     pages: {
@@ -115,6 +120,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'Текущий статус и история инцидентов {name}.',
     incident: '{title}. Обновление статуса от {name}.',
     post: '{title}. Голосуйте и комментируйте эту публикацию в {board}.',
+    notFound: 'Не найдено',
   },
   'pt-br': {
     pages: {
@@ -132,6 +138,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'Status ao vivo e histórico de incidentes de {name}.',
     incident: '{title}. Uma atualização de status de {name}.',
     post: '{title}. Vote e comente esta publicação em {board}.',
+    notFound: 'Não encontrado',
   },
   'zh-cn': {
     pages: {
@@ -149,6 +156,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: '{name} 的实时状态和事件历史。',
     incident: '{title}。来自 {name} 的状态更新。',
     post: '{title}。在 {board} 中为这个帖子投票和评论。',
+    notFound: '未找到',
   },
   'zh-tw': {
     pages: {
@@ -166,6 +174,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: '{name} 的即時狀態與事件紀錄。',
     incident: '{title}。來自 {name} 的狀態更新。',
     post: '{title}。在 {board} 中為這篇貼文投票和留言。',
+    notFound: '找不到',
   },
   nl: {
     pages: {
@@ -183,6 +192,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'Live status en incidentgeschiedenis van {name}.',
     incident: '{title}. Een statusupdate van {name}.',
     post: '{title}. Stem en reageer op dit bericht in {board}.',
+    notFound: 'Niet gevonden',
   },
   pl: {
     pages: {
@@ -200,6 +210,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'Bieżący status i historia incydentów {name}.',
     incident: '{title}. Aktualizacja statusu od {name}.',
     post: '{title}. Głosuj i komentuj ten wpis w {board}.',
+    notFound: 'Nie znaleziono',
   },
   th: {
     pages: {
@@ -217,6 +228,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'สถานะปัจจุบันและประวัติเหตุขัดข้องของ {name}',
     incident: '{title} อัปเดตสถานะจาก {name}',
     post: '{title} โหวตและแสดงความคิดเห็นในโพสต์นี้ใน {board}',
+    notFound: 'ไม่พบหน้านี้',
   },
   uk: {
     pages: {
@@ -234,6 +246,7 @@ const TEMPLATES: Record<SupportedLocale, PortalHeadTemplates> = {
     status: 'Поточний статус та історія інцидентів {name}.',
     incident: '{title}. Оновлення статусу від {name}.',
     post: '{title}. Голосуйте та коментуйте цей допис у {board}.',
+    notFound: 'Не знайдено',
   },
 }
 

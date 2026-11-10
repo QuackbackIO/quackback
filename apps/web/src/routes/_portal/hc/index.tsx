@@ -5,6 +5,7 @@ import {
   helpCenterAbsoluteUrl,
   helpCenterHeadMessages,
   helpCenterHeadPortal,
+  helpShareImage,
 } from '@/components/help-center/help-center-head'
 import {
   listPublicCategoriesFn,
@@ -98,7 +99,7 @@ export const Route = createFileRoute('/_portal/hc/')({
         { name: 'description', content: description },
         { property: 'og:title', content: pageTitle },
         { property: 'og:description', content: description },
-        { property: 'og:image', content: logoUrl },
+        ...helpShareImage(matches, baseUrl, logoUrl),
         { name: 'twitter:title', content: pageTitle },
         { name: 'twitter:description', content: description },
       ],

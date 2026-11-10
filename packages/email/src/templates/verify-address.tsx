@@ -23,7 +23,11 @@ interface VerifyAddressEmailProps {
 export function VerifyAddressEmail({ code, workspaceName, logoUrl }: VerifyAddressEmailProps) {
   const where = workspaceName ? ` for ${workspaceName}` : ''
   return (
-    <EmailLayout preview={`Your verification code${where}`} logoUrl={logoUrl}>
+    <EmailLayout
+      preview={`Your verification code${where}`}
+      logoUrl={logoUrl}
+      logoAlt={workspaceName || undefined}
+    >
       <Heading style={{ ...typography.h1, textAlign: 'center' }}>Confirm your email</Heading>
       <Text style={{ ...typography.text, textAlign: 'center' }}>
         Enter this code{where} to confirm this address. It expires in 10 minutes.

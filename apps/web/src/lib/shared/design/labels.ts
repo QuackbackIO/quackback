@@ -129,7 +129,6 @@ const LABELS: Record<string, string> = {
   'pages.support.request': 'New request button',
   'pages.roadmap': 'Roadmap page',
   'pages.roadmap.board': 'Roadmap board',
-  'pages.roadmap.votes': 'Roadmap votes',
   'pages.post': 'Post page',
   'pages.post.vote': 'Post vote',
   'pages.post.board': 'Post board',

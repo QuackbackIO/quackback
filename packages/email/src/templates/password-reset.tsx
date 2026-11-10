@@ -6,11 +6,21 @@ import { BrandButton, BrandLink } from './brand-parts'
 interface PasswordResetEmailProps {
   resetLink: string
   logoUrl?: string
+  /** The workspace's name, for the preview line and the logo's alt text. */
+  workspaceName?: string
 }
 
-export function PasswordResetEmail({ resetLink, logoUrl }: PasswordResetEmailProps) {
+/** "Reset your Acme password", or without a name when there is none. */
+export const passwordResetSubject = (workspaceName?: string) =>
+  workspaceName?.trim() ? `Reset your ${workspaceName.trim()} password` : 'Reset your password'
+
+export function PasswordResetEmail({ resetLink, logoUrl, workspaceName }: PasswordResetEmailProps) {
   return (
-    <EmailLayout preview="Reset your Quackback password" logoUrl={logoUrl}>
+    <EmailLayout
+      preview={passwordResetSubject(workspaceName)}
+      logoUrl={logoUrl}
+      logoAlt={workspaceName?.trim() || undefined}
+    >
       {/* Content */}
       <Heading style={{ ...typography.h1, textAlign: 'center' }}>Reset your password</Heading>
       <Text style={{ ...typography.text, textAlign: 'center' }}>

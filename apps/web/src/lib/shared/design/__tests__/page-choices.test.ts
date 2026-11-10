@@ -86,7 +86,6 @@ describe('page choices in the design document', () => {
       'data-qb-help-related': '2',
       'data-qb-help-contact': 'on',
       'data-qb-roadmap-board': 'list',
-      'data-qb-roadmap-votes': 'off',
       'data-qb-support-suggest': 'off',
     })
     expect(readPageChoices(attributes)).toEqual({
@@ -99,7 +98,8 @@ describe('page choices in the design document', () => {
         related: 2,
         contact: true,
       },
-      roadmap: { board: 'list', votes: false },
+      // A stored votes switch is read and left alone: the roadmap always shows votes.
+      roadmap: { board: 'list' },
       post: PAGE_CHOICE_DEFAULTS.post,
       support: { suggest: false },
     })
@@ -122,7 +122,7 @@ describe('page choices in the design document', () => {
         related: 4,
         contact: false,
       },
-      roadmap: { board: 'columns', votes: true },
+      roadmap: { board: 'columns' },
       post: {
         vote: 'title',
         board: true,
@@ -177,10 +177,10 @@ describe('page choices named, grouped and reachable by Quackback AI', () => {
   it('keeps a request about one page off another’s', () => {
     const result = applyDesignChanges(
       defaultDesign(),
-      [{ path: 'pages.roadmap.votes', value: false }],
+      [{ path: 'pages.roadmap.board', value: 'list' }],
       'changelog'
     )
-    expect(result.outOfScope).toEqual(['pages.roadmap.votes'])
+    expect(result.outOfScope).toEqual(['pages.roadmap.board'])
   })
 
   it('tells the AI every choice and its values', () => {

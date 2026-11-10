@@ -71,6 +71,7 @@ vi.mock('framer-motion', async () => {
   )
   return {
     AnimatePresence: ({ children }: { children?: ReactNode }) => children,
+    MotionConfig: ({ children }: { children?: ReactNode }) => children,
     // m mirrors motion here: the fake components don't care which name reaches
     // them, only the source's switch to LazyMotion's m does.
     motion: proxy,

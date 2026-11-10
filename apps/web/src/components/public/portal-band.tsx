@@ -70,14 +70,18 @@ const ART_FILL = [
 const IMAGE_FILL = [
   // Along the bottom: room kept at the foot for the image (EdgeImage), on a band of any colour.
   'sm:[&[data-qb-band-image=edge]]:relative sm:[&[data-qb-band-image=edge]]:isolate sm:[&[data-qb-band-image=edge]]:!pb-44',
-  '[&[data-qb-band-image=cover]]:[background:linear-gradient(var(--qb-band-scrim),var(--qb-band-scrim)),var(--qb-band-image)_var(--qb-image-focus,center)/cover_no-repeat,var(--qb-band-bg)]',
-  '[&[data-qb-band-image=pattern]]:[background:linear-gradient(var(--qb-band-scrim-soft),var(--qb-band-scrim-soft)),var(--qb-band-image)_0_0/280px_auto_repeat,var(--qb-band-bg)]',
+  '[&[data-qb-band-image=cover]]:[background:linear-gradient(var(--qb-band-scrim),var(--qb-band-scrim)),var(--qb-band-photo,var(--qb-band-image))_var(--qb-image-focus,center)/cover_no-repeat,var(--qb-band-bg)]',
+  '[&[data-qb-band-image=pattern]]:[background:linear-gradient(var(--qb-band-scrim-soft),var(--qb-band-scrim-soft)),var(--qb-band-photo,var(--qb-band-image))_0_0/280px_auto_repeat,var(--qb-band-bg)]',
   // Left off on phones where the design asks: the band's own colour there.
   'max-sm:[[data-qb-image-phone=hide]_&]:[&[data-qb-band-image]]:[background:var(--qb-band-bg-narrow,var(--qb-band-bg))]',
+  // The smaller copies where the image has them: a phone draws the 1280 one, a pattern its 640
+  // tile; without them the full image (--qb-band-photo is unset, so the fallback holds).
+  'max-sm:[--qb-band-photo:var(--qb-band-image-1280)]',
+  '[&[data-qb-band-image=pattern]]:[--qb-band-photo:var(--qb-band-image-640,var(--qb-band-image-1280))]',
   // Words on a veiled photo read on its measured worst colour, not on the band's own colour.
   '[&[data-qb-photo-shade]]:[--qb-band-ink:var(--qb-photo-ink)] [&[data-qb-photo-shade]]:[--qb-band-muted:var(--qb-photo-muted)] [&[data-qb-photo-shade]]:[--qb-band-accent:var(--qb-photo-accent)]',
   // Under a header on the photo: one picture behind both, the band showing all but its top (usePhotoSpan).
-  '[[data-qb-header-span=photo]_&]:[&[data-qb-band-image=cover]]:[background:linear-gradient(var(--qb-band-scrim),var(--qb-band-scrim)),var(--qb-band-image)_var(--portal-band-image-below,var(--qb-image-focus,center))/var(--portal-band-image-size,cover)_no-repeat,var(--qb-band-bg)]',
+  '[[data-qb-header-span=photo]_&]:[&[data-qb-band-image=cover]]:[background:linear-gradient(var(--qb-band-scrim),var(--qb-band-scrim)),var(--qb-band-photo,var(--qb-band-image))_var(--portal-band-image-below,var(--qb-image-focus,center))/var(--portal-band-image-size,cover)_no-repeat,var(--qb-band-bg)]',
 ].join(' ')
 
 /**
@@ -301,9 +305,7 @@ export function PortalBand({
       data-qb-part="band"
       data-qb-band-image={image && !side ? image.place : undefined}
       data-qb-photo-shade={image?.place === 'cover' && image.shaded ? '' : undefined}
-      style={
-        image && !side ? ({ '--qb-band-image': `url("${image.url}")` } as CSSProperties) : undefined
-      }
+      style={image && !side ? bandImageVars(image) : undefined}
       className={cn(
         // Its padding, less on a phone, where a wide screen's would leave the hero half empty, and
         // its bottom padding, where a coloured band's foot may fade without crossing the words.
@@ -437,6 +439,25 @@ export function PortalBand({
 }
 
 /**
+ * The band image as the backgrounds draw it: the full file, and its 640 and
+ * 1280 copies where its srcset (of stored files only) has them.
+ */
+function bandImageVars(image: { url: string; srcSet?: string }): CSSProperties {
+  const vars: Record<string, string> = { '--qb-band-image': `url("${image.url}")` }
+  if (image.srcSet && STORED_SRCSET.test(image.srcSet)) {
+    const copies = image.srcSet.split(',').map((entry) => {
+      const [url, width] = entry.split(' ')
+      return { url: url!, w: parseInt(width!, 10) }
+    })
+    for (const target of [640, 1280]) {
+      const copy = copies.find((c) => c.w >= target * 0.9 && c.url !== image.url)
+      if (copy) vars[`--qb-band-image-${target}`] = `url("${copy.url}")`
+    }
+  }
+  return vars as CSSProperties
+}
+
+/**
  * An image along the bottom of the band, in the strip kept for it at the
  * foot, fading in at its top. It never runs up behind the words, where it
  * would cost them their contrast with the band. Left off on phones.
@@ -446,7 +467,7 @@ function EdgeImage() {
     <div
       aria-hidden
       data-qb-part="band-foot-image"
-      className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 hidden h-44 [background:var(--qb-band-image)_center_bottom/100%_auto_no-repeat] [mask-image:linear-gradient(transparent,black_3rem)] sm:block"
+      className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 hidden h-44 [background:var(--qb-band-photo,var(--qb-band-image))_center_bottom/100%_auto_no-repeat] [mask-image:linear-gradient(transparent,black_3rem)] sm:block"
     />
   )
 }

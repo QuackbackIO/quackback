@@ -75,7 +75,11 @@ vi.mock('framer-motion', () => {
       },
     }
   )
-  return { AnimatePresence: ({ children }: { children?: ReactNode }) => children, motion: proxy }
+  return {
+    AnimatePresence: ({ children }: { children?: ReactNode }) => children,
+    MotionConfig: ({ children }: { children?: ReactNode }) => children,
+    motion: proxy,
+  }
 })
 
 import { HomeBlockView, type HomeBlock } from '../home-blocks'

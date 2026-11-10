@@ -5,18 +5,22 @@ import { ErrorPageCopy, FriendlyShell } from '@/components/shared/error-page'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 import { useFeedbackPath } from './use-portal-paths'
 
-/** A post's address: its board's slug is the second segment. */
-const POST_PATH = /^\/b\/([^/]+)\/posts\//
+/** A post's address. */
+const POST_PATH = /^\/b\/[^/]+\/posts\//
 
-/** The board a post's address names, read once, or null. */
-function boardOf(pathname: string): string | null {
-  const slug = POST_PATH.exec(pathname)?.[1]
-  if (!slug) return null
-  try {
-    return decodeURIComponent(slug)
-  } catch {
-    return null
+/**
+ * The board a missing post belongs to, as its page's loader found it: only
+ * a board that exists, so the way on never leads to another missing page.
+ */
+function knownBoard(state: {
+  matches: ReadonlyArray<{ status?: string; error?: unknown }>
+}): string | null {
+  for (const match of state.matches) {
+    if (match.status !== 'notFound') continue
+    const board = (match.error as { data?: { board?: unknown } } | undefined)?.data?.board
+    if (typeof board === 'string' && board) return board
   }
+  return null
 }
 
 /**
@@ -25,9 +29,9 @@ function boardOf(pathname: string): string | null {
  * that is gone leads to its board and to a search of the posts.
  */
 export function PortalNotFound() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const post = useRouterState({ select: (state) => POST_PATH.test(state.location.pathname) })
+  const board = useRouterState({ select: knownBoard })
   const feed = useFeedbackPath()
-  const board = boardOf(pathname)
   return (
     <FriendlyShell>
       <ErrorPageCopy>
@@ -43,7 +47,7 @@ export function PortalNotFound() {
                   "The page you're looking for doesn't exist. It may have been moved or deleted, or the link may be incorrect.",
               })}
             </p>
-            {board && (
+            {post && (
               <form role="search" action={feed} method="get" className="mt-6 flex gap-2">
                 <Input
                   name="search"

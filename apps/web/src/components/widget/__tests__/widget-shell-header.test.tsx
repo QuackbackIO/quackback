@@ -89,4 +89,9 @@ describe('WidgetShell header', () => {
     expect(screen.getByRole('button', { name: 'Close feedback widget' })).toBeTruthy()
     expect(document.querySelectorAll('.size-7').length).toBe(0)
   })
+
+  it('holds the page in a main landmark', () => {
+    renderHome()
+    expect(screen.getByRole('main').textContent).toBe('home')
+  })
 })

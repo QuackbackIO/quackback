@@ -6,6 +6,7 @@ import { portalHeadTemplates } from '@/lib/server/domains/settings/portal-head-w
 import {
   pageShareMeta,
   pageTitle,
+  portalBrandMark,
   portalFavicon,
   portalHeadWords,
   portalMainLanguage,
@@ -101,7 +102,29 @@ describe('portalFavicon', () => {
     expect(portalFavicon(withDesign(icon))).toMatch(/^\/brand\.png\?v=\w+&kind=icon$/)
     const logo = { brandingData: { logoUrl: '/api/storage/logo.png' } }
     expect(portalFavicon({ ...withDesign(), ...logo })).toBe('/api/storage/logo.png')
-    expect(portalFavicon(withDesign())).toBe('/logo.png')
+    // No icon and no logo: the brand's initial tile, as the header draws it, never the duck.
+    const tile = portalFavicon(withDesign())
+    expect(tile).toMatch(/^\/brand\.png\?v=\w+&kind=icon$/)
+    expect(tile).not.toBe(portalFavicon(withDesign((doc) => (doc.brand.logo.name = 'Other'))))
+    expect(portalFavicon({ name: 'Acme', portalDesign: { engine: 'legacy' } })).toBe('/logo.png')
+  })
+})
+
+describe('portalBrandMark', () => {
+  it('is the design’s own icon, its dark one alone, then the workspace logo', () => {
+    const logo = { brandingData: { logoUrl: '/api/storage/logo.png' } }
+    const light = withDesign((doc) => {
+      doc.brand.logo.mark.light = { key: 'logos/l.png' }
+      doc.brand.logo.mark.dark = { key: 'logos/d.png' }
+    })
+    expect(portalBrandMark({ ...light, ...logo })).toBe('/api/storage/logos/l.png')
+    const dark = withDesign((doc) => (doc.brand.logo.mark.dark = { key: 'logos/d.png' }))
+    expect(portalBrandMark(dark)).toBe('/api/storage/logos/d.png')
+    expect(portalBrandMark({ ...withDesign(), ...logo })).toBe('/api/storage/logo.png')
+    expect(portalBrandMark({ portalDesign: { engine: 'legacy' }, ...logo })).toBe(
+      '/api/storage/logo.png'
+    )
+    expect(portalBrandMark(withDesign())).toBeNull()
   })
 })
 
@@ -133,6 +156,36 @@ describe('portalShareImage', () => {
       ''
     )
     expect(a).not.toBe(b)
+  })
+
+  it('never points at a blank card: a title its faces cannot draw keeps the logo', () => {
+    for (const title of ['反馈中心', 'مركز الملاحظات', 'ศูนย์ข้อเสนอแนะ', 'Центр отзывов']) {
+      const settings = withDesign((doc) => (doc.brand.logo.name = title))
+      expect(portalShareImage(settings, 'https://acme.test'), title).toBeNull()
+      expect(portalShareImage(settings, 'https://acme.test', 'roadmap'), title).toBeNull()
+      expect(pageShareMeta(settings, 'https://acme.test', 'roadmap'), title).toEqual([])
+    }
+    // Accented Latin is drawn.
+    const cafe = withDesign((doc) => (doc.brand.logo.name = 'Café Ñandú'))
+    expect(portalShareImage(cafe, 'https://acme.test')).toMatch(/brand\.png/)
+  })
+
+  it('leaves out only a page name its faces cannot draw', () => {
+    for (const help of ['帮助中心', 'مركز المساعدة', 'ศูนย์ช่วยเหลือ']) {
+      const settings = {
+        ...withDesign(),
+        portalHeadWords: {
+          ...portalHeadTemplates({}),
+          pages: { ...portalHeadTemplates({}).pages, help },
+        },
+      }
+      const site = portalShareImage(settings, 'https://acme.test')
+      expect(site).toMatch(/brand\.png/)
+      expect(portalShareImage(settings, 'https://acme.test', 'help')).toBe(site)
+      // The portal's own card already stands for the page.
+      expect(pageShareMeta(settings, 'https://acme.test', 'help')).toEqual([])
+      expect(pageShareMeta(settings, 'https://acme.test', 'roadmap')).toHaveLength(1)
+    }
   })
 
   it('leaves a legacy portal to its own image', () => {

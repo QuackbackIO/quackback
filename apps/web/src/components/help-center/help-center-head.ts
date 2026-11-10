@@ -8,6 +8,7 @@
  * but the layout's route id.
  */
 import { getRouteApi } from '@tanstack/react-router'
+import { headSettings, pageShareMeta } from '@/lib/shared/portal-head'
 
 const helpCenterLayout = getRouteApi('/_portal/hc')
 
@@ -50,4 +51,19 @@ export function helpCenterAbsoluteUrl(
   path: string
 ): string | undefined {
   return baseUrl ? `${baseUrl}${path}` : undefined
+}
+
+/**
+ * The link preview's image: on the design engine, the Help Center's own
+ * card (the portal's head has the share image or the card otherwise); on
+ * the legacy theme, the workspace logo, as before.
+ */
+export function helpShareImage(
+  matches: ReadonlyArray<{ context?: unknown }>,
+  baseUrl: string | undefined,
+  logoUrl: string
+): Array<Record<string, string>> {
+  const settings = headSettings(matches)
+  if (settings?.portalDesign?.engine === 'v2') return pageShareMeta(settings, baseUrl, 'help')
+  return [{ property: 'og:image', content: logoUrl }]
 }

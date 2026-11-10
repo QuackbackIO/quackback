@@ -37,7 +37,10 @@ export const helpChoicesSchema = z
 export const roadmapChoicesSchema = z
   .object({
     board: z.enum(DESIGN_OPTIONS.roadmapBoard).optional(),
-    /** The vote box on the board's cards; absent shows it. */
+    /**
+     * Once a switch for the vote box on the board's cards; still read so a
+     * stored design parses, but the roadmap always shows votes now.
+     */
     votes: z.boolean().optional(),
   })
   .strict()
@@ -68,7 +71,8 @@ export const supportChoicesSchema = z
 
 type Changelog = Required<z.output<typeof changelogChoicesSchema>>
 type Help = Required<z.output<typeof helpChoicesSchema>>
-type Roadmap = Required<z.output<typeof roadmapChoicesSchema>>
+/** The roadmap always shows votes; a stored `votes` is read and left alone. */
+type Roadmap = Required<Omit<z.output<typeof roadmapChoicesSchema>, 'votes'>>
 type Post = Required<z.output<typeof postChoicesSchema>>
 type Support = Required<z.output<typeof supportChoicesSchema>>
 
@@ -92,7 +96,7 @@ export const PAGE_CHOICE_DEFAULTS: PageChoices = {
     related: 4,
     contact: false,
   },
-  roadmap: { board: 'columns', votes: true },
+  roadmap: { board: 'columns' },
   post: {
     vote: 'title',
     board: true,

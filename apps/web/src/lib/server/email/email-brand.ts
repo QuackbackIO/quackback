@@ -16,7 +16,16 @@ import {
 } from '@/lib/server/domains/settings/settings.types'
 import { getEmailSafeUrl } from '@/lib/server/storage/s3'
 import { emailIconKey, emailPalette } from '@/lib/shared/design/email-palette'
+import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import {
+  initialTilePath,
+  logoImagePath,
+  shareCardFacts,
+  shareCardVersion,
+  shortHash,
+  squareIconPath,
+} from '@/lib/shared/design/share-card'
 
 const log = logger.child({ component: 'email-brand' })
 
@@ -25,6 +34,8 @@ export interface EmailBranding {
   logoUrl: string | undefined
   /** Absent keeps Quackback gold. */
   brand: EmailBrand | undefined
+  /** The portal's name as its header shows it: the Brand kit title, else the workspace's. */
+  title?: string
 }
 
 /** Mail clients do not draw SVG, so an SVG logo is left out rather than sent broken. */
@@ -35,24 +46,64 @@ function workspaceLogo(logoKey: string | null | undefined): string | undefined {
   return getEmailSafeUrl(logoKey) ?? undefined
 }
 
-/** A design's email brand: its colours, and its icon where mail clients draw it. */
+/**
+ * The portal's own PNGs of the brand, absolute, from the same /brand.png
+ * the favicon is (share-card/serve.ts): the icon, drawn when stored as SVG;
+ * the full logo fitted into the header's square; or the initial tile.
+ */
+function drawnBrandUrl(doc: PortalDesign, workspaceName: string | null | undefined) {
+  const base = config.baseUrl
+  if (!base) return {}
+  const at = (path: string) => `${base.replace(/\/+$/, '')}${path}`
+  const facts = shareCardFacts(doc, resolveDesign(doc))
+  const title = doc.brand.logo.name?.trim() || workspaceName || 'Quackback'
+  return {
+    svgIcon:
+      facts.iconKey && isSvg(facts.iconKey)
+        ? at(squareIconPath(shortHash(facts.iconKey)))
+        : undefined,
+    fullLogo: facts.logoKey ? at(logoImagePath(facts.logoKey)) : undefined,
+    tile: at(initialTilePath(shareCardVersion(facts), title)),
+  }
+}
+
+/**
+ * A design's email brand: its colours, and its icon where mail clients draw
+ * it (an SVG one drawn to PNG by the portal), else its full logo, else the
+ * workspace logo, else the brand's initial tile.
+ */
 export function designEmailBranding(
   doc: PortalDesign,
-  logoKey: string | null | undefined
+  logoKey: string | null | undefined,
+  workspaceName?: string | null
 ): EmailBranding {
   const icon = emailIconKey(doc)
+  const drawn = drawnBrandUrl(doc, workspaceName)
+  const title = doc.brand.logo.name?.trim() || workspaceName || undefined
   return {
-    logoUrl: (icon ? getEmailSafeUrl(icon) : null) ?? workspaceLogo(logoKey),
+    ...(title && { title }),
+    logoUrl:
+      (icon ? getEmailSafeUrl(icon) : null) ??
+      drawn.svgIcon ??
+      drawn.fullLogo ??
+      workspaceLogo(logoKey) ??
+      drawn.tile,
     brand: emailPalette(doc),
   }
 }
 
 export async function emailBranding(workspace: {
+  /** The workspace's name, for the initial tile when the design has no title. */
+  name?: string | null
   logoKey: string | null | undefined
   /** The settings row's stored flags, or flags already resolved (cached settings). */
   featureFlags: string | null | undefined | FeatureFlags
 }): Promise<EmailBranding> {
-  const fallback: EmailBranding = { logoUrl: workspaceLogo(workspace.logoKey), brand: undefined }
+  const fallback: EmailBranding = {
+    logoUrl: workspaceLogo(workspace.logoKey),
+    brand: undefined,
+    ...(workspace.name && { title: workspace.name }),
+  }
   if (config.portalDesignEngine === 'legacy') return fallback
   const flags =
     typeof workspace.featureFlags === 'object' && workspace.featureFlags
@@ -63,7 +114,7 @@ export async function emailBranding(workspace: {
     const { getPublishedRevision } = await import('@/lib/server/domains/design/design.service')
     const published = await getPublishedRevision()
     if (!published) return fallback
-    return designEmailBranding(published.document, workspace.logoKey)
+    return designEmailBranding(published.document, workspace.logoKey, workspace.name)
   } catch (err) {
     // An email in gold beats no email.
     log.warn({ err }, 'published design unreadable; email keeps the default brand')

@@ -62,7 +62,6 @@ export function RoadmapPageView({
             initialSelectedRoadmapId={selectedId}
             isTeamMember={isTeamMember}
             layout={choices.board}
-            votes={choices.votes}
           />
         </div>
       </div>

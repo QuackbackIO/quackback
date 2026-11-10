@@ -116,3 +116,62 @@ describe('help center landing canonicals', () => {
     expect(locale.links).toEqual([])
   })
 })
+
+describe('help center landing link previews', () => {
+  const designed = async () => {
+    const [{ designView }, { defaultDesign }] = await Promise.all([
+      import('@/lib/shared/design/design-view'),
+      import('@/lib/shared/design/schema'),
+    ])
+    return { name: 'Acme', portalDesign: designView(defaultDesign(), 1), brandingData: null }
+  }
+  const portal = (settings: unknown) => ({
+    routeId: '/_portal',
+    loaderData: { workspaceName: 'Acme' },
+    context: { baseUrl: 'https://acme.test', settings },
+  })
+  const ogImages = (meta: Array<Record<string, string>> | undefined) =>
+    (meta ?? []).filter((m) => m.property === 'og:image').map((m) => m.content)
+
+  it('shows the Help Center card on the design engine, never the logo', async () => {
+    const settings = await designed()
+    const root = { routeId: '__root__', context: { settings } }
+    const landing = headOf(Landing)({
+      loaderData: {
+        helpCenterConfig: null,
+        workspaceName: 'Acme',
+        logoUrl: 'https://acme.test/logo.png',
+      },
+      matches: [root, polishLayout, portal(settings)],
+    })
+    const local = headOf(LocaleLanding)({
+      loaderData: {
+        title: null,
+        description: null,
+        workspaceName: 'Acme',
+        logoUrl: 'https://acme.test/logo.png',
+      },
+      params: { locale: 'en' },
+      matches: [root, polishLayout, portal(settings)],
+    })
+    for (const meta of [landing.meta, local.meta]) {
+      expect(ogImages(meta)).toEqual([
+        expect.stringMatching(/^https:\/\/acme\.test\/brand\.png\?v=\w+&page=help$/),
+      ])
+    }
+  })
+
+  it('keeps the logo on the legacy theme', () => {
+    const settings = { name: 'Acme', portalDesign: { engine: 'legacy' } }
+    const root = { routeId: '__root__', context: { settings } }
+    const landing = headOf(Landing)({
+      loaderData: {
+        helpCenterConfig: null,
+        workspaceName: 'Acme',
+        logoUrl: 'https://acme.test/logo.png',
+      },
+      matches: [root, polishLayout, portal(settings)],
+    })
+    expect(ogImages(landing.meta)).toEqual(['https://acme.test/logo.png'])
+  })
+})

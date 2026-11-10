@@ -61,7 +61,11 @@ vi.mock('framer-motion', () => {
       },
     }
   )
-  return { AnimatePresence: ({ children }: { children?: ReactNode }) => children, motion: proxy }
+  return {
+    AnimatePresence: ({ children }: { children?: ReactNode }) => children,
+    MotionConfig: ({ children }: { children?: ReactNode }) => children,
+    motion: proxy,
+  }
 })
 
 import { PortalHome } from '../portal-home'

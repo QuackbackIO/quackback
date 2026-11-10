@@ -9,7 +9,12 @@
  */
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from './i18n'
 import type { PortalDesignView } from './design/view'
-import { shareCardPath, type ShareCardPage } from './design/share-card'
+import {
+  cardCanDraw,
+  initialTilePath,
+  shareCardPath,
+  type ShareCardPage,
+} from './design/share-card'
 
 /** The settings a portal head reads. */
 export interface PortalHeadSettings {
@@ -27,6 +32,16 @@ export function portalSiteName(settings: PortalHeadSettings | null | undefined):
   const design = settings?.portalDesign
   const title = design?.engine === 'v2' ? design.logo.name?.trim() : undefined
   return title || settings?.name || 'Quackback'
+}
+
+/**
+ * The brand's icon as the header shows it: the design's own, its dark one
+ * when it has only that, then the workspace's logo; null for the initial.
+ */
+export function portalBrandMark(settings: PortalHeadSettings | null | undefined): string | null {
+  const design = settings?.portalDesign
+  const mark = design?.engine === 'v2' ? design.logo.mark : undefined
+  return mark?.light || mark?.dark || settings?.brandingData?.logoUrl || null
 }
 
 /**
@@ -52,6 +67,8 @@ type Words = {
   status: (name: string) => string
   incident: (title: string, name: string) => string
   post: (title: string, board: string) => string
+  /** A missing page's name, before the site's in its title. */
+  notFound: string
 }
 
 /**
@@ -70,6 +87,7 @@ export interface PortalHeadTemplates {
   status: string
   incident: string
   post: string
+  notFound: string
 }
 
 const ENGLISH: PortalHeadTemplates = {
@@ -88,6 +106,7 @@ const ENGLISH: PortalHeadTemplates = {
   status: 'Live status and incident history for {name}.',
   incident: '{title}. A status update from {name}.',
   post: '{title}. Vote and comment on this post in {board}.',
+  notFound: 'Not found',
 }
 
 const fill = (template: string, values: Record<string, string>) =>
@@ -106,6 +125,7 @@ export function portalHeadWords(settings: PortalHeadSettings | null | undefined)
     status: (name) => fill(t.status, { name }),
     incident: (title, name) => fill(t.incident, { title, name }),
     post: (title, board) => fill(t.post, { title, board }),
+    notFound: t.notFound,
   }
 }
 
@@ -115,7 +135,8 @@ export const pageTitle = (settings: PortalHeadSettings | null | undefined, page:
 
 /**
  * The favicon: the design's own, then the brand icon, then the workspace's
- * favicon and logo, then the default.
+ * favicon and logo, then the brand's initial tile as the header draws it;
+ * the default only for a portal on the legacy theme.
  */
 export function portalFavicon(settings: PortalHeadSettings | null | undefined): string {
   const design = settings?.portalDesign
@@ -125,7 +146,7 @@ export function portalFavicon(settings: PortalHeadSettings | null | undefined): 
     icons?.mark ||
     settings?.faviconData?.url ||
     settings?.brandingData?.logoUrl ||
-    '/logo.png'
+    (icons?.card ? initialTilePath(icons.card, portalSiteName(settings)) : '/logo.png')
   )
 }
 
@@ -141,7 +162,9 @@ const absolute = (path: string, baseUrl: string | null | undefined) => {
 /**
  * The image a shared link shows, absolute: the design's own share image,
  * else its drawn card (with the page's name), else null for a portal on the
- * legacy theme, which keeps its own.
+ * legacy theme, which keeps its own. The card's faces draw Latin only, so a
+ * title they cannot draw is null too, leaving the logo rather than a blank
+ * card, and a page name they cannot draw is left off.
  */
 export function portalShareImage(
   settings: PortalHeadSettings | null | undefined,
@@ -151,12 +174,11 @@ export function portalShareImage(
   const design = settings?.portalDesign
   if (design?.engine !== 'v2' || !design.icons) return null
   if (design.icons.shareImage) return absolute(design.icons.shareImage, baseUrl)
-  if (!design.icons.card) return null
+  const title = portalSiteName(settings)
+  if (!design.icons.card || !cardCanDraw(title)) return null
   const pageName = page ? portalHeadWords(settings).pages[page] : null
-  return absolute(
-    shareCardPath(design.icons.card, portalSiteName(settings), page, pageName),
-    baseUrl
-  )
+  const named = page && pageName && cardCanDraw(pageName) ? page : undefined
+  return absolute(shareCardPath(design.icons.card, title, named, named ? pageName : null), baseUrl)
 }
 
 /** The meta that points a link preview at a page's own card, to sit over the portal's. */
@@ -169,7 +191,10 @@ export function pageShareMeta(
   // The design's own share image is the same on every page; the portal's head has it.
   if (design?.engine !== 'v2' || design.icons?.shareImage) return []
   const image = portalShareImage(settings, baseUrl, page)
-  return image ? [{ property: 'og:image', content: image }] : []
+  // A page without its own card keeps the portal's.
+  return image && image !== portalShareImage(settings, baseUrl)
+    ? [{ property: 'og:image', content: image }]
+    : []
 }
 
 /** The workspace settings a route's head reads, from the root match's context. */

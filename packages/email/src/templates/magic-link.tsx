@@ -23,7 +23,7 @@ interface MagicLinkEmailProps {
 export function MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName }: MagicLinkEmailProps) {
   const name = workspaceName?.trim()
   return (
-    <EmailLayout preview="Your sign-in link" logoUrl={logoUrl}>
+    <EmailLayout preview="Your sign-in link" logoUrl={logoUrl} logoAlt={name || undefined}>
       <Heading style={{ ...typography.h1, textAlign: 'center' }}>
         {name ? `Sign in to ${name}` : 'Sign in'}
       </Heading>

@@ -62,7 +62,7 @@ describe('Ask AI’s starters', () => {
 
   it('keeps to the page open when nothing is picked', () => {
     const shown = starters('roadmap', null, null)
-    expect(shown[0]).toBe('Lay the roadmap out in columns, with votes on its cards')
+    expect(shown[0]).toBe('Lay the roadmap out in columns')
     expect(shown).not.toContain('Show the roadmap on Home')
   })
 })

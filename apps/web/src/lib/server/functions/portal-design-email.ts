@@ -24,7 +24,7 @@ export const getSignInEmailSampleFn = createServerFn({ method: 'GET' }).handler(
       const state = await getDesignState()
       const doc = state?.draft ?? state?.published?.document ?? null
       if (!doc) return { ok: false, message: 'No design to show yet.' }
-      const { logoUrl, brand } = designEmailBranding(doc, auth.settings.logoKey)
+      const { logoUrl, brand } = designEmailBranding(doc, auth.settings.logoKey, auth.settings.name)
       const html = await renderSignInEmailSample({
         brand,
         logoUrl,
@@ -34,6 +34,30 @@ export const getSignInEmailSampleFn = createServerFn({ method: 'GET' }).handler(
     } catch (err) {
       log.warn({ err }, 'sign-in email sample failed')
       return { ok: false, message: 'The email sample could not be drawn.' }
+    }
+  }
+)
+
+export type ShareCardSampleResult = { ok: true; src: string } | { ok: false; message: string }
+
+/** The link preview's image as visitors will get it once the draft is published. */
+export const getShareCardSampleFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<ShareCardSampleResult> => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    try {
+      const [{ getDesignState }, { brandImageDeps, shareCardSample }, { getWorkspaceSettings }] =
+        await Promise.all([
+          import('@/lib/server/domains/design/design.service'),
+          import('@/lib/server/domains/design/share-card/serve'),
+          import('@/lib/server/domains/settings/settings.service'),
+        ])
+      const [state, settings] = await Promise.all([getDesignState(), getWorkspaceSettings()])
+      const doc = state?.draft ?? state?.published?.document ?? null
+      if (!doc || !settings) return { ok: false, message: 'No design to show yet.' }
+      return { ok: true, src: await shareCardSample(doc, settings, brandImageDeps()) }
+    } catch (err) {
+      log.warn({ err }, 'share card sample failed')
+      return { ok: false, message: 'The link preview could not be drawn.' }
     }
   }
 )

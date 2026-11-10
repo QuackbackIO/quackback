@@ -205,7 +205,7 @@ function guideLines(
     ],
     [
       ['pages.roadmap'],
-      `The Roadmap page; leave a field out for its usual look. pages.roadmap.board: ${DESIGN_OPTIONS.roadmapBoard.join(', ')} (a column per status, or one list grouped by status); pages.roadmap.votes: true or false (the vote box on its cards).`,
+      `The Roadmap page; leave a field out for its usual look. pages.roadmap.board: ${DESIGN_OPTIONS.roadmapBoard.join(', ')} (a column per status, or one list grouped by status). Its cards always show votes.`,
     ],
     [
       ['pages.post'],

@@ -16,6 +16,35 @@ export type ShareCardPage = (typeof SHARE_CARD_PAGES)[number]
 export const isShareCardPage = (value: unknown): value is ShareCardPage =>
   (SHARE_CARD_PAGES as readonly unknown[]).includes(value)
 
+/**
+ * What the card's bundled faces draw: their files are Latin only, so this
+ * is the part of that range every face has (the fallback's cmap pins it).
+ * A title or page name with anything else would be left blank on the card.
+ */
+const CARD_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0x20, 0x7e],
+  [0xa0, 0xac],
+  [0xae, 0xff],
+  [0x131, 0x131],
+  [0x152, 0x153],
+  [0x2013, 0x2014],
+  [0x2018, 0x201a],
+  [0x201c, 0x201e],
+  [0x2022, 0x2022],
+  [0x2026, 0x2026],
+  [0x20ac, 0x20ac],
+  [0x2122, 0x2122],
+]
+
+/** Whether the card's faces can draw every visible character of the text. */
+export function cardCanDraw(text: string): boolean {
+  return [...text].every((ch) => {
+    if (!ch.trim()) return true
+    const cp = ch.codePointAt(0)!
+    return CARD_RANGES.some(([from, to]) => cp >= from && cp <= to)
+  })
+}
+
 /** Where the portal serves its drawn brand images. */
 export const BRAND_IMAGE_PATH = '/brand.png'
 
@@ -26,6 +55,8 @@ export interface ShareCardFacts {
   accentInk: string
   /** The brand icon's stored key, or null. */
   iconKey: string | null
+  /** The full logo's stored key, drawn in place of an icon the brand does not have. */
+  logoKey?: string
   headingFont: string
   headingWeight: number
   bodyFont: string
@@ -49,13 +80,17 @@ function shownVars(resolved: ResolvedDesign) {
 
 export function shareCardFacts(doc: PortalDesign, resolved: ResolvedDesign): ShareCardFacts {
   const vars = shownVars(resolved)
-  const { mark } = doc.brand.logo
+  const { mark, wordmark } = doc.brand.logo
+  const iconKey = (mark.light ?? mark.dark)?.key ?? null
+  const logoKey = iconKey ? undefined : (wordmark.light ?? wordmark.dark)?.key
   return {
+    // Only when there is one, so a card without keeps its address.
+    ...(logoKey && { logoKey }),
     background: hex(vars.background, '#ffffff'),
     ink: hex(vars.foreground, '#0a0a0a'),
     accent: hex(vars.primary, '#ffd43b'),
     accentInk: hex(vars.primaryForeground, '#0a0a0a'),
-    iconKey: (mark.light ?? mark.dark)?.key ?? null,
+    iconKey,
     headingFont: faceId(doc.brand.fonts.heading),
     headingWeight: doc.brand.fonts.headingWeight,
     bodyFont: faceId(doc.brand.fonts.body),
@@ -110,3 +145,15 @@ export function shareCardPath(
 /** The favicon's address: the brand icon fitted into a square. */
 export const squareIconPath = (version: string): string =>
   `${BRAND_IMAGE_PATH}?v=${version}&kind=icon`
+
+/**
+ * The initial tile's address, for a brand with no icon a browser tab or
+ * mail client can show: drawn from the card's colours and the title's
+ * initial, so it carries the card's version and the title.
+ */
+export const initialTilePath = (cardVersion: string, title: string): string =>
+  `${BRAND_IMAGE_PATH}?v=${cardVersion}${shortHash(title)}&kind=icon`
+
+/** The full logo as a PNG mail can show, fitted into the square email headers keep. */
+export const logoImagePath = (key: string): string =>
+  `${BRAND_IMAGE_PATH}?v=${shortHash(key)}&kind=logo`

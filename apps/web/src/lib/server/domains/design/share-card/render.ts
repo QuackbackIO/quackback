@@ -7,6 +7,7 @@
  * is wider or taller than it is square.
  */
 import { overlay } from '@/lib/shared/design/contrast'
+import { nameInitial } from '@/lib/shared/utils/initial'
 import { encodePng, type Image } from '../extract/png'
 import { faceById, nearestWeight, type Face } from '../extract/fonts/faces'
 import { fontFor, renderText, type Font } from '../extract/fonts/woff'
@@ -18,6 +19,8 @@ export const CARD = {
   pad: 96,
   /** The icon's side. */
   icon: 144,
+  /** The widest a full logo is drawn, in place of the icon, as tall as it. */
+  logo: 480,
   /** The brand colour's strip along the foot. */
   foot: 12,
 } as const
@@ -36,6 +39,8 @@ export interface ShareCardSpec {
   headingWeight: number
   bodyFont: string
   icon: Image | null
+  /** The icon is the full logo, drawn wider. */
+  wide?: boolean
 }
 
 type Rgb = [number, number, number]
@@ -115,8 +120,8 @@ function roundedCoverage(px: number, py: number, size: number, radius: number): 
 }
 
 /** The image scaled to fit a box, kept in proportion, its pixels averaged when shrunk. */
-function fitInto(src: Image, box: number): { img: Image; x: number; y: number } {
-  const scale = Math.min(box / src.width, box / src.height)
+function fitInto(src: Image, box: number, boxHeight = box): { img: Image; x: number; y: number } {
+  const scale = Math.min(box / src.width, boxHeight / src.height)
   const w = Math.max(1, Math.round(src.width * scale))
   const h = Math.max(1, Math.round(src.height * scale))
   const out = new Uint8Array(w * h * 4)
@@ -148,8 +153,71 @@ function fitInto(src: Image, box: number): { img: Image; x: number; y: number } 
   return {
     img: { width: w, height: h, data: out },
     x: Math.floor((box - w) / 2),
-    y: Math.floor((box - h) / 2),
+    y: Math.floor((boxHeight - h) / 2),
   }
+}
+
+/** What the initial tile shows: the brand colour, and the title's initial in its ink. */
+export interface InitialTileSpec {
+  accent: string
+  accentInk: string
+  headingFont: string
+  headingWeight: number
+  initial: string
+}
+
+/** The tile's corner radius: 28 on the card's 144px icon, in proportion at any size. */
+const tileRadius = (side: number) => Math.round((side * 28) / 144)
+
+/** The brand colour's rounded square with the initial centred, as the header draws it without an icon. */
+function tileAt(
+  img: Image,
+  left: number,
+  top: number,
+  side: number,
+  spec: InitialTileSpec,
+  fonts: Array<Font | null>
+) {
+  const accent = rgb(spec.accent)
+  const radius = tileRadius(side)
+  for (let y = 0; y < side; y++)
+    for (let x = 0; x < side; x++)
+      blend(img, left + x, top + y, accent, roundedCoverage(x + 0.5, y + 0.5, side, radius))
+  const { initial } = spec
+  const font = initial ? drawable(initial, fonts) : null
+  if (!font) return
+  const size = Math.round((side * 88) / 144)
+  const drawn = renderText(font, size, initial)
+  const x = left + Math.round((side - drawn.advance) / 2)
+  const capHeight = size * 0.7
+  drawLine(
+    img,
+    font,
+    [size],
+    initial,
+    x,
+    top + Math.round((side + capHeight) / 2),
+    side,
+    rgb(spec.accentInk)
+  )
+}
+
+/** The favicon and email header for a brand without an icon: its initial tile on clear. */
+export function drawInitialTile(spec: InitialTileSpec, size: number): Image {
+  const img: Image = { width: size, height: size, data: new Uint8Array(size * size * 4) }
+  // Drawn on the brand colour, then its rounded edge becomes the clear around it.
+  fill(img, 0, 0, size, size, rgb(spec.accent))
+  tileAt(img, 0, 0, size, spec, [
+    fontOf(spec.headingFont, spec.headingWeight),
+    fontOf('inter', spec.headingWeight),
+  ])
+  const radius = tileRadius(size)
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++)
+      img.data[(y * size + x) * 4 + 3] = Math.round(
+        255 * roundedCoverage(x + 0.5, y + 0.5, size, radius)
+      )
+  return img
 }
 
 export function drawShareCard(spec: ShareCardSpec): Image {
@@ -165,7 +233,10 @@ export function drawShareCard(spec: ShareCardSpec): Image {
   const fallback = fontOf('inter', spec.headingWeight)
 
   if (spec.icon) {
-    const fitted = fitInto(spec.icon, side)
+    // A full logo in place of an icon has a wider box, and starts at the margin.
+    const fitted = spec.wide
+      ? { ...fitInto(spec.icon, CARD.logo, side), x: 0 }
+      : fitInto(spec.icon, side)
     const { img: icon } = fitted
     for (let y = 0; y < icon.height; y++)
       for (let x = 0; x < icon.width; x++) {
@@ -174,38 +245,21 @@ export function drawShareCard(spec: ShareCardSpec): Image {
         blend(img, pad + fitted.x + x, pad + fitted.y + y, colour, icon.data[o + 3]! / 255)
       }
   } else {
-    for (let y = 0; y < side; y++)
-      for (let x = 0; x < side; x++)
-        blend(img, pad + x, pad + y, accent, roundedCoverage(x + 0.5, y + 0.5, side, 28))
-    const initial = [...spec.title.trim()][0]?.toUpperCase() ?? ''
-    const font = initial ? drawable(initial, [heading, fallback]) : null
-    if (font) {
-      const size = 88
-      const drawn = renderText(font, size, initial)
-      const x = pad + Math.round((side - drawn.advance) / 2)
-      const capHeight = size * 0.7
-      drawLine(
-        img,
-        font,
-        [size],
-        initial,
-        x,
-        pad + Math.round((side + capHeight) / 2),
-        side,
-        rgb(spec.accentInk)
-      )
-    }
+    tileAt(img, pad, pad, side, { ...spec, initial: nameInitial(spec.title) }, [heading, fallback])
   }
 
   const maxWidth = width - 2 * pad
   const titleFont = spec.title.trim() ? drawable(spec.title, [heading, fallback]) : null
-  const titleBaseline = spec.pageName ? 392 : 430
+  // A page name no face can draw is left off, and the title sits as on the portal's own card.
+  const body = spec.pageName
+    ? drawable(spec.pageName, [fontOf(spec.bodyFont, 400), fontOf('inter', 400)])
+    : null
+  const titleBaseline = body ? 392 : 430
   if (titleFont)
     drawLine(img, titleFont, [84, 76, 68, 60], spec.title.trim(), pad, titleBaseline, maxWidth, ink)
-  if (spec.pageName) {
-    const body = drawable(spec.pageName, [fontOf(spec.bodyFont, 400), fontOf('inter', 400)])
+  if (body && spec.pageName) {
     const muted = rgb(overlay(spec.ink, spec.background, 0.72))
-    if (body) drawLine(img, body, [44], spec.pageName, pad, 480, maxWidth, muted)
+    drawLine(img, body, [44], spec.pageName, pad, 480, maxWidth, muted)
   }
   return img
 }
