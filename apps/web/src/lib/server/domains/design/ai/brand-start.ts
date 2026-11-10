@@ -1,6 +1,7 @@
 /**
  * The whole-look brand match: three looks written from the screenshots, the
- * first, the faithful one, landing in the draft. The staged brand match
+ * first, the faithful one, landing in the draft, the others offered as Try
+ * another look. The staged brand match
  * (brand-match.ts) runs this only when no screenshot could be read closely,
  * so the person still gets a first look from them.
  */
@@ -57,5 +58,10 @@ export async function matchBrand(input: {
     skipped: 0,
     outOfScope: false,
     readability: [],
+    // The other looks were written in the same call; offered at no further cost.
+    others: result.looks.slice(1).map((other) => ({
+      description: other.description,
+      changes: designChanges(input.design, other.design) as AppliedDesignChange[],
+    })),
   }
 }
