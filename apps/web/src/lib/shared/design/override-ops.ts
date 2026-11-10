@@ -18,7 +18,7 @@
  */
 import { BLOCK_NAMES, PAGE_NAMES } from './names'
 import { writeAt, type ElementContext, type ScopeName } from './override-cascade'
-import { allPartsOf, partsOf, type PartInfo } from './parts-registry'
+import { allPartsOf, partsOf, partsOnPage, type PartInfo } from './parts-registry'
 import type { PortalDesign } from './schema'
 import {
   LAYER_PROPS,
@@ -152,6 +152,33 @@ const isState = (word: string | undefined): word is StyleState =>
   !!word && (STYLE_STATES as readonly string[]).includes(word)
 const STATE_WORDS: Record<string, StyleState> = { pressed: 'active', normal: 'base', rest: 'base' }
 
+/**
+ * The pages that draw an element no part names, one of many: each post's
+ * card, and the boxes that are not posts. Every other element's pages are
+ * its parts' (parts-registry), or every page.
+ */
+const LISTED_ON: Partial<Record<StyleElement, readonly OverridePage[]>> = {
+  postCard: ['home', 'feedback', 'roadmap'],
+  panel: ['home', 'feedback', 'changelog', 'help', 'support', 'status', 'post'],
+}
+
+/** Whether a page draws an element, so a look set for it there shows. */
+export function pageDraws(
+  design: PortalDesign,
+  page: OverridePage,
+  element: StyleElement
+): boolean {
+  const listed = LISTED_ON[element]
+  if (!listed || listed.includes(page)) return true
+  return partsOnPage(design, page).some((part) => part.elements.includes(element))
+}
+
+/** What "cards" are on each page, for the AI: post cards where posts are listed, else panels. */
+export const CARDS_RULE = `"Cards" are post cards (postCard) on ${listed(
+  LISTED_ON.postCard!.map((page) => PAGE_NAMES[page as keyof typeof PAGE_NAMES] ?? page),
+  'and'
+)} only; on every other page, such as the changelog's entries, help articles and status, the cards are panels (panel).`
+
 const partName = (part: PartInfo) => `${part.label} · ${part.group.replace(/ · .*$/, '')}`
 
 /**
@@ -241,6 +268,21 @@ export function readOverrideOp(
   if (!where.ok) return where
   const read = readKey(where.read, k, value)
   if (!read.ok) return read
+  // A page that draws no post cards: its cards are panels, where a panel can take the look.
+  if (where.read.kind === 'page' && !pageDraws(design, where.read.page, read.read.element)) {
+    const page = where.read.page
+    const { state, prop } = read.read
+    if (
+      read.read.element === 'postCard' &&
+      pageDraws(design, page, 'panel') &&
+      styleAllows('panel', state, prop)
+    )
+      return { ok: true, read: { where: where.read, ...read.read, element: 'panel' } }
+    const name = PAGE_LABELS[page]
+    return no(
+      `${name.charAt(0).toUpperCase()}${name.slice(1)} has no ${STYLE_ELEMENTS[read.read.element].label.toLowerCase()}`
+    )
+  }
   // A Home block's slot (its heading, its links) is what the block's own look styles in it:
   // written there, where the builder's "This block" reads it; dark mode's own stays the part's.
   const part = where.read.kind === 'part' ? where.read.part : null
@@ -535,4 +577,4 @@ export function overridesNow(design: PortalDesign): string {
 }
 
 /** The rule for the override operation, as Ask AI's prompt tells it. */
-export const OVERRIDE_RULE = `- override: an element's look for one part, one page, one Home block or everywhere, on all screens, phones or dark mode. target: part:<part id> for "this one", "just this button", "only the hero's call to action" (the parts below); page:<page> (${PAGES.join(', ')}) for "only on the roadmap page", every one of that element on it; block:<block id> for one Home block's own look; everywhere for the whole portal. key: <element>.<state>.<property>, the state left out for normal, such as button.hover.background; on a part of one element kind the element may be left out; start it with phone. for phones only (sizes and shapes, never colours: phone.headline.size), or dark. for dark mode's own colour. value as for style; null clears it. A request about one part, one page or phones is an override. A request that names an element by its kind, with no "just", "only", "this" or a page ("the footer", "buttons", "the vote boxes"), is about every one of it: op theme style.<element>..., never a part. "This", "this one" and "just this" mean the part picked when one is; with none picked, name the part.`
+export const OVERRIDE_RULE = `- override: an element's look for one part, one page, one Home block or everywhere, on all screens, phones or dark mode. target: part:<part id> for "this one", "just this button", "only the hero's call to action" (the parts below); page:<page> (${PAGES.join(', ')}) for "only on the roadmap page", every one of that element on it; block:<block id> for one Home block's own look; everywhere for the whole portal. key: <element>.<state>.<property>, the state left out for normal, such as button.hover.background; on a part of one element kind the element may be left out; start it with phone. for phones only (sizes and shapes, never colours: phone.headline.size), or dark. for dark mode's own colour. value as for style; null clears it. A request about one part, one page or phones is an override. A request that names an element by its kind, with no "just", "only", "this" or a page ("the footer", "buttons", "the vote boxes"), is about every one of it: op theme style.<element>..., never a part. "This", "this one" and "just this" mean the part picked when one is; with none picked, name the part. ${CARDS_RULE}`
