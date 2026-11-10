@@ -378,6 +378,37 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       expect((await watchSendingDomains()).watched).toBe(1)
     })
 
+    it('checks now without moving the deadline of a window that is still open', async () => {
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })
+      const deadline = new Date(Date.now() + 10 * 3600 * 1000)
+      await testDb
+        .update(emailSendingDomains)
+        .set({ autoCheckUntil: deadline, lastCheckedAt: new Date(Date.now() - 5 * 60_000) })
+        .where(eq(emailSendingDomains.id, row.id))
+      getIdentity.mockClear()
+
+      const checked = await restartSendingDomainChecks(row.id)
+      expect(checked?.autoCheckUntil?.getTime()).toBe(deadline.getTime())
+      expect(getIdentity.mock.calls.map(([d]) => d)).toEqual(['a.example'])
+      expect(Date.now() - (checked?.lastCheckedAt?.getTime() ?? 0)).toBeLessThan(5000)
+    })
+
+    it('answers from the last check when asked again within moments', async () => {
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })
+      const lastCheckedAt = new Date(Date.now() - 5000)
+      await testDb
+        .update(emailSendingDomains)
+        .set({ autoCheckUntil: new Date(Date.now() + 10 * 3600 * 1000), lastCheckedAt })
+        .where(eq(emailSendingDomains.id, row.id))
+      getIdentity.mockClear()
+
+      const answered = await restartSendingDomainChecks(row.id)
+      // The provider's management API is shared by every workspace, so a
+      // person pressing the button repeatedly costs it one call, not one each.
+      expect(getIdentity).not.toHaveBeenCalled()
+      expect(answered?.lastCheckedAt?.getTime()).toBe(lastCheckedAt.getTime())
+    })
+
     it('answers null for a domain that does not exist', async () => {
       expect(await restartSendingDomainChecks(createId('sending_domain'))).toBeNull()
     })

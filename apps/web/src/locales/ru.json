@@ -1394,7 +1394,7 @@
   "ask.destination.settings_notifications": "Уведомления",
   "ask.destination.settings_portal": "Портал",
   "ask.destination.settings_channels_messenger": "Веб-виджет",
-  "ask.destination.settings_channels_email": "Эл. почта",
+  "ask.destination.settings_channels_email": "Почта поддержки",
   "apiKeys.scopes.settings": "Настройки",
   "apiKeys.scopes.read": "Прочитано",
   "ask.destination.analytics": "Аналитика",

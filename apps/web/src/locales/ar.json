@@ -1394,7 +1394,7 @@
   "ask.destination.settings_notifications": "الإشعارات",
   "ask.destination.settings_portal": "البوابة",
   "ask.destination.settings_channels_messenger": "أداة الويب",
-  "ask.destination.settings_channels_email": "البريد الإلكتروني",
+  "ask.destination.settings_channels_email": "بريد الدعم",
   "apiKeys.scopes.settings": "الإعدادات",
   "apiKeys.scopes.read": "تمت القراءة",
   "ask.destination.analytics": "التحليلات",

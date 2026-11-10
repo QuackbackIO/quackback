@@ -1420,7 +1420,7 @@
   "ask.destination.settings_imports": "导入与导出",
   "ask.destination.settings_widget_install": "安装",
   "ask.destination.settings_channels_messenger": "网页小组件",
-  "ask.destination.settings_channels_email": "邮箱",
+  "ask.destination.settings_channels_email": "支持邮箱",
   "ask.destination.settings_channels_github": "GitHub",
   "ask.starter.branding": "设置我的品牌颜色",
   "ask.starter.invite": "邀请我的团队",

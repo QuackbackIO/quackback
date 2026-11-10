@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { EmptyState } from '@/components/shared/empty-state'
 import { PhaseBadge } from './phase-badge'
 import { emailChannelConfigQuery } from '@/lib/client/queries/channel-accounts'
 import {
@@ -128,19 +129,24 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
         platformName={view.platformName}
         available={data?.addressMode !== 'unavailable'}
         guardPermitsAny={data?.addressMode === 'any'}
+        loaded={data !== undefined}
       />
-      <SendFromCard
-        senders={view.senders}
-        identities={view.identities}
-        platformFrom={view.platformFrom}
-        platformName={view.platformName}
-        platformInbox={view.platformInbox}
-        forwardingTarget={inboundTarget(data?.inboundRoute)}
-        forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
-        hasInboundRoute={!!data?.inboundRoute}
-        rows={['default', ...surfaces]}
-        onError={reason("Couldn't change where email is sent from.")}
-      />
+      {/* With no address there is nothing to choose between, so the card
+          waits for one rather than showing a row of single-option selects. */}
+      {view.addresses.length > 0 && (
+        <SendFromCard
+          senders={view.senders}
+          identities={view.identities}
+          platformFrom={view.platformFrom}
+          platformName={view.platformName}
+          platformInbox={view.platformInbox}
+          forwardingTarget={inboundTarget(data?.inboundRoute)}
+          forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
+          hasInboundRoute={!!data?.inboundRoute}
+          rows={['default', ...surfaces]}
+          onError={reason("Couldn't change where email is sent from.")}
+        />
+      )}
     </div>
   )
 }
@@ -470,6 +476,7 @@ function SendingAddressesSection({
   platformName,
   available,
   guardPermitsAny,
+  loaded,
 }: {
   addresses: SendingAddress[]
   domains: SendingDomainDTO[]
@@ -480,6 +487,8 @@ function SendingAddressesSection({
   available: boolean
   /** One workspace: email still leaves as the address, so nothing falls back. */
   guardPermitsAny: boolean
+  /** Whether the config has arrived, so an empty list really is empty. */
+  loaded: boolean
 }) {
   const [dialog, setDialog] = useState<SendingAddressDialogTarget | null>(null)
   const [domainRemoveTarget, setDomainRemoveTarget] = useState<{
@@ -541,6 +550,10 @@ function SendingAddressesSection({
       }}
     />
   )
+
+  // Nothing added and nothing left over: the card says what email comes from
+  // today and offers the one next step, in place of an empty list.
+  const empty = loaded && rows.length === 0 && unused.length === 0
 
   return (
     <SettingsCard title="Sending addresses" description="Addresses email can be sent from." flush>
@@ -648,21 +661,47 @@ function SendingAddressesSection({
           )
         })}
       </SettingsList>
-      <div className="space-y-2 border-t border-border/50 px-4 py-3 sm:px-6">
-        <Button variant="outline" disabled={!available} onClick={() => setDialog({ kind: 'add' })}>
-          Add address
-        </Button>
-        {!available && (
-          <p className="text-[13px] text-muted-foreground">
-            Custom sending addresses aren&apos;t available on this server.
-          </p>
-        )}
-        {actionError && (
-          <p role="alert" className="text-sm text-destructive">
-            {actionError}
-          </p>
-        )}
-      </div>
+      {empty ? (
+        <EmptyState
+          size="compact"
+          icon={EnvelopeIcon}
+          title="No sending addresses yet"
+          description={
+            !available
+              ? "Custom sending addresses aren't available on this server."
+              : platformFrom
+                ? `Email comes from ${platformFrom}. Add an address to send from your own domain.`
+                : 'Add an address to send email from your own domain.'
+          }
+          action={
+            available ? (
+              <Button variant="outline" onClick={() => setDialog({ kind: 'add' })}>
+                Add address
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="space-y-2 border-t border-border/50 px-4 py-3 sm:px-6">
+          <Button
+            variant="outline"
+            disabled={!available}
+            onClick={() => setDialog({ kind: 'add' })}
+          >
+            Add address
+          </Button>
+          {!available && (
+            <p className="text-[13px] text-muted-foreground">
+              Custom sending addresses aren&apos;t available on this server.
+            </p>
+          )}
+          {actionError && (
+            <p role="alert" className="text-sm text-destructive">
+              {actionError}
+            </p>
+          )}
+        </div>
+      )}
       <SendingAddressDialog
         target={dialog}
         workspaceName={workspaceName}
