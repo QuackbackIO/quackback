@@ -32,6 +32,7 @@ import {
   ROW_LABEL,
 } from './properties/properties-panel'
 import { COLOUR_NAMES, THEME, WORDS, resetToValue } from './properties/words'
+import { Swatch } from './swatch'
 
 type Palette = PortalDesign['brand']['light']
 /** Changes the draft as one step, named for its undo where a name is given. */
@@ -65,6 +66,9 @@ const ROW_FIND: Record<'accent' | 'ink' | 'background' | MoreKey, FindRow> = {
 const RESET_TO_AUTO = resetToValue(WORDS.auto.toLowerCase())
 
 /** One extra colour; clearing the first moves the second up. */
+/** A colour as its hex, for a swatch. */
+const hexOrNone = (colour: string | undefined) => (colour ? toHex(colour) : undefined)
+
 function setExtra(draft: PortalDesign, index: number, value: string | undefined) {
   const next = [...(draft.brand.light.extra ?? [])]
   if (value) next[index] = value
@@ -72,21 +76,6 @@ function setExtra(draft: PortalDesign, index: number, value: string | undefined)
   const kept = next.filter(Boolean)
   if (kept.length) draft.brand.light.extra = kept
   else delete draft.brand.light.extra
-}
-
-function Swatch({ colour, className }: { colour: string | undefined; className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        'size-3.5 shrink-0 rounded-[4px] border border-border',
-        !colour &&
-          'bg-[repeating-linear-gradient(45deg,var(--muted)_0_3px,var(--background)_3px_6px)]',
-        className
-      )}
-      style={colour ? { background: toHex(colour) } : undefined}
-    />
-  )
 }
 
 /**
@@ -132,7 +121,7 @@ export function ColourValue({
           data-colour-state={value ? 'set' : 'auto'}
           className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-xs hover:border-border hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
         >
-          <Swatch colour={shown} />
+          <Swatch colour={hexOrNone(shown)} />
           <span
             className={cn(
               'ms-auto text-muted-foreground',
@@ -351,7 +340,7 @@ function FromLogo({
             onClick={() => onPick(colour)}
             className="grid size-6 place-items-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
           >
-            <Swatch colour={colour} className="size-4" />
+            <Swatch colour={hexOrNone(colour)} className="size-4" />
           </button>
         ))}
       </span>
@@ -383,7 +372,7 @@ function RowIssue({
           aria-label={`${THEME.fix} ${name}`}
           onClick={() => onFix(issue.fix!)}
         >
-          <Swatch colour={issue.fix} className="size-3" />
+          <Swatch colour={hexOrNone(issue.fix)} className="size-3" />
           {THEME.fix}
         </Button>
       )}
@@ -421,7 +410,7 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
         </span>
         <span role="img" aria-label="Dark colours" className="flex gap-1">
           {(['background', 'ink', 'accent'] as const).map((key) => (
-            <Swatch key={key} colour={own[key] ?? auto[key]} />
+            <Swatch key={key} colour={hexOrNone(own[key] ?? auto[key])} />
           ))}
         </span>
         <span className="ms-auto text-xs text-muted-foreground">

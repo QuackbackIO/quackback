@@ -36,3 +36,12 @@ describe('Button touch targets', () => {
     expect(screen.getByRole('button', { name: 'Save' }).className).not.toContain('pointer-coarse')
   })
 })
+
+describe('Button default, disabled', () => {
+  it('drops the brand fill in dark mode, so a disabled Publish does not read as one to press', () => {
+    render(<Button disabled>Publish</Button>)
+    const { classList } = screen.getByRole('button', { name: 'Publish' })
+    expect(classList.contains('dark:disabled:bg-muted')).toBe(true)
+    expect(classList.contains('dark:disabled:text-muted-foreground')).toBe(true)
+  })
+})

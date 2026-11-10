@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import { switchBackPortalDesignFn } from '@/lib/server/functions/portal-design'
 
@@ -33,6 +34,7 @@ const RESTORE_SLOT = 'flex w-[4.5rem] shrink-0 justify-end'
  */
 function Named({ name, by, at }: { name: string; by: string | null; at: Date | string }) {
   const full = by ? `${name} · ${by}` : name
+  const format = useLocalDateFormatter()
   return (
     <span className="flex min-w-0 flex-1 items-baseline">
       <span className="min-w-0 truncate" title={full}>
@@ -41,7 +43,7 @@ function Named({ name, by, at }: { name: string; by: string | null; at: Date | s
       </span>
       <span
         className="shrink-0 whitespace-nowrap text-muted-foreground"
-        title={new Date(at).toLocaleString()}
+        title={format(new Date(at), { dateStyle: 'medium', timeStyle: 'short' })}
       >
         {' · '}
         <TimeAgo date={at} />

@@ -22,6 +22,7 @@ import { CanvasModeContext } from './canvas-mode'
 import { faceName, hexOf, type ColourToken, type FontToken } from './tokens'
 import { PropertyTiles, Tip } from './properties-panel'
 import { WORDS, linkTo } from './words'
+import { Swatch } from '../swatch'
 
 const isHex = (value: string | undefined): value is string => !!value && value.startsWith('#')
 
@@ -42,25 +43,6 @@ export function nearestToken(hex: string, tokens: readonly ColourToken[]): Colou
     }
   }
   return best
-}
-
-function Swatch({ light, dark }: { light: string; dark?: string }) {
-  const none = light === 'transparent'
-  return (
-    <span
-      aria-hidden="true"
-      data-swatch={dark ? 'half' : 'whole'}
-      className={cn(
-        'size-3.5 shrink-0 rounded-[4px] border border-border',
-        none && 'bg-[repeating-linear-gradient(45deg,var(--muted)_0_3px,var(--background)_3px_6px)]'
-      )}
-      style={
-        none
-          ? undefined
-          : { background: dark ? `linear-gradient(135deg, ${light} 50%, ${dark} 50%)` : light }
-      }
-    />
-  )
 }
 
 /**
@@ -130,12 +112,12 @@ export function TokenField({
           >
             {token ? (
               <>
-                <Swatch light={token.light} dark={darkShown} />
+                <Swatch colour={token.light} dark={darkShown} />
                 <span className="truncate">{token.name}</span>
               </>
             ) : isHex(shown) ? (
               <>
-                <Swatch light={shown} dark={darkShown} />
+                <Swatch colour={shown} dark={darkShown} />
                 <span className="font-mono text-[11px] uppercase">{shown}</span>
                 <LinkSlashIcon
                   className="size-3 shrink-0 text-muted-foreground"
@@ -190,7 +172,7 @@ export function TokenField({
                         : 'border-transparent hover:border-border'
                     )}
                   >
-                    <Swatch light={mode === 'dark' ? (t.dark ?? t.light) : t.light} />
+                    <Swatch colour={mode === 'dark' ? (t.dark ?? t.light) : t.light} />
                   </button>
                 </Tip>
               ))}
