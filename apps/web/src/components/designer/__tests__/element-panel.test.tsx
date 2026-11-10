@@ -15,6 +15,7 @@ vi.mock('@/components/ui/select', async () => import('@/test/radix-select'))
 import { defaultDesign, portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { findOverride } from '@/lib/shared/design/style-overrides'
 import type { StyleState } from '@/lib/shared/design/style-tokens'
+import { resolveDesign } from '@/lib/shared/design/resolve'
 import { ElementPanel } from '../element-panel'
 
 afterEach(() => {
@@ -569,10 +570,35 @@ describe('what the canvas draws, where it is not what a row stores', () => {
     expect(before.view.container.querySelector('[data-in-use]')).toBeNull()
   })
 
-  it('compares no colour while the canvas is dark, where light’s value is not the one drawn', () => {
-    const { view } = mount(headline, styled(), {
+  it('compares a colour on a dark canvas with dark’s, and Use this sets dark mode’s own', () => {
+    const inked = () => {
+      const design = home()
+      design.style = { headline: { base: { color: 'ink' } } }
+      return design
+    }
+    const rgb = (hex: string) =>
+      `rgb(${[1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).join(', ')})`
+    const { light, dark } = resolveDesign(inked())
+    expect(light!.foreground).not.toBe(dark!.foreground)
+    // Drawn as dark draws the ink: nothing to say.
+    const same = mount(headline, inked(), {
+      drawn: { values: { color: rgb(dark!.foreground!) }, size: 'desktop', dark: true },
+    })
+    expect(note(same.view, 'Text colour')).toBeNull()
+    cleanup()
+    // Light's ink is not what dark draws.
+    const lit = mount(headline, inked(), {
+      drawn: { values: { color: rgb(light!.foreground!) }, size: 'desktop', dark: true },
+    })
+    expect(note(lit.view, 'Text colour')).not.toBeNull()
+    cleanup()
+    const { box, view } = mount(headline, inked(), {
       drawn: { values: { color: 'rgb(30, 30, 30)' }, size: 'desktop', dark: true },
     })
-    expect(note(view, 'Text colour')).toBeNull()
+    const colour = note(view, 'Text colour')!
+    expect(colour.textContent).toContain('Shown as #1E1E1E so it reads')
+    fireEvent.click(within(colour as HTMLElement).getByRole('button', { name: 'Use this' }))
+    expect(box.design.styleDark?.headline?.base?.color).toBe('#1e1e1e')
+    expect(box.design.style?.headline?.base?.color).toBe('ink')
   })
 })

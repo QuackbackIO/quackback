@@ -69,12 +69,15 @@ import {
   STYLE_ELEMENTS,
   STYLE_PROPS,
   styleAllows,
+  type StyleColour,
   type StyleElementInfo,
   type StylePaint,
   type StyleProp,
   type StylePropInfo,
   type StyleState,
 } from '@/lib/shared/design/style-tokens'
+import { darkDrawnColour } from '@/lib/shared/design/style-css'
+import { resolveDesignCached } from '@/lib/shared/design/resolve'
 import { brandOf, everywhereValue, homeValuesOf, writeEverywhere } from './element-brand'
 import { BASICS, SECTION_PROPS, elementRowFind, elementRowLabel } from './element-rows'
 import {
@@ -306,18 +309,20 @@ export function ElementPanel({
     return null
   }
 
-  /** A colour a row stores, a hex or a role's name, as the canvas's mode draws it. */
+  /** A colour a row stores, a hex or a role's name, as light draws it. */
   const colourHex = (colour: string): string | null => {
     const token = tokens.find((each) => each.id === colour)
-    const css = token ? (drawn?.dark ? (token.dark ?? token.light) : token.light) : colour
+    const css = token ? token.light : colour
     return hexOf(css) ?? cssColourHex(css)
   }
   /** The second line, where what the canvas draws is not what the row has. */
   const inUse = (prop: StyleProp, label: string, shown: unknown): ReactNode => {
     if (!drawn) return null
     const kind = STYLE_PROPS[prop].kind
-    // Light's colours are what a row stores; in dark mode the canvas draws dark's.
-    if (drawn.dark && (kind === 'colour' || kind === 'paint')) return null
+    const colour = kind === 'colour' || kind === 'paint'
+    // In dark mode a row's colour is drawn as dark's: its own there, else light's carried over.
+    const dark = drawn.dark && colour ? darkOf(prop) : undefined
+    if (drawn.dark && colour && !dark) return null
     // What a narrower place sets reaches the element in place of this row's value.
     const reaching = effectiveValue(design, ctx, screen, state, prop)
     if (reaching && reaching.value !== shown) return null
@@ -326,9 +331,23 @@ export function ElementPanel({
       stored: shown,
       drawn: drawn.values[prop],
       size: drawn.size,
-      colourHex,
+      colourHex: dark
+        ? (stored) => {
+            const { light, dark: night } = resolveDesignCached(design)
+            const css = darkDrawnColour(
+              stored as StyleColour,
+              dark.value as StyleColour | undefined,
+              design,
+              light,
+              night
+            )
+            return css ? (hexOf(css) ?? cssColourHex(css)) : null
+          }
+        : colourHex,
     })
     if (!note) return null
+    // Used in dark mode, the colour drawn is dark mode's own.
+    const use = dark ? () => dark.onChange(String(note.value)) : () => write(prop, note.value)
     return (
       <p
         data-in-use={label}
@@ -337,7 +356,7 @@ export function ElementPanel({
         <span className="min-w-0 truncate">{note.text}</span>
         <button
           type="button"
-          onClick={() => write(prop, note.value)}
+          onClick={use}
           className="shrink-0 rounded hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
         >
           {WORDS.useThis}
