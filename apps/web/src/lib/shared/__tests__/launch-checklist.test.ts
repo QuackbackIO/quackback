@@ -318,6 +318,23 @@ describe('the branding step', () => {
     expect(task.search).toEqual({ match: 'acme.com', from: 'onboarding' })
   })
 
+  it('names the website it will match from', () => {
+    expect(branding({ brandInBuilder: true, brandDomain: 'acme.com' }).actionLabel).toBe(
+      'Match from acme.com'
+    )
+    expect(branding({ brandInBuilder: true, brandDomain: null }).actionLabel).toBe(
+      'Match your brand'
+    )
+  })
+
+  it("opens the builder's publish while a matched brand waits in the draft", () => {
+    const task = branding({ brandInBuilder: true, brandDrafted: true, brandDomain: 'acme.com' })
+    expect(task.isCompleted).toBe(false)
+    expect(task.href).toBe('/design')
+    expect(task.search).toEqual({ publish: 'open', from: 'onboarding' })
+    expect(task.actionLabel).toBe('Publish')
+  })
+
   it('opens the builder without a match when the website is not known', () => {
     const task = branding({ brandInBuilder: true, brandDomain: null })
     expect(task.href).toBe('/design')

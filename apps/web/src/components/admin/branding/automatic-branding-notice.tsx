@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/shared/utils'
@@ -6,6 +7,8 @@ import type { AutomaticBrandingStatus } from '@/lib/shared/website-branding'
 /**
  * The launch plan's first tile after the website lookup: a good logo that was
  * applied, with Undo, or a weak one that is offered with Use it and Not now.
+ * On the design engine "Use it" only drafts it, so the tile then leads to the
+ * builder to review and publish.
  */
 export function AutomaticBrandingNotice({
   status,
@@ -25,7 +28,8 @@ export function AutomaticBrandingNotice({
   onDismiss: () => void
 }) {
   const offered = status?.status === 'offered' && status.canUse
-  if (!status || (!offered && status.status !== 'applied')) return null
+  const drafted = status?.status === 'drafted'
+  if (!status || (!offered && !drafted && status.status !== 'applied')) return null
   const action = compact ? 'h-auto px-0 py-0 text-xs underline underline-offset-4' : undefined
   const thumbnail = status.logoUrl ? (
     <img
@@ -87,6 +91,21 @@ export function AutomaticBrandingNotice({
               />
             )}
           </span>
+          {drafted ? (
+            <Button
+              asChild
+              size="sm"
+              variant={compact ? 'ghost' : 'outline'}
+              className={cn(action, !compact && 'h-7')}
+            >
+              <Link to="/design">
+                <FormattedMessage
+                  id="onboarding.branding.review"
+                  defaultMessage="Review and publish"
+                />
+              </Link>
+            </Button>
+          ) : null}
           {status.canUndo && (
             <Button
               size="sm"

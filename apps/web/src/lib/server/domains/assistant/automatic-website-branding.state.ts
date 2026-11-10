@@ -93,6 +93,15 @@ export const brandingLookupSchema = z.discriminatedUnion('status', [
   z
     .object({ ...core, status: z.literal('applied'), offer: offerSchema, receipt: receiptSchema })
     .strict(),
+  // On the design engine "Use it" writes the design's draft only; nothing live changes.
+  z
+    .object({
+      ...core,
+      status: z.literal('drafted'),
+      offer: offerSchema,
+      colorDrafted: z.boolean(),
+    })
+    .strict(),
   z
     .object({ ...core, status: z.literal('undone'), offer: offerSchema, receipt: receiptSchema })
     .strict(),
@@ -242,6 +251,14 @@ export function presentLookup(
       ...quietStatus(lookup.domain, 'offered'),
       logoUrl: getPublicUrlOrNull(lookup.offer.logoKey),
       canUse: true,
+    }
+  }
+  if (lookup.status === 'drafted') {
+    if (!recent) return null
+    return {
+      ...quietStatus(lookup.domain, 'drafted'),
+      logoUrl: getPublicUrlOrNull(lookup.offer.logoKey),
+      colorApplied: lookup.colorDrafted,
     }
   }
   if (lookup.status === 'applied') {

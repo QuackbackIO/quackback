@@ -718,15 +718,60 @@ describe('automatic website branding on the portal design engine (real Postgres)
     await publishDraft({ ...author(), source: 'api' })
   }
 
-  it('puts the logo and colour into the design draft once a design is published, where the old settings no longer reach', async () => {
+  it('puts the logo and colour into the design draft only, leaving the live branding alone', async () => {
     await setRow({ featureFlags: JSON.stringify({ portalDesignV2: true }) })
     await publish()
-    await lookUpAndUse(actor)
+    expect(await lookUpAndUse(actor)).toEqual({
+      domain: 'example.com',
+      status: 'drafted',
+      logoUrl: '/api/storage/logos/acme.png',
+      colorApplied: true,
+      canUndo: false,
+      canUse: false,
+    })
     const state = await getDesignState()
     expect(state?.draft?.brand.logo.mark.light).toEqual({ key: good.logoKey })
     expect(state?.draft?.brand.light.accent.toLowerCase()).toBe(good.color!.toLowerCase())
     // The published design visitors see is unchanged until someone publishes.
     expect(state?.published?.document.brand.logo.mark.light).toBeNull()
+    // The workspace logo and the branding colours, which the launcher and admin read, stay as they were.
+    const row = await read()
+    expect(row.logoKey).toBeNull()
+    expect(row.brandingConfig).toBeNull()
+    // Home reads the drafted notice back, and the offer is answered.
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toMatchObject({ status: 'drafted' })
+    await expect(acceptWebsiteBrandingOffer(actor)).rejects.toMatchObject({
+      code: 'WEBSITE_BRANDING_UNAVAILABLE',
+    })
+  })
+
+  it('drafts over the converted branding before anything is published', async () => {
+    await setRow({ featureFlags: JSON.stringify({ portalDesignV2: true }) })
+    expect(await lookUpAndUse(actor)).toMatchObject({ status: 'drafted' })
+    const state = await getDesignState()
+    expect(state?.published).toBeNull()
+    expect(state?.draft?.brand.logo.mark.light).toEqual({ key: good.logoKey })
+    expect((await read()).logoKey).toBeNull()
+    expect((await read()).brandingConfig).toBeNull()
+  })
+
+  it('drafts the logo alone without the right to change colours', async () => {
+    await setRow({ featureFlags: JSON.stringify({ portalDesignV2: true }) })
+    await publish()
+    await ensureAutomaticWebsiteBranding(actor)
+    const limited: Actor = {
+      ...actor,
+      permissions: new Set(
+        [...actor.permissions!].filter((p) => p !== PERMISSIONS.SETTINGS_BRANDING)
+      ),
+    }
+    expect(await acceptWebsiteBrandingOffer(limited)).toMatchObject({
+      status: 'drafted',
+      colorApplied: false,
+    })
+    const draft = (await getDesignState())?.draft
+    expect(draft?.brand.logo.mark.light).toEqual({ key: good.logoKey })
+    expect(draft?.brand.light.accent).toBe(defaultDesign().brand.light.accent)
   })
 
   it('keeps an icon and colour the design already has', async () => {
@@ -737,6 +782,7 @@ describe('automatic website branding on the portal design engine (real Postgres)
     await publish(own)
     await lookUpAndUse(actor)
     expect((await getDesignState())?.draft).toBeNull()
+    expect((await read()).logoKey).toBeNull()
   })
 
   it('leaves the design alone on the legacy theme', async () => {

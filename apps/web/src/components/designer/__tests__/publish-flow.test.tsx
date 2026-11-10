@@ -219,4 +219,23 @@ describe('After publishing', () => {
     expect(screen.getByLabelText('Live address').textContent).toBe(LIVE.url)
     expect(toast.success).not.toHaveBeenCalled()
   })
+
+  it('opens the full review when a version went live after the draft started, saying so', async () => {
+    const { draft, failing } = draftOf(hideRoadmap)
+    const message = 'Another version was published after this draft started.'
+    draft.publish = vi.fn(async () => ({ ok: false as const, message, changed: true as const }))
+    render(<Harness draft={draft} failing={failing} />)
+    await clickPublish()
+    await act(async () => {
+      fireEvent.click(
+        screen
+          .getAllByRole('button', { name: 'Publish' })
+          .find((each) => each.closest('[role=dialog]'))!
+      )
+    })
+    const review = screen.getByRole('dialog', { name: 'Review and publish' })
+    expect(review.textContent).toContain(message)
+    expect(screen.queryByRole('dialog', { name: /^Publish/ })).toBeNull()
+    expect(published).not.toHaveBeenCalled()
+  })
 })

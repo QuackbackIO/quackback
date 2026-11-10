@@ -756,11 +756,12 @@ export const phoneStyleSheetSchema = sheetSchema(
   STYLE_ELEMENT_NAMES,
   PHONE_PROPS
 ) as unknown as z.ZodType<StyleSheet>
-/** Phones' own values over a Home block's look, as `look.phone`. */
-export const blockPhoneSheetSchema = sheetSchema(
-  BLOCK_STYLE_ELEMENTS,
-  PHONE_PROPS
-) as unknown as z.ZodType<BlockStyleSheet>
+/** A Home block's phone layer: its elements' sizes, and whether phones leave the block out. */
+export type BlockPhoneSheet = BlockStyleSheet & { hidden?: boolean }
+/** Phones' own values over a Home block's look, as `look.phone`; `hidden` leaves the block off phones. */
+export const blockPhoneSheetSchema = sheetSchema(BLOCK_STYLE_ELEMENTS, PHONE_PROPS)
+  .extend({ hidden: z.boolean().optional() })
+  .strict() as unknown as z.ZodType<BlockPhoneSheet>
 
 /* Machine-readable list */
 

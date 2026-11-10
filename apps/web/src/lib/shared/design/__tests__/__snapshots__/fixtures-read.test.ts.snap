@@ -1,57 +1,57 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`design fixtures > bramble.json builds the same design view 1`] = `"15754 6819e5999128e264d5d7fcfd149da747f8b43eb3089d0ebe66d7241064f517d9"`;
+exports[`design fixtures > bramble.json builds the same design view 1`] = `"15845 7188461ee061fd7f6cc2154463331757728786ecb6a6f1b347ce175637219fbe"`;
 
 exports[`design fixtures > bramble.json resolves to the same CSS 1`] = `"13697 230d5b668a7525ded75bd90852b39d5dd03bcd947857e5f242be0c21c8cb80ee"`;
 
-exports[`design fixtures > fieldnote.json builds the same design view 1`] = `"13317 a1d928d07653dcdf29d604f18ae6d0aed57e1a3a2dc728c22c1b0b45372273d0"`;
+exports[`design fixtures > fieldnote.json builds the same design view 1`] = `"13411 fbf4a6803114a9b726655ff1ed297bfdc57c4f75977d8372d4064739ef1700bb"`;
 
 exports[`design fixtures > fieldnote.json resolves to the same CSS 1`] = `"11476 1c83dc148cd15656ba11171e9640f70f3dbc6d00fa0eac1cc67ff6ceb9a31574"`;
 
-exports[`design fixtures > juniper.json builds the same design view 1`] = `"15351 3d7d07e618132ab11e71c8bab40e6afb292cd5cfadadc207990794ed347c1cb5"`;
+exports[`design fixtures > juniper.json builds the same design view 1`] = `"15442 b469d7a17032bef6a3dbc95a9d3ec8ccb2e50b7c8b172e1ab18f312f2e62ff88"`;
 
 exports[`design fixtures > juniper.json resolves to the same CSS 1`] = `"12241 ee00f2dd794234497eb0976cea01c2acbb8c57f3217f313b696b154ba2295eca"`;
 
-exports[`design fixtures > kiln.json builds the same design view 1`] = `"16939 01194301f0170e3e21ef08fbea5fc2082e4f6f5a401c9861df3673944bb3e83c"`;
+exports[`design fixtures > kiln.json builds the same design view 1`] = `"17070 233d4a1d066095371fb7a914d7760e7a230ac2d07ec407f0b99866d6e8a8ce97"`;
 
 exports[`design fixtures > kiln.json resolves to the same CSS 1`] = `"14510 f7601729466c13ec08b77ef915cbfbc12906deafb8fdfc66ae97b02f23d42ab2"`;
 
-exports[`design fixtures > ledger.json builds the same design view 1`] = `"14392 9b132e3e6f4f995d5cd3dfe7bb1203ca65b60c62182fb1ca171375e53708770c"`;
+exports[`design fixtures > ledger.json builds the same design view 1`] = `"14483 de1cf08bf5ae32a13e34a813093a0cc91c2378740ccb3bb4f88d70da4c1f0761"`;
 
 exports[`design fixtures > ledger.json resolves to the same CSS 1`] = `"11884 efaf019cedffe104a079b941c4d3733e1f3f3692e34b5d330a7f07f2f0e43fb2"`;
 
-exports[`design fixtures > no-overrides/beauty-shop.json builds the same design view 1`] = `"16945 f54cfddcd4bacd88a2cbe45d1ef0ae4e9f0bb2f2fc58c7f94fcd5b091390439b"`;
+exports[`design fixtures > no-overrides/beauty-shop.json builds the same design view 1`] = `"17073 c3e5cbcdb9d4ae465820b1f60189578034bb56556a5fa6a57e5290d572dbba64"`;
 
 exports[`design fixtures > no-overrides/beauty-shop.json resolves to the same CSS 1`] = `"14453 97f67f7835a2d3876459d3ecae17774b5756d49bf622c3b0b14850fff6a2ee9d"`;
 
-exports[`design fixtures > no-overrides/code-host.json builds the same design view 1`] = `"17180 ee3b5b381d8f64746ca9ffb0abbe48a0fbcc25f647c5aa7ee4471010b3a44ac3"`;
+exports[`design fixtures > no-overrides/code-host.json builds the same design view 1`] = `"17311 ec1695c6e3b49912c718962adb9ace5850ded67e1bf3ed32d4590ed5f8a1e7bd"`;
 
 exports[`design fixtures > no-overrides/code-host.json resolves to the same CSS 1`] = `"14650 e6e84a8d050971bbb36c25566bbecc05225cfecf4bb052d9638e5a56eb76a684"`;
 
-exports[`design fixtures > no-overrides/notes-app.json builds the same design view 1`] = `"17280 90b1dceaa026d55212931afbf8c2377559e23a5dc756fa5518a504334e65134e"`;
+exports[`design fixtures > no-overrides/notes-app.json builds the same design view 1`] = `"17411 ee0f0c057949d400d2a1c38d15eaf45ab9efc56b20f7be257966c6eca9cd6bf6"`;
 
 exports[`design fixtures > no-overrides/notes-app.json resolves to the same CSS 1`] = `"14756 655a1228ff99c3e2d9a2257dedeb073b5f663d190db9e548d853ab8b19daec43"`;
 
-exports[`design fixtures > no-overrides/stays-market.json builds the same design view 1`] = `"16869 74289cf45a56895d6db8e43f083aa42faf66e6f1d80182bb842f65c64c3cf588"`;
+exports[`design fixtures > no-overrides/stays-market.json builds the same design view 1`] = `"16999 eeedf5bdc64c552cc327f0904cd548d6403b50b5e75749edab14733dea369b3b"`;
 
 exports[`design fixtures > no-overrides/stays-market.json resolves to the same CSS 1`] = `"14466 0f2da7818faf60fc5061cf7db40ea2f39a85133daefe47455119df1f5a959769"`;
 
-exports[`design fixtures > no-overrides/terminal-tool.json builds the same design view 1`] = `"17063 3b0b6268cdcfc45ec9fc38b01f7503a4585e5397eec786afd7b6d8a8665dc528"`;
+exports[`design fixtures > no-overrides/terminal-tool.json builds the same design view 1`] = `"17194 b9af1228e5c856faff2062e968e4a4c72a636c5db1a178b06d8843399513e442"`;
 
 exports[`design fixtures > no-overrides/terminal-tool.json resolves to the same CSS 1`] = `"14806 e0cb62d07136122a27cde9c42bd17c9b002b53184294fc17aa40a298ded3667b"`;
 
-exports[`design fixtures > no-overrides/terminal-tool-styled.json builds the same design view 1`] = `"19845 6a3b8f6ebe4756065b98d4ed7630cb611d668920abae4e0354c65166c4fe34ba"`;
+exports[`design fixtures > no-overrides/terminal-tool-styled.json builds the same design view 1`] = `"19976 523c33a2a6c38beee2bae2fd599dd5a08818c2c20d60f5fb79981387130cdc9f"`;
 
 exports[`design fixtures > no-overrides/terminal-tool-styled.json resolves to the same CSS 1`] = `"17588 46b279b76521de460c9c2cc308c9afec92810395aaa31ee6d56ac812c3da3e46"`;
 
-exports[`design fixtures > orbit.json builds the same design view 1`] = `"14371 8a0585d1a173867ea216bec3b1ba5353552596050cd529be0bda55e6e72defe6"`;
+exports[`design fixtures > orbit.json builds the same design view 1`] = `"14464 96bcdef2ae4ecea71f07c09a0f79b3a65d1fbfc98daf30d0ab5e11d07d8ba3b4"`;
 
 exports[`design fixtures > orbit.json resolves to the same CSS 1`] = `"11840 7a035bde748e651a3a6e032993c9208b1c47b7360212b3589820868d50b787de"`;
 
-exports[`design fixtures > plume.json builds the same design view 1`] = `"14386 7d887c1a16a2927531a4003964cba2fff30909e6c0b8e3852f192a6d0d442d98"`;
+exports[`design fixtures > plume.json builds the same design view 1`] = `"14479 561999a0d5c18611ef1f182557e4b8898bff5904747ed6360e1842d0290ded13"`;
 
 exports[`design fixtures > plume.json resolves to the same CSS 1`] = `"12485 9732cd84c920ed5c58dc90e00e68847b2d64aae251d78ab0118e93fa7ea5c46b"`;
 
-exports[`design fixtures > tandem.json builds the same design view 1`] = `"15009 ac9b56c3d46b0c90e888c3744aaa3dc4155b1fe91334633917b1ae5dfdc09c2b"`;
+exports[`design fixtures > tandem.json builds the same design view 1`] = `"15102 5cf6f2c534598bda7a087660df53a40c0187f494162cca3bfdd1b5cd8d381770"`;
 
 exports[`design fixtures > tandem.json resolves to the same CSS 1`] = `"12598 61975e03ac398cbb7e2018a54e6ae2a36560073117e549e1d986dc830cf559bd"`;

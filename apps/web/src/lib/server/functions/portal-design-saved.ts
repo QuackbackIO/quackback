@@ -31,6 +31,26 @@ export const savePortalDesignFn = createServerFn({ method: 'POST' })
     return saveDesign(data.kind, data.name, data.design, await designAuthor(auth))
   })
 
+/**
+ * Saves the draft aside before the builder replaces it: the stored draft
+ * before Copy into draft, or the person's own unsaved draft, sent along,
+ * before they load someone else's.
+ */
+export const savePortalDesignDraftAsideFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      cause: z.enum(['copy', 'load-theirs']),
+      /** The draft as the person sees it, when the server does not have it. */
+      design: z.unknown().optional(),
+    })
+  )
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const { designAuthor } = await import('@/lib/server/domains/design/design-author')
+    const { saveDraftAsideNow } = await import('@/lib/server/domains/design/saved')
+    return saveDraftAsideNow(data.cause, await designAuthor(auth), data.design)
+  })
+
 export const getPortalDesignCheckpointFn = createServerFn({ method: 'GET' })
   .validator(z.object({ id: typeIdSchema('portal_design_saved') }))
   .handler(async ({ data }) => {

@@ -69,6 +69,10 @@ export const CACHE_KEYS = {
   // Names a user's principal. Nothing is stored under it: the principal row is
   // read once per request (`auth/request-session.ts`) under this same key, and
   // every role/type mutation deletes the key, which drops that memo.
+  // The last design view that rendered, served if a later render throws
+  // (settings.service.ts). Not per build: it must outlive an upgrade whose
+  // renderer fails.
+  PORTAL_DESIGN_LAST_GOOD: 'design:last-good-view',
   PRINCIPAL_BY_USER: (userId: string) => `principal:user:${userId}` as const,
 } as const
 

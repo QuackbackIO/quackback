@@ -9,6 +9,7 @@ import {
   restorePortalDesignVersionFn,
   savePortalDesignDraftFn,
 } from '@/lib/server/functions/portal-design'
+import { savePortalDesignDraftAsideFn } from '@/lib/server/functions/portal-design-saved'
 import { shownChanges } from '@/lib/shared/design/diff'
 import { checkDesign } from '@/lib/shared/design/check-design'
 import { changeLabel } from '@/lib/shared/design/labels'
@@ -35,11 +36,20 @@ export const UNDO_MERGE_MS = 1000
 /** How many steps undo remembers. */
 const UNDO_LIMIT = 100
 
+/** Why nothing can change: a newer build of Quackback saved the design, and this one would lose part of it. */
+export const NEWER_FORMAT_LINE =
+  'A newer version of Quackback saved this design. Update Quackback to edit it.'
+
 type Outcome = { ok: true } | { ok: false; message: string }
 /** A change's outcome: committed, or refused before it reached the draft, with why in a line. */
 export type ChangeOutcome = { ok: true } | { ok: false; reason: string }
-/** A publish's outcome: where the portal is now live. */
-type PublishOutcome = { ok: true; address?: PortalAddress } | { ok: false; message: string }
+/**
+ * A publish's outcome: where the portal is now live, or why not, with
+ * `changed` when another version went live after the draft started.
+ */
+type PublishOutcome =
+  | { ok: true; address?: PortalAddress }
+  | { ok: false; message: string; changed?: true }
 
 /**
  * The Appearance draft: the design being edited, saved to the server shortly
@@ -56,11 +66,17 @@ type PublishOutcome = { ok: true; address?: PortalAddress } | { ok: false; messa
  * the reason in a line to show under its control. Should the server still
  * refuse a save, that same document is never sent again, publishing waits,
  * and the person can go back to the last saved draft in one step.
+ *
+ * A design a newer build of Quackback saved opens read-only: it shows, and
+ * nothing changes, saves, publishes, discards or restores until the update.
  */
 export function useDesignDraft() {
   const queryClient = useQueryClient()
   const router = useRouter()
   const { data } = useSuspenseQuery(portalDesignQueries.editor())
+  const readOnly = data.newerFormat === true
+  const frozen = useRef(readOnly)
+  frozen.current = readOnly
   const [design, setDesign] = useState<PortalDesign>(data.design)
   const [report, setReport] = useState(data.report)
   const [saving, setSaving] = useState(false)
@@ -91,20 +107,27 @@ export function useDesignDraft() {
   // The draft revision the next save is made against, and whether saving waits on a choice.
   const revision = useRef(data.revision)
   const blocked = useRef(false)
+  // The version live now, once a publish said another went live after the draft started.
+  const reviewAgainst = useRef<PortalDesignRevisionId | undefined>(undefined)
 
   // The save under way, so a reader on the server can wait for it; each waits for the one before.
   // A step that fails never breaks the chain: the next save still runs.
   const inflight = useRef<Promise<void>>(Promise.resolve())
-  const save = useCallback((next: PortalDesign): Promise<void> => {
+  // Whether this editing session has saved yet: its first save keeps the draft it started from.
+  const sessionSaved = useRef(false)
+  const save = useCallback((next: PortalDesign, keeping?: 'keep-mine'): Promise<void> => {
     const run = inflight.current.then(async () => {
-      if (blocked.current) return
+      if (blocked.current || frozen.current) return
       const sent = refused.current ? JSON.stringify(next) : null
       if (refused.current && sent === refused.current.doc) return
       setSaving(true)
       try {
+        // The server saves the draft this replaces aside first, for Keep mine and a session's first save.
+        const saveAside = keeping ?? (sessionSaved.current ? undefined : 'session')
         const result = await savePortalDesignDraftFn({
-          data: { design: next, revision: revision.current },
+          data: { design: next, revision: revision.current, saveAside },
         })
+        sessionSaved.current = true
         setFailed(false)
         retry.current.wait = 1000
         if (result.ok) {
@@ -163,6 +186,7 @@ export function useDesignDraft() {
   /** Shows a design and saves it after a short pause. */
   const commit = useCallback(
     (next: PortalDesign) => {
+      if (frozen.current) return
       latest.current = next
       setDesign(next)
       if (timer.current) clearTimeout(timer.current)
@@ -180,6 +204,7 @@ export function useDesignDraft() {
    */
   const update = useCallback(
     (change: (draft: PortalDesign) => void, label?: string, by?: Author): ChangeOutcome => {
+      if (frozen.current) return { ok: false, reason: NEWER_FORMAT_LINE }
       // A plain copy, not a proxy: the builder's changes may copy parts of what they are handed.
       const before = latest.current
       const next = structuredClone(before)
@@ -208,6 +233,7 @@ export function useDesignDraft() {
    */
   const replace = useCallback(
     (next: PortalDesign, label?: string, by?: Author) => {
+      if (frozen.current) return
       const [patches, inverse] = patchesBetween(latest.current, next)
       if (!patches.length) return
       const name = label ?? nameOfChange(latest.current, next)
@@ -345,16 +371,32 @@ export function useDesignDraft() {
     void router.invalidate()
   }, [fetchEditor, forget, queryClient, router])
 
-  /** After a conflict: replaces this draft with the one someone else saved. */
-  const loadTheirs = useCallback(() => refresh(), [refresh])
+  /**
+   * Saves the draft aside on the server before the builder replaces it, such
+   * as by Copy into draft; with a design, that one, which the server lacks.
+   * A save aside that fails never stops what follows.
+   */
+  const saveAside = useCallback(
+    async (cause: 'copy' | 'load-theirs', design?: PortalDesign) => {
+      await flush()
+      await savePortalDesignDraftAsideFn({ data: { cause, design } }).catch(() => null)
+    },
+    [flush]
+  )
 
-  /** After a conflict: saves this draft over the one someone else saved. */
+  /** After a conflict: replaces this draft with the one someone else saved, saving this one aside. */
+  const loadTheirs = useCallback(async () => {
+    await saveAside('load-theirs', latest.current)
+    await refresh()
+  }, [refresh, saveAside])
+
+  /** After a conflict: saves this draft over the one someone else saved, which the server saves aside. */
   const keepMine = useCallback(async () => {
     revision.current = (await fetchEditor()).revision
     blocked.current = false
     setConflict(false)
     setConflictChange(null)
-    await save(latest.current)
+    await save(latest.current, 'keep-mine')
   }, [fetchEditor, save])
 
   /**
@@ -363,6 +405,7 @@ export function useDesignDraft() {
    * save: load their changes or keep their own.
    */
   const discard = useCallback(async (): Promise<Outcome> => {
+    if (frozen.current) return { ok: false, message: NEWER_FORMAT_LINE }
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
     await inflight.current
@@ -388,6 +431,7 @@ export function useDesignDraft() {
       message?: string,
       options: { workspaceLogo?: boolean } = {}
     ): Promise<PublishOutcome> => {
+      if (frozen.current) return { ok: false, message: NEWER_FORMAT_LINE }
       await flush()
       if (blocked.current)
         return { ok: false, message: 'Choose whose changes to keep first, then publish.' }
@@ -397,8 +441,14 @@ export function useDesignDraft() {
           message,
           revision: revision.current,
           workspaceLogo: options.workspaceLogo === true,
+          reviewedAgainst: reviewAgainst.current,
         },
       })
+      if (!result.ok && result.code === 'DESIGN_CHANGED') {
+        // What visitors see now, such as a restored version, for the review to show the draft against.
+        reviewAgainst.current = (await fetchEditor()).published?.revisionId ?? undefined
+        return { ok: false, message: result.message, changed: true }
+      }
       if (!result.ok)
         return {
           ok: false,
@@ -407,14 +457,16 @@ export function useDesignDraft() {
               ? 'The draft changed while you reviewed it. Review it again, then publish.'
               : result.message,
         }
+      reviewAgainst.current = undefined
       await refresh()
       return { ok: true, address: result.address }
     },
-    [refresh, flush]
+    [refresh, flush, fetchEditor]
   )
 
   const restore = useCallback(
     async (revisionId: PortalDesignRevisionId): Promise<Outcome> => {
+      if (frozen.current) return { ok: false, message: NEWER_FORMAT_LINE }
       await flush()
       const result = await restorePortalDesignVersionFn({ data: { revisionId } })
       if (!result.ok) return { ok: false, message: result.message }
@@ -437,6 +489,8 @@ export function useDesignDraft() {
       published: data.published,
       /** Whether this person may publish, or only edit the draft. */
       canPublish: data.canPublish,
+      /** A newer build of Quackback saved the design: it shows, and nothing changes. */
+      readOnly,
       update,
       replace,
       flush,
@@ -454,6 +508,7 @@ export function useDesignDraft() {
       failed,
       loadTheirs,
       keepMine,
+      saveAside,
       undo,
       redo,
       begin,
@@ -472,6 +527,7 @@ export function useDesignDraft() {
       data.live,
       data.published,
       data.canPublish,
+      readOnly,
       update,
       replace,
       flush,
@@ -487,6 +543,7 @@ export function useDesignDraft() {
       failed,
       loadTheirs,
       keepMine,
+      saveAside,
       undo,
       redo,
       begin,

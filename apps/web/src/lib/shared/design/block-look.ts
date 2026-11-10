@@ -101,3 +101,20 @@ export function matchLook(draft: PortalDesign, targetId: string, fromId: string)
   if (!from || !target) return
   for (const prop of LOOK_PROPS) setField(target, prop, from.look?.[prop])
 }
+
+/** Whether phones leave the block out (`look.phone.hidden`). */
+export const hiddenOnPhones = (block: HomeBlock): boolean => block.look?.phone?.hidden === true
+
+/** Leaves the block off phones, or shows it there again, which clears the field. */
+export function setHiddenOnPhones(draft: PortalDesign, id: string, hidden: boolean): void {
+  const block = draft.pages.home.blocks.find((each) => each.id === id)
+  if (!block) return
+  const phone: Record<string, unknown> = { ...block.look?.phone }
+  if (hidden) phone.hidden = true
+  else delete phone.hidden
+  const look: Record<string, unknown> = { ...block.look }
+  if (Object.keys(phone).length) look.phone = phone
+  else delete look.phone
+  if (Object.keys(look).length) block.look = look as HomeBlock['look']
+  else delete block.look
+}

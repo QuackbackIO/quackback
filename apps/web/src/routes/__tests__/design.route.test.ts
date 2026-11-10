@@ -87,8 +87,16 @@ describe('/design search', () => {
     })
   })
 
+  it("keeps onboarding's request to open publish", () => {
+    expect(validate.parse({ publish: 'open', from: 'onboarding' })).toEqual({
+      publish: 'open',
+      from: 'onboarding',
+    })
+  })
+
   it('drops an entry it does not know', () => {
     expect(validate.parse({ from: 'elsewhere' })).toEqual({})
+    expect(validate.parse({ publish: 'now' })).toEqual({})
   })
 })
 

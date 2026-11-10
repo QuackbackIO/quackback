@@ -996,32 +996,75 @@ async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   return settings
 }
 
-/** The design portal pages render with; see design/engine.ts. */
+/**
+ * How long a settings read whose design fell back is kept: long enough to
+ * spare the database a re-render on every request, short enough that the
+ * portal is back on its own design soon after the fault clears.
+ */
+const FALLBACK_SETTINGS_TTL_SECONDS = 30
+
+/** How long the last design view that rendered is kept to stand in for a failed render. */
+const LAST_GOOD_DESIGN_TTL_SECONDS = 60 * 60 * 24 * 30
+
+/** The last design view that rendered, and the published revision it came from. */
+interface LastGoodDesign {
+  revision: number | null
+  view: PortalDesignView
+}
+
+/**
+ * The design portal pages render with; see design/engine.ts. `fellBack` marks
+ * a view that is not the render of the published design, so the caller does
+ * not keep it as long as one that is.
+ */
 async function choosePortalDesign(
   org: SettingsRecord,
   featureFlags: FeatureFlags,
   brandingConfig: BrandingConfig,
   portalConfig: PortalConfig
-): Promise<PortalDesignView> {
+): Promise<{ view: PortalDesignView; fellBack: boolean }> {
   // With the flag off nothing here runs, not even the config read.
-  if (!featureFlags.portalDesignV2) return { engine: 'legacy' }
+  if (!featureFlags.portalDesignV2) return { view: { engine: 'legacy' }, fellBack: false }
+  // Undefined until the published revision is known; null when nothing is published.
+  let revision: number | null | undefined
   try {
     const [{ getPublishedRevision }, { legacyBrandingOf, portalDesignView, resolveDesignSource }] =
       await Promise.all([
         import('@/lib/server/domains/design/design.service'),
         import('@/lib/server/domains/design/engine'),
       ])
+    const published = await getPublishedRevision()
+    revision = published?.number ?? null
     const source = resolveDesignSource({
       override: config.portalDesignEngine,
       flagOn: true,
-      published: await getPublishedRevision(),
+      published,
       legacy: legacyBrandingOf({ ...org, brandingConfig, portalConfig }),
     })
-    return portalDesignView(source)
+    const view = portalDesignView(source)
+    if (view.engine === 'v2') {
+      const lastGood: LastGoodDesign = { revision: view.revision, view }
+      await cacheSet(CACHE_KEYS.PORTAL_DESIGN_LAST_GOOD, lastGood, LAST_GOOD_DESIGN_TTL_SECONDS)
+    }
+    return { view, fellBack: false }
   } catch (error) {
-    // The portal still renders with today's theme rather than failing the page.
-    log.error({ err: error }, 'portal design could not be resolved; using the legacy theme')
-    return { engine: 'legacy' }
+    // The portal still renders rather than failing the page: with the last
+    // view this revision rendered to, or else with today's theme.
+    const lastGood = await cacheGet<LastGoodDesign>(CACHE_KEYS.PORTAL_DESIGN_LAST_GOOD)
+    const usable =
+      lastGood?.view.engine === 'v2' && (revision === undefined || lastGood.revision === revision)
+    log.error(
+      {
+        err: error,
+        event: 'portal_design.fallback',
+        served: usable ? 'last_good' : 'legacy',
+        revision: revision ?? null,
+      },
+      usable
+        ? 'portal design could not be rendered; serving the last view that rendered'
+        : 'portal design could not be resolved; using the legacy theme'
+    )
+    return { view: usable ? lastGood.view : { engine: 'legacy' }, fellBack: true }
   }
 }
 
@@ -1063,7 +1106,12 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
     const statusConfig = resolveStatusSettings(org.metadata)
 
     const featureFlags = resolveFeatureFlags(org.featureFlags)
-    const portalDesign = await choosePortalDesign(org, featureFlags, brandingConfig, portalConfig)
+    const { view: portalDesign, fellBack } = await choosePortalDesign(
+      org,
+      featureFlags,
+      brandingConfig,
+      portalConfig
+    )
 
     const [configuredTypes, passthroughKeys, verifiedDomains] = await Promise.all([
       getConfiguredAuthTypes(),
@@ -1138,7 +1186,13 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
     // 1h TTL: settings change rarely and every mutation in this file
     // calls invalidateSettingsCache(), so a long TTL is safe and keeps
     // the per-request cost of getWorkspaceSettings to a single Redis GET.
-    await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600)
+    // A design that fell back is kept briefly, so a passing fault does not
+    // hold the portal off its own design for the hour.
+    await cacheSet(
+      CACHE_KEYS.WORKSPACE_SETTINGS,
+      result,
+      fellBack ? FALLBACK_SETTINGS_TTL_SECONDS : 3600
+    )
     return result
   } catch (error) {
     logSettingsReadError(log, error, 'get workspace settings failed')

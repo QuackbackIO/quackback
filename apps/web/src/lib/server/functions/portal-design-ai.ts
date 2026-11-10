@@ -100,7 +100,8 @@ export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
     const saved = await actions.saveDesignDraft(
       result.design,
       { ...(await designAuthor(auth)), via: 'ai' },
-      current.revision
+      current.revision,
+      'ai'
     )
     if (!saved.ok) return movedOn(saved)
     return { ...result, report: saved.report, revision: saved.revision }
@@ -212,7 +213,8 @@ export const designAgentStepFn = createServerFn({ method: 'POST' })
     const saved = await actions.saveDesignDraft(
       reply.design,
       { ...(await designAuthor(auth)), via: 'ai' },
-      current.revision
+      current.revision,
+      'ai'
     )
     if (!saved.ok) return movedOn(saved)
     return { ...reply, report: saved.report, revision: saved.revision }

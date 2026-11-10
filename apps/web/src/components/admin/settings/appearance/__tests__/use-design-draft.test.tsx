@@ -8,6 +8,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { defaultDesign } from '@/lib/shared/design/schema'
+import type { PortalDesignRevisionId } from '@quackback/ids'
 
 const server = vi.hoisted(() => ({
   saves: [] as unknown[],
@@ -26,15 +27,35 @@ const server = vi.hoisted(() => ({
   discardResult: null as unknown,
   workspaceLogo: [] as Array<boolean | undefined>,
   publishResult: { ok: true, revisionId: 'portal_design_revision_1', number: 1 } as unknown,
+  restored: 0,
+  /** The published version each publish said it was reviewed against. */
+  reviewedAgainst: [] as Array<string | undefined>,
+  /** The version visitors see, as the server reads it. */
+  live: null as { revisionId: PortalDesignRevisionId; number: number } | null,
+  /** Why each save asked the server to save the draft it replaces aside. */
+  saveAside: [] as Array<string | undefined>,
+  /** Each draft the builder asked the server to save aside, and why. */
+  asides: [] as Array<{ cause: string; design?: unknown }>,
 }))
 
 vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ invalidate: async () => {} }) }))
+vi.mock('@/lib/server/functions/portal-design-saved', () => ({
+  savePortalDesignDraftAsideFn: async ({ data }: { data: { cause: string; design?: unknown } }) => {
+    server.asides.push(data)
+    return { ok: true, saved: true }
+  },
+}))
 vi.mock('@/lib/server/functions/portal-design', () => ({
   getPortalDesignFn: async () => editorState(),
   listPortalDesignVersionsFn: async () => [],
-  savePortalDesignDraftFn: async ({ data }: { data: { design: unknown; revision?: string } }) => {
+  savePortalDesignDraftFn: async ({
+    data,
+  }: {
+    data: { design: unknown; revision?: string; saveAside?: string }
+  }) => {
     server.saves.push(data.design)
     server.revisions.push(data.revision)
+    server.saveAside.push(data.saveAside)
     if (server.hold) await server.hold
     const planned = server.results.shift()
     if (planned instanceof Error) throw planned
@@ -49,17 +70,27 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
   publishPortalDesignFn: async ({
     data,
   }: {
-    data: { revision?: string; workspaceLogo?: boolean }
+    data: { revision?: string; workspaceLogo?: boolean; reviewedAgainst?: string }
   }) => {
     server.published.push(data.revision)
+    server.reviewedAgainst.push(data.reviewedAgainst)
     server.workspaceLogo.push(data.workspaceLogo)
     return server.publishResult
   },
-  restorePortalDesignVersionFn: async () => ({ ok: true }),
+  restorePortalDesignVersionFn: async () => {
+    server.restored++
+    return { ok: true }
+  },
 }))
 
-const { useDesignDraft, DRAFT_SAVE_DELAY_MS, UNDO_MERGE_MS, nameOfChange, designPreviewCss } =
-  await import('../use-design-draft')
+const {
+  useDesignDraft,
+  DRAFT_SAVE_DELAY_MS,
+  UNDO_MERGE_MS,
+  NEWER_FORMAT_LINE,
+  nameOfChange,
+  designPreviewCss,
+} = await import('../use-design-draft')
 const { portalDesignQueries } = await import('@/lib/client/queries/portal-design')
 
 function editorState() {
@@ -67,19 +98,20 @@ function editorState() {
     design: defaultDesign(),
     live: defaultDesign(),
     source: 'converted' as const,
-    published: null,
+    published: server.live,
     report: { adjustments: [], errors: [], css: [] },
     revision: server.revision,
     authors: {},
     draftSavedAt: null,
     waiting: 0,
+    newerFormat: false,
     canPublish: true,
   }
 }
 
-function setup() {
+function setup(extra: Record<string, unknown> = {}) {
   const client = new QueryClient()
-  client.setQueryData(portalDesignQueries.editor().queryKey, editorState())
+  client.setQueryData(portalDesignQueries.editor().queryKey, { ...editorState(), ...extra })
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   )
@@ -96,6 +128,11 @@ beforeEach(() => {
   server.discardResult = null
   server.workspaceLogo = []
   server.publishResult = { ok: true, revisionId: 'portal_design_revision_1', number: 1 }
+  server.restored = 0
+  server.reviewedAgainst = []
+  server.live = null
+  server.saveAside = []
+  server.asides = []
 })
 afterEach(() => {
   cleanup()
@@ -129,15 +166,15 @@ describe('useDesignDraft', () => {
   it('reports a refused publish', async () => {
     server.publishResult = {
       ok: false,
-      code: 'DESIGN_CHANGED',
-      message: 'Another version was published.',
+      code: 'NO_DRAFT',
+      message: 'There is no draft to publish.',
     }
     const { result } = setup()
     let outcome: unknown
     await act(async () => {
       outcome = await result.current.publish()
     })
-    expect(outcome).toEqual({ ok: false, message: 'Another version was published.' })
+    expect(outcome).toEqual({ ok: false, message: 'There is no draft to publish.' })
   })
 
   it('waits for a save already under way before the server reads the draft', async () => {
@@ -222,6 +259,10 @@ describe('useDesignDraft', () => {
       })
       expect(result.current.conflict).toBe(false)
       expect(result.current.design.layout.width).not.toBe('wide')
+      // This person's own draft, never saved, is kept on the server first.
+      expect(server.asides).toEqual([
+        { cause: 'load-theirs', design: expect.objectContaining({ layout: expect.objectContaining({ width: 'wide' }) }) },
+      ])
     })
 
     it('says who changed the draft and when, until the person chooses', async () => {
@@ -255,6 +296,8 @@ describe('useDesignDraft', () => {
       expect(result.current.conflict).toBe(false)
       expect(server.revisions).toEqual(['rev1', 'rev9'])
       expect(server.saves[1]).toMatchObject({ layout: { density: 'compact' } })
+      // The server keeps their draft before mine replaces it.
+      expect(server.saveAside[1]).toBe('keep-mine')
     })
   })
 
@@ -526,6 +569,105 @@ describe('useDesignDraft', () => {
       // Nothing was thrown away: this person's change is still on screen.
       expect(result.current.design.layout.width).toBe('wide')
       expect(result.current.undoLabel).not.toBe('Discard draft')
+    })
+  })
+
+  describe('a draft that started before the version live now, such as one kept through a restore', () => {
+    it('says so, shows the version live now, and the next publish says it was reviewed against it', async () => {
+      server.live = { revisionId: 'portal_design_revision_old' as PortalDesignRevisionId, number: 1 }
+      const { result } = setup()
+      server.publishResult = {
+        ok: false,
+        code: 'DESIGN_CHANGED',
+        message: 'Another version was published after this draft started.',
+      }
+      // Restored elsewhere: the server has a newer version live.
+      server.live = { revisionId: 'portal_design_revision_restored' as PortalDesignRevisionId, number: 3 }
+      let outcome: unknown
+      await act(async () => {
+        outcome = await result.current.publish()
+      })
+      expect(outcome).toMatchObject({ ok: false, changed: true })
+      await waitFor(() => expect(result.current.published?.number).toBe(3))
+      expect(server.reviewedAgainst).toEqual([undefined])
+
+      server.publishResult = { ok: true, revisionId: 'portal_design_revision_4', number: 4 }
+      await act(async () => {
+        outcome = await result.current.publish()
+      })
+      expect(outcome).toMatchObject({ ok: true })
+      expect(server.reviewedAgainst).toEqual([undefined, 'portal_design_revision_restored'])
+      // Once published, the next draft starts over.
+      await act(async () => {
+        await result.current.publish()
+      })
+      expect(server.reviewedAgainst[2]).toBeUndefined()
+    })
+  })
+
+  describe('saving the draft aside on the server', () => {
+    it('asks for it on the first save of the session only', async () => {
+      vi.useFakeTimers()
+      const { result } = setup()
+      act(() => result.current.update((draft) => void (draft.layout.density = 'compact')))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS)
+      })
+      act(() => result.current.update((draft) => void (draft.layout.width = 'wide')))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS)
+      })
+      expect(server.saveAside).toEqual(['session', undefined])
+    })
+
+    it('saves a waiting change first, then asks for the stored draft to be kept', async () => {
+      vi.useFakeTimers()
+      const { result } = setup()
+      act(() => result.current.update((draft) => void (draft.layout.density = 'compact')))
+      await act(async () => {
+        await result.current.saveAside('copy')
+      })
+      expect(server.saves).toHaveLength(1)
+      expect(server.asides).toEqual([{ cause: 'copy', design: undefined }])
+    })
+  })
+
+  describe('a design a newer build of Quackback saved', () => {
+    it('opens read-only: no change commits, nothing saves, publishes, discards or restores', async () => {
+      vi.useFakeTimers()
+      const { result } = setup({ newerFormat: true })
+      expect(result.current.readOnly).toBe(true)
+      let outcome: unknown
+      act(() => {
+        outcome = result.current.update((draft) => void (draft.layout.width = 'wide'))
+      })
+      expect(outcome).toEqual({ ok: false, reason: NEWER_FORMAT_LINE })
+      act(() => result.current.replace({ ...defaultDesign(), mode: 'dark' }, 'Dark'))
+      expect(result.current.design.layout.width).toBe(defaultDesign().layout.width)
+      expect(result.current.design.mode).toBe(defaultDesign().mode)
+      expect(result.current.undoLabel).toBeNull()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS * 2)
+      })
+      vi.useRealTimers()
+      await act(async () => {
+        expect(await result.current.publish()).toMatchObject({ ok: false })
+        expect(await result.current.discard()).toMatchObject({ ok: false })
+        expect(
+          await result.current.restore('portal_design_revision_1' as PortalDesignRevisionId)
+        ).toMatchObject({ ok: false })
+      })
+      expect(server.saves).toEqual([])
+      expect(server.published).toEqual([])
+      expect(server.discarded).toEqual([])
+      expect(server.restored).toBe(0)
+    })
+
+    it('edits as usual when this build wrote the design', () => {
+      const { result } = setup({ newerFormat: false })
+      expect(result.current.readOnly).toBe(false)
+      act(() => void result.current.update((draft) => void (draft.layout.width = 'wide')))
+      expect(result.current.design.layout.width).toBe('wide')
     })
   })
 

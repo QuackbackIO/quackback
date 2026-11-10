@@ -4,7 +4,7 @@
  * it back, or restored, which publishes it.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const server = vi.hoisted(() => ({ canPublish: true }))
@@ -34,6 +34,26 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
   switchBackPortalDesignFn: vi.fn(),
 }))
 vi.mock('@/lib/server/functions/portal-design-ai', () => ({ getPortalDesignAiStatusFn: vi.fn() }))
+vi.mock('@/lib/server/functions/portal-design-saved', () => ({
+  listPortalDesignSavedFn: async () => ({
+    checkpoints: [],
+    looks: [],
+    drafts: [
+      {
+        id: 'portal_design_saved_2',
+        name: 'Before discard',
+        createdAt: new Date().toISOString(),
+        createdBy: 'Sam Rivera',
+      },
+      {
+        id: 'portal_design_saved_1',
+        name: 'While editing',
+        createdAt: new Date().toISOString(),
+        createdBy: null,
+      },
+    ],
+  }),
+}))
 
 const { HistoryDialog } = await import('../history-dialog')
 
@@ -101,5 +121,45 @@ describe('HistoryDialog', () => {
     )
     await screen.findByText('Restoring a version needs permission to publish the design.')
     expect(screen.queryByRole('button', { name: /^Restore version/ })).toBeNull()
+  })
+
+  it('lists the draft saves, when, by whom, each with Copy into draft', async () => {
+    const onCopySaved = vi.fn(async () => ({ ok: true as const }))
+    const onOpenChange = vi.fn()
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <HistoryDialog
+          open
+          onOpenChange={onOpenChange}
+          currentNumber={2}
+          onRestore={vi.fn()}
+          onCopy={vi.fn()}
+          onCopySaved={onCopySaved}
+        />
+      </QueryClientProvider>
+    )
+    const section = (await screen.findByRole('heading', { name: 'Draft saves' })).closest(
+      'section'
+    )!
+    const rows = within(section).getAllByRole('listitem')
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringMatching(/^Before discard · Sam Rivera · .+Copy into draft$/),
+      expect.stringMatching(/^While editing · .+Copy into draft$/),
+    ])
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Copy draft save "While editing" into the draft' })
+    )
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(onCopySaved).toHaveBeenCalledWith('portal_design_saved_1', 'While editing')
+  })
+
+  it('shows no draft saves where they cannot be copied back', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <HistoryDialog open onOpenChange={() => {}} currentNumber={2} onRestore={vi.fn()} />
+      </QueryClientProvider>
+    )
+    await screen.findAllByRole('listitem')
+    expect(screen.queryByRole('heading', { name: 'Draft saves' })).toBeNull()
   })
 })

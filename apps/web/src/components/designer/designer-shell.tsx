@@ -363,7 +363,8 @@ export function DesignerShell({
     setPane('settings')
   }
   const openTheme = (more = false) => panel.dispatch({ type: 'open', sheet: 'theme', more })
-  // Onboarding's /design?match=<site>: the brand match runs into the draft; or the Brand kit opens.
+  // Onboarding's /design?match=<site>: the brand match runs into the draft; or the Brand kit
+  // opens; or, with publish=open, publish does.
   useMatchOnArrival({
     start: (site) => void startBrandMatch({ website: site, from: 'onboarding' }),
     showAi: () => aiPane.reveal(true),
@@ -371,6 +372,7 @@ export function DesignerShell({
       openTheme()
       void revealRow({ root: FIND_ROOTS.theme, row: BRAND_MATCH_FIND })
     },
+    openPublish: () => void publishing.start(),
   })
   const pickAndFocus = (key: Selection) => {
     pick(key)

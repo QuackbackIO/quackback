@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { McpAuthContext } from '../types'
 import { resolveMcpActor } from '../resolve-actor'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { PreconditionFailedError, ValidationError } from '@/lib/shared/errors'
+import { ConflictError, PreconditionFailedError, ValidationError } from '@/lib/shared/errors'
 import type { PrincipalId } from '@quackback/ids'
 import { RETRIEVED_CONTENT_NOTE } from '@/lib/server/domains/assistant/injection-guard'
 import { patchDesignDraft, readDesignForEditing } from '@/lib/server/domains/design/design.actions'
@@ -58,6 +58,7 @@ Examples:
       if (!result.ok) {
         if (result.code === 'REVISION_MISMATCH')
           throw new PreconditionFailedError(result.code, result.message)
+        if (result.code === 'DESIGN_NEWER_FORMAT') throw new ConflictError(result.code, result.message)
         throw new ValidationError(result.code, result.message)
       }
       return jsonResult({ ...(await readDesignForEditing()), note: RETRIEVED_CONTENT_NOTE })

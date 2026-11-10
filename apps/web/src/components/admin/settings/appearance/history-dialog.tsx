@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
-import type { PortalDesignRevisionId } from '@quackback/ids'
+import type { PortalDesignRevisionId, PortalDesignSavedId } from '@quackback/ids'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +42,7 @@ export function HistoryDialog({
   currentNumber,
   onRestore,
   onCopy,
+  onCopySaved,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -54,8 +55,15 @@ export function HistoryDialog({
     revisionId: PortalDesignRevisionId,
     number: number
   ) => Promise<{ ok: true } | { ok: false; message: string }>
+  /** Puts an automatic save of the draft back in the draft; the Draft saves list shows with it. */
+  onCopySaved?: (
+    id: PortalDesignSavedId,
+    name: string
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
 }) {
   const versions = useQuery({ ...portalDesignQueries.versions(), enabled: open })
+  const saved = useQuery({ ...portalDesignQueries.saved(), enabled: open && !!onCopySaved })
+  const drafts = onCopySaved ? (saved.data?.drafts ?? []) : []
   const [confirming, setConfirming] = useState<{
     id: PortalDesignRevisionId
     number: number
@@ -94,7 +102,7 @@ export function HistoryDialog({
             <DialogTitle>Versions</DialogTitle>
             <DialogDescription>
               {onCopy
-                ? 'Copy a version into the draft to look at it; undo brings your draft back. Restoring publishes it.'
+                ? 'Copy a version into the draft to look at it; your draft is kept under Draft saves. Restoring publishes it.'
                 : 'Restoring publishes that version again. Your draft stays.'}
             </DialogDescription>
           </DialogHeader>
@@ -152,6 +160,40 @@ export function HistoryDialog({
               </li>
             ))}
           </ul>
+          {drafts.length > 0 && (
+            <section aria-labelledby="draft-saves-heading" className="space-y-2">
+              <h3 id="draft-saves-heading" className="text-[13px] font-medium">
+                Draft saves
+              </h3>
+              <ul className="max-h-60 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+                {drafts.map((each) => (
+                  <li key={each.id} className="flex items-center gap-3 px-3 py-2 text-[13px]">
+                    <span className="min-w-0 flex-1 truncate">
+                      {each.name}
+                      <span className="text-muted-foreground">
+                        {each.createdBy && ` · ${each.createdBy}`}
+                        {' · '}
+                        <TimeAgo date={each.createdAt} />
+                      </span>
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        if (!onCopySaved) return
+                        const outcome = await onCopySaved(each.id, each.name)
+                        if (outcome.ok) onOpenChange(false)
+                        else setRefusal(outcome.message)
+                      }}
+                      aria-label={`Copy draft save "${each.name}" into the draft`}
+                    >
+                      Copy into draft
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {switched.data && !canPublish && (
             <p className="text-[13px] text-muted-foreground">
               Restoring a version needs permission to publish the design.

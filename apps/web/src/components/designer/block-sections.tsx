@@ -9,6 +9,7 @@ import { useId, useMemo, useState } from 'react'
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon } from '@heroicons/react/16/solid'
 import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
   DropdownMenu,
@@ -18,6 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { blockOf, type SettingField } from '@/lib/shared/design/blocks'
+import { hiddenOnPhones } from '@/lib/shared/design/block-look'
 import { movedWords, resizedWords, type GridChange } from '@/lib/shared/design/grid-edit'
 import type { HomeBlock } from '@/lib/shared/design/home'
 import { homeGridItems } from '@/lib/shared/design/home'
@@ -261,12 +263,27 @@ export function BlockLayout({
     [design, gates, block.id]
   )
   if (!def?.grid || !place) return null
-  if (phone)
+  if (phone) {
+    const shown = !hiddenOnPhones(block)
     return (
       <PropertySection title={BLOCK_SECTIONS.layout}>
-        <p className="py-1 text-xs text-muted-foreground">{BLOCK_WORDS.stacks}</p>
+        <PropertyRow label={BLOCK_WORDS.showOnPhones} htmlFor={`${id}-phone`}>
+          <Switch
+            id={`${id}-phone`}
+            checked={shown}
+            className="ms-auto"
+            onCheckedChange={(next) =>
+              dispatcher(design, update)(
+                { op: 'block.phoneHidden', id: block.id, hidden: !next },
+                `${name}: ${BLOCK_WORDS.showOnPhones.toLowerCase()}`
+              )
+            }
+          />
+        </PropertyRow>
+        {shown && <p className="py-1 text-xs text-muted-foreground">{BLOCK_WORDS.stacks}</p>}
       </PropertySection>
     )
+  }
   const change = (what: string, grid: GridChange) => {
     const same =
       'move' in grid

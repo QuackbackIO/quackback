@@ -28,6 +28,7 @@ import {
   type DesignAuthor,
 } from './design.service'
 import { EMPTY_REVISION } from './draft-revision'
+import type { SaveDraftCause } from './draft-saves'
 import { legacyBrandingOf } from './engine'
 import { lintDesignCss, type CssIssue } from './css-lint'
 import { publishDraftWithWorkspaceLogo } from './workspace-logo'
@@ -45,6 +46,9 @@ const REFUSAL_CODES = [
   'NOT_SWITCHABLE',
   'NOT_SWITCHED',
   'NO_PORTAL_LOGO',
+  'DESIGN_TOO_LARGE',
+  'WELCOME_TOO_LONG',
+  'DESIGN_NEWER_FORMAT',
 ] as const
 export type DesignRefusalCode = (typeof REFUSAL_CODES)[number]
 export type DesignRefusal = { ok: false; code: DesignRefusalCode; message: string }
@@ -72,6 +76,8 @@ export interface DesignEditorState {
   draftSavedAt: string | null
   /** How many changes the draft waits to publish; 0 without a draft. */
   waiting: number
+  /** A newer build of Quackback saved this design: it shows, but every write is refused. */
+  newerFormat: boolean
 }
 
 function reportOf(doc: PortalDesign): DesignReport {
@@ -133,6 +139,7 @@ export async function readDesignForEditing(): Promise<DesignEditorState> {
     authors,
     draftSavedAt: state?.draftSavedAt?.toISOString() ?? null,
     waiting: source === 'draft' ? shownChanges(shownLive, shown).length : 0,
+    newerFormat: state?.newerFormat ?? false,
   }
 }
 
@@ -173,7 +180,8 @@ export async function patchDesignDraft(
     merged !== null && typeof merged === 'object' && !Array.isArray(merged)
       ? tidyDesign(merged as Record<string, unknown>)
       : merged
-  return saveDesignDraft(tidied, author, expectedRevision)
+  // An agent's patch over someone else's draft saves that draft aside first.
+  return saveDesignDraft(tidied, author, expectedRevision, 'agent')
 }
 
 /**
@@ -184,13 +192,15 @@ export async function patchDesignDraft(
 export async function saveDesignDraft(
   input: unknown,
   author: DesignAuthor,
-  expectedRevision?: string
+  expectedRevision?: string,
+  /** Why the draft it replaces is saved aside first, if it is; see draft-saves.ts. */
+  saveAside?: SaveDraftCause
 ): Promise<
   | { ok: true; report: DesignReport; revision: string }
   | (DesignRefusal & { lastChange?: DraftLastChange | null })
 > {
   const result = await refusable(async () => {
-    const revision = await saveDraft(input, author, expectedRevision, convertedDesign)
+    const revision = await saveDraft(input, author, expectedRevision, convertedDesign, saveAside)
     const state = await getDesignState()
     // A draft put back to what visitors see is gone, and what they see is what it was.
     const saved = state?.draft ?? state?.published?.document ?? (await convertedDesign())
@@ -213,7 +223,7 @@ export async function discardDesignDraft(
 > {
   const result = await refusable(async () => ({
     ok: true as const,
-    revision: await discardDraft(expectedRevision),
+    revision: await discardDraft(expectedRevision, viewer),
   }))
   if (result.ok || result.code !== 'REVISION_MISMATCH' || !viewer) return result
   return { ...result, lastChange: await draftLastChange(viewer) }
@@ -224,6 +234,8 @@ export async function publishDesign(
     source: PortalDesignSource
     message?: string
     expectedRevision?: string
+    /** The version live now, which the person reviewed the draft against after it moved. */
+    reviewedAgainst?: PortalDesignRevisionId
     /** Also makes the draft's portal logo the workspace's, for the admin and emails. */
     workspaceLogo?: boolean
   }
