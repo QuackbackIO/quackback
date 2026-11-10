@@ -18,6 +18,23 @@ afterEach(cleanup)
 const design = {} as never
 
 describe('ReviewCompare', () => {
+  it('waits on the After frame, not the live one, until it has drawn the draft', () => {
+    render(
+      <ReviewCompare
+        page="feedback"
+        pages={['feedback']}
+        theme="light"
+        locale="en"
+        sort="top"
+        live={design}
+        draft={design}
+      />
+    )
+    const [live, after] = [...document.querySelectorAll('figure')]
+    expect(live!.querySelector('[data-canvas-skeleton]')).toBeNull()
+    expect(after!.querySelector('[data-canvas-skeleton]')).not.toBeNull()
+  })
+
   it('opens on the page being designed, and shows another when asked', () => {
     render(
       <ReviewCompare

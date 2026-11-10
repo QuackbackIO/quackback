@@ -40,6 +40,8 @@ const CHIP_INSET = 12
 const EDGE = 4
 /** How far below the visible top of the block the chip sits, when it sits inside. */
 const INSIDE = 8
+/** How far the chip keeps from something small it names. */
+const SMALL_GAP = 2
 
 /**
  * Where the picked block's chip goes: centred on the block's top edge, or
@@ -54,6 +56,12 @@ export function chipPlacement(
 ): { left: number; top: number; inside: boolean } | null {
   if (block.top + block.height <= 0 || block.top >= room.height) return null
   const left = Math.max(EDGE, Math.min(block.left + CHIP_INSET, room.width - chip.width - EDGE))
+  // Something about as small as the chip, such as the logo: wholly clear of it, above else below.
+  if (block.height <= chip.height * 1.5) {
+    const over = block.top - chip.height - SMALL_GAP
+    if (over >= 0) return { left, top: over, inside: false }
+    return { left, top: block.top + block.height + SMALL_GAP, inside: false }
+  }
   const above = block.top - chip.height / 2
   if (above >= 0) return { left, top: above, inside: false }
   // Too short to hold the chip clear of what it shows, such as the header: on its bottom edge.

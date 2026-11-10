@@ -15,6 +15,7 @@ import { LogoPanel } from './logo-panel'
 import { MenuPartSettings } from './menu-part-settings'
 import { PagePanel } from './page-panel'
 import { revealFontSlot } from './brand-kit-fonts'
+import { FIND_ROOTS, revealRow } from './find-reveal'
 import { PickedBlock } from './picked-block'
 import type { Crumb } from './properties/properties-panel'
 import type { MenuEditing } from './use-menu-editing'
@@ -127,7 +128,18 @@ export function PickedSettings({
         />
       )
     case 'logo':
-      return <LogoPanel crumbs={crumbs} design={design} update={update} logoUrl={logoUrl} />
+      return (
+        <LogoPanel
+          crumbs={crumbs}
+          design={design}
+          update={update}
+          logoUrl={logoUrl}
+          onBrandKit={(row) => {
+            onTheme()
+            void revealRow({ root: FIND_ROOTS.theme, row })
+          }}
+        />
+      )
     case 'link':
       return (
         <MenuPartSettings

@@ -310,6 +310,7 @@ function tuneSurface(
     band,
     mixed,
     headline: largeHeadline(doc) ? 3 : 4.5,
+    subtitleInHero: doc.layout.hero !== 'none' && doc.layout.pageTitles === 'band',
     ...(page.length ? { page } : {}),
     ...(subtitle
       ? { subtitle: { ink: subtitle, target: tokens['--qb-band-subtitle-size'] ? 3 : 4.5 } }

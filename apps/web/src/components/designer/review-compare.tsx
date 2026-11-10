@@ -3,10 +3,21 @@ import { ClientOnly } from '@tanstack/react-router'
 import type { PortalPreviewProps } from '@/components/admin/settings/branding/portal-preview'
 import type { DesignerPage } from '@/lib/shared/design/outline'
 import { PAGE_NAMES } from '@/lib/shared/design/outline'
+import { CanvasSkeleton } from './canvas-skeleton'
 import { DesignerCanvas, NO_STRUCTURE } from './designer-canvas'
 import { WidgetFrame } from './widget-sample'
 
 const ignore = () => {}
+/** What the After frame shows until it has drawn the draft. */
+const AFTER_SKELETON = (
+  <CanvasSkeleton
+    parts={[
+      { key: 'header', kind: 'header' },
+      { key: 'hero', kind: 'hero' },
+      { key: 'part', kind: 'part' },
+    ]}
+  />
+)
 /** The same empty structural draft every render, so neither frame posts it again. */
 
 /**
@@ -56,7 +67,7 @@ export function ReviewCompare({
       {label}
     </button>
   )
-  const side = (label: string, design: PortalPreviewProps['design']) => (
+  const side = (label: string, design: PortalPreviewProps['design'], drawn = false) => (
     <figure className="m-0 flex min-w-0 flex-col gap-1.5">
       <figcaption className="text-xs font-medium text-muted-foreground">{label}</figcaption>
       {/* A picture to compare, not a page to use: it takes no focus or keys. */}
@@ -81,6 +92,8 @@ export function ReviewCompare({
               refreshKey={label}
               design={design}
               structural={NO_STRUCTURE}
+              // After publishing: the published page shows until the draft is drawn, so a skeleton waits for it.
+              {...(drawn ? { untilDrawn: true, skeleton: AFTER_SKELETON } : {})}
               onSelect={ignore}
               onWords={ignore}
               onKey={ignore}
@@ -106,7 +119,7 @@ export function ReviewCompare({
       </div>
       <div className="grid grid-cols-2 gap-4">
         {side('Live now', live)}
-        {side('After you publish', draft)}
+        {side('After you publish', draft, true)}
       </div>
     </section>
   )

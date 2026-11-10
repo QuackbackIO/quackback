@@ -53,6 +53,28 @@ describe('/design', () => {
   })
 })
 
+describe('/design loader', () => {
+  it('works out the canvas’s first page from the draft and the page someone came from', async () => {
+    vi.doMock('@/lib/client/queries/portal-design', () => ({
+      portalDesignQueries: { editor: () => 'editor', aiStatus: () => 'ai' },
+    }))
+    const { defaultDesign } = await import('@/lib/shared/design/schema')
+    const design = defaultDesign()
+    type Loader = (ctx: object) => Promise<{ canvas: string | null }>
+    const loader = (Route as unknown as { options: { loader: Loader } }).options.loader
+    const data = await loader({
+      context: {
+        returnPath: '/roadmap',
+        settings: null,
+        queryClient: {
+          ensureQueryData: async (key: string) => (key === 'editor' ? { design } : {}),
+        },
+      },
+    })
+    expect(data.canvas).toBe('/roadmap?theme=light&preview=true&lang=en&designer=1&visitor=out')
+  })
+})
+
 describe('/design search', () => {
   const validate = (
     Route as unknown as { options: { validateSearch: { parse: (s: object) => object } } }
@@ -77,6 +99,18 @@ describe('/design head', () => {
     head({ match: { context: { settings } } }).links?.find((l) => l.rel === 'icon')?.href
 
   // Without one, the browser asks for /favicon.ico, which 404s.
+  it('fetches the canvas’s first page early, as the loader worked it out, and nothing without one', () => {
+    const links = (loaderData: object | undefined) =>
+      head({ match: { context: { settings: null } }, loaderData }).links ?? []
+    expect(links({ canvas: '/roadmap?theme=light' })).toContainEqual({
+      rel: 'prefetch',
+      href: '/roadmap?theme=light',
+      as: 'document',
+    })
+    expect(links({ canvas: null }).some((l) => l.rel === 'prefetch')).toBe(false)
+    expect(links(undefined).some((l) => l.rel === 'prefetch')).toBe(false)
+  })
+
   it('names an icon: the workspace favicon, else its logo, else the bundled one', () => {
     expect(icon({ faviconData: { url: '/f.png' }, brandingData: { logoUrl: '/l.png' } })).toBe(
       '/f.png'

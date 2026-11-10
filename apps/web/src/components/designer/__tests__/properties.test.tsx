@@ -167,6 +167,64 @@ describe('a row of tiles', () => {
   })
 })
 
+describe('tiles from the keyboard', () => {
+  const OPTIONS = [
+    ['a', 'One'],
+    ['b', 'Two'],
+    ['c', 'Three'],
+  ] as const
+  const stops = () =>
+    screen.getAllByRole('radio').map((radio) => (radio.tabIndex === 0 ? radio.textContent : null))
+
+  it('is one Tab stop, the picked tile, and the arrows move to the next and pick it', () => {
+    const pick = vi.fn()
+    const { rerender } = render(
+      <PropertyTiles label="Count" value="b" options={OPTIONS} onChange={pick} />
+    )
+    expect(stops().filter(Boolean)).toEqual(['Two'])
+    const two = screen.getByRole('radio', { name: 'Two' })
+    act(() => two.focus())
+    fireEvent.keyDown(two, { key: 'ArrowRight' })
+    expect(pick).toHaveBeenLastCalledWith('c')
+    expect(document.activeElement?.textContent).toBe('Three')
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' })
+    expect(pick).toHaveBeenLastCalledWith('a')
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowUp' })
+    expect(pick).toHaveBeenLastCalledWith('c')
+    // Unset: the tile it has from wider up takes Tab, else the first.
+    rerender(
+      <PropertyTiles
+        label="Count"
+        value={undefined}
+        inherited="c"
+        options={OPTIONS}
+        onChange={pick}
+      />
+    )
+    expect(stops().filter(Boolean)).toEqual(['Three'])
+    rerender(<PropertyTiles label="Count" value={undefined} options={OPTIONS} onChange={pick} />)
+    expect(stops().filter(Boolean)).toEqual(['One'])
+  })
+
+  it('moves the same way through drawn tiles', () => {
+    const pick = vi.fn()
+    render(
+      <PropertyDrawnTiles
+        label="Look"
+        value="a"
+        options={OPTIONS.map(([v, n]) => [v, n, <span key={v} />] as const)}
+        onChange={pick}
+      />
+    )
+    const one = screen.getByRole('radio', { name: 'One' })
+    expect(one.tabIndex).toBe(0)
+    expect(screen.getByRole('radio', { name: 'Two' }).tabIndex).toBe(-1)
+    act(() => one.focus())
+    fireEvent.keyDown(one, { key: 'ArrowLeft' })
+    expect(pick).toHaveBeenLastCalledWith('c')
+  })
+})
+
 describe('drawn tiles', () => {
   it('names each drawing in full and takes the one picked', () => {
     const pick = vi.fn()

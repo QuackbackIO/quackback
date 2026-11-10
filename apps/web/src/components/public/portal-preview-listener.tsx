@@ -131,6 +131,12 @@ export function PortalPreviewProvider({
     return () => window.removeEventListener('message', onMessage)
   }, [active])
 
+  // Once a draft design is drawn, the frame says so: until then it shows the published one.
+  useEffect(() => {
+    if (!active || !design) return
+    window.parent.postMessage({ type: 'quackback:preview-drawn' }, window.location.origin)
+  }, [active, design])
+
   const stylesheet = useMemo(() => (css ? previewStylesheet(css) : ''), [css])
   // While a draft is previewed: its attributes on <html> (the saved ones come
   // back when it changes), and a click on a section tells Appearance which.

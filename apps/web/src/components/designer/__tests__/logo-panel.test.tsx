@@ -1,13 +1,11 @@
 // @vitest-environment happy-dom
 /**
  * The logo, its own element in the header: a pick on the page opens it, with
- * the icon, the title, a full logo image in their place, its height (16 to
- * 64 px) and its colours. The icon and title rows are the brand kit's own
- * rows, so the logo keeps one writer however it is reached. Every stored
- * logo field keeps working.
+ * its icon and title (or a full logo image) summed up and leading to the
+ * brand kit, their one writer, then its height (16 to 64 px) and its colours.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 
@@ -35,7 +33,7 @@ vi.stubGlobal(
 const { LogoPanel } = await import('../logo-panel')
 
 function renderPanel(start: PortalDesign) {
-  const seen = { design: start, labels: [] as string[], up: 0 }
+  const seen = { design: start, labels: [] as string[], up: 0, kit: [] as string[] }
   function Harness() {
     const [design, setDesign] = useState(start)
     return (
@@ -47,6 +45,7 @@ function renderPanel(start: PortalDesign) {
         ]}
         design={design}
         logoUrl="/workspace-logo.png"
+        onBrandKit={(row) => seen.kit.push(row)}
         update={(change, label) => {
           const next = structuredClone(design)
           change(next)
@@ -73,29 +72,31 @@ describe('the logo’s panel', () => {
     const rows = [...document.querySelectorAll('[data-property-row] > :first-child')].map(
       (label) => label.textContent
     )
-    expect(rows.slice(0, 4)).toEqual(['Icon', 'Title', 'Full logo', 'Height'])
+    expect(rows.slice(0, 3)).toEqual(['Icon', 'Title', 'Height'])
     expect(rows).toContain('Logo colours')
   })
 
-  it('sets the title, giving the workspace’s name back when emptied', () => {
-    const { seen } = renderPanel(defaultDesign())
-    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Acme' } })
-    expect(seen.design.brand.logo.name).toBe('Acme')
-    fireEvent.change(screen.getByLabelText('Title'), { target: { value: ' ' } })
-    expect(seen.design.brand.logo).not.toHaveProperty('name')
+  it('sums up its icon and title, which the brand kit writes, and leads there', () => {
+    const start = defaultDesign()
+    start.brand.logo.name = 'Acme'
+    const { seen } = renderPanel(start)
+    // Nothing here writes them: no title field, no upload, no full logo switch.
+    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull()
+    expect(screen.queryByLabelText('Replace icon')).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Use a full logo image instead' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Title: Acme' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Icon: Workspace logo' }))
+    expect(seen.kit).toEqual(['logo-title', 'logo-icon'])
   })
 
-  it('drafts an uploaded icon with its colours, and Reset goes back to the workspace logo', async () => {
-    const { seen } = renderPanel(defaultDesign())
-    fireEvent.change(screen.getByLabelText('Replace icon'), {
-      target: { files: [new File(['png'], 'mark.png', { type: 'image/png' })] },
-    })
-    await waitFor(() =>
-      expect(seen.design.brand.logo.mark.light).toEqual({ key: 'design/mark.png' })
-    )
-    expect(seen.design.brand.logoColours).toEqual(['#0058a3', '#ffffff'])
-    fireEvent.click(screen.getByRole('button', { name: 'Reset to workspace logo' }))
-    expect(seen.design.brand.logo.mark.light).toBeNull()
+  it('sums up a full logo in their place, and leads to it in the brand kit', () => {
+    const start = defaultDesign()
+    start.brand.logo.display = 'wordmark'
+    start.brand.logo.wordmark.light = { key: 'logos/full.svg' }
+    const { seen } = renderPanel(start)
+    expect(screen.queryByRole('button', { name: /^Icon:/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Full logo: Image' }))
+    expect(seen.kit).toEqual(['logo-full'])
   })
 
   it('sets its height from 16 to 64 px, 32 storing nothing', () => {
@@ -118,40 +119,6 @@ describe('the logo’s panel', () => {
     start.brand.logo.display = 'name'
     renderPanel(start)
     expect(screen.queryByLabelText('Height')).toBeNull()
-  })
-
-  it('swaps in a full logo image and back, keeping a stored wordmark design as it is', () => {
-    const { seen } = renderPanel(defaultDesign())
-    const full = screen.getByRole('switch', { name: 'Use a full logo image instead' })
-    fireEvent.click(full)
-    expect(seen.design.brand.logo.display).toBe('wordmark')
-    expect(screen.getByText('Shows icon and title')).toBeTruthy()
-    fireEvent.click(full)
-    expect(seen.design.brand.logo.display).toBe('mark_and_name')
-    cleanup()
-    const stored = defaultDesign()
-    stored.brand.logo.display = 'wordmark'
-    stored.brand.logo.wordmark.light = { key: 'logos/full.svg' }
-    renderPanel(stored)
-    expect(
-      screen
-        .getByRole('switch', { name: 'Use a full logo image instead' })
-        .getAttribute('aria-checked')
-    ).toBe('true')
-    expect(screen.getByLabelText('Replace full logo')).toBeTruthy()
-  })
-
-  it('drafts an uploaded full logo with its colours', async () => {
-    const start = defaultDesign()
-    start.brand.logo.display = 'wordmark'
-    const { seen } = renderPanel(start)
-    fireEvent.change(screen.getByLabelText('Upload full logo'), {
-      target: { files: [new File(['<svg/>'], 'wordmark.svg', { type: 'image/svg+xml' })] },
-    })
-    await waitFor(() =>
-      expect(seen.design.brand.logo.wordmark.light).toEqual({ key: 'design/wordmark.svg' })
-    )
-    expect(seen.design.brand.logoColours).toEqual(['#0058a3', '#ffffff'])
   })
 
   it('shows the logo’s colours and clears them', () => {

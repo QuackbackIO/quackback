@@ -37,9 +37,11 @@ describe('PublishedPopover', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     renderPopover(false)
     expect(screen.getByRole('status').textContent).toBe('Published. Visitors see it now.')
-    expect((screen.getByLabelText('Live address') as HTMLInputElement).value).toBe(
-      'https://acme.quackback.io'
-    )
+    // The whole address from its start, wrapping, never a field scrolled to its tail.
+    const live = document.querySelector('[data-live-address]')!
+    expect(live.textContent).toBe('https://acme.quackback.io')
+    expect(live.tagName).not.toBe('INPUT')
+    expect(live.className).toContain('break-all')
     expect(screen.getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(
       'https://acme.quackback.io'
     )
