@@ -60,6 +60,7 @@ describe('a DKIM key record', () => {
     expect(recordLabel(key(undefined), 'byo')).toBe('DKIM')
     const domain = {
       domain: 'acme.com',
+      preflight: {},
       dnsRecords: [key({ state: 'missing', checkedAt: CHECKED })],
     } as SendingDomainDTO
     expect(failingRecordName(domain)).toBe('DKIM record')
@@ -80,6 +81,7 @@ describe('a return path that is one CNAME', () => {
     expect(recordTypeLabel(returnPath())).toBe('CNAME')
     const domain = {
       domain: 'acme.com',
+      preflight: {},
       dnsRecords: [
         returnPath({ state: 'mismatch', seen: 'ws-other.bounces.example.net', checkedAt: CHECKED }),
       ],

@@ -4,6 +4,7 @@
  * agree.
  */
 import type { DnsRecordDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
+import { nameInZone, recordZone } from '@/lib/shared/record-zone'
 
 /**
  * Where a domain stands, as a person sees it.
@@ -137,15 +138,120 @@ export function signingKeyFailing(domain: SendingDomainDTO, phase: DomainPhase):
 /** The sentence for a signing key that is not working. */
 export const signingKeyProblem = (domain: string) => `The signing key for ${domain} isn't working.`
 
+/** The zone a domain's records are typed into: the domain, or the parent that holds it. */
+export const zoneOf = (domain: Pick<SendingDomainDTO, 'domain' | 'preflight'>): string =>
+  recordZone(domain.domain, domain.preflight.zone)
+
+/** A record's name as that zone's DNS form expects it. */
+export const recordName = (
+  record: Pick<DnsRecordDTO, 'host'>,
+  domain: Pick<SendingDomainDTO, 'domain' | 'preflight'>
+): string => nameInZone(record.host, domain.domain, domain.preflight.zone)
+
+/** How many of a domain's records the last check found. */
+export function recordsFound(domain: Pick<SendingDomainDTO, 'dnsRecords'>): {
+  found: number
+  total: number
+} {
+  return {
+    found: domain.dnsRecords.filter((r) => r.check?.state === 'found').length,
+    total: domain.dnsRecords.length,
+  }
+}
+
+type KnownDnsHost = Exclude<NonNullable<SendingDomainDTO['preflight']['dnsHost']>, 'other'>
+
+/** The DNS hosts told apart by their nameservers, and where each lists a domain's records. */
+const DNS_HOSTS: Record<KnownDnsHost, { name: string; url?: string }> = {
+  cloudflare: {
+    name: 'Cloudflare',
+    url: 'https://dash.cloudflare.com/?to=/:account/:zone/dns/records',
+  },
+  route53: {
+    name: 'Amazon Route 53',
+    url: 'https://console.aws.amazon.com/route53/v2/hostedzones',
+  },
+  godaddy: { name: 'GoDaddy', url: 'https://dcc.godaddy.com/control/portfolio' },
+  namecheap: { name: 'Namecheap', url: 'https://ap.www.namecheap.com/domains/list/' },
+  // These nameservers serve more than one product, so there is no one place to send someone.
+  google: { name: 'Google' },
+}
+
+/**
+ * Where a domain's DNS is managed, when its nameservers say, with the one
+ * thing worth knowing about adding these records there. Null for a host we do
+ * not recognise: nothing is better than a guess.
+ */
+export function dnsHostGuide(
+  domain: Pick<SendingDomainDTO, 'domain' | 'dnsRecords' | 'preflight'>
+): { name: string; tip: string | null; url: string | null } | null {
+  const host = domain.preflight.dnsHost
+  if (!host || host === 'other') return null
+  const { name, url } = DNS_HOSTS[host]
+  const proxies = host === 'cloudflare' && domain.dnsRecords.some((r) => r.type === 'CNAME')
+  const tip = proxies
+    ? 'Add each CNAME as DNS only, not proxied.'
+    : // Only claimed when the zone is known: a subdomain's names are not
+      // relative to the zone otherwise.
+      domain.preflight.zone
+      ? `It adds ${zoneOf(domain)} to each name itself, so enter the names as shown.`
+      : null
+  return { name, tip, url: url ?? null }
+}
+
+/** Whether the last look found no DMARC record covering the domain. */
+export const lacksDmarc = (domain: Pick<SendingDomainDTO, 'preflight'>): boolean =>
+  domain.preflight.dmarc?.found === false
+
+/**
+ * The DMARC record to suggest to a domain that has none: the least a receiver
+ * asks for, which reports and changes nothing about delivery.
+ */
+export const SUGGESTED_DMARC = { name: '_dmarc', type: 'TXT', value: 'v=DMARC1; p=none' } as const
+
 /**
  * The records to publish, as plain text a person can paste into a ticket or
  * a message to whoever manages their DNS.
  */
 export function instructionsText(domain: SendingDomainDTO): string {
-  const lines = domain.dnsRecords.map((r) => `${recordTypeLabel(r)}  ${r.host}  ${r.value}`)
+  const zone = zoneOf(domain)
+  const lines = domain.dnsRecords.map(
+    (r) => `${recordTypeLabel(r)}  ${recordName(r, domain)}  ${r.value}`
+  )
+  const where =
+    zone === domain.domain
+      ? `Add these DNS records to ${domain.domain} so email can be sent from it.`
+      : `Add these DNS records to ${zone} so email can be sent from ${domain.domain}.`
   return [
-    `Add these DNS records to ${domain.domain} so email can be sent from it. Enter each name as shown; most DNS hosts add .${domain.domain} themselves.`,
+    `${where} Enter each name as shown; most DNS hosts add .${zone} themselves.`,
     '',
     ...lines,
   ].join('\n')
+}
+
+/** A new email carrying those instructions, for whoever manages the domain's DNS. */
+export const instructionsMailto = (domain: SendingDomainDTO): string =>
+  `mailto:?subject=${encodeURIComponent(`DNS records for ${domain.domain}`)}&body=${encodeURIComponent(instructionsText(domain))}`
+
+/**
+ * What adding an address does about its domain, as the server will decide it:
+ * a verified domain at or above it lets it send at once; this workspace's row
+ * for that exact domain is reused in whatever state; anything else is new and
+ * brings its DNS records. Null until the address names a domain.
+ */
+export function addressDomainStanding(
+  address: string,
+  domains: Pick<SendingDomainDTO, 'domain' | 'status' | 'verifiedAt' | 'autoCheckUntil'>[],
+  now: Date = new Date()
+): { kind: 'verified' | 'pending' | 'attention' | 'new'; domain: string } | null {
+  const parts = address.trim().toLowerCase().split('@')
+  const host = parts.length === 2 && parts[0] ? parts[1] : ''
+  if (!/^[^\s.]+(\.[^\s.]+)*\.[^\s.]{2,}$/.test(host)) return null
+  const covering = domains.find(
+    (d) => d.status === 'verified' && (host === d.domain || host.endsWith(`.${d.domain}`))
+  )
+  if (covering) return { kind: 'verified', domain: covering.domain }
+  const same = domains.find((d) => d.domain === host)
+  if (!same) return { kind: 'new', domain: host }
+  return { kind: domainPhase(same, now) === 'attention' ? 'attention' : 'pending', domain: host }
 }
