@@ -13,6 +13,7 @@ import { HomeLayoutPicker } from './home-layout-picker'
 import type { AddDrag } from './use-add-drag'
 import { useNewParts } from './use-new-parts'
 import { Tip } from './properties/properties-panel'
+import { cn } from '@/lib/shared/utils'
 
 /** The title over Home's layouts. */
 export const ADD_LAYOUTS = 'Start Home from a layout'
@@ -36,18 +37,35 @@ export const JOB_TITLES = {
   own: 'Your own',
 } as const
 
-/** What a card says after its name: used, on Home already, or where it goes. */
-function cardTag(row: { onHome: boolean; disabled: boolean }, onHome: boolean): string | null {
-  if (row.onHome && row.disabled) return 'Already on Home'
-  if (row.onHome) return 'on Home'
+/** The one word a card's status says: on Home already, or where it goes. */
+export function cardTag(row: { onHome: boolean }, onHome: boolean): string | null {
+  if (row.onHome) return 'On Home'
   return onHome ? null : 'Goes on Home'
 }
 
+/** A card's picture: the block's icon in a small box. */
+function CardIcon({ type, dim }: { type: HomeBlockType; dim?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'grid size-10 shrink-0 place-items-center rounded-md bg-muted',
+        dim && 'opacity-50'
+      )}
+    >
+      <BlockIcon type={type} className="size-4" />
+    </span>
+  )
+}
+
+const CARD = 'flex min-h-16 w-full items-start gap-3 rounded-lg border border-border p-2 text-start'
+
 /**
  * One block Add offers: its picture, name and what it is for, or why it is
- * suggested. Clicked, it adds the block; pressed and dragged past the
- * threshold, it is dragged onto the page. One whose page is off is greyed,
- * says the page it needs, and links to where that page is turned on.
+ * suggested, with its status on the right. Clicked, it adds the block;
+ * pressed and dragged past the threshold, it is dragged onto the page. One
+ * whose page is off is greyed, and says under its purpose the page it needs,
+ * with a link to where that page is turned on.
  */
 export function AddCard({
   row,
@@ -72,35 +90,32 @@ export function AddCard({
 }) {
   if (row.needs)
     return (
-      <div className="flex w-full items-center gap-3 rounded-lg border border-border p-2">
-        <span
-          aria-hidden="true"
-          className="grid h-10 w-14 shrink-0 place-items-center rounded-md bg-muted opacity-50"
-        >
-          <BlockIcon type={row.type} className="size-4" />
-        </span>
-        <span className="min-w-0 flex-1 leading-tight text-muted-foreground">
-          <span className="block text-[13px] font-medium">
+      <div data-add-card="" className={CARD}>
+        <CardIcon type={row.type} dim />
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block text-[13px] font-medium text-muted-foreground">
             {row.def.name}
-            <span className="font-normal"> · Needs {PAGE_NAMES[row.needs]}</span>
           </span>
-          <span className="block text-xs">{row.def.purpose}</span>
+          <span className="block text-xs text-muted-foreground">{row.def.purpose}</span>
+          <span className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
+            <span className="text-muted-foreground">Needs {PAGE_NAMES[row.needs]}</span>
+            {turnOn && (
+              <a
+                href={turnOn}
+                target="_blank"
+                rel="noopener"
+                className="inline-flex min-h-6 items-center gap-1 rounded font-medium underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+              >
+                Turn on
+                <span className="sr-only">
+                  {' '}
+                  {PAGE_NAMES[row.needs]} (goes live, opens in a new tab)
+                </span>
+                <ArrowTopRightOnSquareIcon className="size-3.5" aria-hidden="true" />
+              </a>
+            )}
+          </span>
         </span>
-        {turnOn && (
-          <a
-            href={turnOn}
-            target="_blank"
-            rel="noopener"
-            className="inline-flex min-h-6 shrink-0 items-center gap-1 text-xs font-medium underline underline-offset-2"
-          >
-            Turn on
-            <span className="sr-only">
-              {' '}
-              {PAGE_NAMES[row.needs]} (goes live, opens in a new tab)
-            </span>
-            <ArrowTopRightOnSquareIcon className="size-3.5" aria-hidden="true" />
-          </a>
-        )}
       </div>
     )
   const tag = cardTag(row, onHome)
@@ -108,26 +123,30 @@ export function AddCard({
     <Tip text={row.disabled ? undefined : hint}>
       <button
         type="button"
+        data-add-card=""
         disabled={row.disabled}
         onClick={() => onAdd(row.type)}
         onPointerDown={(event) => {
           if (!row.disabled) drag?.press(row.type, event)
         }}
-        className="flex w-full touch-none select-none items-center gap-3 rounded-lg border border-border p-2 text-start outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-muted-foreground enabled:cursor-grab disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+        className={cn(
+          CARD,
+          'touch-none outline-none select-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-muted-foreground enabled:cursor-grab disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent'
+        )}
       >
-        <span
-          aria-hidden="true"
-          className="grid h-10 w-14 shrink-0 place-items-center rounded-md bg-muted"
-        >
-          <BlockIcon type={row.type} className="size-4" />
-        </span>
+        <CardIcon type={row.type} />
         <span className="min-w-0 flex-1 leading-tight">
-          <span className="block text-[13px] font-medium">
-            {row.def.name}
-            {tag && <span className="font-normal text-muted-foreground"> · {tag}</span>}
-          </span>
+          <span className="block text-[13px] font-medium">{row.def.name}</span>
           <span className="block text-xs text-muted-foreground">{note ?? row.def.purpose}</span>
         </span>
+        {tag && (
+          <span
+            data-card-tag=""
+            className="shrink-0 pt-px text-[11px] whitespace-nowrap text-muted-foreground"
+          >
+            {tag}
+          </span>
+        )}
       </button>
     </Tip>
   )

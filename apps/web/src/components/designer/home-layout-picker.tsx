@@ -39,10 +39,11 @@ export function HomeLayoutPicker({
     <ul className="grid grid-cols-2 gap-2" aria-label="Home layouts">
       {HOME_LAYOUTS.filter((layout) => layoutFits(layout, gates)).map((layout) => {
         const show = () => previewOnCanvas(arranged(layout))
-        // The layout's blocks on Home's twelve columns, a row of the drawing to each of theirs.
+        // The layout's blocks on Home's twelve columns, scaled to the drawing's height.
         const places = arrangeHome([], layout, gates).map((block) => block.grid)
+        const rows = Math.max(1, ...places.map((place) => place.y + place.h))
         return (
-          <li key={layout.id}>
+          <li key={layout.id} className="flex">
             <Tip text={layout.description}>
               <button
                 type="button"
@@ -61,15 +62,18 @@ export function HomeLayoutPicker({
               >
                 <span
                   aria-hidden="true"
-                  className="grid grid-cols-12 gap-x-0.5 [grid-auto-rows:2px]"
+                  data-layout-drawing=""
+                  className="relative block h-12 w-full overflow-hidden rounded-sm border border-border/60 bg-background"
                 >
                   {places.map((place, index) => (
                     <span
                       key={index}
-                      className="mb-0.5 rounded-[2px] bg-muted-foreground/30"
+                      className="absolute rounded-sm bg-muted-foreground/30"
                       style={{
-                        gridColumn: `${place.x + 1} / span ${place.w}`,
-                        gridRow: `${place.y + 1} / span ${place.h}`,
+                        left: `calc(${(place.x / 12) * 100}% + 2px)`,
+                        width: `calc(${(place.w / 12) * 100}% - 4px)`,
+                        top: `calc(${(place.y / rows) * 100}% + 2px)`,
+                        height: `calc(${(place.h / rows) * 100}% - 4px)`,
                       }}
                     />
                   ))}

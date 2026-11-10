@@ -114,11 +114,20 @@ describe('Add', () => {
     expect(screen.getByRole('heading', { name: 'Feedback' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Hear from customers' })).toBeNull()
     const topPosts = screen.getByRole('button', { name: /Top posts/ })
-    expect(topPosts.textContent).toContain('on Home')
+    expect(topPosts.querySelector('[data-card-tag]')?.textContent).toBe('On Home')
     // Home holds Status once.
     expect((screen.getByRole('button', { name: /^Status/ }) as HTMLButtonElement).disabled).toBe(
       true
     )
+  })
+
+  it('keeps each card to its name and purpose, with Needs and Turn on under them', () => {
+    add()
+    const cards = [...document.querySelectorAll('[data-add-card]')]
+    // The status is one word on its own, never wrapped into the name.
+    for (const card of cards) {
+      expect(card.textContent).not.toMatch(/Already on Home|·/)
+    }
   })
 
   it('adds the block clicked', async () => {
@@ -152,6 +161,11 @@ describe('Add', () => {
     expect(screen.queryByRole('button', { name: /^Help search/ })).toBeNull()
     const card = screen.getByText('Help search', { exact: false }).closest('div')!
     expect(card.textContent).toContain('Needs Help Center')
+    // The name stands alone; Needs and Turn on sit together under the purpose.
+    expect(screen.getByText('Help search').textContent).toBe('Help search')
+    expect(within(card).getByRole('link', { name: /Turn on/ }).parentElement!.textContent).toMatch(
+      /^Needs Help Center/
+    )
     const turnOn = within(card).getByRole('link', { name: /Turn on/ })
     expect(turnOn.getAttribute('href')).toBe('/admin/settings/general')
     expect(turnOn.getAttribute('target')).toBe('_blank')
