@@ -12,6 +12,8 @@ const state = vi.hoisted(() => ({
   patchResult: { ok: true } as unknown,
   patches: [] as unknown[],
   engine: 'v2' as 'v2' | 'legacy',
+  opsResult: { ok: true, applied: [0], refused: [], revision: 'rev3' } as unknown,
+  opsCalls: [] as unknown[],
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
@@ -24,10 +26,25 @@ vi.mock('../../resolve-actor', () => ({
 }))
 vi.mock('@/lib/server/domains/design/design.actions', () => ({
   readDesignForEditing: async () => ({ design: {}, source: 'draft', revision: 'rev2' }),
-  patchDesignDraft: async (patch: unknown, author: unknown, expected: unknown) => {
-    state.patches.push({ patch, author, expected })
+  patchDesignDraft: async (
+    patch: unknown,
+    author: unknown,
+    expected: unknown,
+    options: unknown
+  ) => {
+    state.patches.push({ patch, author, expected, options })
     return state.patchResult
   },
+}))
+vi.mock('@/lib/server/domains/design/draft-ops', async (original) => ({
+  ...(await original<typeof import('@/lib/server/domains/design/draft-ops')>()),
+  applyDraftOps: async (ops: unknown, _author: unknown, expected: unknown, gates: unknown) => {
+    state.opsCalls.push({ ops, expected, gates })
+    return state.opsResult
+  },
+}))
+vi.mock('@/lib/server/domains/design/workspace-gates', () => ({
+  workspaceGates: async () => ({ help: true }),
 }))
 
 import { registerPortalDesignTools } from '../portal-design'
@@ -62,6 +79,8 @@ beforeEach(() => {
   state.engine = 'v2'
   state.patchResult = { ok: true }
   state.patches = []
+  state.opsResult = { ok: true, applied: [0], refused: [], revision: 'rev3' }
+  state.opsCalls = []
 })
 
 describe('portal design MCP tools', () => {
@@ -74,10 +93,12 @@ describe('portal design MCP tools', () => {
       } as never,
       { principalId: 'principal_member', role: 'member', scopes: [] } as unknown as McpAuthContext
     )
-    const update = tools.find((tool) => tool.name === 'update_portal_design_draft')!
-    const examples = update.description.split('\n').filter((line) => line.startsWith('{"'))
-    expect(examples.length).toBeGreaterThan(0)
-    for (const example of examples) z.object(update.schema).parse(JSON.parse(example))
+    for (const name of ['update_portal_design_draft', 'apply_portal_design_ops']) {
+      const tool = tools.find((each) => each.name === name)!
+      const examples = tool.description.split('\n').filter((line) => line.startsWith('{"'))
+      expect(examples.length).toBeGreaterThan(0)
+      for (const example of examples) z.object(tool.schema).parse(JSON.parse(example))
+    }
   })
 
   it('need the branding permission', async () => {
@@ -117,9 +138,64 @@ describe('portal design MCP tools', () => {
 
   it('offer no tool that publishes', () => {
     expect([...collect(['settings.branding']).keys()].sort()).toEqual([
+      'apply_portal_design_ops',
       'get_portal_design',
       'update_portal_design_draft',
     ])
+  })
+
+  it('pass replace through to the merge patch', async () => {
+    const tools = collect(['settings.branding'])
+    await tools.get('update_portal_design_draft')!({
+      patch: { overrides: [] },
+      expected_revision: 'rev1',
+      replace: true,
+    })
+    expect(state.patches).toMatchObject([{ options: { replace: true } }])
+  })
+
+  it('report an array patch without replace as an error', async () => {
+    const tools = collect(['settings.branding'])
+    state.patchResult = { ok: false, code: 'REPLACE_REQUIRED', message: 'Send replace: true' }
+    const result = await tools.get('update_portal_design_draft')!({
+      patch: { overrides: [] },
+      expected_revision: 'rev1',
+    })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('Send replace: true')
+  })
+
+  it('apply ops against the revision and say which were refused', async () => {
+    const tools = collect(['settings.branding'])
+    state.opsResult = {
+      ok: true,
+      applied: [1],
+      refused: [{ index: 0, reason: 'That block is no longer on Home' }],
+      revision: 'rev3',
+    }
+    const ops = [
+      { op: 'block.remove', block: 'gone0001' },
+      { op: 'block.step', id: 'ideas001', by: 1 },
+    ]
+    const result = await tools.get('apply_portal_design_ops')!({ ops, expected_revision: 'rev2' })
+    expect(result.isError).not.toBe(true)
+    expect(JSON.parse(text(result))).toMatchObject({
+      applied: [1],
+      refused: [{ index: 0, reason: 'That block is no longer on Home' }],
+      revision: 'rev3',
+    })
+    expect(state.opsCalls).toEqual([{ ops, expected: 'rev2', gates: { help: true } }])
+  })
+
+  it('report a stale revision for ops as an error', async () => {
+    const tools = collect(['settings.branding'])
+    state.opsResult = { ok: false, code: 'REVISION_MISMATCH', message: 'Read it again' }
+    const result = await tools.get('apply_portal_design_ops')!({
+      ops: [{ op: 'block.remove', block: 0 }],
+      expected_revision: 'old',
+    })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('Read it again')
   })
 
   it('are refused while the portal still uses the legacy theme', async () => {

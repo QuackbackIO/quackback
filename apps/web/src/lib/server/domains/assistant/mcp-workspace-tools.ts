@@ -180,6 +180,7 @@ const WORKSPACE_USER_WRITES = new Set([
   'update_comment',
   'react_to_comment',
   'update_portal_design_draft',
+  'apply_portal_design_ops',
 ])
 
 function workspaceWriteGuidance(name: string, description: string): string {
