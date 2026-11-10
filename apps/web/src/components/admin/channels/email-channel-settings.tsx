@@ -83,11 +83,16 @@ function useEmailConfigView() {
       : data.platformAddress
     : null
   // Whether an address can send is the send guard's answer, from the server.
-  const identities: SenderIdentity[] = oldestFirst(addresses).map((a) => ({
-    id: a.id,
-    label: senderLabel(a, workspaceName),
-    live: a.sendable,
-  }))
+  const now = new Date()
+  const identities: SenderIdentity[] = oldestFirst(addresses).map((a) => {
+    const domain = domainOf(a, domains)
+    return {
+      id: a.id,
+      label: senderLabel(a, workspaceName),
+      live: a.sendable,
+      lapsed: !a.sendable && !!domain && domainPhase(domain, now) === 'attention',
+    }
+  })
   return {
     data,
     workspaceName,
@@ -401,6 +406,7 @@ function domainOf(a: SendingAddress, domains: SendingDomainDTO[]): SendingDomain
  * What removing an address does to the email that sends from it, in one
  * sentence: the kinds that override to it fall back to the default, and when
  * it is the default, everything it sends falls to the platform address.
+ * Support counts as using the address behind its inbox.
  */
 function removalNote(
   id: string,
@@ -409,13 +415,16 @@ function removalNote(
   platformName: string
 ): string | null {
   if (senders.default?.mode === 'address' && senders.default.id === id) {
-    return `It's the default address, so email sent from it will send from ${platformFrom ?? `the ${platformName.toLowerCase()}`}.`
+    return `It's the default address, so email will send from ${platformFrom ?? `the ${platformName.toLowerCase()}`} instead.`
   }
   const using = (
     Object.keys(SENDER_SURFACE_NAMES) as Array<keyof typeof SENDER_SURFACE_NAMES>
   ).filter((s) => {
     const choice = senders[s]
-    return choice?.mode === 'address' && choice.id === id
+    return (
+      (choice?.mode === 'address' && choice.id === id) ||
+      (choice?.mode === 'inbox' && choice.fallbackId === id)
+    )
   })
   if (using.length === 0) return null
   return `${listOf(using.map((s) => SENDER_SURFACE_NAMES[s]))} email will send from the default address.`
@@ -479,6 +488,7 @@ function SendingAddressesSection({
   } | null>(null)
   const [removeTarget, setRemoveTarget] = useState<{
     id: string
+    address: string
     alsoDomain: string | null
     note: string | null
   } | null>(null)
@@ -566,6 +576,7 @@ function SendingAddressesSection({
               onSelect: () =>
                 setRemoveTarget({
                   id: a.id,
+                  address: a.address ?? '',
                   // Removing the last address on a domain removes the domain too.
                   alsoDomain:
                     domain && rows.filter((r) => r.domain?.id === domain.id).length === 1
@@ -660,14 +671,14 @@ function SendingAddressesSection({
       <ConfirmDialog
         open={removeTarget !== null}
         onOpenChange={(open) => !open && setRemoveTarget(null)}
-        title="Delete address?"
+        title={removeTarget?.address ? `Remove ${removeTarget.address}?` : 'Remove address?'}
         description={[
           removeTarget?.note ?? 'Email can no longer be sent from this address.',
           removeTarget?.alsoDomain ? `${removeTarget.alsoDomain} will be removed too.` : null,
         ]
           .filter(Boolean)
           .join(' ')}
-        confirmLabel="Delete address"
+        confirmLabel="Remove address"
         variant="destructive"
         isPending={del.isPending}
         onConfirm={() => {

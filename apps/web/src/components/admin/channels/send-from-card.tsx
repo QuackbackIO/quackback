@@ -23,6 +23,8 @@ export type SenderIdentity = {
   label: string
   /** Whether its domain is verified, so mail actually sends from it. */
   live: boolean
+  /** Not live because its domain was verified once and stopped, not because it never was. */
+  lapsed?: boolean
 }
 
 type Surface = keyof EmailSendersDTO
@@ -60,6 +62,10 @@ function choiceOf(value: string): EmailSenderChoiceDTO | null {
 
 /** The addr-spec of a "Name <address>" label: its last bracketed part. */
 const addressOf = (label: string): string => /<([^<>]+)>\s*$/.exec(label)?.[1] ?? label
+
+/** "help@acme.com isn't verified yet", or "is no longer verified" once it was. */
+const cannotSend = (identity: SenderIdentity): string =>
+  `${addressOf(identity.label)} ${identity.lapsed ? 'is no longer verified' : "isn't verified yet"}`
 
 export function SendFromCard({
   senders,
@@ -134,7 +140,7 @@ export function SendFromCard({
     const identity = identities.find((i) => i.id === choice.id)
     const fallback = surface === 'default' ? platformFrom : resolvedDefault
     if (!identity || identity.live || !fallback) return undefined
-    return `${addressOf(identity.label)} isn't verified yet, so email sends from ${fallback}.`
+    return `${cannotSend(identity)}, so email sends from ${fallback}.`
   }
   // The address behind the inbox, when support replies from the inbox and has
   // one: support email that is not a reply to the inbox leaves from it.
@@ -162,9 +168,9 @@ export function SendFromCard({
   const behindInboxHint = !behindInbox
     ? undefined
     : behindInbox.live
-      ? `Other support email comes from ${behindInbox.label}.`
+      ? `Email that isn't a reply to the inbox comes from ${behindInbox.label}.`
       : resolvedDefault
-        ? `${addressOf(behindInbox.label)} isn't verified yet, so other support email comes from ${resolvedDefault}.`
+        ? `${cannotSend(behindInbox)}, so email that isn't a reply to the inbox comes from ${resolvedDefault}.`
         : undefined
 
   const showDefault = rows.includes('default')
@@ -186,7 +192,7 @@ export function SendFromCard({
                 disabled={setSender.isPending}
                 onValueChange={(v) => choose('default', String(v))}
               >
-                <SelectTrigger id="send-from-default" className="w-72" aria-label="Default">
+                <SelectTrigger id="send-from-default" className="w-72 lg:w-96" aria-label="Default">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -229,7 +235,7 @@ export function SendFromCard({
                   disabled={setSender.isPending}
                   onValueChange={(v) => choose(surface, String(v))}
                 >
-                  <SelectTrigger id={id} className="w-72" aria-label={label}>
+                  <SelectTrigger id={id} className="w-72 lg:w-96" aria-label={label}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

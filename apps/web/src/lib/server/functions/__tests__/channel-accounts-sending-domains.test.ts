@@ -253,6 +253,23 @@ describe('createSendingAddressFn', () => {
     })
   })
 
+  it('says whether the address became the default sender', async () => {
+    hoisted.addAddress.mockResolvedValue(ACCOUNT)
+    hoisted.getEmailSenders.mockResolvedValue(
+      new Map<string, unknown>([['default', { mode: 'address', account: { id: ACCOUNT.id } }]])
+    )
+    expect(await createAddress({ data: { address: 'help@acme.com' } })).toMatchObject({
+      madeDefault: true,
+    })
+
+    hoisted.getEmailSenders.mockResolvedValue(
+      new Map<string, unknown>([['default', { mode: 'address', account: { id: 'another' } }]])
+    )
+    expect(await createAddress({ data: { address: 'help@acme.com' } })).toMatchObject({
+      madeDefault: false,
+    })
+  })
+
   it('carries a provider failure back as a sentence a person can act on', async () => {
     hoisted.addAddress.mockRejectedValue(
       new SesIdentityError('SES refused', 400, 'AccessDeniedException', false)

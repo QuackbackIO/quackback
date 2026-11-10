@@ -780,7 +780,7 @@ describe('removing a sending address', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     fireEvent.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', {
-        name: 'Delete address',
+        name: 'Remove address',
       })
     )
   }
@@ -791,7 +791,9 @@ describe('removing a sending address', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     expect(deleteAccount).not.toHaveBeenCalled()
     const dialog = await screen.findByRole('alertdialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete address' }))
+    // Names what is being removed, in the menu's own word for it.
+    expect(within(dialog).getByText('Remove help@acme.com?')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
     await waitFor(() => expect(deleteAccount).toHaveBeenCalledWith('a1', expect.anything()))
   })
 
@@ -804,7 +806,7 @@ describe('removing a sending address', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByText(/acme\.com will be removed too\./)).toBeTruthy()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete address' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
     await waitFor(() => expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything()))
     expect(screen.queryAllByRole('alertdialog')).toHaveLength(0)
   })
@@ -821,7 +823,7 @@ describe('removing a sending address', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(dialog.textContent).not.toContain('will be removed too')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete address' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
     await waitFor(() => expect(deleteAccount).toHaveBeenCalled())
     expect(deleteDomain).not.toHaveBeenCalled()
   })
@@ -856,8 +858,22 @@ describe('removing a sending address', () => {
     })
     const dialog = await removeDialog('Acme <hello@acme.com>')
     expect(dialog.textContent).toContain(
-      "It's the default address, so email sent from it will send from Acme <notifications@example.com>."
+      "It's the default address, so email will send from Acme <notifications@example.com> instead."
     )
+  })
+
+  it('counts the address behind the support inbox as one support uses', async () => {
+    renderSettings({
+      addresses: [address('a1', 'hello@acme.com'), address('a2', 'help@acme.com')],
+      domains: [LIVE],
+      inboundRoute: { id: 'r1', config: { forwardingTarget: 'support@acme.com' } },
+      senders: {
+        default: { mode: 'address', id: 'a1' },
+        support: { mode: 'inbox', fallbackId: 'a2' },
+      },
+    })
+    const dialog = await removeDialog('Acme <help@acme.com>')
+    expect(dialog.textContent).toContain('Support email will send from the default address.')
   })
 
   it('does not offer an address the server says cannot send, even with no domain row', () => {
@@ -868,6 +884,17 @@ describe('removing a sending address', () => {
     })
     expect(document.body.textContent).toContain(
       "help@gone.example isn't verified yet, so email sends from Acme <notifications@example.com>."
+    )
+  })
+
+  it('says a domain that stopped verifying is no longer verified, not "not yet"', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'dom_1', null, false)],
+      domains: [DEMOTED],
+      senders: { default: { mode: 'address', id: 'a1' } },
+    })
+    expect(document.body.textContent).toContain(
+      'help@acme.com is no longer verified, so email sends from Acme <notifications@example.com>.'
     )
   })
 
@@ -1027,6 +1054,32 @@ describe('adding an address', () => {
       { address: 'help@acme.com', senderName: null },
       expect.anything()
     )
+  })
+
+  it('says so when the address added became the default sender', async () => {
+    createAddress.mockImplementation((_input: unknown, opts: { onSuccess: (r: unknown) => void }) =>
+      opts.onSuccess({ address: 'help@acme.com', madeDefault: true })
+    )
+    renderSettings()
+    const dialog = await openAdd()
+    fireEvent.change(within(dialog).getByLabelText('Email address'), {
+      target: { value: 'help@acme.com' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add address' }))
+    expect(toastSuccess).toHaveBeenCalledWith('help@acme.com is now the default sender.')
+  })
+
+  it('says nothing when the address added changed no sender', async () => {
+    createAddress.mockImplementation((_input: unknown, opts: { onSuccess: (r: unknown) => void }) =>
+      opts.onSuccess({ address: 'help@acme.com', madeDefault: false })
+    )
+    renderSettings()
+    const dialog = await openAdd()
+    fireEvent.change(within(dialog).getByLabelText('Email address'), {
+      target: { value: 'help@acme.com' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add address' }))
+    expect(toastSuccess).not.toHaveBeenCalled()
   })
 
   it('adds the address under a sender name of its own', async () => {

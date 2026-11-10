@@ -122,14 +122,16 @@ describe('support replying from the inbox with an address behind it', () => {
   it('keeps the inbox chosen and says where other support email comes from', () => {
     renderCard(withBehind(HELLO.id))
     expect(select('Support').value).toBe('__inbox')
-    expect(screen.getByText(`Other support email comes from ${HELLO.label}.`)).toBeTruthy()
+    expect(
+      screen.getByText(`Email that isn't a reply to the inbox comes from ${HELLO.label}.`)
+    ).toBeTruthy()
   })
 
   it('says what it sends from instead while that address cannot send', () => {
     renderCard(withBehind(PENDING.id))
     expect(
       screen.getByText(
-        `help@pending.example isn't verified yet, so other support email comes from ${PLATFORM}.`
+        `help@pending.example isn't verified yet, so email that isn't a reply to the inbox comes from ${PLATFORM}.`
       )
     ).toBeTruthy()
   })
@@ -176,6 +178,23 @@ describe('a chosen address that cannot send', () => {
     renderCard({ senders: { default: { mode: 'address', id: PENDING.id } } })
     expect(
       screen.getByText(`help@pending.example isn't verified yet, so email sends from ${PLATFORM}.`)
+    ).toBeTruthy()
+  })
+
+  it('says no longer verified for an address whose domain stopped verifying', () => {
+    render(
+      <SendFromCard
+        senders={{ ...NONE, changelog: { mode: 'address', id: 'ca_old' } }}
+        identities={[{ id: 'ca_old', label: 'Acme <news@old.example>', live: false, lapsed: true }]}
+        platformFrom={PLATFORM}
+        forwardingTarget={null}
+        forwardingTargetPermitted={null}
+        hasInboundRoute={false}
+        onError={() => undefined}
+      />
+    )
+    expect(
+      screen.getByText(`news@old.example is no longer verified, so email sends from ${PLATFORM}.`)
     ).toBeTruthy()
   })
 

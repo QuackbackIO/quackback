@@ -3,6 +3,7 @@
  * sender name its mail goes out under, which starts as the workspace name.
  */
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,7 +45,7 @@ export function SendingAddressDialog({
 }) {
   return (
     <Dialog open={!!target} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         {target ? (
           <SendingAddressForm
             key={target.kind === 'rename' ? target.id : 'add'}
@@ -85,7 +86,15 @@ function SendingAddressForm({
     if (target.kind === 'add') {
       create.mutate(
         { address: address.trim(), senderName: name },
-        { onSuccess: onClose, onError: (e) => setError(errorText(e, "Couldn't add the address.")) }
+        {
+          onSuccess: (added) => {
+            // The one time adding an address changes what email sends from, so
+            // it is said rather than left to be noticed.
+            if (added.madeDefault) toast.success(`${added.address} is now the default sender.`)
+            onClose()
+          },
+          onError: (e) => setError(errorText(e, "Couldn't add the address.")),
+        }
       )
     } else {
       rename.mutate(
