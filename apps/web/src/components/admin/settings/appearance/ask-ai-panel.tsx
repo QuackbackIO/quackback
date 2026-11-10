@@ -204,7 +204,7 @@ export function replyText(turn: Extract<DesignAiTurn, { role: 'assistant' }>): s
   if (!turn.matched || !turn.changes?.length) return plainWords(turn.text)
   return matchSummary(
     turn.changes.map((change) => change.path),
-    { logo: !!turn.brand }
+    { logo: !!turn.brand, fontsNearest: !!turn.fontsNearest || !!turn.font }
   )
 }
 

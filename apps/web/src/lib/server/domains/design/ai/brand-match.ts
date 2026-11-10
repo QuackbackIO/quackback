@@ -94,6 +94,7 @@ import {
   siteFontChanges,
   siteFontPlan,
   unmatchedSiteFont,
+  withUnmatchedFont,
   siteName,
   withSiteColours,
 } from './brand-site'
@@ -445,12 +446,15 @@ export async function brandMatch(
     { timings, changes: applied.applied.length, total: now() - start, site: !!site },
     'brand matched'
   )
+  // The fonts drawn are only the nearest: the site's own face, or a headline no face fits.
+  const fontsNearest = !!unmatched || type?.headline?.close === false
   return {
     ok: true,
     reply: said.reply,
-    design: applied.design,
+    design: withUnmatchedFont(applied.design, unmatched),
     ...(siteUse && { site: siteUse }),
     ...(unmatched && { font: unmatched }),
+    ...(fontsNearest && { fontsNearest }),
     applied: applied.applied.map((c) => ({ ...c, why: why.get(c.path) })),
     skipped: applied.skipped,
     outOfScope: false,

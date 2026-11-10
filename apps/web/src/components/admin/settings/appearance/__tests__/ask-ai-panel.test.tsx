@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
-import { AskAiPanel } from '../ask-ai-panel'
+import { AskAiPanel, replyText } from '../ask-ai-panel'
 import type { DesignAiTurn } from '../use-design-ai'
 
 let draft: PortalDesign
@@ -480,5 +480,27 @@ describe('a brand match that could not match a font', () => {
   it('offers nothing where the panel cannot open the fonts', () => {
     mount({ turns: [matched] })
     expect(screen.queryByRole('button', { name: 'Upload Acme Grotesk' })).toBeNull()
+  })
+})
+
+describe('the one line a brand match says about fonts', () => {
+  const turn = (over: Partial<Extract<DesignAiTurn, { role: 'assistant' }>>) =>
+    ({
+      role: 'assistant',
+      text: 'I matched your brand.',
+      matched: true,
+      changes: [
+        { path: 'brand.light.accent', before: '#000000', after: '#0058a3' },
+        { path: 'brand.fonts.heading', before: null, after: null },
+      ],
+      ...over,
+    }) as Extract<DesignAiTurn, { role: 'assistant' }>
+
+  it('claims fonts only where the brand’s own face was drawn', () => {
+    expect(replyText(turn({}))).toBe('Matched your brand: colours and fonts.')
+    expect(replyText(turn({ font: { family: 'Acme Grotesk', slot: 'heading' } }))).toBe(
+      'Matched your brand: colours.'
+    )
+    expect(replyText(turn({ fontsNearest: true }))).toBe('Matched your brand: colours.')
   })
 })
