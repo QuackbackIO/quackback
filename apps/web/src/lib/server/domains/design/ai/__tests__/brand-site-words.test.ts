@@ -7,6 +7,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { defaultDesign } from '@/lib/shared/design/schema'
 import type { Look } from '../design-looks'
+import { GATES } from './edit-eval/cases'
 
 vi.mock('@/lib/server/config', () => ({ config: {} }))
 
@@ -23,8 +24,11 @@ const { matchBrand } = await import('../brand-start')
 const { siteOnlyMatch } = await import('../brand-site-match')
 
 const allows = {
-  blockTypes: ['composer', 'ideas', 'roadmap', 'updates'] as const,
+  blockTypes: ['composer', 'ideas', 'roadmap', 'updates'] as Array<
+    'composer' | 'ideas' | 'roadmap' | 'updates'
+  >,
   checkCss: () => null,
+  gates: GATES,
 }
 
 describe('a match from the website alone', () => {
@@ -44,7 +48,7 @@ describe('a match from the website alone', () => {
     const result = await siteOnlyMatch(
       {
         design,
-        allows: { ...allows, blockTypes: [...allows.blockTypes] },
+        allows,
         site: {
           facts: {
             url: 'https://acme.test/',
@@ -64,7 +68,7 @@ describe('a match from the website alone', () => {
             images: [],
             name: 'Acme',
             hasMark: false,
-            allows: { ...allows, blockTypes: [...allows.blockTypes] },
+            allows,
           }),
       },
       null
