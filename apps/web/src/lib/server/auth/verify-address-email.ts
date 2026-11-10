@@ -12,6 +12,7 @@ export async function sendVerifyAddressCode(email: string, code: string): Promis
     columns: { name: true, logoKey: true, featureFlags: true },
   })
   const { logoUrl, brand } = await emailBranding({
+    name: settings?.name,
     logoKey: settings?.logoKey,
     featureFlags: settings?.featureFlags,
   })

@@ -7,6 +7,7 @@
  * is wider or taller than it is square.
  */
 import { overlay } from '@/lib/shared/design/contrast'
+import { nameInitial } from '@/lib/shared/utils/initial'
 import { encodePng, type Image } from '../extract/png'
 import { faceById, nearestWeight, type Face } from '../extract/fonts/faces'
 import { fontFor, renderText, type Font } from '../extract/fonts/woff'
@@ -152,6 +153,69 @@ function fitInto(src: Image, box: number): { img: Image; x: number; y: number } 
   }
 }
 
+/** What the initial tile shows: the brand colour, and the title's initial in its ink. */
+export interface InitialTileSpec {
+  accent: string
+  accentInk: string
+  headingFont: string
+  headingWeight: number
+  initial: string
+}
+
+/** The tile's corner radius: 28 on the card's 144px icon, in proportion at any size. */
+const tileRadius = (side: number) => Math.round((side * 28) / 144)
+
+/** The brand colour's rounded square with the initial centred, as the header draws it without an icon. */
+function tileAt(
+  img: Image,
+  left: number,
+  top: number,
+  side: number,
+  spec: InitialTileSpec,
+  fonts: Array<Font | null>
+) {
+  const accent = rgb(spec.accent)
+  const radius = tileRadius(side)
+  for (let y = 0; y < side; y++)
+    for (let x = 0; x < side; x++)
+      blend(img, left + x, top + y, accent, roundedCoverage(x + 0.5, y + 0.5, side, radius))
+  const { initial } = spec
+  const font = initial ? drawable(initial, fonts) : null
+  if (!font) return
+  const size = Math.round((side * 88) / 144)
+  const drawn = renderText(font, size, initial)
+  const x = left + Math.round((side - drawn.advance) / 2)
+  const capHeight = size * 0.7
+  drawLine(
+    img,
+    font,
+    [size],
+    initial,
+    x,
+    top + Math.round((side + capHeight) / 2),
+    side,
+    rgb(spec.accentInk)
+  )
+}
+
+/** The favicon and email header for a brand without an icon: its initial tile on clear. */
+export function drawInitialTile(spec: InitialTileSpec, size: number): Image {
+  const img: Image = { width: size, height: size, data: new Uint8Array(size * size * 4) }
+  // Drawn on the brand colour, then its rounded edge becomes the clear around it.
+  fill(img, 0, 0, size, size, rgb(spec.accent))
+  tileAt(img, 0, 0, size, spec, [
+    fontOf(spec.headingFont, spec.headingWeight),
+    fontOf('inter', spec.headingWeight),
+  ])
+  const radius = tileRadius(size)
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++)
+      img.data[(y * size + x) * 4 + 3] = Math.round(
+        255 * roundedCoverage(x + 0.5, y + 0.5, size, radius)
+      )
+  return img
+}
+
 export function drawShareCard(spec: ShareCardSpec): Image {
   const { width, height, pad, icon: side, foot } = CARD
   const img: Image = { width, height, data: new Uint8Array(width * height * 4) }
@@ -174,27 +238,7 @@ export function drawShareCard(spec: ShareCardSpec): Image {
         blend(img, pad + fitted.x + x, pad + fitted.y + y, colour, icon.data[o + 3]! / 255)
       }
   } else {
-    for (let y = 0; y < side; y++)
-      for (let x = 0; x < side; x++)
-        blend(img, pad + x, pad + y, accent, roundedCoverage(x + 0.5, y + 0.5, side, 28))
-    const initial = [...spec.title.trim()][0]?.toUpperCase() ?? ''
-    const font = initial ? drawable(initial, [heading, fallback]) : null
-    if (font) {
-      const size = 88
-      const drawn = renderText(font, size, initial)
-      const x = pad + Math.round((side - drawn.advance) / 2)
-      const capHeight = size * 0.7
-      drawLine(
-        img,
-        font,
-        [size],
-        initial,
-        x,
-        pad + Math.round((side + capHeight) / 2),
-        side,
-        rgb(spec.accentInk)
-      )
-    }
+    tileAt(img, pad, pad, side, { ...spec, initial: nameInitial(spec.title) }, [heading, fallback])
   }
 
   const maxWidth = width - 2 * pad

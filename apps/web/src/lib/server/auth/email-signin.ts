@@ -77,6 +77,7 @@ export async function requestEmailSignin(opts: {
     columns: { name: true, logoKey: true, featureFlags: true },
   })
   const { logoUrl, brand } = await emailBranding({
+    name: settings?.name,
     logoKey: settings?.logoKey,
     featureFlags: settings?.featureFlags,
   })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decodePng } from '../../extract/png'
-import { CARD, drawShareCard, drawSquareIcon, encodeShareCard } from '../render'
+import { CARD, drawInitialTile, drawShareCard, drawSquareIcon, encodeShareCard } from '../render'
 
 const rgbAt = (img: { width: number; data: Uint8Array }, x: number, y: number) => {
   const o = (y * img.width + x) * 4
@@ -101,5 +101,23 @@ describe('drawSquareIcon', () => {
     expect(square.data[(2 * 64 + 32) * 4 + 3]).toBe(0)
     expect(rgbAt(square, 32, 32)).toEqual([10, 20, 30])
     expect(square.data[(32 * 64 + 32) * 4 + 3]).toBe(255)
+  })
+})
+
+describe('drawInitialTile', () => {
+  const tile = { accent: '#ffd43b', accentInk: '#000000', headingFont: 'inter', headingWeight: 700 }
+
+  it('is a rounded square in the brand colour with the initial in its ink', () => {
+    const img = drawInitialTile({ ...tile, initial: 'A' }, 128)
+    expect([img.width, img.height]).toEqual([128, 128])
+    expect(img.data[3]).toBe(0)
+    expect(rgbAt(img, 6, 64)).toEqual([0xff, 0xd4, 0x3b])
+    expect(countNear(img, [24, 24, 104, 104], [0, 0, 0])).toBeGreaterThan(200)
+  })
+
+  it('is the plain tile when no bundled face has the initial', () => {
+    const img = drawInitialTile({ ...tile, initial: '日' }, 128)
+    expect(countNear(img, [24, 24, 104, 104], [0, 0, 0])).toBe(0)
+    expect(rgbAt(img, 64, 64)).toEqual([0xff, 0xd4, 0x3b])
   })
 })

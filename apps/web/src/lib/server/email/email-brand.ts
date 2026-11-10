@@ -16,7 +16,9 @@ import {
 } from '@/lib/server/domains/settings/settings.types'
 import { getEmailSafeUrl } from '@/lib/server/storage/s3'
 import { emailIconKey, emailPalette } from '@/lib/shared/design/email-palette'
+import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import { initialTilePath, shareCardFacts, shareCardVersion } from '@/lib/shared/design/share-card'
 
 const log = logger.child({ component: 'email-brand' })
 
@@ -35,19 +37,40 @@ function workspaceLogo(logoKey: string | null | undefined): string | undefined {
   return getEmailSafeUrl(logoKey) ?? undefined
 }
 
-/** A design's email brand: its colours, and its icon where mail clients draw it. */
+/**
+ * The portal's drawn initial tile, absolute, for a brand with no image mail
+ * can show: the same PNG the portal's favicon is (share-card/serve.ts).
+ */
+function initialTileUrl(doc: PortalDesign, workspaceName: string | null | undefined) {
+  const base = config.baseUrl
+  if (!base) return undefined
+  const title = doc.brand.logo.name?.trim() || workspaceName || 'Quackback'
+  const path = initialTilePath(shareCardVersion(shareCardFacts(doc, resolveDesign(doc))), title)
+  return `${base.replace(/\/+$/, '')}${path}`
+}
+
+/**
+ * A design's email brand: its colours, and its icon where mail clients draw
+ * it, else the workspace logo, else the brand's initial tile.
+ */
 export function designEmailBranding(
   doc: PortalDesign,
-  logoKey: string | null | undefined
+  logoKey: string | null | undefined,
+  workspaceName?: string | null
 ): EmailBranding {
   const icon = emailIconKey(doc)
   return {
-    logoUrl: (icon ? getEmailSafeUrl(icon) : null) ?? workspaceLogo(logoKey),
+    logoUrl:
+      (icon ? getEmailSafeUrl(icon) : null) ??
+      workspaceLogo(logoKey) ??
+      initialTileUrl(doc, workspaceName),
     brand: emailPalette(doc),
   }
 }
 
 export async function emailBranding(workspace: {
+  /** The workspace's name, for the initial tile when the design has no title. */
+  name?: string | null
   logoKey: string | null | undefined
   /** The settings row's stored flags, or flags already resolved (cached settings). */
   featureFlags: string | null | undefined | FeatureFlags
@@ -63,7 +86,7 @@ export async function emailBranding(workspace: {
     const { getPublishedRevision } = await import('@/lib/server/domains/design/design.service')
     const published = await getPublishedRevision()
     if (!published) return fallback
-    return designEmailBranding(published.document, workspace.logoKey)
+    return designEmailBranding(published.document, workspace.logoKey, workspace.name)
   } catch (err) {
     // An email in gold beats no email.
     log.warn({ err }, 'published design unreadable; email keeps the default brand')

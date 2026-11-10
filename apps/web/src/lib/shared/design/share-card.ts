@@ -95,3 +95,11 @@ export function shareCardPath(version: string, title: string, page?: ShareCardPa
 /** The favicon's address: the brand icon fitted into a square. */
 export const squareIconPath = (version: string): string =>
   `${BRAND_IMAGE_PATH}?v=${version}&kind=icon`
+
+/**
+ * The initial tile's address, for a brand with no icon a browser tab or
+ * mail client can show: drawn from the card's colours and the title's
+ * initial, so it carries the card's version and the title.
+ */
+export const initialTilePath = (cardVersion: string, title: string): string =>
+  `${BRAND_IMAGE_PATH}?v=${cardVersion}${shortHash(title)}&kind=icon`

@@ -24,7 +24,7 @@ export const getSignInEmailSampleFn = createServerFn({ method: 'GET' }).handler(
       const state = await getDesignState()
       const doc = state?.draft ?? state?.published?.document ?? null
       if (!doc) return { ok: false, message: 'No design to show yet.' }
-      const { logoUrl, brand } = designEmailBranding(doc, auth.settings.logoKey)
+      const { logoUrl, brand } = designEmailBranding(doc, auth.settings.logoKey, auth.settings.name)
       const html = await renderSignInEmailSample({
         brand,
         logoUrl,

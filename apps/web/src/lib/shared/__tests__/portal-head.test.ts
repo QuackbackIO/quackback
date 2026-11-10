@@ -101,7 +101,11 @@ describe('portalFavicon', () => {
     expect(portalFavicon(withDesign(icon))).toMatch(/^\/brand\.png\?v=\w+&kind=icon$/)
     const logo = { brandingData: { logoUrl: '/api/storage/logo.png' } }
     expect(portalFavicon({ ...withDesign(), ...logo })).toBe('/api/storage/logo.png')
-    expect(portalFavicon(withDesign())).toBe('/logo.png')
+    // No icon and no logo: the brand's initial tile, as the header draws it, never the duck.
+    const tile = portalFavicon(withDesign())
+    expect(tile).toMatch(/^\/brand\.png\?v=\w+&kind=icon$/)
+    expect(tile).not.toBe(portalFavicon(withDesign((doc) => (doc.brand.logo.name = 'Other'))))
+    expect(portalFavicon({ name: 'Acme', portalDesign: { engine: 'legacy' } })).toBe('/logo.png')
   })
 })
 

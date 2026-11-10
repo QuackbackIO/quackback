@@ -11,6 +11,7 @@ vi.mock('@/lib/server/domains/design/design.service', () => ({
 }))
 vi.mock('@/lib/server/config', () => ({
   config: {
+    baseUrl: 'https://acme.test',
     get portalDesignEngine() {
       return engine.current
     },
@@ -56,6 +57,24 @@ describe('emailBranding', () => {
     publish((d) => (d.brand.logo.mark.light = { key: 'design/icon.svg' }))
     const result = await emailBranding({ logoKey: 'logos/acme.png', featureFlags: FLAG_ON })
     expect(result.logoUrl).toBe('https://files.example/logos/acme.png')
+  })
+
+  it('sends the brand initial tile, never the Quackback duck, when there is no image to show', async () => {
+    publish(() => {})
+    const none = await emailBranding({ logoKey: null, featureFlags: FLAG_ON, name: 'Acme' })
+    expect(none.logoUrl).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=\w+&kind=icon$/)
+    // An SVG icon cannot go in mail; with no workspace logo the tile stands in.
+    publish((d) => (d.brand.logo.mark.light = { key: 'design/icon.svg' }))
+    const svg = await emailBranding({
+      logoKey: 'logos/acme.svg',
+      featureFlags: FLAG_ON,
+      name: 'Acme',
+    })
+    expect(svg.logoUrl).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=\w+&kind=icon$/)
+    // The tile shows the design's title, so a new title is a new address.
+    publish((d) => (d.brand.logo.name = 'Other'))
+    const renamed = await emailBranding({ logoKey: null, featureFlags: FLAG_ON, name: 'Acme' })
+    expect(renamed.logoUrl).not.toBe(none.logoUrl)
   })
 
   it('never sends an SVG workspace logo', async () => {

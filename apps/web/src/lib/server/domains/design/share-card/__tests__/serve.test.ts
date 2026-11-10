@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { designView } from '@/lib/shared/design/design-view'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
-import { portalShareImage } from '@/lib/shared/portal-head'
+import { portalFavicon, portalShareImage } from '@/lib/shared/portal-head'
 import { decodePng, encodePng } from '../../extract/png'
 import { serveBrandImage, type BrandImageDeps } from '../serve'
 
@@ -86,12 +86,40 @@ describe('serveBrandImage', () => {
     expect((await serveBrandImage(new URLSearchParams('v=x'), value)).status).toBe(200)
   })
 
-  it('has nothing for a portal without a design, or a favicon without an icon', async () => {
+  it('has nothing for a portal without a design', async () => {
     expect((await serveBrandImage(new URLSearchParams('v=x'), deps(null).value)).status).toBe(404)
-    const res = await serveBrandImage(
-      new URLSearchParams('v=x&kind=icon'),
-      deps(defaultDesign()).value
-    )
-    expect(res.status).toBe(404)
+  })
+
+  it('draws the initial tile for a brand without an icon, kept as long as the card', async () => {
+    const doc = defaultDesign()
+    doc.brand.light.accent = '#0c862c'
+    const { value, settings } = deps(doc)
+    const favicon = portalFavicon(settings)
+    const res = await serveBrandImage(queryOf(favicon), value)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('image/png')
+    expect(res.headers.get('cache-control')).toContain('immutable')
+    const img = decodePng(new Uint8Array(await res.arrayBuffer()))
+    expect(img.width).toBe(img.height)
+    // The brand colour fills the tile; its rounded corner is clear.
+    const at = (x: number, y: number) => [
+      ...img.data.subarray((y * img.width + x) * 4, (y * img.width + x) * 4 + 4),
+    ]
+    expect(at(img.width - 20, img.height / 2)).toEqual([0x0c, 0x86, 0x2c, 255])
+    expect(at(0, 0)[3]).toBe(0)
+    // An old address still gets the tile, only briefly cached.
+    const old = await serveBrandImage(new URLSearchParams('v=old&kind=icon'), value)
+    expect(old.status).toBe(200)
+    expect(old.headers.get('cache-control')).not.toContain('immutable')
+  })
+
+  it('draws the initial tile in PNG for an SVG icon, which mail cannot show', async () => {
+    const doc = defaultDesign()
+    doc.brand.logo.mark.light = { key: 'logos/i.svg' }
+    const { value, read } = deps(doc, new TextEncoder().encode('<svg/>'))
+    const res = await serveBrandImage(new URLSearchParams('v=x&kind=icon'), value)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('image/png')
+    expect(read).not.toHaveBeenCalled()
   })
 })

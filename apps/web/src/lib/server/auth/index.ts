@@ -516,9 +516,10 @@ async function createAuth() {
         }
         const { emailBranding } = await import('@/lib/server/email/email-brand')
         const settings = await db.query.settings.findFirst({
-          columns: { logoKey: true, featureFlags: true },
+          columns: { name: true, logoKey: true, featureFlags: true },
         })
         const { logoUrl, brand } = await emailBranding({
+          name: settings?.name,
           logoKey: settings?.logoKey,
           featureFlags: settings?.featureFlags,
         })

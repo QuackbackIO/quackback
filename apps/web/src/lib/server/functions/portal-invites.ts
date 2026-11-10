@@ -163,6 +163,7 @@ async function sendOnePortalInvite({
   const { emailBranding } = await import('@/lib/server/email/email-brand')
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { logoUrl, brand } = await emailBranding({
+    name: auth.settings.name,
     logoKey: auth.settings.logoKey,
     featureFlags: (await getWorkspaceSettings())?.featureFlags,
   })
@@ -410,6 +411,7 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
     const { emailBranding } = await import('@/lib/server/email/email-brand')
     const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
     const { logoUrl, brand } = await emailBranding({
+      name: auth.settings.name,
       logoKey: auth.settings.logoKey,
       featureFlags: (await getWorkspaceSettings())?.featureFlags,
     })

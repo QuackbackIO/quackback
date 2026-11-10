@@ -18,8 +18,9 @@ import {
   shortHash,
 } from '@/lib/shared/design/share-card'
 import { portalHeadWords, portalSiteName, type PortalHeadSettings } from '@/lib/shared/portal-head'
+import { nameInitial } from '@/lib/shared/utils/initial'
 import { decodeImage, type Image } from '../extract/image'
-import { drawShareCard, drawSquareIcon, encodeShareCard } from './render'
+import { drawInitialTile, drawShareCard, drawSquareIcon, encodeShareCard } from './render'
 
 const log = logger.child({ module: 'share-card' })
 
@@ -52,6 +53,8 @@ function png(bytes: Uint8Array, current: boolean): Response {
 
 const notFound = () => new Response('Not found', { status: 404 })
 
+const isSvg = (key: string) => /\.svg$/i.test(key)
+
 /** A stored image's pixels, or null when it is missing or not a PNG or JPEG. */
 async function pixels(deps: BrandImageDeps, key: string): Promise<Image | null> {
   const bytes = await deps.readObject(key)
@@ -74,7 +77,20 @@ export async function serveBrandImage(
   const facts = shareCardFacts(doc, resolveDesign(doc))
 
   if (query.get('kind') === 'icon') {
-    if (!facts.iconKey) return notFound()
+    // No icon, or an SVG one (mail cannot show it and there is no rasteriser
+    // here): the initial tile, as the header and the card draw it.
+    if (!facts.iconKey || isSvg(facts.iconKey)) {
+      const title = portalSiteName(settings)
+      const version = `${shareCardVersion(facts)}${shortHash(title)}`
+      const key = `tile:${version}`
+      const kept = cache.get(key)
+      if (kept) return png(kept, asked === version)
+      const bytes = encodeShareCard(
+        drawInitialTile({ ...facts, initial: nameInitial(title) }, ICON_SIDE)
+      )
+      cache.set(key, bytes)
+      return png(bytes, asked === version)
+    }
     const version = shortHash(facts.iconKey)
     const key = `icon:${version}`
     const kept = cache.get(key)

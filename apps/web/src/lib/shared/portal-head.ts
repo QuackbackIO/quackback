@@ -9,7 +9,7 @@
  */
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from './i18n'
 import type { PortalDesignView } from './design/view'
-import { shareCardPath, type ShareCardPage } from './design/share-card'
+import { initialTilePath, shareCardPath, type ShareCardPage } from './design/share-card'
 
 /** The settings a portal head reads. */
 export interface PortalHeadSettings {
@@ -115,7 +115,8 @@ export const pageTitle = (settings: PortalHeadSettings | null | undefined, page:
 
 /**
  * The favicon: the design's own, then the brand icon, then the workspace's
- * favicon and logo, then the default.
+ * favicon and logo, then the brand's initial tile as the header draws it;
+ * the default only for a portal on the legacy theme.
  */
 export function portalFavicon(settings: PortalHeadSettings | null | undefined): string {
   const design = settings?.portalDesign
@@ -125,7 +126,7 @@ export function portalFavicon(settings: PortalHeadSettings | null | undefined): 
     icons?.mark ||
     settings?.faviconData?.url ||
     settings?.brandingData?.logoUrl ||
-    '/logo.png'
+    (icons?.card ? initialTilePath(icons.card, portalSiteName(settings)) : '/logo.png')
   )
 }
 
