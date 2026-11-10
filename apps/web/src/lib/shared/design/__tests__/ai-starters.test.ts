@@ -1,0 +1,41 @@
+/**
+ * Ask AI's first suggestions fit the portal: Match my brand until it has a
+ * brand, then a few next edits the design can take, never a guessed colour.
+ */
+import { describe, expect, it } from 'vitest'
+import { aiStarters, hasBrand, MATCH_STARTER } from '../ai-starters'
+import { defaultDesign, type PortalDesign } from '../schema'
+
+const branded = (): PortalDesign => {
+  const design = defaultDesign()
+  design.brand.light.accent = '#0058a3'
+  return design
+}
+
+describe('aiStarters', () => {
+  it('offers only Match my brand while the portal wears the house look', () => {
+    expect(hasBrand(defaultDesign())).toBe(false)
+    expect(aiStarters(defaultDesign())).toEqual([MATCH_STARTER])
+  })
+
+  it('offers next edits after a match, none naming a colour', () => {
+    const design = branded()
+    design.nav.home.on = true
+    const starters = aiStarters(design)
+    expect(starters).toEqual(['Try a dark hero', 'Show the roadmap on Home', 'Square corners'])
+    expect(starters.join(' ')).not.toMatch(/green|blue|red|colour/i)
+  })
+
+  it('leaves out what the design cannot take', () => {
+    const design = branded()
+    design.mode = 'dark'
+    design.shape.corners = 'pill'
+    expect(aiStarters(design, { roadmap: false })).toEqual(['Squarer corners'])
+    design.nav.home.on = true
+    expect(aiStarters(design, { roadmap: false })).toEqual(['Squarer corners'])
+    expect(aiStarters(design, { roadmap: true })).toEqual([
+      'Show the roadmap on Home',
+      'Squarer corners',
+    ])
+  })
+})
