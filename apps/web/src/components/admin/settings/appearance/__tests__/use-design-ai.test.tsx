@@ -483,6 +483,39 @@ describe('the check after a brand match', () => {
     })
   })
 
+  it('stops at Stop: the check is cut off, the match stays, and the reply says so', async () => {
+    const hooks = { begin: vi.fn(), end: vi.fn(), replace: vi.fn(), frame: () => null }
+    stream.match.mockResolvedValue(matched())
+    let given: AbortSignal | undefined
+    let stopNow = () => {}
+    checker.check.mockReset()
+    checker.check.mockImplementation(async (_input, deps) => {
+      given = deps.signal
+      stopNow()
+      return { rounds: [], first: null, best: null, stopped: 'stopped', ms: 1 }
+    })
+    const { result } = renderHook(() =>
+      useDesignAi({
+        flush: async () => {},
+        adopt: vi.fn(),
+        update,
+        workspaceName: 'Acme',
+        check: hooks,
+      })
+    )
+    stopNow = () => result.current.stop()
+    await act(() => result.current.ask('match my brand', 'site', images, undefined, brand))
+    expect(given?.aborted).toBe(true)
+    expect(hooks.end).toHaveBeenCalledTimes(1)
+    const said = result.current.turns.filter((turn) => turn.role === 'assistant')
+    // The match keeps its changes and Undo; the last line says it stopped.
+    expect(said.at(-2)).toMatchObject({
+      text: 'I matched your brand.',
+      changes: [{ path: 'tune.headline.size' }],
+    })
+    expect(said.at(-1)?.text).toBe('Stopped. What changed so far stays.')
+  })
+
   it('is skipped when the match ran out of time, or without the canvas hooks', async () => {
     const hooks = { begin: vi.fn(), end: vi.fn(), replace: vi.fn(), frame: () => null }
     stream.match.mockResolvedValue(matched({ target: { ...target, checkable: false } }))

@@ -354,7 +354,11 @@ export function useDesignAi({
           ...(result.font ? { font: result.font } : {}),
         })
         // Stopped once the match landed: it stays, and the check does not start.
-        if (!checking || !target || signal?.aborted) return
+        if (signal?.aborted) {
+          say({ role: 'assistant', text: stoppedReply(result.applied.length > 0 || !!logo) })
+          return
+        }
+        if (!checking || !target) return
         // The verified critic loop: read the drawn preview, score it against what was
         // measured, and keep a revision only when the measured match improves.
         setSteps((now) => [...now, CHECK_STEP])
@@ -372,6 +376,7 @@ export function useDesignAi({
             ...(check.open ? { open: check.open } : {}),
             show: (design) => check.replace(design, 'Match your brand'),
             flush,
+            ...(signal && { signal }),
             progress: (text) => {
               setStage(`${text}…`)
               setSteps((now) => [...now.filter((step) => !step.startsWith(CHECK_STEP)), text])
@@ -405,6 +410,8 @@ export function useDesignAi({
           kept: kept.length,
           stopped: report.stopped,
         })
+        // Stopped during the check: the match and what the check kept stay, with their Undo.
+        if (signal?.aborted) say({ role: 'assistant', text: stoppedReply(true) })
       } finally {
         if (checking) check.end()
       }

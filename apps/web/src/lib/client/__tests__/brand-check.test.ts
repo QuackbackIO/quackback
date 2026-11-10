@@ -112,6 +112,40 @@ describe('checkBrandMatch', () => {
     expect(report).toMatchObject({ stopped: 'failed', error: expect.stringMatching(/allowance/) })
     expect(show).not.toHaveBeenCalled()
   })
+
+  it('cuts off its request at Stop and shows nothing more', async () => {
+    const controller = new AbortController()
+    let sent: AbortSignal | undefined
+    const fetcher = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          sent = init.signal ?? undefined
+          init.signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          )
+          // The person presses Stop while the score is on its way.
+          controller.abort()
+        })
+    )
+    const show = vi.fn()
+    const report = await checkBrandMatch(
+      { target: {}, shots: ['x'], paths: [], palette: [], design: defaultDesign() },
+      {
+        frame: () => null,
+        show,
+        flush: async () => {},
+        progress: () => {},
+        signal: controller.signal,
+        fetcher: fetcher as unknown as typeof fetch,
+        capture: async () => null,
+        read: (async () => ({})) as never,
+      }
+    )
+    expect(sent?.aborted).toBe(true)
+    expect(report.stopped).toBe('stopped')
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(show).not.toHaveBeenCalled()
+  })
 })
 
 describe('checkBrandMatch on its own frame', () => {
