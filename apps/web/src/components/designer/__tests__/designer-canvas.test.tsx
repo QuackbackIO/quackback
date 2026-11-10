@@ -210,14 +210,50 @@ describe('DesignerCanvas', () => {
     const { send, frame } = show()
     send({ type: 'quackback:preview-ready' })
     const told = vi.mocked(frame.postMessage).mock.calls.map(([message]) => message)
-    expect(told.at(-1)).toStrictEqual({ type: 'quackback:preview-designer', trying: false })
+    expect(told.slice(-2)).toStrictEqual([
+      { type: 'quackback:preview-designer', trying: false },
+      { type: 'quackback:preview-theme', theme: 'light' },
+    ])
+  })
+
+  it('draws light or dark in the page it shows, and loads another page afresh', () => {
+    const { frame } = show()
+    const props = {
+      page: 'feedback' as const,
+      size: 'phone' as const,
+      locale: 'en',
+      sort: 'trending' as const,
+      design: null,
+      structural: {},
+      onSelect: vi.fn(),
+      onWords: vi.fn(),
+      onKey: vi.fn(),
+    }
+    const before = screen.getByTitle('Feedback, phone, light') as HTMLIFrameElement
+    const src = before.getAttribute('src')
+    cleanup()
+    const view = render(<DesignerCanvas {...props} theme="light" />)
+    const shown = view.container.querySelector('iframe')!
+    Object.defineProperty(shown, 'contentWindow', { configurable: true, get: () => frame })
+    vi.mocked(frame.postMessage).mockClear()
+    view.rerender(<DesignerCanvas {...props} theme="dark" />)
+    // The same frame, at the address it loaded, told to draw dark.
+    expect(view.container.querySelector('iframe')).toBe(shown)
+    expect(shown.getAttribute('src')).toBe(src)
+    expect(frame.postMessage).toHaveBeenCalledWith(
+      { type: 'quackback:preview-theme', theme: 'dark' },
+      window.location.origin
+    )
+    view.rerender(<DesignerCanvas {...props} theme="dark" page="roadmap" />)
+    expect(view.container.querySelector('iframe')).not.toBe(shown)
+    expect(view.container.querySelector('iframe')!.getAttribute('src')).toContain('theme=dark')
   })
 
   it('in Preview, tells the frame to act as a visitor’s and takes Tab', () => {
     const { send, frame } = show(true)
     send({ type: 'quackback:preview-ready' })
     const told = vi.mocked(frame.postMessage).mock.calls.map(([message]) => message)
-    expect(told.at(-1)).toMatchObject({ type: 'quackback:preview-designer', trying: true })
+    expect(told).toContainEqual({ type: 'quackback:preview-designer', trying: true })
     expect(screen.getByTitle(/preview, links work/).tabIndex).toBe(0)
   })
 

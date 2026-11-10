@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
+import { useRouteContext, useRouter } from '@tanstack/react-router'
 import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
 import { BrandStatusColours } from './brand-status-colours'
 import {
   FeedCopyContext,
+  PREVIEW_THEME,
   PreviewDraftProvider,
   PreviewDesignContext,
   PreviewSamplesContext,
@@ -99,6 +100,9 @@ export function PortalPreviewProvider({
 
   // Only a framed, explicitly preview-flagged document listens.
   const active = enabled && typeof window !== 'undefined' && window.self !== window.top
+  const router = useRouter()
+  const routerRef = useRef(router)
+  routerRef.current = router
 
   useEffect(() => {
     if (!active) return
@@ -123,6 +127,18 @@ export function PortalPreviewProvider({
           shownDesign.current = next
           setDesign(next)
         })
+      } else if (msg?.type === PREVIEW_THEME) {
+        // Light or dark, in place: the address says which, as the frame was loaded with it,
+        // and the page keeps its scroll and what it drew.
+        const theme = (msg as { theme?: unknown }).theme
+        const shown = new URLSearchParams(window.location.search).get('theme')
+        if ((theme === 'light' || theme === 'dark') && theme !== shown)
+          void routerRef.current.navigate({
+            to: '.',
+            search: (prev) => ({ ...prev, theme }),
+            replace: true,
+            resetScroll: false,
+          })
       } else if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
         setCss(msg.css)
       } else if (msg?.type === 'quackback:preview-draft' && msg.draft) {

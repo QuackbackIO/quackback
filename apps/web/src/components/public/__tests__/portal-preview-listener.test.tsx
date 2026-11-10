@@ -13,9 +13,15 @@ import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 
 /** The published design, as the route context carries it. */
 const root = vi.hoisted(() => ({ portalDesign: undefined as unknown }))
+/** The frame's router: where the page loads ahead for a link, and how it moves. */
+const router = vi.hoisted(() => ({
+  preloadRoute: async (_options: unknown): Promise<unknown> => [],
+  navigate: async (_options: unknown): Promise<void> => {},
+}))
 vi.mock('@tanstack/react-router', () => ({
   useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
     select({ settings: { portalDesign: root.portalDesign } }),
+  useRouter: () => router,
 }))
 
 import { PortalPreviewProvider } from '../portal-preview-listener'
@@ -131,6 +137,27 @@ describe('PortalPreviewProvider', () => {
       expect(document.querySelector('style[data-qb-forced]')).toBeNull()
     }
     header.remove()
+  })
+
+  it('draws in light or dark in place, as asked, keeping its page', () => {
+    const navigate = vi.fn(async () => {})
+    router.navigate = navigate
+    post({ type: 'quackback:preview-theme', theme: 'dark' })
+    expect(navigate).toHaveBeenCalledOnce()
+    const [options] = navigate.mock.calls[0] as unknown as [
+      { search: (prev: object) => object; replace: boolean; resetScroll: boolean },
+    ]
+    expect(options.search({ preview: true, theme: 'light' })).toEqual({
+      preview: true,
+      theme: 'dark',
+    })
+    expect(options).toMatchObject({ replace: true, resetScroll: false })
+    // Already drawn in it, or asked for something else: nothing moves.
+    window.history.replaceState(null, '', '/?theme=dark')
+    post({ type: 'quackback:preview-theme', theme: 'dark' })
+    post({ type: 'quackback:preview-theme', theme: 'sepia' })
+    expect(navigate).toHaveBeenCalledOnce()
+    window.history.replaceState(null, '', '/')
   })
 
   it('picks on a click while designing, and lets clicks act while trying', async () => {

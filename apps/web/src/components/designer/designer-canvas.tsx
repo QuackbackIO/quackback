@@ -4,6 +4,7 @@ import type { PortalPreviewProps } from '@/components/admin/settings/branding/po
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
 import { PAGE_NAMES, type DesignerPage } from '@/lib/shared/design/outline'
 import { canvasSrc } from '@/lib/shared/design/canvas-src'
+import { PREVIEW_THEME } from '@/components/public/preview-draft-context'
 
 export { canvasSrc }
 import type { CanvasVisitor } from '@/lib/shared/design/designer-frame'
@@ -205,11 +206,14 @@ export function DesignerCanvas({
 
   const told = useRef(trying)
   told.current = trying
+  const shownTheme = useRef(theme)
+  shownTheme.current = theme
   const tellDesigner = useCallback((target: Window | null | undefined) => {
     target?.postMessage(
       { type: 'quackback:preview-designer', trying: told.current },
       window.location.origin
     )
+    target?.postMessage({ type: PREVIEW_THEME, theme: shownTheme.current }, window.location.origin)
   }, [])
   usePreviewPosting(iframeRef, {
     draftCss: '',
@@ -222,6 +226,13 @@ export function DesignerCanvas({
     paced: true,
   })
   useEffect(() => tellDesigner(iframeRef.current?.contentWindow), [trying, tellDesigner])
+  // Light or dark changes in place: the page keeps its scroll and what it drew.
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: PREVIEW_THEME, theme },
+      window.location.origin
+    )
+  }, [theme])
 
   // The frame that said its page is ready, by its key: a new page loads, and is not, until it says so.
   const [readyKey, setReadyKey] = useState<string | null>(null)
@@ -329,7 +340,12 @@ export function DesignerCanvas({
   const phoneMode = size === 'phone' && !trying
   const { scale, height, outer, room: drawn } = frameBox(room, width, zoom)
   const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample })
-  const key = `${src}:${refreshKey}:${trying}`
+  // Only another page, item, language or visitor loads the frame afresh; light or dark is
+  // sent to the page it shows, which keeps the address it loaded with.
+  const key = `${canvasSrc({ page, theme: 'light', locale, sort, postPath, visitor, sample })}:${refreshKey}:${trying}`
+  const [loaded, setLoaded] = useState({ key, src })
+  if (loaded.key !== key) setLoaded({ key, src })
+  const frameSrc = loaded.key === key ? loaded.src : src
   frameKey.current = key
   const ready = readyKey === key && (!untilDrawn || drawnKey === key)
   // A page that never says it is ready (an error, say) is shown once it has loaded a while.
@@ -366,7 +382,7 @@ export function DesignerCanvas({
             setLoadedKey(key)
             onLoad?.()
           }}
-          src={src}
+          src={frameSrc}
           title={[
             name,
             PAGE_NAMES[page],
