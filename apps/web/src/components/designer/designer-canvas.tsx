@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { usePreviewPosting } from '@/components/admin/settings/branding/use-preview-posting'
 import type { PortalPreviewProps } from '@/components/admin/settings/branding/portal-preview'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
-import { PAGE_NAMES, pagePath, type DesignerPage } from '@/lib/shared/design/outline'
+import { PAGE_NAMES, type DesignerPage } from '@/lib/shared/design/outline'
+import { canvasSrc } from '@/lib/shared/design/canvas-src'
+
+export { canvasSrc }
 import type { CanvasVisitor } from '@/lib/shared/design/designer-frame'
 import { isMenuTarget, type MenuTarget } from '@/lib/shared/design/menu-actions'
-import { samplePath, type SamplePage } from '@/lib/shared/design/sample-pages'
+import type { SamplePage } from '@/lib/shared/design/sample-pages'
 import { isWordsDoc, type WordsDoc } from '@/lib/shared/design/rich-words'
 import { readWordsField, wordsKindOf, wordsLimitOf } from '@/lib/shared/design/headline-words'
 import { checkedWords } from '@/lib/shared/design/words-schema'
@@ -15,42 +18,6 @@ import { PHONE_TINT } from './properties/phone-mode'
 /** The widths a visitor's browser lays the portal out at: desktop, tablet and phone. */
 export const CANVAS_WIDTHS = { desktop: 1280, tablet: 768, phone: 390 } as const
 export type CanvasSize = keyof typeof CANVAS_WIDTHS
-
-/**
- * The address the canvas loads: the page as a preview, in the theme and
- * language asked for, signed in or out; or the page's sample.
- */
-export function canvasSrc({
-  page,
-  theme,
-  locale,
-  sort,
-  postPath = null,
-  visitor = 'in',
-  sample = null,
-}: {
-  page: DesignerPage
-  theme: 'light' | 'dark'
-  locale: string
-  sort: 'trending' | 'top' | 'new'
-  /** The item the page shows, such as the post on the post page. */
-  postPath?: string | null
-  visitor?: CanvasVisitor
-  /** The page drawn from sample content instead. */
-  sample?: SamplePage | null
-}): string {
-  const search = new URLSearchParams({ theme, preview: 'true', lang: locale, designer: '1' })
-  // A sample is served to the designer alone, so it is drawn for them as themselves.
-  if (sample) return `${samplePath(sample)}?${search}`
-  // The root shows Home whatever the saved design leads with.
-  if (page === 'home') search.set('page', 'home')
-  if (page === 'feedback') search.set('sort', sort)
-  if (visitor === 'out') search.set('visitor', 'out')
-  // An item can carry its own search, such as a board on the feed.
-  const [path, own] = pagePath(page, postPath).split('?') as [string, string | undefined]
-  for (const [name, value] of new URLSearchParams(own ?? '')) search.set(name, value)
-  return `${path}?${search}`
-}
 
 /** A path the frame says it is at: the portal's own, never another site's. */
 function framePath(value: unknown): string | null {
