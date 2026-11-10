@@ -345,7 +345,11 @@ describe('a design saved by a newer build', () => {
     const state = await getDesignState()
     expect(state?.published?.document.brand.logo.display).toBe('mark_and_name')
     expect(state?.draft?.brand.light.accent).toBe('#7a1f35')
-    expect((await restoreRevision(first.revisionId, who)).number).toBe(2)
+    // Writing it back would lose what this build does not know, so writes wait for the update.
+    expect(state?.newerFormat).toBe(true)
+    await expect(restoreRevision(first.revisionId, who)).rejects.toMatchObject({
+      code: 'DESIGN_NEWER_FORMAT',
+    })
   })
 })
 
@@ -363,7 +367,7 @@ describe('restore', () => {
     expect((await listRevisions())[0]).toMatchObject({ number: 3, source: 'restore' })
   })
 
-  it('keeps a draft under way publishable, with its authors', async () => {
+  it('keeps a draft under way as it was, with its authors and the version it started from', async () => {
     const who = await admin()
     await saveDraft(withAccent('#0F766E'), who)
     const teal = await publishDraft({ ...who, source: 'appearance' })
@@ -371,13 +375,42 @@ describe('restore', () => {
     const [before] = await testDb.select().from(portalDesigns)
     await restoreRevision(teal.revisionId, who)
     const [after] = await testDb.select().from(portalDesigns)
+    expect(after!.draft).toEqual(before!.draft)
     expect(after!.draftAuthors).toEqual(before!.draftAuthors)
     expect(Object.keys(after!.draftAuthors ?? {})).not.toHaveLength(0)
     expect(after!.draftUpdatedAt).toEqual(before!.draftUpdatedAt)
-    await expect(publishDraft({ ...who, source: 'appearance' })).resolves.toMatchObject({
-      number: 3,
+    expect(after!.draftBaseRevisionId).toBe(before!.draftBaseRevisionId)
+  })
+
+  it('makes a draft kept through a rollback be reviewed against the restored version before it publishes', async () => {
+    const who = await admin()
+    await saveDraft(withAccent('#0F766E'), who)
+    const good = await publishDraft({ ...who, source: 'appearance' })
+    // A broken version goes live, and the person keeps editing on top of it.
+    await saveDraft(withAccent('#FF0000'), who)
+    await publishDraft({ ...who, source: 'appearance' })
+    const broken = withAccent('#FF0000')
+    broken.layout.width = 'wide'
+    await saveDraft(broken, who)
+    // They roll back to the good version.
+    const restored = await restoreRevision(good.revisionId, who)
+    expect((await getPublishedDesign())?.brand.light.accent).toBe('#0f766e')
+
+    // The draft still holds what was rolled back, so publishing it asks for a review first.
+    await expect(publishDraft({ ...who, source: 'appearance' })).rejects.toMatchObject({
+      code: 'DESIGN_CHANGED',
     })
-    expect((await getPublishedDesign())?.brand.light.accent).toBe('#7a1f35')
+    expect((await getPublishedDesign())?.brand.light.accent).toBe('#0f766e')
+    // A review against a version that is no longer live does not count.
+    await expect(
+      publishDraft({ ...who, source: 'appearance', reviewedAgainst: good.revisionId })
+    ).rejects.toMatchObject({ code: 'DESIGN_CHANGED' })
+
+    // Reviewed against the restored version, it publishes.
+    await expect(
+      publishDraft({ ...who, source: 'appearance', reviewedAgainst: restored.revisionId })
+    ).resolves.toMatchObject({ number: 4 })
+    expect((await getPublishedDesign())?.layout.width).toBe('wide')
   })
 
   it('reads an old version to copy into the draft, and nothing for one that does not exist', async () => {

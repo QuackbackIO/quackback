@@ -164,7 +164,8 @@ export async function runBrandMatchRequest(
   const saved = await actions.saveDesignDraft(
     result.design,
     { ...(await designAuthor(auth)), via: 'ai' },
-    current.revision
+    current.revision,
+    'brand-match'
   )
   if (!saved.ok)
     return saved.code === 'REVISION_MISMATCH'

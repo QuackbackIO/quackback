@@ -65,6 +65,13 @@ export function usePublishFlow({
   ) => {
     const offered = newLogo
     const outcome = await draft.publish(message, options)
+    // Another version went live after the draft started, such as by a restore: review
+    // the draft against it in full. The summary closes; publishing waits for the review.
+    if (!outcome.ok && outcome.changed && !fullReview) {
+      setReason(outcome.message)
+      setStep('full')
+      return { ok: true as const }
+    }
     if (outcome.ok) {
       // The live address on Publish itself; a toast only when the server sent none.
       if (outcome.address) setPublished(outcome.address)
@@ -82,7 +89,7 @@ export function usePublishFlow({
     <>
       <PublishSummaryDialog
         open={step === 'summary'}
-        onOpenChange={(open) => !open && setStep(null)}
+        onOpenChange={(open) => !open && setStep((now) => (now === 'summary' ? null : now))}
         count={count}
         summary={summary ?? { menu: [], look: [], overrides: [] }}
         newLogo={newLogo}

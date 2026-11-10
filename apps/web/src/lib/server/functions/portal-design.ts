@@ -29,6 +29,8 @@ export const savePortalDesignDraftFn = createServerFn({ method: 'POST' })
       design: z.unknown(),
       /** The draft revision the change was made against; a newer draft refuses it. */
       revision: z.string().max(64).optional(),
+      /** Save the draft this replaces aside first: for Keep mine, or a session's first save. */
+      saveAside: z.enum(['keep-mine', 'session']).optional(),
     })
   )
   .handler(async ({ data }) => {
@@ -36,7 +38,7 @@ export const savePortalDesignDraftFn = createServerFn({ method: 'POST' })
     const { designAuthor } = await import('@/lib/server/domains/design/design-author')
     const author = await designAuthor(auth)
     const { saveDesignDraft } = await import('@/lib/server/domains/design/design.actions')
-    return saveDesignDraft(data.design, author, data.revision)
+    return saveDesignDraft(data.design, author, data.revision, data.saveAside)
   })
 
 export const discardPortalDesignDraftFn = createServerFn({ method: 'POST' })
@@ -60,6 +62,8 @@ export const publishPortalDesignFn = createServerFn({ method: 'POST' })
       revision: z.string().max(64).optional(),
       /** Also use the draft's portal logo in the admin and emails. */
       workspaceLogo: z.boolean().optional(),
+      /** The version live now, which the person reviewed the draft against after it moved. */
+      reviewedAgainst: typeIdSchema('portal_design_revision').optional(),
     })
   )
   .handler(async ({ data }) => {
@@ -81,6 +85,7 @@ export const publishPortalDesignFn = createServerFn({ method: 'POST' })
       message: data.message,
       expectedRevision: data.revision,
       workspaceLogo: data.workspaceLogo === true,
+      reviewedAgainst: data.reviewedAgainst as PortalDesignRevisionId | undefined,
     })
     if (!result.ok) return result
     log.info({ revision: result.number }, 'portal design published from appearance')

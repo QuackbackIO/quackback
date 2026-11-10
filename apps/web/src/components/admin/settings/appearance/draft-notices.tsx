@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { TimeAgo } from '@/components/ui/time-ago'
-import type { useDesignDraft } from './use-design-draft'
+import { NEWER_FORMAT_LINE, type useDesignDraft } from './use-design-draft'
 
 type Draft = ReturnType<typeof useDesignDraft>
 
@@ -22,12 +22,17 @@ function ConflictHeadline({ change }: { change: Draft['conflictChange'] }) {
 
 /**
  * What stops the draft from saving: a colleague's newer draft, which the
- * person chooses to load or to overwrite, or a change the server refused,
- * with a way back to the draft it last saved.
+ * person chooses to load or to overwrite, a change the server refused, with
+ * a way back to the draft it last saved, or a design a newer build saved.
  */
 export function DraftNotices({ draft }: { draft: Draft }) {
   return (
     <>
+      {draft.readOnly && (
+        <p role="status" className="text-[13px] text-muted-foreground">
+          {NEWER_FORMAT_LINE}
+        </p>
+      )}
       {draft.conflict && (
         <div
           role="alert"
