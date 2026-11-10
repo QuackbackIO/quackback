@@ -60,7 +60,7 @@ export function OverridesList({
                               <button
                                 type="button"
                                 onClick={onGo}
-                                className="rounded text-start font-medium hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                                className="min-h-6 rounded py-1 text-start leading-4 font-medium hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
                               >
                                 {p.name}
                               </button>
@@ -93,7 +93,7 @@ export function OverridesList({
                               `${p.name}: reset`
                             )
                           }
-                          className="shrink-0 rounded text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                          className="inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded px-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
                         >
                           {action}
                         </button>
