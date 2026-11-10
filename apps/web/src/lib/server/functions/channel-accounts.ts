@@ -187,8 +187,13 @@ export interface SendingDomainDTO {
   preflight: SendingDomainPreflightDTO
 }
 
-/** A surface's choice of sender: an address by id, or (support) the inbox. */
-export type EmailSenderChoiceDTO = { mode: 'address'; id: string } | { mode: 'inbox' }
+/**
+ * A surface's choice of sender: an address by id, or (support) the inbox.
+ * `fallbackId` is the address behind the inbox when it has one: what support
+ * email leaves from when it is not a reply to the inbox.
+ */
+export type EmailSenderChoiceDTO =
+  { mode: 'address'; id: string } | { mode: 'inbox'; fallbackId?: string }
 
 /** Each surface's choice, or null where nothing is chosen. */
 export type EmailSendersDTO = Record<EmailSenderSurface, EmailSenderChoiceDTO | null>
@@ -315,7 +320,10 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
           !choice
             ? null
             : choice.mode === 'inbox'
-              ? { mode: 'inbox' as const }
+              ? {
+                  mode: 'inbox' as const,
+                  ...(choice.account ? { fallbackId: choice.account.id } : {}),
+                }
               : { mode: 'address' as const, id: choice.account.id },
         ]
       })
@@ -455,7 +463,7 @@ export const getSurfaceSenderFn = createServerFn({ method: 'GET' })
     assertAnyPermission(await requireAuth(), SURFACE_SENDER_READ_PERMISSIONS[data.surface])
     const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
     const workspaceName = (await requireSettingsCached()).name?.trim()
-    const resolved = await resolveSender({ surface: data.surface })
+    const resolved = await resolveSender({ surface: data.surface, preview: true })
     if (!resolved) return { from: await platformFromFor(workspaceName) }
     const name = resolved.senderName?.trim() || workspaceName
     const address = bareSenderAddress(resolved.from)

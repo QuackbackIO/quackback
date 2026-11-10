@@ -81,7 +81,7 @@ import { notifyAgentReply, notifyCsatRequestEmail } from '../conversation.notify
 import { notifyConversationClosed } from '../conversation.notify-closed'
 import { createSendingAddress } from '@/lib/server/domains/channel-accounts/channel-account.service'
 import { setEmailSender } from '@/lib/server/domains/channel-accounts/email-senders'
-import { resolveSendingAddress } from '@/lib/server/domains/channel-accounts/sender-resolver'
+import { resolveSender } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 
 const fixture = await createDbTestFixture({
@@ -378,7 +378,9 @@ describe.skipIf(!fixture.available)('one sender for a whole support thread (real
     // Support is pointed at another address, which a new thread would use, and
     // the conversation is reassigned.
     await setEmailSender('support', { mode: 'address', channelAccountId: billingAddress.id })
-    expect(await asWorkspace(() => resolveSendingAddress(billing.id))).toBe('billing@home.example')
+    expect((await asWorkspace(() => resolveSender({ surface: 'support' })))?.from).toBe(
+      'billing@home.example'
+    )
     await testDb
       .update(conversations)
       .set({ assignedTeamId: billing.id, status: 'open', resolvedAt: null, endReason: null })

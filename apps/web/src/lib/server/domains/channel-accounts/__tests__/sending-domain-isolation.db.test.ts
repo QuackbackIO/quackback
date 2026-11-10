@@ -41,7 +41,12 @@ import {
   createSendingAddress,
   createSendingDomain,
 } from '../channel-account.service'
-import { resolveConversationFrom, resolveSendingAddress } from '../sender-resolver'
+import { resolveConversationSender, resolveSender } from '../sender-resolver'
+
+/** The address support email leaves from, and the one a conversation's does. */
+const supportFrom = async () => (await resolveSender({ surface: 'support' }))?.from ?? null
+const conversationFrom = async (id: ConversationId) =>
+  (await resolveConversationSender(id))?.from ?? null
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -133,7 +138,7 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
       address: 'support@tenant-a.example',
     })
 
-    expect(await resolveSendingAddress(teamId)).toBeNull()
+    expect(await supportFrom()).toBeNull()
   })
 
   it('sends as the same address once THIS workspace has verified the domain', async () => {
@@ -145,7 +150,7 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
     })
     await seedVerifiedDomain(teamId, 'tenant-a.example')
 
-    expect(await resolveSendingAddress(teamId)).toBe('support@tenant-a.example')
+    expect(await supportFrom()).toBe('support@tenant-a.example')
   })
 
   it('does not accept a domain that is merely pending', async () => {
@@ -157,7 +162,7 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
     // Added, records shown, nothing published yet.
     await createSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
 
-    expect(await resolveSendingAddress(teamId)).toBeNull()
+    expect(await supportFrom()).toBeNull()
   })
 
   it('replies from the address the customer wrote to, once its domain is verified', async () => {
@@ -184,9 +189,7 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
 
     // The inbox the mail arrived at wins over the team's configured address:
     // a thread that reached support@ should not answer from team@.
-    expect(await resolveConversationFrom(conv.id as ConversationId)).toBe(
-      'support@tenant-a.example'
-    )
+    expect(await conversationFrom(conv.id as ConversationId)).toBe('support@tenant-a.example')
   })
 
   it('falls back past an inbox address whose domain is not verified', async () => {
@@ -214,7 +217,7 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
       })
       .returning()
 
-    expect(await resolveConversationFrom(conv.id as ConversationId)).toBe('team@tenant-b.example')
+    expect(await conversationFrom(conv.id as ConversationId)).toBe('team@tenant-b.example')
   })
 
   it('stands down on a single-workspace install', async () => {
@@ -227,6 +230,6 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
       address: 'support@tenant-a.example',
     })
 
-    expect(await resolveSendingAddress(teamId)).toBe('support@tenant-a.example')
+    expect(await supportFrom()).toBe('support@tenant-a.example')
   })
 })

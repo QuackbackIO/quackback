@@ -58,7 +58,8 @@ const inboundAccount = vi.hoisted(() => ({ current: null as unknown }))
 
 vi.mock('../email-senders', () => ({
   getEmailSenders: async () => senders.current,
-  senderNameForAddress: async () => null,
+  // Every address asked about is one the workspace still has.
+  workspaceAddress: async () => ({ known: true, senderName: null }),
 }))
 vi.mock('../channel-account.service', () => ({
   getChannelAccount: async () => inboundAccount.current,

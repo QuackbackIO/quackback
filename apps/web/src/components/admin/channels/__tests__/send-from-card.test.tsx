@@ -111,6 +111,37 @@ describe('a server with its own default address', () => {
   })
 })
 
+describe('support replying from the inbox with an address behind it', () => {
+  const withBehind = (id: string) => ({
+    senders: { support: { mode: 'inbox' as const, fallbackId: id } },
+    hasInboundRoute: true,
+    forwardingTarget: 'support@acme.com',
+    forwardingTargetPermitted: true,
+  })
+
+  it('keeps the inbox chosen and says where other support email comes from', () => {
+    renderCard(withBehind(HELLO.id))
+    expect(select('Support').value).toBe('__inbox')
+    expect(screen.getByText(`Other support email comes from ${HELLO.label}.`)).toBeTruthy()
+  })
+
+  it('says what it sends from instead while that address cannot send', () => {
+    renderCard(withBehind(PENDING.id))
+    expect(
+      screen.getByText(
+        `help@pending.example isn't verified yet, so other support email comes from ${PLATFORM}.`
+      )
+    ).toBeTruthy()
+  })
+
+  it('names it as what replies fall back to while the inbox address cannot send', () => {
+    renderCard({ ...withBehind(HELLO.id), forwardingTargetPermitted: false })
+    expect(
+      screen.getByText(`support@acme.com isn't verified yet, so replies come from ${HELLO.label}.`)
+    ).toBeTruthy()
+  })
+})
+
 describe('an inbox address that cannot send yet', () => {
   const unverifiedInbox = {
     senders: { support: { mode: 'inbox' as const } },

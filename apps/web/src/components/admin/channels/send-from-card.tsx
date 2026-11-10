@@ -131,17 +131,36 @@ export function SendFromCard({
     if (!identity || identity.live || !fallback) return undefined
     return `${addressOf(identity.label)} isn't verified yet, so email sends from ${fallback}.`
   }
+  // The address behind the inbox, when support replies from the inbox and has
+  // one: support email that is not a reply to the inbox leaves from it.
+  const support = senders.support
+  const behindInbox =
+    support?.mode === 'inbox' && support.fallbackId
+      ? identities.find((i) => i.id === support.fallbackId)
+      : undefined
   // Said only when what happens differs from what is chosen. A reply that
-  // cannot leave from the inbox address leaves from the default, else from the
-  // workspace's own inbox on the platform, else from the platform address.
-  const inboxFallback = defaultIdentity?.label ?? platformInbox ?? platformFrom
+  // cannot leave from the inbox address leaves from the address behind the
+  // inbox, else the default, else the workspace's own inbox on the platform,
+  // else the platform address.
+  const inboxFallback =
+    (behindInbox?.live ? behindInbox.label : undefined) ??
+    defaultIdentity?.label ??
+    platformInbox ??
+    platformFrom
   const supportHint =
-    senders.support?.mode === 'inbox' &&
+    support?.mode === 'inbox' &&
     forwardingTarget &&
     forwardingTargetPermitted === false &&
     inboxFallback
       ? `${forwardingTarget} isn't verified yet, so replies come from ${inboxFallback}.`
       : undefined
+  const behindInboxHint = !behindInbox
+    ? undefined
+    : behindInbox.live
+      ? `Other support email comes from ${behindInbox.label}.`
+      : resolvedDefault
+        ? `${addressOf(behindInbox.label)} isn't verified yet, so other support email comes from ${resolvedDefault}.`
+        : undefined
 
   const showDefault = rows.includes('default')
   // Beside the default row "Same as default" is enough. Alone, the row's
@@ -193,7 +212,7 @@ export function SendFromCard({
               label={label}
               htmlFor={id}
               description={
-                (surface === 'support' ? supportHint : undefined) ??
+                (surface === 'support' ? (supportHint ?? behindInboxHint) : undefined) ??
                 notLiveHint(surface) ??
                 (!showDefault && value === SAME_AS_DEFAULT && resolvedDefault
                   ? `Sends from ${resolvedDefault}.`
