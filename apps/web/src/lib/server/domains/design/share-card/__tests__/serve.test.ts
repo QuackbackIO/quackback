@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { designView } from '@/lib/shared/design/design-view'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
-import { portalShareImage } from '@/lib/shared/portal-head'
+import {
+  portalShareImage,
+  type PortalHeadSettings,
+  type PortalHeadTemplates,
+} from '@/lib/shared/portal-head'
 import { decodePng, encodePng } from '../../extract/png'
 import { serveBrandImage, type BrandImageDeps } from '../serve'
 
@@ -11,8 +15,28 @@ const red = () => {
   return encodePng({ width: 40, height: 20, data })
 }
 
+const ENGLISH_HEAD: PortalHeadTemplates = {
+  pages: {
+    feedback: 'Feedback',
+    roadmap: 'Roadmap',
+    changelog: 'Changelog',
+    status: 'Status',
+    help: 'Help Center',
+  },
+  portal: '{name}',
+  feedback: '{name}',
+  roadmap: '{name}',
+  changelog: '{name}',
+  entry: '{title}',
+  status: '{name}',
+  incident: '{title}',
+  post: '{title}',
+}
+
 function deps(doc: PortalDesign | null, icon: Uint8Array | null = null) {
-  const settings = doc ? { name: 'Acme Corp', portalDesign: designView(doc, 4) } : null
+  const settings: PortalHeadSettings | null = doc
+    ? { name: 'Acme Corp', portalDesign: designView(doc, 4) }
+    : null
   const read = vi.fn(async () => icon)
   const value: BrandImageDeps = {
     load: async () => (doc && settings ? { doc, settings } : null),
@@ -48,6 +72,29 @@ describe('serveBrandImage', () => {
     const res = await serveBrandImage(new URLSearchParams('v=old'), value)
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).not.toContain('immutable')
+  })
+
+  it('moves a page’s card to a new address when the page’s name changes', async () => {
+    const doc = defaultDesign()
+    doc.brand.logo.mark.light = { key: 'logos/i.png' }
+    const { value, read, settings } = deps(doc, red())
+    const before = portalShareImage(settings, '', 'roadmap')
+    await serveBrandImage(queryOf(before), value)
+    // The main language changes, and with it the words under the title.
+    const words = { ...ENGLISH_HEAD, pages: { ...ENGLISH_HEAD.pages, roadmap: 'Feuille de route' } }
+    settings!.portalHeadWords = words
+    const after = portalShareImage(settings, '', 'roadmap')
+    expect(after).not.toBe(before)
+    const stale = await serveBrandImage(queryOf(before), value)
+    expect(stale.headers.get('cache-control')).not.toContain('immutable')
+    expect(read).toHaveBeenCalledTimes(2)
+    const current = await serveBrandImage(queryOf(after), value)
+    expect(current.headers.get('cache-control')).toContain('immutable')
+    // The portal's own card names no page, so its address stays.
+    settings!.portalHeadWords = undefined
+    const own = portalShareImage(settings, '')
+    settings!.portalHeadWords = words
+    expect(portalShareImage(settings, '')).toBe(own)
   })
 
   it('draws the card once per version', async () => {

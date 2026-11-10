@@ -118,9 +118,12 @@ describe('portalShareImage', () => {
     const settings = withDesign()
     const site = portalShareImage(settings, 'https://acme.test')
     expect(site).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=\w+$/)
+    // The page's card adds its name to the version, so a renamed page is a new address.
     expect(pageShareMeta(settings, 'https://acme.test', 'roadmap')).toEqual([
-      { property: 'og:image', content: `${site}&page=roadmap` },
+      { property: 'og:image', content: expect.stringMatching(/&page=roadmap$/) },
     ])
+    const [meta] = pageShareMeta(settings, 'https://acme.test', 'roadmap')
+    expect(meta!.content.startsWith(site!)).toBe(true)
   })
 
   it('changes address when the title changes, so a cached card is never stale', () => {
