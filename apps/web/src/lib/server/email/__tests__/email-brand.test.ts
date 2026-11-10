@@ -55,6 +55,32 @@ describe('emailBranding', () => {
     expect(result.drawn).toBeUndefined()
   })
 
+  it('puts a light-ink logo on a plate, so it reads on the white card', async () => {
+    publish((d) => {
+      d.brand.light.accent = '#0c862c'
+      d.brand.logo.mark.light = { key: 'design/icon.png' }
+      d.brand.logo.tone = 'light'
+    })
+    const light = await emailBranding({ logoKey: null, featureFlags: FLAG_ON })
+    expect(light.brand?.logoPlate).toBe('#0c862c')
+    publish((d) => {
+      d.brand.light.accent = '#ffd43b'
+      d.brand.logo.mark.light = { key: 'design/icon.png' }
+      d.brand.logo.tone = 'light'
+    })
+    // A pale brand colour would not hold light ink: near black does.
+    expect((await emailBranding({ logoKey: null, featureFlags: FLAG_ON })).brand?.logoPlate).toBe(
+      '#18181b'
+    )
+    publish((d) => {
+      d.brand.logo.mark.light = { key: 'design/icon.png' }
+      d.brand.logo.tone = 'dark'
+    })
+    expect((await emailBranding({ logoKey: null, featureFlags: FLAG_ON })).brand?.logoPlate).toBe(
+      undefined
+    )
+  })
+
   it('sends an SVG icon as the PNG the portal draws of it', async () => {
     publish((d) => (d.brand.logo.mark.light = { key: 'design/icon.svg' }))
     const result = await emailBranding({ logoKey: 'logos/acme.png', featureFlags: FLAG_ON })
