@@ -16,7 +16,7 @@ import { logger } from '@/lib/server/logger'
 import { opsPrompt, valuesNow } from './design-ai-guide'
 import { BLOCK_NAMES, type DesignerPage } from '@/lib/shared/design/outline'
 import { viewNote, writtenInEnglish } from './design-ai-view'
-import { honestReply, newAdjustments, wordsNote } from './design-ai-reply'
+import { honestReply, inRequestLanguage, newAdjustments, wordsNote } from './design-ai-reply'
 import { brandColour } from '@/lib/shared/design/palette'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
@@ -345,14 +345,23 @@ export async function askDesignAi(input: {
       (answer.outOfScope
         ? leftOut || nothing
         : leftOut && nothing && (!reachTo || reachTo === 'every'))
+    const english = writtenInEnglish(input.message)
     const said = honestReply(
       answer,
       result,
       outOfScope,
       input.scope === 'site' ? 'the section picked' : `the ${picked}`,
       reachTo,
-      writtenInEnglish(input.message)
+      english
     )
+    // Nothing changed, said by the server: in the request's own language where it is not English.
+    if (said.server && !english)
+      said.reply = await inRequestLanguage({
+        model,
+        request: input.message,
+        line: said.reply,
+        ...(input.signal ? { signal: input.signal } : {}),
+      })
     const clause = reachClause(result.design, result.applied, {
       scope: input.scope,
       ...(input.page ? { page: input.page } : {}),

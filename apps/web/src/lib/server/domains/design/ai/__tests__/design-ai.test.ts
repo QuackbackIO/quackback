@@ -21,6 +21,8 @@ const model = vi.hoisted(() => ({
     middleware?: Array<{ params?: Record<string, unknown> }>
   }>,
   refusesImages: false,
+  /** The server's line in the request's language, when asked for; null fails the call. */
+  translated: null as string | null,
   /** Answers that do not fit the schema before one that does. */
   misfits: 0,
   /** A complete look; a test's look names only what it is about. */
@@ -49,6 +51,10 @@ vi.mock('@/lib/server/domains/ai/structured-chat', () => ({
     messages: Array<{ content: unknown }>
   }) => {
     model.calls.push(input)
+    if (input.systemPrompts[0]?.startsWith('Write the line in the language')) {
+      if (model.translated === null) throw new Error('no translation')
+      return { reply: model.translated }
+    }
     if (model.error) throw model.error
     if (model.misfits > 0) {
       model.misfits--
@@ -115,6 +121,7 @@ beforeEach(() => {
   model.refusesImages = false
   model.configured = true
   model.answer = null
+  model.translated = null
   model.error = null
   model.calls = []
   model.allowance = { credits: 'available', resetsAt: null, trial: false }
@@ -1133,10 +1140,42 @@ describe('a request keeps as near as the chip says it reaches', () => {
       if (!result.ok) throw new Error('expected an answer')
       expect(result.applied).toEqual([])
       expect(result.design.layout.hero).toBe('brand')
+      // In German the line could not be put into German here, so it is said in English.
       expect(result.reply).toBe('That reaches beyond this page, so nothing changed.')
       // About the hero itself: no offer to ask about the whole site.
       expect(result.outOfScope).toBe(false)
     })
+
+  it('says nothing changed in the request’s language, never the model’s claim that it did', async () => {
+    model.answer = calmer
+    model.translated =
+      'Das reicht über diese Seite hinaus, also hat sich nichts geändert. Mehr nicht.'
+    const result = await ask('Mach das ruhiger', 'page')
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.applied).toEqual([])
+    expect(result.reply).toBe('Das reicht über diese Seite hinaus, also hat sich nichts geändert.')
+    // The server's line went to be put into the request's language, with the request.
+    const asked = JSON.stringify(model.calls.at(-1)!.messages)
+    expect(asked).toContain('That reaches beyond this page, so nothing changed.')
+    expect(asked).toContain('Mach das ruhiger')
+  })
+
+  it('asks for no other language for an English request, nor where the model said it was outside', async () => {
+    model.answer = calmer
+    model.translated = 'Never said'
+    expect((await ask('Make this calmer', 'page')).ok && model.calls.length).toBe(1)
+    model.calls = []
+    model.answer = {
+      reply: 'Eso no es parte de la cabecera, así que no cambié nada.',
+      outOfScope: true,
+      ops: [],
+    }
+    const result = await ask('Pon el menú en negro', 'page')
+    expect(result.ok && result.reply).toBe(
+      'Eso no es parte de la cabecera, así que no cambié nada.'
+    )
+    expect(model.calls.length).toBe(1)
+  })
 
   it('with the hero picked for every page, says in one sentence that it changed every page', async () => {
     model.answer = calmer

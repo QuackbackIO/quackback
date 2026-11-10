@@ -10,6 +10,12 @@ import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { OpsAnswer } from './design-ai-guide'
 import { languageName } from './design-ai-view'
+import { z } from 'zod'
+import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
+import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ module: 'design-ai-reply' })
 
 const opKey = (op: FlatOp) => JSON.stringify([op.op, op.target ?? '', op.key ?? '', op.value ?? ''])
 
@@ -30,7 +36,12 @@ export function honestReply(
   reach: AiReach | undefined,
   /** Whether the request is in English, which the server's own words are. */
   english = true
-): { reply: string; notes: string[] } {
+): {
+  reply: string
+  notes: string[]
+  /** The server's own English line for nothing changed, which a request in another language needs in its own. */
+  server?: true
+} {
   const { done, refused, already } = result
   // In another language, the model's own line, in the person's words, where it can be
   // true: some of it applied, or the model itself said the request was outside.
@@ -38,20 +49,17 @@ export function honestReply(
   const why = plainReasons(refused.map((each) => each.reason))
   const narrowed = reach === 'page' ? 'this page' : reach === 'one' ? 'this one' : null
   const leftOut = result.outOfScope.length > 0
+  const server = (reply: string) => ({ reply, notes: [], server: true as const })
   if (done.length === 0 && (outOfScope || (leftOut && !narrowed)))
-    return {
-      reply: own && answer.outOfScope ? own : `That is outside ${where}, so nothing changed.`,
-      notes: [],
-    }
+    return own && answer.outOfScope
+      ? { reply: own, notes: [] }
+      : server(`That is outside ${where}, so nothing changed.`)
   if (done.length === 0 && leftOut)
-    return { reply: `That reaches beyond ${narrowed}, so nothing changed.`, notes: [] }
+    return server(`That reaches beyond ${narrowed}, so nothing changed.`)
   if (done.length === 0 && refused.length > 0)
-    return {
-      reply: why ? `Nothing changed: ${why}.` : 'Nothing changed: I could not do that here.',
-      notes: [],
-    }
+    return server(why ? `Nothing changed: ${why}.` : 'Nothing changed: I could not do that here.')
   if (done.length === 0 && already.length > 0)
-    return { reply: 'Nothing changed: it is already like that.', notes: [] }
+    return server('Nothing changed: it is already like that.')
   const applied = new Set(done.map((each) => opKey(each.op)))
   const said = answer.ops.every((each) => applied.has(opKey(each)))
     ? oneSentence(answer.reply)
@@ -93,4 +101,44 @@ export function wordsNote(result: OpsOutcome, locale: string | undefined): strin
     ({ op }) => op.op === 'words' || (op.op === 'set' && ['heading', 'body'].includes(op.key ?? ''))
   )
   return wrote ? `The words are in ${languageName(locale)}, the language shown.` : ''
+}
+
+/** What the model is told when the server's own line must be said in the request's language. */
+export const REQUEST_LANGUAGE_PROMPT =
+  'Write the line in the language the request is written in, with the same meaning: one short, plain sentence that names the part as the request does. Add nothing the line does not say.'
+
+const inLanguage = z.object({ reply: z.string().max(300) })
+
+/**
+ * The server's own line for nothing changed, said in the language of a request
+ * written in another: the model's reply would claim the change it asked for,
+ * which never landed. Said in English where the line cannot be put into it.
+ */
+export async function inRequestLanguage(input: {
+  model: string
+  request: string
+  line: string
+  signal?: AbortSignal
+}): Promise<string> {
+  try {
+    const answer = await structuredChat({
+      model: input.model,
+      systemPrompts: [REQUEST_LANGUAGE_PROMPT],
+      messages: [{ role: 'user', content: `Request: ${input.request}\nLine: ${input.line}` }],
+      schema: inLanguage,
+      maxTokens: 200,
+      middleware: [
+        createUsageLoggingMiddleware({
+          pipelineStep: 'design',
+          model: input.model,
+          metadata: { call: 'edit' },
+        }),
+      ],
+      ...(input.signal ? { signal: input.signal } : {}),
+    })
+    return oneSentence(answer.reply.trim()) || input.line
+  } catch (err) {
+    log.warn({ err }, 'the design ai reply stayed in English')
+    return input.line
+  }
 }
