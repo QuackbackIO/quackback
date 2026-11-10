@@ -579,11 +579,18 @@ export function applyDesignChanges(
     // An optional field is cleared by leaving it out; a nullable one takes null.
     const attempts = value === null ? [null, undefined] : [value]
     let next: PortalDesign | null = null
+    let tidied = false
     let reason = 'the design does not allow it'
     for (const attempt of attempts) {
       const raw = write(design, path, attempt, untrusted?.language)
-      // A key format 2 had (one card look, Lift as a motion) lands as a stored design's does.
-      const written = typeof raw === 'string' ? raw : (tidyDesign(raw as never) as PortalDesign)
+      // A key format 2 had (one card look, Lift as a motion) lands as a stored design's does;
+      // one a tidy only takes away again (a retired key) is refused, as before.
+      const kept = typeof raw === 'string' ? raw : (tidyDesign(raw as never) as PortalDesign)
+      const written =
+        typeof raw !== 'string' && kept !== raw && same(kept, design)
+          ? (invalid(raw) ?? 'the design does not allow it')
+          : kept
+      tidied = typeof raw !== 'string' && kept !== raw
       const why =
         typeof written === 'string'
           ? written
@@ -599,11 +606,13 @@ export function applyDesignChanges(
       continue
     }
     // A tidied change lands elsewhere than its path: each top-level field it moved is the change.
-    const paths = same(read(design, path), read(next, path))
-      ? Object.keys({ ...design, ...next }).filter(
-          (key) => !same(read(design, key), read(next, key))
-        )
-      : [path]
+    const paths = !same(read(design, path), read(next, path))
+      ? [path]
+      : tidied
+        ? Object.keys({ ...design, ...next }).filter(
+            (key) => !same(read(design, key), read(next, key))
+          )
+        : []
     if (!paths.length) continue
     for (const each of paths) {
       applied.push({
