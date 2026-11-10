@@ -343,11 +343,11 @@ describe('Main action', () => {
     start.pages.home.mainAction = 'button'
     show(start, 'home', { ...ALL_ON, help: false, roadmap: false })
     expect(names('Main action')).toEqual(['Composer', 'Button', 'None'])
-    expect(screen.getByRole('button', { name: 'Search needs the help centre on.' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Search needs the Help Center on.' })).toBeTruthy()
     expect(names('Goes to')).toEqual(['Composer', 'Support'])
     expect(
       screen.getByRole('button', {
-        name: 'The roadmap needs to be on for a button to go there. The help centre needs to be on for a button to go there.',
+        name: 'The roadmap needs to be on for a button to go there. The Help Center needs to be on for a button to go there.',
       })
     ).toBeTruthy()
   })

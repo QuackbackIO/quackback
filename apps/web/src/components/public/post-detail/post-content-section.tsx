@@ -208,7 +208,7 @@ export function PostContentSection({
               onDocumentChange={handleContentChange}
               placeholder={intl.formatMessage({
                 id: 'portal.postDetail.edit.detailsPlaceholder',
-                defaultMessage: 'Add more details... Type / for commands',
+                defaultMessage: 'Add more details… Type / for commands',
               })}
               minHeight="150px"
               disabled={isSaving}
@@ -234,7 +234,7 @@ export function PostContentSection({
           </Button>
           <Button size="sm" onClick={handleSave} disabled={!isValid || !hasChanges || isSaving}>
             {isSaving ? (
-              <FormattedMessage id="portal.postDetail.edit.saving" defaultMessage="Saving..." />
+              <FormattedMessage id="portal.postDetail.edit.saving" defaultMessage="Saving…" />
             ) : (
               <FormattedMessage id="portal.postDetail.edit.save" defaultMessage="Save" />
             )}

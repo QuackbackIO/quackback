@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { WORDS } from './properties/words'
 import type { DesignCheck } from '@/lib/shared/design/checks'
 import type { Selection } from '@/lib/shared/design/outline'
 import type { PublishSummary, SummaryRow } from '@/lib/shared/design/publish-summary'
@@ -137,7 +138,7 @@ export function PublishSummaryDialog({
         <div className="-mx-1 min-h-0 space-y-4 overflow-y-auto px-1">
           <Rows title="Menu and landing" rows={summary.menu} />
           <Rows title="Look and words" rows={summary.look} />
-          <Rows title="Overrides" rows={summary.overrides} />
+          <Rows title={WORDS.setDifferently} rows={summary.overrides} />
           {newLogo && (
             <div className="flex items-start gap-2 rounded-lg border border-border p-3">
               <Checkbox

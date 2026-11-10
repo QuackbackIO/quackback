@@ -66,7 +66,7 @@ const m = defineMessages({
   never: { id: 'portal.settings.apiKeys.expiry.never', defaultMessage: 'No expiry' },
   cancel: { id: 'portal.settings.apiKeys.cancel', defaultMessage: 'Cancel' },
   create: { id: 'portal.settings.apiKeys.create', defaultMessage: 'Create key' },
-  creating: { id: 'portal.settings.apiKeys.creating', defaultMessage: 'Creating...' },
+  creating: { id: 'portal.settings.apiKeys.creating', defaultMessage: 'Creating…' },
   failed: {
     id: 'portal.settings.apiKeys.createFailed',
     defaultMessage: 'The key could not be created.',

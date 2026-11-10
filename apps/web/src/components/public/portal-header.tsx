@@ -443,7 +443,7 @@ export function PortalHeader({
         data-qb-section="header"
         data-qb-part="header"
       >
-        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+        <div className="qb-page">
           <div ref={inlineRow} className="flex h-12 items-center gap-4" data-qb-header-row="">
             {logo}
             {menuFolded ? null : (
@@ -455,9 +455,7 @@ export function PortalHeader({
           </div>
         </div>
         <NavScroller className={menuFolded ? 'mt-2' : 'mt-2 md:hidden'}>
-          <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
-            {navigation}
-          </div>
+          <div className="qb-page">{navigation}</div>
         </NavScroller>
       </header>
     )
@@ -470,7 +468,7 @@ export function PortalHeader({
         data-qb-section="header"
         data-qb-part="header"
       >
-        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+        <div className="qb-page">
           {/* From md, three columns: the theme toggle and Log in at the start, the logo
               between, Sign up or the account at the end, each edge on the content
               column's. On a phone the logo leads, every button together at the end. */}
@@ -519,7 +517,7 @@ export function PortalHeader({
     >
       {/* Row 1: Logo + Name + Auth */}
       <div>
-        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+        <div className="qb-page">
           <div className="flex h-12 items-center justify-between">
             {logo}
             {authButtons}
@@ -529,9 +527,7 @@ export function PortalHeader({
 
       {/* Row 2: Navigation */}
       <NavScroller className="mt-2">
-        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
-          {navigation}
-        </div>
+        <div className="qb-page">{navigation}</div>
       </NavScroller>
     </header>
   )

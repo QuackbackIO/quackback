@@ -24,15 +24,21 @@ export function ChangelogPage() {
     id: 'portal.changelog.description',
     defaultMessage: 'Stay up to date with the latest product updates and shipped features.',
   })
-  const rss = intl.formatMessage({ id: 'portal.changelog.rssFeed', defaultMessage: 'RSS Feed' })
+  const rss = intl.formatMessage({ id: 'portal.changelog.rssFeed', defaultMessage: 'RSS feed' })
   // Subscribe by email leads; a visitor not signed in signs in to subscribe. RSS follows, quietly.
+  // The RSS button stands as tall as Subscribe, a primary button, however tall a brand's buttons are.
   const actions = (
-    <div className="flex items-center gap-2">
+    <div data-changelog-actions="" className="flex items-center gap-2">
       <ChangelogSubscribeButton
         enabled={isIdentified}
         onSignIn={authPopover ? () => authPopover.openAuthPopover({ mode: 'login' }) : undefined}
       />
-      <Button variant="outline" size="icon-sm" asChild className="shrink-0">
+      <Button
+        variant="outline"
+        size="icon-sm"
+        asChild
+        className="min-h-[var(--qb-button-height,2rem)] min-w-[var(--qb-button-height,2rem)] shrink-0"
+      >
         <a
           href="/changelog/feed"
           target="_blank"
@@ -57,12 +63,7 @@ export function ChangelogPage() {
           actionPlace={choices.subscribe}
         />
       )}
-      <div
-        className={cn(
-          'mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6',
-          designTitles ? 'pt-8 pb-8' : 'py-8'
-        )}
-      >
+      <div className={cn('qb-page', designTitles ? 'pt-8 pb-8' : 'py-8')}>
         {!designTitles && (
           <PortalPageHeader
             size="large"

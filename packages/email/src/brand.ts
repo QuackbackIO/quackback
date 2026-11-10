@@ -12,6 +12,11 @@ export interface EmailBrand {
   accentText: string
   /** Link text, readable on the white email card. */
   link: string
+  /**
+   * A plate behind the header image, for a logo in light ink that would
+   * vanish on the white card; absent draws it as it is.
+   */
+  logoPlate?: string
 }
 
 /** Quackback gold, for a workspace with no published design. */

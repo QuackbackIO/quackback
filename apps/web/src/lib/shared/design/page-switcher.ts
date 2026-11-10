@@ -111,7 +111,7 @@ const MODULE_TITLES: Record<PortalPageType, string> = {
   feedback: 'Feedback',
   roadmap: 'Roadmap',
   changelog: 'Changelog',
-  help: 'Help center',
+  help: 'Help Center',
   support: 'Support',
   status: 'Status',
 }

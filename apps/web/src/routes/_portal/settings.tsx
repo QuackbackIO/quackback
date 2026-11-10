@@ -30,7 +30,7 @@ function SettingsLayout() {
   const { userRole } = Route.useRouteContext()
   return (
     <AreaMessages area="settings" messages={messages}>
-      <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full flex flex-col md:flex-row gap-4 md:gap-8 px-4 sm:px-6 py-6 md:py-8 flex-1 animate-in fade-in duration-200">
+      <div className="qb-page flex flex-col md:flex-row gap-4 md:gap-8 py-6 md:py-8 flex-1 animate-in fade-in duration-200">
         <SettingsNav showApiKeys={isTeamMember(userRole)} />
         <main className="min-w-0 flex-1">
           <Outlet />

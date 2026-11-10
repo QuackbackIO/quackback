@@ -232,7 +232,7 @@ function PlaceholderHero() {
     <section
       data-qb-section="hero"
       data-qb-placeholder=""
-      className="mx-auto my-4 flex min-h-28 w-full max-w-[var(--qb-page-max,72rem)] flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-muted-foreground/40 px-4 text-center text-muted-foreground sm:px-6"
+      className="qb-page my-4 flex min-h-28 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-muted-foreground/40 text-center text-muted-foreground"
     >
       <p className="text-sm font-medium">Add a headline</p>
       <p className="text-xs">Visitors see nothing here until you do</p>
@@ -330,7 +330,7 @@ export function PortalBand({
     >
       <div
         className={cn(
-          'mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 sm:px-6 pt-2 sm:pt-6 [[data-qb-band=none]_&]:pb-0',
+          'qb-page pt-2 sm:pt-6 [[data-qb-band=none]_&]:pb-0',
           '[[data-qb-band-align=centre]_&]:text-center',
           '[[data-qb-band-shape=inset]_&]:max-w-[calc(var(--qb-page-max,72rem)-3rem)] sm:[[data-qb-band-shape=inset]_&]:w-[calc(100%-3rem)] [[data-qb-band-shape=inset]_&]:rounded-[calc(var(--qb-radius-panel,0.75rem)*2.5)] [[data-qb-band-shape=inset]_&]:px-6 [[data-qb-band-shape=inset]_&]:py-10 sm:[[data-qb-band-shape=inset]_&]:px-12 sm:[[data-qb-band-shape=inset]_&]:py-14',
           '[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg)]',

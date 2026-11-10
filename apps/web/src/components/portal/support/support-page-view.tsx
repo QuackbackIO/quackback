@@ -128,12 +128,7 @@ export function SupportPageView({
           action={newConversation || undefined}
         />
       )}
-      <div
-        className={cn(
-          'mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 sm:px-6',
-          designTitles ? 'pt-6 pb-8' : 'py-8'
-        )}
-      >
+      <div className={cn('qb-page', designTitles ? 'pt-6 pb-8' : 'py-8')}>
         {!designTitles && (
           <div className="mb-6 flex items-center justify-between gap-3">
             <div>

@@ -11,6 +11,21 @@ import { rewritePartAliases } from '@/lib/shared/design/parts'
 
 const messages = (issues: { message: string }[]) => issues.map((issue) => issue.message)
 
+describe('hero part names', () => {
+  it('lints clean and styles the hero, as the band names still do', () => {
+    const css =
+      '[data-qb-part="hero"] { --qb-band-bg: #000; } [data-qb-part="post-hero"] { color: red; }'
+    expect(lintDesignCss(css).warnings).toEqual([])
+    expect(rewritePartAliases(css)).toBe(
+      '[data-qb-part="band"] { --qb-band-bg: #000; } [data-qb-part="post-band"] { color: red; }'
+    )
+    expect(rewritePartAliases('[data-qb-part="hero-image"] {}')).toBe(
+      '[data-qb-part="band-image"] {}'
+    )
+    expect(lintDesignCss('[data-qb-part="band"] { color: red; }').warnings).toEqual([])
+  })
+})
+
 describe('lintDesignCss', () => {
   it('passes CSS that styles parts with their tokens', () => {
     const report = lintDesignCss(`

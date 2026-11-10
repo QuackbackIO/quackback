@@ -124,7 +124,7 @@ export function HelpCenterHeroSearch({
       })
     : intl.formatMessage({
         id: 'portal.hc.search.placeholder',
-        defaultMessage: 'Search articles...',
+        defaultMessage: 'Search articles…',
       })
 
   return (

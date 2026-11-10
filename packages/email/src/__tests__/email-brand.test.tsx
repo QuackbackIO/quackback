@@ -58,4 +58,16 @@ describe('email brand', () => {
     expect(html).toContain('https://cdn.example/icon.png')
     expect(html).toContain('background-color:#0c862c')
   })
+
+  it('puts the header logo on its plate when the brand gives one', async () => {
+    const sample = (brand: typeof GREEN & { logoPlate?: string }) =>
+      renderSignInEmailSample({
+        brand,
+        logoUrl: 'https://cdn.example/icon.png',
+        workspaceName: 'Acme',
+      })
+    const plated = await sample({ ...GREEN, logoPlate: '#18181b' })
+    expect(plated).toMatch(/<img[^>]*icon\.png[^>]*background-color:#18181b/)
+    expect(await sample(GREEN)).not.toContain('#18181b')
+  })
 })

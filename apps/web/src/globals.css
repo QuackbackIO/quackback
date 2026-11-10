@@ -602,6 +602,18 @@ a svg,
   }
 }
 
+/* The portal's page column: centred, as wide as the design's page width, with the page's side gutter. */
+@utility qb-page {
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--qb-page-max, 72rem);
+  padding-inline: 1rem;
+
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+}
+
 @utility qb-tag-edge {
   border-color: color-mix(in oklch, var(--qb-tag) 28%, transparent);
 

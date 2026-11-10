@@ -101,11 +101,11 @@ export function mainActionsOffered(gates: PortalPageGates): {
     notes: {
       actions: [
         ...(gates.feedback ? [] : ['The composer needs feedback on.']),
-        ...(gates.help ? [] : ['Search needs the help centre on.']),
+        ...(gates.help ? [] : ['Search needs the Help Center on.']),
       ],
       buttonTo: [
         ...(gates.roadmap ? [] : ['The roadmap needs to be on for a button to go there.']),
-        ...(gates.help ? [] : ['The help centre needs to be on for a button to go there.']),
+        ...(gates.help ? [] : ['The Help Center needs to be on for a button to go there.']),
         ...(gates.support ? [] : ['Support needs to be on for a button to go there.']),
       ],
     },

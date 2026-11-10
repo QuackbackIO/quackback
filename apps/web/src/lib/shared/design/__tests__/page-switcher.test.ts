@@ -60,7 +60,7 @@ describe('the page switcher, by module', () => {
       'Feedback',
       'Roadmap',
       'Changelog',
-      'Help center',
+      'Help Center',
       'Turned off',
     ])
   })

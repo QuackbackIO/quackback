@@ -78,7 +78,7 @@ export function StatusPageView({
   const historyItems = historyPages?.pages.flatMap((page) => page.items) ?? []
 
   return (
-    <div className="mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 py-8 sm:px-6">
+    <div className="qb-page py-8">
       <PortalPageHeader
         size="large"
         title={intl.formatMessage({ id: 'portal.status.title', defaultMessage: 'Status' })}
@@ -326,7 +326,7 @@ export function StatusPageView({
               {isFetchingNextPage ? (
                 <FormattedMessage
                   id="portal.status.history.loadingMore"
-                  defaultMessage="Loading..."
+                  defaultMessage="Loading…"
                 />
               ) : (
                 <FormattedMessage id="portal.status.history.loadMore" defaultMessage="Load more" />

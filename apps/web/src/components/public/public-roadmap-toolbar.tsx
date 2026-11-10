@@ -108,7 +108,7 @@ export function PublicRoadmapToolbar({
               <Input
                 placeholder={intl.formatMessage({
                   id: 'portal.feedback.toolbar.searchPlaceholder',
-                  defaultMessage: 'Search posts...',
+                  defaultMessage: 'Search posts…',
                 })}
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}

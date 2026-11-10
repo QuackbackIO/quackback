@@ -56,7 +56,7 @@ export function ChangelogListPublic({
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-muted-foreground">
-          <FormattedMessage id="portal.changelog.loading" defaultMessage="Loading changelog..." />
+          <FormattedMessage id="portal.changelog.loading" defaultMessage="Loading changelog…" />
         </div>
       </div>
     )
@@ -149,7 +149,7 @@ export function ChangelogListPublic({
         <div className="flex justify-center pt-8">
           <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
             {isFetchingNextPage ? (
-              <FormattedMessage id="portal.changelog.loadingMore" defaultMessage="Loading..." />
+              <FormattedMessage id="portal.changelog.loadingMore" defaultMessage="Loading…" />
             ) : (
               <FormattedMessage id="portal.changelog.loadMore" defaultMessage="Load more" />
             )}
