@@ -32,6 +32,7 @@ import type { SaveDraftCause } from './draft-saves'
 import { legacyBrandingOf } from './engine'
 import { lintDesignCss, type CssIssue } from './css-lint'
 import { publishDraftWithWorkspaceLogo } from './workspace-logo'
+import { mergePatchRefusal, settledForSave } from './api-writes'
 
 const REFUSAL_CODES = [
   'INVALID_DESIGN',
@@ -49,6 +50,8 @@ const REFUSAL_CODES = [
   'DESIGN_TOO_LARGE',
   'WELCOME_TOO_LONG',
   'DESIGN_NEWER_FORMAT',
+  'REPLACE_REQUIRED',
+  'ID_REQUIRED',
 ] as const
 export type DesignRefusalCode = (typeof REFUSAL_CODES)[number]
 export type DesignRefusal = { ok: false; code: DesignRefusalCode; message: string }
@@ -161,12 +164,19 @@ export async function readDraftForChange(): Promise<
  * as the draft. With `expectedRevision`, a patch made against an older state
  * is refused. A patch written for format 2, naming the hero's keys as a band
  * (layout.bandShape), still applies: its keys take format 3's names first.
+ *
+ * Arrays are replaced whole, so a patch that names Home's blocks, the
+ * overrides or the menu's items is refused unless it passes `replace`, and
+ * blocks and menu links must carry their ids. Home's grid is settled after.
  */
 export async function patchDesignDraft(
   patch: unknown,
   author: DesignAuthor,
-  expectedRevision?: string
+  expectedRevision?: string,
+  options: { replace?: boolean } = {}
 ): Promise<{ ok: true; report: DesignReport } | DesignRefusal> {
+  const refused = mergePatchRefusal(patch, options.replace === true)
+  if (refused) return { ok: false, ...refused }
   const current = await readDraftForChange()
   // The save checks the revision under the draft's lock, so a change landing
   // between this read and that save is refused too.
@@ -181,7 +191,7 @@ export async function patchDesignDraft(
       ? tidyDesign(merged as Record<string, unknown>)
       : merged
   // An agent's patch over someone else's draft saves that draft aside first.
-  return saveDesignDraft(tidied, author, expectedRevision, 'agent')
+  return saveDesignDraft(settledForSave(tidied), author, expectedRevision, 'agent')
 }
 
 /**
