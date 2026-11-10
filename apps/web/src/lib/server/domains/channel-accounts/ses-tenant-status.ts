@@ -13,6 +13,7 @@
  */
 import { and, db, eq, isNull, emailSesTenants } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import {
   ensureSesTenantState,
   getSesTenantState,
@@ -82,7 +83,8 @@ async function notifyPausedOnce(
       title: 'Email sending is paused',
       body:
         'The email provider paused sending because of bounces or complaints.' +
-        (shortCause ? ` ${shortCause}` : ''),
+        (shortCause ? ` ${shortCause}` : '') +
+        (isPooledTenancy() ? ' Contact support to resume.' : ''),
       metadata: { reason: 'sending_paused', audience: 'admin' },
     })
   } catch (err) {

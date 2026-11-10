@@ -119,7 +119,10 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
   const { data } = view
   return (
     <div className="space-y-6">
-      <SendingPausedNotice paused={data?.sendingPaused ?? null} />
+      <SendingPausedNotice
+        paused={data?.sendingPaused ?? null}
+        ownServer={data?.addressMode === 'any'}
+      />
       <SendingAddressesSection
         addresses={view.addresses}
         domains={view.domains}
@@ -161,7 +164,10 @@ export function SupportInboxSettings({ canManageSending }: { canManageSending: b
   const { data } = view
   return (
     <div className="space-y-6">
-      <SendingPausedNotice paused={data?.sendingPaused ?? null} />
+      <SendingPausedNotice
+        paused={data?.sendingPaused ?? null}
+        ownServer={data?.addressMode === 'any'}
+      />
       <InboundRouteSection
         forwardingTarget={inboundTarget(data?.inboundRoute)}
         platformAddress={data?.platformAddress ?? null}

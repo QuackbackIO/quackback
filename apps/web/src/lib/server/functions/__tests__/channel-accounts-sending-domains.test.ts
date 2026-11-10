@@ -168,7 +168,7 @@ describe('restartSendingDomainChecksFn and deleteSendingDomainFn', () => {
   it('falls back to the remove wording for an unknown failure', async () => {
     hoisted.deleteDomain.mockRejectedValue(new Error('connection reset'))
     await expect(deleteDomain({ data: { id: 'sending_domain_1' } })).rejects.toThrow(
-      "Couldn't remove the domain. Try again, and if it keeps failing, contact your workspace's operator."
+      "Couldn't remove the domain. Try again, and if it keeps failing, contact your administrator."
     )
   })
 })
@@ -288,7 +288,7 @@ describe('createSendingAddressFn failures', () => {
     await expect(
       createAddress({ data: { address: 'help@acme.com', senderName: 'Acme Support' } })
     ).rejects.toThrow(
-      "Couldn't add the address. Try again, and if it keeps failing, contact your workspace's operator."
+      "Couldn't add the address. Try again, and if it keeps failing, contact your administrator."
     )
   })
 })
