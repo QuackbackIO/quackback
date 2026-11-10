@@ -81,6 +81,8 @@ const VALUE_LABELS: Record<string, string> = {
   ink: 'Text colour',
   accent: 'Brand colour',
   support: 'Second colour',
+  // Home's composer and the page titles keep the hero's old stored word: people see "hero".
+  band: 'In the hero',
 }
 
 const capital = (value: string) => value[0].toUpperCase() + value.slice(1).replaceAll('_', ' ')
