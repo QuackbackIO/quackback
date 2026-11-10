@@ -11,9 +11,19 @@ import {
   portalPathsOf,
 } from '@/components/public/feedback/feed-route'
 
+/** What marks Home in the server's page: its grid (portal-home.tsx). */
+const HOME_DRAWN = '[data-qb-section="home"][data-qb-grid]'
+
 /** Home's module: its page, and what its loader starts. One import serves both. */
 const importHome = () => import('@/components/public/home/portal-home')
 const PortalHome = lazy(() => importHome().then((module) => ({ default: module.PortalHome })))
+
+// Where the server drew Home, its module starts loading with the page's own
+// scripts rather than when hydration reaches it. Until it hydrates, an update
+// from above (the theme, the session) makes React draw Home again from
+// nothing, and on a slow phone its blocks vanished for seconds while the
+// module and its reads arrived.
+if (typeof document !== 'undefined' && document.querySelector(HOME_DRAWN)) void importHome()
 
 /** The feed page, from its own chunk, as the feed route loads it. */
 const FeedComponent = lazyRouteComponent(
