@@ -455,9 +455,7 @@ export function PortalHeader({
           </div>
         </div>
         <NavScroller className={menuFolded ? 'mt-2' : 'mt-2 md:hidden'}>
-          <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
-            {navigation}
-          </div>
+          <div className={MENU_ROW}>{navigation}</div>
         </NavScroller>
       </header>
     )
@@ -529,13 +527,20 @@ export function PortalHeader({
 
       {/* Row 2: Navigation */}
       <NavScroller className="mt-2">
-        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
-          {navigation}
-        </div>
+        <div className={MENU_ROW}>{navigation}</div>
       </NavScroller>
     </header>
   )
 }
+
+/**
+ * A menu on a row of its own: the page's width at least, and as wide as the
+ * menu and its side padding when that is wider, so on a phone the row
+ * scrolls, fades and offers its way on (NavScroller) rather than running the
+ * last page's name into the screen's edge.
+ */
+const MENU_ROW =
+  'mx-auto w-max min-w-[min(100%,var(--qb-page-max,72rem))] max-w-[var(--qb-page-max,72rem)] px-4 sm:px-6'
 
 const navItemClass = (isActive: boolean) =>
   cn(
