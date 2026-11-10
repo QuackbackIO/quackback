@@ -8,8 +8,10 @@ import type { LaunchTask } from '@/lib/shared/launch-checklist'
 
 /**
  * The launch plan's branding step. With the portal in the builder, it hands
- * off to the builder's brand match on the brand's website (or opens the
- * Brand kit when no website is known). Otherwise nothing is set for the
+ * off to the builder's brand match on the website it names, with Use another
+ * site opening the match row to change it (or opens the Brand kit when no
+ * website is known); while a matched brand waits in the draft, it opens
+ * publish. Otherwise nothing is set for the
  * workspace until someone chooses here: a logo the lookup found on their website is offered
  * with "Use it", and otherwise (a personal email has no company website, or
  * the lookup found nothing) they can name their website to look it up, or
@@ -31,13 +33,55 @@ export function BrandingStepAction({
   const searching = branding.looking || status?.status === 'pending'
 
   if (task.href === '/design') {
+    // A matched brand waits in the draft: visitors see it once it is published.
+    if (task.search?.publish) {
+      return (
+        <>
+          <span className="text-sm text-muted-foreground">
+            <FormattedMessage
+              id="onboarding.branding.notPublished"
+              defaultMessage="Matched, not published"
+            />
+          </span>
+          <Button asChild size="sm" variant={variant}>
+            <Link to="/design" search={{ publish: 'open', from: 'onboarding' }}>
+              <FormattedMessage id="onboarding.branding.publish" defaultMessage="Publish" />
+            </Link>
+          </Button>
+        </>
+      )
+    }
     const match = task.search?.match ?? status?.domain
+    if (!match) {
+      return (
+        <Button asChild size="sm" variant={variant}>
+          <Link to="/design" search={{ from: 'onboarding' }}>
+            <FormattedMessage id="onboarding.branding.match" defaultMessage="Match your brand" />
+          </Link>
+        </Button>
+      )
+    }
+    // The website is a guess from the email address, so it is named, and another is a click away.
     return (
-      <Button asChild size="sm" variant={variant}>
-        <Link to="/design" search={{ ...(match ? { match } : {}), from: 'onboarding' }}>
-          <FormattedMessage id="onboarding.branding.match" defaultMessage="Match your brand" />
-        </Link>
-      </Button>
+      <>
+        <Button asChild size="sm" variant={variant}>
+          <Link to="/design" search={{ match, from: 'onboarding' }}>
+            <FormattedMessage
+              id="onboarding.branding.matchFrom"
+              defaultMessage="Match from {domain}"
+              values={{ domain: match }}
+            />
+          </Link>
+        </Button>
+        <Button asChild size="sm" variant="ghost" className="text-muted-foreground">
+          <Link to="/design" search={{ brand: 'match', from: 'onboarding' }}>
+            <FormattedMessage
+              id="onboarding.branding.otherSite"
+              defaultMessage="Use another site"
+            />
+          </Link>
+        </Button>
+      </>
     )
   }
 

@@ -128,10 +128,10 @@ describe('the branding step with the portal in the builder', () => {
   const builder = (search: Record<string, string>) =>
     ({ ...task, href: '/design', search }) as LaunchTask
 
-  it('hands off to the builder brand match on the website, not a logo upload', () => {
+  it('hands off to the builder brand match on the website it names, not a logo upload', () => {
     hook.state = { status: null }
     show(builder({ match: 'acme.com', from: 'onboarding' }))
-    expect(screen.getByRole('link', { name: 'Match your brand' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Match from acme.com' })).toHaveAttribute(
       'href',
       '/design?match=acme.com&from=onboarding'
     )
@@ -139,10 +139,19 @@ describe('the branding step with the portal in the builder', () => {
     expect(screen.queryByRole('link', { name: 'Upload a logo' })).toBeNull()
   })
 
+  it("offers another site through the builder's brand match row, for a wrong guess", () => {
+    hook.state = { status: null }
+    show(builder({ match: 'acme.com', from: 'onboarding' }))
+    expect(screen.getByRole('link', { name: 'Use another site' })).toHaveAttribute(
+      'href',
+      '/design?brand=match&from=onboarding'
+    )
+  })
+
   it('matches the website the lookup knows when the plan did not name one', () => {
     hook.state = { status: status({ status: 'eligible' }) }
     show(builder({ from: 'onboarding' }))
-    expect(screen.getByRole('link', { name: 'Match your brand' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Match from acme.example' })).toHaveAttribute(
       'href',
       '/design?match=acme.example&from=onboarding'
     )
@@ -155,5 +164,17 @@ describe('the branding step with the portal in the builder', () => {
       'href',
       '/design?from=onboarding'
     )
+    expect(screen.queryByRole('link', { name: 'Use another site' })).toBeNull()
+  })
+
+  it("says a matched brand is not published yet, and opens the builder's publish", () => {
+    hook.state = { status: status({ status: 'eligible' }) }
+    show(builder({ publish: 'open', from: 'onboarding' }))
+    expect(screen.getByText('Matched, not published')).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Publish' })).toHaveAttribute(
+      'href',
+      '/design?publish=open&from=onboarding'
+    )
+    expect(screen.queryByRole('link', { name: /^Match/ })).toBeNull()
   })
 })

@@ -36,12 +36,15 @@ export interface LaunchStatus {
   /** A teammate has been invited, whether or not they have joined yet. */
   hasTeamInvite?: boolean
   /**
-   * The portal carries the brand: in the builder, a brand match has run or the
-   * Brand kit has an icon, colour and font; otherwise the workspace has a logo.
+   * The portal carries the brand: in the builder, the published design has a
+   * matched brand colour, or an icon, colour and font; otherwise the workspace
+   * has a logo.
    */
   hasBranding: boolean
   /** The portal's look is edited in the builder (the portal design engine). */
   brandInBuilder?: boolean
+  /** In the builder, the draft carries the brand but is not published yet. */
+  brandDrafted?: boolean
   /** The brand's website, for the builder's brand match, when known. */
   brandDomain?: string | null
   hasWidgetInstalled?: boolean
@@ -430,7 +433,25 @@ function buildOutcomeTasks(
     actionLabel: 'Invite teammate',
     completedLabel: 'Manage team',
   }
-  // In the builder the step hands off to the brand match on the brand's website.
+  // In the builder the step hands off to the brand match on the brand's website,
+  // or, once the draft carries the brand, to the builder's publish.
+  const builderBrand: Pick<LaunchTask, 'href' | 'search' | 'actionLabel' | 'completedLabel'> =
+    status.brandDrafted
+      ? {
+          href: '/design' as const,
+          search: { publish: 'open', from: 'onboarding' },
+          actionLabel: 'Publish',
+          completedLabel: 'Edit brand',
+        }
+      : {
+          href: '/design' as const,
+          search: {
+            ...(status.brandDomain ? { match: status.brandDomain } : {}),
+            from: 'onboarding',
+          },
+          actionLabel: status.brandDomain ? `Match from ${status.brandDomain}` : 'Match your brand',
+          completedLabel: 'Edit brand',
+        }
   const branding: LaunchTaskInput = {
     id: 'customize-branding',
     title: 'Make the portal look like your brand',
@@ -439,15 +460,7 @@ function buildOutcomeTasks(
     canAct: permissions.brandingManage,
     classification: 'polish',
     ...(status.brandInBuilder
-      ? {
-          href: '/design' as const,
-          search: {
-            ...(status.brandDomain ? { match: status.brandDomain } : {}),
-            from: 'onboarding',
-          },
-          actionLabel: 'Match your brand',
-          completedLabel: 'Edit brand',
-        }
+      ? builderBrand
       : {
           href: '/admin/settings/general' as const,
           actionLabel: 'Add logo',
