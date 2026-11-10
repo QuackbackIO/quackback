@@ -37,4 +37,36 @@ describe('releaseOverrides', () => {
     expect(releaseOverrides(before, both)).toEqual([])
     expect(both.tune?.headline?.size).toBe(60)
   })
+
+  it('releases brand-wide styles the re-picked choice competes with, in light, dark and phone', () => {
+    const before = defaultDesign()
+    before.style = {
+      postCard: { base: { radius: 4, background: '#ffffff' } },
+      headline: { base: { size: 40 } },
+    }
+    before.stylePhone = { postCard: { base: { radius: 2 } } }
+    before.styleDark = { button: { base: { background: '#111111' } } }
+    const next = structuredClone(before)
+    next.shape.corners = next.shape.corners === 'sharp' ? 'pill' : 'sharp'
+    next.shape.fill = next.shape.fill === 'ink' ? 'accent' : 'ink'
+    expect(releaseOverrides(before, next).sort()).toEqual(
+      ['style.postCard.radius', 'stylePhone.postCard.radius', 'styleDark.button.background'].sort()
+    )
+    expect(next.style).toEqual({
+      postCard: { base: { background: '#ffffff' } },
+      headline: { base: { size: 40 } },
+    })
+    expect(next).not.toHaveProperty('stylePhone')
+    expect(next).not.toHaveProperty('styleDark')
+  })
+
+  it('keeps a style the same change set', () => {
+    const before = defaultDesign()
+    before.style = { postCard: { base: { radius: 4 } } }
+    const next = structuredClone(before)
+    next.shape.corners = next.shape.corners === 'sharp' ? 'pill' : 'sharp'
+    next.style!.postCard!.base!.radius = 9
+    expect(releaseOverrides(before, next)).toEqual([])
+    expect(next.style?.postCard?.base?.radius).toBe(9)
+  })
 })

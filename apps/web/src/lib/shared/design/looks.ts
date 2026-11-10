@@ -1,5 +1,6 @@
 /**
- * A design's look: its mode, colours, fonts, shape, layout and exact values,
+ * A design's look: its mode, colours, fonts, shape, layout, exact values and
+ * element looks (style, styleDark, stylePhone),
  * apart from its pages, menu, words and logo. A workspace keeps its own looks
  * beside the presets. Taking one gives the draft its treatment (shape,
  * layout, hero, type and exact values) and keeps the brand's own colours,
@@ -7,6 +8,7 @@
  * come too only when asked.
  */
 import type { PortalDesign } from './schema'
+import { COLOUR_PROPS } from './style-tokens'
 
 export interface DesignLook {
   mode: PortalDesign['mode']
@@ -18,7 +20,14 @@ export interface DesignLook {
   shape: PortalDesign['shape']
   layout: PortalDesign['layout']
   tune?: PortalDesign['tune']
+  /** Elements' own looks; a look saved before these were carried has none. */
+  style?: PortalDesign['style']
+  styleDark?: PortalDesign['styleDark']
+  stylePhone?: PortalDesign['stylePhone']
 }
+
+/** The brand-wide style sheets a look carries. */
+const SHEETS = ['style', 'styleDark', 'stylePhone'] as const
 
 /** How many looks a workspace keeps. */
 export const SAVED_LOOKS_MAX = 5
@@ -35,6 +44,7 @@ export function lookOf(design: PortalDesign): DesignLook {
     shape: design.shape,
     layout,
     ...(design.tune ? { tune: design.tune } : {}),
+    ...Object.fromEntries(SHEETS.filter((k) => design[k]).map((k) => [k, design[k]])),
   })
 }
 
@@ -78,6 +88,12 @@ function wholeLook(design: PortalDesign, look: DesignLook): PortalDesign {
   if (design.layout.postCardHides) next.layout.postCardHides = design.layout.postCardHides
   if (tune) next.tune = tune
   else delete next.tune
+  // Element looks are exact values too: one without them leaves none.
+  for (const sheet of SHEETS) {
+    const value = structuredClone(look[sheet])
+    if (value) (next as Record<string, unknown>)[sheet] = value
+    else delete next[sheet]
+  }
   return next
 }
 
@@ -123,12 +139,48 @@ export function keepOwn(look: PortalDesign, own: PortalDesign, keep: KeepOwn): P
     }
     if (Object.keys(tune).length) next.tune = tune as PortalDesign['tune']
     else delete next.tune
+    // Dark mode's own sheet holds colours only, so it is the draft's whole.
+    if (own.styleDark) next.styleDark = structuredClone(own.styleDark)
+    else delete next.styleDark
+    keepProps(next, own, 'style', COLOUR_PROPS)
   }
   if (keep.fonts) {
     const { heading, body, display, headingWeight } = own.brand.fonts
     Object.assign(next.brand.fonts, structuredClone({ heading, body, headingWeight }))
     if (display) next.brand.fonts.display = structuredClone(display)
     else delete next.brand.fonts.display
+    keepProps(next, own, 'style', ['font'])
+    keepProps(next, own, 'stylePhone', ['font'])
   }
   return next
+}
+
+type Sheet = Record<string, Record<string, Record<string, unknown> | undefined> | undefined>
+
+/** In one style sheet of `next`, each of `props` as `own` has it, in every element and state. */
+function keepProps(
+  next: PortalDesign,
+  own: PortalDesign,
+  sheet: 'style' | 'stylePhone',
+  props: readonly string[]
+): void {
+  const mine = (own[sheet] ?? {}) as Sheet
+  const out = structuredClone((next[sheet] ?? {}) as Sheet)
+  for (const element of new Set([...Object.keys(out), ...Object.keys(mine)])) {
+    const states = { ...out[element] }
+    for (const state of new Set([...Object.keys(states), ...Object.keys(mine[element] ?? {})])) {
+      const values = { ...states[state] }
+      for (const prop of props) {
+        const value = mine[element]?.[state]?.[prop]
+        if (value === undefined) delete values[prop]
+        else values[prop] = structuredClone(value)
+      }
+      if (Object.keys(values).length) states[state] = values
+      else delete states[state]
+    }
+    if (Object.keys(states).length) out[element] = states
+    else delete out[element]
+  }
+  if (Object.keys(out).length) (next as Record<string, unknown>)[sheet] = out
+  else delete next[sheet]
 }
