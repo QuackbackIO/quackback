@@ -21,11 +21,10 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   initialTilePath,
   logoImagePath,
-  shareCardFacts,
-  shareCardVersion,
   shortHash,
   squareIconPath,
 } from '@/lib/shared/design/share-card'
+import { shareCardFacts, shareCardVersion } from '@/lib/shared/design/share-card-facts'
 
 const log = logger.child({ component: 'email-brand' })
 

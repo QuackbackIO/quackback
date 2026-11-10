@@ -15,11 +15,13 @@ import {
   cardCanDraw,
   isShareCardPage,
   shareCardAddressVersion,
+  shortHash,
+} from '@/lib/shared/design/share-card'
+import {
   shareCardFacts,
   shareCardVersion,
-  shortHash,
   type ShareCardFacts,
-} from '@/lib/shared/design/share-card'
+} from '@/lib/shared/design/share-card-facts'
 import { portalHeadWords, portalSiteName, type PortalHeadSettings } from '@/lib/shared/portal-head'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import { nameInitial } from '@/lib/shared/utils/initial'
