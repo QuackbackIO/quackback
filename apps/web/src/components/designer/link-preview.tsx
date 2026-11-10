@@ -4,7 +4,7 @@ import { designAssetUrl } from '@/lib/shared/design/design-view'
 import { fontStack } from '@/lib/shared/design/fonts'
 import { resolveDesignCached } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import { shareCardFacts } from '@/lib/shared/design/share-card'
+import { shareCardFacts } from '@/lib/shared/design/share-card-facts'
 import { portalHeadWords } from '@/lib/shared/portal-head'
 import { cn } from '@/lib/shared/utils'
 

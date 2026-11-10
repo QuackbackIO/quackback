@@ -12,7 +12,7 @@ import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { motion, AnimatePresence, MotionConfig } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { PencilIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,6 +27,7 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
+import { MotionAsAsked } from '@/components/public/motion-as-asked'
 import { BoardCustomFields } from '@/components/public/feedback/board-custom-fields'
 import { PostingToBoard } from '@/components/public/feedback/posting-to-board'
 import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
@@ -366,7 +367,7 @@ export function FeedbackHeaderAnimated({
 
   // Reduced motion as the visitor's device asks, here rather than at the portal's root.
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionAsAsked>
       <motion.div
         data-qb-part="composer"
         data-state={expanded ? 'open' : undefined}
@@ -665,7 +666,7 @@ export function FeedbackHeaderAnimated({
           )}
         </AnimatePresence>
       </motion.div>
-    </MotionConfig>
+    </MotionAsAsked>
   )
 }
 

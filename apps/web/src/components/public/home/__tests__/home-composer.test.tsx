@@ -5,7 +5,7 @@
  * to the post they wrote. The router is real; the server is not.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createElement, forwardRef, type ReactNode } from 'react'
+import { createContext, createElement, forwardRef, type ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
@@ -77,7 +77,7 @@ vi.mock('framer-motion', () => {
   )
   return {
     AnimatePresence: ({ children }: { children?: ReactNode }) => children,
-    MotionConfig: ({ children }: { children?: ReactNode }) => children,
+    MotionConfigContext: createContext({}),
     motion: proxy,
   }
 })

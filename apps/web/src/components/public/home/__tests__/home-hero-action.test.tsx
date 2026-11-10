@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
-import { createElement, forwardRef, type ReactNode } from 'react'
+import { createContext, createElement, forwardRef, type ReactNode } from 'react'
 import {
   RouterProvider,
   createMemoryHistory,
@@ -63,7 +63,7 @@ vi.mock('framer-motion', () => {
   )
   return {
     AnimatePresence: ({ children }: { children?: ReactNode }) => children,
-    MotionConfig: ({ children }: { children?: ReactNode }) => children,
+    MotionConfigContext: createContext({}),
     motion: proxy,
   }
 })
