@@ -105,6 +105,11 @@ export function PageSwitcher({
     () => switcherColumns({ design, gates, places: places ?? NO_PLACES, here, sample, widget }),
     [design, gates, places, here, sample, widget]
   )
+  const shownName = widget
+    ? SWITCHER_COPY.widget
+    : sample
+      ? SAMPLE_NAMES[sample]
+      : pageName(design, gates, here.page)
   const done = (then: () => void) => {
     setOpen(false)
     then()
@@ -125,12 +130,8 @@ export function PageSwitcher({
           className="gap-1.5 border-border font-normal data-popup-open:border-foreground"
         >
           <span className="text-muted-foreground">{SWITCHER_COPY.page}</span>
-          <span className="max-w-40 truncate font-semibold">
-            {widget
-              ? SWITCHER_COPY.widget
-              : sample
-                ? SAMPLE_NAMES[sample]
-                : pageName(design, gates, here.page)}
+          <span className="max-w-40 truncate font-semibold" title={shownName}>
+            {shownName}
           </span>
           <ChevronDownIcon className="size-3.5" aria-hidden="true" />
         </Button>

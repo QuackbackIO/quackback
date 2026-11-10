@@ -87,19 +87,20 @@ export function DraftStatus({
           <Button
             variant="outline"
             size="sm"
-            className="gap-2 border-border font-normal data-popup-open:border-foreground"
+            title={text}
+            className="max-w-full min-w-0 gap-2 border-border font-normal data-popup-open:border-foreground"
           >
             <span
               aria-hidden="true"
               className={cn(
-                'size-2 rounded-full',
+                'size-2 shrink-0 rounded-full',
                 tone === 'draft' && 'bg-amber-600',
                 tone === 'warning' && 'bg-destructive',
                 tone === 'quiet' && 'bg-muted-foreground/50'
               )}
             />
-            {text}
-            <ChevronDownIcon className="size-3.5" aria-hidden="true" />
+            <span className="min-w-0 truncate">{text}</span>
+            <ChevronDownIcon className="size-3.5 shrink-0" aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-72">
