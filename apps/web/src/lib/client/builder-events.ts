@@ -146,7 +146,7 @@ export const BUILDER_EVENTS = {
   designer_brand_checked: {
     rounds: 'count',
     kept: 'count',
-    stopped: ['bar', 'rounds', 'no_gain', 'no_revision', 'time', 'failed'],
+    stopped: ['bar', 'rounds', 'no_gain', 'no_revision', 'time', 'failed', 'stopped'],
   },
   /** The logo a brand match placed, changed from its card: the crop adjusted, or shown another way. */
   designer_brand_logo_changed: { how: ['adjusted', 'full_logo', 'icon'] },
