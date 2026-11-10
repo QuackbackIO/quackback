@@ -51,7 +51,6 @@ import { ReviewCompare } from './review-compare'
 import { AddDragCard, AddDropLayer, useAddDrag } from './use-add-drag'
 import {
   focusAfterStepUp,
-  focusCanvas,
   focusHeading,
   focusSettings,
   inSettings,
@@ -153,11 +152,6 @@ export function DesignerShell({
     say,
   })
   const { selection, setSelection, pick, nameOf, stepBack } = picking
-  // The page's own panel shows with nothing picked, until Escape closes it; any pick opens it again.
-  const [pageClosed, setPageClosed] = useState(false)
-  useEffect(() => {
-    if (selection || picking.elementKey) setPageClosed(false)
-  }, [selection, picking.elementKey])
   // The picked element's state, which the canvas draws it in; a new pick starts at rest.
   const [elementState, setElementState] = useState<StyleState>('base')
   useEffect(() => setElementState('base'), [picking.elementKey])
@@ -232,7 +226,6 @@ export function DesignerShell({
     setSelection,
     open: () => {
       setPane('settings')
-      setPageClosed(false)
     },
   })
   const dialogs = useBuilderDialogs({
@@ -262,9 +255,7 @@ export function DesignerShell({
   )
   // The element's own panel shows in place of its block's, though not under a sheet.
   const route = panelFor(selection, !!pickedElement && !shown.sheet, page, nameOf)
-  const settingsOpen = !pageClosed || !!selection || !!shown.sheet || !!pickedElement
-  // A narrow window shows the page when there are no settings to show.
-  const column: Pane = pane === 'settings' && !settingsOpen ? 'page' : pane
+  const column: Pane = pane
 
   // Each change is named for the part it changes, so undo says what it takes back.
   // A change the server would refuse is not made; why shows under the row that made it.
@@ -383,7 +374,6 @@ export function DesignerShell({
   const treeOrigin = useRef<TreeOrigin | null>(null)
   const pickFromTree = (row: TreeRow) => {
     menu.dismiss()
-    setPageClosed(false)
     treeOrigin.current = { row: row.id, selection: row.key }
     const node = row.part ? partNode(row.part) : null
     if (node) picking.select(row.key, null, node)
@@ -442,7 +432,7 @@ export function DesignerShell({
             blocks.blockKeys(event, () => dialogs.show('keys'))
             if (event.key !== 'Escape' || event.defaultPrevented) return
             if ((event.target as Element).closest(OWNS_ESCAPE)) return
-            const step = escapeStep(panel.state, selection ?? picking.elementKey, settingsOpen)
+            const step = escapeStep(panel.state, selection ?? picking.elementKey)
             if (step === 'close-sheet') panel.close()
             else if (step === 'up') {
               // The panel stays, a level up: focus in it stays in it, back on the
@@ -452,21 +442,15 @@ export function DesignerShell({
               const row = treeReturnRow(treeOrigin.current, selection)
               stepBack()
               if (kept) focusAfterStepUp({ toPage, row })
-            } else if (step === 'close-page') {
-              const lost = inSettings()
-              setPageClosed(true)
-              if (lost) focusCanvas()
             }
           }}
         >
-          {settingsOpen && (
-            <a
-              href="#designer-settings"
-              className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-muted-foreground"
-            >
-              Skip to properties
-            </a>
-          )}
+          <a
+            href="#designer-settings"
+            className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-overlay focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-muted-foreground"
+          >
+            Skip to properties
+          </a>
           {previewing ? (
             <PreviewBar
               page={page}
@@ -503,15 +487,7 @@ export function DesignerShell({
             />
           )}
 
-          {!previewing && (
-            <BuilderColumns
-              pane={column}
-              onPane={(next) => {
-                if (next === 'settings') setPageClosed(false)
-                setPane(next)
-              }}
-            />
-          )}
+          {!previewing && <BuilderColumns pane={column} onPane={setPane} />}
           <div className="flex min-h-0 flex-1">
             {!previewing && (
               <AiPane pane={aiPane} hidden={column !== 'ai'}>
@@ -550,7 +526,7 @@ export function DesignerShell({
               tabIndex={-1}
               className={cn(
                 'flex min-h-0 min-w-0 flex-1 flex-col p-4 pb-3 outline-none',
-                !previewing && column !== 'page' && 'max-[1100px]:hidden'
+                !previewing && column !== 'page' && 'max-builder:hidden'
               )}
             >
               <p role="status" className="sr-only">
@@ -618,7 +594,6 @@ export function DesignerShell({
                     trying={previewing}
                     onSelect={(section, link, target) => {
                       menu.dismiss()
-                      setPageClosed(false)
                       picking.select(section, link, target)
                     }}
                     onFollow={(link) => {
@@ -635,7 +610,6 @@ export function DesignerShell({
                     onMenuHover={menu.setHovered}
                     onContext={(section, target, at) => {
                       menu.dismiss()
-                      setPageClosed(false)
                       picking.select(section, null, target)
                       // A block's actions open where it was right-clicked, as its ⋯ offers them.
                       if (section?.startsWith('block-')) openChipMenu(section, at)
@@ -708,7 +682,6 @@ export function DesignerShell({
               <BrandMatchProvider value={brandMatch}>
                 <BuilderSettings
                   hidden={column !== 'settings'}
-                  open={settingsOpen}
                   shown={shown}
                   route={route}
                   panel={panel}

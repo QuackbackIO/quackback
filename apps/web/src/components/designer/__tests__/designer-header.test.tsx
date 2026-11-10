@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { DesignerHeader } from '../designer-header'
+import { DesignerHeader, STATUS_SLOT_WIDTH } from '../designer-header'
 
 afterEach(cleanup)
 
@@ -40,6 +40,27 @@ function show(props: Partial<Parameters<typeof DesignerHeader>[0]> = {}) {
 }
 
 describe('the top bar', () => {
+  it('holds the draft state in one fixed slot, so nothing beside it moves as it changes', () => {
+    show({ draftStatus: <span>No changes</span> })
+    const slot = screen.getByText('No changes').closest<HTMLElement>('[data-status-slot]')!
+    expect(slot.style.width).toBe(`${STATUS_SLOT_WIDTH}px`)
+    expect(slot.className).toContain('shrink-0')
+    cleanup()
+    show({ draftStatus: <span>Not saved. Retrying…</span> })
+    const again = screen
+      .getByText('Not saved. Retrying…')
+      .closest<HTMLElement>('[data-status-slot]')!
+    expect(again.style.width).toBe(slot.style.width)
+  })
+
+  it('never wraps onto a second row, and the right side keeps one width so the centre stays put', () => {
+    show()
+    const bar = screen.getByRole('banner', { name: 'Top bar' })
+    expect(bar.className).not.toContain('flex-wrap')
+    expect(bar.className).toContain('grid-cols-[minmax(0,1fr)_auto_auto]')
+    expect(bar.children).toHaveLength(4)
+  })
+
   it('says where you are: the workspace, then the customer portal', () => {
     show()
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })

@@ -207,7 +207,8 @@ export function QuickFind({
       <DialogContent
         showCloseButton={false}
         finalFocus={() => !toSetting.current}
-        className="max-w-lg overflow-hidden p-0"
+        data-quick-find=""
+        className="top-[15vh] max-w-lg translate-y-0 overflow-hidden p-0"
       >
         <DialogTitle className="sr-only">Find</DialogTitle>
         <Command
