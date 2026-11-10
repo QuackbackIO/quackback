@@ -176,7 +176,7 @@ export function ManagePostActions({
                     >
                       <IconGitMerge className="h-5 w-5" strokeWidth={1.5} />
                       {actions.hasDuplicateSignals && (
-                        <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
+                        <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-warning" />
                       )}
                     </button>
                   </DropdownMenuTrigger>

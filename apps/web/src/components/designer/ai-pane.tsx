@@ -62,7 +62,7 @@ export function AiPane({
                 aria-expanded={false}
                 aria-controls="designer-ai"
                 onClick={pane.expand}
-                className="grid size-9 place-items-center rounded-lg text-amber-700 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                className="grid size-9 place-items-center rounded-lg text-chrome-active-icon outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground"
               >
                 <SparklesIcon className="size-5" aria-hidden="true" />
               </button>

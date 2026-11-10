@@ -408,7 +408,7 @@ export function CommentForm({
                       className={cn(
                         'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
                         isPrivate
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                          ? 'bg-warning/15 text-warning'
                           : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
                         isPrivateLocked && 'opacity-70 cursor-not-allowed'
                       )}
@@ -593,7 +593,7 @@ export function CommentForm({
                     disabled={isPrivateLocked}
                     className={cn(
                       isPrivate
-                        ? 'bg-amber-500 hover:bg-amber-600 text-white border-0 gap-1.5'
+                        ? 'bg-warning hover:bg-warning/90 text-warning-foreground border-0 gap-1.5'
                         : 'text-muted-foreground gap-1.5',
                       isPrivateLocked && 'opacity-70 cursor-not-allowed'
                     )}

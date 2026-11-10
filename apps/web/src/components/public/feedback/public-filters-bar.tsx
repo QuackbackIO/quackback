@@ -253,8 +253,8 @@ export function PublicMoreFilters({ filters, setFilters, size = 'sm' }: MoreFilt
             <VotePills {...group} />
           </MoreGroup>
           {(members.length > 0 || segments.length > 0) && (
-            <div className="space-y-3 rounded-lg bg-amber-50 p-2 dark:bg-amber-500/10">
-              <p className="px-1 text-xs font-medium text-amber-800 dark:text-amber-400">
+            <div className="space-y-3 rounded-lg bg-warning/10 p-2">
+              <p className="px-1 text-xs font-medium text-warning">
                 {intl.formatMessage({
                   id: 'portal.feedback.filter.internal.tooltip',
                   defaultMessage: 'Only your team sees this',

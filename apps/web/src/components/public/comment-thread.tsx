@@ -105,16 +105,16 @@ function renderGroupedComments(
 function PrivateNoteCard({ children }: { children: React.ReactNode }) {
   const intl = useIntl()
   return (
-    <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.04] dark:bg-amber-950/30 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-amber-500/20 bg-amber-500/[0.06] dark:bg-amber-500/[0.08]">
-        <LockClosedIcon className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+    <div className="rounded-lg border border-warning/25 bg-warning/5 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-warning/20 bg-warning/5">
+        <LockClosedIcon className="h-3.5 w-3.5 text-warning" />
+        <span className="text-xs font-medium text-warning">
           {intl.formatMessage({
             id: 'portal.commentThread.internalNote',
             defaultMessage: 'Internal note',
           })}
         </span>
-        <span className="text-xs text-amber-600/60 dark:text-amber-500/50">
+        <span className="text-xs text-muted-foreground">
           &middot;{' '}
           {intl.formatMessage({
             id: 'portal.commentThread.internalNoteHint',
@@ -610,7 +610,7 @@ function CommentItem({
             'py-2',
             isPinned && 'bg-primary/[0.04] border border-primary/15 rounded-lg px-3 -mx-3',
             comment.moderationState === 'pending' &&
-              'rounded-lg border border-amber-500/25 bg-amber-500/[0.04] px-3 -mx-3',
+              'rounded-lg border border-warning/25 bg-warning/5 px-3 -mx-3',
             isDeleted && isTeamMember && 'opacity-50'
           )}
         >
@@ -706,7 +706,7 @@ function CommentItem({
               </Tooltip>
             )}
             {comment.isPrivate && !insidePrivateCard && (
-              <Badge className="text-xs px-1.5 py-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0">
+              <Badge className="text-xs px-1.5 py-0 bg-warning/15 text-warning border-0">
                 <LockClosedIcon className="h-2.5 w-2.5 me-0.5" />
                 {intl.formatMessage({
                   id: 'portal.commentThread.internalNote',

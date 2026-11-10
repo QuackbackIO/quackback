@@ -153,9 +153,9 @@ function PublicProfilePage() {
       {/* Team-only context strip — renders only when the people.view query
           returned data. Never part of the public payload. */}
       {teamContext && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+        <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-            <span className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
+            <span className="text-xs font-medium uppercase tracking-wide text-warning">
               <FormattedMessage id="portal.profile.teamStrip.label" defaultMessage="Team only" />
             </span>
             {teamContext.email && <span className="text-foreground">{teamContext.email}</span>}
