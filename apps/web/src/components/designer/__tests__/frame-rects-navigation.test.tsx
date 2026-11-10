@@ -69,4 +69,34 @@ describe('the canvas after the frame loads a new page', () => {
     expect(() => act(() => first.changed())).not.toThrow()
     expect(result.current.feed).toBeDefined()
   })
+
+  it('never throws out of the canvas when the browser refuses an element', () => {
+    const only = page()
+    let refuse = false
+    const Original = only.win.ResizeObserver
+    class Refusing extends Original {
+      observe(element: Element) {
+        if (refuse && element !== only.doc.documentElement)
+          throw new TypeError("parameter 1 is not of type 'Element'")
+        super.observe(element)
+      }
+    }
+    only.win.ResizeObserver = Refusing
+    const frame = {
+      contentDocument: only.doc,
+      contentWindow: only.win,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    } as unknown as HTMLIFrameElement
+    const { result, rerender } = renderHook(({ keys }) => useFrameRects(frame, 1, keys), {
+      initialProps: { keys: ['feed'] as string[] },
+    })
+    expect(result.current.feed).toBeDefined()
+    refuse = true
+    only.doc.body.insertAdjacentHTML('beforeend', '<div data-qb-section="hero"></div>')
+    expect(() => rerender({ keys: ['feed', 'hero'] })).not.toThrow()
+    refuse = false
+    act(() => only.changed())
+    expect(result.current.hero).toBeDefined()
+  })
 })

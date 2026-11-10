@@ -125,7 +125,17 @@ export function useFrameRects(
         elements.some((element, i) => element !== watching[i])
       if (moved) {
         for (const element of watching) resize?.unobserve(element)
-        for (const element of elements) resize?.observe(element)
+        // Only the watched page's own elements. One the browser refuses (the
+        // page being swapped under us) is still measured, just not watched:
+        // the page's own changes and its load event measure it again.
+        for (const element of elements) {
+          if (element.ownerDocument !== watched) continue
+          try {
+            resize?.observe(element)
+          } catch {
+            // Left unwatched rather than thrown out of the canvas.
+          }
+        }
         watching = elements
       }
       const next: Partial<Record<string, Rect>> = {}
@@ -151,7 +161,15 @@ export function useFrameRects(
       watched = doc
       // The frame's own observers, so they watch its page as it lays it out.
       resize = new (win.ResizeObserver ?? ResizeObserver)(schedule)
-      resize.observe(doc.documentElement)
+      try {
+        resize.observe(doc.documentElement)
+      } catch {
+        // The page is being swapped: its load event attaches again.
+        resize.disconnect()
+        resize = null
+        watched = null
+        return
+      }
       watching = []
       const mutation = new (win.MutationObserver ?? MutationObserver)(schedule)
       mutation.observe(doc.documentElement, {
