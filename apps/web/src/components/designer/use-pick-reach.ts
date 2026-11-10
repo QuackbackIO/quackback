@@ -10,6 +10,8 @@ import {
   drawnValues,
   locatePick,
   measuredValue,
+  pickKey,
+  pickOfKey,
   reachOf,
   type ElementPick,
   type Reach,
@@ -24,6 +26,12 @@ const canvasDoc = () =>
 /** What a picked element is drawn with now, by property. */
 export type Drawn = Partial<Record<StyleProp, number | string>>
 
+/** An update that keeps what it had when it reads the same. */
+const same =
+  <T>(next: T) =>
+  (before: T): T =>
+    JSON.stringify(before) === JSON.stringify(next) ? before : next
+
 export function usePickReach(
   pick: ElementPick | null,
   design: PortalDesign,
@@ -37,24 +45,30 @@ export function usePickReach(
 } {
   const [reach, setReach] = useState<Reach | null>(null)
   const [drawn, setDrawn] = useState<Drawn | null>(null)
+  // Read by what is picked, not by the object naming it: a pick handed over afresh on each
+  // render would read the canvas again each time, and each read renders the builder again.
+  const key = pick ? pickKey(pick) : null
   useEffect(() => {
     setDrawn(null)
-    if (!pick) return setReach(null)
+    const picked = key ? pickOfKey(key) : null
+    if (!picked) return setReach(null)
     const timer = setTimeout(() => {
       const doc = canvasDoc()
-      setReach(doc ? reachOf(doc, pick, design, page) : null)
-      const node = doc ? locatePick(doc, pick, design, page) : null
-      setDrawn(node ? drawnValues(node) : null)
+      const node = doc ? locatePick(doc, picked, design, page) : null
+      // Read as before, they are kept as they were, so the builder renders only for news.
+      setReach(same(doc ? reachOf(doc, picked, design, page) : null))
+      setDrawn(same(node ? drawnValues(node) : null))
     }, 150)
     return () => clearTimeout(timer)
-  }, [pick, design, page, view])
+  }, [key, design, page, view])
   const measure = useCallback(
     (prop: StyleProp) => {
+      const picked = key ? pickOfKey(key) : null
       const doc = canvasDoc()
-      const node = doc && pick ? locatePick(doc, pick, design, page) : null
+      const node = doc && picked ? locatePick(doc, picked, design, page) : null
       return node ? measuredValue(node, prop) : undefined
     },
-    [pick, design, page]
+    [key, design, page]
   )
   return { reach, measure, drawn }
 }

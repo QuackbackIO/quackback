@@ -137,4 +137,15 @@ describe('useCanvasSelection', () => {
     act(() => result.current.stepBack())
     expect(result.current.selection).toBeNull()
   })
+
+  it('hands over the same picked element on every render until another is picked', () => {
+    document.body.innerHTML = `<div data-qb-page="home"><section data-qb-section="block-aaaaaaaa"><a id="more" data-qb-link="" href="/">All</a></section></div>`
+    const { result, rerender } = picking()
+    act(() => result.current.select('block-aaaaaaaa', null, document.getElementById('more')))
+    const picked = result.current.element
+    expect(picked).not.toBeNull()
+    rerender()
+    act(() => result.current.hover('block-aaaaaaaa', null))
+    expect(result.current.element).toBe(picked)
+  })
 })

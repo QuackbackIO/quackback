@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer } from 'react'
+import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import { isMenuSelection } from '@/lib/shared/design/menu'
 import { outlineKeys, type outlineOf, type Selection } from '@/lib/shared/design/outline'
 import { canvasPickOf, NOTHING_PICKED, selectionReducer } from '@/lib/shared/design/selection'
@@ -124,13 +124,15 @@ export function useCanvasSelection({
   )
   /** The frame loaded a page afresh. */
   const reload = useCallback(() => dispatch({ type: 'reload' }), [])
+  // The same object while the same element stays picked: what reads the canvas for it reads once.
+  const element = useMemo(() => (state.element ? pickOfKey(state.element) : null), [state.element])
   /** Escape lets go of what is picked. */
   const stepBack = useCallback(() => dispatch({ type: 'escape' }), [])
   return {
     selection,
     hovered: state.hovered as Selection | null,
     /** The element picked in the block, or null for the block itself. */
-    element: state.element ? pickOfKey(state.element) : null,
+    element,
     elementKey: state.element,
     /** The element under the pointer, by its pick key. */
     hoveredElement: state.hoveredElement,
