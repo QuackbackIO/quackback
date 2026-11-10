@@ -9,7 +9,7 @@ import { BrandMatchRow } from './brand-match-row'
 import { FIND } from './find-rows'
 import { KitImageTile } from './kit-image-tile'
 import { LinkPreview } from './link-preview'
-import { LogoIconRow, LogoTitleRow } from './logo-rows'
+import { FullLogoRows, LogoIconRow, LogoTitleRow } from './logo-rows'
 import { PropertyRow, PropertySection } from './properties/properties-panel'
 import { THEME, resetToValue } from './properties/words'
 
@@ -48,6 +48,7 @@ export function BrandKit({
         <BrandMatchRow design={design} update={update} />
         <LogoIconRow design={design} update={update} logoUrl={logoUrl} />
         <LogoTitleRow design={design} update={update} />
+        <FullLogoRows design={design} update={update} />
         {onLogo && (
           <button
             type="button"

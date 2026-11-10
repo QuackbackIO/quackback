@@ -171,7 +171,15 @@ export const THEME_PANEL: FindPanel = {
   place: 'theme',
   name: WORDS.theme,
   sections: [
-    { title: THEME.sections.brandKit, rows: [FIND.icon, FIND.title] },
+    {
+      title: THEME.sections.brandKit,
+      rows: [
+        FIND.icon,
+        FIND.title,
+        FIND.fullLogo,
+        { ...FIND.logoImage, when: ({ design }) => design.brand.logo.display === 'wordmark' },
+      ],
+    },
     {
       title: THEME.sections.colours,
       rows: [
@@ -212,11 +220,7 @@ export const PART_PANELS: readonly FindPanel[] = [
     name: WORDS.logo,
     sections: [
       {
-        rows: [
-          FIND.fullLogo,
-          { ...FIND.logoImage, when: ({ design }) => design.brand.logo.display === 'wordmark' },
-          { ...FIND.logoHeight, when: ({ design }) => design.brand.logo.display !== 'name' },
-        ],
+        rows: [{ ...FIND.logoHeight, when: ({ design }) => design.brand.logo.display !== 'name' }],
       },
       { title: THEME.sections.colours, rows: [FIND.logoColours] },
     ],

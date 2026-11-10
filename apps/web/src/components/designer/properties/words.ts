@@ -99,6 +99,8 @@ export const THEME = {
   titlePlaceholder: 'Workspace name',
   /** Where an icon comes from while the portal has none of its own. */
   workspaceLogo: 'Workspace logo',
+  /** The portal's own icon, uploaded. */
+  ownIcon: 'Uploaded',
   /** The draft note, as hover help on the icon rather than a paragraph. */
   draftNote: 'Admin and emails keep the workspace logo',
   readable: 'Every pair reads well',

@@ -128,7 +128,6 @@ describe('the logo: an icon and a title', () => {
   it('leads to the logo as the header draws it for its size and placement', () => {
     const { seen } = renderKit(defaultDesign())
     expect(screen.queryByLabelText('Height')).toBeNull()
-    expect(screen.queryByRole('switch', { name: 'Use a full logo image instead' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Size and placement' }))
     expect(seen.logo).toBe(1)
   })
@@ -172,12 +171,47 @@ describe('the logo: an icon and a title', () => {
     ).toBeTruthy()
   })
 
-  it('offers an icon and a title only: no wordmarks, logos on dark or what the header shows', () => {
+  it('offers no logo on dark, wordmark colours or what the header shows', () => {
     renderKit(defaultDesign())
     expect(screen.queryByLabelText('Header shows')).toBeNull()
     expect(screen.queryByLabelText(/wordmark/i)).toBeNull()
     expect(screen.queryByLabelText(/on dark/i)).toBeNull()
     expect(screen.queryByRole('radiogroup', { name: 'Wordmark colour' })).toBeNull()
+  })
+
+  // The full logo is brand identity: the brand kit is its one writer, the logo's panel sums it up.
+  it('swaps in a full logo image and back, keeping a stored wordmark design as it is', () => {
+    const { seen } = renderKit(defaultDesign())
+    const full = screen.getByRole('switch', { name: 'Use a full logo image instead' })
+    fireEvent.click(full)
+    expect(seen.design.brand.logo.display).toBe('wordmark')
+    expect(screen.getByText('Shows icon and title')).toBeTruthy()
+    fireEvent.click(full)
+    expect(seen.design.brand.logo.display).toBe('mark_and_name')
+    cleanup()
+    const stored = defaultDesign()
+    stored.brand.logo.display = 'wordmark'
+    stored.brand.logo.wordmark.light = { key: 'logos/full.svg' }
+    renderKit(stored)
+    expect(
+      screen
+        .getByRole('switch', { name: 'Use a full logo image instead' })
+        .getAttribute('aria-checked')
+    ).toBe('true')
+    expect(screen.getByLabelText('Replace full logo')).toBeTruthy()
+  })
+
+  it('drafts an uploaded full logo with its colours', async () => {
+    const start = defaultDesign()
+    start.brand.logo.display = 'wordmark'
+    const { seen } = renderKit(start)
+    fireEvent.change(screen.getByLabelText('Upload full logo'), {
+      target: { files: [new File(['<svg/>'], 'wordmark.svg', { type: 'image/svg+xml' })] },
+    })
+    await waitFor(() =>
+      expect(seen.design.brand.logo.wordmark.light).toEqual({ key: 'design/wordmark.svg' })
+    )
+    expect(seen.design.brand.logoColours).toEqual(['#0058a3', '#ffffff'])
   })
 
   it('drafts the title, and an empty title goes back to the workspace name', () => {
