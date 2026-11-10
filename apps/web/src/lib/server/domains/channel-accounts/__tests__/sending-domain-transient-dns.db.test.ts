@@ -95,6 +95,7 @@ import { getSendingDomain } from '../channel-account.service'
 import {
   provisionSendingDomain,
   refreshSendingDomain,
+  restartSendingDomainChecks,
   sweepSendingDomains,
 } from '../sending-identity'
 
@@ -149,7 +150,13 @@ function proofName(row: EmailSendingDomain): string {
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
-    await db.select({ id: emailSendingDomains.mailFromLabel }).from(emailSendingDomains).limit(0)
+    await db
+      .select({
+        id: emailSendingDomains.mailFromLabel,
+        sent: emailSendingDomains.ownershipWarningSentAt,
+      })
+      .from(emailSendingDomains)
+      .limit(0)
   },
 })
 
@@ -288,6 +295,89 @@ describe.skipIf(!fixture.available)('sending domain checks on unanswered DNS', (
     expect(await refreshSendingDomain(row.id)).toMatchObject({ status: 'verified' })
     const later = await getSendingDomain(row.id)
     expect(later?.ownershipMissingSince).toEqual(after?.ownershipMissingSince)
+    expect(await attentionBells(admin)).toHaveLength(1)
+    expect(sentAttention).toHaveBeenCalledTimes(1)
+  })
+
+  it('tries a warning whose delivery failed again on the next sweep, and stops once it is delivered', async () => {
+    const row = await verifiedDomain()
+    zone.delete(proofName(row))
+    sentAttention.mockImplementationOnce(() => {
+      throw new Error('mail provider unavailable')
+    })
+
+    expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 0 })
+    const failed = await getSendingDomain(row.id)
+    expect(failed?.ownershipMissingSince).not.toBeNull()
+    expect(failed?.ownershipWarningSentAt).toBeNull()
+    expect(sentAttention).toHaveBeenCalledTimes(1)
+
+    expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 0 })
+    const delivered = await getSendingDomain(row.id)
+    expect(delivered?.ownershipWarningSentAt).not.toBeNull()
+    // The retry keeps the date the first miss set.
+    expect(delivered?.ownershipMissingSince).toEqual(failed?.ownershipMissingSince)
+    expect(sentAttention).toHaveBeenCalledTimes(2)
+    expect(sentAttention.mock.calls[1][0]).toMatchObject({
+      record: { purpose: 'ownership', state: 'missing' },
+      deadline: expect.any(String),
+    })
+
+    // Delivered: later sweeps inside the period say nothing more.
+    await sweepSendingDomains()
+    expect(sentAttention).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries an undelivered warning once when two sweeps run at the same time', async () => {
+    const row = await verifiedDomain()
+    zone.delete(proofName(row))
+    sentAttention.mockImplementationOnce(() => {
+      throw new Error('mail provider unavailable')
+    })
+    await sweepSendingDomains()
+    expect(await attentionBells(admin)).toHaveLength(1)
+
+    await Promise.all([sweepSendingDomains(), sweepSendingDomains()])
+    expect(sentAttention).toHaveBeenCalledTimes(2)
+    expect(await attentionBells(admin)).toHaveLength(2)
+    expect((await getSendingDomain(row.id))?.ownershipWarningSentAt).not.toBeNull()
+  })
+
+  it('starts the period over, with a fresh warning, when the record goes missing again', async () => {
+    const row = await verifiedDomain()
+    zone.delete(proofName(row))
+    await sweepSendingDomains()
+    publish('a.example', row.dnsRecords)
+    await sweepSendingDomains()
+    const back = await getSendingDomain(row.id)
+    expect(back?.ownershipMissingSince).toBeNull()
+    expect(back?.ownershipWarningSentAt).toBeNull()
+
+    zone.delete(proofName(row))
+    await sweepSendingDomains()
+    expect(sentAttention).toHaveBeenCalledTimes(2)
+  })
+
+  it('tells the managers once when the Verify action finds a verified domain no longer verifies', async () => {
+    const row = await verifiedDomain()
+    providerState.set('a.example', { ...verifiedIdentity('a.example'), verifiedForSending: false })
+
+    expect((await restartSendingDomainChecks(row.id))?.status).toBe('pending')
+    expect(await attentionBells(admin)).toHaveLength(1)
+    expect(sentAttention).toHaveBeenCalledTimes(1)
+    expect(sentAttention.mock.calls[0][0]).not.toHaveProperty('deadline', expect.any(String))
+
+    // The next sweep finds it already demoted and says nothing more.
+    expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 0 })
+    expect(await attentionBells(admin)).toHaveLength(1)
+    expect(sentAttention).toHaveBeenCalledTimes(1)
+  })
+
+  it('tells the managers once when two sweeps demote the same domain at the same time', async () => {
+    await verifiedDomain()
+    providerState.set('a.example', { ...verifiedIdentity('a.example'), verifiedForSending: false })
+
+    await Promise.all([sweepSendingDomains(), sweepSendingDomains()])
     expect(await attentionBells(admin)).toHaveLength(1)
     expect(sentAttention).toHaveBeenCalledTimes(1)
   })

@@ -201,6 +201,12 @@ export const emailSendingDomains = pgTable(
      * Null while the record is published.
      */
     ownershipMissingSince: timestamp('ownership_missing_since', { withTimezone: true }),
+    /**
+     * When the warning about the missing ownership record was delivered. Null
+     * until it has been, so a failed delivery is tried again by a later check
+     * while the grace period runs. Cleared with `ownershipMissingSince`.
+     */
+    ownershipWarningSentAt: timestamp('ownership_warning_sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

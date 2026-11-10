@@ -55,9 +55,10 @@ export function ownershipGrace(
 }
 
 /**
- * Start a row's grace period and warn its managers. Conditional, so whichever
- * check sees the first miss, and however many see it at once, the warning goes
- * out once. Returns the row when this call started the period, else null.
+ * Start a row's grace period. Conditional, so whichever check sees the first
+ * miss, and however many see it at once, the period starts once. Returns the
+ * row when this call started it, else null. The warning is sent separately,
+ * by `deliverOwnershipWarning`.
  */
 export async function startOwnershipGrace(
   id: SendingDomainId,
@@ -65,7 +66,7 @@ export async function startOwnershipGrace(
 ): Promise<EmailSendingDomain | null> {
   const [started] = await db
     .update(emailSendingDomains)
-    .set({ ownershipMissingSince: since })
+    .set({ ownershipMissingSince: since, ownershipWarningSentAt: null })
     .where(and(eq(emailSendingDomains.id, id), isNull(emailSendingDomains.ownershipMissingSince)))
     .returning()
   if (!started) return null
@@ -73,6 +74,53 @@ export async function startOwnershipGrace(
     { sending_domain_id: id, domain: started.domain },
     'sending domain ownership record is missing; keeping it verified for the grace period'
   )
-  await notifySendingDomainOwnershipMissing(started, ownershipGraceEnds(since))
   return started
+}
+
+/**
+ * Warn a row's managers that its ownership record is missing, unless that
+ * warning was already delivered for the running period. Called by every check
+ * that finds a verified row in its grace period, so a delivery that failed is
+ * tried again by the next one.
+ *
+ * The delivered mark is claimed with a conditional update before sending, so
+ * however many checks run at once only one of them sends; a delivery that
+ * fails gives the claim back, so a later check tries again. Returns the row as
+ * it stands after this call.
+ */
+export async function deliverOwnershipWarning(
+  row: EmailSendingDomain
+): Promise<EmailSendingDomain> {
+  const since = row.ownershipMissingSince
+  if (row.status !== 'verified' || !since || row.ownershipWarningSentAt) return row
+  const claimedAt = new Date()
+  const [claimed] = await db
+    .update(emailSendingDomains)
+    .set({ ownershipWarningSentAt: claimedAt })
+    .where(
+      and(
+        eq(emailSendingDomains.id, row.id),
+        eq(emailSendingDomains.status, 'verified'),
+        eq(emailSendingDomains.ownershipMissingSince, since),
+        isNull(emailSendingDomains.ownershipWarningSentAt)
+      )
+    )
+    .returning()
+  if (!claimed) return row
+  if (await notifySendingDomainOwnershipMissing(claimed, ownershipGraceEnds(since))) return claimed
+  const [released] = await db
+    .update(emailSendingDomains)
+    .set({ ownershipWarningSentAt: null })
+    .where(
+      and(
+        eq(emailSendingDomains.id, row.id),
+        eq(emailSendingDomains.ownershipWarningSentAt, claimedAt)
+      )
+    )
+    .returning()
+  log.warn(
+    { sending_domain_id: row.id, domain: row.domain },
+    'sending domain ownership warning was not delivered; the next check tries again'
+  )
+  return released ?? claimed
 }

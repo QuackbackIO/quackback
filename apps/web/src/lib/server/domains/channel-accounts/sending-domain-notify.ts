@@ -6,8 +6,9 @@
  * Recipients are every teammate holding `channel_account.manage`, the same
  * permission the settings page is gated on. The bell respects each person's
  * in-app preference for the type; the attention email respects their email
- * preference. Both are best effort: a failure here is logged and never undoes
- * the status change it reports.
+ * preference. A failure here is logged and never undoes the status change it
+ * reports; the ownership warning also says whether it was delivered, so its
+ * caller can try again.
  */
 import type { PrincipalId, UserId } from '@quackback/ids'
 import type { SendingDomainAttentionProblem } from '@quackback/email'
@@ -173,15 +174,16 @@ export function formatDeadline(at: Date): string {
 /**
  * A verified domain's ownership record went missing: a bell per manager and an
  * email naming the record and the date it has to be back by. The domain keeps
- * sending as itself until then.
+ * sending as itself until then. Resolves true when the bell and every email
+ * went out (or there was nobody to tell), false when any part failed.
  */
 export async function notifySendingDomainOwnershipMissing(
   domain: EmailSendingDomain,
   deadline: Date
-): Promise<void> {
+): Promise<boolean> {
   try {
     const managers = await sendingDomainManagers()
-    if (managers.length === 0) return
+    if (managers.length === 0) return true
     const record = ownershipProblem(domain)
     const by = formatDeadline(deadline)
     const { sendingDomainProblem, sendingDomainDeadline } = await import('@quackback/email')
@@ -190,29 +192,32 @@ export async function notifySendingDomainOwnershipMissing(
       body: `${sendingDomainProblem(domain.domain, record)} ${sendingDomainDeadline(domain.domain, by)}`,
       metadata: { sendingDomainId: domain.id, domain: domain.domain, audience: 'admin' },
     })
-    await emailManagers(managers, domain, record, by)
+    return await emailManagers(managers, domain, record, by)
   } catch (err) {
     log.warn(
       { err, sending_domain_id: domain.id },
       'sending domain ownership warning notification failed'
     )
+    return false
   }
 }
 
+/** Email every manager whose preference allows it. False when any send failed. */
 async function emailManagers(
   managers: Manager[],
   domain: EmailSendingDomain,
   record: SendingDomainAttentionProblem,
   deadline?: string
-): Promise<void> {
+): Promise<boolean> {
   const { sendSendingDomainAttentionEmail, isEmailConfigured } = await import('@quackback/email')
-  if (!isEmailConfigured()) return
+  if (!isEmailConfigured()) return true
   const prefs = await batchGetNotificationPreferences(managers.map((m) => m.principalId))
   const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { getBaseUrl } = await import('@/lib/server/config')
   const workspace = await getWorkspaceSettings()
   const base = getBaseUrl().replace(/\/$/, '')
+  let delivered = true
   for (const manager of managers) {
     const p = prefs.get(manager.principalId)
     if (p && !shouldNotify(p, 'sending_domain_needs_attention', 'email')) continue
@@ -229,10 +234,12 @@ async function emailManagers(
         workspaceName: workspace?.settings?.name,
       })
     } catch (err) {
+      delivered = false
       log.warn(
         { err, sending_domain_id: domain.id, principal_id: manager.principalId },
         'sending domain attention email failed'
       )
     }
   }
+  return delivered
 }

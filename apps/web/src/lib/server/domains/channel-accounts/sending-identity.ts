@@ -91,7 +91,7 @@ export {
   withPreviousChecks,
 } from './sending-domain-records'
 import { notifySendingDomainLive, notifySendingDomainNeedsAttention } from './sending-domain-notify'
-import { ownershipGrace, startOwnershipGrace } from './ownership-grace'
+import { deliverOwnershipWarning, ownershipGrace, startOwnershipGrace } from './ownership-grace'
 import { enqueueSesTenantReconcile } from './ses-tenant-queue'
 import { rekeyToHeldSigningKey, sealSigningKey, shouldHoldSigningKey } from './pending-signing-key'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
@@ -564,8 +564,20 @@ export async function refreshSendingDomain(
     checkRecords(row.domain, composed, resolver, now),
     readDmarc(row.domain, resolver),
   ])
-  // Every field but the move to verified, which is made below on its own.
+  // The one place a domain stops verifying, whether the daily sweep, the watch
+  // job or a person's click found it. Conditional, so when two checks find it
+  // failing at once only the one whose update moved it off verified tells the
+  // managers; the write below then sets the same status again.
   const promoted = status === 'verified'
+  const [demoted] = promoted
+    ? []
+    : await db
+        .update(emailSendingDomains)
+        .set({ status, updatedAt: now })
+        .where(and(eq(emailSendingDomains.id, id), eq(emailSendingDomains.status, 'verified')))
+        .returning({ id: emailSendingDomains.id })
+
+  // Every field but the move to verified, which is made below on its own.
   const [written] = await db
     .update(emailSendingDomains)
     .set({
@@ -573,7 +585,7 @@ export async function refreshSendingDomain(
       dnsRecords,
       ...(dmarc ? { preflight: { ...row.preflight, dmarc } } : {}),
       // Found again: the clock for a missing record starts over.
-      ...(ownershipProven ? { ownershipMissingSince: null } : {}),
+      ...(ownershipProven ? { ownershipMissingSince: null, ownershipWarningSentAt: null } : {}),
       lastCheckedAt: now,
       updatedAt: now,
     })
@@ -581,9 +593,24 @@ export async function refreshSendingDomain(
     .returning()
   let updated = written
 
-  // The first miss on a verified row starts the grace period and warns.
-  if (written && grace.since && !row.ownershipMissingSince && status === 'verified') {
-    updated = (await startOwnershipGrace(id, grace.since)) ?? updated
+  if (written && demoted) {
+    // Named at warn because it is a live deliverability change for a
+    // customer: replies for this domain go out as the platform sender from
+    // now on. The domain is configuration, not a person.
+    log.warn(
+      { sending_domain_id: id, domain: row.domain, status },
+      'sending domain is no longer verified; falling back to the platform sender'
+    )
+    // Told after the write, so the notice names the records as this check found them.
+    await notifySendingDomainNeedsAttention(written)
+  }
+
+  // A verified row inside its grace period: the first miss starts the period,
+  // and every check that finds the record still gone warns the managers unless
+  // the warning for this period was already delivered.
+  if (written && grace.since && status === 'verified') {
+    const started = row.ownershipMissingSince ? null : await startOwnershipGrace(id, grace.since)
+    updated = await deliverOwnershipWarning(started ?? written)
   }
 
   // The one place a domain goes live, whether the watch job, the daily sweep or
@@ -682,17 +709,8 @@ export async function sweepSendingDomains(): Promise<{ checked: number; demoted:
     try {
       const updated = await refreshSendingDomain(row.id)
       checked += 1
-      if (row.status === 'verified' && updated && updated.status !== 'verified') {
-        demoted += 1
-        // Named at warn because it is a live deliverability change for a
-        // customer: replies for this domain go out as the platform sender from
-        // now on. The domain is configuration, not a person.
-        log.warn(
-          { sending_domain_id: row.id, domain: row.domain, status: updated.status },
-          'sending domain is no longer verified; falling back to the platform sender'
-        )
-        await notifySendingDomainNeedsAttention(updated)
-      }
+      // The check that demotes a row tells its managers (`refreshSendingDomain`).
+      if (row.status === 'verified' && updated && updated.status !== 'verified') demoted += 1
     } catch (err) {
       // One domain's provider or DNS failure must not stop the rest being
       // checked: the whole value of the sweep is that it runs on every row.
