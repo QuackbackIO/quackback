@@ -11,6 +11,14 @@ import {
   portalPathsOf,
 } from '@/components/public/feedback/feed-route'
 
+/** The feed page, from its own chunk, as the feed route loads it. */
+const FeedComponent = lazyRouteComponent(
+  () => import('@/components/public/feedback/feed-page'),
+  'FeedPage'
+)
+
+/** What marks the feed in the server's page (feedback-container.tsx). */
+const FEED_DRAWN = '[data-qb-section="feed"]'
 /** What marks Home in the server's page: its grid (portal-home.tsx). */
 const HOME_DRAWN = '[data-qb-section="home"][data-qb-grid]'
 
@@ -22,14 +30,11 @@ const PortalHome = lazy(() => importHome().then((module) => ({ default: module.P
 // scripts rather than when hydration reaches it. Until it hydrates, an update
 // from above (the theme, the session) makes React draw Home again from
 // nothing, and on a slow phone its blocks vanished for seconds while the
-// module and its reads arrived.
-if (typeof document !== 'undefined' && document.querySelector(HOME_DRAWN)) void importHome()
-
-/** The feed page, from its own chunk, as the feed route loads it. */
-const FeedComponent = lazyRouteComponent(
-  () => import('@/components/public/feedback/feed-page'),
-  'FeedPage'
-)
+// module and its reads arrived. The feed drawn here is the same.
+if (typeof document !== 'undefined') {
+  if (document.querySelector(HOME_DRAWN)) void importHome()
+  else if (document.querySelector(FEED_DRAWN)) void FeedComponent.preload?.()
+}
 
 /**
  * The portal's root. With Home on it is Home, and an old link to the feed
