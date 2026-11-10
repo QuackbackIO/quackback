@@ -177,7 +177,12 @@ describe('PageTree', () => {
     key(item('Header and menu'), 'ArrowRight')
     fireEvent.click(screen.getByRole('button', { name: 'Hide Roadmap' }))
     expect(onShown).toHaveBeenCalledWith(expect.objectContaining({ id: 'page:roadmap' }), false)
-    expect(screen.getByRole('button', { name: 'Hide Feedback' })).toHaveProperty('disabled', true)
+    const locked = screen.getByRole('button', { name: 'Hide Feedback' })
+    expect(locked).toHaveProperty('disabled', true)
+    // Why it stays is shown on the row, and read with its eye.
+    const why = document.getElementById(locked.getAttribute('aria-describedby')!)!
+    expect(why.textContent).toBe('Landing page')
+    expect(locked.getAttribute('title')).toBeNull()
   })
 
   it('lets Tab reach the focused row’s buttons only', () => {

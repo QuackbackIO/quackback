@@ -152,7 +152,7 @@ describe('Look', () => {
     start.layout.heroArt = 'petals'
     show(start, 'roadmap')
     const look = screen.getByRole('region', { name: 'Look' })
-    const help = within(look).getAllByRole('img')[0]!.getAttribute('title')!
+    const help = look.querySelector('[data-help]')!.getAttribute('aria-label')!
     expect(help).toContain('A custom look. Pick one to replace it.')
     expect(help).toContain('title sits plain')
     expect(screen.queryByText(/custom look/)).toBeNull()
@@ -235,7 +235,7 @@ describe('Image', () => {
     const start = defaultDesign()
     start.brand.heroImage = { key: 'portal-images/room.jpg' }
     const { seen } = show(start)
-    expect(screen.getByRole('img', { name: /A photo or pattern works best/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /A photo or pattern works best/ })).toBeTruthy()
     expect(screen.queryByText(/A photo or pattern works best/)).toBeNull()
     expect(names('Image sits')).toEqual(['Beside', 'Bottom', 'Behind', 'Tiled'])
     fireEvent.click(within(group('Image sits')).getByRole('radio', { name: 'Behind' }))
@@ -333,10 +333,10 @@ describe('Main action', () => {
     start.pages.home.mainAction = 'button'
     show(start, 'home', { ...ALL_ON, help: false, roadmap: false })
     expect(names('Main action')).toEqual(['Composer', 'Button', 'None'])
-    expect(screen.getByRole('img', { name: 'Search needs the help centre on.' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Search needs the help centre on.' })).toBeTruthy()
     expect(names('Goes to')).toEqual(['Composer', 'Support'])
     expect(
-      screen.getByRole('img', {
+      screen.getByRole('button', {
         name: 'The roadmap needs to be on for a button to go there. The help centre needs to be on for a button to go there.',
       })
     ).toBeTruthy()

@@ -17,6 +17,7 @@ import { cn } from '@/lib/shared/utils'
 import { designerLookChosen } from '@/lib/client/builder-events'
 import { previewOnCanvas } from './look-preview'
 import { THEME } from './properties/words'
+import { Tip } from './properties/properties-panel'
 
 /** A value as text with its keys in order, so two equal looks read the same. */
 function canonical(value: unknown): string {
@@ -153,23 +154,24 @@ function Tile({
   const hide = () => previewOnCanvas(null)
   return (
     <li className="group relative">
-      <button
-        type="button"
-        title={hint}
-        onPointerEnter={() => previewOnCanvas(own)}
-        onPointerLeave={hide}
-        onFocus={() => previewOnCanvas(own)}
-        onBlur={hide}
-        aria-current={current || undefined}
-        onClick={() => onChoose(look, false)}
-        className={cn(
-          'flex w-full flex-col gap-1 rounded-md border p-1.5 text-start hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-          current ? 'border-foreground' : 'border-border'
-        )}
-      >
-        <LookDrawing tile={tile} logoUrl={logoUrl} />
-        <span className="truncate text-xs font-medium">{name}</span>
-      </button>
+      <Tip text={hint}>
+        <button
+          type="button"
+          onPointerEnter={() => previewOnCanvas(own)}
+          onPointerLeave={hide}
+          onFocus={() => previewOnCanvas(own)}
+          onBlur={hide}
+          aria-current={current || undefined}
+          onClick={() => onChoose(look, false)}
+          className={cn(
+            'flex w-full flex-col gap-1 rounded-md border p-1.5 text-start hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            current ? 'border-foreground' : 'border-border'
+          )}
+        >
+          <LookDrawing tile={tile} logoUrl={logoUrl} />
+          <span className="truncate text-xs font-medium">{name}</span>
+        </button>
+      </Tip>
       {coloursDiffer && (
         <button
           type="button"

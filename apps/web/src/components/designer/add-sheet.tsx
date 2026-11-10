@@ -12,6 +12,7 @@ import { BlockIcon } from './block-icon'
 import { HomeLayoutPicker } from './home-layout-picker'
 import type { AddDrag } from './use-add-drag'
 import { useNewParts } from './use-new-parts'
+import { Tip } from './properties/properties-panel'
 
 /** The title over Home's layouts. */
 export const ADD_LAYOUTS = 'Start Home from a layout'
@@ -104,30 +105,31 @@ export function AddCard({
     )
   const tag = cardTag(row, onHome)
   return (
-    <button
-      type="button"
-      title={row.disabled ? undefined : hint}
-      disabled={row.disabled}
-      onClick={() => onAdd(row.type)}
-      onPointerDown={(event) => {
-        if (!row.disabled) drag?.press(row.type, event)
-      }}
-      className="flex w-full touch-none select-none items-center gap-3 rounded-lg border border-border p-2 text-start outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-muted-foreground enabled:cursor-grab disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
-    >
-      <span
-        aria-hidden="true"
-        className="grid h-10 w-14 shrink-0 place-items-center rounded-md bg-muted"
+    <Tip text={row.disabled ? undefined : hint}>
+      <button
+        type="button"
+        disabled={row.disabled}
+        onClick={() => onAdd(row.type)}
+        onPointerDown={(event) => {
+          if (!row.disabled) drag?.press(row.type, event)
+        }}
+        className="flex w-full touch-none select-none items-center gap-3 rounded-lg border border-border p-2 text-start outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-muted-foreground enabled:cursor-grab disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
       >
-        <BlockIcon type={row.type} className="size-4" />
-      </span>
-      <span className="min-w-0 flex-1 leading-tight">
-        <span className="block text-[13px] font-medium">
-          {row.def.name}
-          {tag && <span className="font-normal text-muted-foreground"> · {tag}</span>}
+        <span
+          aria-hidden="true"
+          className="grid h-10 w-14 shrink-0 place-items-center rounded-md bg-muted"
+        >
+          <BlockIcon type={row.type} className="size-4" />
         </span>
-        <span className="block text-xs text-muted-foreground">{note ?? row.def.purpose}</span>
-      </span>
-    </button>
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block text-[13px] font-medium">
+            {row.def.name}
+            {tag && <span className="font-normal text-muted-foreground"> · {tag}</span>}
+          </span>
+          <span className="block text-xs text-muted-foreground">{note ?? row.def.purpose}</span>
+        </span>
+      </button>
+    </Tip>
   )
 }
 

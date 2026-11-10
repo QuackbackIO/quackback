@@ -231,7 +231,9 @@ describe('the picked element’s properties', () => {
     const corners = screen.getByLabelText('Corners') as HTMLInputElement
     expect(corners.value).toBe('')
     expect(corners.placeholder).toBe('6')
-    expect(view.container.querySelector('[title="From every main button"]')).toBeTruthy()
+    expect(
+      view.container.querySelector('[data-help][aria-label="From every main button"]')
+    ).toBeTruthy()
     fireEvent.change(corners, { target: { value: '2' } })
     fireEvent.click(screen.getByRole('button', { name: 'Reset to 6 px from every main button' }))
     expect(box.design.overrides).toBeUndefined()
@@ -243,7 +245,7 @@ describe('the picked element’s properties', () => {
     const { view } = mount(cta, design)
     fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
     expect((screen.getByLabelText('Corners') as HTMLInputElement).placeholder).toBe('999')
-    expect(view.container.querySelector('[title="From brand"]')).toBeTruthy()
+    expect(view.container.querySelector('[data-help][aria-label="From brand"]')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Background: Brand colour' })).toBeTruthy()
     expect(view.container.textContent).not.toContain('As the theme')
   })
@@ -478,7 +480,9 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     const { view } = mount(cta, design)
     fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
     expect((screen.getByLabelText('Corners') as HTMLInputElement).placeholder).toBe('14')
-    expect(view.container.querySelector('[title="From every main button"]')).toBeTruthy()
+    expect(
+      view.container.querySelector('[data-help][aria-label="From every main button"]')
+    ).toBeTruthy()
   })
 
   it('resets every main button’s values, its exact ones too, from its menu', async () => {

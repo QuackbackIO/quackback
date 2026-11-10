@@ -166,7 +166,9 @@ describe('the logo: an icon and a title', () => {
     const { view } = renderKit(defaultDesign())
     expect(view.container.textContent).not.toMatch(/All of this is in your draft/)
     expect(
-      view.container.querySelector('[title="Admin and emails keep the workspace logo"]')
+      view.container.querySelector(
+        '[data-help][aria-label="Admin and emails keep the workspace logo"]'
+      )
     ).toBeTruthy()
   })
 

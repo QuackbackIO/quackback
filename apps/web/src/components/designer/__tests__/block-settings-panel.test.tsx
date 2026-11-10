@@ -28,7 +28,9 @@ describe('a block’s settings panel', () => {
   it('names the block and says what it is for on hover, with no kind tag', () => {
     mount(topPosts())
     const name = screen.getByRole('heading', { level: 2, name: 'Top posts' })
-    expect(name.getAttribute('title')).toBe('The posts visitors vote for most')
+    expect(name.getAttribute('title')).toBeNull()
+    // What it is for is behind an ⓘ that takes focus.
+    expect(screen.getByRole('button', { name: 'The posts visitors vote for most' })).toBeTruthy()
     expect(screen.queryByText('The posts visitors vote for most')).toBeNull()
     expect(screen.queryByText('Block')).toBeNull()
   })

@@ -177,6 +177,11 @@ export function PageTree({
             {row.blockType && <BlockIcon type={row.blockType} />}
             <span className="truncate">{row.label}</span>
           </span>
+          {row.hide?.shown && row.hide.locked && (
+            <span id={`${labelId}-locked`} className="shrink-0 text-[11px] text-muted-foreground">
+              {MENU_COPY.landsHere}
+            </span>
+          )}
           {row.move && (
             <span className="flex opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100">
               <button
@@ -207,7 +212,7 @@ export function PageTree({
               tabIndex={stop}
               disabled={row.hide.shown && row.hide.locked}
               aria-label={`${row.hide.shown ? WORDS.hide : WORDS.show} ${row.label}`}
-              title={row.hide.shown && row.hide.locked ? MENU_COPY.landsHere : undefined}
+              aria-describedby={row.hide.shown && row.hide.locked ? `${labelId}-locked` : undefined}
               onClick={() => onShown(row, !row.hide!.shown)}
               className={cn(
                 iconButton,
