@@ -4,7 +4,7 @@ import { hexToOklch } from '@/lib/shared/theme/colors'
 
 /**
  * A colour as a person names it, from its hue, lightness and how colourful
- * it is: black, grey or white; a muted tint (slate, taupe, sage, mauve); or a
+ * it is: black, grey or white; a pale tint (pale indigo); a muted tint (slate, taupe, sage, mauve); or a
  * hue, with its own words for light, dark and dark-but-muted colours (a deep,
  * greyed purple is aubergine or plum, not purple or pink).
  */
@@ -16,6 +16,8 @@ export function colourName(hex: string): string {
       : parseOklch(hex)
   if (!parsed) return 'colour'
   const { l, c, h } = parsed
+  // Near white, any tint shows: a pale indigo is never white, nor slate.
+  if (l > 0.88 && c >= 0.012 && c < 0.06) return `pale ${paleHue(h)}`
   if (c < 0.03) return l < 0.3 ? 'black' : l > 0.9 ? 'white' : 'grey'
   const dark = l < 0.42
   const light = l > 0.75
@@ -41,6 +43,18 @@ export function colourName(hex: string): string {
   if (light) return h < 325 ? 'lavender' : 'pink'
   if (l < 0.3) return 'deep purple'
   return h < 330 ? 'purple' : 'magenta'
+}
+
+/** A pale tint's hue in a word. */
+function paleHue(h: number): string {
+  if (h < 20 || h >= 345) return 'pink'
+  if (h < 70) return 'peach'
+  if (h < 110) return 'yellow'
+  if (h < 175) return 'green'
+  if (h < 215) return 'teal'
+  if (h < 265) return 'blue'
+  if (h < 290) return 'indigo'
+  return h < 330 ? 'purple' : 'pink'
 }
 
 /**

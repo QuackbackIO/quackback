@@ -1,6 +1,6 @@
 /** Colours said by name, and reasons kept only when a person can read them. */
 import { describe, expect, it } from 'vitest'
-import { plainReason, plainWords } from '../colour-names'
+import { colourName, plainReason, plainWords } from '../colour-names'
 
 describe('plainWords', () => {
   it('drops a code after a name and names a code alone', () => {
@@ -9,6 +9,19 @@ describe('plainWords', () => {
       'Buttons now turn black on hover.'
     )
     expect(plainWords('The page is oklch(0.98 0.01 90).')).toBe('The page is white.')
+  })
+})
+
+describe('colourName', () => {
+  it('names a pale tint by its hue, and only a near-colourless one white', () => {
+    expect(colourName('#eef0fd')).toBe('pale indigo')
+    expect(colourName('#e0e7ff')).toBe('pale indigo')
+    expect(colourName('#eff6ff')).toBe('pale blue')
+    expect(colourName('#ecfdf5')).toBe('pale green')
+    expect(colourName('#fef2f2')).toBe('pale pink')
+    expect(colourName('#ffffff')).toBe('white')
+    expect(colourName('#f1f5f9')).toBe('white')
+    expect(colourName('#4f46e5')).toBe('indigo')
   })
 })
 
