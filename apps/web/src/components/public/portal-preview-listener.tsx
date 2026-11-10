@@ -190,6 +190,17 @@ export function PortalPreviewProvider({
         : undefined,
     [active, designer, trying]
   )
+  // While designing, the page's links are not followed, so pointing at one fetches nothing
+  // ahead for it; trying the page as a visitor, they load ahead as on the portal.
+  useEffect(() => {
+    if (!active || !designer || trying) return
+    const router = routerRef.current
+    const preload = router.preloadRoute
+    router.preloadRoute = async () => undefined
+    return () => {
+      router.preloadRoute = preload
+    }
+  }, [active, designer, trying])
   // The designer's frame says so in its address: until designing starts, a click
   // or a form does nothing, so nothing navigates or posts in the first moment.
   useEffect(() => {

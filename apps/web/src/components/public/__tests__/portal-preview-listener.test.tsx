@@ -139,6 +139,17 @@ describe('PortalPreviewProvider', () => {
     header.remove()
   })
 
+  it('fetches nothing ahead for a link while designing, and does while trying', async () => {
+    const preload = vi.fn(async () => [])
+    router.preloadRoute = preload
+    await postDesign({ type: 'quackback:preview-designer', state: null })
+    await router.preloadRoute({ to: '/b/ideas/posts/p1' })
+    expect(preload).not.toHaveBeenCalled()
+    await postDesign({ type: 'quackback:preview-designer', trying: true })
+    await router.preloadRoute({ to: '/b/ideas/posts/p1' })
+    expect(preload).toHaveBeenCalledOnce()
+  })
+
   it('draws in light or dark in place, as asked, keeping its page', () => {
     const navigate = vi.fn(async () => {})
     router.navigate = navigate
