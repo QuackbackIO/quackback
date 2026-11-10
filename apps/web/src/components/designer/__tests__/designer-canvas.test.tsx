@@ -265,6 +265,17 @@ describe('DesignerCanvas', () => {
     expect(box.getAttribute('aria-busy')).toBe('false')
   })
 
+  it('keeps the skeleton, when asked, until the frame says it drew the design given', () => {
+    const { send, frame } = show(false, { skeleton: <p>Loading shapes</p>, untilDrawn: true })
+    send({ type: 'quackback:preview-ready' }, frame)
+    // Ready, but still drawing the published design: the skeleton stays.
+    expect(screen.queryByText('Loading shapes')).not.toBeNull()
+    send({ type: 'quackback:preview-drawn' }, {} as Window)
+    expect(screen.queryByText('Loading shapes')).not.toBeNull()
+    send({ type: 'quackback:preview-drawn' }, frame)
+    expect(screen.queryByText('Loading shapes')).toBeNull()
+  })
+
   it('offers no Try it of its own', () => {
     show()
     expect(screen.queryByRole('button', { name: 'Try it' })).toBeNull()

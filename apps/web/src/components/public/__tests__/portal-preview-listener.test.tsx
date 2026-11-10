@@ -216,6 +216,18 @@ describe('a design draft in the preview', () => {
       document.documentElement.removeAttribute(name)
   })
 
+  it('says it drew a draft design once it has, and not before', async () => {
+    const drawn = () =>
+      vi
+        .mocked(framer.postMessage)
+        .mock.calls.filter(
+          ([message]) => (message as { type?: string }).type === 'quackback:preview-drawn'
+        )
+    expect(drawn()).toEqual([])
+    await postDesign({ type: 'quackback:preview-design', design: draftDesign() })
+    expect(drawn()).toEqual([[{ type: 'quackback:preview-drawn' }, window.location.origin]])
+  })
+
   it('draws the draft with the view the server builds for it, then puts the saved one back', async () => {
     document.documentElement.setAttribute('data-qb-header', 'saved')
     const draft = draftDesign((d) => {

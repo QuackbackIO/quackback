@@ -159,6 +159,7 @@ export function DesignerCanvas({
   onLocation,
   layer,
   skeleton,
+  untilDrawn = false,
 }: {
   page: DesignerPage
   /** The item the page shows, such as the post on the post page. */
@@ -210,6 +211,8 @@ export function DesignerCanvas({
   layer?: (canvas: CanvasFrame) => ReactNode
   /** Shapes of the page's parts, drawn until the frame says its page is ready. */
   skeleton?: ReactNode
+  /** Keeps the skeleton until the frame says it drew the design given, not the published one. */
+  untilDrawn?: boolean
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   // The frame element itself, for the layer: a new one each time the page loads afresh.
@@ -250,6 +253,8 @@ export function DesignerCanvas({
 
   // The frame that said its page is ready, by its key: a new page loads, and is not, until it says so.
   const [readyKey, setReadyKey] = useState<string | null>(null)
+  // The frame that drew the design it was given, by its key.
+  const [drawnKey, setDrawnKey] = useState<string | null>(null)
   const frameKey = useRef('')
   const handlers = useRef({
     onSelect,
@@ -286,6 +291,7 @@ export function DesignerCanvas({
         return
       const message = event.data as Record<string, unknown> | null
       if (message?.type === 'quackback:preview-ready') setReadyKey(frameKey.current)
+      if (message?.type === 'quackback:preview-drawn') setDrawnKey(frameKey.current)
       const menu = isMenuTarget(message?.menu) ? message.menu : null
       // The element at the point the frame names, read from its own page.
       const target =
@@ -353,12 +359,15 @@ export function DesignerCanvas({
   const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample })
   const key = `${src}:${refreshKey}:${trying}`
   frameKey.current = key
-  const ready = readyKey === key
+  const ready = readyKey === key && (!untilDrawn || drawnKey === key)
   // A page that never says it is ready (an error, say) is shown once it has loaded a while.
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
   useEffect(() => {
     if (loadedKey !== key || ready) return
-    const timer = setTimeout(() => setReadyKey(key), LOADED_GRACE_MS)
+    const timer = setTimeout(() => {
+      setReadyKey(key)
+      setDrawnKey(key)
+    }, LOADED_GRACE_MS)
     return () => clearTimeout(timer)
   }, [loadedKey, key, ready])
   return (
