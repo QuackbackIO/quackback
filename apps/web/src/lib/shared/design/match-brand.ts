@@ -50,14 +50,15 @@ const ABOUT_A_PART =
 
 /**
  * Whether a message starts a brand from its images: it carries images and
- * asks to match the brand, or carries nothing else.
+ * asks to match the brand, or carries nothing else. Words about one part
+ * ("match the button style") never start the whole match, even with "match".
  */
 export function isBrandStart(text: string, images: number): boolean {
   if (images === 0) return false
   const words = text.trim()
   if (!words) return true
-  if (/\b(match|brand|branding)\b/i.test(words)) return true
-  return ASKS_TO_MATCH.test(words) && !ABOUT_A_PART.test(words)
+  if (ABOUT_A_PART.test(words)) return false
+  return ASKS_TO_MATCH.test(words)
 }
 
 /** A website in a message: a URL or a bare domain (never an email address), as typed. */
@@ -79,9 +80,9 @@ export function isSiteStart(text: string): boolean {
   const site = websiteIn(text)
   if (!site) return false
   const rest = text.replace(site, ' ').trim()
+  if (ABOUT_A_PART.test(rest)) return false
   if (rest.split(/\s+/).filter(Boolean).length <= 2) return true
-  if (/\b(match|brand|branding)\b/i.test(rest)) return !ABOUT_A_PART.test(rest)
-  return ASKS_TO_MATCH.test(rest) && !ABOUT_A_PART.test(rest)
+  return ASKS_TO_MATCH.test(rest)
 }
 
 export type ShotWarning = 'dimmed' | 'banner'

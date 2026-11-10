@@ -25,6 +25,8 @@ vi.mock('@/lib/client/builder-events', () => events)
 const shots = vi.hoisted(() => ({ read: vi.fn() }))
 vi.mock('@/lib/client/brand-shots', () => ({ readBrandShot: shots.read }))
 vi.mock('@/lib/client/image-palette', () => ({ imagePalette: async () => ['#0058a3'] }))
+const site = vi.hoisted(() => ({ read: vi.fn() }))
+vi.mock('@/lib/server/functions/site-capture', () => ({ readWebsiteFn: site.read }))
 const checker = vi.hoisted(() => ({ check: vi.fn() }))
 vi.mock('@/lib/client/brand-check', () => ({ checkBrandMatch: checker.check }))
 
@@ -483,6 +485,39 @@ describe('the check after a brand match', () => {
     })
   })
 
+  it('stops at Stop: the check is cut off, the match stays, and the reply says so', async () => {
+    const hooks = { begin: vi.fn(), end: vi.fn(), replace: vi.fn(), frame: () => null }
+    stream.match.mockResolvedValue(matched())
+    let given: AbortSignal | undefined
+    let stopNow = () => {}
+    checker.check.mockReset()
+    checker.check.mockImplementation(async (_input, deps) => {
+      given = deps.signal
+      stopNow()
+      return { rounds: [], first: null, best: null, stopped: 'stopped', ms: 1 }
+    })
+    const { result } = renderHook(() =>
+      useDesignAi({
+        flush: async () => {},
+        adopt: vi.fn(),
+        update,
+        workspaceName: 'Acme',
+        check: hooks,
+      })
+    )
+    stopNow = () => result.current.stop()
+    await act(() => result.current.ask('match my brand', 'site', images, undefined, brand))
+    expect(given?.aborted).toBe(true)
+    expect(hooks.end).toHaveBeenCalledTimes(1)
+    const said = result.current.turns.filter((turn) => turn.role === 'assistant')
+    // The match keeps its changes and Undo; the last line says it stopped.
+    expect(said.at(-2)).toMatchObject({
+      text: 'I matched your brand.',
+      changes: [{ path: 'tune.headline.size' }],
+    })
+    expect(said.at(-1)?.text).toBe('Stopped. What changed so far stays.')
+  })
+
   it('is skipped when the match ran out of time, or without the canvas hooks', async () => {
     const hooks = { begin: vi.fn(), end: vi.fn(), replace: vi.fn(), frame: () => null }
     stream.match.mockResolvedValue(matched({ target: { ...target, checkable: false } }))
@@ -571,6 +606,100 @@ describe('a website to match', () => {
     const { result } = hook()
     await act(() => result.current.recapture('acme.test'))
     expect(stream.match.mock.calls[0]![0]).toMatchObject({ url: 'acme.test', recapture: true })
+  })
+})
+
+describe('a request about one part', () => {
+  const partHook = () =>
+    renderHook(() =>
+      useDesignAi({
+        flush: async () => {},
+        adopt: vi.fn(),
+        update,
+        workspaceName: 'Acme',
+        check: {
+          begin: vi.fn(),
+          end: vi.fn(),
+          replace: vi.fn(),
+          frame: () => null,
+          current: () => defaultDesign(),
+        },
+      })
+    )
+  beforeEach(() => {
+    loop.run.mockReset()
+    loop.run.mockResolvedValue({ ok: false, code: 'AI_FAILED', message: 'No.' })
+    server.ask.mockResolvedValue({ ok: false, code: 'AI_FAILED', message: 'No.' })
+  })
+
+  it('never runs the whole brand match for a site named with the hero picked', async () => {
+    const { result } = partHook()
+    await act(() =>
+      result.current.ask(
+        'match stripe.com',
+        'band',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'page'
+      )
+    )
+    expect(stream.match).not.toHaveBeenCalled()
+    // The loop borrows from the site with read_website, for the hero only.
+    const [request, deps] = loop.run.mock.calls[0]!
+    expect(request).toMatchObject({ scope: 'band', within: 'page' })
+    expect(deps.matchWebsite).toBeUndefined()
+    expect(deps.readWebsite).toBeTypeOf('function')
+  })
+
+  it('never runs the whole brand match for a screenshot sent with one element picked', async () => {
+    const shot = {
+      id: 's1',
+      jpeg: 'data:image/jpeg;base64,AAAA',
+      width: 1440,
+      height: 900,
+    } as never
+    const { result } = partHook()
+    await act(() =>
+      result.current.ask(
+        'Match my brand from this',
+        'band',
+        [{ palette: ['#ffffff'], image: 'data:image/jpeg;base64,AAAA' }],
+        undefined,
+        { shots: [shot], name: '', icon: null },
+        { element: 'button', part: 'hero.home.cta' },
+        'one'
+      )
+    )
+    expect(stream.match).not.toHaveBeenCalled()
+    expect(loop.run).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads a website with the request’s Stop, so Stop cuts the read off', async () => {
+    site.read.mockResolvedValue({
+      reading: { host: 'stripe.com' },
+      capture: null,
+    })
+    loop.run.mockImplementation(
+      async (request: { signal: AbortSignal }, deps: { readWebsite: (u: string) => unknown }) => {
+        await deps.readWebsite('stripe.com')
+        expect(site.read.mock.calls[0]![0].signal).toBe(request.signal)
+        return { ok: false, code: 'AI_FAILED', message: 'No.' }
+      }
+    )
+    const { result } = partHook()
+    await act(() => result.current.ask('make the hero look like stripe.com', 'band'))
+    expect(site.read).toHaveBeenCalledTimes(1)
+    expect(site.read.mock.calls[0]![0].signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('still matches the whole brand when nothing is picked', async () => {
+    stream.match.mockResolvedValue({ ok: false, code: 'X', message: 'No.' })
+    const { result } = partHook()
+    await act(() => result.current.ask('match stripe.com', 'site'))
+    expect(stream.match).toHaveBeenCalledTimes(1)
+    expect(loop.run).not.toHaveBeenCalled()
   })
 })
 
@@ -667,6 +796,84 @@ describe('Stop', () => {
       role: 'assistant',
       text: 'Stopped. Nothing changed.',
     })
+  })
+
+  it('takes the draft the server saved just as Stop landed, with its Undo', async () => {
+    let seen: AbortSignal | undefined
+    server.ask.mockImplementation(
+      ({ signal }: { signal?: AbortSignal }) =>
+        new Promise((_, reject) => {
+          seen = signal
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          )
+        })
+    )
+    const start = defaultDesign()
+    const saved = structuredClone(start)
+    saved.layout.width = 'wide'
+    const report = { adjustments: [], errors: [], css: [] }
+    const adopt = vi.fn()
+    const moved = vi.fn(async () => ({ design: saved, report, revision: 'r9' }))
+    const { result } = renderHook(() =>
+      useDesignAi({
+        flush: async () => {},
+        adopt,
+        moved,
+        update,
+        workspaceName: 'Acme',
+        check: {
+          begin: vi.fn(),
+          end: vi.fn(),
+          replace: vi.fn(),
+          frame: () => null,
+          current: () => start,
+        },
+      })
+    )
+    let asked: Promise<void> | undefined
+    act(() => {
+      asked = result.current.ask('Wider', 'site')
+    })
+    await vi.waitFor(() => expect(seen).toBeDefined())
+    act(() => result.current.stop())
+    await act(() => asked!)
+    expect(adopt).toHaveBeenCalledWith(saved, report, 'Wider', 'r9')
+    expect(result.current.turns.at(-1)).toMatchObject({
+      role: 'assistant',
+      text: 'Stopped. What changed so far stays.',
+      changes: [{ path: 'layout.width', before: start.layout.width, after: 'wide' }],
+    })
+  })
+
+  it('says nothing changed after Stop when the server draft did not move', async () => {
+    server.ask.mockImplementation(
+      ({ signal }: { signal?: AbortSignal }) =>
+        new Promise((_, reject) => {
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          )
+        })
+    )
+    const adopt = vi.fn()
+    const { result } = renderHook(() =>
+      useDesignAi({
+        flush: async () => {},
+        adopt,
+        moved: async () => null,
+        update,
+        workspaceName: 'Acme',
+      })
+    )
+    let asked: Promise<void> | undefined
+    act(() => {
+      asked = result.current.ask('Wider', 'site')
+    })
+    await vi.waitFor(() => expect(server.ask).toHaveBeenCalled())
+    act(() => result.current.stop())
+    await act(() => asked!)
+    expect(adopt).not.toHaveBeenCalled()
+    expect(result.current.turns.at(-1)?.text).toBe('Stopped. Nothing changed.')
   })
 
   it('does nothing when nothing is running', () => {

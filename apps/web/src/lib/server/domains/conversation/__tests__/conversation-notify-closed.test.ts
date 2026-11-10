@@ -3,10 +3,12 @@ import type { ConversationId, PrincipalId } from '@quackback/ids'
 
 const sendConversationClosedEmail = vi.fn(async (_opts: unknown) => ({ sent: true }))
 const enforceEmailBudget = vi.fn(async () => undefined)
+const BRAND = { accent: '#0a7d4f', accentText: '#ffffff', link: '#0a6b44' }
 const buildHookContext = vi.fn(async () => ({
   workspaceName: 'Acme',
   portalBaseUrl: 'https://acme.example.com',
   logoUrl: null,
+  emailBrand: BRAND,
 }))
 let csatRows: Array<Record<string, unknown>> = []
 let limitQueue: Array<Array<Record<string, unknown>>> = []
@@ -114,6 +116,8 @@ describe('notifyConversationClosed', () => {
       variant: 'closed',
       conversationSubject: 'Billing',
       conversationId: 'conversation_1',
+      // In the workspace's brand, not Quackback gold.
+      brand: BRAND,
     })
   })
 

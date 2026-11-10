@@ -58,6 +58,8 @@ import {
   type WordsDoc,
 } from './rich-words'
 import { checkedWords } from './words-schema'
+import { HERO_PATHS } from './hero'
+import { withHeroPath } from './migrations'
 import {
   setHeadline,
   wordsChangeLabel,
@@ -567,7 +569,9 @@ export function setHero(
   value: unknown
 ): OpResult {
   const def = blockOf('hero')!
-  const field = fieldOf(def, key)
+  // A setting by the design field it stores, or format 2's name: layout.heroAlign, bandAlign.
+  const named = key ? heroKeyOf(key) : null
+  const field = fieldOf(def, key) ?? (named ? fieldOf(def, named) : null)
   if (!field)
     return refuse(
       `The hero has no setting called ${key ?? 'that'}; it has ${listed(def.fields.map((f) => f.key))}`
@@ -755,6 +759,21 @@ function tuneAsStyle(key: string): string | null {
   return stylePath(`style.${element}.base.${TUNE_PROP[m[2]!] ?? m[2]!}`)
 }
 
+/**
+ * The hero setting a Theme key names, as the model may write one: hero.composerWidth,
+ * a design field one hero setting alone stores (layout.heroAlign), or format 2's
+ * name for it (layout.bandAlign, bandAlign).
+ */
+function heroKeyOf(key: string): string | null {
+  const own = /^(?:hero|band)\.(\w+)$/i.exec(key.trim())?.[1]
+  if (own) return own
+  const path = withHeroPath(key.includes('.') ? key : `layout.${key}`)
+  const found = Object.entries(HERO_PATHS).find(
+    ([, paths]) => paths.length === 1 && paths[0] === path
+  )
+  return found?.[0] ?? null
+}
+
 /** Sets a brand-wide setting by its name in Theme: setTheme(key, value). */
 export function setTheme(
   design: PortalDesign,
@@ -787,6 +806,11 @@ export function setTheme(
     }
     return { ...at, label: labels.join('; ') } as OpResult
   }
+  // A hero setting named as Theme's is the hero's, as op set hero writes it; the
+  // hero's own fill, edge and shadow (hero.background) stay its style.
+  const hero = !path && key ? heroKeyOf(key) : null
+  if (hero && (fieldOf(blockOf('hero')!, hero) || !tuneAsStyle(key!)))
+    return setHero(design, world, hero, value)
   // An exact value the design has none of, but a style has: the element's look, at rest.
   const asStyle = !path && key ? tuneAsStyle(key) : null
   if (asStyle) return setTheme(design, world, asStyle, value)
@@ -841,6 +865,16 @@ export function marksRefusal(name: string, value: unknown): string | null {
   return `The ${name} is plain words: only a headline or a page title sets a phrase apart, and only Welcome words take bold, italics and links`
 }
 
+/** Words as compared for a mark over all of them: case, spacing and closing stops aside. */
+const bareWords = (text: string) =>
+  norm(text)
+    .replace(/[\s.!?…,;:]+$/u, '')
+    .trim()
+
+/** Why a highlight or a lighter look over a whole title is left alone. */
+const WHOLE_TITLE_MARK =
+  'A phrase set apart is part of a headline, never all of it; a whole headline takes the headlines’ colour'
+
 /**
  * Sets a page's headline or title from its markup: plain words, or one
  * phrase set apart as [words]{accent}, {highlight} or {lighter}. Plain words
@@ -855,6 +889,24 @@ function setTitle(
 ): OpResult {
   const read = readHeadlineMarkup(text)
   if (!read.ok) return refuse(read.refusal)
+  const mark = read.words.accent
+  // A mark over the whole title sets nothing apart: in the brand colour it is the
+  // headlines' own colour, which the drawn headline then shows and checks can read.
+  if (mark && bareWords(mark.text) === bareWords(read.words.title)) {
+    if (mark.style !== 'colour' || (mark.colour && mark.colour !== 'accent'))
+      return refuse(WHOLE_TITLE_MARK)
+    const plain = setTitle(design, world, page, read.words.title, wordsLabel)
+    if (!plain.ok) return plain
+    const coloured = setTheme(plain.design, world, 'headlineColour', 'accent')
+    if (!coloured.ok) return coloured
+    const labels = [plain, coloured].filter((each) => each.changed).map((each) => each.label)
+    return {
+      ok: true,
+      design: coloured.design,
+      label: labels.join('; ') || coloured.label,
+      changed: labels.length > 0,
+    }
+  }
   const locale = world.locale ?? 'en'
   const field: WordsField = { kind: 'page', page, part: 'title' }
   const draft = structuredClone(design)
@@ -863,7 +915,8 @@ function setTitle(
   return finish(
     design,
     draft,
-    label.endsWith(': accent') ? label : wordsLabel(read.words.title),
+    // Only the phrase set apart changed: named by its kind, as the editor names it.
+    label.endsWith(': words') ? wordsLabel(read.words.title) : label,
     world
   )
 }
@@ -1565,7 +1618,11 @@ export function applyOp(design: PortalDesign, world: OpWorld, op: FlatOp): OpRes
       const target = op.target ?? ''
       // A Theme setting, exact value or element style named with no block is the whole
       // portal's, as op theme writes it.
-      if (!target.trim() && op.key && (themePath(themeKeyOf(op.key)) || tuneAsStyle(op.key)))
+      if (
+        !target.trim() &&
+        op.key &&
+        (themePath(themeKeyOf(op.key)) || tuneAsStyle(op.key) || heroKeyOf(op.key))
+      )
         return setTheme(design, world, op.key, value)
       // Phones' own sizes or dark mode's own colours: an override, of the block where one is named.
       if (
@@ -1703,7 +1760,12 @@ function opInScope(
   if (within.blockId) {
     if (!['set', 'move', 'resize', 'remove'].includes(op.op)) return false
     const found = findBlock(before, op.target)
-    return found.ok && found.block.id === within.blockId
+    if (!found.ok || found.block.id !== within.blockId) return false
+    // Naming the block is not enough: "roadmap" is a block and a page, and a
+    // page's own setting lands on the page, outside what was picked.
+    return fields.every(
+      (field) => under(field, 'pages.home.blocks') || pathInScope(field, within.scope)
+    )
   }
   if (!fields.every((field) => pathInScope(field, within.scope))) return false
   return fieldsInReach(before, after, fields, within)

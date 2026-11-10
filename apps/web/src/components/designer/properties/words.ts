@@ -36,6 +36,7 @@ export const WORDS = {
   dark: 'Dark',
   /** Sources a value can come from, on hover. */
   fromBrand: 'From brand',
+  fromTheme: 'From Theme',
   /** Corner steps, sharpest first. */
   corners: { sharp: 'Sharp', soft: 'Soft', round: 'Round', pill: 'Pill' },
   /** Letter case. */
@@ -98,6 +99,8 @@ export const THEME = {
   titlePlaceholder: 'Workspace name',
   /** Where an icon comes from while the portal has none of its own. */
   workspaceLogo: 'Workspace logo',
+  /** The portal's own icon, uploaded. */
+  ownIcon: 'Uploaded',
   /** The draft note, as hover help on the icon rather than a paragraph. */
   draftNote: 'Admin and emails keep the workspace logo',
   readable: 'Every pair reads well',
@@ -296,6 +299,14 @@ export const BLOCK_WORDS = {
   column: 'Column',
   row: 'Row',
   height: 'Height',
+  /** The height in grid rows, under More. */
+  rows: 'Rows',
+  /** The least height, that grows to fit what is in it. */
+  fit: 'Fit',
+  taller: 'Taller',
+  move: 'Move',
+  moveUp: 'Move up a row',
+  moveDown: 'Move down a row',
   /** On a phone, in place of Layout's rows. */
   stacks: 'Stacks in reading order',
   background: 'Background',

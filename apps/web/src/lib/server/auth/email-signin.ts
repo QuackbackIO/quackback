@@ -76,7 +76,8 @@ export async function requestEmailSignin(opts: {
   const settings = await db.query.settings.findFirst({
     columns: { name: true, logoKey: true, featureFlags: true },
   })
-  const { logoUrl, brand } = await emailBranding({
+  const { logoUrl, brand, title } = await emailBranding({
+    name: settings?.name,
     logoKey: settings?.logoKey,
     featureFlags: settings?.featureFlags,
   })
@@ -107,7 +108,7 @@ export async function requestEmailSignin(opts: {
     if (!to) return
     await sendSignupNotAllowedEmail({
       to,
-      workspaceName: settings?.name ?? undefined,
+      workspaceName: title,
       logoUrl,
       brand,
     })
@@ -177,6 +178,6 @@ export async function requestEmailSignin(opts: {
     code: otp,
     logoUrl,
     brand,
-    workspaceName: settings?.name ?? undefined,
+    workspaceName: title,
   })
 }

@@ -87,13 +87,7 @@ export interface HistoryState {
   /** The last step pushed, and when, to merge a burst of the same change. */
   last: { label: string; at: number } | null
   /** Records a change, a person's unless said; one that changed nothing is not a step. */
-  push: (
-    label: string,
-    patches: Patch[],
-    inversePatches: Patch[],
-    at?: number,
-    by?: Author
-  ) => void
+  push: (label: string, patches: Patch[], inversePatches: Patch[], at?: number, by?: Author) => void
   /** Opens a group; groups nest, and the outermost names the step. */
   begin: (label: string, by?: Author) => void
   /** Closes a group, recording it as one step once the outermost ends. */
@@ -160,8 +154,7 @@ export function createHistory({
       const { group, side } = get()
       if (!group && !side) return
       set({ group: null, side: null })
-      for (const open of [group, side])
-        if (open?.patches.length) record(stepOf(open), null)
+      for (const open of [group, side]) if (open?.patches.length) record(stepOf(open), null)
     }
     return {
       past: [],
@@ -229,7 +222,7 @@ export function createHistory({
         }))
         return { doc: apply(doc, step.patches), label: step.label }
       },
-      undoLabel: () => get().past.at(-1)?.label ?? null,
+      undoLabel: () => undoLabelOf(get()),
       redoLabel: () => get().future.at(-1)?.label ?? null,
       clear: (past = []) => set({ past, future: [], group: null, side: null, last: null }),
     }
@@ -237,3 +230,13 @@ export function createHistory({
 }
 
 export type HistoryStore = ReturnType<typeof createHistory>
+
+/**
+ * What undo takes back, by its label: undo closes an open group first, the
+ * AI's and then any person's group made meanwhile, so the last of those
+ * with changes is the step it takes back; else the last step.
+ */
+export function undoLabelOf(state: Pick<HistoryState, 'past' | 'group' | 'side'>): string | null {
+  for (const open of [state.side, state.group]) if (open?.patches.length) return open.label
+  return state.past.at(-1)?.label ?? null
+}

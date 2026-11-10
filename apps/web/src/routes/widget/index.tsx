@@ -43,6 +43,7 @@ import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { portalBrandMark } from '@/lib/shared/portal-head'
 import {
   CONVERSATION_PRESENCE_QUERY_KEY,
   useConversationPresence,
@@ -284,8 +285,10 @@ export const Route = createFileRoute('/widget/')({
       },
       // Home surface customisation (greeting, hero style, quick-link cards).
       home: settings?.publicWidgetConfig?.home ?? null,
-      // Workspace logo for the Home header (branding config).
-      logoUrl: settings?.brandingData?.logoUrl ?? null,
+      // The brand's icon for the Home header, as the portal's header shows it:
+      // the design's own, then the workspace logo (branding config). The
+      // portal's head reads it too, so it is in the entry chunk already.
+      logoUrl: portalBrandMark(settings),
       // Top help articles for the Home search card (public; SSR'd).
       topArticles,
       // Team label for widget surfaces (changelog header, messages fallback):

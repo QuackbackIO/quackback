@@ -45,28 +45,16 @@ const HELPERS: Record<string, string> = {
  */
 const KNOWN: Record<string, { writers: readonly string[]; why: string }> = {
   'brand.fonts.heading': {
-    writers: [
-      'admin/settings/appearance/fonts-section.tsx',
-      'designer/brand-kit-fonts.tsx',
-      'designer/element-style-section.tsx',
-    ],
-    why: 'The heading font: brand kit fonts and the heading element (F49)',
+    writers: ['admin/settings/appearance/fonts-section.tsx', 'designer/brand-kit-fonts.tsx'],
+    why: 'The font picker is a part of the brand kit fonts',
   },
   'brand.fonts.display': {
-    writers: [
-      'admin/settings/appearance/fonts-section.tsx',
-      'designer/brand-kit-fonts.tsx',
-      'designer/element-style-section.tsx',
-    ],
-    why: 'The headline font: brand kit fonts and the headline element (F49)',
+    writers: ['admin/settings/appearance/fonts-section.tsx', 'designer/brand-kit-fonts.tsx'],
+    why: 'The font picker is a part of the brand kit fonts',
   },
   'brand.fonts.headingWeight': {
-    writers: [
-      'admin/settings/appearance/fonts-section.tsx',
-      'designer/brand-kit-fonts.tsx',
-      'designer/element-style-section.tsx',
-    ],
-    why: 'Heading weight: brand kit fonts, and the heading element matching it to a new heading font (F49)',
+    writers: ['admin/settings/appearance/fonts-section.tsx', 'designer/brand-kit-fonts.tsx'],
+    why: 'The font picker is a part of the brand kit fonts',
   },
   'brand.fonts.body': {
     writers: [
@@ -116,7 +104,7 @@ const DIRECT_WRITES: Record<string, { writes: number; why: string }> = {
   'designer/theme-sheet.tsx': { writes: 4, why: 'Theme' },
   'admin/settings/appearance/css-section.tsx': { writes: 1, why: 'Custom CSS' },
   'designer/element-panel.tsx': { writes: 5, why: 'Element styles' },
-  'designer/element-style-section.tsx': { writes: 4, why: 'Element styles' },
+  'designer/element-style-section.tsx': { writes: 3, why: 'Element styles' },
   'designer/element-styles.tsx': { writes: 3, why: 'Element styles' },
   'designer/overrides-list.tsx': { writes: 1, why: 'Element style overrides' },
   'designer/header-panel.tsx': { writes: 3, why: 'The header' },

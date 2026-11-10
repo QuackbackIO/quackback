@@ -28,6 +28,7 @@ import { heroOf } from '../hero'
 import { homeBlockTypes } from '../home'
 import { landingOf, menuParts } from '../menu'
 import { defaultDesign, portalDesign, type PortalDesign } from '../schema'
+import { plainReason } from '../colour-names'
 
 const GATES = {
   feedback: true,
@@ -248,6 +249,33 @@ describe('setHero, setPageSection, setTheme and setWords', () => {
     expect(setHero(design(), world, 'image', { key: 'x' })).toMatchObject({ ok: false })
   })
 
+  it('takes a hero setting named through theme as the hero’s, old names included', () => {
+    const d = design()
+    d.pages.home.composer = 'band'
+    const narrow = applyOps(d, model, [
+      { op: 'theme', target: '', key: 'hero.composerWidth', value: 'narrow' },
+    ])
+    expect(narrow.refused).toEqual([])
+    expect(narrow.design.pages.home.composerWidth).toBe('narrow')
+    expect(narrow.done[0]!.label).toBe('Hero composer width: Narrow')
+    for (const key of ['layout.heroAlign', 'layout.bandAlign', 'heroAlign', 'hero.align']) {
+      const centred = applyOp(d, model, { op: 'theme', target: '', key, value: 'centre' })
+      expect(heroOf(ok(centred).design).align, key).toBe('centre')
+    }
+    const set = applyOp(d, model, {
+      op: 'set',
+      target: 'hero',
+      key: 'layout.bandAlign',
+      value: 'centre',
+    })
+    expect(heroOf(ok(set).design).align).toBe('centre')
+    // A hero setting it does not have is refused as the hero's, by its own settings.
+    expect(applyOp(d, model, { op: 'theme', key: 'hero.sparkle', value: 'on' })).toMatchObject({
+      ok: false,
+      refusal: expect.stringContaining('The hero has no setting called sparkle'),
+    })
+  })
+
   it('tells the roadmap page from a Roadmap block by the setting', () => {
     const withBlock = ok(addBlock(design(), world, 'roadmap')).design
     const page = ok(
@@ -412,6 +440,22 @@ describe('applyOps', () => {
     expect(result.outOfScope).toEqual([ops[2], ops[3]])
   })
 
+  it('keeps a picked block from reaching the page of the same name', () => {
+    // "roadmap" names a Home block and a page; board is the page's setting.
+    const d = ok(addBlock(design(), world, 'roadmap')).design
+    const roadmap = d.pages.home.blocks.find((block) => block.type === 'roadmap')!
+    const op = { op: 'set', target: 'roadmap', key: 'board', value: 'list' } as const
+    // Unscoped, the operation does change the roadmap page.
+    const unscoped = applyOps(d, model, [op])
+    expect(unscoped.applied.map((change) => change.path)).toEqual(['pages.roadmap'])
+    expect(unscoped.design.pages.roadmap).toMatchObject({ board: 'list' })
+    const result = applyOps(d, model, [op], { scope: 'home', blockId: roadmap.id })
+    expect(result.done).toEqual([])
+    expect(result.applied).toEqual([])
+    expect(result.outOfScope).toEqual([op])
+    expect(result.design).toBe(d)
+  })
+
   it('says what is already so, and never throws on an operation it cannot read', () => {
     const result = applyOps(design(), model, [
       { op: 'set', target: 'ideas', key: 'count', value: '3' },
@@ -463,6 +507,36 @@ describe('words with marks', () => {
       style: 'muted',
       text: { en: 'Acme grows into' },
     })
+    expect(lighter.label).toBe('Headline: lighter')
+  })
+
+  it('takes the whole title marked in the brand colour as the headlines’ colour', () => {
+    const d = withWelcome()
+    d.pages.home.headline!.accent = { style: 'highlight', text: { en: 'Acme' } }
+    for (const [value, title] of [
+      ['[Help shape what Acme grows into]{accent}', 'Help shape what Acme grows into'],
+      ['[Help shape what Acme grows into]{accent:accent}.', 'Help shape what Acme grows into.'],
+    ] as const) {
+      const result = applyOps(d, model, [{ op: 'words', target: 'home', key: 'title', value }])
+      expect(result.refused, value).toEqual([])
+      expect(result.design.brand.fonts.headlineColour, value).toBe('accent')
+      // No phrase set apart: the headline's own colour is what was asked for.
+      expect(result.design.pages.home.headline?.accent, value).toBeUndefined()
+      expect(result.design.pages.home.headline?.title, value).toEqual({ en: title })
+    }
+  })
+
+  it('refuses another look over the whole title, with a reason a person can read', () => {
+    for (const value of [
+      '[Help shape what Acme grows into]{highlight}',
+      '[Help shape what Acme grows into]{lighter}',
+      '[Help shape what Acme grows into]{accent:support}',
+    ]) {
+      const result = setWords(withWelcome(), model, 'home', 'title', value)
+      expect(result, value).toMatchObject({ ok: false })
+      const refusal = (result as { refusal: string }).refusal
+      expect(plainReason(refusal), value).toBe(refusal)
+    }
   })
 
   it('clears the accent when the headline is written as plain words', () => {
@@ -470,7 +544,7 @@ describe('words with marks', () => {
     d.pages.home.headline!.accent = { style: 'highlight', text: { en: 'Acme' } }
     const result = ok(setWords(d, model, 'home', 'title', 'Help shape what Acme grows into'))
     expect(result.design.pages.home.headline?.accent).toBeUndefined()
-    expect(result.label).toBe('Headline: accent')
+    expect(result.label).toBe('Headline: no highlight')
     const renamed = ok(setWords(d, model, 'home', 'title', 'Hi'))
     expect(renamed.design.pages.home.headline?.title).toEqual({ en: 'Hi' })
     expect(renamed.label).toBe('Home headline: “Hi”')

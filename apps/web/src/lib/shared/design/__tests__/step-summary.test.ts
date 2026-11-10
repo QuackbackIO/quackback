@@ -33,6 +33,49 @@ describe('matchSummary', () => {
   })
 })
 
+describe('matchSummary when the match adds Home', () => {
+  it('says it added a Home page, in the same sentence', () => {
+    expect(
+      matchSummary([
+        'brand.light.accent',
+        'pages.home.headline.title',
+        'nav.home.on',
+        'nav.home.tab',
+      ])
+    ).toBe('Matched your brand: colours and words, and added a Home page.')
+    expect(matchSummary(['nav.home.on'])).toBe('Matched your brand and added a Home page.')
+  })
+
+  it('says nothing of Home when Home was already on', () => {
+    expect(matchSummary(['brand.light.accent', 'pages.home.headline.title'])).toBe(
+      'Matched your brand: colours and words.'
+    )
+  })
+})
+
+describe('matchSummary on fonts', () => {
+  it('names fonts only where a face changed, not a size, weight or case', () => {
+    expect(
+      matchSummary([
+        'brand.light.accent',
+        'brand.fonts.headingWeight',
+        'tune.headline.size',
+        'tune.headline.weight',
+        'tune.button.case',
+      ])
+    ).toBe('Matched your brand: colours.')
+    expect(matchSummary(['brand.light.accent', 'brand.fonts.body'])).toBe(
+      'Matched your brand: colours and fonts.'
+    )
+  })
+
+  it('does not claim fonts drawn only in the nearest face to the brand’s', () => {
+    expect(
+      matchSummary(['brand.light.accent', 'brand.fonts.heading'], { fontsNearest: true })
+    ).toBe('Matched your brand: colours.')
+  })
+})
+
 describe('partsChanged', () => {
   it('puts the hero, page background and Home in plain parts, once each', () => {
     expect(

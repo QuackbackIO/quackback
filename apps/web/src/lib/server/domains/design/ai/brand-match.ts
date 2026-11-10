@@ -10,10 +10,9 @@
  *    whose cap height and weight then size the headline.
  * 4. Decide: the decision table and the colour roles by rule; then the
  *    families the rules leave open (colour roles where ambiguous, and the
- *    hero, in parallel), and composition and wording last: the brand's
- *    voice read from every word seen (started once the screenshots are
- *    read), a set of words from each writing angle at once, and a words
- *    critic choosing among them.
+ *    hero, in parallel); beside them from the screenshots' read, the words:
+ *    the brand's voice read from every word seen, a set of words from each
+ *    writing angle at once, and a words critic choosing among them.
  * 5. Validate and apply: conflicts settled by rules, every change through
  *    applyDesignChanges (schema, contrast), as one draft step.
  * 6. Reply: what changed with its evidence, questions the screenshots could
@@ -94,6 +93,7 @@ import {
   siteFontChanges,
   siteFontPlan,
   unmatchedSiteFont,
+  withUnmatchedFont,
   siteName,
   withSiteColours,
 } from './brand-site'
@@ -225,6 +225,15 @@ export async function brandMatch(
     Math.min(BUDGET.voice, left()),
     'voice read'
   )
+  // The words need only what was read: every angle's words, then the critic's choice,
+  // written once the voice is read, beside measuring, the fonts and the hero.
+  const write = (voice: Awaited<typeof voiceRead>, ms: number) =>
+    ms > LEAST ? writeWords({ ev: wordsEvidence, voice, call: deps.family, ms, now }) : null
+  const writing = within(
+    voiceRead.then((voice) => write(voice, Math.min(BUDGET.words, left()))),
+    BUDGET.total,
+    'words'
+  )
 
   // 2. Measure.
   onStep('measure')
@@ -308,37 +317,30 @@ export async function brandMatch(
   done('hero')
 
   onStep('words')
-  const wordsMs = Math.min(BUDGET.words, left())
-  // Every angle's words at once, then the critic's choice, inside the words budget.
-  const written =
-    wordsMs > LEAST
-      ? await writeWords({
-          ev: wordsEvidence,
-          voice: await voiceRead,
-          call: deps.family,
-          ms: wordsMs,
-          now,
-        })
-      : null
+  // The words being written; the hero photo (never from a screenshot under a pop-up's
+  // dimming), the logo and the site's favicon and share picture stored meanwhile.
+  const [written, photo, { agreement, siteLogo, logoKey }, assetKeys] = await Promise.all([
+    writing,
+    heroPhoto.photoStage(primary, deps.storePhoto, left() - LEAST, BUDGET.logo),
+    // The logo, stored for the design: the site's own file where it is the one the
+    // screenshot shows, else the cut.
+    (async () => {
+      const { agreement, siteLogo } =
+        site && logo && deps.storeAsset && left() > LEAST
+          ? await siteLogoFor(site, logo, deps.storeAsset)
+          : { agreement: null, siteLogo: null }
+      const cut = !siteLogo && logo && left() > LEAST ? deps.storeLogo(logo.cut.png) : null
+      return {
+        agreement,
+        siteLogo,
+        logoKey: siteLogo ?? (cut && (await within(cut, Math.min(BUDGET.logo, left()), 'logo'))),
+      }
+    })(),
+    storeSiteAssets(site, input.design, deps.storeAsset),
+  ])
   const words: WordsAnswer | null = written?.answer ?? null
-  // The hero photo, cut and stored; never from a screenshot under a pop-up's dimming.
-  const photo = await heroPhoto.photoStage(primary, deps.storePhoto, left() - LEAST, BUDGET.logo)
   if (!words)
     failed.push('I could not write new words, so Home and the headlines are as they were.')
-
-  // The logo, stored for the design: the site's own file where it is the one the
-  // screenshot shows, else the cut.
-  const { agreement, siteLogo } =
-    site && logo && deps.storeAsset && left() > LEAST
-      ? await siteLogoFor(site, logo, deps.storeAsset)
-      : { agreement: null, siteLogo: null }
-  const logoKey =
-    siteLogo ??
-    (logo && left() > LEAST
-      ? await within(deps.storeLogo(logo.cut.png), Math.min(BUDGET.logo, left()), 'logo')
-      : null)
-  // The site's favicon and share picture, where the design has none.
-  const assetKeys = await storeSiteAssets(site, input.design, deps.storeAsset)
   done('words')
 
   // 5. Validate and apply.
@@ -444,12 +446,15 @@ export async function brandMatch(
     { timings, changes: applied.applied.length, total: now() - start, site: !!site },
     'brand matched'
   )
+  // The fonts drawn are only the nearest: the site's own face, or a headline no face fits.
+  const fontsNearest = !!unmatched || type?.headline?.close === false
   return {
     ok: true,
     reply: said.reply,
-    design: applied.design,
+    design: withUnmatchedFont(applied.design, unmatched),
     ...(siteUse && { site: siteUse }),
     ...(unmatched && { font: unmatched }),
+    ...(fontsNearest && { fontsNearest }),
     applied: applied.applied.map((c) => ({ ...c, why: why.get(c.path) })),
     skipped: applied.skipped,
     outOfScope: false,

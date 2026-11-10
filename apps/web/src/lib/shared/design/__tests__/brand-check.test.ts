@@ -211,6 +211,61 @@ describe('runCheckLoop', () => {
     expect(checkSummary(report)).toMatch(/stopped early/)
   })
 
+  it('stops at Stop: nothing more is read, scored, revised or shown', async () => {
+    const controller = new AbortController()
+    const d = doubles([score(60, 5), score(70, 6), score(80, 7)])
+    const revise = d.deps.revise
+    const report = await runCheckLoop(
+      { v: 0 },
+      {
+        ...d.deps,
+        signal: controller.signal,
+        revise: async (best, round) => {
+          const candidate = await revise(best, round)
+          // The person presses Stop while round 2's revision is on its way.
+          if (round === 2) controller.abort()
+          return candidate
+        },
+      }
+    )
+    expect(report.stopped).toBe('stopped')
+    // Round 1 was kept and stays; round 2's candidate never goes on.
+    expect(d.applied).toEqual([1])
+    expect(d.reads).toEqual([0, 1])
+    expect(d.shown()).toEqual({ v: 1 })
+  })
+
+  it('puts the best back when Stop lands while a candidate is on trial', async () => {
+    const controller = new AbortController()
+    const d = doubles([score(60, 5), score(70, 6)])
+    const scoreOf = d.deps.score
+    const report = await runCheckLoop(
+      { v: 0 },
+      {
+        ...d.deps,
+        signal: controller.signal,
+        score: async (reading, round) => {
+          if (round === 1) controller.abort()
+          return scoreOf(reading, round)
+        },
+      }
+    )
+    expect(report.stopped).toBe('stopped')
+    // The unverified candidate goes back to the match as applied, and nothing more runs.
+    expect(d.applied).toEqual([1, 0])
+    expect(report.rounds.filter((r) => r.round > 0)).toEqual([])
+  })
+
+  it('does nothing when stopped before it starts', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const d = doubles([score(60, 5)])
+    const report = await runCheckLoop({ v: 0 }, { ...d.deps, signal: controller.signal })
+    expect(report.stopped).toBe('stopped')
+    expect(d.reads).toEqual([])
+    expect(d.applied).toEqual([])
+  })
+
   it('words a kept revision by the rule that kept it: measured held and the combined score rose', () => {
     // A revision is kept when its measured match does not drop and the combined score rises:
     // one kept with the measured match unchanged must not be said to have measured better.

@@ -2,7 +2,6 @@ import { useState, type ReactElement } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { trackBuilder } from '@/lib/client/builder-events'
 import type { PortalAddress } from '@/lib/shared/design/portal-address'
@@ -49,14 +48,14 @@ export function PublishedPopover({
         </p>
         {address && (
           <>
+            {/* The whole address, wrapping, from its start: a field scrolls to its tail. */}
+            <p
+              data-live-address=""
+              className="rounded-md border border-border px-2 py-1.5 font-mono text-xs break-all select-all"
+            >
+              {address.url}
+            </p>
             <div className="flex gap-1.5">
-              <Input
-                readOnly
-                value={address.url}
-                aria-label="Live address"
-                className="h-8 text-xs"
-                onFocus={(event) => event.currentTarget.select()}
-              />
               <Button size="sm" variant="outline" onClick={() => void copy()}>
                 {copied ? 'Copied' : 'Copy'}
               </Button>

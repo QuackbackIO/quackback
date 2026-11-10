@@ -89,4 +89,26 @@ describe('WidgetShell header', () => {
     expect(screen.getByRole('button', { name: 'Close feedback widget' })).toBeTruthy()
     expect(document.querySelectorAll('.size-7').length).toBe(0)
   })
+
+  it('holds the page in a main landmark', () => {
+    renderHome()
+    expect(screen.getByRole('main').textContent).toBe('home')
+  })
+})
+
+describe('WidgetShell footer', () => {
+  it('holds the tab bar and Powered by in a footer landmark', () => {
+    renderHome()
+    const footer = screen.getByRole('contentinfo')
+    expect(footer.textContent).toContain('Powered by')
+    expect(footer.contains(screen.getByRole('button', { name: /Feedback/ }))).toBe(true)
+  })
+
+  it('draws inactive tab labels in solid muted text, never faded below 4.5:1', () => {
+    renderHome()
+    const inactive = screen.getByRole('button', { name: /Feedback/ })
+    expect(inactive.getAttribute('aria-current')).toBeNull()
+    expect(inactive.className).toMatch(/(^|\s)text-muted-foreground(\s|$)/)
+    expect(inactive.className).not.toMatch(/text-muted-foreground\/\d+/)
+  })
 })

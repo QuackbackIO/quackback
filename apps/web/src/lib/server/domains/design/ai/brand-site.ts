@@ -192,6 +192,17 @@ export function unmatchedSiteFont(plan: SiteFontPlan, design: PortalDesign): Unm
   return body ? { family: body, slot: 'body' } : null
 }
 
+/**
+ * The design as the match leaves it, recording the site's face it could only
+ * draw in the nearest, for Brand kit's fonts to offer its upload; a match
+ * that found none clears an earlier one.
+ */
+export function withUnmatchedFont(design: PortalDesign, font: UnmatchedFont | null): PortalDesign {
+  const brand = { ...design.brand }
+  delete brand.unmatchedFont
+  return { ...design, brand: font ? { ...brand, unmatchedFont: font } : brand }
+}
+
 /** The hints the font fitting takes from the site, per role. */
 export function faceHints(plan: SiteFontPlan): {
   headline: FaceHint | null

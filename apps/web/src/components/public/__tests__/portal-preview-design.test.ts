@@ -28,23 +28,23 @@ describe('a draft design read from the preview message', () => {
     expect(posted({ ...defaultDesign(), script: 'alert(1)' })).toBeNull()
   })
 
-  it('keeps the logo’s files only from the workspace’s storage', () => {
+  it('keeps the logo’s files, and reads no design whose file keys are not plain storage keys', () => {
     const draft = defaultDesign()
     draft.brand.logo.display = 'wordmark'
-    draft.brand.logo.wordmark = {
-      light: { key: 'header-logos/a.svg' },
-      dark: { key: 'x.svg?u=https://evil.example' },
-    }
-    draft.brand.logo.mark = {
-      light: { key: 'header-logos/icon.png' },
-      dark: { key: 'icon.png#"onerror' },
-    }
+    draft.brand.logo.wordmark = { light: { key: 'header-logos/a.svg' }, dark: null }
+    draft.brand.logo.mark = { light: { key: 'header-logos/icon.png' }, dark: null }
     expect(posted(draft)?.logo).toEqual({
       display: 'wordmark',
       name: null,
       wordmark: { light: '/api/storage/header-logos/a.svg', dark: null },
       mark: { light: '/api/storage/header-logos/icon.png', dark: null },
     })
+    // A key that could carry a query or leave an attribute is no design at all.
+    draft.brand.logo.wordmark.dark = { key: 'x.svg?u=https://evil.example' }
+    expect(posted(draft)).toBeNull()
+    draft.brand.logo.wordmark.dark = null
+    draft.brand.logo.mark.dark = { key: 'icon.png#"onerror' }
+    expect(posted(draft)).toBeNull()
   })
 
   it('keeps a band image and its smaller copies only from storage', () => {
@@ -63,6 +63,6 @@ describe('a draft design read from the preview message', () => {
 
     delete draft.brand.heroImage.variants
     draft.brand.heroImage.key = 'room.webp?x=1'
-    expect(posted(draft)?.bandImage).toBeNull()
+    expect(posted(draft)).toBeNull()
   })
 })

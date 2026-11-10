@@ -55,14 +55,24 @@ export interface BrandCheckDeps {
   /** Saves a change waiting to save, so the server reads the draft as shown. */
   flush: () => Promise<void>
   progress: (text: string) => void
+  /** The person's Stop: the check ends where it is, and its requests are cut off. */
+  signal?: AbortSignal
   fetcher?: typeof fetch
   capture?: (frame: HTMLIFrameElement | null) => Promise<string | null>
   read?: typeof readSettled
 }
 
-async function post<T>(fetcher: typeof fetch, body: unknown, ms: number): Promise<T> {
+async function post<T>(
+  fetcher: typeof fetch,
+  body: unknown,
+  ms: number,
+  stop?: AbortSignal
+): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), ms)
+  const cut = () => controller.abort()
+  if (stop?.aborted) cut()
+  stop?.addEventListener('abort', cut, { once: true })
   try {
     const res = await fetcher(BRAND_CHECK_URL, {
       method: 'POST',
@@ -80,6 +90,7 @@ async function post<T>(fetcher: typeof fetch, body: unknown, ms: number): Promis
     return result
   } finally {
     clearTimeout(timer)
+    stop?.removeEventListener('abort', cut)
   }
 }
 
@@ -133,7 +144,8 @@ function loop(
           shots: input.shots,
           ...(input.brand ? { brand: input.brand } : {}),
         },
-        REQUEST_MS.score
+        REQUEST_MS.score,
+        deps.signal
       ),
     revise: async (best, round): Promise<CheckCandidate<PortalDesign> | null> => {
       await deps.flush()
@@ -151,7 +163,8 @@ function loop(
           paths: input.paths,
           palette: input.palette,
         },
-        REQUEST_MS.revise
+        REQUEST_MS.revise,
+        deps.signal
       )
       if (!revised.design || !revised.changes.length) return null
       before = best.reading.fingerprint
@@ -162,5 +175,6 @@ function loop(
       probe?.show(design)
     },
     progress: deps.progress,
+    ...(deps.signal && { signal: deps.signal }),
   })
 }

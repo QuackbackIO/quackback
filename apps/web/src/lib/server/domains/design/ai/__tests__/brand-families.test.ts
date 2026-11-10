@@ -341,6 +341,19 @@ describe('composition', () => {
     submit: '',
   })
 
+  it('turns Home on only when it was off, so the reply can say it added a Home page', () => {
+    const off = values(wordsChanges(answer('portal'), defaultDesign(), ON))
+    expect(off['nav.home.on']).toBe(true)
+    expect(off['nav.home.tab']).toBe(true)
+    const design = defaultDesign()
+    design.nav.home.on = true
+    design.nav.home.tab = true
+    const on = wordsChanges(answer('portal'), design, ON).map((change) => change.path)
+    expect(on).not.toContain('nav.home.on')
+    expect(on).not.toContain('nav.home.tab')
+    expect(on).toContain('pages.home.headline.title')
+  })
+
   it('writes headlines through the words model: a phrase marked is an accent, plain words have none', () => {
     const plain = values(wordsChanges(answer('portal'), defaultDesign(), ON))
     expect(plain['pages.home.headline.title']).toBe('Shape what is next')

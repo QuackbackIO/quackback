@@ -222,6 +222,9 @@ describe('MenuAdd, heading and limits', () => {
     showAdd(design)
     const add = screen.getByRole('button', { name: 'Link' })
     expect(add.hasAttribute('disabled')).toBe(true)
-    expect(add.getAttribute('title')).toBe('The menu holds 16')
+    // Said where it is seen, and read with the button.
+    const why = document.getElementById(add.getAttribute('aria-describedby')!)!
+    expect(why.textContent).toBe('The menu holds 16')
+    expect(add.getAttribute('title')).toBeNull()
   })
 })

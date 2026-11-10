@@ -8,14 +8,21 @@ import {
   type ReactNode,
 } from 'react'
 import { Toolbar } from '@base-ui/react/toolbar'
-import { DocumentDuplicateIcon, TrashIcon } from '@heroicons/react/16/solid'
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  DocumentDuplicateIcon,
+  TrashIcon,
+} from '@heroicons/react/16/solid'
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import { BLOCK_ACTIONS } from './properties/words'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { chipPlacement, outlineBox, type Rect } from '@/lib/shared/design/layer-geometry'
 
@@ -105,7 +112,8 @@ function ChipButton({
  * What the builder draws over the canvas: a quiet outline on the block under
  * the pointer, and on the picked block an outline and a chip on its top edge
  * (inside it when there is no room above) with its grip, its name and
- * Remove; right-clicking the chip copies it, as Ctrl+D does. Open belongs to
+ * Remove; right-clicking the chip, or the block on the page, opens the
+ * block's actions, as its ⋯ does. Open belongs to
  * the link or item it opens, on that element's own chip. The page under it
  * still takes the pointer; only the chip does not let it through.
  */
@@ -114,9 +122,11 @@ export function EditingLayer({
   hovered,
   picked,
   pickedKey,
+  avoid,
   name,
   onDuplicate,
   onRemove,
+  onMove,
   onSettings,
   onDown,
   grip,
@@ -129,11 +139,15 @@ export function EditingLayer({
   picked: Rect | null
   /** Which block is picked, so the outline and chip glide to a new pick. */
   pickedKey?: string | null
+  /** What the chip keeps clear of beside something small, such as the menu's items. */
+  avoid?: readonly Rect[]
   /** The picked block's name. */
   name: string | null
   /** Copies or removes the picked block; absent for parts of a page that cannot be. */
   onDuplicate?: () => void
   onRemove?: () => void
+  /** Moves the picked block a place up or down; null where it cannot go further. */
+  onMove?: { up: (() => void) | null; down: (() => void) | null }
   /** Leads to the picked block's settings. */
   onSettings: () => void
   /** Goes down from the block to its first element (Down arrow on its name). */
@@ -159,7 +173,7 @@ export function EditingLayer({
     const next = { width: element.offsetWidth, height: element.offsetHeight }
     if (next.width && (next.width !== size.width || next.height !== size.height)) setSize(next)
   })
-  const place = picked && name ? chipPlacement(picked, size, room) : null
+  const place = picked && name ? chipPlacement(picked, size, room, avoid) : null
   const glide = useGlide(pickedKey) ? GLIDE : undefined
   return (
     <div data-editing-layer="" className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -189,10 +203,11 @@ export function EditingLayer({
       ))}
       {children}
       {place && name && (
-        <ChipMenu name={name} onDuplicate={onDuplicate}>
+        <ChipMenu name={name} onDuplicate={onDuplicate} onRemove={onRemove} onMove={onMove}>
           <Toolbar.Root
             ref={chip}
             aria-label={`${name}, picked`}
+            data-chip-for={pickedKey ?? undefined}
             data-chip-inside={place.inside ? '' : undefined}
             // Words edited on the page take the chip's place for their format bar.
             className="pointer-events-auto absolute flex items-center gap-px rounded-lg p-0.5 shadow-md [[data-words-editing]_&]:hidden"
@@ -272,14 +287,18 @@ function ChangeOutline({ rect, room }: { rect: Rect; room: { width: number; heig
   )
 }
 
-/** The picked block chip's right-click menu: copying the block, as Ctrl+D does. */
+/** The picked block chip's right-click menu: the block's actions, as its ⋯ offers them. */
 function ChipMenu({
   name,
   onDuplicate,
+  onRemove,
+  onMove,
   children,
 }: {
   name: string
   onDuplicate?: () => void
+  onRemove?: () => void
+  onMove?: { up: (() => void) | null; down: (() => void) | null }
   children: ReactNode
 }) {
   if (!onDuplicate) return children
@@ -289,9 +308,31 @@ function ChipMenu({
       <ContextMenuContent aria-label={`${name}: more`}>
         <ContextMenuItem onClick={onDuplicate}>
           <DocumentDuplicateIcon aria-hidden="true" />
-          Duplicate
+          {BLOCK_ACTIONS.duplicate}
           <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
         </ContextMenuItem>
+        {onMove && (
+          <>
+            <ContextMenuItem disabled={!onMove.up} onClick={() => onMove.up?.()}>
+              <ArrowUpIcon aria-hidden="true" />
+              {BLOCK_ACTIONS.moveUp}
+            </ContextMenuItem>
+            <ContextMenuItem disabled={!onMove.down} onClick={() => onMove.down?.()}>
+              <ArrowDownIcon aria-hidden="true" />
+              {BLOCK_ACTIONS.moveDown}
+            </ContextMenuItem>
+          </>
+        )}
+        {onRemove && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={onRemove}>
+              <TrashIcon aria-hidden="true" />
+              {BLOCK_ACTIONS.remove}
+              <ContextMenuShortcut>Delete</ContextMenuShortcut>
+            </ContextMenuItem>
+          </>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   )

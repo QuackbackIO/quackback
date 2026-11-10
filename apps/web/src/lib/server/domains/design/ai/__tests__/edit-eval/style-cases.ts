@@ -262,11 +262,12 @@ export const STYLE_CASES: StyleCase[] = [
     touches: [...STYLED, 'layout.nav'],
   },
   {
-    name: 'fields edged in the brand colour when focused',
-    request: 'When someone clicks into a field, give it a border in our brand colour',
+    // Focus stays neutral: a thicker edge, never a brand-coloured one.
+    name: 'fields edged more thickly when focused',
+    request: 'When someone clicks into a field, give it a thicker border',
     ops: [],
-    styles: [s('input', 'borderColor', 'accent', 'focus'), s('input', 'borderWidth', '2', 'focus')],
-    check: (d) => near(colour(d, 'input', 'borderColor', 'focus'), ACCENT, 0.08),
+    styles: [s('input', 'borderWidth', '2', 'focus')],
+    check: (d) => n(v(d, 'input', 'focus').values['borderWidth']) >= 2,
     touches: STYLED,
   },
   {

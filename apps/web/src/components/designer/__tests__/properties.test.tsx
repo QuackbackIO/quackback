@@ -23,6 +23,9 @@ import { FontField, TokenField } from '../properties/token-field'
 import type { ColourToken, FontToken } from '../properties/tokens'
 import { COLOUR_NAMES, WORDS, resetTo } from '../properties/words'
 
+/** A target at least 24px tall, as small text links and buttons are given. */
+const at24 = (el: Element) => expect(el.className).toMatch(/(^|\s)(min-h-6|size-6|min-h-7)(\s|$)/)
+
 afterEach(cleanup)
 
 describe('the panel frame', () => {
@@ -113,7 +116,7 @@ describe('a property row', () => {
       </PropertyRow>
     )
     expect(view.container.querySelector('[data-set-dot]')).toBeNull()
-    expect(view.container.querySelector('[title="From brand"]')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'From brand' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Reset/ })).toBeNull()
   })
 
@@ -164,6 +167,64 @@ describe('a row of tiles', () => {
   })
 })
 
+describe('tiles from the keyboard', () => {
+  const OPTIONS = [
+    ['a', 'One'],
+    ['b', 'Two'],
+    ['c', 'Three'],
+  ] as const
+  const stops = () =>
+    screen.getAllByRole('radio').map((radio) => (radio.tabIndex === 0 ? radio.textContent : null))
+
+  it('is one Tab stop, the picked tile, and the arrows move to the next and pick it', () => {
+    const pick = vi.fn()
+    const { rerender } = render(
+      <PropertyTiles label="Count" value="b" options={OPTIONS} onChange={pick} />
+    )
+    expect(stops().filter(Boolean)).toEqual(['Two'])
+    const two = screen.getByRole('radio', { name: 'Two' })
+    act(() => two.focus())
+    fireEvent.keyDown(two, { key: 'ArrowRight' })
+    expect(pick).toHaveBeenLastCalledWith('c')
+    expect(document.activeElement?.textContent).toBe('Three')
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' })
+    expect(pick).toHaveBeenLastCalledWith('a')
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowUp' })
+    expect(pick).toHaveBeenLastCalledWith('c')
+    // Unset: the tile it has from wider up takes Tab, else the first.
+    rerender(
+      <PropertyTiles
+        label="Count"
+        value={undefined}
+        inherited="c"
+        options={OPTIONS}
+        onChange={pick}
+      />
+    )
+    expect(stops().filter(Boolean)).toEqual(['Three'])
+    rerender(<PropertyTiles label="Count" value={undefined} options={OPTIONS} onChange={pick} />)
+    expect(stops().filter(Boolean)).toEqual(['One'])
+  })
+
+  it('moves the same way through drawn tiles', () => {
+    const pick = vi.fn()
+    render(
+      <PropertyDrawnTiles
+        label="Look"
+        value="a"
+        options={OPTIONS.map(([v, n]) => [v, n, <span key={v} />] as const)}
+        onChange={pick}
+      />
+    )
+    const one = screen.getByRole('radio', { name: 'One' })
+    expect(one.tabIndex).toBe(0)
+    expect(screen.getByRole('radio', { name: 'Two' }).tabIndex).toBe(-1)
+    act(() => one.focus())
+    fireEvent.keyDown(one, { key: 'ArrowLeft' })
+    expect(pick).toHaveBeenLastCalledWith('c')
+  })
+})
+
 describe('drawn tiles', () => {
   it('names each drawing in full and takes the one picked', () => {
     const pick = vi.fn()
@@ -192,7 +253,7 @@ describe('drawn tiles', () => {
 })
 
 describe('hover help', () => {
-  it('keeps a row’s and a section’s advice behind an ⓘ, said on hover', () => {
+  it('keeps a row’s and a section’s advice behind an ⓘ, said on hover', async () => {
     render(
       <PropertySection title="Image" help="A photo works best.">
         <PropertyRow label="Alt text" help="What the image shows">
@@ -200,11 +261,13 @@ describe('hover help', () => {
         </PropertyRow>
       </PropertySection>
     )
-    expect(screen.getByRole('img', { name: 'A photo works best.' }).getAttribute('title')).toBe(
-      'A photo works best.'
-    )
-    expect(screen.getByRole('img', { name: 'What the image shows' })).toBeTruthy()
+    // Each ⓘ takes focus, and says its advice in a tooltip, never a title.
+    const help = screen.getByRole('button', { name: 'A photo works best.' })
+    expect(help.getAttribute('title')).toBeNull()
+    expect(screen.getByRole('button', { name: 'What the image shows' })).toBeTruthy()
     expect(screen.queryByText('What the image shows')).toBeNull()
+    act(() => help.focus())
+    expect(await screen.findByText('A photo works best.')).toBeTruthy()
   })
 })
 
@@ -365,7 +428,9 @@ describe('a brand colour field', () => {
     expect(
       screen.getByRole('button', { name: 'Background: #b0123a' }).getAttribute('data-token-state')
     ).toBe('detached')
-    fireEvent.click(screen.getByRole('button', { name: 'Link to Brand colour' }))
+    const back = screen.getByRole('button', { name: 'Link to Brand colour' })
+    at24(back)
+    fireEvent.click(back)
     expect(onChange).toHaveBeenLastCalledWith('accent')
   })
 
@@ -486,5 +551,18 @@ describe('one ladder of scope words', () => {
     expect(view.container.textContent).toBe('Applies to the header (5 pages)')
     expect(view.container.querySelector('[data-scope-line]')).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
+  })
+})
+
+describe('a row’s label', () => {
+  it('wraps when longer than its column, as "Logo colours" beside its ⓘ is, never cut off', () => {
+    render(
+      <PropertyRow label="Logo colours" source="Read from your logo">
+        <span />
+      </PropertyRow>
+    )
+    const label = screen.getByText('Logo colours')
+    expect(label.className).not.toMatch(/truncate|text-ellipsis|whitespace-nowrap/)
+    expect(label.className).toContain('break-words')
   })
 })

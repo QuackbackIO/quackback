@@ -12,6 +12,7 @@ import {
   undoAutomaticWebsiteBrandingFn,
 } from '@/lib/server/functions/website-branding'
 import { refreshSettingsAreaQueries } from '@/components/admin/ask/settings-proposal-cache'
+import { adminQueries } from '@/lib/client/queries/admin'
 import type { AutomaticBrandingStatus } from '@/lib/shared/website-branding'
 
 /** A running lookup is polled at most this many times per mount. */
@@ -68,6 +69,14 @@ export function useAutomaticWebsiteBranding({ enabled }: { enabled: boolean }) {
     refreshed.current = true
     void refresh().catch(() => setError(failed()))
   }, [status.data?.status, client, router, intl])
+
+  // A lookup this mount watched has landed: the launch plan's brand step now links to
+  // the brand match on the website it used, so the plan is read again.
+  const landed = status.data?.status
+  useEffect(() => {
+    if (!watched.current || !landed || landed === 'pending' || landed === 'eligible') return
+    void client.invalidateQueries({ queryKey: adminQueries.onboardingStatus().queryKey })
+  }, [landed, client])
 
   const settle = async (result: AutomaticBrandingStatus | null, changed: boolean) => {
     setError(null)

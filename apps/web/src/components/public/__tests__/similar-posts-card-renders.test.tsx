@@ -13,11 +13,12 @@ import { IntlProvider } from 'react-intl'
 
 const { presence } = vi.hoisted(() => ({ presence: { renders: 0 } }))
 
-vi.mock('framer-motion', () => ({
+vi.mock('framer-motion', async () => ({
   AnimatePresence: ({ children }: { children?: ReactNode }) => {
     presence.renders++
     return children
   },
+  MotionConfigContext: (await import('react')).createContext({}),
   motion: { div: ({ children }: { children?: ReactNode }) => <div>{children}</div> },
 }))
 vi.mock('@/components/public/vote-button', () => ({ VoteButton: () => null }))

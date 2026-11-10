@@ -25,7 +25,7 @@ import { DesignerAi } from './designer-ai'
 import { CanvasSkeleton, skeletonOf } from './canvas-skeleton'
 import { CANVAS_WIDTHS, DesignerCanvas } from './designer-canvas'
 import { ElementPanel, elementPanelKey } from './element-panel'
-import { revealThemeFonts } from './brand-kit-fonts'
+import { revealFontSlot, revealThemeFonts } from './brand-kit-fonts'
 import { usePickReach } from './use-pick-reach'
 import { backgroundPageOf } from '@/lib/shared/design/page-background'
 import { partOf, partSelector } from '@/lib/shared/design/parts-registry'
@@ -55,6 +55,7 @@ import {
   focusHeading,
   focusSettings,
   inSettings,
+  openChipMenu,
   treeReturnRow,
   type TreeOrigin,
 } from './settings-focus'
@@ -250,6 +251,7 @@ export function DesignerShell({
         },
         onDuplicate: selection ? () => blocks.duplicateBlock(selection) : undefined,
         onRemove: selection ? () => blocks.removeBlock(selection) : undefined,
+        onHome: design.nav.home.on ? undefined : () => menu.land('home'),
       }),
   })
   // A sheet's way back names what the panel under it shows: the element, the pick, or the page.
@@ -270,7 +272,7 @@ export function DesignerShell({
   const { refuse, clear: clearRefusal } = refusalLines
   const refusals = useMemo(() => ({ refuse, clear: clearRefusal }), [refuse, clearRefusal])
   const update = useCountedUpdate(draft, page, refusals)
-  const blocks = useBlockActions({ draft, selection, setSelection: pick, nameOf, say })
+  const blocks = useBlockActions({ draft, selection, setSelection: pick, nameOf, say, gates })
   const { structural, onWords } = useCanvasInput(design, update, locale)
   const menu = useMenuEditing({ design, gates, update, page, setPage, pick, say })
   // A block dragged from Add onto the page: dropped, it is picked and the sheet closes.
@@ -346,8 +348,9 @@ export function DesignerShell({
   })
   const discard = () => {
     trackBuilder('designer_draft_discarded', { changes: draft.changes.length })
-    void draft.discard()
-    say('Draft discarded. Undo brings it back.')
+    void draft.discard().then((outcome) => {
+      if (outcome.ok) say('Draft discarded. Undo brings it back.')
+    })
   }
   const exit = async () => {
     await draft.flush()
@@ -628,6 +631,13 @@ export function DesignerShell({
                       else if (how === 'click' && node) picking.select('header', null, node)
                     }}
                     onMenuHover={menu.setHovered}
+                    onContext={(section, target, at) => {
+                      menu.dismiss()
+                      setPageClosed(false)
+                      picking.select(section, null, target)
+                      // A block's actions open where it was right-clicked, as its ⋯ offers them.
+                      if (section?.startsWith('block-')) openChipMenu(section, at)
+                    }}
                     onWords={onWords}
                     onKey={(key) => (key === 'undo' ? undo() : redo())}
                     onEscape={() => {
@@ -651,6 +661,7 @@ export function DesignerShell({
                             onPage={setPage}
                             onDuplicate={blocks.duplicateBlock}
                             onRemove={blocks.removeBlock}
+                            onMove={blocks.moveBlock}
                             onDeselect={stepBack}
                             flash={changeFlash.flash}
                             grid={{
@@ -706,6 +717,7 @@ export function DesignerShell({
                   design={design}
                   update={update}
                   gates={gates}
+                  gateSettings={view.settings}
                   locale={locale}
                   phone={size === 'phone'}
                   onPhone={(next) => canvas.setSize(next ? 'phone' : 'desktop')}
@@ -754,6 +766,10 @@ export function DesignerShell({
                             ? { values: pickReach.drawn, size, dark: canvasDark }
                             : null
                         }
+                        onFonts={(slot) => {
+                          openTheme()
+                          void revealFontSlot(slot)
+                        }}
                         onJump={(place) => {
                           if (place.block) return pick(`block-${place.block}` as Selection)
                           const to =

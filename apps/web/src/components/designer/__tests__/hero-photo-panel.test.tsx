@@ -102,7 +102,7 @@ afterEach(() => {
 describe('a hero photo cut from a screenshot, in the hero’s panel', () => {
   it('says where it came from and asks for the original', () => {
     show(fromShot())
-    expect(screen.getByRole('img', { name: MATCH_BRAND.fromScreenshot })).toBeTruthy()
+    expect(screen.getByRole('button', { name: MATCH_BRAND.fromScreenshot })).toBeTruthy()
     expect(screen.queryByText(MATCH_BRAND.fromScreenshot)).toBeNull()
     expect(screen.getByRole('button', { name: MATCH_BRAND.adjustCrop })).toBeTruthy()
     expect(screen.getByText('Replace')).toBeTruthy()

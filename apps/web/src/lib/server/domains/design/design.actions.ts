@@ -3,18 +3,18 @@
  * refusal a caller must explain is returned as a value, not thrown: a thrown
  * error reaches the browser as a bare message, without its code.
  */
-import { readRevision } from './revisions'
+import { listRevisions, readRevision } from './revisions'
 import { draftLastChange, type DraftLastChange } from './draft-last-change'
 import { currentAuthors } from './draft-authors'
 import { authorNames } from './draft-author-names'
-import type { PortalDesignRevisionId } from '@quackback/ids'
+import type { PortalDesignRevisionId, PrincipalId } from '@quackback/ids'
 import { db, type PortalDesignSource } from '@/lib/server/db'
 import { DomainException } from '@/lib/shared/errors'
 import { convertLegacyBranding } from '@/lib/shared/design/convert'
-import { designChanges } from '@/lib/shared/design/diff'
+import { shownChanges } from '@/lib/shared/design/diff'
 import { withBlockIds } from '@/lib/shared/design/home'
 import { mergePatch } from '@/lib/shared/design/merge-patch'
-import { withHeroKeys } from '@/lib/shared/design/migrations'
+import { tidyDesign, withHeroKeys } from '@/lib/shared/design/migrations'
 import { resolveDesign, type DesignAdjustment } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { parseJsonOrNull, parsePortalConfig } from '@/lib/server/domains/settings/settings.helpers'
@@ -22,7 +22,6 @@ import type { BrandingConfig } from '@/lib/server/domains/settings/settings.type
 import {
   discardDraft,
   getDesignState,
-  listRevisions,
   publishDraft,
   restoreRevision,
   saveDraft,
@@ -133,7 +132,7 @@ export async function readDesignForEditing(): Promise<DesignEditorState> {
     revision,
     authors,
     draftSavedAt: state?.draftSavedAt?.toISOString() ?? null,
-    waiting: source === 'draft' ? designChanges(shownLive, shown).length : 0,
+    waiting: source === 'draft' ? shownChanges(shownLive, shown).length : 0,
   }
 }
 
@@ -168,7 +167,13 @@ export async function patchDesignDraft(
     patch !== null && typeof patch === 'object' && !Array.isArray(patch)
       ? withHeroKeys(patch as Record<string, unknown>)
       : patch
-  return saveDesignDraft(mergePatch(current.design, named), author, expectedRevision)
+  // Keys written as format 2 had them (one card look, Lift as a motion) are tidied as a stored design's are.
+  const merged = mergePatch(current.design, named)
+  const tidied =
+    merged !== null && typeof merged === 'object' && !Array.isArray(merged)
+      ? tidyDesign(merged as Record<string, unknown>)
+      : merged
+  return saveDesignDraft(tidied, author, expectedRevision)
 }
 
 /**
@@ -195,9 +200,23 @@ export async function saveDesignDraft(
   return { ...result, lastChange: await draftLastChange(author.principalId) }
 }
 
-export async function discardDesignDraft(): Promise<{ ok: true }> {
-  await discardDraft()
-  return { ok: true }
+/**
+ * Discards the draft and returns the revision the next save names. With
+ * `expectedRevision`, a discard against a draft someone else has changed
+ * since is refused, saying who changed it and when.
+ */
+export async function discardDesignDraft(
+  expectedRevision?: string,
+  viewer?: PrincipalId
+): Promise<
+  { ok: true; revision: string } | (DesignRefusal & { lastChange?: DraftLastChange | null })
+> {
+  const result = await refusable(async () => ({
+    ok: true as const,
+    revision: await discardDraft(expectedRevision),
+  }))
+  if (result.ok || result.code !== 'REVISION_MISMATCH' || !viewer) return result
+  return { ...result, lastChange: await draftLastChange(viewer) }
 }
 
 export async function publishDesign(

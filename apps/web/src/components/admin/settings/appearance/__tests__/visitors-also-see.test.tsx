@@ -6,9 +6,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 
-const sample = vi.hoisted(() => ({ fn: vi.fn() }))
+const sample = vi.hoisted(() => ({ fn: vi.fn(), card: vi.fn() }))
 vi.mock('@/lib/server/functions/portal-design-email', () => ({
   getSignInEmailSampleFn: sample.fn,
+  getShareCardSampleFn: sample.card,
 }))
 
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
@@ -22,7 +23,11 @@ import { VisitorsAlsoSee } from '../visitors-also-see'
 afterEach(() => {
   cleanup()
   sample.fn.mockReset()
+  sample.card.mockReset()
+  sample.card.mockResolvedValue({ ok: false, message: 'x' })
 })
+
+sample.card.mockResolvedValue({ ok: false, message: 'x' })
 
 describe('VisitorsAlsoSee', () => {
   it('shows the sign-in email sample in a sandboxed frame', async () => {
@@ -50,5 +55,16 @@ describe('VisitorsAlsoSee', () => {
     const preview = await screen.findByRole('figure', { name: 'Link preview' })
     expect(preview.textContent).toContain('GitHub')
     expect(preview.textContent).toContain('acme.test')
+  })
+
+  it('shows the card the server draws for the draft, not a sketch of it', async () => {
+    sample.fn.mockResolvedValue({ ok: true, html: '<p>Sign in</p>' })
+    sample.card.mockResolvedValue({ ok: true, src: 'data:image/png;base64,AAAA' })
+    render(<VisitorsAlsoSee design={defaultDesign()} />)
+    const preview = await screen.findByRole('figure', { name: 'Link preview' })
+    await waitFor(() =>
+      expect(preview.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,AAAA')
+    )
+    expect(screen.queryByTestId('link-preview-card')).toBeNull()
   })
 })

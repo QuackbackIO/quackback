@@ -215,6 +215,27 @@ export function startDesigning(): () => void {
       editWords(words)
     }
   }
+  // Shift+click and double-clicks pick; they select no text, but in words being edited.
+  function onMouseDown(event: MouseEvent) {
+    if (!event.shiftKey && event.detail < 2) return
+    if (document.querySelector('[data-qb-words-editing]')) return
+    event.preventDefault()
+  }
+  // A right-click picks what is under it and opens its actions in the builder, there.
+  function onContextMenu(event: MouseEvent) {
+    const target = event.target as Element | null
+    if (!target || target.closest('[data-qb-words-editing]')) return
+    event.preventDefault()
+    event.stopPropagation()
+    const menu = menuOf(target)
+    post({
+      type: 'quackback:preview-context',
+      section: sectionOf(target),
+      x: event.clientX,
+      y: event.clientY,
+      ...(menu ? { menu } : {}),
+    })
+  }
   // Undo, redo, quick find and Escape belong to the designer, whichever document has focus.
   function onKey(event: KeyboardEvent) {
     if ((event.target as Element | null)?.closest?.('[data-qb-words-editing], input, textarea'))
@@ -243,6 +264,8 @@ export function startDesigning(): () => void {
   }
   document.addEventListener('click', onClick, true)
   document.addEventListener('dblclick', onDoubleClick, true)
+  document.addEventListener('mousedown', onMouseDown, true)
+  document.addEventListener('contextmenu', onContextMenu, true)
   document.addEventListener('keydown', onKey, true)
   window.addEventListener('message', onMessage)
   // Listening now: what the builder asks the page to show, such as the feed empty.
@@ -251,6 +274,8 @@ export function startDesigning(): () => void {
   return () => {
     document.removeEventListener('click', onClick, true)
     document.removeEventListener('dblclick', onDoubleClick, true)
+    document.removeEventListener('mousedown', onMouseDown, true)
+    document.removeEventListener('contextmenu', onContextMenu, true)
     document.removeEventListener('keydown', onKey, true)
     window.removeEventListener('message', onMessage)
     setDesignerPreview({ empty: false, composer: false })

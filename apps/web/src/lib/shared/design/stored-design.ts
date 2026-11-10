@@ -10,7 +10,7 @@
  * the parse refused, every one from that parse at once, and parses again.
  */
 import { defaultDesign, portalDesign, type PortalDesign } from './schema'
-import { migrateDesign } from './migrations'
+import { DESIGN_VERSION, migrateDesign } from './migrations'
 
 type Path = ReadonlyArray<PropertyKey>
 type Issue = { code: string; path: Path; keys?: string[] }
@@ -89,6 +89,40 @@ function optionalFields(doc: unknown, paths: Path[]): boolean[] {
   return paths.map((path) => !rest.error.issues.some((other) => samePath(other.path, path)))
 }
 
+/** A value's kind, so a default only stands in for a value of the same kind. */
+const kindOf = (value: unknown) =>
+  value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value
+
+/**
+ * Puts right a required field this build cannot read, whatever the parse
+ * said of it, such as a font of a newer kind or a weight it does not offer.
+ * From the field up, the nearest that can go is dropped (a display font with
+ * an id this build lacks), else the nearest the default design has a value
+ * of the same kind for, or an empty one, takes that value. A whole section,
+ * such as the brand, is never swapped for the default. Returns the path it
+ * changed, or null when none can be, as a value of the wrong kind cannot.
+ */
+function settle(doc: unknown, path: Path): Path | null {
+  const defaults = defaultDesign()
+  for (let end = path.length; end >= 1; end--) {
+    const at = path.slice(0, end)
+    const value = lookup(doc, at)
+    const parent = lookup(doc, at.slice(0, -1))
+    if (value === undefined || !isRecord(parent) || (end === 1 && isRecord(value))) continue
+    // The field itself was already found to be required.
+    if (end < path.length && optionalFields(doc, [at])[0]) {
+      remove(doc, at)
+      return at
+    }
+    const fallback = lookup(defaults, at)
+    if (fallback === undefined || (fallback !== null && kindOf(fallback) !== kindOf(value)))
+      continue
+    parent[at.at(-1)!] = structuredClone(fallback)
+    return at
+  }
+  return null
+}
+
 /**
  * Applies the repairs every issue of one parse allows, noting each path set
  * aside, or returns false when one allows none and the document is not a
@@ -148,15 +182,9 @@ function repairAll(doc: unknown, issues: readonly Issue[], dropped: string[]): b
           note(repair.path)
           break
         }
-        // A required option value this build does not offer goes back to the default design's value.
-        const { path, issue } = repair
-        if (issue.code !== 'invalid_value' || path[0] === 'version') return false
-        const fallback = lookup(defaultDesign(), path)
-        const parent = lookup(doc, path.slice(0, -1))
-        if (fallback === undefined || typeof lookup(doc, path) !== 'string' || !isRecord(parent))
-          return false
-        parent[path.at(-1)!] = fallback
-        note(path)
+        const settled = settle(doc, repair.path)
+        if (!settled) return false
+        note(settled)
         break
       }
     }
@@ -176,6 +204,11 @@ export function readStoredDesign(
   if (input === null || typeof input !== 'object') return null
   const doc = structuredClone(migrateDesign(input))
   const dropped: string[] = []
+  // A newer format reads as this one: what it added is set aside like any newer field.
+  if (isRecord(doc) && typeof doc.version === 'number' && doc.version > DESIGN_VERSION) {
+    doc.version = DESIGN_VERSION
+    dropped.push('version')
+  }
   for (let round = 0; ; round++) {
     const parsed = portalDesign.safeParse(doc)
     if (parsed.success) return { design: parsed.data, dropped }

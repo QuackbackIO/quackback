@@ -12,13 +12,8 @@ import { rewritePartAliases } from './parts'
 import { designFontIds, fontStack, uploadedFontFaces } from './fonts'
 import { renderDesignCss, resolveDesign, type ResolvedDesign } from './resolve'
 import { readableStatusColours } from './status-colours'
-import {
-  shareCardFacts,
-  shareCardVersion,
-  shortHash,
-  squareIconPath,
-  themeColours,
-} from './share-card'
+import { shortHash, squareIconPath } from './share-card'
+import { shareCardFacts, shareCardVersion, themeColours } from './share-card-facts'
 import type { PortalDesign } from './schema'
 import type { BandImage, DesignLogo, PortalCopy, PortalDesignView } from './view'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'

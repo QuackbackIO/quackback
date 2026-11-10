@@ -512,9 +512,30 @@ const under = (path: string, field: string) => path === field || path.startsWith
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 
 /**
+ * What a label sets, without the value: "Cards" of "Cards to raised", "Main
+ * buttons: background" of "Main buttons: background #312e81".
+ */
+export const labelSubject = (label: string): string =>
+  (/^(.+: [\w-]+) \S/.exec(label)?.[1] ?? /^(.+?) to \S/.exec(label)?.[1] ?? label).toLowerCase()
+
+/**
+ * Labels as a later step leaves them: a label the step restates for the same
+ * thing goes, and the step's own come last. A field with one value keeps only
+ * the last step's labels.
+ */
+function restated(had: readonly string[], own: readonly string[], leaf: boolean): string[] {
+  if (leaf && own.length) return [...new Set(own)]
+  const subjects = new Set(own.map(labelSubject))
+  return [...new Set([...had.filter((label) => !subjects.has(labelSubject(label))), ...own])]
+}
+
+const isLeaf = (value: unknown) => value === null || typeof value !== 'object'
+
+/**
  * Changes from several applications as one list, each field once: its value
- * before the first and after the last, its labels joined. A field inside one
- * already listed joins it; a field changed and changed back drops out.
+ * before the first and after the last, and the last label for each thing it
+ * set, so Show changes never says a value the field no longer has. A field
+ * inside one already listed joins it; a field changed and changed back drops out.
  */
 export function mergeChanges(
   original: PortalDesign,
@@ -526,11 +547,16 @@ export function mergeChanges(
     const ancestor = [...labels.keys()].find((path) => under(change.path, path))
     const own = (change.label ?? '').split('; ').filter(Boolean)
     if (ancestor) {
-      labels.set(ancestor, [...new Set([...labels.get(ancestor)!, ...own])])
+      const leaf = ancestor === change.path && isLeaf(change.after)
+      labels.set(ancestor, restated(labels.get(ancestor)!, own, leaf))
       continue
     }
     const inside = [...labels.keys()].filter((path) => under(path, change.path))
-    const joined = [...new Set([...inside.flatMap((path) => labels.get(path)!), ...own])]
+    const joined = restated(
+      inside.flatMap((path) => labels.get(path)!),
+      own,
+      false
+    )
     for (const path of inside) labels.delete(path)
     labels.set(change.path, joined)
   }

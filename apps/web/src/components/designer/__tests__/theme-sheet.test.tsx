@@ -220,8 +220,8 @@ describe('Theme', () => {
     // One source: the element Hover values, never a motion of its own.
     expect(seen.design.shape).not.toHaveProperty('hover')
     expect(seen.design.style).toEqual({
-      postCard: { hover: { lift: 2, shadow: 'floating' } },
-      button: { hover: { lift: 2, shadow: 'floating' } },
+      postCard: { hover: { lift: 2, shadow: 'lift' } },
+      button: { hover: { lift: 2, shadow: 'lift' } },
     })
     expect(radio('Hover', 'Lift').getAttribute('aria-checked')).toBe('true')
     fireEvent.click(radio('Hover', 'None'))

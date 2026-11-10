@@ -390,6 +390,12 @@ export function StyleField({
                   {looks[0]!.toUpperCase() + looks.slice(1)}
                 </SelectItem>
               ))}
+              {/* Lift's own shadow is shown while set, never offered. */}
+              {value === 'lift' && prop === 'shadow' ? (
+                <SelectItem value="lift" disabled>
+                  Lift
+                </SelectItem>
+              ) : null}
             </SelectContent>
           </Select>
         </Row>

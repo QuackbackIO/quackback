@@ -44,7 +44,8 @@ export interface PortalPreviewProps {
   switched?: boolean
 }
 
-export type PreviewPage = 'root' | 'home' | 'feedback'
+/** `landing`: the page visitors land on, Home or the first page, as the portal's root chooses. */
+export type PreviewPage = 'root' | 'home' | 'feedback' | 'landing'
 
 /** The width a desktop visitor's browser lays the portal out at. */
 const DESKTOP_WIDTH = 1280
@@ -60,6 +61,8 @@ export function portalPreviewSrc(
   page: PreviewPage = 'root'
 ) {
   if (page === 'home') return `/?theme=${theme}&preview=true&page=home`
+  // No feed search, which would send the root on to the feed while Home is on.
+  if (page === 'landing') return `/?theme=${theme}&preview=true`
   return `${page === 'feedback' ? '/feedback' : '/'}?theme=${theme}&preview=true&sort=${sort}`
 }
 

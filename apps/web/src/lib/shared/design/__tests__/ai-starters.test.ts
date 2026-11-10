@@ -76,7 +76,7 @@ describe('aiStarters for the page and the pick', () => {
 
   it('offers a page section’s examples when it is picked', () => {
     expect(aiStarters(branded(), undefined, { page: 'roadmap', selection: 'board' })).toEqual([
-      'Lay the roadmap out in columns, with votes on its cards',
+      'Lay the roadmap out in columns',
     ])
   })
 
@@ -84,7 +84,7 @@ describe('aiStarters for the page and the pick', () => {
     const design = branded()
     design.nav.home.on = true
     const roadmap = aiStarters(design, undefined, { page: 'roadmap', selection: null })
-    expect(roadmap[0]).toBe('Lay the roadmap out in columns, with votes on its cards')
+    expect(roadmap[0]).toBe('Lay the roadmap out in columns')
     expect(roadmap).not.toContain('Show the roadmap on Home')
     expect(roadmap.length).toBeLessThanOrEqual(3)
     const help = aiStarters(design, undefined, { page: 'help' })

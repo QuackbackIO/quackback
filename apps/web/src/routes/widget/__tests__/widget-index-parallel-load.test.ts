@@ -62,4 +62,40 @@ describe('widget index loader', () => {
     expect(getShowPoweredByFn).toHaveBeenCalledTimes(1)
     expect(calledBeforePortalDataSettled).toBe(true)
   })
+
+  it('shows the portal design’s icon, as the portal does, before the workspace logo', async () => {
+    const queryClient = {
+      ensureQueryData: vi.fn(async () => ({
+        boards: [],
+        posts: { items: [], hasMore: false },
+        statuses: [],
+        votedPostIds: [],
+        boardPermissions: {},
+      })),
+      setQueryData: vi.fn(),
+    }
+    const { designView } = await import('@/lib/shared/design/design-view')
+    const { defaultDesign } = await import('@/lib/shared/design/schema')
+    const doc = defaultDesign()
+    doc.brand.logo.mark.dark = { key: 'logos/dark.png' }
+    const logoOf = async (settings: Record<string, unknown>) => {
+      const loader = Route.options.loader as (args: unknown) => Promise<unknown>
+      const out = await loader({
+        context: {
+          queryClient,
+          settings: { publicWidgetConfig: { home: { showTeamAvatars: false } }, ...settings },
+          session: undefined,
+        },
+        location: { search: {} },
+      })
+      return JSON.stringify(out).match(/"logoUrl":("[^"]*"|null)/)?.[1]
+    }
+    const legacy = { brandingData: { logoUrl: '/api/storage/legacy.png' } }
+    expect(await logoOf({ ...legacy, portalDesign: designView(doc, 1) })).toBe(
+      '"/api/storage/logos/dark.png"'
+    )
+    expect(await logoOf({ ...legacy, portalDesign: designView(defaultDesign(), 1) })).toBe(
+      '"/api/storage/legacy.png"'
+    )
+  })
 })

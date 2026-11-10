@@ -50,6 +50,53 @@ describe('chipPlacement', () => {
     })
   })
 
+  it('keeps wholly clear of something about as small as itself, such as the logo', () => {
+    // At the top of the canvas: below it, never over it.
+    const logo = { left: 50, top: 10, width: 70, height: 16 }
+    const placed = chipPlacement(logo, chip, room)!
+    expect(placed.top).toBeGreaterThanOrEqual(logo.top + logo.height)
+    // With room above: above it.
+    const lower = chipPlacement({ ...logo, top: 100 }, chip, room)!
+    expect(lower.top + chip.height).toBeLessThanOrEqual(100)
+  })
+
+  describe('beside something small, clear of its neighbours', () => {
+    const small = { width: 44, height: 24 }
+    // The logo at the top of the header, and the menu's row just under it.
+    const logo = { left: 170, top: 10, width: 105, height: 31 }
+    const menu = { left: 180, top: 56, width: 210, height: 17 }
+    const covers = (place: { left: number; top: number }, box: typeof logo) =>
+      place.left < box.left + box.width &&
+      box.left < place.left + small.width &&
+      place.top < box.top + box.height &&
+      box.top < place.top + small.height
+
+    it('sits beside the logo when below it would cover the first menu item', () => {
+      const placed = chipPlacement(logo, small, room, [menu])!
+      expect(covers(placed, menu)).toBe(false)
+      expect(covers(placed, logo)).toBe(false)
+      expect(placed.left).toBeGreaterThanOrEqual(logo.left + logo.width)
+      expect(placed.top + small.height).toBeGreaterThan(logo.top)
+      expect(placed.top).toBeLessThan(logo.top + logo.height)
+    })
+
+    it('sits before it when there is no room after it', () => {
+      const right = { ...logo, left: room.width - logo.width - 10 }
+      const placed = chipPlacement(right, small, room, [{ ...menu, left: right.left }])!
+      expect(placed.left + small.width).toBeLessThanOrEqual(right.left)
+    })
+
+    it('stays below it when nothing is there', () => {
+      expect(chipPlacement(logo, small, room, [])!.top).toBe(logo.top + logo.height + 2)
+    })
+
+    it('keeps above it with room there, whatever is below', () => {
+      const lower = { ...logo, top: 120 }
+      const placed = chipPlacement(lower, small, room, [{ ...menu, top: 166 }])!
+      expect(placed.top + small.height).toBeLessThanOrEqual(lower.top)
+    })
+  })
+
   it('stays at the top of what shows of a block scrolled partly out of view', () => {
     const placed = chipPlacement({ left: 40, top: -150, width: 400, height: 300 }, chip, room)
     expect(placed).toEqual({ left: 52, top: 8, inside: true })

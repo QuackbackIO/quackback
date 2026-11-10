@@ -43,7 +43,7 @@ vi.mock('../use-widget-image-upload', () => ({
 }))
 vi.mock('../widget-vote-button', () => ({ WidgetVoteButton: () => null }))
 vi.mock('framer-motion', async () => {
-  const { createElement, forwardRef } = await import('react')
+  const { createContext, createElement, forwardRef } = await import('react')
   const MOTION_PROPS = new Set([
     'initial',
     'animate',
@@ -71,6 +71,7 @@ vi.mock('framer-motion', async () => {
   )
   return {
     AnimatePresence: ({ children }: { children?: ReactNode }) => children,
+    MotionConfigContext: createContext({}),
     // m mirrors motion here: the fake components don't care which name reaches
     // them, only the source's switch to LazyMotion's m does.
     motion: proxy,

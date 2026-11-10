@@ -111,7 +111,7 @@ export const FIND = {
   heroLook: row('hero-look', HERO_WORDS.look, 'band banner'),
   heroColour: row('hero-colour', HERO_WORDS.colour, 'band colour color'),
   heroArt: row('hero-art', HERO_WORDS.art, 'pattern dots waves'),
-  heroHeight: row('hero-height', HERO_WORDS.height, 'tall short'),
+  heroHeight: row('hero-height', HERO_WORDS.height, 'tall short roomy'),
   heroAlign: row('hero-align', HERO_WORDS.align, 'centre left'),
   heroShape: row('hero-shape', HERO_WORDS.shape, 'inset split full'),
   heroImage: row('hero-image', HERO_WORDS.image, 'photo picture'),
@@ -171,7 +171,15 @@ export const THEME_PANEL: FindPanel = {
   place: 'theme',
   name: WORDS.theme,
   sections: [
-    { title: THEME.sections.brandKit, rows: [FIND.icon, FIND.title] },
+    {
+      title: THEME.sections.brandKit,
+      rows: [
+        FIND.icon,
+        FIND.title,
+        FIND.fullLogo,
+        { ...FIND.logoImage, when: ({ design }) => design.brand.logo.display === 'wordmark' },
+      ],
+    },
     {
       title: THEME.sections.colours,
       rows: [
@@ -212,11 +220,7 @@ export const PART_PANELS: readonly FindPanel[] = [
     name: WORDS.logo,
     sections: [
       {
-        rows: [
-          FIND.fullLogo,
-          { ...FIND.logoImage, when: ({ design }) => design.brand.logo.display === 'wordmark' },
-          { ...FIND.logoHeight, when: ({ design }) => design.brand.logo.display !== 'name' },
-        ],
+        rows: [{ ...FIND.logoHeight, when: ({ design }) => design.brand.logo.display !== 'name' }],
       },
       { title: THEME.sections.colours, rows: [FIND.logoColours] },
     ],

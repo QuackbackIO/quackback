@@ -5,6 +5,7 @@
  * such as a website's, show as Custom and stay until a pair is picked.
  */
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   OwnFont,
@@ -20,6 +21,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
 import { FIND, headingWeightsOf } from './find-rows'
+import { FIND_ROOTS, revealRow } from './find-reveal'
 import { FontFaces } from './properties/token-field'
 import { faceName } from './properties/tokens'
 import { FONT_NAMES, THEME, WORDS } from './properties/words'
@@ -41,6 +43,13 @@ export function revealThemeFonts(font?: OwnFontRequest): void {
     })
   reveal(20)
 }
+
+/** Brings a brand font's row into view in Theme, from an element's font row. */
+export const revealFontSlot = (slot: 'heading' | 'headline') =>
+  revealRow({
+    root: FIND_ROOTS.theme,
+    row: slot === 'headline' ? FIND.headlineFont.id : FIND.headingFont.id,
+  })
 
 type DesignFont = PortalDesign['brand']['fonts']['body']
 type HeadingWeight = PortalDesign['brand']['fonts']['headingWeight']
@@ -178,6 +187,13 @@ export function BrandKitFonts({ design, update }: { design: PortalDesign; update
   const { fonts } = design.brand
   const uploaded = uploadedFonts(fonts)
   const weights = headingWeightsOf(design)
+  // The brand's own face the last match could only draw in the nearest, until it is uploaded.
+  const missed = design.brand.unmatchedFont
+  const siteFont =
+    missed &&
+    !uploaded.some((font) => font.family.trim().toLowerCase() === missed.family.toLowerCase())
+      ? missed
+      : null
   return (
     <div id={THEME_FONTS_ID} className="scroll-mt-4">
       <PropertySection title={WORDS.fonts}>
@@ -259,6 +275,11 @@ export function BrandKitFonts({ design, update }: { design: PortalDesign; update
               }
             />
           </PropertyRow>
+        )}
+        {siteFont && (
+          <Button variant="outline" size="sm" onClick={() => requestOwnFont(siteFont)}>
+            Upload {siteFont.family}
+          </Button>
         )}
         <OwnFont update={update} />
       </PropertySection>

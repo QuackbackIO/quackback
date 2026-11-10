@@ -93,4 +93,6 @@ export type BrandMatchResult = Extract<DesignAiResult, { ok: true }> & {
   site?: SiteUse | null
   /** The site's own face no bundled face is, for the reply's "Upload <family>". */
   font?: UnmatchedFont
+  /** The fonts drawn are only the nearest to the brand's, so the summary does not claim them. */
+  fontsNearest?: boolean
 }

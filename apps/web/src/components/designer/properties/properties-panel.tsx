@@ -9,7 +9,7 @@
  * from on hover; a row set at this scope shows a dot and a Reset that names
  * what it goes back to.
  */
-import { Fragment, useId, useState, type ReactNode } from 'react'
+import { Fragment, useId, useState, type ReactElement, type ReactNode } from 'react'
 import {
   ChevronRightIcon,
   EllipsisHorizontalIcon,
@@ -24,6 +24,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { onRadioKeys, radioTabIndex } from '@/components/admin/settings/appearance/radio-keys'
 import { cn } from '@/lib/shared/utils'
 import { keepOpen, rememberedOpen } from '../advanced'
 import { RefusalText, useRowRefusal } from './change-refusal'
@@ -118,12 +120,11 @@ export function PropertiesPanel({
         )}
         <div className="flex items-center gap-2">
           {icon}
-          <h2
-            className="min-w-0 flex-1 truncate rounded-sm text-[15px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
-            title={about}
-          >
+          <h2 className="min-w-0 truncate rounded-sm text-[15px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground">
             {title}
           </h2>
+          {about && <Help text={about} />}
+          <span className="flex-1" />
           {actions && actions.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -355,14 +356,17 @@ export function PropertyRow({
         {...refusal.handlers}
       >
         <span className="flex w-[92px] shrink-0 items-center gap-0.5">
-          <label htmlFor={htmlFor} className="min-w-0 truncate text-xs text-muted-foreground">
+          {/* A label longer than the column wraps, never cut off. */}
+          <label
+            htmlFor={htmlFor}
+            className="min-w-0 text-xs leading-tight break-words text-muted-foreground"
+          >
             {label}
           </label>
           {help && <Help text={help} />}
+          {!help && !set && source && <Help text={source} />}
         </span>
-        <div className="flex min-w-0 flex-1 items-center gap-1.5" title={set ? undefined : source}>
-          {children}
-        </div>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">{children}</div>
         {!set && phoneSet && (
           <span className="flex shrink-0 items-center" title={PHONE_WORDS.setForPhones}>
             <span
@@ -411,12 +415,33 @@ export function PropertyRow({
   )
 }
 
-/** Advice kept out of the way: an ⓘ that says it on hover, and to a screen reader. */
+/**
+ * Advice kept out of the way: an ⓘ that says it on hover and on focus, and
+ * to a screen reader as the ⓘ's name.
+ */
 export function Help({ text }: { text: string }) {
   return (
-    <span role="img" aria-label={text} title={text} className="shrink-0 text-muted-foreground/70">
-      <InformationCircleIcon className="size-3" aria-hidden="true" />
-    </span>
+    <Tip text={text}>
+      <button
+        type="button"
+        aria-label={text}
+        data-help=""
+        className="-my-1 grid size-6 shrink-0 place-items-center rounded text-muted-foreground/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+      >
+        <InformationCircleIcon className="size-3" aria-hidden="true" />
+      </button>
+    </Tip>
+  )
+}
+
+/** A tip on a control that takes focus, shown on hover and on focus; none without text. */
+export function Tip({ text, children }: { text?: string | null; children: ReactElement }) {
+  if (!text) return children
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent className="max-w-64">{text}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -456,15 +481,21 @@ export function PropertyTiles<T extends string>({
   onChange: (value: T) => void
   id?: string
 }) {
+  // One Tab stop: the picked tile, else the one it has from wider up, else the first.
+  const stop = Math.max(
+    0,
+    options.findIndex(([option]) => option === (value ?? inherited))
+  )
   return (
     <div
       id={id}
       role="radiogroup"
       aria-label={label}
       data-tiles=""
+      onKeyDown={onRadioKeys}
       className="flex min-w-0 flex-1 flex-wrap gap-0.5"
     >
-      {options.map(([option, name]) => {
+      {options.map(([option, name], index) => {
         const on = value === option
         const from = value === undefined && inherited === option
         return (
@@ -473,6 +504,7 @@ export function PropertyTiles<T extends string>({
             type="button"
             role="radio"
             aria-checked={on}
+            tabIndex={index === stop ? 0 : -1}
             onClick={() => onChange(option)}
             className={cn(
               // Never narrower than its label: a tile that does not fit goes to the next row.
@@ -516,14 +548,16 @@ export function PropertyDrawnTiles<T extends string>({
   columns?: 3 | 4
   id?: string
 }) {
+  const none = !options.some(([option]) => option === value)
   return (
     <div
       id={id}
       role="radiogroup"
       aria-label={label}
+      onKeyDown={onRadioKeys}
       className={cn('grid gap-1 py-0.5', columns === 3 ? 'grid-cols-3' : 'grid-cols-4')}
     >
-      {options.map(([option, name, drawing]) => {
+      {options.map(([option, name, drawing], index) => {
         const on = value === option
         return (
           <button
@@ -531,6 +565,7 @@ export function PropertyDrawnTiles<T extends string>({
             type="button"
             role="radio"
             aria-checked={on}
+            tabIndex={radioTabIndex(on, none, index)}
             aria-label={name}
             onClick={() => onChange(option)}
             className={cn(

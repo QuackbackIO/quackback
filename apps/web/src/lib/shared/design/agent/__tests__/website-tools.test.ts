@@ -195,6 +195,49 @@ describe('read_website and match_website in the loop', () => {
   })
 })
 
+describe('Stop while a website tool works', () => {
+  it('uses nothing a tool brought back after Stop: no check is read, no step follows', async () => {
+    const original = portalDesign.parse(defaultDesign())
+    const controller = new AbortController()
+    const { step } = model(
+      [
+        answer({
+          read_website: 'acme.test',
+          checks: [
+            {
+              element: 'button',
+              state: 'base',
+              block: '',
+              target: '',
+              property: 'background',
+              expect: 'changed',
+              value: '',
+            },
+          ],
+        }),
+        answer({ done: true, reply: 'Done.' }),
+      ],
+      original
+    )
+    const read = vi.fn(async () => ({}))
+    const readWebsite = vi.fn(async () => {
+      // The person presses Stop while the site is read; the read still comes back.
+      controller.abort()
+      return { reading, capture }
+    })
+    const result = await runEditLoop({
+      registry: STYLE_REGISTRY,
+      design: original,
+      targets: [],
+      deps: { step, read, readWebsite } as LoopDeps,
+      signal: controller.signal,
+    })
+    expect(result.ok && result.stopped).toBe('stopped')
+    expect(step).toHaveBeenCalledTimes(1)
+    expect(read).not.toHaveBeenCalled()
+  })
+})
+
 describe('the reading', () => {
   it('the example the model is shown fits the schema and is in the tools’ text', () => {
     expect(websiteReadingSchema.parse(WEBSITE_READING_EXAMPLE)).toEqual(WEBSITE_READING_EXAMPLE)

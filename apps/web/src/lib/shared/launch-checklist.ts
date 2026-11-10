@@ -659,8 +659,27 @@ export function launchPath(status: LaunchStatus): LaunchPath {
     total: LAUNCH_PATH_LENGTH,
     complete,
     next: complete ? null : goalOpen ? goalStep : win,
-    later: tasks.filter((task) => task !== goalStep && task !== win && !task.isReady),
+    later: portalFirst(
+      goal,
+      tasks.filter((task) => task !== goalStep && task !== win && !task.isReady)
+    ),
   }
+}
+
+/** Goals whose customers meet the workspace on its portal, so its brand leads the polish. */
+const PORTAL_GOALS: readonly LaunchPathGoal[] = ['feedback', 'helpCenter']
+
+/**
+ * The other steps: every picked goal's step, then the polish, the brand step
+ * leading the polish where the goal's customers see the portal.
+ */
+function portalFirst(goal: LaunchPathGoal, later: LaunchTask[]): LaunchTask[] {
+  const brand = later.find((task) => task.id === 'customize-branding')
+  if (!brand || !PORTAL_GOALS.includes(goal)) return later
+  const rest = later.filter((task) => task !== brand)
+  const polish = rest.findIndex((task) => task.classification !== 'prerequisite')
+  const at = polish < 0 ? rest.length : polish
+  return [...rest.slice(0, at), brand, ...rest.slice(at)]
 }
 
 /** A step still to do: not done, not skipped, and in reach of whoever looks. */

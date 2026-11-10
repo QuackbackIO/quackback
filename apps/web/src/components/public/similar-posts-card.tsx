@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useIntl } from 'react-intl'
 import { LightBulbIcon } from '@heroicons/react/24/outline'
 import { VoteButton } from '@/components/public/vote-button'
+import { MotionAsAsked } from '@/components/public/motion-as-asked'
 import type { SimilarPost } from '@/lib/client/hooks/use-similar-posts'
 import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
@@ -55,69 +56,72 @@ export const SimilarPostsCard = memo(function SimilarPostsCard({
   const showCard = show && posts.length > 0
   const { ref: contentRef, height: measuredHeight } = useContentHeight()
 
+  // Reduced motion as the visitor's device asks, here rather than at the portal's root.
   return (
-    <AnimatePresence>
-      {showCard && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: measuredHeight || 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.15, ease: 'easeOut' }}
-          className={cn('overflow-hidden', className)}
-        >
-          <div ref={contentRef}>
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
-              <LightBulbIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              {heading ??
-                intl.formatMessage({
-                  id: 'portal.feedback.similarPosts.heading',
-                  defaultMessage: 'Similar posts',
-                })}
-            </p>
-            <div className="space-y-1.5">
-              {posts.slice(0, MAX_SIMILAR_POSTS).map((post) => (
-                <a
-                  key={post.id}
-                  href={`/b/${post.boardSlug}/posts/${post.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2.5 w-full rounded-lg hover:bg-muted/30 transition-colors px-2 py-1.5 cursor-pointer text-left"
-                >
-                  <div
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                    }}
-                    className="shrink-0"
+    <MotionAsAsked>
+      <AnimatePresence>
+        {showCard && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: measuredHeight || 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            className={cn('overflow-hidden', className)}
+          >
+            <div ref={contentRef}>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
+                <LightBulbIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                {heading ??
+                  intl.formatMessage({
+                    id: 'portal.feedback.similarPosts.heading',
+                    defaultMessage: 'Similar posts',
+                  })}
+              </p>
+              <div className="space-y-1.5">
+                {posts.slice(0, MAX_SIMILAR_POSTS).map((post) => (
+                  <a
+                    key={post.id}
+                    href={`/b/${post.boardSlug}/posts/${post.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2.5 w-full rounded-lg hover:bg-muted/30 transition-colors px-2 py-1.5 cursor-pointer text-left"
                   >
-                    <VoteButton postId={post.id as PostId} voteCount={post.voteCount} pill />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {post.status && (
-                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <StatusColourDot colour={post.status.color} className="size-1.5" />
-                        {post.status.name}
-                      </span>
-                    )}
-                    <p className="text-sm font-semibold text-foreground line-clamp-1">
-                      {post.title}
-                    </p>
-                  </div>
-                </a>
-              ))}
+                    <div
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
+                      className="shrink-0"
+                    >
+                      <VoteButton postId={post.id as PostId} voteCount={post.voteCount} pill />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {post.status && (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <StatusColourDot colour={post.status.color} className="size-1.5" />
+                          {post.status.name}
+                        </span>
+                      )}
+                      <p className="text-sm font-semibold text-foreground line-clamp-1">
+                        {post.title}
+                      </p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+              {more && (
+                <button
+                  type="button"
+                  onClick={more.onClick}
+                  className="mt-2 rounded-sm px-2 text-xs font-medium text-[var(--qb-accent-text,var(--primary))] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {more.label}
+                </button>
+              )}
             </div>
-            {more && (
-              <button
-                type="button"
-                onClick={more.onClick}
-                className="mt-2 rounded-sm px-2 text-xs font-medium text-[var(--qb-accent-text,var(--primary))] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {more.label}
-              </button>
-            )}
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </MotionAsAsked>
   )
 })

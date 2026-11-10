@@ -1,12 +1,13 @@
 /**
  * The Add sheet: the blocks Home can take, from the block registry, grouped
  * by the job each does. A block Home already has says so; one Home holds
- * once cannot be added again, and nothing can once Home is full. A click
+ * once cannot be added again, and nothing can once Home is full. A block
+ * whose page is off is shown too, greyed, with the page it needs. A click
  * puts the new block under the picked block, or at the end of Home.
  */
 import { blocksByJob, type BlockDef, type BlockJob } from './blocks'
-import { HOME_BLOCKS_MAX, homeBlockTypes, type HomeBlockType } from './home'
-import type { PortalPageGates } from './paths'
+import { HOME_BLOCKS_MAX, blockPageOff, homeBlockTypes, type HomeBlockType } from './home'
+import type { PortalPageGates, PortalPageType } from './paths'
 import type { PortalDesign } from './schema'
 
 export interface AddRow {
@@ -14,8 +15,10 @@ export interface AddRow {
   def: BlockDef
   /** Home already has one. */
   onHome: boolean
-  /** It cannot be added: Home holds it once, or Home is full. */
+  /** It cannot be added: Home holds it once, Home is full, or its page is off. */
   disabled: boolean
+  /** The page it needs, which is off; null when visitors see it. */
+  needs: PortalPageType | null
 }
 
 export interface AddGroup {
@@ -34,11 +37,22 @@ export function addSheetGroups(design: PortalDesign, gates: PortalPageGates): Ad
       job,
       name,
       rows: defs
-        .filter((def) => offered.has(def.type as HomeBlockType))
+        .filter(
+          (def) =>
+            offered.has(def.type as HomeBlockType) ||
+            !!blockPageOff(def.type as HomeBlockType, gates)
+        )
         .map((def) => {
           const type = def.type as HomeBlockType
           const onHome = used.has(type)
-          return { type, def, onHome, disabled: full || (onHome && def.repeat === 'once') }
+          const needs = offered.has(type) ? null : blockPageOff(type, gates)
+          return {
+            type,
+            def,
+            onHome,
+            disabled: full || (onHome && def.repeat === 'once') || !!needs,
+            needs,
+          }
         }),
     }))
     .filter((group) => group.rows.length > 0)

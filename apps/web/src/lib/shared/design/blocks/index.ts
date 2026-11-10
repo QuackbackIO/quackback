@@ -115,7 +115,7 @@ const SECTION_KEYS = {
   'help.popular': ['popular'],
   'help.search': ['search'],
   'help.article': ['helpful', 'related', 'contact'],
-  'roadmap.board': ['board', 'votes'],
+  'roadmap.board': ['board'],
   'post.vote': ['vote'],
   'post.details': ['board', 'tags', 'date', 'author', 'subscribe'],
   'post.comments': ['comments'],
@@ -132,7 +132,7 @@ export type SectionBlock =
   | ({ type: 'help.popular' } & Pick<PageChoices['help'], 'popular'>)
   | ({ type: 'help.search' } & Pick<PageChoices['help'], 'search'>)
   | ({ type: 'help.article' } & Pick<PageChoices['help'], 'helpful' | 'related' | 'contact'>)
-  | ({ type: 'roadmap.board' } & Pick<PageChoices['roadmap'], 'board' | 'votes'>)
+  | ({ type: 'roadmap.board' } & Pick<PageChoices['roadmap'], 'board'>)
   | ({ type: 'post.vote' } & Pick<PageChoices['post'], 'vote'>)
   | ({ type: 'post.details' } & Pick<
       PageChoices['post'],
@@ -738,21 +738,12 @@ const SECTIONS: Record<SectionType, Omit<BlockDef, 'type' | 'pages' | 'addable' 
         },
         about: 'How the roadmap page lays out its posts',
       },
-      {
-        kind: 'switch',
-        key: 'votes',
-        label: 'Votes on cards',
-        about: 'Whether each roadmap card shows its vote box',
-      },
     ],
-    ai: ['board', 'votes'],
+    ai: ['board'],
     examples: [
       {
-        request: 'Lay the roadmap out in columns, with votes on its cards',
-        ops: [
-          { op: 'set', target: 'roadmap page', key: 'board', value: 'columns' },
-          { op: 'set', target: 'roadmap page', key: 'votes', value: 'true' },
-        ],
+        request: 'Lay the roadmap out in columns',
+        ops: [{ op: 'set', target: 'roadmap page', key: 'board', value: 'columns' }],
       },
     ],
   },

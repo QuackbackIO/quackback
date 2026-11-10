@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { EditingLayer, useGlide } from '../editing-layer'
+import { openChipMenu } from '../settings-focus'
 
 afterEach(cleanup)
 
@@ -72,6 +73,53 @@ describe('EditingLayer', () => {
     expect(item.textContent).toContain('Ctrl+D')
     fireEvent.click(item)
     expect(onDuplicate).toHaveBeenCalledOnce()
+  })
+
+  it('offers the block’s ⋯ actions on its right-click menu', async () => {
+    const up = vi.fn()
+    const { onRemove } = show({ onMove: { up, down: null } })
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Top posts: settings' }))
+    const items = await screen.findAllByRole('menuitem')
+    expect(items.map((item) => item.textContent)).toEqual([
+      'DuplicateCtrl+D',
+      'Move up',
+      'Move down',
+      'RemoveDelete',
+    ])
+    // The last block goes no further down.
+    expect(items[2]!.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(items[1]!)
+    expect(up).toHaveBeenCalledOnce()
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Top posts: settings' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Remove/ }))
+    expect(onRemove).toHaveBeenCalledOnce()
+  })
+
+  it('opens the actions of the block right-clicked on the page, once its chip is drawn', async () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame'] })
+    try {
+      const { rerender } = show({ picked: null, name: null, pickedKey: null })
+      openChipMenu('block-b1', { x: 300, y: 200 })
+      vi.advanceTimersByTime(17)
+      expect(screen.queryByRole('menu')).toBeNull()
+      // Picked on the next frame, as the right-click picks it.
+      rerender(
+        <EditingLayer
+          room={room}
+          hovered={null}
+          picked={block}
+          pickedKey="block-b1"
+          name="Top posts"
+          onDuplicate={vi.fn()}
+          onRemove={vi.fn()}
+          onSettings={vi.fn()}
+        />
+      )
+      act(() => void vi.advanceTimersByTime(17))
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(await screen.findByRole('menu', { name: 'Top posts: more' })).toBeTruthy()
   })
 
   it('offers no copy or removal for a part of the page that cannot be', () => {

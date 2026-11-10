@@ -6,6 +6,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultDesign, portalDesign } from '@/lib/shared/design/schema'
 import { resolveDesign } from '@/lib/shared/design/resolve'
+import { oneSentence } from '@/lib/shared/design/ai-reach'
+import { writtenInEnglish } from '../design-ai-view'
 import { DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import type { HomeBlockType } from '@/lib/shared/design/home'
 
@@ -19,6 +21,8 @@ const model = vi.hoisted(() => ({
     middleware?: Array<{ params?: Record<string, unknown> }>
   }>,
   refusesImages: false,
+  /** The server's line in the request's language, when asked for; null fails the call. */
+  translated: null as string | null,
   /** Answers that do not fit the schema before one that does. */
   misfits: 0,
   /** A complete look; a test's look names only what it is about. */
@@ -47,6 +51,10 @@ vi.mock('@/lib/server/domains/ai/structured-chat', () => ({
     messages: Array<{ content: unknown }>
   }) => {
     model.calls.push(input)
+    if (input.systemPrompts[0]?.startsWith('Write the line in the language')) {
+      if (model.translated === null) throw new Error('no translation')
+      return { reply: model.translated }
+    }
     if (model.error) throw model.error
     if (model.misfits > 0) {
       model.misfits--
@@ -113,6 +121,7 @@ beforeEach(() => {
   model.refusesImages = false
   model.configured = true
   model.answer = null
+  model.translated = null
   model.error = null
   model.calls = []
   model.allowance = { credits: 'available', resetsAt: null, trial: false }
@@ -311,6 +320,33 @@ describe('askDesignAi', () => {
     expect(result.reply).toBe('That is outside the header, so nothing changed.')
   })
 
+  it('never reaches from a picked Home block into the page of the same name', async () => {
+    const design = defaultDesign()
+    design.nav.home.on = true
+    design.pages.home.blocks = [
+      { type: 'roadmap', id: 'roadmapaaa', roadmapId: null, grid: { x: 0, y: 0, w: 12, h: 4 } },
+    ]
+    model.answer = {
+      reply: 'The roadmap is a list now.',
+      // "roadmap" names the block and the page; board is the page's setting.
+      ops: [op({ op: 'set', target: 'roadmap', key: 'board', value: 'list' }, 'roadmap as a list')],
+      outOfScope: false,
+    }
+    const result = await askDesignAi({
+      message: 'Show it as a list',
+      design,
+      scope: 'home',
+      blockId: 'roadmapaaa',
+      history: [],
+      allows: ALLOWS,
+    })
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.applied).toEqual([])
+    expect(result.design.pages.roadmap).toEqual(design.pages.roadmap)
+    expect(result.reply).toBe('That is outside the Roadmap block on Home, so nothing changed.')
+    expect(result.reply).not.toMatch(/list/i)
+  })
+
   it('keeps a request about one Home block to that block', async () => {
     const design = defaultDesign()
     design.nav.home.on = true
@@ -351,6 +387,56 @@ describe('askDesignAi', () => {
     expect(model.calls.at(-1)!.systemPrompts[1]).toContain(
       'The person picked Contact (contactbbb); "this" and "it" mean it.'
     )
+  })
+
+  it('answers a request in another language in the model’s own words, never English labels', async () => {
+    const design = defaultDesign()
+    design.nav.home.on = true
+    design.pages.home.blocks = [
+      { type: 'status', id: 'statusaaaa', grid: { x: 0, y: 0, w: 4, h: 4 } },
+      { type: 'contact', id: 'contactbbb', grid: { x: 0, y: 4, w: 12, h: 4 } },
+    ]
+    model.answer = {
+      reply: 'Der Kontaktblock hat jetzt eine freundlichere Überschrift.',
+      ops: [
+        op(
+          { op: 'set', target: 'contactbbb', key: 'heading', value: 'Schreib uns' },
+          'die Überschrift des Kontaktblocks'
+        ),
+        op(
+          { op: 'set', target: 'statusaaaa', key: 'heading', value: 'Läuft?' },
+          'die Statusüberschrift'
+        ),
+      ],
+      outOfScope: false,
+    }
+    const result = await askDesignAi({
+      message: 'Gib ihm eine freundlichere Überschrift',
+      design,
+      scope: 'home',
+      blockId: 'contactbbb',
+      history: [],
+      allows: ALLOWS,
+    })
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.applied).toHaveLength(1)
+    expect(result.reply).toBe('Der Kontaktblock hat jetzt eine freundlichere Überschrift.')
+    // The model is told to answer in the request's language, naming parts in it.
+    expect(model.calls.at(-1)!.systemPrompts[1]).toContain(
+      'Write reply and says in the language of the request'
+    )
+  })
+
+  it('reads which requests are in English', () => {
+    for (const english of ['Calmer', 'Give it a friendlier heading', 'Make the buttons rounder'])
+      expect(writtenInEnglish(english), english).toBe(true)
+    for (const other of [
+      'Gib ihm eine freundlichere Überschrift',
+      'Pon los botones en negro',
+      'Mach alle Buttons schwarz',
+      'このボタンだけを黒にして',
+    ])
+      expect(writtenInEnglish(other), other).toBe(false)
   })
 
   it('passes the colours of an attached image with the request', async () => {
@@ -598,7 +684,7 @@ describe('designDirections', () => {
     expect(result.looks[0].preset).toBe('calm')
     expect(result.looks[0].design.pages.feedback.headline).toEqual({
       title: { en: 'Help us grow' },
-      subtitle: { en: 'Share ideas and vote.' },
+      subtitle: { en: 'Share posts and vote.' },
     })
     for (const look of result.looks) {
       const doc = portalDesign.parse(look.design)
@@ -649,6 +735,23 @@ describe('any change to the design', () => {
       expect(result.outOfScope, example.request).toEqual([])
       expect(result.done.length, example.request).toBe(example.answer.ops.length)
     }
+  })
+
+  it('shows the model replies of one sentence only, as its own replies must be', () => {
+    for (const example of OPS_EXAMPLES) {
+      expect(oneSentence(example.answer.reply), example.request).toBe(example.answer.reply)
+      // The few-shot JSON is an answer the model's schema takes.
+      expect(editSchema.safeParse(example.answer).success, example.request).toBe(true)
+    }
+  })
+
+  it('shows the model a picked block’s heading set in the second colour', () => {
+    const example = OPS_EXAMPLES.find((each) =>
+      /block's heading in the second colour/i.test(each.request)
+    )
+    expect(example?.answer.ops).toEqual([
+      expect.objectContaining({ op: 'set', key: 'style.heading.base.color', value: 'support' }),
+    ])
   })
 
   it('keeps the answer’s grammar flat: a few strings per operation, no nesting', () => {
@@ -1037,10 +1140,42 @@ describe('a request keeps as near as the chip says it reaches', () => {
       if (!result.ok) throw new Error('expected an answer')
       expect(result.applied).toEqual([])
       expect(result.design.layout.hero).toBe('brand')
+      // In German the line could not be put into German here, so it is said in English.
       expect(result.reply).toBe('That reaches beyond this page, so nothing changed.')
       // About the hero itself: no offer to ask about the whole site.
       expect(result.outOfScope).toBe(false)
     })
+
+  it('says nothing changed in the request’s language, never the model’s claim that it did', async () => {
+    model.answer = calmer
+    model.translated =
+      'Das reicht über diese Seite hinaus, also hat sich nichts geändert. Mehr nicht.'
+    const result = await ask('Mach das ruhiger', 'page')
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.applied).toEqual([])
+    expect(result.reply).toBe('Das reicht über diese Seite hinaus, also hat sich nichts geändert.')
+    // The server's line went to be put into the request's language, with the request.
+    const asked = JSON.stringify(model.calls.at(-1)!.messages)
+    expect(asked).toContain('That reaches beyond this page, so nothing changed.')
+    expect(asked).toContain('Mach das ruhiger')
+  })
+
+  it('asks for no other language for an English request, nor where the model said it was outside', async () => {
+    model.answer = calmer
+    model.translated = 'Never said'
+    expect((await ask('Make this calmer', 'page')).ok && model.calls.length).toBe(1)
+    model.calls = []
+    model.answer = {
+      reply: 'Eso no es parte de la cabecera, así que no cambié nada.',
+      outOfScope: true,
+      ops: [],
+    }
+    const result = await ask('Pon el menú en negro', 'page')
+    expect(result.ok && result.reply).toBe(
+      'Eso no es parte de la cabecera, así que no cambié nada.'
+    )
+    expect(model.calls.length).toBe(1)
+  })
 
   it('with the hero picked for every page, says in one sentence that it changed every page', async () => {
     model.answer = calmer

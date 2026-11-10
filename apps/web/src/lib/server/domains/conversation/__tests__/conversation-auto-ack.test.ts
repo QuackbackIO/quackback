@@ -15,6 +15,14 @@ const hoisted = vi.hoisted(() => ({
   requireSettings: vi.fn(async () => ({ name: 'Acme' })),
   inboundReplyToAddress: vi.fn(() => 'reply+c1@mail.example'),
   mintOutboundMessageId: vi.fn(() => 'c.1.ack@mail.example'),
+  emailBranding: vi.fn(async (_settings: unknown) => ({
+    logoUrl: undefined,
+    brand: { accent: '#0a7d4f', accentText: '#ffffff', link: '#0a6b44' },
+  })),
+}))
+
+vi.mock('@/lib/server/email/email-brand', () => ({
+  emailBranding: (settings: unknown) => hoisted.emailBranding(settings),
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.email-auto-ack', () => ({
@@ -177,5 +185,15 @@ describe('maybeSendColdInboundAck', () => {
       })
     )
     expect(hoisted.recordOutboundEmail).toHaveBeenCalledWith('ack@x', conversationId)
+  })
+
+  it('sends in the workspace brand, read from its settings', async () => {
+    await maybeSendColdInboundAck({ parsed: parsed(), conversationId, conversationSubject: 'Hi' })
+    expect(hoisted.emailBranding).toHaveBeenCalledWith({ name: 'Acme' })
+    expect(hoisted.sendConversationAutoAckEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        brand: { accent: '#0a7d4f', accentText: '#ffffff', link: '#0a6b44' },
+      })
+    )
   })
 })

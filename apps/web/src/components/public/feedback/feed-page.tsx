@@ -44,9 +44,10 @@ export function FeedPage() {
 }
 
 /**
- * The welcome card. In the admin branding preview an unsaved welcome-card
- * draft wins over the saved config; read here rather than by the page, a
- * draft edit re-renders the card and not the feed beside it.
+ * The welcome card. On the design engine it is the design's, the draft's in
+ * the builder, as every part is. Otherwise, in the admin branding preview, an
+ * unsaved welcome-card draft wins over the saved config. Read here rather
+ * than by the page, a draft edit re-renders the card and not the feed beside it.
  */
 function PortalHero() {
   const draftWelcomeCard = usePreviewWelcomeCard()
@@ -56,15 +57,12 @@ function PortalHero() {
   })
   // On the design engine the welcome message is part of the design.
   const design = usePortalDesign()
-  const savedCard = useMemo(
-    () => savedWelcomeCard(design, legacyWelcomeCard),
-    [design, legacyWelcomeCard]
+  // An unsaved settings draft stands in for the saved settings card, never for the design's.
+  const card = useMemo(
+    () => savedWelcomeCard(design, draftWelcomeCard ?? legacyWelcomeCard),
+    [design, draftWelcomeCard, legacyWelcomeCard]
   )
-  return (
-    <PortalWelcomeCard
-      welcomeCard={(draftWelcomeCard ?? savedCard) as PortalWelcomeCardData | undefined}
-    />
-  )
+  return <PortalWelcomeCard welcomeCard={card as PortalWelcomeCardData | undefined} />
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   PropertyRow,
   PropertySection,
   PropertyTiles,
+  Tip,
   type Crumb,
   type OverridePlace,
   type PanelAction,
@@ -189,18 +190,21 @@ function Field({
           resetLabel={`${WORDS.reset} ${field.label.toLowerCase()}`}
           onReset={() => onChange('')}
         >
-          <Input
-            id={id}
-            value={words[locale] ?? ''}
-            maxLength={field.max}
-            placeholder={field.placeholder}
-            title={Object.entries(words)
+          <Tip
+            text={Object.entries(words)
               .filter(([other, text]) => other !== locale && text)
               .map(([, text]) => text)
               .join(' · ')}
-            onChange={(event) => onChange(event.target.value)}
-            className="h-7 rounded-md px-2 text-xs md:text-xs"
-          />
+          >
+            <Input
+              id={id}
+              value={words[locale] ?? ''}
+              maxLength={field.max}
+              placeholder={field.placeholder}
+              onChange={(event) => onChange(event.target.value)}
+              className="h-7 rounded-md px-2 text-xs md:text-xs"
+            />
+          </Tip>
         </PropertyRow>
       )
     }

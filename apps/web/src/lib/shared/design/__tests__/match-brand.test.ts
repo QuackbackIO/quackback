@@ -27,6 +27,11 @@ describe('a message that starts a brand', () => {
     expect(isBrandStart('make the buttons rounder like this', 1)).toBe(false)
     expect(isBrandStart('match my brand', 0)).toBe(false)
   })
+
+  it('is not a request about one part, even when it says match', () => {
+    expect(isBrandStart('Match the button style in this screenshot', 1)).toBe(false)
+    expect(isBrandStart('match the header to this', 1)).toBe(false)
+  })
 })
 
 describe('a warning on an image', () => {
@@ -105,5 +110,7 @@ describe('a message that names a website', () => {
     expect(isSiteStart('make the buttons rounder, like on acme.test')).toBe(false)
     expect(isSiteStart('link the menu to acme.test/help for support questions')).toBe(false)
     expect(isSiteStart('warmer colours')).toBe(false)
+    expect(isSiteStart('match the buttons to stripe.com')).toBe(false)
+    expect(isSiteStart('hero like stripe.com')).toBe(false)
   })
 })

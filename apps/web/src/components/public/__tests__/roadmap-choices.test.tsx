@@ -107,6 +107,9 @@ vi.mock('../public-roadmap-filters-bar', () => ({
   PublicRoadmapToolbarFilterButton: () => null,
 }))
 
+import { defaultDesign } from '@/lib/shared/design/schema'
+import { layoutAttributes } from '@/lib/shared/design/components'
+import { readPageChoices } from '@/lib/shared/design/page-choices'
 import { RoadmapBoard } from '../roadmap-board'
 import { RoadmapCard } from '../roadmap-card'
 
@@ -137,7 +140,7 @@ describe('the roadmap without a choice', () => {
   })
 
   it('is the same as choosing columns with votes', () => {
-    expect(today(board({ layout: 'columns', votes: true }))).toBe(today(board()))
+    expect(today(board({ layout: 'columns' }))).toBe(today(board()))
   })
 
   it('is one section the designer can pick', () => {
@@ -172,12 +175,16 @@ describe('the roadmap’s choices', () => {
     expect(groups[0]!.querySelectorAll('[data-qb-surface="card"][data-qb-post]')).toHaveLength(2)
   })
 
-  it('leaves the vote box off the cards, keeping the count out of them too', () => {
+  it('always shows the vote box, even for a design that once turned it off', () => {
+    const design = defaultDesign()
+    design.pages.roadmap = { board: 'list', votes: false }
+    const choices = readPageChoices(layoutAttributes(design)).roadmap
+    expect(choices).toEqual({ board: 'list' })
     for (const layout of ['columns', 'list'] as const) {
-      const page = board({ layout, votes: false })
-      expect(page.querySelector('[data-qb-part="vote-button"]'), layout).toBeNull()
-      expect(page.querySelector('.roadmap-card__vote'), layout).toBeNull()
-      expect(page.textContent, layout).toContain('Exports')
+      const page = board({ layout })
+      expect(page.querySelectorAll('[data-qb-part="vote-button"]').length, layout).toBeGreaterThan(
+        0
+      )
       cleanup()
     }
   })

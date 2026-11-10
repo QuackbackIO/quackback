@@ -108,6 +108,7 @@ export function HistoryDialog({
                 <span className="min-w-0 flex-1 truncate">
                   {version.message ?? SOURCE[version.source] ?? version.source}
                   <span className="text-muted-foreground">
+                    {version.publishedBy && ` · ${version.publishedBy}`}
                     {' · '}
                     <TimeAgo date={version.createdAt} />
                   </span>

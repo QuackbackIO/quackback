@@ -40,7 +40,7 @@ import {
 import { randomUUID } from 'node:crypto'
 import { agentReplyDisplayName, assembleOutboundThreading } from '@quackback/email'
 import { withEmailIdempotencyKey } from '@quackback/email/idempotency'
-import type { EmailAttachment } from '@quackback/email'
+import type { EmailAttachment, EmailBrand } from '@quackback/email'
 import { getChannelDescriptor } from '@/lib/shared/channels'
 import { requireChannelAdapter } from '@/lib/server/domains/channels'
 import type { Conversation, ConversationAttachment } from '@/lib/server/db'
@@ -335,6 +335,7 @@ export async function notifyVisitorMessage(opts: {
               ctaUrl,
               workspaceName: ctx.workspaceName,
               logoUrl: ctx.logoUrl ?? undefined,
+              brand: ctx.emailBrand,
               isFirstMessage: opts.isFirstMessage,
               conversationSubject: opts.conversation.subject,
               messageId: mintTeamOutboundMessageId(opts.conversation.id) ?? undefined,
@@ -442,7 +443,7 @@ export async function sendVisitorConversationEmail(opts: {
   /** Rich message body (TipTap doc) rendered inline in the email, when present. */
   contentJson?: JSONContent | null
   ctaUrl: string
-  ctx: { workspaceName: string; logoUrl: string | null }
+  ctx: { workspaceName: string; logoUrl: string | null; emailBrand?: EmailBrand }
   channel?: Conversation['channel']
   attachments?: ConversationAttachment[]
 }): Promise<void> {
@@ -502,6 +503,7 @@ export async function sendVisitorConversationEmail(opts: {
         ctaUrl: opts.ctaUrl,
         workspaceName: opts.ctx.workspaceName,
         logoUrl: opts.ctx.logoUrl ?? undefined,
+        brand: opts.ctx.emailBrand,
         replyTo,
         from,
         fromDisplayName: from ? undefined : fromDisplayName,
@@ -625,6 +627,7 @@ export async function notifyAgentReply(opts: {
         ctaUrl,
         workspaceName: ctx.workspaceName,
         logoUrl: ctx.logoUrl,
+        emailBrand: ctx.emailBrand,
         direction: 'agent_reply',
         attachments: opts.attachments,
       })
@@ -657,6 +660,7 @@ export async function notifyAgentReply(opts: {
             ctaUrl,
             workspaceName: ctx.workspaceName,
             logoUrl: ctx.logoUrl,
+            emailBrand: ctx.emailBrand,
             direction: 'agent_reply',
             attachments: opts.attachments,
           })
@@ -730,6 +734,7 @@ export async function notifyConversationStarted(opts: {
       ctaUrl,
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl,
+      emailBrand: ctx.emailBrand,
       direction: 'agent_started',
       attachments: opts.attachments,
     })
@@ -816,6 +821,7 @@ export async function notifyCsatRequestEmail(
       ratingUrls,
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl,
+      brand: ctx.emailBrand,
     })
   } catch (err) {
     log.warn({ err, conversationId }, 'csat request email failed')

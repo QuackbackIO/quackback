@@ -262,6 +262,12 @@ describe('words fields', () => {
     const plain = line({ type: 'text', text: 'Shape Acme' })
     const marked = line({ type: 'text', text: 'Shape ' }, accent('Acme'))
     expect(wordsChangeLabel(field, plain, marked)).toBe('Headline: accent')
+    // Each kind by the name the editor gives it, and taking one away says so.
+    const lighter = line({ type: 'text', text: 'Shape ' }, accent('Acme', 'muted'))
+    expect(wordsChangeLabel(field, plain, lighter)).toBe('Headline: lighter')
+    const highlighted = line({ type: 'text', text: 'Shape ' }, accent('Acme', 'highlight'))
+    expect(wordsChangeLabel(field, plain, highlighted)).toBe('Headline: highlight')
+    expect(wordsChangeLabel(field, highlighted, plain)).toBe('Headline: no highlight')
     expect(wordsChangeLabel(field, plain, line({ type: 'text', text: 'Shape us' }))).toBe(
       'Headline: words'
     )

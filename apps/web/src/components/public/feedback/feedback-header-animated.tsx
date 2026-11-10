@@ -27,6 +27,7 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
+import { MotionAsAsked } from '@/components/public/motion-as-asked'
 import { BoardCustomFields } from '@/components/public/feedback/board-custom-fields'
 import { PostingToBoard } from '@/components/public/feedback/posting-to-board'
 import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
@@ -364,305 +365,308 @@ export function FeedbackHeaderAnimated({
     </AnimatePresence>
   )
 
+  // Reduced motion as the visitor's device asks, here rather than at the portal's root.
   return (
-    <motion.div
-      data-qb-part="composer"
-      data-state={expanded ? 'open' : undefined}
-      className={cn(
-        // Typing in it shows as a ring on the whole composer, the way a field's focus does.
-        'bg-card border border-border overflow-hidden focus-within:border-ring focus-within:outline-1 focus-within:outline-ring',
-        place === 'feed'
-          ? 'rounded-lg mb-5 shadow-sm'
-          : // The brand's composer shape, eased to a card's corners once it opens.
-            'rounded-[var(--qb-radius-composer,0.5rem)] data-[state=open]:rounded-[min(var(--qb-radius-composer,0.5rem),1.25rem)]',
-        place === 'home' && 'shadow-sm',
-        // In the band it follows the cards: raised casts a shadow, the rest sit flat.
-        place === 'band' &&
-          '[[data-qb-cards=raised]_&]:shadow-lg [[data-qb-cards=filled]_&]:border-transparent'
-      )}
-      initial={false}
-      animate={
-        place === 'feed'
-          ? {
-              boxShadow: expanded
-                ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
-                : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-            }
-          : undefined
-      }
-      transition={{ duration: 0.2 }}
-      onKeyDown={handleKeyDown}
-      // The editor renders once the header expands; hovering warms its chunk.
-      onPointerEnter={preloadRichTextEditor}
-    >
-      {/* Destination board, above title when expanded (on Home, under the ideas like it) */}
-      {!staged && boardPicker}
-
-      {/* Icon + Title Row - Always visible */}
-      <div
+    <MotionAsAsked>
+      <motion.div
+        data-qb-part="composer"
+        data-state={expanded ? 'open' : undefined}
         className={cn(
-          'flex items-center gap-3 px-4 py-3.5',
-          // In the band the button goes under the field whenever the row has no room for it
-          // (a narrow band, a brand's larger or capital label), never cut by the composer's edge.
-          place === 'band' && !expanded && 'flex-wrap py-3'
+          // Typing in it shows as a ring on the whole composer, the way a field's focus does.
+          'bg-card border border-border overflow-hidden focus-within:border-ring focus-within:outline-1 focus-within:outline-ring',
+          place === 'feed'
+            ? 'rounded-lg mb-5 shadow-sm'
+            : // The brand's composer shape, eased to a card's corners once it opens.
+              'rounded-[var(--qb-radius-composer,0.5rem)] data-[state=open]:rounded-[min(var(--qb-radius-composer,0.5rem),1.25rem)]',
+          place === 'home' && 'shadow-sm',
+          // In the band it follows the cards: raised casts a shadow, the rest sit flat.
+          place === 'band' &&
+            '[[data-qb-cards=raised]_&]:shadow-lg [[data-qb-cards=filled]_&]:border-transparent'
         )}
+        initial={false}
+        animate={
+          place === 'feed'
+            ? {
+                boxShadow: expanded
+                  ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
+                  : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+              }
+            : undefined
+        }
+        transition={{ duration: 0.2 }}
+        onKeyDown={handleKeyDown}
+        // The editor renders once the header expands; hovering warms its chunk.
+        onPointerEnter={preloadRichTextEditor}
       >
-        {/* Icon - fades out when expanded */}
-        <AnimatePresence>
-          {!expanded && (
-            <motion.div
-              initial={false}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8, width: 0, marginRight: -12 }}
-              transition={{ duration: 0.2 }}
-              className="flex-shrink-0 w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center"
-            >
-              <PencilIcon className="w-4 h-4 text-primary" />
-            </motion.div>
+        {/* Destination board, above title when expanded (on Home, under the ideas like it) */}
+        {!staged && boardPicker}
+
+        {/* Icon + Title Row - Always visible */}
+        <div
+          className={cn(
+            'flex items-center gap-3 px-4 py-3.5',
+            // In the band the button goes under the field whenever the row has no room for it
+            // (a narrow band, a brand's larger or capital label), never cut by the composer's edge.
+            place === 'band' && !expanded && 'flex-wrap py-3'
           )}
-        </AnimatePresence>
-
-        {/* Title input - always visible, grows when expanded */}
-        <TitleInput
-          title={title}
-          inputRef={titleInputRef}
-          expanded={expanded}
-          onExpand={() => setExpanded(true)}
-          staged={staged}
-        />
-        {place !== 'feed' && !expanded && (
-          <button
-            type="button"
-            data-qb-label=""
-            data-qb-action={place === 'band' ? '' : undefined}
-            onClick={() => setExpanded(true)}
-            className={cn(
-              'shrink-0 text-sm font-medium',
-              place === 'band'
-                ? 'basis-full max-w-full rounded-[var(--qb-radius-button,999px)] bg-[var(--qb-action-bg,var(--primary))] px-4 py-2 font-semibold text-[var(--qb-action-ink,var(--primary-foreground))] hover:opacity-90 sm:ms-auto sm:basis-auto'
-                : 'rounded-full px-3 py-1.5 text-[var(--qb-accent-text,var(--primary))] hover:bg-muted'
+        >
+          {/* Icon - fades out when expanded */}
+          <AnimatePresence>
+            {!expanded && (
+              <motion.div
+                initial={false}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8, width: 0, marginRight: -12 }}
+                transition={{ duration: 0.2 }}
+                className="flex-shrink-0 w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center"
+              >
+                <PencilIcon className="w-4 h-4 text-primary" />
+              </motion.div>
             )}
-          >
-            <span data-qb-words="feedback.submit">
-              {submitLabel ?? intl.formatMessage(homeMessages.composerContinue)}
-            </span>
-          </button>
-        )}
-      </div>
+          </AnimatePresence>
 
-      {/* On Home, ideas like the one typed, before its details */}
-      {staged && (
-        <StagedSimilar title={title} expanded={expanded} onDetails={() => setExpanded(true)} />
-      )}
-      {staged && boardPicker}
-
-      {/* Expandable content */}
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-            className="overflow-hidden"
-          >
-            {/* Error message */}
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="px-4 sm:px-5"
-                >
-                  <div className="[border-radius:calc(var(--radius)*0.8)] bg-destructive/10 px-3 py-2 text-sm text-destructive mb-2">
-                    {error}
-                  </div>
-                </motion.div>
+          {/* Title input - always visible, grows when expanded */}
+          <TitleInput
+            title={title}
+            inputRef={titleInputRef}
+            expanded={expanded}
+            onExpand={() => setExpanded(true)}
+            staged={staged}
+          />
+          {place !== 'feed' && !expanded && (
+            <button
+              type="button"
+              data-qb-label=""
+              data-qb-action={place === 'band' ? '' : undefined}
+              onClick={() => setExpanded(true)}
+              className={cn(
+                'shrink-0 text-sm font-medium',
+                place === 'band'
+                  ? 'basis-full max-w-full rounded-[var(--qb-radius-button,999px)] bg-[var(--qb-action-bg,var(--primary))] px-4 py-2 font-semibold text-[var(--qb-action-ink,var(--primary-foreground))] hover:opacity-90 sm:ms-auto sm:basis-auto'
+                  : 'rounded-full px-3 py-1.5 text-[var(--qb-accent-text,var(--primary))] hover:bg-muted'
               )}
-            </AnimatePresence>
-
-            {/* Rich text editor */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.2, delay: 0.15 }}
-              className="px-4 sm:px-5 pb-4"
             >
-              <Suspense fallback={<RichTextEditorPlaceholder minHeight="150px" />}>
-                <LazyRichTextEditor
-                  value=""
-                  onDocumentChange={handleContentChange}
-                  placeholder={intl.formatMessage({
-                    id: 'portal.feedback.header.detailsPlaceholder',
-                    defaultMessage: 'Add more details... Type / for commands',
-                  })}
-                  minHeight="150px"
-                  borderless
-                  toolbarPosition="bottom"
-                  features={{
-                    ...PUBLIC_FEEDBACK_EDITOR_FEATURES,
-                    images: canUploadMedia,
-                    videos: canUploadMedia,
-                  }}
-                  onImageUpload={canUploadMedia ? uploadMediaWithSession : undefined}
-                  onVideoUpload={canUploadMedia ? uploadMediaWithSession : undefined}
-                />
-              </Suspense>
-            </motion.div>
+              <span data-qb-words="feedback.submit">
+                {submitLabel ?? intl.formatMessage(homeMessages.composerContinue)}
+              </span>
+            </button>
+          )}
+        </div>
 
-            {/* Board-configured custom intake fields */}
-            {boardCustomFields.length > 0 && (
+        {/* On Home, ideas like the one typed, before its details */}
+        {staged && (
+          <StagedSimilar title={title} expanded={expanded} onDetails={() => setExpanded(true)} />
+        )}
+        {staged && boardPicker}
+
+        {/* Expandable content */}
+        <AnimatePresence>
+          {expanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+              className="overflow-hidden"
+            >
+              {/* Error message */}
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="px-4 sm:px-5"
+                  >
+                    <div className="[border-radius:calc(var(--radius)*0.8)] bg-destructive/10 px-3 py-2 text-sm text-destructive mb-2">
+                      {error}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Rich text editor */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.2, delay: 0.15 }}
                 className="px-4 sm:px-5 pb-4"
               >
-                <BoardCustomFields
-                  fields={boardCustomFields}
-                  values={customFieldValues}
-                  onChange={(key, value) =>
-                    setCustomFieldValues((prev) => ({ ...prev, [key]: value }))
-                  }
-                />
-              </motion.div>
-            )}
-
-            {/* Similar posts card - shown above footer as pre-submit prompt */}
-            {!staged && <SimilarPostsPrompt title={title} enabled={expanded} />}
-
-            {/* Footer with auth and actions */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: 0.2 }}
-              className="flex items-center justify-between px-4 sm:px-5 py-3 border-t bg-muted/30"
-            >
-              {noAccess ? (
-                <p className="text-xs text-muted-foreground">
-                  <FormattedMessage
-                    id="portal.feedback.header.noAccess"
-                    defaultMessage={"You don't have access to post on this board"}
+                <Suspense fallback={<RichTextEditorPlaceholder minHeight="150px" />}>
+                  <LazyRichTextEditor
+                    value=""
+                    onDocumentChange={handleContentChange}
+                    placeholder={intl.formatMessage({
+                      id: 'portal.feedback.header.detailsPlaceholder',
+                      defaultMessage: 'Add more details... Type / for commands',
+                    })}
+                    minHeight="150px"
+                    borderless
+                    toolbarPosition="bottom"
+                    features={{
+                      ...PUBLIC_FEEDBACK_EDITOR_FEATURES,
+                      images: canUploadMedia,
+                      videos: canUploadMedia,
+                    }}
+                    onImageUpload={canUploadMedia ? uploadMediaWithSession : undefined}
+                    onVideoUpload={canUploadMedia ? uploadMediaWithSession : undefined}
                   />
-                </p>
-              ) : isAnonymousSession && canPostAnonymously ? (
-                // A visitor who never signed in posts under their generated
-                // name, and has nothing to sign out of.
-                <p className="text-xs text-muted-foreground">
-                  {anonymousName ? (
-                    <>
+                </Suspense>
+              </motion.div>
+
+              {/* Board-configured custom intake fields */}
+              {boardCustomFields.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2, delay: 0.15 }}
+                  className="px-4 sm:px-5 pb-4"
+                >
+                  <BoardCustomFields
+                    fields={boardCustomFields}
+                    values={customFieldValues}
+                    onChange={(key, value) =>
+                      setCustomFieldValues((prev) => ({ ...prev, [key]: value }))
+                    }
+                  />
+                </motion.div>
+              )}
+
+              {/* Similar posts card - shown above footer as pre-submit prompt */}
+              {!staged && <SimilarPostsPrompt title={title} enabled={expanded} />}
+
+              {/* Footer with auth and actions */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: 0.2 }}
+                className="flex items-center justify-between px-4 sm:px-5 py-3 border-t bg-muted/30"
+              >
+                {noAccess ? (
+                  <p className="text-xs text-muted-foreground">
+                    <FormattedMessage
+                      id="portal.feedback.header.noAccess"
+                      defaultMessage={"You don't have access to post on this board"}
+                    />
+                  </p>
+                ) : isAnonymousSession && canPostAnonymously ? (
+                  // A visitor who never signed in posts under their generated
+                  // name, and has nothing to sign out of.
+                  <p className="text-xs text-muted-foreground">
+                    {anonymousName ? (
+                      <>
+                        <FormattedMessage
+                          id="portal.feedback.header.postingAs"
+                          defaultMessage="Posting as"
+                        />{' '}
+                        <span className="font-medium text-foreground">{anonymousName}</span>
+                      </>
+                    ) : (
                       <FormattedMessage
-                        id="portal.feedback.header.postingAs"
-                        defaultMessage="Posting as"
-                      />{' '}
-                      <span className="font-medium text-foreground">{anonymousName}</span>
-                    </>
-                  ) : (
+                        id="portal.feedback.header.postingAnonymously"
+                        defaultMessage="Posting anonymously"
+                      />
+                    )}
+                  </p>
+                ) : effectiveUser ? (
+                  <p className="text-xs text-muted-foreground">
+                    <FormattedMessage
+                      id="portal.feedback.header.postingAs"
+                      defaultMessage="Posting as"
+                    />{' '}
+                    <span className="font-medium text-foreground">
+                      {shownName(effectiveUser.name, effectiveUser.email)}
+                    </span>
+                    {' ('}
+                    <button
+                      type="button"
+                      className="text-primary hover:underline"
+                      onClick={async () => {
+                        await signOut()
+                        removeViewerScopedPortalQueries(queryClient)
+                        router.invalidate()
+                      }}
+                    >
+                      <FormattedMessage
+                        id="portal.feedback.header.signOut"
+                        defaultMessage="sign out"
+                      />
+                    </button>
+                    {')'}
+                  </p>
+                ) : canPostAnonymously ? (
+                  <p className="text-xs text-muted-foreground">
                     <FormattedMessage
                       id="portal.feedback.header.postingAnonymously"
                       defaultMessage="Posting anonymously"
                     />
-                  )}
-                </p>
-              ) : effectiveUser ? (
-                <p className="text-xs text-muted-foreground">
-                  <FormattedMessage
-                    id="portal.feedback.header.postingAs"
-                    defaultMessage="Posting as"
-                  />{' '}
-                  <span className="font-medium text-foreground">
-                    {shownName(effectiveUser.name, effectiveUser.email)}
-                  </span>
-                  {' ('}
+                  </p>
+                ) : (
                   <button
                     type="button"
-                    className="text-primary hover:underline"
-                    onClick={async () => {
-                      await signOut()
-                      removeViewerScopedPortalQueries(queryClient)
-                      router.invalidate()
-                    }}
+                    onClick={() => openAuthPopover({ mode: 'login' })}
+                    className="relative rounded-sm text-xs text-primary hover:underline font-medium after:absolute after:-inset-y-1 after:inset-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <FormattedMessage
-                      id="portal.feedback.header.signOut"
-                      defaultMessage="sign out"
+                      id="portal.feedback.header.signInToPost"
+                      defaultMessage={'Sign in to post'}
                     />
                   </button>
-                  {')'}
-                </p>
-              ) : canPostAnonymously ? (
-                <p className="text-xs text-muted-foreground">
-                  <FormattedMessage
-                    id="portal.feedback.header.postingAnonymously"
-                    defaultMessage="Posting anonymously"
-                  />
-                </p>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => openAuthPopover({ mode: 'login' })}
-                  className="relative rounded-sm text-xs text-primary hover:underline font-medium after:absolute after:-inset-y-1 after:inset-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <FormattedMessage
-                    id="portal.feedback.header.signInToPost"
-                    defaultMessage={'Sign in to post'}
-                  />
-                </button>
-              )}
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  data-qb-label=""
-                  onClick={handleCancel}
-                  disabled={createPost.isPending}
-                >
-                  <FormattedMessage id="portal.feedback.header.cancel" defaultMessage="Cancel" />
-                </Button>
-                <Button
-                  size="sm"
-                  data-qb-label=""
-                  onClick={handleSubmit}
-                  disabled={createPost.isPending || !canSubmit}
-                  title={
-                    !canSubmit
-                      ? noAccess
-                        ? intl.formatMessage({
-                            id: 'portal.feedback.header.submitTooltipNoAccess',
-                            defaultMessage: "You don't have access to post on this board",
-                          })
-                        : intl.formatMessage({
-                            id: 'portal.feedback.header.submitTooltipSignIn',
-                            defaultMessage: 'Please sign in to post',
-                          })
-                      : undefined
-                  }
-                  className="portal-submit-button bg-[var(--portal-button-background)] text-[var(--portal-button-foreground)] hover:bg-[var(--portal-button-background)]/90"
-                >
-                  {createPost.isPending ? (
-                    <FormattedMessage
-                      id="portal.feedback.header.submitting"
-                      defaultMessage="Posting..."
-                    />
-                  ) : (
-                    <span data-qb-words="feedback.submit">
-                      {submitLabel ?? (
-                        <FormattedMessage
-                          id="portal.feedback.header.submit"
-                          defaultMessage="Post"
-                        />
-                      )}
-                    </span>
-                  )}
-                </Button>
-              </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-qb-label=""
+                    onClick={handleCancel}
+                    disabled={createPost.isPending}
+                  >
+                    <FormattedMessage id="portal.feedback.header.cancel" defaultMessage="Cancel" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    data-qb-label=""
+                    onClick={handleSubmit}
+                    disabled={createPost.isPending || !canSubmit}
+                    title={
+                      !canSubmit
+                        ? noAccess
+                          ? intl.formatMessage({
+                              id: 'portal.feedback.header.submitTooltipNoAccess',
+                              defaultMessage: "You don't have access to post on this board",
+                            })
+                          : intl.formatMessage({
+                              id: 'portal.feedback.header.submitTooltipSignIn',
+                              defaultMessage: 'Please sign in to post',
+                            })
+                        : undefined
+                    }
+                    className="portal-submit-button bg-[var(--portal-button-background)] text-[var(--portal-button-foreground)] hover:bg-[var(--portal-button-background)]/90"
+                  >
+                    {createPost.isPending ? (
+                      <FormattedMessage
+                        id="portal.feedback.header.submitting"
+                        defaultMessage="Posting..."
+                      />
+                    ) : (
+                      <span data-qb-words="feedback.submit">
+                        {submitLabel ?? (
+                          <FormattedMessage
+                            id="portal.feedback.header.submit"
+                            defaultMessage="Post"
+                          />
+                        )}
+                      </span>
+                    )}
+                  </Button>
+                </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </MotionAsAsked>
   )
 }
 

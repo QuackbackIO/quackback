@@ -1,12 +1,17 @@
 import { useEffect, useRef } from 'react'
-import { locationOfPath, type DesignerPage, type Selection } from '@/lib/shared/design/outline'
+import {
+  blockKey,
+  locationOfPath,
+  type DesignerPage,
+  type Selection,
+} from '@/lib/shared/design/outline'
 import type { CanvasFrame } from './designer-canvas'
 import { EditingLayer } from './editing-layer'
 import { ComposerWidthHandles } from './composer-width-handles'
 import { GridHandles } from './grid-handles'
 import { useComposerWidthEdit } from './use-composer-width'
 import { useGridEdit, type GridEditing } from './use-grid-edit'
-import { revealInFrame, useFrameRects } from './use-frame-rects'
+import { MENU_ROW_KEY, revealInFrame, useFrameRects } from './use-frame-rects'
 import { ElementOutlines, type OutlinedElement } from './element-outline'
 import { locateTarget, outlineTargets } from './change-outlines'
 import type { ChangeFlash } from './use-change-flash'
@@ -20,6 +25,8 @@ import {
   type ElementPick,
 } from '@/lib/shared/design/element-pick'
 import { destinationName } from '@/lib/shared/design/content-kinds'
+import { overlaps } from '@/lib/shared/design/layer-geometry'
+import { CHIP_NAME, keepFocus } from './settings-focus'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { OverridePage } from '@/lib/shared/design/style-overrides'
 import type { StyleState } from '@/lib/shared/design/style-tokens'
@@ -43,6 +50,7 @@ export function CanvasLayer({
   onPage,
   onDuplicate,
   onRemove,
+  onMove,
   onDeselect,
   grid,
   elements,
@@ -59,6 +67,8 @@ export function CanvasLayer({
   onPage: (page: DesignerPage, item?: string | null) => void
   onDuplicate: (key: Selection) => void
   onRemove: (key: Selection) => void
+  /** Moves a block a place up or down, as its ⋯ does. */
+  onMove?: (key: Selection, by: -1 | 1) => void
   onDeselect: () => void
   /** What moving and resizing Home's blocks needs; without it, blocks stay put. */
   grid?: GridEditing
@@ -113,6 +123,8 @@ export function CanvasLayer({
       elements?.picked ?? null,
       ...otherKeys,
       ...flashKeys,
+      // The menu's items, which the chip of something small beside them, such as the logo, keeps clear of.
+      picked ? MENU_ROW_KEY : null,
     ],
     locate
   )
@@ -156,7 +168,7 @@ export function CanvasLayer({
     if (!elements || !element) return
     if (to === 'up') {
       elements.onPick(null)
-      keepFocus('[data-editing-layer] [data-chip-name]')
+      keepFocus(CHIP_NAME)
       return
     }
     const doc = canvas.frame?.contentDocument
@@ -223,7 +235,10 @@ export function CanvasLayer({
         }
       : null
   const block = picked?.startsWith('block-') ? picked : null
+  const homeBlocks = (elements?.design ?? grid?.design)?.pages.home.blocks ?? []
+  const placeAt = block ? homeBlocks.findIndex((each, i) => blockKey(each, i) === block) : -1
   const pickedRect = picked ? (rects[picked] ?? null) : null
+  const menuRow = picked ? rects[MENU_ROW_KEY] : undefined
   const pointedRect =
     elements?.hovered && elements.hovered !== elements.picked && !resizing
       ? (rects[elements.hovered] ?? null)
@@ -236,6 +251,7 @@ export function CanvasLayer({
       }
       picked={pickedRect}
       pickedKey={picked}
+      avoid={menuRow && pickedRect && !overlaps(menuRow, pickedRect) ? [menuRow] : []}
       changed={
         flash
           ? {
@@ -247,6 +263,14 @@ export function CanvasLayer({
       name={name}
       onDuplicate={block ? () => onDuplicate(block) : undefined}
       onRemove={block ? () => onRemove(block) : undefined}
+      onMove={
+        block && onMove && placeAt >= 0
+          ? {
+              up: placeAt > 0 ? () => onMove(block, -1) : null,
+              down: placeAt < homeBlocks.length - 1 ? () => onMove(block, 1) : null,
+            }
+          : undefined
+      }
       onSettings={() => document.getElementById('designer-settings')?.focus()}
       onDown={elements ? down : undefined}
       grip={
@@ -302,20 +326,4 @@ export function CanvasLayer({
       )}
     </EditingLayer>
   )
-}
-
-/**
- * Puts focus on what a selector names once it is drawn: the tag of the
- * element just picked, drawn again once its box is measured.
- */
-function keepFocus(selector: string, frames = 20): void {
-  let left = frames
-  let seen: HTMLElement | null = null
-  const tick = () => {
-    const found = document.querySelector<HTMLElement>(selector)
-    if (found && found !== document.activeElement) found.focus()
-    if (found) seen = found
-    if (--left > 0 && (!seen || seen.isConnected)) requestAnimationFrame(tick)
-  }
-  requestAnimationFrame(tick)
 }

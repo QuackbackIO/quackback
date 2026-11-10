@@ -292,7 +292,7 @@ describe('a block’s summary', () => {
     expect(summaryOf(sectionOf(design, 'help.article'))).toBe(
       'Was this helpful? on · 4 related articles · contact link off'
     )
-    expect(summaryOf(sectionOf(design, 'roadmap.board'))).toBe('Columns · votes shown')
+    expect(summaryOf(sectionOf(design, 'roadmap.board'))).toBe('Columns')
     expect(summaryOf(sectionOf(design, 'help.popular'))).toBe('Shown')
     expect(summaryOf(sectionOf(design, 'help.search'))).toBe('Standard size')
     expect(summaryOf(sectionOf(design, 'help.topics'))).toBe('Cards')
@@ -371,9 +371,8 @@ describe('changing a setting', () => {
     const back = applySetting(entries.block, 'entries', 'timeline')
     if (back.ok) writeSection(design, back.block as SectionBlock)
     expect(design.pages.changelog).toBeUndefined()
-    expect(applySetting(sectionOf(design, 'roadmap.board'), 'votes', 'yes').ok).toBe(false)
-    const off = applySetting(sectionOf(design, 'roadmap.board'), 'votes', false)
-    expect(off.ok).toBe(true)
+    // The roadmap always shows votes: there is no switch for them to set.
+    expect(applySetting(sectionOf(design, 'roadmap.board'), 'votes', false).ok).toBe(false)
   })
 })
 

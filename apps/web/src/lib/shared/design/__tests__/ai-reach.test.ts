@@ -175,4 +175,13 @@ describe('one sentence', () => {
     expect(oneSentence('Buttons are 48px tall on phones.')).toBe('Buttons are 48px tall on phones.')
     expect(oneSentence('No full stop')).toBe('No full stop')
   })
+
+  it('ends a sentence at a full stop, question or exclamation mark of Chinese or Japanese', () => {
+    expect(oneSentence('選んだボタンだけ黒になりました。他のボタンは元の色のままです。')).toBe(
+      '選んだボタンだけ黒になりました。'
+    )
+    expect(oneSentence('按钮变黑了！其他按钮不变。')).toBe('按钮变黑了！')
+    expect(oneSentence('これでいいですか？ 他は変えていません。')).toBe('これでいいですか？')
+    expect(oneSentence('ボタンは黒です。')).toBe('ボタンは黒です。')
+  })
 })

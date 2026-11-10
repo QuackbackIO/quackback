@@ -17,7 +17,11 @@ export async function deliverAgentMessageOnChannel(
     content: ctx.content,
     contentJson: ctx.contentJson,
     ctaUrl: ctx.ctaUrl,
-    ctx: { workspaceName: ctx.workspaceName, logoUrl: ctx.logoUrl },
+    ctx: {
+      workspaceName: ctx.workspaceName,
+      logoUrl: ctx.logoUrl,
+      emailBrand: ctx.emailBrand,
+    },
     channel,
     attachments: ctx.attachments,
   })

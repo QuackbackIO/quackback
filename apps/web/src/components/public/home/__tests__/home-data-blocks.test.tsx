@@ -463,3 +463,12 @@ describe('Contact', () => {
     expect(screen.getByText('Write').getAttribute('data-qb-words')).toBe('block-blockid001.link')
   })
 })
+
+describe('a block on a tablet', () => {
+  it('keeps to its own height at the top of its area, never stretched to its row-mate’s', async () => {
+    show(block({ type: 'status' }), { components: 2 })
+    await screen.findByText('All systems operational')
+    const section = document.querySelector('[data-qb-block]') as HTMLElement
+    expect(section.className.split(/\s+/)).toContain('md:max-lg:self-start')
+  })
+})

@@ -6,7 +6,7 @@
  * job, says which are on Home, and a click adds one.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { newBlock } from '@/lib/shared/design/home'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { defaultDesign } from '@/lib/shared/design/schema'
@@ -121,15 +121,40 @@ describe('Add', () => {
     )
   })
 
-  it('adds the block clicked', () => {
+  it('adds the block clicked', async () => {
     const { onAdd } = add('Top posts')
     fireEvent.click(screen.getByRole('button', { name: /^Welcome/ }))
     expect(onAdd).toHaveBeenCalledWith('welcome')
-    // Where it goes is said on hover, not as a line always shown.
-    expect(screen.getByRole('button', { name: /^Welcome/ }).getAttribute('title')).toBe(
-      'Drag one onto the page, or click to add it under Top posts.'
-    )
+    // Where it goes is said on hover and focus, in a tooltip, not as a line always shown.
+    const welcome = screen.getByRole('button', { name: /^Welcome/ })
+    expect(welcome.getAttribute('title')).toBeNull()
     expect(screen.queryByText(/Drag one onto the page/)).toBeNull()
+    act(() => welcome.focus())
+    expect(
+      await screen.findByText('Drag one onto the page, or click to add it under Top posts.')
+    ).toBeTruthy()
+  })
+
+  it('shows a block whose page is off greyed, with the page it needs and Turn on', () => {
+    const design = defaultDesign()
+    render(
+      <AddContent
+        design={design}
+        update={vi.fn()}
+        gates={{ ...ALL_ON, help: false }}
+        settings={{}}
+        after={null}
+        onHome
+        onAdd={vi.fn()}
+      />
+    )
+    // Not a button to add it, and not left out.
+    expect(screen.queryByRole('button', { name: /^Help search/ })).toBeNull()
+    const card = screen.getByText('Help search', { exact: false }).closest('div')!
+    expect(card.textContent).toContain('Needs Help Center')
+    const turnOn = within(card).getByRole('link', { name: /Turn on/ })
+    expect(turnOn.getAttribute('href')).toBe('/admin/settings/general')
+    expect(turnOn.getAttribute('target')).toBe('_blank')
   })
 
   it('says where a new block goes', () => {

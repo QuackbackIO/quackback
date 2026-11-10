@@ -352,6 +352,8 @@ export interface TuneSurface {
   subtitle?: { ink: string; target: number }
   /** The contrast a headline reads at: 3:1 while it is large text everywhere (style-css.ts largeHeadline). */
   headline?: number
+  /** Every subtitle sits in the hero, the pages' titles too, so none is on the page. */
+  subtitleInHero?: boolean
 }
 
 /** An exact text colour as drawn: the one set, and the one used so it reads, or null when none does. */
@@ -394,7 +396,15 @@ export function tunedColours(tune: Tune | undefined, surface: TuneSurface | null
   }
   // The subtitle is body-sized, so it reads as body text does.
   else if (subtitle && !surface.mixed)
-    add('Subtitle', subtitle, [surface.background, ...page, ...surface.band], 4.5)
+    add(
+      'Subtitle',
+      subtitle,
+      // In the hero only, it reads on the hero, never the page under it.
+      surface.subtitleInHero && surface.band.length
+        ? surface.band
+        : [surface.background, ...page, ...surface.band],
+      4.5
+    )
   const heading = tune.heading?.colour
   // A section heading shrinks to body size on a phone, so it reads as body text does.
   if (heading) add('Section headings', heading, [surface.background, ...page, '#ffffff'], 4.5)

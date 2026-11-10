@@ -81,8 +81,13 @@ export interface FindItem {
   aka?: string
   /** Other words it is found by. */
   terms?: string
+  /** Why it cannot be gone to now, such as its page being off: listed greyed, with this said. */
+  off?: string
   target: FindTarget
 }
+
+/** What a Home-only setting says while Home is off. */
+export const ON_HOME_OFF = 'On Home, which is off'
 
 /** How a path reads: "Theme › Style › Corners". */
 export const findPath = (item: Pick<FindItem, 'path' | 'label'>) =>
@@ -192,6 +197,25 @@ const partTarget = (selection: Selection | null, row: PanelRow, to: DesignerPage
   ...(row.opens ? { opens: row.opens } : {}),
 })
 
+/** Whether a row is on Home only, and Home is not among the pages shown. */
+const homeOnly = (row: PanelRow, pages: readonly DesignerPage[]) =>
+  !!row.pages?.length && row.pages.every((p) => p === 'home') && !pages.includes('home')
+
+/** The words of the settings only Home has, which Turn on Home is found by too. */
+export const HOME_ONLY_TERMS = [
+  ...new Set(
+    PART_PANELS.flatMap((panel) =>
+      panel.sections.flatMap((section) =>
+        section.rows
+          .filter((row) => row.pages?.length && row.pages.every((p) => p === 'home'))
+          .flatMap((row) => [row.label.toLowerCase(), row.terms ?? ''])
+      )
+    )
+  ),
+]
+  .join(' ')
+  .trim()
+
 /** The part panels' rows and the page panel's, each on a page that draws it. */
 function partItems(
   design: PortalDesign,
@@ -206,6 +230,20 @@ function partItems(
     for (const section of panel.sections)
       for (const row of section.rows) {
         const to = pageAmong(page, row.pages ? has.filter((p) => row.pages!.includes(p)) : has)
+        // A setting only Home has, while Home is off: listed, greyed, saying so.
+        if (!to && homeOnly(row, pages)) {
+          if (!(row.when?.({ design, gates, page: 'home' }) ?? true)) continue
+          items.push({
+            id: `part:${panel.place}:${row.id}`,
+            group: 'Settings',
+            label: row.label,
+            path: section.title ? [panel.name, section.title] : [panel.name],
+            terms: row.terms,
+            off: ON_HOME_OFF,
+            target: partTarget(panel.place as Selection, row, 'home'),
+          })
+          continue
+        }
         if (!to || !(row.when?.({ design, gates, page: to }) ?? true)) continue
         items.push({
           id: `part:${panel.place}:${row.id}`,
@@ -360,6 +398,7 @@ export function blockFindActions({
   onLayouts,
   onDuplicate,
   onRemove,
+  onHome,
 }: {
   /** The picked Home block's name, or null with none picked. */
   picked: string | null
@@ -367,6 +406,8 @@ export function blockFindActions({
   onLayouts: () => void
   onDuplicate?: () => void
   onRemove?: () => void
+  /** Turns Home on, while it is off. */
+  onHome?: () => void
 }): FindItem[] {
   const action = (id: string, label: string, run: () => void, terms?: string): FindItem => ({
     id: `do:${id}`,
@@ -383,6 +424,10 @@ export function blockFindActions({
       : []),
     ...(picked && onRemove ? [action('remove', `Remove ${picked}`, onRemove, 'delete')] : []),
     action('layouts', 'Start Home from a layout…', onLayouts, 'home layouts arrangement blocks'),
+    // Found by Home's own settings too, so a search for one leads to a way to reach it.
+    ...(onHome
+      ? [action('home', 'Turn on Home', onHome, `landing page hero ${HOME_ONLY_TERMS}`)]
+      : []),
   ]
 }
 

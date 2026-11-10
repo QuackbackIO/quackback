@@ -36,14 +36,11 @@ export const Route = createFileRoute('/design')({
   },
   loader: async ({ context }) => {
     // Loaded here, not imported above: a loader's imports ship in the entry chunk.
-    const { portalDesignQueries } = await import('@/lib/client/queries/portal-design')
-    await Promise.all([
-      context.queryClient.ensureQueryData(portalDesignQueries.editor()),
-      context.queryClient.ensureQueryData(portalDesignQueries.aiStatus()),
-    ])
+    const { loadDesignerRoute } = await import('@/lib/client/designer-route-data')
+    return loadDesignerRoute(context.queryClient, context.settings, context.returnPath)
   },
   // The workspace's icon, as the portal shows it; without one the browser asks for /favicon.ico.
-  head: ({ match }) => {
+  head: ({ match, loaderData }) => {
     const settings = match.context.settings
     return {
       meta: [{ title: 'Customise' }, { name: 'robots', content: 'noindex, nofollow' }],
@@ -52,6 +49,10 @@ export const Route = createFileRoute('/design')({
           rel: 'icon',
           href: settings?.faviconData?.url || settings?.brandingData?.logoUrl || '/logo.png',
         },
+        // The canvas's first page, fetched now and taken from the cache when the canvas asks.
+        ...(loaderData?.canvas
+          ? [{ rel: 'prefetch', href: loaderData.canvas, as: 'document' }]
+          : []),
       ],
     }
   },

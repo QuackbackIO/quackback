@@ -76,6 +76,9 @@ describe('the overrides list', () => {
     expect(
       screen.getByRole('button', { name: 'Remove Section headings in a block that is gone' })
     ).toBeTruthy()
+    // Each name and each Reset is a target at least 24px tall.
+    for (const name of ['Call to action · Hero', 'Reset Call to action · Hero'])
+      expect(screen.getByRole('button', { name }).className).toMatch(/(^|\s)min-h-6(\s|$)/)
     fireEvent.click(screen.getByRole('button', { name: 'Call to action · Hero' }))
     expect(onJump).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'part:hero.home.cta:button' })

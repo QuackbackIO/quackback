@@ -65,6 +65,24 @@ describe('QuickFind', () => {
     for (const text of shown()) expect(text).not.toMatch(/site:|block-/)
   })
 
+  it('greys a setting it cannot go to, saying why, and goes nowhere on it', async () => {
+    const off: FindItem = {
+      id: 'part:hero:hero-height',
+      group: 'Settings',
+      label: 'Height',
+      path: ['Hero', 'Layout'],
+      off: 'On Home, which is off',
+      target: { kind: 'part', selection: 'hero', page: 'home' },
+    }
+    const navigation = show(() => [off])
+    await typeIn('height')
+    const item = document.querySelector('[data-find-item="part:hero:hero-height"]')!
+    expect(item.getAttribute('data-disabled')).toBe('true')
+    expect(item.textContent).toContain('On Home, which is off')
+    fireEvent.click(item)
+    expect(navigation.show).not.toHaveBeenCalled()
+  })
+
   it('leads a setting on another page to its part there', async () => {
     const navigation = show()
     await typeIn('sort')
@@ -128,26 +146,37 @@ describe('QuickFind', () => {
     ])
   })
 
-  it('opens when the canvas hands over its Ctrl+K, and not for another origin', async () => {
+  it('opens when the canvas hands over its Ctrl+K, and not for another origin or window', async () => {
     show()
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { type: 'quackback:preview-key', key: 'find' },
-          origin: 'https://elsewhere.example.com',
-        })
-      )
-    })
-    expect(screen.queryByRole('dialog')).toBeNull()
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { type: 'quackback:preview-key', key: 'find' },
-          origin: window.location.origin,
-        })
-      )
-    })
-    expect(await screen.findByRole('dialog')).toBeTruthy()
+    // The canvas's frame, and another frame of the same origin.
+    const box = document.createElement('div')
+    box.setAttribute('data-canvas-box', '')
+    const iframe = document.createElement('iframe')
+    box.append(iframe)
+    document.body.append(box)
+    const canvas = { postMessage: vi.fn() } as unknown as Window
+    Object.defineProperty(iframe, 'contentWindow', { configurable: true, get: () => canvas })
+    const other = { postMessage: vi.fn() } as unknown as Window
+    const send = (origin: string, source: Window | null) =>
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { type: 'quackback:preview-key', key: 'find' },
+            origin,
+            source,
+          })
+        )
+      })
+    try {
+      send('https://elsewhere.example.com', canvas)
+      send(window.location.origin, other)
+      send(window.location.origin, null)
+      expect(screen.queryByRole('dialog')).toBeNull()
+      send(window.location.origin, canvas)
+      expect(await screen.findByRole('dialog')).toBeTruthy()
+    } finally {
+      box.remove()
+    }
   })
 })
 

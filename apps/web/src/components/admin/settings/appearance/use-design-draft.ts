@@ -9,12 +9,18 @@ import {
   restorePortalDesignVersionFn,
   savePortalDesignDraftFn,
 } from '@/lib/server/functions/portal-design'
-import { designChanges } from '@/lib/shared/design/diff'
+import { shownChanges } from '@/lib/shared/design/diff'
 import { checkDesign } from '@/lib/shared/design/check-design'
 import { changeLabel } from '@/lib/shared/design/labels'
 import { designView, previewStylesheet } from '@/lib/shared/design/design-view'
-import { createHistory, patchesBetween, type Author } from '@/lib/shared/design/history'
+import {
+  createHistory,
+  patchesBetween,
+  undoLabelOf,
+  type Author,
+} from '@/lib/shared/design/history'
 import { releaseOverrides } from '@/lib/shared/design/overrides'
+import { rebaseOnto } from '@/lib/shared/design/rebase'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalDesignRevisionId } from '@quackback/ids'
 import type { DraftLastChange } from '@/lib/server/domains/design/draft-last-change'
@@ -78,7 +84,7 @@ export function useDesignDraft() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Undo and redo: each change as labelled patches, a burst of the same change as one step.
   const [history] = useState(() => createHistory({ limit: UNDO_LIMIT, mergeMs: UNDO_MERGE_MS }))
-  const undoLabel = useStore(history, (state) => state.past.at(-1)?.label ?? null)
+  const undoLabel = useStore(history, undoLabelOf)
   const redoLabel = useStore(history, (state) => state.future.at(-1)?.label ?? null)
   const forget = useCallback(() => history.getState().clear(), [history])
 
@@ -258,22 +264,30 @@ export function useDesignDraft() {
   /**
    * Takes a design the server already saved as the draft, such as Quackback
    * AI's, at the revision that save returned; the next save is made against it.
+   * The server worked from the draft it last saved; a change made by hand
+   * since stays, with only the server's own changes put on top, and saves next.
+   * Returns the draft as it now shows.
    */
   const adopt = useCallback(
-    (next: PortalDesign, nextReport?: typeof report, label?: string, nextRevision?: string) => {
+    (
+      next: PortalDesign,
+      nextReport?: typeof report,
+      label?: string,
+      nextRevision?: string
+    ): PortalDesign => {
+      const mine = latest.current
+      const merged = rebaseOnto(accepted.current, next, mine)
       // A step of its own, never merged into the one before, named for what it changed.
-      const [patches, inverse] = patchesBetween(latest.current, next)
-      const name = label ?? nameOfChange(latest.current, next)
+      const [patches, inverse] = patchesBetween(mine, merged)
+      const name = label ?? nameOfChange(mine, merged)
       // Quackback AI's, so a change made by hand meanwhile never joins its step.
       history.getState().begin(name, 'ai')
       history.getState().push(name, patches, inverse, undefined, 'ai')
       history.getState().end('ai')
-      latest.current = next
       // The server saved it already.
       accepted.current = next
       refused.current = null
       setRefusal(null)
-      setDesign(next)
       if (nextReport) setReport(nextReport)
       if (nextRevision) revision.current = nextRevision
       else
@@ -282,9 +296,27 @@ export function useDesignDraft() {
             revision.current = (await fetchEditor()).revision
           })
           .catch(() => {})
+      // The hand change on top saves against the revision the server's save returned.
+      if (merged !== next) commit(merged)
+      else {
+        latest.current = next
+        setDesign(next)
+      }
+      return merged
     },
-    [fetchEditor, history]
+    [commit, fetchEditor, history]
   )
+
+  /**
+   * The server's draft when it moved past the revision this builder last
+   * saved, such as by an Ask AI request stopped just as the server saved it;
+   * null when it is where this builder left it.
+   */
+  const moved = useCallback(async () => {
+    await inflight.current
+    const fresh = await fetchEditor()
+    return fresh.revision !== revision.current ? fresh : null
+  }, [fetchEditor])
 
   /** Reads what visitors see again after a change made outside the draft, such as a new logo. */
   const refreshLive = useCallback(async () => {
@@ -325,16 +357,29 @@ export function useDesignDraft() {
     await save(latest.current)
   }, [fetchEditor, save])
 
-  /** Discards the draft; undo brings it back as the draft. */
-  const discard = useCallback(async () => {
+  /**
+   * Discards the draft; undo brings it back as the draft. A draft someone
+   * else changed since is kept, and the person chooses as after a refused
+   * save: load their changes or keep their own.
+   */
+  const discard = useCallback(async (): Promise<Outcome> => {
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
     await inflight.current
     const before = latest.current
-    await discardPortalDesignDraftFn()
+    const result = await discardPortalDesignDraftFn({ data: { revision: revision.current } })
+    if (!result.ok) {
+      if (result.code === 'REVISION_MISMATCH') {
+        blocked.current = true
+        setConflict(true)
+        setConflictChange(result.lastChange ?? null)
+      }
+      return { ok: false, message: result.message }
+    }
     await refresh()
     const [patches, inverse] = patchesBetween(before, latest.current)
     history.getState().clear([{ label: 'Discard draft', patches, inversePatches: inverse }])
+    return { ok: true }
   }, [refresh, history])
 
   /** Publishes the draft as reviewed: a draft that moved since, or one in conflict, is refused. */
@@ -379,7 +424,7 @@ export function useDesignDraft() {
     [refresh, flush]
   )
 
-  const changes = useMemo(() => designChanges(data.live, design), [data.live, design])
+  const changes = useMemo(() => shownChanges(data.live, design), [data.live, design])
   // The preview follows a step behind fast typing, so drawing it never holds up a keystroke.
   // The frame takes the design whole and builds its view there, as the server does.
   const preview = useDeferredValue(design)
@@ -396,6 +441,7 @@ export function useDesignDraft() {
       replace,
       flush,
       adopt,
+      moved,
       refreshLive,
       changes,
       report,
@@ -430,6 +476,7 @@ export function useDesignDraft() {
       replace,
       flush,
       adopt,
+      moved,
       refreshLive,
       changes,
       report,
@@ -458,7 +505,7 @@ export function useDesignDraft() {
 /** A change named for what it changed, such as "Brand colour", or by its first part when it changed several. */
 export function nameOfChange(before: PortalDesign, after: PortalDesign): string {
   const changed = [
-    ...new Set(designChanges(before, after).map((change) => changeLabel(change.path))),
+    ...new Set(shownChanges(before, after).map((change) => changeLabel(change.path))),
   ]
   if (!changed.length) return 'Change'
   return changed.length === 1 ? changed[0]! : `${changed[0]} and ${changed.length - 1} more`

@@ -347,6 +347,37 @@ describe('PortalBand', () => {
     expect(band.getAttribute('style')).toBeNull()
   })
 
+  it('draws a smaller copy behind the words where it has one: a phone’s width, and a pattern’s tile', () => {
+    const srcSet =
+      '/api/storage/portal-images/leaves-640.webp 640w,/api/storage/portal-images/leaves-1280.webp 1280w,/api/storage/portal-images/leaves.webp 2400w'
+    root.portalDesign = {
+      ...view({ title: { en: 'Ideas' }, subtitle: {} }),
+      bandImage: { url: '/api/storage/portal-images/leaves.webp', place: 'cover', srcSet },
+    }
+    mount()
+    const band = document.querySelector('[data-qb-part=band]') as HTMLElement
+    // The full image stays the fallback; the copies ride beside it.
+    expect(band.style.getPropertyValue('--qb-band-image')).toBe(
+      'url("/api/storage/portal-images/leaves.webp")'
+    )
+    expect(band.style.getPropertyValue('--qb-band-image-640')).toBe(
+      'url("/api/storage/portal-images/leaves-640.webp")'
+    )
+    expect(band.style.getPropertyValue('--qb-band-image-1280')).toBe(
+      'url("/api/storage/portal-images/leaves-1280.webp")'
+    )
+    // A phone takes the 1280 copy, a pattern its 640 tile; the backgrounds draw what they choose.
+    expect(band.className).toContain('max-sm:[--qb-band-photo:var(--qb-band-image-1280)]')
+    expect(band.className).toContain(
+      '[&[data-qb-band-image=pattern]]:[--qb-band-photo:var(--qb-band-image-640,var(--qb-band-image-1280))]'
+    )
+    expect(band.className).not.toMatch(/,var\(--qb-band-image\)_/)
+    expect(band.className).toMatch(
+      /var\(--qb-band-photo,var\(--qb-band-image\)\)_var\(--qb-image-focus/
+    )
+    expect(document.querySelector('[data-qb-part=band-foot-image]')).toBeNull()
+  })
+
   it('keeps an image along the bottom below the words, on any band, with room left for it', () => {
     for (const band of ['none', 'brand']) {
       root.portalDesign = {

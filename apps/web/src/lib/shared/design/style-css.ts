@@ -112,6 +112,8 @@ export function largeHeadline(doc: PortalDesign): boolean {
 export const STYLE_SHADOW_CSS = {
   ...SHADOW,
   glow: '0 0 0 4px color-mix(in oklch, var(--qb-accent) 22%, transparent)',
+  // Lift's own, exactly as the motion it replaced drew it.
+  lift: '0 6px 16px -4px rgb(0 0 0 / 0.18)',
 } as const
 
 /** The roles an exact colour can be, to draw it as that role's own in dark mode. */
@@ -204,6 +206,23 @@ export function styleColourValue(
       if (/^#0{6}$/i.test(ref)) return t.foreground
       return darkExact(ref, doc, t, light)
   }
+}
+
+/**
+ * A colour a row stores, as dark mode draws it: dark mode's own colour as it
+ * is, else light's carried over to dark; null with no dark variables.
+ */
+export function darkDrawnColour(
+  stored: StyleColour,
+  ownDark: StyleColour | undefined,
+  doc: PortalDesign,
+  light: ThemeVariables | null,
+  dark: ThemeVariables | null
+): string | null {
+  if (!dark) return null
+  return ownDark
+    ? styleColourValue(ownDark, doc, dark as Vars, 'dark')
+    : styleColourValue(stored, doc, dark as Vars, 'dark', light ? (light as Vars) : undefined)
 }
 
 /** A fill's colours (one, or a gradient's two) and its CSS. */

@@ -398,7 +398,7 @@ function sloganClause(words: string, ev: SiteWords, signatures: readonly string[
   })
 }
 const SLOGAN_HEADLINE =
-  'their slogan, with an invitation fitted round it: ask plainly what would make their product or service better, or what to make next, in their voice and their words for what they do ("What would help you ride further?", "Got an idea for your rides?"); their slogan\'s words only where the question still makes plain sense read literally, or lead with a greeting of theirs'
+  'their slogan, with an invitation fitted round it: ask plainly what would make their product or service better, or what to make next, in their voice and their words for what they do ("What would help you ride further?", "Got a request for your rides?"); their slogan\'s words only where the question still makes plain sense read literally, or lead with a greeting of theirs'
 
 /** What is wrong with one line, or null when it passes. */
 export function lineLint(
@@ -446,7 +446,7 @@ export function lineLint(
   if (WELCOME_LINES.has(line) && offersService(words)) return SERVICE_OFFER
   const english = !ev.language && !/[^\P{L}\p{Script=Latin}]/u.test(words)
   if (line === 'home_subtitle' && english && !INVITES_SUBTITLE.test(words))
-    return 'invites nothing: Home’s subtitle invites their customers to share ideas and vote, with help beside it if they like'
+    return 'invites nothing: Home’s subtitle invites their customers to share feedback and vote, with help beside it if they like'
   if (!HEADLINES.has(line)) return null
   if (WELCOME.test(words))
     return 'opens with a welcome, a preamble that says nothing of them: open with what only they would say'

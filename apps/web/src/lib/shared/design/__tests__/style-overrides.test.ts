@@ -224,6 +224,27 @@ describe('orphaned overrides', () => {
     ])
   })
 
+  it('leave out a hidden menu item and Home when it is off, so their looks come back when shown', () => {
+    const d = portalDesign.parse({
+      ...defaultDesign(),
+      overrides: [
+        {
+          id: '',
+          target: { scope: 'part', part: 'nav.roadmap', element: 'navItem' },
+          style: { base: { color: 'accent' } },
+        },
+        {
+          id: '',
+          target: { scope: 'part', part: 'nav.home', element: 'navItem' },
+          style: { base: { color: 'accent' } },
+        },
+      ],
+    })
+    d.nav.home.on = false
+    for (const item of d.nav.items) if (item.type === 'roadmap') item.shown = false
+    expect(orphanedOverrides(d)).toEqual([])
+  })
+
   it('include a part override for an element kind the part is not', () => {
     const d = portalDesign.parse({
       ...defaultDesign(),

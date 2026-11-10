@@ -20,6 +20,7 @@ import { ColourField, toHex } from '@/components/admin/settings/appearance/colou
 import { colourPairs, colourRowIssues, type ColourRowIssue } from '@/lib/shared/design/colour-pairs'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import { hexOf } from './properties/tokens'
 import { cn } from '@/lib/shared/utils'
 import { FIND, type FindRow } from './find-rows'
 import { PropertyMore, PropertyRow, PropertySection } from './properties/properties-panel'
@@ -106,6 +107,8 @@ export function ColourValue({
 }) {
   const [open, setOpen] = useState(startOpen)
   const shown = value ?? (auto || undefined)
+  // A colour as people read it: its hex, never the way it is stored, such as "oklch(…)".
+  const label = value ? (hexOf(value) ?? value) : undefined
   return (
     <Popover
       open={open}
@@ -118,7 +121,7 @@ export function ColourValue({
         <button
           id={id}
           type="button"
-          aria-label={`${name}: ${value ?? (auto !== undefined ? WORDS.auto : WORDS.none)}`}
+          aria-label={`${name}: ${label ?? (auto !== undefined ? WORDS.auto : WORDS.none)}`}
           data-colour-state={value ? 'set' : 'auto'}
           className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-xs hover:border-border hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
         >
@@ -129,7 +132,7 @@ export function ColourValue({
               value && 'font-mono text-[11px] uppercase'
             )}
           >
-            {value ?? (auto !== undefined ? WORDS.auto : WORDS.none)}
+            {label ?? (auto !== undefined ? WORDS.auto : WORDS.none)}
           </span>
         </button>
       </PopoverTrigger>
@@ -155,7 +158,11 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
   const { light } = design.brand
   const extra = light.extra ?? []
   const [adding, setAdding] = useState(false)
-  const failing = useMemo(() => colourPairs(design).filter((pair) => !pair.passes).length, [design])
+  // A part's own exact colour that no lightness of reads is not drawn, so it is no pair to fix here.
+  const failing = useMemo(
+    () => colourPairs(design).filter((pair) => !pair.passes && !pair.unused).length,
+    [design]
+  )
   const issues = useMemo(() => colourRowIssues(design), [design])
   const worked = useMemo(() => resolveDesign({ ...design, mode: 'light' }).light, [design])
   const autoOf: Record<MoreKey, string | undefined> = {
@@ -322,24 +329,25 @@ function FromLogo({
   const offered = colours.filter((colour) => colour.toLowerCase() !== accent.toLowerCase())
   if (!offered.length) return null
   return (
-    <div
-      role="group"
-      aria-label={THEME.fromLogo}
-      className="flex min-h-7 items-center gap-1.5 ps-[100px]"
-    >
-      <span className="me-0.5 text-[11px] text-muted-foreground">{THEME.fromLogo}</span>
-      {offered.map((colour) => (
-        <button
-          key={colour}
-          type="button"
-          aria-label={THEME.useAsBrand(colour)}
-          title={colour}
-          onClick={() => onPick(colour)}
-          className="grid size-6 place-items-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-        >
-          <Swatch colour={colour} className="size-4" />
-        </button>
-      ))}
+    <div role="group" aria-label={THEME.fromLogo} className="flex min-h-7 items-center gap-2">
+      {/* In the rows' label column, on one line; the swatches wrap beside it. */}
+      <span className="w-[92px] shrink-0 text-[11px] whitespace-nowrap text-muted-foreground">
+        {THEME.fromLogo}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        {offered.map((colour) => (
+          <button
+            key={colour}
+            type="button"
+            aria-label={THEME.useAsBrand(colour)}
+            title={colour}
+            onClick={() => onPick(colour)}
+            className="grid size-6 place-items-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          >
+            <Swatch colour={colour} className="size-4" />
+          </button>
+        ))}
+      </span>
     </div>
   )
 }
@@ -442,7 +450,7 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
           <button
             type="button"
             onClick={() => update((draft) => void delete draft.brand.dark)}
-            className="ms-[100px] rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="ms-[100px] inline-flex min-h-6 items-center rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
           >
             {THEME.resetAllToAuto}
           </button>

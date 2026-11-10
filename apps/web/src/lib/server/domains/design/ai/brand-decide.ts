@@ -406,8 +406,9 @@ export function wordsChanges(
     out.push(
       change('pages.home.composer', 'band', 'the composer under Home’s headline, as the hero')
     )
-    out.push(change('nav.home.on', true, 'Home leads the portal'))
-    out.push(change('nav.home.tab', true, 'Home leads the portal'))
+    // Only a Home that was off is turned on, so the reply says it added a Home page only then.
+    if (!design.nav.home.on) out.push(change('nav.home.on', true, 'Home leads the portal'))
+    if (!design.nav.home.tab) out.push(change('nav.home.tab', true, 'Home leads the portal'))
   }
   return out
 }

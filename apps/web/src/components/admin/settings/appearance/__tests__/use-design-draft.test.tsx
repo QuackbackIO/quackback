@@ -21,6 +21,9 @@ const server = vi.hoisted(() => ({
   hold: null as Promise<void> | null,
   /** The revision each publish was asked against. */
   published: [] as Array<string | undefined>,
+  /** The revision each discard was made against, and the next discard's result if set. */
+  discarded: [] as Array<string | undefined>,
+  discardResult: null as unknown,
   workspaceLogo: [] as Array<boolean | undefined>,
   publishResult: { ok: true, revisionId: 'portal_design_revision_1', number: 1 } as unknown,
 }))
@@ -39,7 +42,10 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
     server.revision = `rev${server.saves.length + 1}`
     return { ok: true, report: { adjustments: [], errors: [], css: [] }, revision: server.revision }
   },
-  discardPortalDesignDraftFn: async () => ({ ok: true }),
+  discardPortalDesignDraftFn: async ({ data }: { data: { revision?: string } }) => {
+    server.discarded.push(data.revision)
+    return server.discardResult ?? { ok: true, revision: 'rev-discarded' }
+  },
   publishPortalDesignFn: async ({
     data,
   }: {
@@ -86,6 +92,8 @@ beforeEach(() => {
   server.results = []
   server.revision = 'rev1'
   server.published = []
+  server.discarded = []
+  server.discardResult = null
   server.workspaceLogo = []
   server.publishResult = { ok: true, revisionId: 'portal_design_revision_1', number: 1 }
 })
@@ -330,6 +338,22 @@ describe('useDesignDraft', () => {
       expect(result.current.design).toEqual(original)
     })
 
+    it('names the AI change still under way as what undo takes back', () => {
+      const { result } = setup()
+      act(() => result.current.update((draft) => void (draft.layout.width = 'wide'), 'Width'))
+      const before = structuredClone(result.current.design)
+      act(() => result.current.begin('Make it calmer', 'ai'))
+      // Opened, with nothing changed yet, undo still takes back the last step.
+      expect(result.current.undoLabel).toBe('Width')
+      const next = structuredClone(result.current.design)
+      next.layout.density = 'compact'
+      act(() => result.current.adopt(next, undefined, 'Make it calmer', 'r2'))
+      expect(result.current.undoLabel).toBe('Make it calmer')
+      act(() => result.current.undo())
+      expect(result.current.design).toEqual(before)
+      expect(result.current.undoLabel).toBe('Width')
+    })
+
     it('starts again when another draft is loaded', async () => {
       const { result } = setup()
       act(() => result.current.update((draft) => void (draft.layout.width = 'wide'), 'Width'))
@@ -360,6 +384,80 @@ describe('useDesignDraft', () => {
         await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS)
       })
       expect(server.saves.at(-1)).toMatchObject({ layout: { width: 'wide' } })
+    })
+
+    it('keeps a change made by hand while the AI worked, and saves both', async () => {
+      vi.useFakeTimers()
+      const { result } = setup()
+      const original = structuredClone(result.current.design)
+      // The person changes the density while the server works on the request.
+      act(() =>
+        result.current.update((draft) => void (draft.layout.density = 'compact'), 'Density')
+      )
+      // The server's design: the draft it read (before the hand change) and the AI's change.
+      const ai = structuredClone(original)
+      ai.layout.width = 'wide'
+      act(() => result.current.adopt(ai, undefined, 'Wider', 'r2'))
+      expect(result.current.design.layout).toMatchObject({ density: 'compact', width: 'wide' })
+      // The hand change saves on top of the AI's, against the revision the AI's save returned.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS)
+      })
+      expect(server.saves.at(-1)).toMatchObject({ layout: { density: 'compact', width: 'wide' } })
+      expect(server.revisions.at(-1)).toBe('r2')
+      // Undo takes back the AI's change alone, then the hand change.
+      expect(result.current.undoLabel).toBe('Wider')
+      act(() => result.current.undo())
+      expect(result.current.design.layout).toMatchObject({
+        density: 'compact',
+        width: original.layout.width,
+      })
+      act(() => result.current.undo())
+      expect(result.current.design).toEqual(original)
+    })
+
+    it('keeps a hand change made during an AI step of the loop, inside its group', () => {
+      const { result } = setup()
+      const original = structuredClone(result.current.design)
+      act(() => result.current.begin('Make it calmer', 'ai'))
+      act(() =>
+        result.current.update((draft) => void (draft.layout.density = 'compact'), 'Density')
+      )
+      const ai = structuredClone(original)
+      ai.layout.width = 'wide'
+      act(() => result.current.adopt(ai, undefined, 'Make it calmer', 'r2'))
+      act(() => result.current.end('ai'))
+      expect(result.current.design.layout).toMatchObject({ density: 'compact', width: 'wide' })
+      expect(result.current.undoLabel).toBe('Make it calmer')
+      act(() => result.current.undo())
+      expect(result.current.design.layout).toMatchObject({
+        density: 'compact',
+        width: original.layout.width,
+      })
+    })
+
+    it('lets the hand change win where it and the AI changed the same thing', () => {
+      const { result } = setup()
+      const original = structuredClone(result.current.design)
+      act(() => result.current.update((draft) => void (draft.layout.width = 'narrow'), 'Width'))
+      const ai = structuredClone(original)
+      ai.layout.width = 'wide'
+      ai.layout.density = 'compact'
+      act(() => result.current.adopt(ai, undefined, 'Calmer', 'r2'))
+      expect(result.current.design.layout).toMatchObject({ width: 'narrow', density: 'compact' })
+      act(() => result.current.undo())
+      expect(result.current.design.layout).toMatchObject({
+        width: 'narrow',
+        density: original.layout.density,
+      })
+    })
+
+    it('reads the server draft only when it moved past the revision saved last', async () => {
+      const { result } = setup()
+      await expect(result.current.moved()).resolves.toBeNull()
+      // A request stopped just as the server saved it.
+      server.revision = 'rev7'
+      await expect(result.current.moved()).resolves.toMatchObject({ revision: 'rev7' })
     })
 
     it('takes the revision a server-side save returned, without asking again', async () => {
@@ -405,6 +503,29 @@ describe('useDesignDraft', () => {
       expect(result.current.undoLabel).toBe('Discard draft')
       act(() => result.current.undo())
       expect(result.current.design.layout.width).toBe('wide')
+    })
+
+    it('keeps a draft someone else changed, and asks whose changes to keep', async () => {
+      const { result } = setup()
+      act(() => result.current.update((draft) => void (draft.layout.width = 'wide')))
+      const lastChange = { by: 'Sam', at: '2026-11-10T10:00:00.000Z', kind: 'saved' }
+      server.discardResult = {
+        ok: false,
+        code: 'REVISION_MISMATCH',
+        message: 'The draft changed since you opened it.',
+        lastChange,
+      }
+      let outcome: unknown
+      await act(async () => {
+        outcome = await result.current.discard()
+      })
+      expect(server.discarded).toEqual(['rev1'])
+      expect(outcome).toMatchObject({ ok: false })
+      expect(result.current.conflict).toBe(true)
+      expect(result.current.conflictChange).toEqual(lastChange)
+      // Nothing was thrown away: this person's change is still on screen.
+      expect(result.current.design.layout.width).toBe('wide')
+      expect(result.current.undoLabel).not.toBe('Discard draft')
     })
   })
 

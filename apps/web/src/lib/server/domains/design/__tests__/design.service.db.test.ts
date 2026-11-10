@@ -26,7 +26,6 @@ import {
   discardDraft,
   getDesignState,
   getPublishedDesign,
-  listRevisions,
   publishDraft,
   publishStartingDesign,
   restoreRevision,
@@ -34,7 +33,7 @@ import {
   saveDraft,
 } from '../design.service'
 import { EMPTY_REVISION } from '../draft-revision'
-import { readRevision } from '../revisions'
+import { listRevisions, readRevision } from '../revisions'
 
 const fixture = await createDbTestFixture()
 beforeEach(async () => {
@@ -135,6 +134,43 @@ describe('drafts', () => {
   })
 })
 
+describe('the versions list', () => {
+  it('names who published each version, and no one for one made by setup', async () => {
+    await testDb.transaction((tx) => publishStartingDesign(tx, defaultDesign()))
+    const who = await admin()
+    await saveDraft(withAccent('#0F766E'), who)
+    await publishDraft({ ...who, source: 'appearance' })
+    expect((await listRevisions()).map((r) => [r.number, r.publishedBy])).toEqual([
+      [2, 'Admin'],
+      [1, null],
+    ])
+  })
+})
+
+describe('publishing a draft with overrides whose part is gone', () => {
+  it('drops them, keeping every override that still reaches something', async () => {
+    const who = await admin()
+    const doc = withAccent('#0F766E')
+    doc.overrides = [
+      {
+        id: 'part:block.zzzzzzzz.heading:heading',
+        target: { scope: 'part', part: 'block.zzzzzzzz.heading', element: 'heading' },
+        style: { base: { size: 20 } },
+      },
+      {
+        id: 'page:feedback:button',
+        target: { scope: 'page', page: 'feedback', element: 'button' },
+        style: { base: { radius: 6 } },
+      },
+    ]
+    await saveDraft(doc, who)
+    await publishDraft({ ...who, source: 'appearance' })
+    expect((await getPublishedDesign())?.overrides?.map((o) => o.id)).toEqual([
+      'page:feedback:button',
+    ])
+  })
+})
+
 describe('two people saving the same draft', () => {
   it('refuses a save made against a draft that has changed since', async () => {
     const who = await admin()
@@ -164,6 +200,26 @@ describe('two people saving the same draft', () => {
     await saveDraft(withAccent('#7A1F35'), who)
     await discardDraft()
     expect((await getDesignState())!.revision).toBe(published)
+  })
+
+  it('refuses a discard made against a draft that has changed since', async () => {
+    const who = await admin()
+    const opened = await saveDraft(withAccent('#0F766E'), who)
+    // A colleague saves on top before the discard lands.
+    await saveDraft(withAccent('#7A1F35'), who, opened)
+    await expect(discardDraft(opened)).rejects.toMatchObject({ code: 'REVISION_MISMATCH' })
+    expect((await getDesignState())?.draft?.brand.light.accent).toBe('#7a1f35')
+  })
+
+  it('discards the draft named by its revision, and moves the draft count on', async () => {
+    const who = await admin()
+    const saved = await saveDraft(withAccent('#0F766E'), who)
+    const [before] = await testDb.select().from(portalDesigns)
+    const next = await discardDraft(saved)
+    const [after] = await testDb.select().from(portalDesigns)
+    expect(after!.draft).toBeNull()
+    expect(after!.draftVersion).toBe(before!.draftVersion + 1)
+    expect(next).toBe((await getDesignState())!.revision)
   })
 
   it('refuses a stale save even when two saves land in the same millisecond', async () => {

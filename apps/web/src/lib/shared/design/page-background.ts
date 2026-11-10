@@ -224,7 +224,18 @@ const PATTERN_TILE: Record<(typeof DESIGN_OPTIONS.patternScale)[number], number>
   medium: 20,
   large: 32,
 }
-const DEFAULT_IMAGE_STRENGTH = 35
+/**
+ * Each fill's settings when left out: DESIGN_DEFAULTS.backgroundFill, written
+ * out here (a test holds them equal) because every portal page loads this
+ * module, and loading the defaults table from here would add a script to each.
+ */
+export const BACKGROUND_FILL_DEFAULTS = {
+  tint: { strength: 'soft' },
+  gradient: { shape: 'linear', direction: 'down', centre: 'top', strength: 'faint' },
+  pattern: { colour: 'accent', scale: 'medium', strength: 'faint' },
+  image: { fit: 'cover', position: 'centre', strength: 35, scroll: 'scroll' },
+} as const
+const FILL = BACKGROUND_FILL_DEFAULTS
 
 const toHex = (value: string) => (value.startsWith('#') ? value : oklchToHex(value))
 
@@ -354,7 +365,7 @@ export function drawFill(
   const page = ground.page
   switch (fill.kind) {
     case 'tint': {
-      const s = fill.strength ?? 'soft'
+      const s = fill.strength ?? FILL.tint.strength
       const drawn = drawnColour(doc, fill.colour, ground, mode, {
         depth: TINT_DEPTH[s],
         chroma: CHROMA[s],
@@ -369,7 +380,7 @@ export function drawFill(
       }
     }
     case 'gradient': {
-      const s = fill.strength ?? 'faint'
+      const s = fill.strength ?? FILL.gradient.strength
       const drawn = fill.stops.map((stop) =>
         drawnColour(doc, stop, ground, mode, {
           depth: GRADIENT_DEPTH[s],
@@ -380,12 +391,12 @@ export function drawFill(
       const stops = drawn.map((each) => each.colour)
       const first = stops[0]!
       const last = stops.at(-1)!
-      const radial = fill.shape === 'radial'
-      const centre = fill.centre ?? 'top'
+      const radial = (fill.shape ?? FILL.gradient.shape) === 'radial'
+      const centre = fill.centre ?? FILL.gradient.centre
       const css = radial
         ? `radial-gradient(140vw 100vh at ${GLOW_AT[centre]}, ${stops.join(', ')}) ${last}`
-        : `linear-gradient(${ANGLE[fill.direction ?? 'down']}, ${stops.join(', ')})`
-      const direction = fill.direction ?? 'down'
+        : `linear-gradient(${ANGLE[fill.direction ?? FILL.gradient.direction]}, ${stops.join(', ')})`
+      const direction = fill.direction ?? FILL.gradient.direction
       const top = radial
         ? centre === 'middle'
           ? last
@@ -404,15 +415,15 @@ export function drawFill(
       }
     }
     case 'pattern': {
-      const s = fill.strength ?? 'faint'
-      const ink = toHex(namedColour(doc, fill.colour ?? 'accent', ground, mode).value)
+      const s = fill.strength ?? FILL.pattern.strength
+      const ink = toHex(namedColour(doc, fill.colour ?? FILL.pattern.colour, ground, mode).value)
       let alpha = PATTERN_ALPHA[s]
       let softened = false
       while (alpha > 0.02 && contrastRatio(ground.ink, overlay(ink, page, alpha)) < PAGE_TEXT) {
         alpha = +(alpha - 0.02).toFixed(2)
         softened = true
       }
-      const tile = PATTERN_TILE[fill.scale ?? 'medium']
+      const tile = PATTERN_TILE[fill.scale ?? FILL.pattern.scale]
       const svg = patternSvg(fill.pattern, ink, alpha)
       return {
         kind: 'pattern',
@@ -423,11 +434,11 @@ export function drawFill(
       }
     }
     case 'image': {
-      const strengthPercent = fill.strength ?? DEFAULT_IMAGE_STRENGTH
+      const strengthPercent = fill.strength ?? FILL.image.strength
       const layer = imageLayer(fill.image.tones, ground, strengthPercent)
       const veil = `color-mix(in srgb, ${page} ${Math.round(layer.alpha * 100)}%, transparent)`
-      const position = POSITION[fill.position ?? 'centre']
-      const fit = fill.fit ?? 'cover'
+      const position = POSITION[fill.position ?? FILL.image.position]
+      const fit = fill.fit ?? FILL.image.fit
       const size = fit === 'tile' ? 'auto' : fit
       const repeat = fit === 'tile' ? 'repeat' : 'no-repeat'
       const draw = (key: string, attach: string) =>

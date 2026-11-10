@@ -219,6 +219,65 @@ describe('_portal loader — portal-visibility gate + access.denied audit', () =
   })
 })
 
+describe('_portal loader: the sign-in wall shows the brand', () => {
+  async function settingsWith(
+    edit: (doc: import('@/lib/shared/design/schema').PortalDesign) => void
+  ) {
+    const [{ designView }, { defaultDesign }] = await Promise.all([
+      import('@/lib/shared/design/design-view'),
+      import('@/lib/shared/design/schema'),
+    ])
+    const doc = defaultDesign()
+    edit(doc)
+    return {
+      name: 'Acme Corp',
+      portalDesign: designView(doc, 2),
+      brandingData: { logoUrl: '/api/storage/legacy.png' },
+    }
+  }
+
+  async function gateFor(settings: unknown) {
+    mockEvaluateMyPortalAccessFn.mockResolvedValueOnce({
+      granted: false,
+      reason: 'unauthenticated',
+    })
+    const context = { ...makeContext(), settings }
+    const result = (await runLoader(context as never)) as {
+      gate: { workspaceName: string; logoUrl: string | null }
+    }
+    return result.gate
+  }
+
+  it('names the wall with the Brand kit title and shows the design’s icon', async () => {
+    const gate = await gateFor(
+      await settingsWith((doc) => {
+        doc.brand.logo.name = 'GitHub'
+        doc.brand.logo.mark.light = { key: 'logos/icon.png' }
+      })
+    )
+    expect(gate.workspaceName).toBe('GitHub')
+    expect(gate.logoUrl).toBe('/api/storage/logos/icon.png')
+  })
+
+  it('never carries the custom CSS a second time: the head and the settings already do', async () => {
+    const settings = await settingsWith((doc) => (doc.css = '.x { color: red }'))
+    expect(await gateFor(settings)).not.toHaveProperty('customCss')
+    mockEvaluateMyPortalAccessFn.mockResolvedValueOnce({ granted: true, reason: 'public' })
+    const page = (await runLoader({ ...makeContext(), settings } as never)) as Record<
+      string,
+      unknown
+    >
+    expect(page.gate).toBeNull()
+    expect(page).not.toHaveProperty('customCss')
+  })
+
+  it('falls back to the workspace name and logo without its own', async () => {
+    const gate = await gateFor(await settingsWith(() => {}))
+    expect(gate.workspaceName).toBe('Acme Corp')
+    expect(gate.logoUrl).toBe('/api/storage/legacy.png')
+  })
+})
+
 describe('_portal head: the brand reaches the tab and link previews', () => {
   type Head = (ctx: object) => {
     meta: Array<Record<string, string>>
@@ -258,5 +317,19 @@ describe('_portal head: the brand reaches the tab and link previews', () => {
     expect(content('og:image')).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=/)
     expect(content('twitter:card')).toBe('summary_large_image')
     expect(content('description')).not.toMatch(/feature request/i)
+  })
+
+  it('titles a missing page as not found, then the brand', async () => {
+    const settings = await settingsWithDesign()
+    const titleOf = (matches: Array<Record<string, unknown>>) =>
+      head({
+        loaderData: { gate: null, baseUrl: 'https://acme.test' },
+        matches: [{ context: { settings } }, ...matches],
+      }).meta.find((m) => 'title' in m)?.title
+    expect(titleOf([{ routeId: '/_portal', _notFound: true }])).toBe('Not found · GitHub')
+    expect(titleOf([{ routeId: '/_portal/b/$slug', status: 'notFound' }])).toBe(
+      'Not found · GitHub'
+    )
+    expect(titleOf([{ routeId: '/_portal', status: 'success' }])).toBe('GitHub')
   })
 })

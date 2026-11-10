@@ -135,6 +135,21 @@ describe('which blocks Home holds', () => {
     expect(placed(draft)).toEqual(placed(before))
     expect(added.grid.x).toBe(8)
   })
+
+  it('turns Home on with the block when asked, as Turn on Home does, and only then', () => {
+    const off = design()
+    off.nav.home.on = false
+    const count = off.pages.home.blocks.length
+    const plain = made({ op: 'block.add', type: 'contact' }, off).draft
+    expect(plain.nav.home.on).toBe(false)
+    const shown = made({ op: 'block.add', type: 'contact', turnOnHome: { gates: GATES } }, off)
+    expect(shown.draft.nav.home.on).toBe(true)
+    expect(shown.draft.pages.home.blocks).toHaveLength(count + 1)
+    // An empty Home gets the block alone, never the starters.
+    off.pages.home.blocks = []
+    const empty = made({ op: 'block.add', type: 'contact', turnOnHome: { gates: GATES } }, off)
+    expect(empty.draft.pages.home.blocks.map((b) => b.type)).toEqual(['contact'])
+  })
 })
 
 describe('the grid', () => {

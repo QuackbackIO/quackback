@@ -25,7 +25,7 @@ import {
   type WebsiteMatch,
   type WebsiteReading,
 } from './website-tool'
-import { mergeChanges, roleColour, type LoopApplyOutcome } from './style-ops'
+import { labelSubject, mergeChanges, roleColour, type LoopApplyOutcome } from './style-ops'
 import { readOverrideOp, setAsOverride } from '../override-ops'
 import {
   placeOf,
@@ -184,6 +184,8 @@ export function loopReply(input: {
   refused: ReadonlyArray<{ what: string; reason: string }>
   unmet: readonly CheckResult[]
   stopped: Extract<LoopResult, { ok: true }>['stopped']
+  /** The steps' own plain words for what applied, said in place of the changes' labels. */
+  words?: readonly string[]
   /** Parts of the request left alone because they are outside what was picked. */
   leftAlone?: readonly string[]
   /** How far the changes reached beyond the page shown, such as "on every page". */
@@ -202,7 +204,10 @@ export function loopReply(input: {
   const said =
     clean && answer?.reply.trim()
       ? oneSentence(answer.reply)
-      : `I changed ${[...new Set(done)].slice(0, 8).map(lowerFirst).join(', ')}.`
+      : `I changed ${(input.words?.length ? [...new Set(input.words)] : [...new Set(done)])
+          .slice(0, 8)
+          .map(lowerFirst)
+          .join(', ')}.`
   const reached = withReach(said, input.reach ?? '')
   const stoppedEarly = input.stopped === 'time' || input.stopped === 'failed'
   return plainWords(
@@ -237,6 +242,45 @@ export function loopNotes(input: {
     ...alsoNotes(input.applied, input.scope),
     ...new Set(input.own),
   ].map(plainWords)
+}
+
+/** Whether a change's label is what a refusal named: the same thing, set after all. */
+function settles(label: string, what: string): boolean {
+  const lower = what.toLowerCase()
+  return (
+    label.toLowerCase() === lower ||
+    labelSubject(label) === labelSubject(what) ||
+    label.toLowerCase().startsWith(`${lower}: `)
+  )
+}
+
+/**
+ * Adds a step's own words for each operation and style that applied (not
+ * refused, left alone or already so) to `words`, the last for each thing set.
+ */
+function saysOf(
+  registry: StyleRegistry,
+  answer: AgentStepAnswer,
+  outcome: Pick<LoopApplyOutcome, 'refused' | 'already'>,
+  outside: readonly string[],
+  words: Map<string, string>
+): void {
+  const missed = [...outcome.refused.map((each) => each.what), ...outside, ...outcome.already]
+  const put = (key: string, says: string) => {
+    words.delete(key)
+    if (says.trim()) words.set(key, says.trim())
+  }
+  for (const op of answer.ops) {
+    const text = [op.op, op.target, op.key, op.value].filter(Boolean).join(' ')
+    if (!missed.includes(text)) put(`op|${op.op}|${op.target}|${op.key}`, op.says)
+  }
+  for (const style of answer.styles) {
+    const named = targetWords(registry, style)
+    const missing = missed.some(
+      (what) => what === named || what.startsWith(`${named}: ${style.property} `)
+    )
+    if (!missing) put(`style|${targetKey(style)}|${style.property}`, style.says)
+  }
 }
 
 const uniqueTargets = (targets: readonly StyleTarget[]) => {
@@ -314,6 +358,37 @@ function overrideStyles(
   })
 }
 
+/** The phrases set apart in the design's titles: Home's and the feedback page's headlines, and the other pages'. */
+function titleMarks(design: PortalDesign): string {
+  const { pages } = design
+  return JSON.stringify([
+    pages.home.headline?.accent ?? null,
+    pages.feedback.headline?.accent ?? null,
+    Object.entries(pages.titles ?? {}).map(([page, title]) => [page, title?.accent ?? null]),
+  ])
+}
+
+/** What draws the headline's own colour, beside the phrase a mark sets apart. */
+const headlineColour = (design: PortalDesign) =>
+  JSON.stringify([
+    design.brand.fonts.headlineColour ?? null,
+    design.style?.headline ?? null,
+    design.styleDark?.headline ?? null,
+    design.tune?.headline?.colour ?? null,
+  ])
+
+/**
+ * Whether the request set a phrase of a title apart and left the headline's
+ * own colour as it was: the drawn headline then keeps its colour, and only
+ * the phrase takes the mark's, which no reading of the headline measures.
+ */
+const phraseSetApart = (before: PortalDesign, now: PortalDesign) =>
+  titleMarks(before) !== titleMarks(now) && headlineColour(before) === headlineColour(now)
+
+/** A check of the headline's colour, which says nothing of a phrase set apart; readable still holds. */
+const headlineColourCheck = (check: StyleCheck) =>
+  check.element === 'headline' && check.property === 'color' && check.expect !== 'readable'
+
 const needsBefore = (check: StyleCheck) =>
   (['darker', 'lighter', 'more', 'less'].includes(check.expect) &&
     (check.value === 'before' || check.state === 'base')) ||
@@ -349,6 +424,11 @@ export async function runEditLoop(input: {
   const lists: AppliedDesignChange[][] = []
   const refused: Array<{ what: string; reason: string }> = []
   const done: string[] = []
+  // The step each refusal and each change came from, so a refusal a later step put right goes.
+  const refusedAt: number[] = []
+  const doneAt: Array<{ step: number; label: string }> = []
+  // The steps' own words for what applied, the last for each thing set, for the reply.
+  const words = new Map<string, string>()
   const leftAlone: string[] = []
   const own: string[] = []
   let design = input.design
@@ -424,8 +504,11 @@ export async function runEditLoop(input: {
       design = reply.design
       lists.push(reply.outcome.applied)
       refused.push(...reply.outcome.refused)
+      refusedAt.push(...reply.outcome.refused.map(() => step))
       done.push(...reply.outcome.done)
+      doneAt.push(...reply.outcome.done.map((label) => ({ step, label })))
       const outside = reply.outcome.outOfScope ?? []
+      if (reply.outcome.done.length) saysOf(registry, answer, reply.outcome, outside, words)
       leftAlone.push(...outside)
       own.push(...(reply.outcome.notes ?? []))
       // read_website and match_website: once a site, whatever the model asks.
@@ -438,6 +521,11 @@ export async function runEditLoop(input: {
         else {
           deps.progress?.(`Reading ${toRead}`)
           const got = await deps.readWebsite(answer.read_website)
+          // Stopped while the site was read: nothing it brought back is used.
+          if (input.signal?.aborted) {
+            stopped = 'stopped'
+            break
+          }
           readSites.set(toRead, got)
           website.push(readingText(got.reading))
           capture = got.capture
@@ -452,6 +540,15 @@ export async function runEditLoop(input: {
         matchedSites.add(toMatch)
         deps.progress?.(`Matching ${toMatch}`)
         const matched = await deps.matchWebsite(answer.match_website)
+        // Stopped during the match: a match that saved keeps its changes, with their Undo.
+        if (input.signal?.aborted) {
+          if (matched.design) {
+            design = matched.design
+            lists.push(matched.applied)
+          }
+          stopped = 'stopped'
+          break
+        }
         website.push(matchText(matched.match))
         if (matched.design) {
           design = matched.design
@@ -492,7 +589,14 @@ export async function runEditLoop(input: {
       picture = answer.look && deps.picture ? await deps.picture() : null
       const readMs = now() - readStart
       // What was set for phones only is not on the page as read, at full width: not measured.
+      const marked = phraseSetApart(input.design, design)
       const results = checks.map((check): CheckResult => {
+        if (marked && headlineColourCheck(check))
+          return {
+            check,
+            ok: null,
+            saw: `${targetWords(registry, check)}: the phrase set apart takes the mark's colour and the rest keeps the headline's, so the headline's colour is not measured`,
+          }
         const key = `${check.element}|${check.property}`
         if (phoneOnly.has(key) && !allScreens.has(key))
           return {
@@ -548,12 +652,33 @@ export async function runEditLoop(input: {
   }
 
   const applied = mergeChanges(input.design, design, lists)
+  // What a later step restated is said once, as it ended, as Show changes says it.
+  const labelsOf = (changes: readonly AppliedDesignChange[]) =>
+    changes.flatMap((change) => (change.label ?? '').split('; ').filter(Boolean))
+  const labelled = new Set(labelsOf(lists.flat()))
+  const kept = new Set(labelsOf(applied))
+  const stood = done.filter((label) => !labelled.has(label) || kept.has(label))
+  // A refusal a later step put right is not said: what was asked is done.
+  const standing = refused.filter(
+    (each, at) =>
+      !doneAt.some((later) => later.step > refusedAt[at]! && settles(later.label, each.what))
+  )
   const scope = input.pick?.scope ?? 'site'
   const reach = reachClause(design, applied, {
     scope,
     ...(input.pick?.page ? { page: input.pick.page } : {}),
   })
-  const said = loopReply({ answer, applied, done, refused, unmet, stopped, leftAlone, reach })
+  const said = loopReply({
+    answer,
+    applied,
+    done: stood,
+    words: [...words.values()],
+    refused: standing,
+    unmet,
+    stopped,
+    leftAlone,
+    reach,
+  })
   return {
     ok: true,
     // A match says what it did; what the steps added is under Show changes.
@@ -562,8 +687,8 @@ export async function runEditLoop(input: {
     applied,
     steps: records,
     unmet,
-    refused,
-    notes: loopNotes({ unmet, refused, leftAlone, applied, own, scope }),
+    refused: standing,
+    notes: loopNotes({ unmet, refused: standing, leftAlone, applied, own, scope }),
     stopped,
     ms: now() - started,
   }

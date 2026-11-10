@@ -64,7 +64,7 @@ import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
-import { PasswordResetEmail } from './templates/password-reset'
+import { PasswordResetEmail, passwordResetSubject } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 import {
   SendingDomainAttentionEmail,
@@ -871,7 +871,9 @@ export async function sendSignupNotAllowedEmail(
   return sendEmail({
     brand: params.brand,
     to,
-    subject: 'About your Quackback sign-in request',
+    subject: workspaceName?.trim()
+      ? `About your ${workspaceName.trim()} sign-in request`
+      : 'About your sign-in request',
     react: SignupNotAllowedEmail({ workspaceName, logoUrl }),
     emailType: 'SignupNotAllowedEmail',
   })
@@ -884,6 +886,8 @@ export async function sendSignupNotAllowedEmail(
 interface SendPasswordResetParams {
   to: SecureRecipient
   resetLink: string
+  /** The workspace's name for the subject and logo; left out, the email names no one. */
+  workspaceName?: string
   logoUrl?: string
   /** The workspace's brand; absent keeps Quackback gold. */
   brand?: EmailBrand
@@ -892,14 +896,14 @@ interface SendPasswordResetParams {
 export async function sendPasswordResetEmail(
   params: SendPasswordResetParams
 ): Promise<EmailResult> {
-  const { to, resetLink, logoUrl } = params
+  const { to, resetLink, logoUrl, workspaceName } = params
 
   log.debug('sending password reset email')
   return sendEmail({
     brand: params.brand,
     to,
-    subject: 'Reset your Quackback password',
-    react: PasswordResetEmail({ resetLink, logoUrl }),
+    subject: passwordResetSubject(workspaceName),
+    react: PasswordResetEmail({ resetLink, logoUrl, workspaceName }),
     emailType: 'PasswordResetEmail',
     preview: { resetLink },
   })
@@ -1282,11 +1286,14 @@ export async function sendConversationClosedEmail(params: {
   inReplyTo?: string
   references?: string[]
   conversationId?: string | null
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }): Promise<EmailResult> {
   const subject =
     conversationReplySubject(params.conversationSubject) ??
     `Re: your conversation with ${params.workspaceName}`
   return sendEmail({
+    brand: params.brand,
     to: params.to,
     subject,
     react: ConversationClosedEmail({
@@ -1317,11 +1324,14 @@ export async function sendConversationAutoAckEmail(params: {
   references?: string[]
   from?: SendingIdentity
   conversationId?: string | null
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }): Promise<EmailResult> {
   const subject =
     conversationReplySubject(params.conversationSubject) ??
     `Re: your message to ${params.workspaceName}`
   return sendEmail({
+    brand: params.brand,
     to: params.to,
     subject,
     react: ConversationReplyEmail({

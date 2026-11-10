@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { usePreviewPosting } from '@/components/admin/settings/branding/use-preview-posting'
 import type { PortalPreviewProps } from '@/components/admin/settings/branding/portal-preview'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
-import { PAGE_NAMES, pagePath, type DesignerPage } from '@/lib/shared/design/outline'
+import { PAGE_NAMES, type DesignerPage } from '@/lib/shared/design/outline'
+import { canvasSrc } from '@/lib/shared/design/canvas-src'
+
+export { canvasSrc }
 import type { CanvasVisitor } from '@/lib/shared/design/designer-frame'
 import { isMenuTarget, type MenuTarget } from '@/lib/shared/design/menu-actions'
-import { samplePath, type SamplePage } from '@/lib/shared/design/sample-pages'
+import type { SamplePage } from '@/lib/shared/design/sample-pages'
 import { isWordsDoc, type WordsDoc } from '@/lib/shared/design/rich-words'
 import { readWordsField, wordsKindOf, wordsLimitOf } from '@/lib/shared/design/headline-words'
 import { checkedWords } from '@/lib/shared/design/words-schema'
@@ -15,42 +18,6 @@ import { PHONE_TINT } from './properties/phone-mode'
 /** The widths a visitor's browser lays the portal out at: desktop, tablet and phone. */
 export const CANVAS_WIDTHS = { desktop: 1280, tablet: 768, phone: 390 } as const
 export type CanvasSize = keyof typeof CANVAS_WIDTHS
-
-/**
- * The address the canvas loads: the page as a preview, in the theme and
- * language asked for, signed in or out; or the page's sample.
- */
-export function canvasSrc({
-  page,
-  theme,
-  locale,
-  sort,
-  postPath = null,
-  visitor = 'in',
-  sample = null,
-}: {
-  page: DesignerPage
-  theme: 'light' | 'dark'
-  locale: string
-  sort: 'trending' | 'top' | 'new'
-  /** The item the page shows, such as the post on the post page. */
-  postPath?: string | null
-  visitor?: CanvasVisitor
-  /** The page drawn from sample content instead. */
-  sample?: SamplePage | null
-}): string {
-  const search = new URLSearchParams({ theme, preview: 'true', lang: locale, designer: '1' })
-  // A sample is served to the designer alone, so it is drawn for them as themselves.
-  if (sample) return `${samplePath(sample)}?${search}`
-  // The root shows Home whatever the saved design leads with.
-  if (page === 'home') search.set('page', 'home')
-  if (page === 'feedback') search.set('sort', sort)
-  if (visitor === 'out') search.set('visitor', 'out')
-  // An item can carry its own search, such as a board on the feed.
-  const [path, own] = pagePath(page, postPath).split('?') as [string, string | undefined]
-  for (const [name, value] of new URLSearchParams(own ?? '')) search.set(name, value)
-  return `${path}?${search}`
-}
 
 /** A path the frame says it is at: the portal's own, never another site's. */
 function framePath(value: unknown): string | null {
@@ -122,6 +89,9 @@ export function framedWords(
     : null
 }
 
+/** No structural draft: the canvas draws everything, the welcome message too, from the design. */
+export const NO_STRUCTURE: PortalPreviewDraft = {}
+
 /**
  * The page being designed, in a same-origin frame laid out at a true width
  * and scaled down to fit. The draft travels in by message; clicks, the
@@ -148,6 +118,7 @@ export function DesignerCanvas({
   onHover,
   onMenu,
   onMenuHover,
+  onContext,
   onWords,
   onKey,
   onEscape,
@@ -155,6 +126,7 @@ export function DesignerCanvas({
   onLocation,
   layer,
   skeleton,
+  untilDrawn = false,
 }: {
   page: DesignerPage
   /** The item the page shows, such as the post on the post page. */
@@ -188,6 +160,12 @@ export function DesignerCanvas({
   onMenu?: (menu: MenuTarget, how: 'click' | 'rename', target?: Element | null) => void
   /** The menu item the pointer is over, or null. */
   onMenuHover?: (menu: MenuTarget | null) => void
+  /**
+   * A right-click on the page, not on the menu: the block under it and the
+   * element there, as a click names them, and where it was in the builder's
+   * window, to open the actions there.
+   */
+  onContext?: (section: string | null, target: Element | null, at: { x: number; y: number }) => void
   onWords: (field: string, value: WordsDoc | string) => void
   onKey: (key: 'undo' | 'redo') => void
   /** An Escape the page did not take: to leave Preview, or to let go of what is picked. */
@@ -200,6 +178,8 @@ export function DesignerCanvas({
   layer?: (canvas: CanvasFrame) => ReactNode
   /** Shapes of the page's parts, drawn until the frame says its page is ready. */
   skeleton?: ReactNode
+  /** Keeps the skeleton until the frame says it drew the design given, not the published one. */
+  untilDrawn?: boolean
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   // The frame element itself, for the layer: a new one each time the page loads afresh.
@@ -240,6 +220,8 @@ export function DesignerCanvas({
 
   // The frame that said its page is ready, by its key: a new page loads, and is not, until it says so.
   const [readyKey, setReadyKey] = useState<string | null>(null)
+  // The frame that drew the design it was given, by its key.
+  const [drawnKey, setDrawnKey] = useState<string | null>(null)
   const frameKey = useRef('')
   const handlers = useRef({
     onSelect,
@@ -247,6 +229,7 @@ export function DesignerCanvas({
     onHover,
     onMenu,
     onMenuHover,
+    onContext,
     onWords,
     onKey,
     onEscape,
@@ -259,6 +242,7 @@ export function DesignerCanvas({
     onHover,
     onMenu,
     onMenuHover,
+    onContext,
     onWords,
     onKey,
     onEscape,
@@ -274,6 +258,7 @@ export function DesignerCanvas({
         return
       const message = event.data as Record<string, unknown> | null
       if (message?.type === 'quackback:preview-ready') setReadyKey(frameKey.current)
+      if (message?.type === 'quackback:preview-drawn') setDrawnKey(frameKey.current)
       const menu = isMenuTarget(message?.menu) ? message.menu : null
       // The element at the point the frame names, read from its own page.
       const target =
@@ -293,6 +278,23 @@ export function DesignerCanvas({
           target
         )
         handlers.current.onMenuHover?.(menu)
+      } else if (message?.type === 'quackback:preview-context') {
+        const section = typeof message.section === 'string' ? message.section : null
+        // A menu item's actions are its click menu.
+        if (menu && handlers.current.onMenu) handlers.current.onMenu(menu, 'click', target)
+        else if (
+          handlers.current.onContext &&
+          typeof message.x === 'number' &&
+          typeof message.y === 'number'
+        ) {
+          const frame = iframeRef.current!
+          const box = frame.getBoundingClientRect()
+          const scale = frame.offsetWidth ? box.width / frame.offsetWidth : 1
+          handlers.current.onContext(section, target, {
+            x: box.left + message.x * scale,
+            y: box.top + message.y * scale,
+          })
+        }
       } else if (message?.type === 'quackback:preview-rename') {
         if (menu) handlers.current.onMenu?.(menu, 'rename')
       } else if (message?.type === 'quackback:preview-words') {
@@ -324,12 +326,15 @@ export function DesignerCanvas({
   const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample })
   const key = `${src}:${refreshKey}:${trying}`
   frameKey.current = key
-  const ready = readyKey === key
+  const ready = readyKey === key && (!untilDrawn || drawnKey === key)
   // A page that never says it is ready (an error, say) is shown once it has loaded a while.
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
   useEffect(() => {
     if (loadedKey !== key || ready) return
-    const timer = setTimeout(() => setReadyKey(key), LOADED_GRACE_MS)
+    const timer = setTimeout(() => {
+      setReadyKey(key)
+      setDrawnKey(key)
+    }, LOADED_GRACE_MS)
     return () => clearTimeout(timer)
   }, [loadedKey, key, ready])
   return (

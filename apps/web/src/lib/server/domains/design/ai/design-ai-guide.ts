@@ -205,7 +205,7 @@ function guideLines(
     ],
     [
       ['pages.roadmap'],
-      `The Roadmap page; leave a field out for its usual look. pages.roadmap.board: ${DESIGN_OPTIONS.roadmapBoard.join(', ')} (a column per status, or one list grouped by status); pages.roadmap.votes: true or false (the vote box on its cards).`,
+      `The Roadmap page; leave a field out for its usual look. pages.roadmap.board: ${DESIGN_OPTIONS.roadmapBoard.join(', ')} (a column per status, or one list grouped by status). Its cards always show votes.`,
     ],
     [
       ['pages.post'],
@@ -323,28 +323,28 @@ export const OPS_EXAMPLES: Array<{ request: string; picked?: string; answer: Ops
     },
   },
   {
-    request: 'Call Feedback “Ideas” in the menu and hide the changelog',
+    request: 'Call Feedback “Posts” in the menu and hide the changelog',
     answer: {
-      reply: 'The menu now says Ideas, and the changelog is out of it.',
+      reply: 'The menu now says Posts, and the changelog is out of it.',
       outOfScope: false,
       ops: [
         op(
-          { op: 'menu', target: 'feedback', key: 'rename', value: 'Ideas' },
-          'Feedback to Ideas in the menu'
+          { op: 'menu', target: 'feedback', key: 'rename', value: 'Posts' },
+          'Feedback to Posts in the menu'
         ),
         op({ op: 'menu', target: 'changelog', key: 'hide' }, 'the changelog out of the menu'),
       ],
     },
   },
   {
-    request: 'Use our amber #b45309, and title the feedback page Ideas welcome',
+    request: 'Use our amber #b45309, and title the feedback page Feedback welcome',
     answer: {
-      reply: 'The brand colour is now amber and the feedback page reads Ideas welcome.',
+      reply: 'The brand colour is now amber and the feedback page reads Feedback welcome.',
       outOfScope: false,
       ops: [
         op({ op: 'theme', key: 'accent', value: '#b45309' }, 'the brand colour to amber'),
         op(
-          { op: 'words', target: 'feedback', key: 'title', value: 'Ideas welcome' },
+          { op: 'words', target: 'feedback', key: 'title', value: 'Feedback welcome' },
           'the feedback headline'
         ),
       ],
@@ -393,7 +393,7 @@ export const OPS_EXAMPLES: Array<{ request: string; picked?: string; answer: Ops
     request: 'Make this one wider and a little smaller headline',
     picked: 'Top posts (ideas) picked; the headline is 48px now',
     answer: {
-      reply: 'I widened Top posts. The headline belongs to the hero, so I left it alone.',
+      reply: 'I widened Top posts; the headline belongs to the hero, so I left it alone.',
       outOfScope: true,
       ops: [op({ op: 'resize', target: 'ideas', value: 'wider' }, 'top posts wider')],
     },
@@ -421,7 +421,7 @@ export const OPS_RULES = `Operations (${OP_KINDS.join(', ')}):
 - background: target "site" for every page, or one page (home, feedback, roadmap, changelog, help, support, status, post) for that page only; key the kind (solid, tint, gradient, pattern, image), reset (a page follows every page again) or dark (dark mode's own: value a background with its kind, or "auto" to work it out from light); value its settings as JSON, such as {"colour":"accent","strength":"soft"}; settings left out keep theirs. "The page" or "the background" means every page (target "site"), whatever page is shown; use one page only when the person names it or says "this page only". Only a person uploads an image: with one uploaded you may change how it shows, never add one.
 - menu: target a menu item by its id or label; key rename (value the new name), hide, show, left, right, first, last, land (make it the first page visitors see), remove (a link), or addlink (target the link's label, value an address the person gave).
 ${OVERRIDE_RULE}
-Marks: a title (a page's headline) takes ${HEADLINE_MARKS}. Write the whole title with the mark, its words exactly as "Headlines now" shows them, such as "make 'together' the accent" -> {"op":"words","target":"home","key":"title","value":"Build it [together]{accent}"}; to move a mark or change its look, write the title with the new one; to remove it, write the title with no mark. A lighter second half is a two-tone headline: the later half of its words, counted, such as "Share the ideas [that shape what we build]{lighter}" (four words of eight), never its last word alone. Subtitles, block headings, prompt, submit and empty are plain words with no marks. Rich words (a Welcome block's body, set with set, and the feedback page's welcome) are markdown: ${RICH_MARKS}; write all of the words with every mark they have now (bold, italics, links, colours, headings and alignment, as "Rich words now" shows them), changing only what is asked: colouring one phrase keeps the colours others have. A link only to an address the person gave, never one made up.
+Marks: a title (a page's headline) takes ${HEADLINE_MARKS}. Write the whole title with the mark, its words exactly as "Headlines now" shows them, such as "make 'together' the accent" -> {"op":"words","target":"home","key":"title","value":"Build it [together]{accent}"}; to move a mark or change its look, write the title with the new one; to remove it, write the title with no mark. A mark is for a phrase within the title, never the whole title: the whole headline in the brand colour is {"op":"theme","key":"headlineColour","value":"accent"}. A lighter second half is a two-tone headline: the later half of its words, counted, such as "Share the posts [that shape what we build]{lighter}" (four words of eight), never its last word alone. Subtitles, block headings, prompt, submit and empty are plain words with no marks. Rich words (a Welcome block's body, set with set, and the feedback page's welcome) are markdown: ${RICH_MARKS}; write all of the words with every mark they have now (bold, italics, links, colours, headings and alignment, as "Rich words now" shows them), changing only what is asked: colouring one phrase keeps the colours others have. A link only to an address the person gave, never one made up.
 Places and sizes are words, never coordinates. Boards, roadmaps and help topics are chosen by their names; never write an id the context does not give. Never invent a link or a file. Change only what the request is about. If what is asked is already so, make no operations and say so. If no operation does what is asked, make none and say what can be done instead. People call the band the hero: say hero.`
 
 /** What Quackback AI is told for a request made of operations. */

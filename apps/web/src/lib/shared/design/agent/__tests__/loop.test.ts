@@ -286,9 +286,73 @@ describe('the edit loop', () => {
     if (!result.ok) throw new Error(result.message)
     expect(step).toHaveBeenCalledTimes(3)
     expect(result.stopped).toBe('steps')
-    // One sentence; what did not come out as asked is under Show changes.
-    expect(result.reply).toBe('I changed main buttons on hover: background periwinkle.')
+    // One sentence in the step's own words, never the undo label; what did not come out
+    // as asked is under Show changes.
+    expect(result.reply).toBe('I changed buttons darker on hover.')
     expect(result.notes).toContain('Some of it did not come out as asked, so ask again to finish.')
+  })
+
+  it('says only the last value a field was set to, in the reply and under Show changes', async () => {
+    const original = start()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({
+          plan: 'Try',
+          styles: [{ ...hoverStyle('#c7d2fe'), says: 'buttons pale on hover' }],
+        }),
+        answer({
+          plan: 'Deeper',
+          styles: [{ ...hoverStyle('#312e81'), says: 'buttons deep indigo on hover' }],
+        }),
+      ],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+      budget: { steps: 2, ms: 60_000 },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.reply).toBe('I changed buttons deep indigo on hover.')
+    expect(result.applied.map((c) => c.label)).toEqual([
+      'Main buttons on hover: background #312e81',
+    ])
+  })
+
+  it('drops a refusal a later step put right, and says the step’s own reply', async () => {
+    const original = start()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({ plan: 'Try', styles: [hoverStyle('not a colour')] }),
+        answer({
+          plan: 'Again',
+          styles: [hoverStyle('#312e81')],
+          done: true,
+          reply: 'Buttons now turn deep indigo on hover.',
+        }),
+      ],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+      budget: { steps: 2, ms: 60_000 },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(step.mock.results[0]).toBeDefined()
+    // The first step's refusal was real; the second set the same thing.
+    expect((await step.mock.results[0]!.value).outcome.refused).not.toEqual([])
+    expect(result.refused).toEqual([])
+    expect(result.notes.some((note) => /left the rest|could not do the rest/.test(note))).toBe(
+      false
+    )
+    expect(result.reply).toBe('Buttons now turn deep indigo on hover.')
   })
 
   it('starts no step the time budget cannot fit', async () => {
@@ -561,6 +625,103 @@ describe('the edit loop', () => {
     expect(asked[1]!.readings[0]!.target).toBe('Main buttons')
     expect(asked[1]!.readings[0]!.values.background).toBeDefined()
     expect(result.ok && result.reply).toBe('They are already so.')
+  })
+})
+
+describe('the edit loop, a phrase of the headline set apart', () => {
+  const titled = () => {
+    const d = start()
+    d.pages.home.headline = { title: { en: 'Help shape what Acme grows into' }, subtitle: {} }
+    return portalDesign.parse(d)
+  }
+  const isAccent = {
+    element: 'headline' as const,
+    state: 'base' as const,
+    block: '',
+    target: '',
+    property: 'color' as const,
+    expect: 'is' as const,
+    value: 'accent',
+  }
+
+  it('never holds the whole headline to the colour of the words set apart', async () => {
+    const original = titled()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({
+          plan: 'Set “grows” apart in the brand colour',
+          ops: [
+            {
+              op: 'words',
+              target: 'home',
+              key: 'title',
+              value: 'Help shape what Acme [grows]{accent} into',
+              says: '“grows” in the brand colour',
+            },
+          ],
+          checks: [isAccent],
+          done: true,
+          reply: '“grows” is now in the brand colour.',
+        }),
+        answer({
+          plan: 'Colour the whole headline',
+          styles: [
+            { ...hoverStyle('accent'), element: 'headline', state: 'base', property: 'color' },
+          ],
+          done: true,
+          reply: 'The headline is in the brand colour.',
+        }),
+      ],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+    })
+    if (!result.ok) throw new Error(result.message)
+    // The headline itself is drawn in the text colour: no step is sent to correct that.
+    expect(step).toHaveBeenCalledTimes(1)
+    expect(result.stopped).toBe('done')
+    expect(result.steps[0]!.checks.map((c) => c.ok)).not.toContain(false)
+    expect(result.design.style?.headline).toBeUndefined()
+    expect(result.reply).toBe('“grows” is now in the brand colour.')
+  })
+
+  it('still measures the headline’s own colour where a step sets it', async () => {
+    const original = titled()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({
+          plan: 'Set “grows” apart, and the headline in rust',
+          ops: [
+            {
+              op: 'words',
+              target: 'home',
+              key: 'title',
+              value: 'Help shape what Acme [grows]{accent} into',
+              says: '',
+            },
+            { op: 'theme', target: '', key: 'tune.headline.colour', value: '#7c2d12', says: '' },
+          ],
+          checks: [isAccent],
+          done: true,
+        }),
+      ],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+      budget: { steps: 1, ms: 60_000 },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.steps[0]!.checks.map((c) => c.ok)).toEqual([false])
   })
 })
 

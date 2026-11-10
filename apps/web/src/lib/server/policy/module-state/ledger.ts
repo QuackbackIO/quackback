@@ -1489,4 +1489,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'patches to state it keeps editing. It holds configuration only, no drafts or patches; ' +
       'each history store keeps its own steps, so sharing the instance shares no workspace data.',
   },
+  {
+    file: 'apps/web/src/lib/shared/design/rebase.ts',
+    name: 'immer',
+    category: 'process-lifetime',
+    reason:
+      'An Immer instance configured not to freeze drafts, so a reply the server saved can be put ' +
+      'on top of the draft as it is now. It holds configuration only, no drafts or patches; each ' +
+      'call works on the designs it is given, so sharing the instance shares no workspace data.',
+  },
 ]
