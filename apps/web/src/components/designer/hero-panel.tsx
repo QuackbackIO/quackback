@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { ChevronRightIcon, XMarkIcon } from '@heroicons/react/16/solid'
 import {
   BandArtDrawing,
@@ -71,10 +71,17 @@ const quiet =
   'rounded text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
 
 /** A look as a small drawing: its colour, with its art or its panel where it has one. */
-function LookDrawing({ look }: { look: BandLook }) {
+function LookDrawing({ look, colours }: { look: BandLook; colours: CSSProperties }) {
   const { hero: band, heroArt, heroShape } = look.fields
   return (
-    <span className={cn('relative block h-full w-full', heroShape === 'inset' && 'px-1 pt-0.5')}>
+    <span
+      data-look-drawing=""
+      style={colours}
+      className={cn(
+        'relative block h-full w-full bg-background',
+        heroShape === 'inset' && 'px-1 pt-0.5'
+      )}
+    >
       <span className={cn('block h-full overflow-hidden', heroShape === 'inset' && 'rounded-sm')}>
         <BandDrawing band={band} />
       </span>
@@ -208,6 +215,14 @@ export function HeroPanel({
     plainHere && HERO_WORDS.plainHere,
   ].filter(Boolean) as string[]
 
+  // The looks are drawn in the design's own colours, not the builder's.
+  const palette = design.brand.light
+  const lookColours = {
+    '--primary':
+      design.layout.heroColour === 'support' && palette.support ? palette.support : palette.accent,
+    '--foreground': palette.ink,
+    '--background': palette.background,
+  } as CSSProperties
   const look = (
     <PropertySection title={HERO_WORDS.look} help={lookHelp.join(' ') || undefined}>
       <div data-find={FIND.heroLook.id}>
@@ -221,7 +236,7 @@ export function HeroPanel({
               [
                 each.id,
                 HERO_LOOKS[each.id] ?? each.label,
-                <LookDrawing key={each.id} look={each} />,
+                <LookDrawing key={each.id} look={each} colours={lookColours} />,
               ] as const
           )}
           onChange={(value) => change('look', value)}

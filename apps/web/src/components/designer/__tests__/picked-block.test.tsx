@@ -116,7 +116,10 @@ describe('the picked block’s panel', () => {
 
   it('shows recently shipped posts in one step: the shipped statuses, newest first', () => {
     const { seen } = show('block-ideas0001', home())
-    fireEvent.click(screen.getByRole('button', { name: 'Use' }))
+    const button = screen.getByRole('button', { name: 'Show shipped posts' })
+    // A button that says what it does, at least 24px tall, not a bare word that reads as a value.
+    expect(button.className).toMatch(/(^|\s)(h-6|min-h-6)(\s|$)/)
+    fireEvent.click(button)
     const ideas = seen.design.pages.home.blocks[1] as { statusIds?: string[]; sort: string }
     expect(ideas.statusIds).toEqual([COMPLETE])
     expect(ideas.sort).toBe('new')

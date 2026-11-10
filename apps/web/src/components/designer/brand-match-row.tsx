@@ -34,6 +34,7 @@ import {
 import { cn } from '@/lib/shared/utils'
 import { useEscapeToDismiss } from './menu-coach-mark'
 import { PropertyRow } from './properties/properties-panel'
+import { Swatch } from './swatch'
 
 /** The row's words. */
 export const MATCH_ROW = {
@@ -403,13 +404,7 @@ function PickChip({
           className="size-4 rounded-sm border border-border object-contain"
         />
       )}
-      {pick === 'colour' && offer.colour && (
-        <span
-          aria-hidden="true"
-          className="size-3.5 rounded-[4px] border border-border"
-          style={{ background: offer.colour }}
-        />
-      )}
+      {pick === 'colour' && offer.colour && <Swatch colour={offer.colour} />}
       {MATCH_ROW.picks[pick]}
     </button>
   )

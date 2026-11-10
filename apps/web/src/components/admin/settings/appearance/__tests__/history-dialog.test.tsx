@@ -75,6 +75,34 @@ describe('HistoryDialog', () => {
     expect(rows[1]!.textContent).not.toContain('Sam Rivera')
   })
 
+  it('lines its actions up on every row, in one button style, and never cuts the time', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <HistoryDialog
+          open
+          onOpenChange={() => {}}
+          currentNumber={2}
+          onRestore={vi.fn()}
+          onCopy={vi.fn()}
+        />
+      </QueryClientProvider>
+    )
+    await screen.findByRole('button', { name: 'Restore version 1' })
+    const rows = screen.getAllByRole('listitem')
+    // The live row keeps the slot Restore takes on the others.
+    const slots = rows.map((row) => row.querySelector('[data-restore-slot]'))
+    expect(slots.every(Boolean)).toBe(true)
+    expect(new Set(slots.map((slot) => slot!.className)).size).toBe(1)
+    const copy = screen.getByRole('button', { name: 'Copy version 1 into the draft' })
+    const restore = screen.getByRole('button', { name: 'Restore version 1' })
+    expect(copy.className).toBe(restore.className)
+    for (const row of rows) {
+      const time = row.querySelector('[title] + span, .truncate ~ span')!
+      expect(time.closest('.truncate')).toBeNull()
+      expect(time.className).toContain('shrink-0')
+    }
+  })
+
   it('copies a version into the draft without publishing, and closes', async () => {
     const onCopy = vi.fn(async () => ({ ok: true as const }))
     const onRestore = vi.fn()

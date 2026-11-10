@@ -21,8 +21,36 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import { switchBackPortalDesignFn } from '@/lib/server/functions/portal-design'
+
+/** The slot at a row's end that holds Restore or Live, kept on every row so the actions line up. */
+const RESTORE_SLOT = 'flex w-[4.5rem] shrink-0 justify-end'
+
+/**
+ * What a row is, who made it and when. The name gives way when space is
+ * short, never the time; a cut name says itself in full on hover.
+ */
+function Named({ name, by, at }: { name: string; by: string | null; at: Date | string }) {
+  const full = by ? `${name} · ${by}` : name
+  const format = useLocalDateFormatter()
+  return (
+    <span className="flex min-w-0 flex-1 items-baseline">
+      <span className="min-w-0 truncate" title={full}>
+        {name}
+        {by && <span className="text-muted-foreground">{` · ${by}`}</span>}
+      </span>
+      <span
+        className="shrink-0 whitespace-nowrap text-muted-foreground"
+        title={format(new Date(at), { dateStyle: 'medium', timeStyle: 'short' })}
+      >
+        {' · '}
+        <TimeAgo date={at} />
+      </span>
+    </span>
+  )
+}
 
 const SOURCE: Record<string, string> = {
   appearance: 'Appearance',
@@ -113,17 +141,14 @@ export function HistoryDialog({
             {versions.data?.map((version) => (
               <li key={version.id} className="flex items-center gap-3 px-3 py-2 text-[13px]">
                 <span className="w-10 shrink-0 font-medium tabular-nums">v{version.number}</span>
-                <span className="min-w-0 flex-1 truncate">
-                  {version.message ?? SOURCE[version.source] ?? version.source}
-                  <span className="text-muted-foreground">
-                    {version.publishedBy && ` · ${version.publishedBy}`}
-                    {' · '}
-                    <TimeAgo date={version.createdAt} />
-                  </span>
-                </span>
+                <Named
+                  name={version.message ?? SOURCE[version.source] ?? version.source}
+                  by={version.publishedBy}
+                  at={version.createdAt}
+                />
                 {onCopy && (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     onClick={async () => {
                       const outcome = await onCopy(
@@ -138,25 +163,28 @@ export function HistoryDialog({
                     Copy into draft
                   </Button>
                 )}
-                {version.number === currentNumber ? (
-                  <span className="text-xs text-muted-foreground">Live</span>
-                ) : (
-                  canPublish && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setConfirming({
-                          id: version.id as PortalDesignRevisionId,
-                          number: version.number,
-                        })
-                      }
-                      aria-label={`Restore version ${version.number}`}
-                    >
-                      Restore
-                    </Button>
-                  )
-                )}
+                {/* One slot on every row, so Copy into draft lines up whether or not Restore is there. */}
+                <span data-restore-slot="" className={RESTORE_SLOT}>
+                  {version.number === currentNumber ? (
+                    <span className="text-xs text-muted-foreground">Live</span>
+                  ) : (
+                    canPublish && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setConfirming({
+                            id: version.id as PortalDesignRevisionId,
+                            number: version.number,
+                          })
+                        }
+                        aria-label={`Restore version ${version.number}`}
+                      >
+                        Restore
+                      </Button>
+                    )
+                  )}
+                </span>
               </li>
             ))}
           </ul>
@@ -168,16 +196,9 @@ export function HistoryDialog({
               <ul className="max-h-60 divide-y divide-border overflow-y-auto rounded-lg border border-border">
                 {drafts.map((each) => (
                   <li key={each.id} className="flex items-center gap-3 px-3 py-2 text-[13px]">
-                    <span className="min-w-0 flex-1 truncate">
-                      {each.name}
-                      <span className="text-muted-foreground">
-                        {each.createdBy && ` · ${each.createdBy}`}
-                        {' · '}
-                        <TimeAgo date={each.createdAt} />
-                      </span>
-                    </span>
+                    <Named name={each.name} by={each.createdBy} at={each.createdAt} />
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
                       onClick={async () => {
                         if (!onCopySaved) return
@@ -189,6 +210,7 @@ export function HistoryDialog({
                     >
                       Copy into draft
                     </Button>
+                    <span aria-hidden="true" className={RESTORE_SLOT} />
                   </li>
                 ))}
               </ul>

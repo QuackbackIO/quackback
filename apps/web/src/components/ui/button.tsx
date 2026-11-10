@@ -20,8 +20,9 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // Disabled in dark mode, a muted fill: a dimmed brand fill still reads as a button to press.
         default:
-          'bg-primary text-primary-foreground hover:bg-primary/90 hover:brightness-94 active:bg-primary/85',
+          'bg-primary text-primary-foreground hover:bg-primary/90 hover:brightness-94 active:bg-primary/85 dark:disabled:bg-muted dark:disabled:text-muted-foreground',
         destructive:
           'bg-destructive text-white hover:bg-destructive/90 active:bg-destructive/85 focus-visible:ring-destructive',
         outline:

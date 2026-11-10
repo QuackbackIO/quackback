@@ -25,6 +25,7 @@ import { changeRows, type ChangeRow, type RowChange, type RowSide } from './chan
 import { HeroPhotoChip } from './hero-photo-chip'
 import type { StoredHero } from './use-image-upload'
 import type { DesignAiTurn } from './use-design-ai'
+import { Swatch } from '@/components/designer/swatch'
 
 /** Changes the draft, naming the change for undo when a name is given. */
 type Update = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -76,20 +77,9 @@ function RowValue({ side }: { side: RowSide }) {
   if (!side.swatch) return <span>{side.words}</span>
   return (
     <span className="inline-flex items-center gap-1">
-      <Swatch colour={side.swatch} />
+      <Swatch colour={side.swatch} className="size-3" />
       {side.words}
     </span>
-  )
-}
-
-function Swatch({ colour }: { colour: string }) {
-  return (
-    <span
-      data-swatch=""
-      aria-hidden="true"
-      className="size-3 rounded-sm border border-border"
-      style={{ background: colour }}
-    />
   )
 }
 
@@ -186,7 +176,7 @@ function StepResult({
                 <li key={each.key} className="flex flex-wrap items-center gap-x-1">
                   {each.row && 'text' in each.row ? (
                     <>
-                      {each.row.swatch && <Swatch colour={each.row.swatch} />}
+                      {each.row.swatch && <Swatch colour={each.row.swatch} className="size-3" />}
                       {each.row.text}
                     </>
                   ) : each.row ? (

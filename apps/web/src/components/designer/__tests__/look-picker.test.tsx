@@ -202,4 +202,17 @@ describe('HomeLayoutPicker', () => {
     update.mock.calls[0]![0](draft)
     expect(draft.pages.home.blocks[0]?.type).toBe('help_search')
   })
+
+  it('draws each layout as a small picture of its blocks, all the same height', () => {
+    render(<HomeLayoutPicker design={defaultDesign()} update={vi.fn()} gates={ALL_ON} />)
+    const drawings = [...document.querySelectorAll<HTMLElement>('[data-layout-drawing]')]
+    expect(drawings.length).toBeGreaterThan(1)
+    for (const drawing of drawings) {
+      expect(drawing.className).toContain('h-12')
+      const blocks = [...drawing.children] as HTMLElement[]
+      expect(blocks.length).toBeGreaterThan(0)
+      // Each block takes a share of the drawing, never a fixed sliver that can come to nothing.
+      for (const block of blocks) expect(block.style.height).toMatch(/%/)
+    }
+  })
 })

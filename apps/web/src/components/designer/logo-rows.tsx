@@ -24,6 +24,7 @@ import { KitImageTile } from './kit-image-tile'
 import { PropertyRow } from './properties/properties-panel'
 import { ScrubNumber } from './properties/scrub-number'
 import { THEME, WORDS, resetToValue } from './properties/words'
+import { Swatch } from './swatch'
 
 /** Changes the draft as one step, named for its undo where a name is given. */
 type Update = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -170,16 +171,6 @@ export function LogoHeightRow({ design, update }: { design: PortalDesign; update
         onChange={write}
       />
     </PropertyRow>
-  )
-}
-
-function Swatch({ colour }: { colour: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="size-3.5 shrink-0 rounded-[4px] border border-border"
-      style={{ background: colour }}
-    />
   )
 }
 

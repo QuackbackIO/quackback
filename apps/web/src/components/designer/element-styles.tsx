@@ -38,7 +38,7 @@ import {
   type StyleSheet,
   type StyleState,
 } from '@/lib/shared/design/style-tokens'
-import { Segmented } from './segmented'
+import { PropertyRow, PropertyTiles } from './properties/properties-panel'
 
 /** Where a sheet lives: the site's, or a Home block's own. */
 export interface StyleScope {
@@ -141,13 +141,14 @@ export function ElementStyleEditor({
         </div>
       )}
       {showStates && el.states.length > 1 && (
-        <Segmented
-          label="State"
-          value={state}
-          options={el.states.map((s) => [s, STATE_INFO[s].label] as const)}
-          onChange={setState}
-          rows={el.states.length > 4}
-        />
+        <PropertyRow label="State">
+          <PropertyTiles
+            label="State"
+            value={state}
+            options={el.states.map((s) => [s, STATE_INFO[s].label] as const)}
+            onChange={setState}
+          />
+        </PropertyRow>
       )}
       {preview && (
         <StylePreview design={design} element={element} state={state} blockId={scope.blockId} />
@@ -194,7 +195,7 @@ function Row({
             type="button"
             variant="ghost"
             size="icon"
-            className="ms-auto size-5"
+            className="ms-auto size-6"
             aria-label={`Clear ${label.toLowerCase()}`}
             onClick={onClear}
           >
@@ -297,7 +298,7 @@ export function StyleField({
       const gradient = typeof paint === 'object'
       return (
         <Row id={id} label={info.label} set={set} onClear={clear}>
-          <Segmented
+          <PropertyTiles
             label="Fill"
             value={gradient ? 'gradient' : 'colour'}
             options={[

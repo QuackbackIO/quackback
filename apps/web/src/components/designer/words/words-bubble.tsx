@@ -24,6 +24,7 @@ import {
 } from '@/lib/shared/words-editor/extensions'
 import { cn } from '@/lib/shared/utils'
 import { WORDS } from '../properties/words'
+import { Swatch } from '../swatch'
 
 const MOD =
   typeof navigator !== 'undefined' && /Mac|iP(hone|ad)/.test(navigator.platform) ? '⌘' : 'Ctrl+'
@@ -168,15 +169,6 @@ function MoreButton({ open, onPress }: { open: boolean; onPress: () => void }) {
   )
 }
 
-/** A brand colour as a round swatch. */
-const Swatch = ({ colour }: { colour: string }) => (
-  <span
-    aria-hidden="true"
-    className="size-3.5 rounded-full border border-foreground/15"
-    style={{ background: colour }}
-  />
-)
-
 /** Accent, Highlight and Lighter: one phrase per headline, so a new one moves it. */
 function HeadlineMarks({
   state,
@@ -231,7 +223,7 @@ function HeadlineMarks({
               pressed={(state.accentColour ?? 'accent') === role}
               onPress={() => onCommand({ type: 'accentColour', role })}
             >
-              <Swatch colour={colour} />
+              <Swatch colour={colour} className="rounded-full" />
             </BarButton>
           ))}
         </Row>
@@ -359,7 +351,7 @@ function RichMarks({
                 pressed={state.colour === null}
                 onPress={() => onCommand({ type: 'colour', role: null })}
               >
-                <Swatch colour="currentColor" />
+                <Swatch colour="currentColor" className="rounded-full" />
               </BarButton>
               {roles.map(({ role, name, colour }) => (
                 <BarButton
@@ -369,7 +361,7 @@ function RichMarks({
                   pressed={state.colour === role}
                   onPress={() => onCommand({ type: 'colour', role })}
                 >
-                  <Swatch colour={colour} />
+                  <Swatch colour={colour} className="rounded-full" />
                 </BarButton>
               ))}
             </>

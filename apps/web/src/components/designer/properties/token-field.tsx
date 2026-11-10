@@ -20,7 +20,9 @@ import type { BundledFontId } from '@/lib/shared/design/fonts'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { CanvasModeContext } from './canvas-mode'
 import { faceName, hexOf, type ColourToken, type FontToken } from './tokens'
+import { PropertyTiles, Tip } from './properties-panel'
 import { WORDS, linkTo } from './words'
+import { Swatch } from '../swatch'
 
 const isHex = (value: string | undefined): value is string => !!value && value.startsWith('#')
 
@@ -41,25 +43,6 @@ export function nearestToken(hex: string, tokens: readonly ColourToken[]): Colou
     }
   }
   return best
-}
-
-function Swatch({ light, dark }: { light: string; dark?: string }) {
-  const none = light === 'transparent'
-  return (
-    <span
-      aria-hidden="true"
-      data-swatch={dark ? 'half' : 'whole'}
-      className={cn(
-        'size-3.5 shrink-0 rounded-[4px] border border-border',
-        none && 'bg-[repeating-linear-gradient(45deg,var(--muted)_0_3px,var(--background)_3px_6px)]'
-      )}
-      style={
-        none
-          ? undefined
-          : { background: dark ? `linear-gradient(135deg, ${light} 50%, ${dark} 50%)` : light }
-      }
-    />
-  )
 }
 
 /**
@@ -129,12 +112,12 @@ export function TokenField({
           >
             {token ? (
               <>
-                <Swatch light={token.light} dark={darkShown} />
+                <Swatch colour={token.light} dark={darkShown} />
                 <span className="truncate">{token.name}</span>
               </>
             ) : isHex(shown) ? (
               <>
-                <Swatch light={shown} dark={darkShown} />
+                <Swatch colour={shown} dark={darkShown} />
                 <span className="font-mono text-[11px] uppercase">{shown}</span>
                 <LinkSlashIcon
                   className="size-3 shrink-0 text-muted-foreground"
@@ -148,7 +131,7 @@ export function TokenField({
         </PopoverTrigger>
         <PopoverContent align="start" className="w-64 space-y-3 p-3" aria-label={label}>
           <div className="flex items-center gap-2">
-            <Pair
+            <PropertyTiles
               label={`${label}: colours`}
               value={tab}
               options={[
@@ -158,7 +141,7 @@ export function TokenField({
               onChange={setTab}
             />
             {dark && (
-              <Pair
+              <PropertyTiles
                 label={`${label}: mode`}
                 value={mode}
                 options={[
@@ -166,7 +149,6 @@ export function TokenField({
                   ['dark', WORDS.dark],
                 ]}
                 onChange={setMode}
-                className="ms-auto"
               />
             )}
           </div>
@@ -177,22 +159,22 @@ export function TokenField({
               className="grid grid-cols-6 gap-1.5"
             >
               {tokens.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  aria-label={t.name}
-                  aria-pressed={editing.value === t.id}
-                  title={t.name}
-                  onClick={() => pick(t.id)}
-                  className={cn(
-                    'flex size-8 items-center justify-center rounded-md border focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
-                    editing.value === t.id
-                      ? 'border-foreground'
-                      : 'border-transparent hover:border-border'
-                  )}
-                >
-                  <Swatch light={mode === 'dark' ? (t.dark ?? t.light) : t.light} />
-                </button>
+                <Tip key={t.id} text={t.name}>
+                  <button
+                    type="button"
+                    aria-label={t.name}
+                    aria-pressed={editing.value === t.id}
+                    onClick={() => pick(t.id)}
+                    className={cn(
+                      'flex size-8 items-center justify-center rounded-md border focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+                      editing.value === t.id
+                        ? 'border-foreground'
+                        : 'border-transparent hover:border-border'
+                    )}
+                  >
+                    <Swatch colour={mode === 'dark' ? (t.dark ?? t.light) : t.light} />
+                  </button>
+                </Tip>
               ))}
             </div>
           ) : (
@@ -208,53 +190,16 @@ export function TokenField({
         </PopoverContent>
       </Popover>
       {back && (
-        <button
-          type="button"
-          onClick={() => onChange(back.id)}
-          className="min-h-6 truncate rounded py-1 text-[11px] leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-        >
-          {linkTo(back.name)}
-        </button>
+        <Tip text={linkTo(back.name)}>
+          <button
+            type="button"
+            onClick={() => onChange(back.id)}
+            className="min-h-6 truncate rounded py-1 text-[11px] leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          >
+            {linkTo(back.name)}
+          </button>
+        </Tip>
       )}
-    </div>
-  )
-}
-
-/** Two or three tabs side by side, as a radio group. */
-function Pair<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-  className,
-}: {
-  label: string
-  value: T
-  options: ReadonlyArray<readonly [T, string]>
-  onChange: (value: T) => void
-  className?: string
-}) {
-  return (
-    <div
-      role="radiogroup"
-      aria-label={label}
-      className={cn('flex gap-0.5 rounded-md bg-muted p-0.5', className)}
-    >
-      {options.map(([option, name]) => (
-        <button
-          key={option}
-          type="button"
-          role="radio"
-          aria-checked={value === option}
-          onClick={() => onChange(option)}
-          className={cn(
-            'h-6 rounded px-2 text-[11px] focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
-            value === option ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground'
-          )}
-        >
-          {name}
-        </button>
-      ))}
     </div>
   )
 }
@@ -348,13 +293,15 @@ export function FontField({
         </PopoverContent>
       </Popover>
       {linkBack && onChange && (
-        <button
-          type="button"
-          onClick={() => onChange(linkBack.id)}
-          className="min-h-6 truncate rounded py-1 text-[11px] leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-        >
-          {linkTo(linkBack.name)}
-        </button>
+        <Tip text={linkTo(linkBack.name)}>
+          <button
+            type="button"
+            onClick={() => onChange(linkBack.id)}
+            className="min-h-6 truncate rounded py-1 text-[11px] leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          >
+            {linkTo(linkBack.name)}
+          </button>
+        </Tip>
       )}
     </div>
   )

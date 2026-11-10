@@ -46,6 +46,7 @@ import { STYLE_CHOICES, WORDS } from './properties/words'
 import { Tag } from './tag'
 import { useNewParts } from './use-new-parts'
 import { layoutValue } from '@/lib/shared/design/defaults'
+import { IconButton } from './icon-button'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -296,17 +297,20 @@ function MenuRow({
         )}
       </button>
       {!link && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
+        <IconButton
           className="size-6 shrink-0"
           disabled={part.shown && stays}
-          title={part.shown && stays ? MENU_COPY.landsHere : undefined}
-          aria-label={`${part.shown ? WORDS.hide : WORDS.show} ${part.label}`}
+          // Hiding the page the menu lands on is not offered: it says why.
+          tip={
+            part.shown && stays
+              ? MENU_COPY.landsHere
+              : `${part.shown ? WORDS.hide : WORDS.show} ${part.label}`
+          }
+          label={`${part.shown ? WORDS.hide : WORDS.show} ${part.label}`}
           onClick={() => onAct(part.shown ? 'hide' : 'show')}
         >
           <Eye className="size-3.5" aria-hidden="true" />
-        </Button>
+        </IconButton>
       )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

@@ -290,6 +290,19 @@ describe('the picked element’s properties', () => {
     expect(screen.queryByRole('button', { name: /more actions$/ })).toBeNull()
   })
 
+  it('moves the screen chip with the arrow keys, one Tab stop', () => {
+    const onScreen = vi.fn()
+    mount(cta, home(), { onScreen })
+    const chip = within(screen.getByRole('radiogroup', { name: 'Editing' }))
+    const all = chip.getByRole('radio', { name: 'All screens' })
+    expect(all.tabIndex).toBe(0)
+    expect(chip.getByRole('radio', { name: 'Phone' }).tabIndex).toBe(-1)
+    all.focus()
+    fireEvent.keyDown(all, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(chip.getByRole('radio', { name: 'Phone' }))
+    expect(onScreen).toHaveBeenCalledWith('phone')
+  })
+
   it('tints its scope block on a phone, with the chip on Phone and the way back', () => {
     const onScreen = vi.fn()
     const { view } = mount(cta, home(), { screen: 'phone', onScreen })
@@ -420,11 +433,28 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     expect(box.labels.at(-1)).toBe('Post card: shadow, everywhere')
   })
 
-  it('folds a headline’s scale into its Size row', () => {
+  it('keeps a headline’s Text size a number, as every text element has it, and its scale a Style choice', () => {
     const { box } = mount(headline)
-    expect(screen.queryByRole('radiogroup', { name: 'Scale' })).toBeNull()
-    fireEvent.click(tiles('Text size').getByRole('radio', { name: 'Large' }))
+    expect(screen.queryByRole('radiogroup', { name: 'Text size' })).toBeNull()
+    expect((screen.getByLabelText('Text size') as HTMLInputElement).tagName).toBe('INPUT')
+    fireEvent.click(style().getByRole('radio', { name: 'Large' }))
     expect(box.design.brand.fonts.scale).toBe('large')
+  })
+
+  it('gives a headline the Capitals control every text element has; As written and Capitals pick the brand’s', () => {
+    const { box } = mount(headline)
+    const capitals = tiles('Capitals')
+    expect(capitals.getAllByRole('radio').map((radio) => radio.textContent)).toEqual([
+      'Aa',
+      'AA',
+      'aa',
+      'Ab',
+    ])
+    fireEvent.click(capitals.getByRole('radio', { name: 'AA' }))
+    expect(box.design.brand.fonts.headlineCase).toBe('upper')
+    expect(box.design.style?.headline?.base?.case).toBeUndefined()
+    fireEvent.click(tiles('Capitals').getByRole('radio', { name: 'aa' }))
+    expect(box.design.style?.headline?.base?.case).toBe('lower')
   })
 
   it('keeps the brand’s choices to every one of the kind; a one-off has the exact field only', () => {
@@ -446,7 +476,7 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     const design = home()
     design.tune = { headline: { size: 48 } }
     const { box, view } = mount(headline, design)
-    const size = () => screen.getByLabelText('Custom text size') as HTMLInputElement
+    const size = () => screen.getByLabelText('Text size') as HTMLInputElement
     expect(size().value).toBe('48')
     fireEvent.change(size(), { target: { value: '60' } })
     expect(box.design.tune).toEqual({ headline: { size: 60 } })
@@ -455,9 +485,7 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     expect(box.design.tune).toBeUndefined()
     expect(box.design.style).toBeUndefined()
     // Back to the theme's scale, not the 48 the match once wrote.
-    const scale = within(screen.getByRole('radiogroup', { name: 'Text size' }))
-    expect(scale.getByRole('radio', { name: 'Standard', checked: true })).toBeTruthy()
-    fireEvent.click(scale.getByRole('radio', { name: 'Custom' }))
+    expect(tiles('Scale').getByRole('radio', { name: 'Standard', checked: true })).toBeTruthy()
     expect(size().value).toBe('')
     expect(size().placeholder).not.toBe('48')
     expect(view.container.textContent).not.toContain('set exactly')
@@ -468,7 +496,7 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     design.tune = { headline: { size: 48 } }
     design.style = { headline: { base: { size: 60 } } }
     const { box } = mount(headline, design)
-    expect((screen.getByLabelText('Custom text size') as HTMLInputElement).value).toBe('60')
+    expect((screen.getByLabelText('Text size') as HTMLInputElement).value).toBe('60')
     fireEvent.click(screen.getByRole('button', { name: /^Reset to .* from brand$/ }))
     expect(box.design.tune).toBeUndefined()
     expect(box.design.style).toBeUndefined()
@@ -505,9 +533,9 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     design.brand.fonts.headlineColour = 'accent'
     const onFonts = vi.fn()
     const { box } = mount(headline, design, { onFonts })
-    expect(
-      tiles('Text colour').getByRole('radio', { name: 'Brand colour', checked: true })
-    ).toBeTruthy()
+    // The colour chip every text element has, on the brand's choice.
+    expect(screen.queryByRole('radiogroup', { name: 'Text colour' })).toBeNull()
+    expect(screen.getByRole('button', { name: /^Text colour: / })).toBeTruthy()
     // A summary of the brand's font, which opens the brand kit's fonts at the headline's slot.
     const font = style().getByRole('button', { name: /^Font: / })
     expect(style().queryByRole('combobox', { name: 'Font' })).toBeNull()
