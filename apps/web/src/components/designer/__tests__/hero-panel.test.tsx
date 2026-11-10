@@ -434,19 +434,13 @@ describe('More and the summary rows', () => {
 })
 
 describe('Title', () => {
-  it('shows only on the changelog and help, with what sits by their title', () => {
-    show(defaultDesign(), 'changelog')
-    const title = screen.getByRole('region', { name: 'Title' })
-    expect(within(title).getByRole('radiogroup', { name: 'Subscribe' })).toBeTruthy()
-    cleanup()
-    show(defaultDesign(), 'help')
-    expect(
-      within(screen.getByRole('region', { name: 'Title' })).getByRole('radiogroup', {
-        name: 'Search size',
-      })
-    ).toBeTruthy()
-    cleanup()
-    show(defaultDesign(), 'roadmap')
-    expect(screen.queryByRole('region', { name: 'Title' })).toBeNull()
+  it('leaves what sits by the title to the page’s own panel, its one writer', () => {
+    for (const page of ['changelog', 'help', 'roadmap'] as const) {
+      show(defaultDesign(), page)
+      expect(screen.queryByRole('region', { name: 'Title' })).toBeNull()
+      expect(screen.queryByRole('radiogroup', { name: 'Subscribe' })).toBeNull()
+      expect(screen.queryByRole('radiogroup', { name: 'Search size' })).toBeNull()
+      cleanup()
+    }
   })
 })
