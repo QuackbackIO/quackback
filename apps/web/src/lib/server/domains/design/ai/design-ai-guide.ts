@@ -393,7 +393,7 @@ export const OPS_EXAMPLES: Array<{ request: string; picked?: string; answer: Ops
     request: 'Make this one wider and a little smaller headline',
     picked: 'Top posts (ideas) picked; the headline is 48px now',
     answer: {
-      reply: 'I widened Top posts. The headline belongs to the hero, so I left it alone.',
+      reply: 'I widened Top posts; the headline belongs to the hero, so I left it alone.',
       outOfScope: true,
       ops: [op({ op: 'resize', target: 'ideas', value: 'wider' }, 'top posts wider')],
     },
