@@ -133,6 +133,32 @@ describe('reachOf', () => {
   })
 })
 
+describe('while words are edited in place', () => {
+  /** What the in-place editor does: hides the element and draws a copy of it just after. */
+  const editInPlace = (id: string) => {
+    const node = document.getElementById(id)!
+    const copy = node.cloneNode(false) as HTMLElement
+    copy.removeAttribute('id')
+    copy.id = `${id}-editing`
+    copy.setAttribute('data-qb-words-editing', '')
+    node.setAttribute('data-qb-words-hidden', '')
+    node.style.display = 'none'
+    node.after(copy)
+  }
+
+  it('counts the element once, not its editor too', () => {
+    const cta = at('cta')!.pick
+    editInPlace('cta')
+    expect(reachOf(document, cta)).toEqual({ page: 1, block: null })
+  })
+
+  it('finds the editor where the element is drawn, so its tag sits on it', () => {
+    const cta = at('cta')!.pick
+    editInPlace('cta')
+    expect(locatePick(document, cta, design, 'home')?.id).toBe('cta-editing')
+  })
+})
+
 describe('measuredValue', () => {
   it('reads a number an element is drawn with, in the property’s own unit', () => {
     const node = document.getElementById('cta')!
