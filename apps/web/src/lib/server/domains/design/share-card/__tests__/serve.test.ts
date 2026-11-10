@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { designView } from '@/lib/shared/design/design-view'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
-import {
-  portalShareImage,
-  type PortalHeadSettings,
-  type PortalHeadTemplates,
-} from '@/lib/shared/portal-head'
+import { portalShareImage, type PortalHeadTemplates } from '@/lib/shared/portal-head'
 import { decodePng, encodePng } from '../../extract/png'
 import { serveBrandImage, type BrandImageDeps } from '../serve'
 
@@ -34,8 +30,12 @@ const ENGLISH_HEAD: PortalHeadTemplates = {
 }
 
 function deps(doc: PortalDesign | null, icon: Uint8Array | null = null) {
-  const settings: PortalHeadSettings | null = doc
-    ? { name: 'Acme Corp', portalDesign: designView(doc, 4) }
+  const settings = doc
+    ? {
+        name: 'Acme Corp',
+        portalDesign: designView(doc, 4),
+        portalHeadWords: undefined as PortalHeadTemplates | undefined,
+      }
     : null
   const read = vi.fn(async () => icon)
   const value: BrandImageDeps = {
