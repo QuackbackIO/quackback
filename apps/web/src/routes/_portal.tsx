@@ -212,7 +212,6 @@ export const Route = createFileRoute('/_portal')({
         // The brand as the header shows it: the Brand kit title and icon.
         workspaceName: settings ? portalSiteName(settings) : '',
         logoUrl: portalBrandMark(settings),
-        customCss: theme.customCss,
         configFontSans: theme.configFontSans,
         locale,
         // Only meaningful for 'unauthorized' — null for an anonymous visitor.
@@ -266,7 +265,8 @@ export const Route = createFileRoute('/_portal')({
     const publicPortalConfig = settings?.publicPortalConfig ?? null
 
     // Custom CSS comes after the theme, so it cascades over it.
-    const { themeMode, customCss, configFontSans } = portalTheme(settings)
+    // The custom CSS is in the head's style and the root's settings already; it is not sent again.
+    const { themeMode, configFontSans } = portalTheme(settings)
 
     const initialUserData = session?.user
       ? {
@@ -296,7 +296,6 @@ export const Route = createFileRoute('/_portal')({
       baseUrl: baseUrl ?? '',
       userRole,
       brandingData,
-      customCss,
       configFontSans,
       themeMode,
       initialUserData,
@@ -388,7 +387,7 @@ function PortalLayout() {
     const gate = loaderData.gate
     return (
       <>
-        <PortalBrandingFontLoader customCss={gate.customCss} configFontSans={gate.configFontSans} />
+        <PortalBrandingFontLoader configFontSans={gate.configFontSans} />
         <Suspense fallback={null}>
           <PortalAccessGate
             reason={gate.reason}
@@ -411,7 +410,6 @@ function PortalLayout() {
     workspaceName,
     userRole,
     brandingData,
-    customCss,
     configFontSans,
     themeMode,
     initialUserData,
@@ -440,7 +438,7 @@ function PortalLayout() {
           {/* The design's wording and status colours for every page, and the
               draft bridge for the builder's preview frame (?preview=true). */}
           <PortalPreviewProvider enabled={preview === true}>
-            <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
+            <PortalBrandingFontLoader configFontSans={configFontSans} />
             <PortalShell>
               <PortalHeader
                 orgName={workspaceName}
@@ -501,17 +499,12 @@ function PortalAuthAutoOpen(props: {
  * preview, it also picks up the live draft stylesheet (postMessaged from the
  * settings page as the admin previews different fonts) via usePreviewCss.
  * Without a draft stylesheet (always, outside preview mode) it falls back to
- * the loader-supplied customCss/configFontSans, exactly like a normal visit.
+ * the custom CSS the settings carry and the loader's configFontSans, exactly like a normal visit.
  */
-function PortalBrandingFontLoader({
-  customCss,
-  configFontSans,
-}: {
-  customCss: string
-  configFontSans: string | null
-}) {
+function PortalBrandingFontLoader({ configFontSans }: { configFontSans: string | null }) {
   const draftCss = usePreviewCss()
   const settings = useWorkspaceSettings()
+  const { customCss } = portalTheme(settings)
   useBrandingFont(draftCss ?? customCss, configFontSans, portalFontIds(settings))
   return null
 }

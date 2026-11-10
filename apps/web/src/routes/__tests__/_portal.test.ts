@@ -259,6 +259,18 @@ describe('_portal loader: the sign-in wall shows the brand', () => {
     expect(gate.logoUrl).toBe('/api/storage/logos/icon.png')
   })
 
+  it('never carries the custom CSS a second time: the head and the settings already do', async () => {
+    const settings = await settingsWith((doc) => (doc.css = '.x { color: red }'))
+    expect(await gateFor(settings)).not.toHaveProperty('customCss')
+    mockEvaluateMyPortalAccessFn.mockResolvedValueOnce({ granted: true, reason: 'public' })
+    const page = (await runLoader({ ...makeContext(), settings } as never)) as Record<
+      string,
+      unknown
+    >
+    expect(page.gate).toBeNull()
+    expect(page).not.toHaveProperty('customCss')
+  })
+
   it('falls back to the workspace name and logo without its own', async () => {
     const gate = await gateFor(await settingsWith(() => {}))
     expect(gate.workspaceName).toBe('Acme Corp')
