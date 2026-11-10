@@ -289,15 +289,22 @@ describe('DesignerCanvas', () => {
     expect(onLocation).not.toHaveBeenCalled()
   })
 
+  /** Whether the skeleton covers the frame: it covers all of it, then fades out of sight. */
+  const covered = () => {
+    const cover = screen.getByText('Loading shapes').closest<HTMLElement>('[data-canvas-cover]')!
+    expect(cover.classList.contains('bg-background')).toBe(true)
+    return !cover.classList.contains('invisible')
+  }
+
   it('draws the skeleton, busy, until its own frame says it is ready', () => {
     const { send, frame } = show(false, { skeleton: <p>Loading shapes</p> })
     const box = document.querySelector('[data-canvas-box]')!
     expect(box.getAttribute('aria-busy')).toBe('true')
-    expect(screen.getByText('Loading shapes')).toBeTruthy()
+    expect(covered()).toBe(true)
     send({ type: 'quackback:preview-ready' }, {} as Window)
-    expect(screen.queryByText('Loading shapes')).not.toBeNull()
+    expect(covered()).toBe(true)
     send({ type: 'quackback:preview-ready' }, frame)
-    expect(screen.queryByText('Loading shapes')).toBeNull()
+    expect(covered()).toBe(false)
     expect(box.getAttribute('aria-busy')).toBe('false')
   })
 
@@ -305,11 +312,11 @@ describe('DesignerCanvas', () => {
     const { send, frame } = show(false, { skeleton: <p>Loading shapes</p>, untilDrawn: true })
     send({ type: 'quackback:preview-ready' }, frame)
     // Ready, but still drawing the published design: the skeleton stays.
-    expect(screen.queryByText('Loading shapes')).not.toBeNull()
+    expect(covered()).toBe(true)
     send({ type: 'quackback:preview-drawn' }, {} as Window)
-    expect(screen.queryByText('Loading shapes')).not.toBeNull()
+    expect(covered()).toBe(true)
     send({ type: 'quackback:preview-drawn' }, frame)
-    expect(screen.queryByText('Loading shapes')).toBeNull()
+    expect(covered()).toBe(false)
   })
 
   it('offers no Try it of its own', () => {

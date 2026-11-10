@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { usePreviewPosting } from '@/components/admin/settings/branding/use-preview-posting'
 import type { PortalPreviewProps } from '@/components/admin/settings/branding/portal-preview'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
@@ -194,11 +194,18 @@ export function DesignerCanvas({
   }, [])
   const box = useRef<HTMLDivElement>(null)
   const [room, setRoom] = useState({ width: 0, height: 0 })
-  useEffect(() => {
+  // Measured before the first paint, so the frame starts at the room's size rather than growing into it.
+  useLayoutEffect(() => {
     const element = box.current
     if (!element) return
+    const { width, height } = element.getBoundingClientRect()
+    if (width) setRoom({ width, height })
     const observer = new ResizeObserver(([entry]) =>
-      setRoom({ width: entry.contentRect.width, height: entry.contentRect.height })
+      setRoom((before) =>
+        before.width === entry.contentRect.width && before.height === entry.contentRect.height
+          ? before
+          : { width: entry.contentRect.width, height: entry.contentRect.height }
+      )
     )
     observer.observe(element)
     return () => observer.disconnect()
@@ -406,9 +413,15 @@ export function DesignerCanvas({
             transformOrigin: 'top left',
           }}
         />
-        {skeleton && !ready && (
+        {skeleton && (
+          // The whole frame, in the page's light or dark, until the page is ready; then it fades.
           <div
-            className="pointer-events-none absolute top-0 left-0 overflow-hidden"
+            data-canvas-cover=""
+            className={cn(
+              'pointer-events-none absolute top-0 left-0 overflow-hidden bg-background transition-[opacity,visibility] duration-150 ease-out motion-reduce:transition-none',
+              theme === 'dark' && 'dark',
+              ready && 'invisible opacity-0'
+            )}
             style={{
               width,
               height,
