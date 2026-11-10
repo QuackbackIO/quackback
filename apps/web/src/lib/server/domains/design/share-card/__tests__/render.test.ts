@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { cardCanDraw } from '@/lib/shared/design/share-card'
+import { faceById } from '../../extract/fonts/faces'
+import { fontFor } from '../../extract/fonts/woff'
 import { decodePng } from '../../extract/png'
 import { CARD, drawInitialTile, drawShareCard, drawSquareIcon, encodeShareCard } from '../render'
 
@@ -119,5 +122,32 @@ describe('drawInitialTile', () => {
     const img = drawInitialTile({ ...tile, initial: '日' }, 128)
     expect(countNear(img, [24, 24, 104, 104], [0, 0, 0])).toBe(0)
     expect(rgbAt(img, 64, 64)).toEqual([0xff, 0xd4, 0x3b])
+  })
+})
+
+describe('cardCanDraw', () => {
+  it('accepts only what the fallback face really has, so a card it passes is never blank', () => {
+    const inter = faceById('inter')!
+    for (const weight of [400, 700]) {
+      const font = fontFor(inter, weight)!
+      for (let cp = 0x20; cp < 0x3000; cp++) {
+        const ch = String.fromCodePoint(cp)
+        if (cardCanDraw(ch) && ch.trim())
+          expect(font.cmap.has(cp), `U+${cp.toString(16)}`).toBe(true)
+      }
+    }
+  })
+
+  it('refuses Chinese, Arabic and Thai, which the bundled faces do not draw', () => {
+    expect(cardCanDraw('Acme Café')).toBe(true)
+    for (const text of ['反馈中心', 'مركز الملاحظات', 'ศูนย์ข้อเสนอแนะ', 'Acme 中心']) {
+      expect(cardCanDraw(text), text).toBe(false)
+    }
+  })
+
+  it('draws the title in the middle when a page name cannot be drawn', () => {
+    const img = drawShareCard({ ...base, pageName: '帮助中心' })
+    const lone = drawShareCard({ ...base, pageName: null })
+    expect(Buffer.from(img.data).equals(Buffer.from(lone.data))).toBe(true)
   })
 })

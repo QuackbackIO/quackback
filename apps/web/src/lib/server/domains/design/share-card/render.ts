@@ -243,13 +243,16 @@ export function drawShareCard(spec: ShareCardSpec): Image {
 
   const maxWidth = width - 2 * pad
   const titleFont = spec.title.trim() ? drawable(spec.title, [heading, fallback]) : null
-  const titleBaseline = spec.pageName ? 392 : 430
+  // A page name no face can draw is left off, and the title sits as on the portal's own card.
+  const body = spec.pageName
+    ? drawable(spec.pageName, [fontOf(spec.bodyFont, 400), fontOf('inter', 400)])
+    : null
+  const titleBaseline = body ? 392 : 430
   if (titleFont)
     drawLine(img, titleFont, [84, 76, 68, 60], spec.title.trim(), pad, titleBaseline, maxWidth, ink)
-  if (spec.pageName) {
-    const body = drawable(spec.pageName, [fontOf(spec.bodyFont, 400), fontOf('inter', 400)])
+  if (body && spec.pageName) {
     const muted = rgb(overlay(spec.ink, spec.background, 0.72))
-    if (body) drawLine(img, body, [44], spec.pageName, pad, 480, maxWidth, muted)
+    drawLine(img, body, [44], spec.pageName, pad, 480, maxWidth, muted)
   }
   return img
 }

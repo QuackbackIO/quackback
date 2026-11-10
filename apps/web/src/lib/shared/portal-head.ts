@@ -9,7 +9,12 @@
  */
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from './i18n'
 import type { PortalDesignView } from './design/view'
-import { initialTilePath, shareCardPath, type ShareCardPage } from './design/share-card'
+import {
+  cardCanDraw,
+  initialTilePath,
+  shareCardPath,
+  type ShareCardPage,
+} from './design/share-card'
 
 /** The settings a portal head reads. */
 export interface PortalHeadSettings {
@@ -142,7 +147,9 @@ const absolute = (path: string, baseUrl: string | null | undefined) => {
 /**
  * The image a shared link shows, absolute: the design's own share image,
  * else its drawn card (with the page's name), else null for a portal on the
- * legacy theme, which keeps its own.
+ * legacy theme, which keeps its own. The card's faces draw Latin only, so a
+ * title they cannot draw is null too, leaving the logo rather than a blank
+ * card, and a page name they cannot draw is left off.
  */
 export function portalShareImage(
   settings: PortalHeadSettings | null | undefined,
@@ -152,8 +159,10 @@ export function portalShareImage(
   const design = settings?.portalDesign
   if (design?.engine !== 'v2' || !design.icons) return null
   if (design.icons.shareImage) return absolute(design.icons.shareImage, baseUrl)
-  if (!design.icons.card) return null
-  return absolute(shareCardPath(design.icons.card, portalSiteName(settings), page), baseUrl)
+  const title = portalSiteName(settings)
+  if (!design.icons.card || !cardCanDraw(title)) return null
+  const named = page && cardCanDraw(portalHeadWords(settings).pages[page]) ? page : undefined
+  return absolute(shareCardPath(design.icons.card, title, named), baseUrl)
 }
 
 /** The meta that points a link preview at a page's own card, to sit over the portal's. */
@@ -166,7 +175,10 @@ export function pageShareMeta(
   // The design's own share image is the same on every page; the portal's head has it.
   if (design?.engine !== 'v2' || design.icons?.shareImage) return []
   const image = portalShareImage(settings, baseUrl, page)
-  return image ? [{ property: 'og:image', content: image }] : []
+  // A page without its own card keeps the portal's.
+  return image && image !== portalShareImage(settings, baseUrl)
+    ? [{ property: 'og:image', content: image }]
+    : []
 }
 
 /** The workspace settings a route's head reads, from the root match's context. */

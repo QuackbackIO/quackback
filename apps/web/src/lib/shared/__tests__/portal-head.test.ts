@@ -136,6 +136,36 @@ describe('portalShareImage', () => {
     expect(a).not.toBe(b)
   })
 
+  it('never points at a blank card: a title its faces cannot draw keeps the logo', () => {
+    for (const title of ['反馈中心', 'مركز الملاحظات', 'ศูนย์ข้อเสนอแนะ', 'Центр отзывов']) {
+      const settings = withDesign((doc) => (doc.brand.logo.name = title))
+      expect(portalShareImage(settings, 'https://acme.test'), title).toBeNull()
+      expect(portalShareImage(settings, 'https://acme.test', 'roadmap'), title).toBeNull()
+      expect(pageShareMeta(settings, 'https://acme.test', 'roadmap'), title).toEqual([])
+    }
+    // Accented Latin is drawn.
+    const cafe = withDesign((doc) => (doc.brand.logo.name = 'Café Ñandú'))
+    expect(portalShareImage(cafe, 'https://acme.test')).toMatch(/brand\.png/)
+  })
+
+  it('leaves out only a page name its faces cannot draw', () => {
+    for (const help of ['帮助中心', 'مركز المساعدة', 'ศูนย์ช่วยเหลือ']) {
+      const settings = {
+        ...withDesign(),
+        portalHeadWords: {
+          ...portalHeadTemplates({}),
+          pages: { ...portalHeadTemplates({}).pages, help },
+        },
+      }
+      const site = portalShareImage(settings, 'https://acme.test')
+      expect(site).toMatch(/brand\.png/)
+      expect(portalShareImage(settings, 'https://acme.test', 'help')).toBe(site)
+      // The portal's own card already stands for the page.
+      expect(pageShareMeta(settings, 'https://acme.test', 'help')).toEqual([])
+      expect(pageShareMeta(settings, 'https://acme.test', 'roadmap')).toHaveLength(1)
+    }
+  })
+
   it('leaves a legacy portal to its own image', () => {
     expect(portalShareImage({ portalDesign: { engine: 'legacy' } }, 'https://acme.test')).toBeNull()
   })
