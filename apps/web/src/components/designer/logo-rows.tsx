@@ -1,9 +1,8 @@
 /**
- * The logo's rows, the one place each logo field is written: the icon and
- * the title (the brand kit's source, shown in the logo's panel too), a full
- * logo image in their place, how tall the header draws it, and its own
- * colours. The brand kit and the logo's panel both draw these rows, so the
- * logo keeps one writer wherever it is reached.
+ * The logo's rows, the one place each logo field is written: the icon, the
+ * title and a full logo image in their place (the brand kit draws these; the
+ * logo's panel sums them up), how tall the header draws it, and its own
+ * colours (the logo's panel draws these).
  */
 import { useState } from 'react'
 import { EyeDropperIcon } from '@heroicons/react/16/solid'
