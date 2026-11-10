@@ -57,6 +57,16 @@ export function ReviewPublishDialog({
   const [workspaceLogo, setWorkspaceLogo] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
   const blocked = report.errors.length > 0
+  // Published, it closes as it was, still publishing; opened again, it starts afresh.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setPublishing(false)
+      setMessage('')
+      setWorkspaceLogo(false)
+    }
+  }
 
   async function publish() {
     setPublishing(true)
@@ -68,14 +78,10 @@ export function ReviewPublishDialog({
       })
     } catch {
       outcome = { ok: false, message: 'Publishing did not reach the server. Try again.' }
-    } finally {
-      setPublishing(false)
     }
-    if (outcome.ok) {
-      setMessage('')
-      setWorkspaceLogo(false)
-      onOpenChange(false)
-    } else {
+    if (outcome.ok) onOpenChange(false)
+    else {
+      setPublishing(false)
       setRefusal(outcome.message)
     }
   }
