@@ -17,6 +17,7 @@ import {
   tileColumns,
 } from '../properties/properties-panel'
 import { ReachNote, ScopeLine } from '../properties/scope-line'
+import { SummaryRow } from '../properties/summary-row'
 import { SCOPE_NAMES } from '@/lib/shared/design/override-cascade'
 import { ScrubNumber } from '../properties/scrub-number'
 import { CanvasModeContext } from '../properties/canvas-mode'
@@ -612,5 +613,36 @@ describe('a row’s label', () => {
     expect(ends).toHaveLength(2)
     expect(ends[0].className).toBe(ends[1].className)
     expect(ends[1].querySelector('button[aria-label="Reset set"]')).not.toBeNull()
+  })
+})
+
+describe('a summary row', () => {
+  it('opens what it summarises in place, saying so and turning its chevron down', () => {
+    const onOpen = vi.fn()
+    const { rerender } = render(
+      <SummaryRow
+        label="Background"
+        value="Page colour"
+        onOpen={onOpen}
+        expanded={false}
+        controls="x"
+      />
+    )
+    const row = screen.getByRole('button', { name: 'Background: Page colour' })
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+    expect(row.getAttribute('aria-controls')).toBe('x')
+    expect(row.querySelector('svg')!.getAttribute('class')).not.toContain('rotate-90')
+    rerender(
+      <SummaryRow label="Background" value="Page colour" onOpen={onOpen} expanded controls="x" />
+    )
+    expect(row.getAttribute('aria-expanded')).toBe('true')
+    expect(row.querySelector('svg')!.getAttribute('class')).toContain('rotate-90')
+  })
+
+  it('leads away, with no expanded state, where it opens another panel', () => {
+    render(<SummaryRow label="Logo" value="Full logo" onOpen={() => {}} />)
+    expect(
+      screen.getByRole('button', { name: 'Logo: Full logo' }).hasAttribute('aria-expanded')
+    ).toBe(false)
   })
 })

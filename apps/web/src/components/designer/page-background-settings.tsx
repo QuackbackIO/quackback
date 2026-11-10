@@ -7,7 +7,7 @@
  * with a way back. Each change is one undo step named for it.
  */
 import { useId, useMemo, useState, type ReactNode } from 'react'
-import { ChevronRightIcon, MinusIcon, PlusIcon } from '@heroicons/react/16/solid'
+import { MinusIcon, PlusIcon } from '@heroicons/react/16/solid'
 import { presignBandImage } from '@/components/admin/settings/appearance/design-update'
 import { Button } from '@/components/ui/button'
 import { prepareBackgroundImage, type PreparedBackground } from '@/lib/client/background-image'
@@ -40,7 +40,6 @@ import {
   PropertyRow,
   PropertySection,
   PropertyTiles,
-  ROW_LABEL,
   PropertyDrawnTiles,
   type DrawnOption,
 } from './properties/properties-panel'
@@ -49,6 +48,7 @@ import { ScrubNumber } from './properties/scrub-number'
 import { TokenField } from './properties/token-field'
 import { colourTokens } from './properties/tokens'
 import { THEME } from './properties/words'
+import { SummaryRow } from './properties/summary-row'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -781,27 +781,18 @@ export function PageBackgroundEntry({
   const whose = own && ownShown ? THEME.pageOnly(BACKGROUND_PAGE_NAMES[own]) : THEME.everyPage
   return (
     <div className="space-y-2" data-find={find}>
-      <button
-        type="button"
-        aria-label={`${THEME.sections.pageBackground}: ${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
-        aria-expanded={onOpen ? undefined : open}
-        aria-controls={onOpen ? undefined : regionId}
-        onClick={() => (onOpen ? onOpen() : setOpen(!open))}
-        className="flex min-h-7 w-full items-center gap-2 rounded-md text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-      >
-        <span className={cn(ROW_LABEL, 'shrink-0 leading-tight text-muted-foreground')}>
-          {label ?? (onOpen ? whose : THEME.sections.pageBackground)}
-        </span>
-        <span className="min-w-0 flex-1 truncate px-1.5">
-          {onOpen && !label
+      <SummaryRow
+        label={label ?? (onOpen ? whose : THEME.sections.pageBackground)}
+        value={
+          onOpen && !label
             ? BACKGROUND_NAMES[shown.kind]
-            : `${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
-        </span>
-        <ChevronRightIcon
-          className={cn('size-3.5 text-muted-foreground', !onOpen && open && 'rotate-90')}
-          aria-hidden="true"
-        />
-      </button>
+            : `${whose}: ${BACKGROUND_NAMES[shown.kind]}`
+        }
+        name={`${THEME.sections.pageBackground}: ${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
+        expanded={onOpen ? undefined : open}
+        controls={onOpen ? undefined : regionId}
+        onOpen={() => (onOpen ? onOpen() : setOpen(!open))}
+      />
       {!onOpen && (
         <div id={regionId} hidden={!open}>
           {open && (
