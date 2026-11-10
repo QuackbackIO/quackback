@@ -167,13 +167,26 @@ export function EditingLayer({
 }) {
   const chip = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState(CHIP_GUESS)
+  const place = picked && name ? chipPlacement(picked, size, room, avoid) : null
+  // The chip's size, read as it shows and whenever it changes, never on every render:
+  // reading it forces the builder to lay out, and the layer renders on every change.
+  const chipShown = !!place
   useLayoutEffect(() => {
     const element = chip.current
     if (!element) return
-    const next = { width: element.offsetWidth, height: element.offsetHeight }
-    if (next.width && (next.width !== size.width || next.height !== size.height)) setSize(next)
-  })
-  const place = picked && name ? chipPlacement(picked, size, room, avoid) : null
+    const read = () => {
+      const next = { width: element.offsetWidth, height: element.offsetHeight }
+      if (!next.width) return
+      setSize((before) =>
+        next.width === before.width && next.height === before.height ? before : next
+      )
+    }
+    read()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(read)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [chipShown, name, pickedKey])
   const glide = useGlide(pickedKey) ? GLIDE : undefined
   return (
     <div data-editing-layer="" className="pointer-events-none absolute inset-0 overflow-hidden">
