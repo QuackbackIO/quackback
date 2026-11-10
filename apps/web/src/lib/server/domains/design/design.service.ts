@@ -24,6 +24,7 @@ import { ConflictError, NotFoundError } from '@/lib/shared/errors'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { sameDesign } from '@/lib/shared/design/diff'
 import { withoutOrphanedOverrides } from '@/lib/shared/design/override-cascade'
+import { releaseOverrides } from '@/lib/shared/design/overrides'
 import { logger } from '@/lib/server/logger'
 import { digestOf } from '@/lib/server/utils/canonical-json'
 import { authorKey, recordAuthors, type DraftAuthors } from './draft-authors'
@@ -186,11 +187,14 @@ export async function saveDraft(
     if (expectedRevision !== undefined && expectedRevision !== draftRevision(row))
       throw new ConflictError('REVISION_MISMATCH', 'The draft changed since you opened it.')
     await assertWritable(tx, row)
+    const published = await revision(tx, row.publishedRevisionId)
+    const live = published ? storedDesign(published.document, 'published') : fallback
+    // A choice picked again counts, whoever wrote it: the exact values and styles it competes
+    // with go. A first design competes with nothing, so it is released against itself.
+    releaseOverrides((row.draft ? storedDesign(row.draft, 'draft') : live) ?? document, document)
     // Saving the draft as it is changes nothing, so its revision stays where it is.
     if (row.draft && draftDigest(row.draft) === draftDigest(document)) return draftRevision(row)
     await saveDraftAsideBeforeSave(tx, row, document, author.principalId, saveAside)
-    const published = await revision(tx, row.publishedRevisionId)
-    const live = published ? storedDesign(published.document, 'published') : fallback
     // A draft put back to what visitors see is no draft, so nothing says one is waiting.
     if (live && sameDesign(live, document)) return dropDraft(tx, row)
     await assertCssAllowed(tx, document, row.publishedRevisionId)
