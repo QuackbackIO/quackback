@@ -215,7 +215,7 @@ export function normalizeSendingDomain(
   for (const platform of platformSendingDomains(env)) {
     if (domainsOverlap(domain, platform)) {
       throw new SendingDomainRefusedError(
-        `${domain} cannot be added: it is part of the platform's own mail domain.`
+        `${domain} can't be added because it's part of the platform's own email domain.`
       )
     }
   }

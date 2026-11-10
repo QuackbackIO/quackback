@@ -49,7 +49,7 @@ export function sendingDomainProblem(
   domain: string,
   record: SendingDomainAttentionProblem | null | undefined
 ): string {
-  if (!record) return `The mail provider stopped confirming ${domain}.`
+  if (!record) return `The email provider stopped confirming ${domain}.`
   if (record === 'signing-key') return `The signing key for ${domain} isn't working.`
   const named = `The ${PURPOSE_LABEL[record.purpose]} (${record.type} ${record.name})`
   if (record.state === 'proxied') return `${named} is proxied. Turn off any proxy for it.`
@@ -94,14 +94,14 @@ export function SendingDomainAttentionEmail({
       <Text style={typography.text}>
         {deadline
           ? sendingDomainDeadline(domain, deadline)
-          : 'Email from this domain sends from the default address until it is fixed.'}
+          : "Until it's fixed, email from this domain comes from your default address."}
       </Text>
       {settingsUrl ? (
         <Text style={typography.text}>
           <Link href={settingsUrl} style={utils.link}>
             Open email settings
           </Link>{' '}
-          to see every record and verify.
+          to see the records and check again.
         </Text>
       ) : null}
       <TransactionalFooter>

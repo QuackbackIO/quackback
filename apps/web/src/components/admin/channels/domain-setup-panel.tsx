@@ -64,17 +64,17 @@ export function DomainSetupPanel({
           title={phase === 'setting-up' ? undefined : checkedTitle}
         >
           {phase === 'live'
-            ? 'Keep these published.'
+            ? 'Keep these records in place.'
             : phase === 'setting-up'
-              ? `Checking automatically${checkedAgo ? `, last checked ${checkedAgo}` : ''}. We'll let you know when it's live.`
+              ? `We check automatically and will let you know when it's verified.${checkedAgo ? ` Last checked ${checkedAgo}.` : ''}`
               : broken
                 ? "We can't find these records any more."
-                : "We couldn't find these records yet."}
+                : "We haven't found these records yet."}
         </span>
         {phase !== 'live' && (
           <div className="flex shrink-0 gap-2">
             <Button size="sm" variant="outline" disabled={checking} onClick={onCheckAgain}>
-              {phase === 'setting-up' ? 'Check now' : 'Verify'}
+              Check now
             </Button>
             <CopyInstructionsButton domain={domain} />
           </div>

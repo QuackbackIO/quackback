@@ -63,6 +63,13 @@ function choiceOf(value: string): EmailSenderChoiceDTO | null {
 /** The addr-spec of a "Name <address>" label: its last bracketed part. */
 const addressOf = (label: string): string => /<([^<>]+)>\s*$/.exec(label)?.[1] ?? label
 
+/** The domain of an address, which is what gets verified. */
+const domainOf = (address: string): string => address.slice(address.lastIndexOf('@') + 1)
+
+/** How long a stand-in lasts: a new address is waiting, a lapsed one needs a fix. */
+const untilWhen = (identity: SenderIdentity): string =>
+  identity.lapsed ? "until it's fixed" : 'for now'
+
 /** "help@acme.com isn't verified yet", or "is no longer verified" once it was. */
 const cannotSend = (identity: SenderIdentity): string =>
   `${addressOf(identity.label)} ${identity.lapsed ? 'is no longer verified' : "isn't verified yet"}`
@@ -130,8 +137,8 @@ export function SendFromCard({
   const defaultHint = defaultChoice
     ? undefined
     : platformFrom
-      ? `Email sends from ${platformFrom}.`
-      : 'No default address is configured, so choose one to send email.'
+      ? `Email comes from ${platformFrom}.`
+      : "No default address is set, so email can't be sent until you choose one."
   // A chosen address whose domain stopped verifying (or never finished) is
   // still shown as chosen; this says what mail goes out from meanwhile.
   const notLiveHint = (surface: Surface): string | undefined => {
@@ -140,7 +147,7 @@ export function SendFromCard({
     const identity = identities.find((i) => i.id === choice.id)
     const fallback = surface === 'default' ? platformFrom : resolvedDefault
     if (!identity || identity.live || !fallback) return undefined
-    return `${cannotSend(identity)}, so email sends from ${fallback}.`
+    return `${cannotSend(identity)}, so email comes from ${fallback} ${untilWhen(identity)}.`
   }
   // The address behind the inbox, when support replies from the inbox and has
   // one: support email that is not a reply to the inbox leaves from it.
@@ -163,14 +170,14 @@ export function SendFromCard({
     forwardingTarget &&
     forwardingTargetPermitted === false &&
     inboxFallback
-      ? `${forwardingTarget} isn't verified yet, so replies come from ${inboxFallback}.`
+      ? `${domainOf(forwardingTarget)} isn't verified, so replies come from ${inboxFallback}.`
       : undefined
   const behindInboxHint = !behindInbox
     ? undefined
     : behindInbox.live
-      ? `Email that isn't a reply to the inbox comes from ${behindInbox.label}.`
+      ? `Conversations not started by email use ${behindInbox.label}.`
       : resolvedDefault
-        ? `${cannotSend(behindInbox)}, so email that isn't a reply to the inbox comes from ${resolvedDefault}.`
+        ? `${cannotSend(behindInbox)}, so conversations not started by email use ${resolvedDefault} ${untilWhen(behindInbox)}.`
         : undefined
 
   const showDefault = rows.includes('default')
@@ -226,7 +233,7 @@ export function SendFromCard({
                 (surface === 'support' ? (supportHint ?? behindInboxHint) : undefined) ??
                 notLiveHint(surface) ??
                 (!showDefault && value === SAME_AS_DEFAULT && resolvedDefault
-                  ? `Sends from ${resolvedDefault}.`
+                  ? `${surface === 'support' ? 'Replies come' : 'Email comes'} from ${resolvedDefault}.`
                   : undefined)
               }
               control={

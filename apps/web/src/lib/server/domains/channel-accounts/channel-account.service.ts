@@ -417,7 +417,7 @@ export async function clearInboundForwarding(owningTeamId: TeamId): Promise<Chan
  *  typed it into a settings form. */
 export class ChannelAddressInUseError extends ConflictError {
   constructor(readonly address: string) {
-    super('ADDRESS_IN_USE', `${address} is already in use by this workspace's inbound route.`)
+    super('ADDRESS_IN_USE', `${address} is already used by your support inbox.`)
   }
 }
 

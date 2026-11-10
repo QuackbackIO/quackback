@@ -106,7 +106,7 @@ describe('a server with its own default address', () => {
     renderCard({ platformName: 'Server default', platformFrom: null })
     expect(options('Default')).toContain('Server default (not set)')
     expect(
-      screen.getByText('No default address is configured, so choose one to send email.')
+      screen.getByText("No default address is set, so email can't be sent until you choose one.")
     ).toBeTruthy()
   })
 })
@@ -122,16 +122,14 @@ describe('support replying from the inbox with an address behind it', () => {
   it('keeps the inbox chosen and says where other support email comes from', () => {
     renderCard(withBehind(HELLO.id))
     expect(select('Support').value).toBe('__inbox')
-    expect(
-      screen.getByText(`Email that isn't a reply to the inbox comes from ${HELLO.label}.`)
-    ).toBeTruthy()
+    expect(screen.getByText(`Conversations not started by email use ${HELLO.label}.`)).toBeTruthy()
   })
 
   it('says what it sends from instead while that address cannot send', () => {
     renderCard(withBehind(PENDING.id))
     expect(
       screen.getByText(
-        `help@pending.example isn't verified yet, so email that isn't a reply to the inbox comes from ${PLATFORM}.`
+        `help@pending.example isn't verified yet, so conversations not started by email use ${PLATFORM} for now.`
       )
     ).toBeTruthy()
   })
@@ -139,7 +137,7 @@ describe('support replying from the inbox with an address behind it', () => {
   it('names it as what replies fall back to while the inbox address cannot send', () => {
     renderCard({ ...withBehind(HELLO.id), forwardingTargetPermitted: false })
     expect(
-      screen.getByText(`support@acme.com isn't verified yet, so replies come from ${HELLO.label}.`)
+      screen.getByText(`acme.com isn't verified, so replies come from ${HELLO.label}.`)
     ).toBeTruthy()
   })
 })
@@ -156,7 +154,7 @@ describe('an inbox address that cannot send yet', () => {
     renderCard({ ...unverifiedInbox, platformInbox: 'Acme <acme@in.platform.test>' })
     expect(
       screen.getByText(
-        "support@acme.com isn't verified yet, so replies come from Acme <acme@in.platform.test>."
+        "acme.com isn't verified, so replies come from Acme <acme@in.platform.test>."
       )
     ).toBeTruthy()
   })
@@ -168,7 +166,7 @@ describe('an inbox address that cannot send yet', () => {
       platformInbox: 'Acme <acme@in.platform.test>',
     })
     expect(
-      screen.getByText(`support@acme.com isn't verified yet, so replies come from ${HELLO.label}.`)
+      screen.getByText(`acme.com isn't verified, so replies come from ${HELLO.label}.`)
     ).toBeTruthy()
   })
 })
@@ -177,7 +175,9 @@ describe('a chosen address that cannot send', () => {
   it('says the default goes out from the platform address meanwhile', () => {
     renderCard({ senders: { default: { mode: 'address', id: PENDING.id } } })
     expect(
-      screen.getByText(`help@pending.example isn't verified yet, so email sends from ${PLATFORM}.`)
+      screen.getByText(
+        `help@pending.example isn't verified yet, so email comes from ${PLATFORM} for now.`
+      )
     ).toBeTruthy()
   })
 
@@ -194,7 +194,9 @@ describe('a chosen address that cannot send', () => {
       />
     )
     expect(
-      screen.getByText(`news@old.example is no longer verified, so email sends from ${PLATFORM}.`)
+      screen.getByText(
+        `news@old.example is no longer verified, so email comes from ${PLATFORM} until it's fixed.`
+      )
     ).toBeTruthy()
   })
 
@@ -211,7 +213,9 @@ describe('a chosen address that cannot send', () => {
       />
     )
     expect(
-      screen.getByText(`help@pending.example isn't verified yet, so email sends from ${PLATFORM}.`)
+      screen.getByText(
+        `help@pending.example isn't verified yet, so email comes from ${PLATFORM} for now.`
+      )
     ).toBeTruthy()
   })
 
@@ -224,7 +228,7 @@ describe('a chosen address that cannot send', () => {
     })
     expect(
       screen.getByText(
-        `help@pending.example isn't verified yet, so email sends from ${HELLO.label}.`
+        `help@pending.example isn't verified yet, so email comes from ${HELLO.label} for now.`
       )
     ).toBeTruthy()
   })
@@ -239,7 +243,7 @@ describe('the default sender', () => {
   it('says what email sends from while no default is chosen', () => {
     renderCard()
     expect(select('Default').value).toBe('__platform')
-    expect(screen.getByText(`Email sends from ${PLATFORM}.`)).toBeTruthy()
+    expect(screen.getByText(`Email comes from ${PLATFORM}.`)).toBeTruthy()
   })
 
   it('says nothing more once a default is chosen', () => {
@@ -324,7 +328,7 @@ describe('support', () => {
       forwardingTargetPermitted: false,
     })
     expect(
-      screen.getByText(`support@acme.com isn't verified yet, so replies come from ${HELLO.label}.`)
+      screen.getByText(`acme.com isn't verified, so replies come from ${HELLO.label}.`)
     ).toBeTruthy()
   })
 
@@ -336,7 +340,7 @@ describe('support', () => {
       forwardingTargetPermitted: false,
     })
     expect(
-      screen.getByText(`support@acme.com isn't verified yet, so replies come from ${PLATFORM}.`)
+      screen.getByText(`acme.com isn't verified, so replies come from ${PLATFORM}.`)
     ).toBeTruthy()
   })
 
@@ -368,12 +372,12 @@ describe('showing only some rows', () => {
     renderCard({ rows: ['support'], senders: { default: { mode: 'address', id: HELLO.id } } })
     expect(rowNames()).toEqual(['Support'])
     expect(options('Support')[0]).toBe('Workspace default')
-    expect(screen.getByText(`Sends from ${HELLO.label}.`)).toBeTruthy()
+    expect(screen.getByText(`Replies come from ${HELLO.label}.`)).toBeTruthy()
   })
 
   it('names the Quackback address as that default when none is chosen', () => {
     renderCard({ rows: ['support'] })
-    expect(screen.getByText(`Sends from ${PLATFORM}.`)).toBeTruthy()
+    expect(screen.getByText(`Replies come from ${PLATFORM}.`)).toBeTruthy()
   })
 
   it('says nothing more once the row has its own address', () => {

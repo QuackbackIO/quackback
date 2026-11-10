@@ -90,7 +90,7 @@ function SendingAddressForm({
           onSuccess: (added) => {
             // The one time adding an address changes what email sends from, so
             // it is said rather than left to be noticed.
-            if (added.madeDefault) toast.success(`${added.address} is now the default sender.`)
+            if (added.madeDefault) toast.success(`${added.address} is now your default address.`)
             onClose()
           },
           onError: (e) => setError(errorText(e, "Couldn't add the address.")),
@@ -115,8 +115,8 @@ function SendingAddressForm({
         <DialogTitle>{adding ? 'Add address' : 'Edit name'}</DialogTitle>
         <DialogDescription>
           {adding
-            ? 'Email can be sent from it once its domain is verified.'
-            : `The name email from ${target.address} is sent under.`}
+            ? 'You can send from this address once its domain is verified.'
+            : `The name recipients see on email from ${target.address}.`}
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-3 py-4">

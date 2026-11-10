@@ -254,10 +254,9 @@ describe('address rows', () => {
     // When it was last looked at is said, not left to a tooltip.
     expect(
       screen.getByText(
-        "Checking automatically, last checked less than a minute ago. We'll let you know when it's live."
+        "We check automatically and will let you know when it's verified. Last checked less than a minute ago."
       )
     ).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Verify' })).toBeNull()
   })
 
   it('lets someone who just published the records check now, without waiting', () => {
@@ -289,7 +288,7 @@ describe('address rows', () => {
     expect(within(row('Acme <news@acme.com>')).getByText('Pending')).toBeTruthy()
   })
 
-  it('flags records not found after 72 hours and offers Verify', () => {
+  it('flags records not found after 72 hours and offers Check now', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com')],
       domains: [NOT_FOUND],
@@ -298,10 +297,10 @@ describe('address rows', () => {
     expect(within(r).getByText('Needs attention')).toBeTruthy()
     expect(within(r).queryByText('Pending')).toBeNull()
     expect(r.textContent).toContain(
-      'Records not found after 72 hours. Email sends from the default address.'
+      "Records not found after 72 hours. Email comes from your default address until it's fixed."
     )
-    expect(screen.getByText("We couldn't find these records yet.")).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
+    expect(screen.getByText("We haven't found these records yet.")).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check now' }))
     expect(restartChecks).toHaveBeenCalledWith('dom_1', expect.anything())
   })
 
@@ -310,7 +309,7 @@ describe('address rows', () => {
     const r = row('Acme <help@acme.com>')
     expect(within(r).getByText('Needs attention')).toBeTruthy()
     expect(r.textContent).toContain(
-      'The return path record is missing. Email sends from the default address.'
+      "The return path record is missing. Email comes from your default address until it's fixed."
     )
     const panel = panels()[0] as HTMLElement
     expect(
@@ -328,7 +327,7 @@ describe('address rows', () => {
     })
     const r = row('Acme <help@acme.com>')
     expect(r.textContent).toContain('Records not found after 72 hours.')
-    expect(r.textContent).not.toContain('Email sends from the default address.')
+    expect(r.textContent).not.toContain("Email comes from your default address until it's fixed.")
     expect(r.textContent).toContain('may land in spam')
   })
 
@@ -368,7 +367,7 @@ describe('address rows', () => {
     )
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
     fireEvent.click(within(row('Acme <help@acme.com>')).getByRole('button', { name: 'Send test' }))
-    expect(toastSuccess).toHaveBeenCalledWith('Test sent to admin@example.com')
+    expect(toastSuccess).toHaveBeenCalledWith('Test email sent to admin@example.com')
   })
 
   it('edits the sender name from the row menu', async () => {
@@ -407,7 +406,7 @@ describe('address rows', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
     const user = await openMenu('Acme <help@acme.com>')
     await user.click(screen.getByRole('menuitem', { name: 'DNS records' }))
-    expect(screen.getByText('Keep these published.')).toBeTruthy()
+    expect(screen.getByText('Keep these records in place.')).toBeTruthy()
   })
 })
 
@@ -464,13 +463,13 @@ describe('a domain that broke after it was live', () => {
   it('keeps the first-time wording for a domain never live', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [NOT_FOUND] })
     expect(screen.getByText('Set up acme.com')).toBeTruthy()
-    expect(screen.getByText("We couldn't find these records yet.")).toBeTruthy()
+    expect(screen.getByText("We haven't found these records yet.")).toBeTruthy()
   })
 })
 
 describe('what happens to email meanwhile', () => {
-  const SPAM = 'Email still sends from this address but may land in spam until this is fixed.'
-  const FALLBACK = 'Email sends from the default address.'
+  const SPAM = 'Email is still sent from this address, but it may land in spam until this is fixed.'
+  const FALLBACK = "Email comes from your default address until it's fixed."
 
   it.each([
     ['not found', NOT_FOUND],
@@ -859,7 +858,7 @@ describe('removing a sending address', () => {
     })
     const dialog = await removeDialog('Acme <news@acme.com>')
     expect(dialog.textContent).toContain(
-      'Changelog and Status page email will send from the default address.'
+      'Changelog and Status page email will come from your default address instead.'
     )
   })
 
@@ -871,7 +870,7 @@ describe('removing a sending address', () => {
     })
     const dialog = await removeDialog('Acme <hello@acme.com>')
     expect(dialog.textContent).toContain(
-      "It's the default address, so email will send from Acme <notifications@example.com> instead."
+      "It's your default address, so email will come from Acme <notifications@example.com> instead."
     )
   })
 
@@ -886,7 +885,9 @@ describe('removing a sending address', () => {
       },
     })
     const dialog = await removeDialog('Acme <help@acme.com>')
-    expect(dialog.textContent).toContain('Support email will send from the default address.')
+    expect(dialog.textContent).toContain(
+      'Support email will come from your default address instead.'
+    )
   })
 
   it('does not offer an address the server says cannot send, even with no domain row', () => {
@@ -896,7 +897,7 @@ describe('removing a sending address', () => {
       senders: { default: { mode: 'address', id: 'a1' } },
     })
     expect(document.body.textContent).toContain(
-      "help@gone.example isn't verified yet, so email sends from Acme <notifications@example.com>."
+      "help@gone.example isn't verified yet, so email comes from Acme <notifications@example.com> for now."
     )
   })
 
@@ -907,7 +908,7 @@ describe('removing a sending address', () => {
       senders: { default: { mode: 'address', id: 'a1' } },
     })
     expect(document.body.textContent).toContain(
-      'help@acme.com is no longer verified, so email sends from Acme <notifications@example.com>.'
+      "help@acme.com is no longer verified, so email comes from Acme <notifications@example.com> until it's fixed."
     )
   })
 
@@ -1079,7 +1080,7 @@ describe('adding an address', () => {
       target: { value: 'help@acme.com' },
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Add address' }))
-    expect(toastSuccess).toHaveBeenCalledWith('help@acme.com is now the default sender.')
+    expect(toastSuccess).toHaveBeenCalledWith('help@acme.com is now your default address.')
   })
 
   it('says nothing when the address added changed no sender', async () => {

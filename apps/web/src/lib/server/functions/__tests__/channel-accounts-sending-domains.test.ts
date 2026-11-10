@@ -161,7 +161,7 @@ describe('restartSendingDomainChecksFn and deleteSendingDomainFn', () => {
   it('asks for a retry on a transient provider failure', async () => {
     hoisted.restart.mockRejectedValue(new SesIdentityError('throttled', 429, 'Throttling', true))
     await expect(restartChecks({ data: { id: 'sending_domain_1' } })).rejects.toThrow(
-      "Couldn't reach the mail provider. Try again in a minute."
+      "Couldn't reach the email provider. Try again in a minute."
     )
   })
 

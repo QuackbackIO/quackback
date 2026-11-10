@@ -25,7 +25,7 @@ const NOT_SET_UP: Record<DomainAction, string> = {
   test: "Custom sending domains aren't set up correctly on this server, so nothing was sent.",
 }
 
-const UNREACHABLE = "Couldn't reach the mail provider. Try again in a minute."
+const UNREACHABLE = "Couldn't reach the email provider. Try again in a minute."
 
 const ASK_OPERATOR = "Try again, and if it keeps failing, contact your workspace's operator."
 

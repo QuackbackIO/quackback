@@ -42,9 +42,9 @@ describe('SendingDomainAttentionEmail', () => {
     expect(text).toContain('Sending from acme.com needs attention')
     expect(text).toContain('The return path record (MX qb-bounce.acme.com) is missing.')
     expect(text).toContain(
-      'Email from this domain sends from the default address until it is fixed.'
+      "Until it's fixed, email from this domain comes from your default address."
     )
-    expect(text).toContain('to see every record and verify.')
+    expect(text).toContain('to see the records and check again.')
   })
 
   it('says what was found instead when the value is wrong', async () => {
@@ -111,7 +111,7 @@ describe('SendingDomainAttentionEmail', () => {
 
   it('falls back to the provider when every record still looks right', async () => {
     const text = visibleText(await render(SendingDomainAttentionEmail({ domain: 'acme.com' })))
-    expect(text).toContain('The mail provider stopped confirming acme.com.')
+    expect(text).toContain('The email provider stopped confirming acme.com.')
   })
 
   it('links to the settings page when given one', async () => {

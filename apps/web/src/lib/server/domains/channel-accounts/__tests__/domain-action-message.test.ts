@@ -15,7 +15,7 @@ import { domainActionMessage } from '../domain-action-message'
 
 const NOT_SET_UP =
   "Custom sending domains aren't set up correctly on this server. Nothing was added."
-const UNREACHABLE = "Couldn't reach the mail provider. Try again in a minute."
+const UNREACHABLE = "Couldn't reach the email provider. Try again in a minute."
 
 describe('domainActionMessage', () => {
   it('passes our own refusals through, since they name the fix', () => {
@@ -27,7 +27,7 @@ describe('domainActionMessage', () => {
     const identity = new SendingIdentityRefusedError('help@acme.com')
     expect(domainActionMessage(identity, 'address')).toBe(identity.message)
     expect(domainActionMessage(new ChannelAddressInUseError('help@acme.com'), 'address')).toBe(
-      "help@acme.com is already in use by this workspace's inbound route."
+      'help@acme.com is already used by your support inbox.'
     )
   })
 
