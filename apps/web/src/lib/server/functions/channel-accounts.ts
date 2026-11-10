@@ -144,6 +144,8 @@ export type SendingAddressDTO = ChannelAccountDTO & { sendable: boolean }
 /** Pre-flight findings for a domain (see `preflight.ts`). Every field may be absent. */
 export interface SendingDomainPreflightDTO {
   dnsHost?: 'cloudflare' | 'route53' | 'godaddy' | 'namecheap' | 'google' | 'other'
+  /** The zone the records go in, when it was found: the domain or a parent of it. */
+  zone?: string
   mailFromFree?: boolean
   dmarc?: { found: boolean; policy?: 'none' | 'quarantine' | 'reject' }
   checkedAt?: string

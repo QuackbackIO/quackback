@@ -2,7 +2,8 @@
  * Pre-flight for a new sending domain, run before its identity is created.
  *
  * Three cheap lookups that shape the setup steps without deciding anything:
- * who hosts the domain's DNS (so the instructions can name that host's quirks),
+ * which zone the domain sits in and who hosts it (so the record names are the
+ * ones that zone's form expects and the instructions can name that host's quirks),
  * whether the MAIL FROM subdomain already holds records ours would conflict
  * with (so a taken name is refused), and the domain's DMARC record (read and
  * shown, never required or changed).
@@ -51,21 +52,22 @@ export function dnsHostFromNameservers(nameservers: string[]): DnsHost | undefin
 }
 
 /**
- * The nameservers of the zone a domain lives in: the domain's own, or the
- * nearest parent's when the domain is a name inside someone else's zone.
+ * The zone a domain lives in and that zone's nameservers: the domain's own, or
+ * the nearest parent's when the domain is a name inside someone else's zone.
+ * No zone when nothing up to the two-label domain has nameservers.
  */
-async function zoneNameservers(
+async function findZone(
   domain: string,
   resolver: DnsResolver
-): Promise<string[] | undefined> {
+): Promise<{ zone?: string; nameservers: string[] } | undefined> {
   const labels = domain.split('.')
   for (let i = 0; i <= labels.length - 2; i++) {
     const name = labels.slice(i).join('.')
     const found = await lookup(() => resolver.resolveNs(name))
     if (found === undefined) return undefined
-    if (found.length > 0) return found
+    if (found.length > 0) return { zone: name, nameservers: found }
   }
-  return []
+  return { nameservers: [] }
 }
 
 const normalName = (n: string) => n.trim().toLowerCase().replace(/\.$/, '')
@@ -158,19 +160,30 @@ async function mailFromNameTaken(
   return unknown ? undefined : false
 }
 
-/** The domain's DMARC record, or undefined when the lookup failed. */
+/**
+ * The DMARC record that applies to a domain, or undefined when a lookup failed.
+ *
+ * A subdomain with no record of its own is covered by a parent's, which is how
+ * receivers read it, so the parents are asked in turn up to the two-label
+ * domain. "Not found" is only said when every one of them answered and none
+ * had a record.
+ */
 export async function readDmarc(
   domain: string,
   resolver: DnsResolver
 ): Promise<SendingDomainPreflight['dmarc']> {
-  const values = await lookup(() => resolver.resolveTxt(`_dmarc.${domain}`))
-  if (values === undefined) return undefined
-  const record = values
-    .map((chunks) => chunks.join('').trim())
-    .find((v) => v.toLowerCase().startsWith('v=dmarc1'))
-  if (!record) return { found: false }
-  const policy = /(?:^|;)\s*p\s*=\s*(none|quarantine|reject)\s*(?:;|$)/i.exec(record)?.[1]
-  return policy ? { found: true, policy: policy.toLowerCase() as DmarcPolicy } : { found: true }
+  const labels = domain.split('.')
+  for (let from = 0; labels.length - from >= 2; from++) {
+    const values = await lookup(() => resolver.resolveTxt(`_dmarc.${labels.slice(from).join('.')}`))
+    if (values === undefined) return undefined
+    const record = values
+      .map((chunks) => chunks.join('').trim())
+      .find((v) => v.toLowerCase().startsWith('v=dmarc1'))
+    if (!record) continue
+    const policy = /(?:^|;)\s*p\s*=\s*(none|quarantine|reject)\s*(?:;|$)/i.exec(record)?.[1]
+    return policy ? { found: true, policy: policy.toLowerCase() as DmarcPolicy } : { found: true }
+  }
+  return { found: false }
 }
 
 export async function runPreflight(
@@ -182,14 +195,15 @@ export async function runPreflight(
   /** Set when the return path is one CNAME to this name rather than an MX and TXT. */
   returnPathTarget: string | null = null
 ): Promise<SendingDomainPreflight> {
-  const [nameservers, inUse, dmarc] = await Promise.all([
-    zoneNameservers(domain, resolver),
+  const [zone, inUse, dmarc] = await Promise.all([
+    findZone(domain, resolver),
     mailFromNameTaken(`${mailFromLabel}.${domain}`, domain, region, resolver, returnPathTarget),
     readDmarc(domain, resolver),
   ])
-  const dnsHost = nameservers ? dnsHostFromNameservers(nameservers) : undefined
+  const dnsHost = zone ? dnsHostFromNameservers(zone.nameservers) : undefined
   return {
     ...(dnsHost ? { dnsHost } : {}),
+    ...(zone?.zone ? { zone: zone.zone } : {}),
     ...(inUse !== undefined ? { mailFromFree: !inUse } : {}),
     ...(dmarc ? { dmarc } : {}),
     checkedAt: now.toISOString(),

@@ -84,7 +84,13 @@ export async function watchSendingDomains(
     watched += 1
     try {
       const stored = row.dnsRecords ?? []
-      const checked = await checkRecords(row.domain, stored, systemResolver, now)
+      const checked = await checkRecords(
+        row.domain,
+        stored,
+        systemResolver,
+        now,
+        row.preflight?.zone
+      )
       const due =
         !row.lastCheckedAt || now.getTime() - row.lastCheckedAt.getTime() >= PROVIDER_RECHECK_MS
       if (due || checksChanged(stored, checked)) {
