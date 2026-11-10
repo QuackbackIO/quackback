@@ -28,8 +28,12 @@ import {
 import type { EmailSendersDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { DomainSetupPanel } from './domain-setup-panel'
 import { SendingPausedNotice } from './sending-paused-notice'
-import { SendFromCard, type SenderIdentity } from './send-from-card'
-import { SendingAddressDialog, type SendingAddressDialogTarget } from './sending-address-dialog'
+import { SENDER_SURFACE_NAMES, SendFromCard, type SenderIdentity } from './send-from-card'
+import {
+  errorText,
+  SendingAddressDialog,
+  type SendingAddressDialogTarget,
+} from './sending-address-dialog'
 import {
   domainPhase,
   failingRecordName,
@@ -43,14 +47,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/shared/utils'
 import { toastError } from '@/lib/client/error-notice'
-
-/** The kinds of email that can send from an address, as the remove dialog names them. */
-const SURFACE_NAMES: Record<Exclude<keyof EmailSendersDTO, 'default'>, string> = {
-  support: 'Support',
-  feedback: 'Feedback board',
-  changelog: 'Changelog',
-  status: 'Status page',
-}
 
 const NO_SENDERS: EmailSendersDTO = {
   default: null,
@@ -415,12 +411,14 @@ function removalNote(
   if (senders.default?.mode === 'address' && senders.default.id === id) {
     return `It's the default address, so email sent from it will send from ${platformFrom ?? `the ${platformName.toLowerCase()}`}.`
   }
-  const using = (Object.keys(SURFACE_NAMES) as Array<keyof typeof SURFACE_NAMES>).filter((s) => {
+  const using = (
+    Object.keys(SENDER_SURFACE_NAMES) as Array<keyof typeof SENDER_SURFACE_NAMES>
+  ).filter((s) => {
     const choice = senders[s]
     return choice?.mode === 'address' && choice.id === id
   })
   if (using.length === 0) return null
-  return `${listOf(using.map((s) => SURFACE_NAMES[s]))} email will send from the default address.`
+  return `${listOf(using.map((s) => SENDER_SURFACE_NAMES[s]))} email will send from the default address.`
 }
 
 /** The meta line of a row whose domain is not live yet, or is live with its ownership record missing. */
@@ -713,7 +711,3 @@ function SendingAddressesSection({
     </SettingsCard>
   )
 }
-
-/** The server's sentence for a failed action, or the generic line. */
-const errorText = (error: unknown, fallback: string): string =>
-  error instanceof Error && error.message ? error.message : fallback

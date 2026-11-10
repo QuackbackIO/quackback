@@ -27,12 +27,17 @@ export type SenderIdentity = {
 
 type Surface = keyof EmailSendersDTO
 
-const OVERRIDES: Array<{ surface: Exclude<Surface, 'default'>; label: string }> = [
-  { surface: 'support', label: 'Support' },
-  { surface: 'feedback', label: 'Feedback board' },
-  { surface: 'changelog', label: 'Changelog' },
-  { surface: 'status', label: 'Status page' },
-]
+/** What each kind of email with its own sender is called, in the order shown. */
+export const SENDER_SURFACE_NAMES: Record<Exclude<Surface, 'default'>, string> = {
+  support: 'Support',
+  feedback: 'Feedback board',
+  changelog: 'Changelog',
+  status: 'Status page',
+}
+
+const OVERRIDES = (
+  Object.keys(SENDER_SURFACE_NAMES) as Array<keyof typeof SENDER_SURFACE_NAMES>
+).map((surface) => ({ surface, label: SENDER_SURFACE_NAMES[surface] }))
 
 const ALL_ROWS: readonly Surface[] = ['default', ...OVERRIDES.map((o) => o.surface)]
 

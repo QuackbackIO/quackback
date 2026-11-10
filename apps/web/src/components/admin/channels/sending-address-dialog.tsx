@@ -29,7 +29,8 @@ const storedName = (typed: string, workspaceName: string): string | null => {
   return name && name !== workspaceName ? name : null
 }
 
-const errorText = (error: unknown, fallback: string): string =>
+/** The server's sentence for a failed action, or the generic line. */
+export const errorText = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message ? error.message : fallback
 
 export function SendingAddressDialog({
