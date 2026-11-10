@@ -452,9 +452,9 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     ])
     fireEvent.click(capitals.getByRole('radio', { name: 'AA' }))
     expect(box.design.brand.fonts.headlineCase).toBe('upper')
-    expect(box.design.tune?.headline?.case).toBeUndefined()
+    expect(box.design.style?.headline?.base?.case).toBeUndefined()
     fireEvent.click(tiles('Capitals').getByRole('radio', { name: 'aa' }))
-    expect(box.design.tune?.headline?.case ?? box.design.style?.headline?.base?.case).toBe('lower')
+    expect(box.design.style?.headline?.base?.case).toBe('lower')
   })
 
   it('keeps the brand’s choices to every one of the kind; a one-off has the exact field only', () => {
