@@ -2,14 +2,24 @@
  * The properties of an element picked on the canvas, on the shared frame
  * (properties/). A change is shared by default: it starts at every one of
  * the element's kind, and the scope line offers the one-offs (just this one,
- * this block, this page) with what they reach. Its states are always shown,
- * with a dot on each that holds values. Rows are grouped as Fill, Text and
- * Shape; Edge and Shadow (and Lift, Focus ring in their states) are added
- * with "+"; the rest are under More. Each unset row shows what it has,
- * muted, and where it comes from; each row set here has a dot and Reset.
- * The places that keep their own values are listed at the foot.
+ * this block, this page) with what they reach. It opens simple, with its
+ * background, text colour and size and corners; the rest is under More,
+ * which stays open for the visit once opened. The state shown is one chip,
+ * "State: Normal", with the others in its menu. Each property is one row;
+ * for every one, a brand choice that sets it is that row's tiles, with
+ * Custom for an exact value. Each unset row shows what it has, muted and in
+ * whole pixels, and where it comes from; each row set here has a dot and
+ * Reset. The places that keep their own values are listed at the foot.
  */
 import { useMemo, useState, type ReactNode } from 'react'
+import { ChevronDownIcon } from '@heroicons/react/16/solid'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { pickName, singular, type ElementPick, type Reach } from '@/lib/shared/design/element-pick'
 import { partOf } from '@/lib/shared/design/parts-registry'
 import {
@@ -49,9 +59,9 @@ import {
   type StylePropInfo,
   type StyleState,
 } from '@/lib/shared/design/style-tokens'
-import { cn } from '@/lib/shared/utils'
-import { brandOf, clearExactValues, exactOf, exactValuesOf } from './element-brand'
-import { ElementStyleSection } from './element-style-section'
+import { brandOf, everywhereValue, homeValuesOf, writeEverywhere } from './element-brand'
+import { BASICS, SECTION_PROPS, elementRowFind, elementRowLabel } from './element-rows'
+import { ElementStyleSection, applyChoice, rowChoiceOf } from './element-style-section'
 import { StyleField } from './element-styles'
 import { placeDetail, valueText } from './set-differently'
 import {
@@ -68,7 +78,7 @@ import { ScopeLine, type ScopeOption } from './properties/scope-line'
 import { ScrubNumber } from './properties/scrub-number'
 import { FontField, TokenField } from './properties/token-field'
 import { colourTokens, fontTokens } from './properties/tokens'
-import { CHOICE_TILES, SECTIONS, WORDS, everyOf, fromScope, resetTo } from './properties/words'
+import { CHOICE_TILES, WORDS, everyOf, fromScope, resetTo } from './properties/words'
 
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
 
@@ -88,41 +98,12 @@ export function contextOf(pick: ElementPick, page: DesignerPage): ElementContext
 export const elementPanelKey = (pick: ElementPick) =>
   `${pick.element}|${pick.part ?? ''}|${pick.section ?? ''}`
 
-/** The panel's sections, in order: each one's props, and whether it is added with "+". */
-const SECTION_PROPS: ReadonlyArray<{
-  title: string
-  props: readonly StyleProp[]
-  optional: boolean
-}> = [
-  { title: SECTIONS.fill, props: ['background'], optional: false },
-  { title: SECTIONS.text, props: ['color', 'size', 'weight'], optional: false },
-  { title: SECTIONS.shape, props: ['radius', 'height', 'paddingX', 'paddingY'], optional: false },
-  { title: SECTIONS.edge, props: ['borderColor', 'borderWidth', 'borderStyle'], optional: true },
-  { title: SECTIONS.shadow, props: ['shadow'], optional: true },
-  { title: SECTIONS.lift, props: ['lift'], optional: true },
-  { title: SECTIONS.focusRing, props: ['ring', 'ringWidth'], optional: true },
-]
-
-/** A row's label within its section: Edge's "Edge colour" is its Colour. */
-const ROW_LABELS: Partial<Record<StyleProp, string>> = {
-  color: 'Colour',
-  borderColor: 'Colour',
-  borderWidth: 'Width',
-  borderStyle: 'Style',
-  ring: 'Colour',
-  ringWidth: 'Width',
-  lift: 'Rise',
-}
+/** A row's tile for its exact field, after the brand's choices. */
+const CUSTOM = 'custom'
 
 /** How a scope reads in a source line: "every main button", "this page". */
 const scopeWords = (scope: ScopeName, one: string) =>
-  scope === 'everywhere'
-    ? everyOf(one)
-    : scope === 'page'
-      ? 'this page'
-      : scope === 'block'
-        ? 'this block'
-        : 'just this one'
+  scope === 'everywhere' ? everyOf(one) : SCOPE_NAMES[scope].toLowerCase()
 
 export function ElementPanel({
   pick,
@@ -180,7 +161,8 @@ export function ElementPanel({
   const [scope, setScope] = useState<ScopeName>(() =>
     initialScope && scopes.includes(initialScope) ? initialScope : defaultScope(ctx)
   )
-  const [added, setAdded] = useState<ReadonlySet<string>>(new Set())
+  /** Rows whose Custom tile is picked, showing their exact field before a value is set. */
+  const [customOpen, setCustomOpen] = useState<ReadonlySet<StyleProp>>(new Set())
   const at = scopes.includes(scope) ? scope : defaultScope(ctx)
   const name = pickName(pick, design, ctx.page)
   const one = singular(pick.element)
@@ -196,9 +178,19 @@ export function ElementPanel({
     styleAllows(pick.element, state, prop) &&
     (!phone || (PHONE_PROPS as readonly string[]).includes(prop))
 
+  // Every one's normal look on all screens is the element's brand layer: its exact value, else its style.
+  const widest = at === 'everywhere' && screen === 'all'
+  const readHere = (prop: StyleProp, s: StyleState = state) =>
+    widest && s === 'base'
+      ? everywhereValue(design, pick.element, prop)
+      : readAt(design, ctx, at, screen, s, prop)
+  const writeHere = (draft: PortalDesign, prop: StyleProp, value: unknown) =>
+    widest && state === 'base'
+      ? writeEverywhere(draft, pick.element, prop, value)
+      : writeAt(draft, ctx, at, screen, state, prop, value)
   const write = (prop: StyleProp, value: unknown) =>
     update(
-      (draft) => writeAt(draft, ctx, at, screen, state, prop, value === '' ? undefined : value),
+      (draft) => writeHere(draft, prop, value === '' ? undefined : value),
       undoName(STYLE_PROPS[prop].label.toLowerCase())
     )
   const darkOf = (prop: StyleProp) =>
@@ -213,8 +205,15 @@ export function ElementPanel({
         }
       : undefined
 
-  /** What a row has while nothing is set here, and where it comes from. */
+  /** What a row has while nothing is set here, and where it comes from, in whole pixels. */
   const inherited = (prop: StyleProp): { value: unknown; from: string } | null => {
+    const found = inheritedRaw(prop)
+    const info: StylePropInfo = STYLE_PROPS[prop]
+    return found && typeof found.value === 'number' && info.kind === 'number' && info.unit === 'px'
+      ? { ...found, value: Math.round(found.value) }
+      : found
+  }
+  const inheritedRaw = (prop: StyleProp): { value: unknown; from: string } | null => {
     const wider = widerValue(design, ctx, at, screen, state, prop)
     if (wider)
       return {
@@ -226,12 +225,21 @@ export function ElementPanel({
               ? 'From all screens'
               : `From ${STATE_INFO.base.label}`,
       }
-    const brand = brandOf(design, pick.element, prop)
-    if (brand !== undefined)
+    // Every one's exact value, below this scope, state or screen.
+    const every =
+      widest && state === 'base' ? undefined : everywhereValue(design, pick.element, prop)
+    if (every !== undefined)
       return {
-        value: brand,
-        from: exactOf(design, pick.element, prop) === undefined ? WORDS.fromBrand : WORDS.fromExact,
+        value: every,
+        from:
+          at !== 'everywhere'
+            ? fromScope(scopeWords('everywhere', one))
+            : state !== 'base'
+              ? `From ${STATE_INFO.base.label}`
+              : 'From all screens',
       }
+    const brand = brandOf(design, pick.element, prop)
+    if (brand !== undefined) return { value: brand, from: WORDS.fromBrand }
     // What the element is drawn with is the brand's only where nothing narrower sets it.
     if (!effectiveValue(design, ctx, screen, state, prop)) {
       const measured = measure?.(prop)
@@ -244,12 +252,15 @@ export function ElementPanel({
     if (!allowed(prop)) return null
     const info: StylePropInfo = STYLE_PROPS[prop]
     const id = `style-${pick.element}-${state}-${prop}`
-    const label = ROW_LABELS[prop] ?? info.label
-    const here = readAt(design, ctx, at, screen, state, prop)
+    const label = elementRowLabel(prop)
+    const here = readHere(prop)
     const from = inherited(prop)
     const resetLabel = from
       ? resetTo(valueText(prop, from.value), from.from)
       : `${WORDS.reset} ${label.toLowerCase()}`
+    // For every one, a brand choice that sets this property is its row's tiles, with Custom for the exact field.
+    const choice = widest && state === 'base' ? rowChoiceOf(design, pick.element, prop) : undefined
+    const fieldLabel = choice ? `${WORDS.custom} ${label.toLowerCase()}` : label
     const control = (() => {
       switch (info.kind) {
         case 'paint':
@@ -260,7 +271,7 @@ export function ElementPanel({
             <>
               <TokenField
                 id={id}
-                label={label}
+                label={fieldLabel}
                 value={here as string | undefined}
                 inherited={typeof from?.value === 'string' ? from.value : undefined}
                 tokens={tokens}
@@ -289,7 +300,7 @@ export function ElementPanel({
           return (
             <ScrubNumber
               id={id}
-              label={label}
+              label={fieldLabel}
               value={typeof here === 'number' ? here : undefined}
               inherited={typeof from?.value === 'number' ? from.value : undefined}
               min={info.min}
@@ -304,7 +315,7 @@ export function ElementPanel({
             return (
               <FontField
                 id={id}
-                label={label}
+                label={fieldLabel}
                 value={here === 'display' ? 'headline' : (here as string | undefined)}
                 inherited={
                   from?.value === 'display' ? 'headline' : (from?.value as string | undefined)
@@ -317,7 +328,7 @@ export function ElementPanel({
           return (
             <PropertyTiles
               id={id}
-              label={label}
+              label={fieldLabel}
               value={here as string | undefined}
               inherited={from?.value as string | undefined}
               options={Object.entries(tiles) as Array<[string, string]>}
@@ -327,10 +338,48 @@ export function ElementPanel({
         }
       }
     })()
+    if (choice) {
+      const custom = here !== undefined || customOpen.has(prop)
+      return (
+        <PropertyRow
+          key={`${state}-${prop}`}
+          label={label}
+          find={elementRowFind(pick.element, prop)}
+          set={here !== undefined}
+          source={choice.reach ?? from?.from}
+          resetLabel={resetLabel}
+          onReset={() => write(prop, undefined)}
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <PropertyTiles
+              id={`${id}-choice`}
+              label={label}
+              value={custom ? CUSTOM : choice.value || undefined}
+              options={[...choice.options, [CUSTOM, WORDS.custom]]}
+              onChange={(value) => {
+                setCustomOpen((open) => {
+                  const next = new Set(open)
+                  if (value === CUSTOM) next.add(prop)
+                  else next.delete(prop)
+                  return next
+                })
+                if (value !== CUSTOM)
+                  update(
+                    (draft) => applyChoice(draft, pick.element, choice, value),
+                    undoName(label.toLowerCase())
+                  )
+              }}
+            />
+            {custom && <div className="flex min-w-0 items-center gap-1.5">{control}</div>}
+          </div>
+        </PropertyRow>
+      )
+    }
     return (
       <PropertyRow
         key={`${state}-${prop}`}
         label={label}
+        find={elementRowFind(pick.element, prop)}
         htmlFor={info.kind === 'number' ? id : undefined}
         set={here !== undefined}
         source={from?.from}
@@ -342,49 +391,33 @@ export function ElementPanel({
     )
   }
 
+  // It opens simple: the basics, else what most people change on it; the rest is under More.
+  const basicsOf = BASICS.filter(allowed)
+  const basics = basicsOf.length ? basicsOf : el.common.filter(allowed)
   const placed = new Set<StyleProp>(SECTION_PROPS.flatMap((s) => s.props))
-  const rest = (el.props as readonly StyleProp[]).filter((p) => !placed.has(p) && allowed(p))
-  // A rarer property most people change on this element sits in Text, not under More.
-  const restCommon = rest.filter((p) => el.common.includes(p))
-  const restMore = rest.filter((p) => !el.common.includes(p))
-  const hasValue = (prop: StyleProp) =>
-    readAt(design, ctx, at, screen, state, prop) !== undefined ||
-    effectiveValue(design, ctx, screen, state, prop) !== null
-
-  const sections = SECTION_PROPS.map((section) => {
-    const props = section.props.filter(allowed)
-    const extra = section.title === SECTIONS.text ? restCommon : []
-    if (!props.length && !extra.length) return null
-    const optional = section.optional && !props.some((p) => el.common.includes(p))
-    const shown = !optional || added.has(section.title) || props.some(hasValue)
-    return (
-      <PropertySection
-        key={section.title}
-        title={section.title}
-        onAdd={optional ? () => setAdded(new Set([...added, section.title])) : undefined}
-        added={shown}
-        onRemove={
-          optional
-            ? () => {
-                setAdded(new Set([...added].filter((t) => t !== section.title)))
-                if (props.some((p) => readAt(design, ctx, at, screen, state, p) !== undefined))
-                  update((draft) => {
-                    for (const p of props) writeAt(draft, ctx, at, screen, state, p, undefined)
-                  }, undoName(section.title.toLowerCase()))
-              }
-            : undefined
-        }
-      >
-        {props.map(row)}
-        {extra.map(row)}
-      </PropertySection>
-    )
-  })
+  const rest = (el.props as readonly StyleProp[]).filter(
+    (p) => !placed.has(p) && allowed(p) && !basics.includes(p)
+  )
+  const groups = [
+    ...SECTION_PROPS.map((section) => ({
+      title: section.title,
+      props: section.props.filter((p) => allowed(p) && !basics.includes(p)),
+    })),
+    { title: undefined, props: rest },
+  ].filter((group) => group.props.length > 0)
+  const moreSet = groups.some((group) => group.props.some((p) => readHere(p) !== undefined))
 
   const kinds = STYLE_ELEMENTS[pick.element].label.toLowerCase()
   const narrower: Array<ScopeOption<ScopeName>> = [
     ...(scopes.includes('part')
-      ? [{ id: 'part' as const, link: WORDS.justThisOne, phrase: 'just this one', detail: name }]
+      ? [
+          {
+            id: 'part' as const,
+            link: WORDS.justThisOne,
+            phrase: WORDS.justThisOne.toLowerCase(),
+            detail: name,
+          },
+        ]
       : []),
     ...(scopes.includes('block')
       ? [
@@ -417,26 +450,20 @@ export function ElementPanel({
     onGo: onJump ? () => onJump(place) : undefined,
   }))
 
-  const values = countAt(design, ctx, at, screen)
-  const exact = at === 'everywhere' ? exactValuesOf(design, pick.element).length : 0
+  const homes = widest ? homeValuesOf(design, pick.element) : []
+  const values =
+    countAt(design, ctx, at, screen) +
+    homes.filter((p) => readAt(design, ctx, at, screen, 'base', p) === undefined).length
   const actions: PanelAction[] = [
     ...(values
       ? [
           {
             label: `Reset ${scopeWords(at, one)} (${values} ${values === 1 ? 'value' : 'values'})`,
-            onSelect: () => update((draft) => resetAt(draft, ctx, at, screen), undoName('reset')),
-          },
-        ]
-      : []),
-    ...(exact
-      ? [
-          {
-            label: `${WORDS.resetExact} (${exact})`,
             onSelect: () =>
-              update(
-                (draft) => clearExactValues(draft, pick.element),
-                undoName(WORDS.resetExact.toLowerCase())
-              ),
+              update((draft) => {
+                resetAt(draft, ctx, at, screen)
+                for (const p of homes) writeEverywhere(draft, pick.element, p, undefined)
+              }, undoName('reset')),
           },
         ]
       : []),
@@ -450,9 +477,7 @@ export function ElementPanel({
   ]
 
   const statesSet = (s: StyleState) =>
-    (el.props as readonly StyleProp[]).some(
-      (p) => readAt(design, ctx, at, screen, s, p) !== undefined
-    )
+    (el.props as readonly StyleProp[]).some((p) => readHere(p, s) !== undefined)
 
   return (
     <PropertiesPanel
@@ -466,7 +491,6 @@ export function ElementPanel({
         ]
       }
       title={crumb}
-      kind="Element"
       actions={actions}
       overrides={overrides}
       scope={
@@ -495,39 +519,7 @@ export function ElementPanel({
             </p>
           )}
           {el.states.length > 1 && (
-            <div
-              role="radiogroup"
-              aria-label="State"
-              className="flex gap-0.5 rounded-lg bg-muted p-0.5"
-            >
-              {el.states.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  role="radio"
-                  aria-checked={state === s}
-                  onClick={() => onState(s)}
-                  className={cn(
-                    'flex h-6 min-w-0 flex-1 items-center justify-center gap-1 truncate rounded-md px-1 text-[11px] focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
-                    state === s
-                      ? 'bg-background font-medium text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {STATE_INFO[s].label}
-                  {statesSet(s) && (
-                    <>
-                      <span
-                        aria-hidden="true"
-                        data-state-dot=""
-                        className="size-1 shrink-0 rounded-full bg-primary"
-                      />
-                      <span className="sr-only">, set</span>
-                    </>
-                  )}
-                </button>
-              ))}
-            </div>
+            <StateChip states={el.states} value={state} onChange={onState} isSet={statesSet} />
           )}
         </div>
       }
@@ -535,10 +527,17 @@ export function ElementPanel({
       {at === 'everywhere' && !phone && (
         <ElementStyleSection element={pick.element} name={name} design={design} update={update} />
       )}
-      {sections}
-      {restMore.length > 0 && (
+      {basics.length > 0 && <PropertySection>{basics.map(row)}</PropertySection>}
+      {groups.length > 0 && (
         <div className="border-b border-border px-4 py-1.5">
-          <PropertyMore>{restMore.map(row)}</PropertyMore>
+          <PropertyMore remember="element-more" initiallyOpen={moreSet}>
+            {groups.map((group) => (
+              <div key={group.title ?? 'rest'} className="space-y-0.5 pt-1">
+                {group.title && <h3 className="pt-1 text-xs font-semibold">{group.title}</h3>}
+                {group.props.map(row)}
+              </div>
+            ))}
+          </PropertyMore>
         </div>
       )}
     </PropertiesPanel>
@@ -553,4 +552,68 @@ function countAt(design: PortalDesign, ctx: ElementContext, at: ScopeName, scree
   for (const s of el.states)
     for (const p of el.props) if (readAt(design, ctx, at, screen, s, p) !== undefined) n++
   return n
+}
+
+/**
+ * The state shown, as one quiet chip, "State: Normal", with a menu of the
+ * element's states; a dot marks each that holds values, and the chip has one
+ * when a state other than the one shown does.
+ */
+function StateChip({
+  states,
+  value,
+  onChange,
+  isSet,
+}: {
+  states: readonly StyleState[]
+  value: StyleState
+  onChange: (state: StyleState) => void
+  isSet: (state: StyleState) => boolean
+}) {
+  const others = states.some((s) => s !== value && isSet(s))
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          data-state-chip=""
+          className="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        >
+          {WORDS.state}: <span className="text-foreground">{STATE_INFO[value].label}</span>
+          {others && (
+            <>
+              <span
+                aria-hidden="true"
+                className="size-1 shrink-0 rounded-full bg-muted-foreground"
+              />
+              <span className="sr-only">, other states set</span>
+            </>
+          )}
+          <ChevronDownIcon className="size-3" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-40">
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(next) => onChange(next as StyleState)}
+        >
+          {states.map((s) => (
+            <DropdownMenuRadioItem key={s} value={s} className="text-[13px]">
+              {STATE_INFO[s].label}
+              {isSet(s) && (
+                <>
+                  <span
+                    aria-hidden="true"
+                    data-state-dot=""
+                    className="ms-auto size-1.5 shrink-0 rounded-full bg-muted-foreground"
+                  />
+                  <span className="sr-only">, set</span>
+                </>
+              )}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }

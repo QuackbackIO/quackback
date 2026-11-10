@@ -5,7 +5,7 @@
  */
 import { effectiveValues } from './effective-values'
 import { styleValueWords } from './labels'
-import { BLOCK_NAMES } from './names'
+import { BLOCK_NAMES, SCOPE_WORDS } from './names'
 import { partOf } from './parts-registry'
 import type { PortalDesign } from './schema'
 import {
@@ -59,12 +59,8 @@ export interface ElementContext {
   block: string | null
 }
 
-export const SCOPE_NAMES: Record<ScopeName, string> = {
-  part: 'This one',
-  block: 'This block',
-  page: 'This page',
-  everywhere: 'Everywhere',
-}
+/** Each scope's name, from the one ladder of scope words. */
+export const SCOPE_NAMES: Record<ScopeName, string> = SCOPE_WORDS
 
 const inBlock = (ctx: ElementContext) =>
   !!ctx.block && (BLOCK_STYLE_ELEMENTS as readonly string[]).includes(ctx.element)
@@ -518,7 +514,9 @@ export function themeRole(
     ghost: { background: 'transparent', color: 'ink' },
     link: { color: 'accent-text' },
     navItem: { color: 'muted' },
-    card: { background: 'surface', color: 'ink', borderColor: 'border' },
+    tab: { color: 'muted' },
+    postCard: { background: 'surface', color: 'ink', borderColor: 'border' },
+    panel: { background: 'surface', color: 'ink', borderColor: 'border' },
     block: { background: 'surface', color: 'ink', borderColor: 'border' },
     input: { background: 'surface', borderColor: 'border' },
     headline: { color: 'ink' },
@@ -540,7 +538,9 @@ const BRAND_NUMBERS: Partial<
     weight: (v) => v.label.weight,
   },
   navItem: { size: (v) => v.label.size, weight: (v) => v.label.weight },
-  card: { radius: (v) => v.card.radius },
+  tab: { radius: (v) => v.button.radius },
+  postCard: { radius: (v) => v.card.radius },
+  panel: { radius: (v) => v.card.radius },
   input: { radius: (v) => v.field.radius },
   headline: {
     size: (v) => v.headline.size,

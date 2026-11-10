@@ -41,6 +41,7 @@ import {
   type LookProp,
   type LookScope,
 } from './block-panel'
+import { FIND } from './find-rows'
 import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
 import { ScopeLine } from './properties/scope-line'
 import { ScrubNumber } from './properties/scrub-number'
@@ -164,8 +165,9 @@ export function BlockWords({
 }
 
 /** One of a block's words: what it says, read only, with Edit on the canvas. */
-function WordsRow({
+export function WordsRow({
   label,
+  find,
   text,
   usual,
   set,
@@ -176,6 +178,8 @@ function WordsRow({
   onAdd,
 }: {
   label: string
+  /** Its stable name, which quick find shares. */
+  find?: string
   /** Its own words, or null. */
   text: string | null
   /** What the page draws without them; null where it draws nothing. */
@@ -191,7 +195,7 @@ function WordsRow({
 }) {
   const shown = text ?? usual
   return (
-    <PropertyRow label={label} set={set} resetLabel={resetLabel} onReset={onReset}>
+    <PropertyRow label={label} find={find} set={set} resetLabel={resetLabel} onReset={onReset}>
       <span
         data-words-row=""
         title={others.length ? others.join(' · ') : undefined}
@@ -280,7 +284,7 @@ export function BlockLayout({
   const tiles = widthTiles(def.grid.minW)
   return (
     <PropertySection title={BLOCK_SECTIONS.layout}>
-      <PropertyRow label={BLOCK_WORDS.width}>
+      <PropertyRow label={FIND.blockWidth.label} find={FIND.blockWidth.id}>
         <PropertyTiles
           label={BLOCK_WORDS.width}
           value={tiles.some(([w]) => w === width) ? width : undefined}
@@ -415,12 +419,20 @@ export function BlockLook({
         className="pb-1.5"
         one={BLOCK_WORDS.homeBlock}
         widest={{ id: 'every', phrase: EVERY_HOME_BLOCK, count: blocks.length }}
-        narrower={[{ id: 'one', link: WORDS.justThisOne, phrase: 'just this one', detail: name }]}
+        narrower={[
+          {
+            id: 'one',
+            link: WORDS.justThisOne,
+            phrase: WORDS.justThisOne.toLowerCase(),
+            detail: name,
+          },
+        ]}
         value={scope}
         onChange={onScope}
       />
       <PropertyRow
-        label={BLOCK_WORDS.background}
+        label={FIND.blockBackground.label}
+        find={FIND.blockBackground.id}
         set={isSet('tone')}
         source={fromWhere}
         resetLabel={resetLabel('tone', BLOCK_TONES)}

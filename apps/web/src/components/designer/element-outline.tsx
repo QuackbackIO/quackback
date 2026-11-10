@@ -2,46 +2,34 @@
  * The element under the pointer and the element picked in a block, drawn on
  * the editing layer in the colours of their kind of content: static words in
  * dashed blue, the workspace's data in teal, the product's own interface in
- * dotted slate with a lock. A quiet outline and a tag while pointing; a
- * firmer outline and a tag once picked, and for a data item a lighter one on
- * every other item it styles. The tag takes the keyboard: Tab and Shift+Tab
- * move between the block's elements, Up arrow and Escape go back to the
- * block, Right arrow reaches its Open. Live values in the block wear a small
- * Live badge that says where they come from and where they are changed.
+ * dotted slate. A quiet outline and a tag while pointing; a firmer outline
+ * and a tag once picked, and for a data item a lighter one on every other
+ * item it styles. A tag names the element and where it is, "Headline ·
+ * Hero"; a database glyph marks the workspace's own content. The tag takes
+ * the keyboard: Tab and Shift+Tab move between the block's elements, Up
+ * arrow and Escape go back to the block, Right arrow reaches its Open.
  */
-import { useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
-import { ArrowTopRightOnSquareIcon, LockClosedIcon } from '@heroicons/react/16/solid'
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
+import { ArrowTopRightOnSquareIcon, CircleStackIcon } from '@heroicons/react/16/solid'
 import { KIND_LOOK, type ContentKind } from '@/lib/shared/design/content-kinds'
 import { outlineBox, type Rect } from '@/lib/shared/design/layer-geometry'
 
-/** An element as the layer draws it: where it is, its name and what its kind says. */
+/** An element as the layer draws it: where it is, its name and its kind of content. */
 export interface OutlinedElement {
   rect: Rect
+  /** What it is and where: "Headline · Hero". */
   name: string
   kind: ContentKind
-  /** What the tag says of its kind: "Static · edit in place", "styling all 3", "style only". */
-  note: string
+  /** Whether a double-click edits its words where they sit. */
+  editable: boolean
+  /** How many it styles: every item of its kind, for a data item. */
+  count?: number
 }
 
-/** A live value in the picked or pointed block. */
-export interface LiveValue {
-  rect: Rect
-  /** Said after "From your". */
-  source: string
-  /** The settings page it is changed on. */
-  settings: string
-  /** Whether the box is the value's words, so the badge follows them, rather than a box it sits on the corner of. */
-  words: boolean
-}
-
-/** How a kind is said to a screen reader, after the element's name. */
-function spoken(kind: ContentKind, note: string): string {
-  if (kind === 'static')
-    return note.includes('edit in place')
-      ? 'static words, double-click to edit in place'
-      : 'static, part of the design'
-  if (kind === 'dynamic') return `your data, ${note === 'Dynamic' ? 'styled here' : note}`
-  return 'product interface, style only'
+/** What a screen reader hears after the element's name, where there is more to say. */
+function spoken({ kind, editable, count = 1 }: OutlinedElement): string {
+  if (kind === 'dynamic') return `, your data${count > 1 ? `, styling all ${count}` : ''}`
+  return editable ? ', double-click to edit in place' : ''
 }
 
 const TAG =
@@ -73,18 +61,14 @@ function Tag({
   )
 }
 
-/** The tag's words: its name, and its kind's note. */
-function TagWords({ name, kind, note }: Pick<OutlinedElement, 'name' | 'kind' | 'note'>) {
+/** The tag's words: its name, after a database glyph for the workspace's own content. */
+function TagWords({ name, kind }: Pick<OutlinedElement, 'name' | 'kind'>) {
   return (
     <>
+      {kind === 'dynamic' && (
+        <CircleStackIcon data-content-glyph="" className="size-3 shrink-0" aria-hidden="true" />
+      )}
       <span className="max-w-48 truncate">{name}</span>
-      <span
-        data-kind-note={kind}
-        className="inline-flex items-center gap-0.5 rounded-full bg-white/20 px-1.5 text-[11px]"
-      >
-        {kind === 'system' && <LockClosedIcon className="size-2.5" aria-hidden="true" />}
-        {note}
-      </span>
     </>
   )
 }
@@ -104,7 +88,6 @@ export function ElementOutlines({
   picked,
   others = [],
   open,
-  lives = [],
   block = null,
   onStep,
 }: {
@@ -115,8 +98,6 @@ export function ElementOutlines({
   others?: readonly Rect[]
   /** Where the picked link or item goes, for its Open: "Open post". */
   open?: { label: string; onOpen: () => void } | null
-  /** Live values shown in the block picked or pointed at. */
-  lives?: readonly LiveValue[]
   /** The picked block, whose chip the tags keep clear of. */
   block?: Rect | null
   /** Moves the pick: to the next or the last element in the block, or up to the block. */
@@ -157,10 +138,6 @@ export function ElementOutlines({
   }
   return (
     <>
-      {/* Under the tags, which name what is pointed at or picked. */}
-      {lives.map((live, i) => (
-        <LiveBadge key={i} live={live} room={room} />
-      ))}
       {hovered && (
         <>
           <div
@@ -177,7 +154,7 @@ export function ElementOutlines({
               className={TAG}
               style={{ background: KIND_LOOK[hovered.kind].chip }}
             >
-              <TagWords {...hovered} />
+              <TagWords name={hovered.name} kind={hovered.kind} />
             </span>
           </Tag>
         </>
@@ -205,13 +182,13 @@ export function ElementOutlines({
             <button
               type="button"
               data-element-tag=""
-              aria-label={`${picked.name}, ${spoken(picked.kind, picked.note)}, picked. Tab moves to the next element, Up arrow to its block${open ? `, Right arrow to ${open.label}` : ''}`}
+              aria-label={`${picked.name}${spoken(picked)}, picked. Tab moves to the next element, Up arrow to its block${open ? `, Right arrow to ${open.label}` : ''}`}
               aria-keyshortcuts={`Tab Shift+Tab ArrowUp Escape${open ? ' ArrowRight' : ''}`}
               onKeyDown={onKey}
               className={`pointer-events-auto ${TAG} focus-visible:ring-2 focus-visible:ring-zinc-300 focus-visible:outline-none`}
               style={{ background: KIND_LOOK[picked.kind].chip }}
             >
-              <TagWords {...picked} />
+              <TagWords name={picked.name} kind={picked.kind} />
             </button>
             {open && (
               <button
@@ -232,65 +209,5 @@ export function ElementOutlines({
         </>
       )}
     </>
-  )
-}
-
-/**
- * A live value's badge, after its words or on its box's top end corner: "Live", and on hover or focus where the
- * value comes from, with a way to the settings it is changed in.
- */
-function LiveBadge({ live, room }: { live: LiveValue; room: { width: number; height: number } }) {
-  const [open, setOpen] = useState(false)
-  // On the value's top end corner, as a badge on what it marks, clear of what follows it.
-  const end = live.rect.left + live.rect.width
-  const left = Math.max(4, Math.min(live.words ? end + 6 : end - 6, room.width - 44))
-  const top = Math.max(
-    2,
-    live.words ? live.rect.top + live.rect.height / 2 - 9 : live.rect.top - 11
-  )
-  return (
-    <div
-      data-live-badge=""
-      className="pointer-events-auto absolute"
-      style={{ left, top }}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && open) {
-          event.stopPropagation()
-          setOpen(false)
-        }
-      }}
-    >
-      <button
-        type="button"
-        aria-label={`Live: from your ${live.source}`}
-        aria-expanded={open}
-        className="rounded-full px-1.5 py-px text-[11px] font-semibold text-white focus-visible:ring-2 focus-visible:ring-zinc-300 focus-visible:outline-none"
-        style={{ background: KIND_LOOK.dynamic.chip, boxShadow: '0 0 0 1px #fff' }}
-      >
-        Live
-      </button>
-      {open && (
-        <div
-          role="note"
-          className="absolute top-full left-0 z-10 mt-1 w-max max-w-56 rounded-md border border-border bg-popover px-2 py-1.5 text-[12px] text-popover-foreground shadow-md"
-        >
-          <span>From your {live.source}. </span>
-          <a
-            href={live.settings}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium underline underline-offset-2"
-          >
-            Change in Settings
-          </a>
-        </div>
-      )}
-    </div>
   )
 }

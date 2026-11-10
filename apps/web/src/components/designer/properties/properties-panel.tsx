@@ -1,6 +1,6 @@
 /**
  * The properties frame every panel shares, Figma style: a breadcrumb whose
- * crumbs pick the parent, a title with its kind and an optional ⋯ menu, an
+ * crumbs pick the parent, a title with an optional ⋯ menu, an
  * optional scope line, titled sections of compact rows, and a footer listing
  * the places set differently, shown only when there are some.
  *
@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/shared/utils'
+import { keepOpen, rememberedOpen } from '../advanced'
 import { WORDS, setDifferentlyIn } from './words'
 
 /** A step of the breadcrumb: the last is where you are; the others pick that parent. */
@@ -59,7 +60,6 @@ export function PropertiesPanel({
   title,
   icon,
   about,
-  kind,
   actions,
   scope,
   overrides = [],
@@ -73,8 +73,6 @@ export function PropertiesPanel({
   icon?: ReactNode
   /** What it is for, said on hovering the title. */
   about?: string
-  /** What it is, as a tag beside the title: "Element", "Block", "Page". */
-  kind?: string
   /** The ⋯ menu; none shows no menu. */
   actions?: readonly PanelAction[]
   /** The scope line, under the title. */
@@ -121,7 +119,6 @@ export function PropertiesPanel({
           <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold" title={about}>
             {title}
           </h2>
-          {kind && <span className="text-[11px] text-muted-foreground">{kind}</span>}
           {actions && actions.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -259,14 +256,33 @@ export function PropertySection({
   )
 }
 
-/** Rows most people never need, closed until asked for; they stay in the page, so find reaches them. */
-export function PropertyMore({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false)
+/**
+ * Rows most people never need, closed until asked for; they stay in the page,
+ * so find reaches them. Remembered, it stays open for the visit once opened;
+ * it starts open where it holds something set.
+ */
+export function PropertyMore({
+  remember,
+  initiallyOpen = false,
+  children,
+}: {
+  /** Kept open for the rest of the visit once opened, under this name. */
+  remember?: string
+  initiallyOpen?: boolean
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(
+    () => initiallyOpen || (remember ? rememberedOpen(remember) : false)
+  )
   return (
     <details
       className="group mt-1"
       open={open || undefined}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
+      onToggle={(event) => {
+        const now = event.currentTarget.open
+        setOpen(now)
+        if (remember) keepOpen(remember, now)
+      }}
     >
       <summary className="flex min-h-7 cursor-pointer list-none items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none [&::-webkit-details-marker]:hidden">
         <ChevronRightIcon
@@ -287,6 +303,7 @@ export function PropertyMore({ children }: { children: ReactNode }) {
  */
 export function PropertyRow({
   label,
+  find,
   htmlFor,
   set = false,
   source,
@@ -296,6 +313,8 @@ export function PropertyRow({
   children,
 }: {
   label: string
+  /** Its stable name, which quick find's index shares to lead to it (find-rows.ts). */
+  find?: string
   /** Advice about the row, on hovering the ⓘ after its label. */
   help?: string
   /** The control's id, so the label names it. */
@@ -313,6 +332,7 @@ export function PropertyRow({
     <div
       className="flex min-h-7 items-center gap-2"
       data-property-row=""
+      data-find={find}
       data-set={set || undefined}
     >
       <span className="flex w-[92px] shrink-0 items-center gap-0.5">

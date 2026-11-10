@@ -17,20 +17,12 @@ import {
   PropertySection,
   PropertyTiles,
 } from './properties/properties-panel'
-import { WORDS } from './properties/words'
+import { FIND, TITLED } from './find-rows'
+import { THEME, WORDS } from './properties/words'
 import type { Crumb } from './properties/properties-panel'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
-
-/** The pages whose title can sit plain or in a hero, as Home's and Feedback's always do. */
-const TITLED: readonly DesignerPage[] = ['roadmap', 'changelog', 'help', 'support']
-
-const WIDTH_NAMES: Record<PortalDesign['layout']['width'], string> = {
-  narrow: 'Narrow',
-  default: 'Standard',
-  wide: 'Wide',
-}
 
 const link =
   'rounded text-xs underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
@@ -38,7 +30,7 @@ const link =
 /**
  * The page itself, shown with nothing picked: where its title sits, its
  * background and width, its parts as rows that pick each one, and the way
- * to what every page shares.
+ * to Theme, which every page shares.
  */
 export function PagePanel({
   crumbs,
@@ -58,23 +50,18 @@ export function PagePanel({
   /** The page's outline: its parts, in the order a visitor meets them. */
   nodes: readonly OutlineNode[]
   onSelect: (selection: Selection) => void
-  /** Opens Theme, at its More options for a style such as the page width. */
+  /** Opens Theme, at its Style for a style such as the page width. */
   onTheme: (more: boolean) => void
 }) {
   const titles = design.layout.pageTitles
   const parts = nodes.filter((node) => node.key !== 'site')
   return (
-    <PropertiesPanel
-      crumbs={crumbs}
-      title={title}
-      kind={WORDS.page}
-      data-page-panel=""
-      className="pb-24"
-    >
+    <PropertiesPanel crumbs={crumbs} title={title} data-page-panel="" className="pb-24">
       <PropertySection title={WORDS.page}>
         {TITLED.includes(page) && (
           <PropertyRow
-            label={WORDS.pageTitle}
+            label={FIND.pageTitle.label}
+            find={FIND.pageTitle.id}
             set={titles !== undefined}
             source={WORDS.titledPages}
             resetLabel={`${WORDS.reset} ${WORDS.pageTitle.toLowerCase()} to ${WORDS.titlePlain.toLowerCase()}`}
@@ -107,7 +94,7 @@ export function PagePanel({
             className="inline-flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-[11px] hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
           >
             <span className="truncate">
-              {WORDS.brand}: {WIDTH_NAMES[design.layout.width]}
+              {WORDS.brand}: {THEME.widths[design.layout.width]}
             </span>
           </button>
         </PropertyRow>
@@ -134,9 +121,6 @@ export function PagePanel({
           <button type="button" className={link} onClick={() => onTheme(false)}>
             {WORDS.theme}
           </button>
-          <button type="button" className={link} onClick={() => onSelect('site:words')}>
-            {WORDS.words}
-          </button>
         </p>
       </PropertySection>
     </PropertiesPanel>
@@ -160,7 +144,7 @@ export function BackgroundRow({
   const shown = ownBg ?? siteBackground(design)
   return (
     <>
-      <PropertyRow label={WORDS.background} htmlFor={id}>
+      <PropertyRow label={FIND.pageBackground.label} find={FIND.pageBackground.id} htmlFor={id}>
         <button
           id={id}
           type="button"

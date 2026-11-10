@@ -7,11 +7,10 @@ import { GridHandles } from './grid-handles'
 import { useComposerWidthEdit } from './use-composer-width'
 import { useGridEdit, type GridEditing } from './use-grid-edit'
 import { revealInFrame, useFrameRects } from './use-frame-rects'
-import { ElementOutlines, type LiveValue, type OutlinedElement } from './element-outline'
+import { ElementOutlines, type OutlinedElement } from './element-outline'
 import { locateTarget, outlineTargets } from './change-outlines'
 import type { ChangeFlash } from './use-change-flash'
 import {
-  kindNote,
   locatePick,
   pickKey,
   pickName,
@@ -20,7 +19,7 @@ import {
   pickTraits,
   type ElementPick,
 } from '@/lib/shared/design/element-pick'
-import { destinationName, LIVE_SOURCES, livesIn } from '@/lib/shared/design/content-kinds'
+import { destinationName } from '@/lib/shared/design/content-kinds'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { OverridePage } from '@/lib/shared/design/style-overrides'
 import type { StyleState } from '@/lib/shared/design/style-tokens'
@@ -90,13 +89,6 @@ export function CanvasLayer({
       const target = flashTargetOf(key)
       return target ? locateTarget(doc, target) : null
     }
-    const live = liveOfKey(key)
-    if (live) {
-      const scope = [...doc.querySelectorAll('[data-qb-section]')].find(
-        (node) => node.getAttribute('data-qb-section') === live.section
-      )
-      return scope ? (livesIn(scope)[live.at]?.node ?? null) : null
-    }
     const pick = pickOfKey(key)
     return pick && elements ? locatePick(doc, pick, elements.design, elements.page) : null
   }
@@ -111,21 +103,6 @@ export function CanvasLayer({
     element && pickedTraits
       ? pickedTraits.others.map((index) => pickKey({ ...element, index }))
       : []
-  // Live values in the block picked, else the one pointed at.
-  const liveSection = picked ?? hovered
-  const liveMarks = (() => {
-    if (!doc || !liveSection || !elements) return []
-    const scope = [...doc.querySelectorAll('[data-qb-section]')].find(
-      (node) => node.getAttribute('data-qb-section') === liveSection
-    )
-    return scope
-      ? livesIn(scope).map((live) => ({
-          mark: live.mark,
-          words: live.node.hasAttribute('data-qb-live'),
-        }))
-      : []
-  })()
-  const liveKeys = liveMarks.map((_, at) => `live:${liveSection}|${at}`)
   const rects = useFrameRects(
     canvas.frame,
     canvas.scale,
@@ -135,7 +112,6 @@ export function CanvasLayer({
       elements?.hovered ?? null,
       elements?.picked ?? null,
       ...otherKeys,
-      ...liveKeys,
       ...flashKeys,
     ],
     locate
@@ -238,12 +214,14 @@ export function CanvasLayer({
     rect: (typeof rects)[string] | null
   ): OutlinedElement | null =>
     pick && traits && rect
-      ? { rect, name: nameOf(pick) ?? '', kind: traits.kind, note: kindNote(traits) }
+      ? {
+          rect,
+          name: nameOf(pick) ?? '',
+          kind: traits.kind,
+          editable: traits.editable,
+          count: traits.count,
+        }
       : null
-  const lives: LiveValue[] = liveMarks.flatMap(({ mark, words }, i) => {
-    const rect = rects[liveKeys[i]!]
-    return rect && !resizing ? [{ rect, words, ...LIVE_SOURCES[mark] }] : []
-  })
   const block = picked?.startsWith('block-') ? picked : null
   const pickedRect = picked ? (rects[picked] ?? null) : null
   const pointedRect =
@@ -303,7 +281,6 @@ export function CanvasLayer({
                 }
               : null
           }
-          lives={lives}
           block={pickedRect}
           onStep={step}
         />
@@ -341,10 +318,4 @@ function keepFocus(selector: string, frames = 20): void {
     if (--left > 0 && (!seen || seen.isConnected)) requestAnimationFrame(tick)
   }
   requestAnimationFrame(tick)
-}
-
-/** A live value's key among the frame's boxes: its block and which of the block's live values. */
-function liveOfKey(key: string): { section: string; at: number } | null {
-  const m = /^live:(.+)\|(\d+)$/.exec(key)
-  return m ? { section: m[1]!, at: Number(m[2]) } : null
 }

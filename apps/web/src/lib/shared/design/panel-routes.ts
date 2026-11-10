@@ -3,7 +3,7 @@
  * breadcrumb, and the level Escape goes up to. Nothing picked shows the
  * page's own panel, and so does a pick with no panel of its own, so the
  * panel is never blank. Escape climbs one level at a time: an element to its
- * block, a Home block to Blocks, a menu link to the header, anything else to
+ * block, a Home block to Blocks, a menu link or the logo to the header, anything else to
  * the page; only the page closes the panel.
  */
 import { sectionTypeOf } from './builder-chrome'
@@ -12,16 +12,7 @@ import { PAGE_NAMES, type DesignerPage, type Selection } from './outline'
 
 /** The panels the right panel holds. */
 export type PanelKind =
-  | 'page'
-  | 'words'
-  | 'header'
-  | 'link'
-  | 'hero'
-  | 'blocks'
-  | 'block'
-  | 'section'
-  | 'part'
-  | 'element'
+  'page' | 'header' | 'logo' | 'link' | 'hero' | 'blocks' | 'block' | 'section' | 'part' | 'element'
 
 /** A step of the breadcrumb: `to` picks it (null is the page); the last has none. */
 export interface RouteCrumb {
@@ -39,10 +30,11 @@ export interface PanelRoute {
 /** Each panel's own name, where the outline does not give one. */
 const OWN_NAMES: Partial<Record<string, string>> = {
   header: 'Header and menu',
+  logo: 'Logo',
   hero: 'Hero',
   home: 'Blocks',
-  'site:words': 'Words',
   welcome: 'Welcome message',
+  composer: 'Composer',
   feed: 'Feed',
   filters: 'Filters',
   entries: 'Entries',
@@ -51,13 +43,13 @@ const OWN_NAMES: Partial<Record<string, string>> = {
   board: 'Board',
 }
 
-const PARTS = new Set(['welcome', 'feed', 'filters'])
+const PARTS = new Set(['welcome', 'composer', 'feed', 'filters'])
 
-/** The level above a pick: a Home block's is Blocks, a menu link's the header, the rest the page. */
+/** The level above a pick: a Home block's is Blocks, a menu link's and the logo's the header, the rest the page. */
 export function upOf(selection: string | null): Selection | null {
   if (!selection) return null
   if (selection.startsWith('block-')) return 'home'
-  if (selection.startsWith('link:')) return 'header'
+  if (selection.startsWith('link:') || selection === 'logo') return 'header'
   return null
 }
 
@@ -89,7 +81,8 @@ export function panelFor(
     return { ...under('header', 'header'), up: null }
   if (selection.startsWith('link:'))
     return under('link', selection, [{ label: named('header'), to: 'header' }])
-  if (selection === 'site:words') return under('words', selection)
+  if (selection === 'logo')
+    return under('logo', selection, [{ label: named('header'), to: 'header' }])
   if (selection === 'hero') return under('hero', selection)
   if (selection === 'home') return under('blocks', selection)
   if (selection.startsWith('block-'))

@@ -13,13 +13,13 @@ import {
   type OwnFontRequest,
 } from '@/components/admin/settings/appearance/fonts-section'
 import { loadFontPreviews } from '@/components/admin/settings/appearance/font-previews'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
+import type { Update } from '@/components/admin/settings/appearance/design-update'
 import { FONT_PAIRS, fontPairOf, takeFontPair } from '@/lib/shared/design/curated'
-import { BUNDLED_FONTS, closestWeight, fontStack, fontWeights } from '@/lib/shared/design/fonts'
-import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
+import { BUNDLED_FONTS, closestWeight, fontStack } from '@/lib/shared/design/fonts'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
+import { FIND, headingWeightsOf } from './find-rows'
 import { FontFaces } from './properties/token-field'
 import { faceName } from './properties/tokens'
 import { FONT_NAMES, THEME, WORDS } from './properties/words'
@@ -177,16 +177,18 @@ function FaceValue({
 export function BrandKitFonts({ design, update }: { design: PortalDesign; update: Update }) {
   const { fonts } = design.brand
   const uploaded = uploadedFonts(fonts)
-  const weights = DESIGN_OPTIONS.headingWeight.filter((weight) =>
-    fontWeights(fonts.heading).includes(weight)
-  )
+  const weights = headingWeightsOf(design)
   return (
     <div id={THEME_FONTS_ID} className="scroll-mt-4">
       <PropertySection title={WORDS.fonts}>
-        <PropertyRow label={THEME.pair} htmlFor="kit-font-pair">
+        <PropertyRow label={FIND.pair.label} find={FIND.pair.id} htmlFor="kit-font-pair">
           <PairPicker design={design} update={update} />
         </PropertyRow>
-        <PropertyRow label={FONT_NAMES.heading} htmlFor="kit-font-heading">
+        <PropertyRow
+          label={FIND.headingFont.label}
+          find={FIND.headingFont.id}
+          htmlFor="kit-font-heading"
+        >
           <FaceValue
             id="kit-font-heading"
             label={FONT_NAMES.heading}
@@ -206,7 +208,8 @@ export function BrandKitFonts({ design, update }: { design: PortalDesign; update
           />
         </PropertyRow>
         <PropertyRow
-          label={FONT_NAMES.headline}
+          label={FIND.headlineFont.label}
+          find={FIND.headlineFont.id}
           htmlFor="kit-font-display"
           set={!!fonts.display}
           resetLabel={`${WORDS.reset} to ${THEME.sameAsHeading.toLowerCase()}`}
@@ -227,7 +230,7 @@ export function BrandKitFonts({ design, update }: { design: PortalDesign; update
             }
           />
         </PropertyRow>
-        <PropertyRow label={FONT_NAMES.body} htmlFor="kit-font-body">
+        <PropertyRow label={FIND.bodyFont.label} find={FIND.bodyFont.id} htmlFor="kit-font-body">
           <FaceValue
             id="kit-font-body"
             label={FONT_NAMES.body}
@@ -238,7 +241,11 @@ export function BrandKitFonts({ design, update }: { design: PortalDesign; update
           />
         </PropertyRow>
         {weights.length > 1 && (
-          <PropertyRow label={THEME.headingWeight} htmlFor="kit-heading-weight">
+          <PropertyRow
+            label={FIND.headingWeight.label}
+            find={FIND.headingWeight.id}
+            htmlFor="kit-heading-weight"
+          >
             <PropertyTiles
               id="kit-heading-weight"
               label={THEME.headingWeight}

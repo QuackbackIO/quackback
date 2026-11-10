@@ -20,7 +20,8 @@ import {
   type OverridePlace,
   type PanelAction,
 } from './properties/properties-panel'
-import { BLOCK_SECTIONS, KINDS, WORDS } from './properties/words'
+import { blockFieldFind } from './find-rows'
+import { BLOCK_SECTIONS, WORDS } from './properties/words'
 
 type Source = Extract<SettingField, { kind: 'source' }>['source']
 /** What the workspace has to pick from, each as its id and name. */
@@ -113,7 +114,6 @@ export function BlockPanel({
       title={def.name}
       icon={icon}
       about={def.purpose}
-      kind={KINDS.block}
       actions={actions}
       overrides={overrides}
       scope={notes ? <div className="space-y-1.5 text-xs">{notes}</div> : undefined}
@@ -182,6 +182,7 @@ function Field({
       return (
         <PropertyRow
           label={label}
+          find={blockFieldFind(field.key)}
           htmlFor={id}
           set={!!words[locale]}
           resetLabel={`${WORDS.reset} ${field.label.toLowerCase()}`}
@@ -206,6 +207,7 @@ function Field({
       return (
         <PropertyRow
           label={field.label}
+          find={blockFieldFind(field.key)}
           set={setOn(value, field.default)}
           onReset={field.default !== undefined ? () => onChange(field.default) : undefined}
         >
@@ -223,6 +225,7 @@ function Field({
       return (
         <PropertyRow
           label={field.label}
+          find={blockFieldFind(field.key)}
           set={setOn(value, field.default)}
           onReset={field.default !== undefined ? () => onChange(field.default) : undefined}
         >
@@ -243,6 +246,7 @@ function Field({
           {group && <p className="pt-1 text-xs font-medium text-muted-foreground">{group}</p>}
           <PropertyRow
             label={field.label}
+            find={blockFieldFind(field.key)}
             htmlFor={id}
             set={setOn(value, field.default === true)}
             onReset={() => onChange(field.default === true)}
@@ -288,6 +292,7 @@ function SourceSelect({
   return (
     <PropertyRow
       label={field.label}
+      find={blockFieldFind(field.key)}
       htmlFor={id}
       set={typeof value === 'string'}
       onReset={() => onChange(null)}
@@ -329,7 +334,7 @@ function SourceList({
   const max = field.max ?? items.length
   if (items.length === 0)
     return (
-      <PropertyRow label={field.label}>
+      <PropertyRow label={field.label} find={blockFieldFind(field.key)}>
         <span className="text-xs text-muted-foreground">
           {`${NOTHING_YET[field.source]} Shows ${field.any.toLowerCase()}.`}
         </span>
@@ -340,7 +345,7 @@ function SourceList({
     onChange(on ? [...rest, itemId].slice(0, max) : rest)
   }
   return (
-    <fieldset className="space-y-0.5">
+    <fieldset className="space-y-0.5" data-find={blockFieldFind(field.key)}>
       <legend className="sr-only">{field.label}</legend>
       <PropertyRow label={field.label} set={picked.length > 0} onReset={() => onChange([])}>
         <span className="text-xs text-muted-foreground">

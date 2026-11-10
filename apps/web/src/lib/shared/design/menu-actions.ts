@@ -75,7 +75,6 @@ export const MENU_COPY = {
 export const HEADER_COPY = {
   title: 'Header and menu',
   logo: 'Logo',
-  logoAction: 'Change the logo in Theme',
   menu: 'Menu',
   hidden: WORDS.hidden,
   show: WORDS.show,

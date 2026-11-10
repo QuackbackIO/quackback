@@ -6,7 +6,7 @@ import {
   DesignComposer,
   type ChatContext,
 } from '@/components/admin/settings/appearance/design-composer'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
+import type { Update } from '@/components/admin/settings/appearance/design-update'
 import type { useDesignAi } from '@/components/admin/settings/appearance/use-design-ai'
 import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
 import { Button } from '@/components/ui/button'
@@ -38,9 +38,12 @@ export function aiScopeOf(selection: Selection | null): {
   const scopes: Record<string, DesignAiScope> = {
     site: 'brand',
     header: 'header',
+    logo: 'logo',
     // The hero's fields are stored under its older name, band.
     hero: 'band',
     welcome: 'welcome',
+    // The composer's words are the feed's.
+    composer: 'feed',
     feed: 'feed',
     filters: 'filters',
     home: 'home',

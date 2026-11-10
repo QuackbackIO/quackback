@@ -8,6 +8,7 @@
 import type { SectionType } from './blocks'
 import { isMenuSelection } from './menu'
 import type { OutlineNode, Selection } from './outline'
+import type { StyleElement, StyleState } from './style-tokens'
 
 /** The sheets that open over the right panel. */
 export type Sheet = 'theme' | 'add'
@@ -41,10 +42,17 @@ export function panelBaseOf(selection: string | null): PanelBase {
   return 'part'
 }
 
-/** The sheet open over the panel, and whether Theme shows More options. */
+/** Where Theme opens for quick find: its main view, or an element's panel in a state. */
+export interface ThemeAt {
+  element: StyleElement | null
+  state?: StyleState
+}
+
+/** The sheet open over the panel, whether Theme opens at its Style, and the view asked for. */
 export interface PanelState {
   sheet: Sheet | null
   more: boolean
+  at?: ThemeAt
 }
 
 export const NO_SHEET: PanelState = { sheet: null, more: false }
@@ -52,8 +60,8 @@ export const NO_SHEET: PanelState = { sheet: null, more: false }
 export type PanelAction =
   /** Add or Theme in the top bar: opens its sheet, or closes it when open. */
   | { type: 'toggle'; sheet: Sheet }
-  /** Opens a sheet, Theme at More options if asked, such as from a search. */
-  | { type: 'open'; sheet: Sheet; more?: boolean }
+  /** Opens a sheet, Theme at its Style or at a view if asked, such as from a search. */
+  | { type: 'open'; sheet: Sheet; more?: boolean; at?: ThemeAt }
   | { type: 'more'; open: boolean }
   | { type: 'close' }
   /** "Back to <pick>": the sheet goes, the pick's panel stays. */
@@ -66,7 +74,11 @@ export function panelReducer(state: PanelState, action: PanelAction): PanelState
     case 'toggle':
       return state.sheet === action.sheet ? NO_SHEET : { sheet: action.sheet, more: false }
     case 'open':
-      return { sheet: action.sheet, more: action.sheet === 'theme' && !!action.more }
+      return {
+        sheet: action.sheet,
+        more: action.sheet === 'theme' && !!action.more,
+        ...(action.sheet === 'theme' && action.at ? { at: action.at } : {}),
+      }
     case 'more':
       return state.sheet === 'theme' && state.more !== action.open
         ? { ...state, more: action.open }

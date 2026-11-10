@@ -11,7 +11,7 @@
  */
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/shared/utils'
-import { backToEvery, everyOf } from './words'
+import { appliesTo, backToEvery, everyOf } from './words'
 
 /** A scope a change can be made at. */
 export interface ScopeOption<T extends string = string> {
@@ -96,5 +96,29 @@ export function ScopeLine<T extends string>({
         {extra}
       </p>
     </div>
+  )
+}
+
+/**
+ * How far a change reaches where only one reach exists, as a plain sentence:
+ * "Applies to the header (5 pages)". No ladder, since there is no choice.
+ */
+export function ReachNote({
+  phrase,
+  count,
+  countNote,
+  className,
+}: {
+  /** What a change here reaches: "the header", "every post card". */
+  phrase: string
+  count?: number
+  countNote?: string
+  className?: string
+}) {
+  return (
+    <p data-reach-note="" className={cn('text-xs text-muted-foreground', className)}>
+      {appliesTo(phrase)}
+      {counted({ count, countNote })}
+    </p>
   )
 }

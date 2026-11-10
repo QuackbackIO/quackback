@@ -9,7 +9,7 @@
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import { ChevronRightIcon, MinusIcon, PlusIcon } from '@heroicons/react/16/solid'
 import { DesignTiles } from '@/components/admin/settings/appearance/design-tiles'
-import { presignBandImage } from '@/components/admin/settings/appearance/section-controls'
+import { presignBandImage } from '@/components/admin/settings/appearance/design-update'
 import { Button } from '@/components/ui/button'
 import { prepareBackgroundImage, type PreparedBackground } from '@/lib/client/background-image'
 import { PAGE_BACKGROUND_SETTINGS } from '@/lib/shared/design/blocks'
@@ -728,11 +728,17 @@ export function PageBackgroundEntry({
   design,
   update,
   page,
+  label,
+  find,
   onOpen,
 }: {
   design: PortalDesign
   update: NamedUpdate
   page: string | null
+  /** The row's own name, such as Background in Theme's Style; whose it is then joins the value. */
+  label?: string
+  /** Its stable name, which quick find shares. */
+  find?: string
   onOpen?: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -742,7 +748,7 @@ export function PageBackgroundEntry({
   const shown = ownShown || siteBackground(design)
   const whose = own && ownShown ? THEME.pageOnly(BACKGROUND_PAGE_NAMES[own]) : THEME.everyPage
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-find={find}>
       <button
         type="button"
         aria-label={`${THEME.sections.pageBackground}: ${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
@@ -752,10 +758,12 @@ export function PageBackgroundEntry({
         className="flex min-h-7 w-full items-center gap-2 rounded-md text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
       >
         <span className="w-[92px] shrink-0 truncate text-muted-foreground">
-          {onOpen ? whose : THEME.sections.pageBackground}
+          {label ?? (onOpen ? whose : THEME.sections.pageBackground)}
         </span>
         <span className="min-w-0 flex-1 truncate px-1.5">
-          {onOpen ? BACKGROUND_NAMES[shown.kind] : `${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
+          {onOpen && !label
+            ? BACKGROUND_NAMES[shown.kind]
+            : `${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
         </span>
         <ChevronRightIcon
           className={cn('size-3.5 text-muted-foreground', !onOpen && open && 'rotate-90')}

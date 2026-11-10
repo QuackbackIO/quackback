@@ -272,7 +272,7 @@ describe('motion under the pointer', () => {
     const css = renderDesignCss(resolveDesign(defaultDesign()))
     const guard = css.indexOf('@media (prefers-reduced-motion: no-preference)')
     expect(guard).toBeGreaterThan(0)
-    for (const motion of ['translateY(-2px)', 'translateX(3px)', 'transition:'])
+    for (const motion of ['translateX(3px)', 'transition:'])
       expect(css.indexOf(motion)).toBeGreaterThan(guard)
     // The arrow itself shows either way; only its nudge moves.
     expect(
@@ -280,5 +280,11 @@ describe('motion under the pointer', () => {
         "[data-qb-hover=arrow][data-portal-theme] [data-qb-link]::after { content: '\\2192'"
       )
     ).toBeGreaterThan(0)
+  })
+
+  it('has no lift of its own: Lift is the element Hover values, drawn once', () => {
+    const css = renderDesignCss(resolveDesign(defaultDesign()))
+    expect(css).not.toContain('data-qb-hover=lift')
+    expect(css).not.toContain('translateY(-2px)')
   })
 })

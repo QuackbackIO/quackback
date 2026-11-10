@@ -987,15 +987,10 @@ function styleCases(): EvalCase[] {
       touches: ['style'],
     },
     {
-      name: 'style: a thick brand focus ring on buttons',
-      request: 'When buttons are focused with the keyboard, show a 3px ring in the brand colour',
-      ops: [
-        { op: 'theme', key: 'style.button.focus.ring', value: 'accent' },
-        { op: 'theme', key: 'style.button.focus.ringWidth', value: '3' },
-      ],
-      check: (d) =>
-        at(d, 'style.button.focus.ringWidth') === 3 &&
-        ['accent', '#4f46e5'].includes(String(at(d, 'style.button.focus.ring'))),
+      name: 'style: a thick focus ring on buttons, still neutral',
+      request: 'When buttons are focused with the keyboard, show a thicker 3px ring',
+      ops: [{ op: 'theme', key: 'style.button.focus.ringWidth', value: '3' }],
+      check: (d) => at(d, 'style.button.focus.ringWidth') === 3,
       touches: ['style'],
     },
     {
@@ -1028,9 +1023,9 @@ function styleCases(): EvalCase[] {
     {
       name: 'block style: cards in top posts rise on hover',
       request: 'In Top posts only, cards should rise a few pixels on hover',
-      ops: [{ op: 'set', target: 'ideas00001', key: 'style.card.hover.lift', value: '3' }],
+      ops: [{ op: 'set', target: 'ideas00001', key: 'style.postCard.hover.lift', value: '3' }],
       check: (d) => {
-        const lift = blockLook(d, 'ideas00001', 'card.hover.lift')
+        const lift = blockLook(d, 'ideas00001', 'postCard.hover.lift')
         return typeof lift === 'number' && lift > 0
       },
       touches: ['pages.home.blocks'],

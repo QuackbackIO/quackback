@@ -32,14 +32,21 @@ export interface SpotChange {
 }
 
 /** The pages with a hero: every page but a post and the status page. */
-const HERO_PAGES: readonly DesignerPage[] = ['home', 'feedback', 'roadmap', 'changelog', 'help', 'support']
+const HERO_PAGES: readonly DesignerPage[] = [
+  'home',
+  'feedback',
+  'roadmap',
+  'changelog',
+  'help',
+  'support',
+]
 
 /** The exact values each part keeps, as the element they style. */
 const TUNE_ELEMENTS: Record<string, StyleElement> = {
   headline: 'headline',
   heading: 'heading',
   button: 'button',
-  card: 'card',
+  card: 'postCard',
   field: 'input',
   subtitle: 'subtitle',
   link: 'link',
@@ -94,8 +101,7 @@ function blocksChanged(design: PortalDesign, change: SpotChange): ChangeSpot[] {
     const id = design.pages.home.blocks[Number(at[1])]?.id
     return id ? [{ page: 'home', section: `block-${id}` }] : []
   }
-  const list = (value: unknown) =>
-    Array.isArray(value) ? (value as Array<{ id?: string }>) : []
+  const list = (value: unknown) => (Array.isArray(value) ? (value as Array<{ id?: string }>) : [])
   const was = new Map(list(change.before).map((block) => [block.id, JSON.stringify(block)]))
   return list(change.after)
     .filter((block) => block.id && was.get(block.id) !== JSON.stringify(block))
@@ -117,7 +123,8 @@ function spotOfField(path: string): ChangeSpot | null {
     }
   }
   const tuned = /^tune\.(\w+)\./.exec(path)
-  if (tuned) return TUNE_ELEMENTS[tuned[1]!] ? { page: null, element: TUNE_ELEMENTS[tuned[1]!] } : null
+  if (tuned)
+    return TUNE_ELEMENTS[tuned[1]!] ? { page: null, element: TUNE_ELEMENTS[tuned[1]!] } : null
   for (const [field, page, section] of SECTION_FIELDS)
     if (field.test(path)) return { page, section }
   const titled = /^pages\.titles\.(roadmap|changelog|help|support)\b/.exec(path)
@@ -165,10 +172,7 @@ export function pageForSpot(
 }
 
 /** Where a request's changes show, each spot once. */
-export function spotsOfChanges(
-  design: PortalDesign,
-  changes: readonly SpotChange[]
-): ChangeSpot[] {
+export function spotsOfChanges(design: PortalDesign, changes: readonly SpotChange[]): ChangeSpot[] {
   const seen = new Set<string>()
   return changes
     .flatMap((change) => changeSpots(design, change))

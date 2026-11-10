@@ -2,8 +2,8 @@
 /**
  * The header's panel on the properties frame: its layout (with the blend
  * into the hero), the menu as rows with Hide or Show on each and the rest
- * under ⋯, the landing page as tiles, the menu's style, and the logo's way
- * to Theme. Names change where the menu draws them, never in the list.
+ * under ⋯, the landing page as tiles, the menu's style, and a row into the
+ * logo, its own element. Names change where the menu draws them, never in the list.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -34,8 +34,9 @@ function show(change?: (draft: PortalDesign) => void) {
   const props = {
     act: vi.fn(),
     onAdd: vi.fn(),
-    onTheme: vi.fn(),
+    onLogo: vi.fn(),
     onLanding: vi.fn(),
+    onElement: vi.fn(),
   }
   function Harness() {
     const [design, setDesign] = useState(start)
@@ -72,8 +73,8 @@ describe('HeaderPanel', () => {
   it('sits on the frame, saying it changes the header on every page', () => {
     show()
     expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Header and menu')
-    expect(document.querySelector('[data-scope-line]')?.textContent).toContain(
-      'Changing the header (5 pages)'
+    expect(document.querySelector('[data-reach-note]')?.textContent).toBe(
+      'Applies to the header (5 pages)'
     )
   })
 
@@ -159,10 +160,20 @@ describe('HeaderPanel', () => {
     expect(screen.queryByRole('switch', { name: 'Header blends into the hero' })).toBeNull()
   })
 
-  it('leads to Theme for the logo, and to adding to the menu', () => {
-    const { onTheme, onAdd } = show()
-    fireEvent.click(screen.getByRole('button', { name: 'Change the logo in Theme' }))
-    expect(onTheme).toHaveBeenCalled()
+  it('shows the menu items’ look as one row that picks their element, never a second editor', () => {
+    const { onElement, seen } = show((draft) => void (draft.layout.nav = 'pills'))
+    expect(screen.queryByRole('radiogroup', { name: 'Menu style' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Menu text' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Menu look: Pills · Grey' }))
+    expect(onElement).toHaveBeenCalledWith('navItem')
+    expect(seen.labels).toEqual([])
+  })
+
+  it('leads to the logo, its own element, and to adding to the menu', () => {
+    const { onLogo, onAdd } = show((draft) => void (draft.brand.logo.display = 'wordmark'))
+    expect(screen.queryByRole('button', { name: 'Theme' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Logo: Full logo' }))
+    expect(onLogo).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Add to the menu' }))
     expect(onAdd).toHaveBeenCalled()
   })

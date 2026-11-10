@@ -300,6 +300,18 @@ describe('setHero, setPageSection, setTheme and setWords', () => {
     expect(setTheme(design(), world, 'sparkle', 'on')).toMatchObject({ ok: false })
   })
 
+  it('keeps focus rings neutral: a ring width, never a ring colour', () => {
+    expect(setTheme(design(), world, 'style.button.focus.ring', 'accent')).toMatchObject({
+      ok: false,
+    })
+    expect(setTheme(design(), world, 'styleDark.input.focus.ring', '#ffffff')).toMatchObject({
+      ok: false,
+    })
+    expect(ok(setTheme(design(), world, 'style.button.focus.ringWidth', '3')).design.style).toEqual(
+      { button: { focus: { ringWidth: 3 } } }
+    )
+  })
+
   it('writes a page’s words where they belong', () => {
     expect(
       ok(setWords(design(), world, 'home', 'title', 'Hi')).design.pages.home.headline?.title

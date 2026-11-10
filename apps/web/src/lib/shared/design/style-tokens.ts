@@ -28,7 +28,7 @@ export const STATE_INFO: Record<StyleState, { label: string; about: string }> = 
   active: { label: 'Pressed', about: 'while pressed' },
   focus: {
     label: 'Focus',
-    about: 'when reached by keyboard; the neutral focus ring stays unless a ring is set',
+    about: 'when reached by keyboard; the focus ring is always neutral grey',
   },
   current: {
     label: 'Current',
@@ -152,7 +152,7 @@ export const STYLE_PROPS = {
     label: 'Font',
     about: 'which of the design’s fonts',
   },
-  size: { ...num(10, 160, 1), label: 'Size', about: 'text size' },
+  size: { ...num(10, 200, 1), label: 'Size', about: 'text size' },
   weight: { ...num(100, 900, 100, ''), label: 'Weight', about: 'how heavy the text is' },
   case: {
     kind: 'choice',
@@ -185,16 +185,10 @@ export const STYLE_PROPS = {
     states: ['hover', 'active'],
   },
   opacity: { ...num(0.2, 1, 0.05, ''), label: 'Opacity', about: '1 is solid' },
-  ring: {
-    kind: 'colour',
-    label: 'Focus ring',
-    about: 'the focus ring’s colour; moved until it reads at 3:1',
-    states: ['focus'],
-  },
   ringWidth: {
     ...num(1, 6, 1),
     label: 'Focus ring width',
-    about: 'the focus ring’s width',
+    about: 'the focus ring’s width; its colour is always the neutral grey',
     states: ['focus'],
   },
 } as const satisfies Record<string, StylePropInfo>
@@ -222,7 +216,6 @@ const CONTROL: readonly StyleProp[] = [
   'underline',
   'lift',
   'opacity',
-  'ring',
   'ringWidth',
 ]
 
@@ -233,6 +226,8 @@ export interface StyleElementInfo {
   selector: string
   /** The selector of its `current` state, where it has one; its own state attribute. */
   current?: string
+  /** The selector of its `focus` state, where it is not focused itself but holds what is. */
+  focus?: string
   states: readonly StyleState[]
   props: readonly StyleProp[]
   /**
@@ -304,7 +299,7 @@ export const STYLE_ELEMENTS = {
     about: 'links in text and each block’s way on',
     selector: ':is(.prose a, [data-qb-link])',
     states: ['base', 'hover', 'focus'],
-    props: ['color', 'font', 'size', 'weight', 'case', 'tracking', 'underline', 'ring'],
+    props: ['color', 'font', 'size', 'weight', 'case', 'tracking', 'underline'],
     common: ['color', 'weight', 'underline'],
     aliases: ['links', 'link'],
     example: {
@@ -330,18 +325,61 @@ export const STYLE_ELEMENTS = {
       value: 700,
     },
   },
-  card: {
-    label: 'Cards',
-    about: 'post cards and other cards',
-    selector: '[data-qb-surface=card]',
-    states: ['base', 'hover'],
+  tab: {
+    label: 'Tabs and filters',
+    about: 'the sort tabs and filter pills on Feedback, and the roadmap’s tabs',
+    selector: '[data-qb-part=tab]',
+    current: ':is([aria-pressed=true], [aria-selected=true], [aria-current=page])',
+    states: ['base', 'hover', 'current', 'focus'],
+    props: [
+      'background',
+      'color',
+      'borderColor',
+      'borderWidth',
+      'radius',
+      'size',
+      'weight',
+      'case',
+    ],
+    common: ['background', 'color', 'radius', 'size'],
+    derived: 'hover darkens (or lightens) a set fill a little',
+    aliases: ['tabs', 'filters', 'filter pills', 'sort tabs', 'pills'],
+    example: {
+      request: 'Fill the chosen tab or filter with the brand colour',
+      state: 'current',
+      prop: 'background',
+      value: 'accent',
+    },
+  },
+  postCard: {
+    label: 'Post cards',
+    about: 'the card of each post in the feed and on the roadmap',
+    selector: '[data-qb-post]',
+    focus: ':has(:focus-visible)',
+    states: ['base', 'hover', 'focus'],
     props: [...BOX, 'lift'],
     common: ['background', 'borderColor', 'radius', 'shadow'],
-    aliases: ['cards', 'post card', 'panel', 'tiles'],
+    aliases: ['cards', 'post card', 'post cards', 'posts', 'tiles'],
     example: {
-      request: 'Cards should rise 2px with a deeper shadow on hover',
+      request: 'Post cards should rise 2px with a deeper shadow on hover',
       state: 'hover',
       prop: 'lift',
+      value: 2,
+    },
+  },
+  panel: {
+    label: 'Panels',
+    about:
+      'boxes that are not posts, such as the filters, the welcome message and a post’s details',
+    selector: '[data-qb-surface=card]:not([data-qb-post])',
+    states: ['base'],
+    props: BOX,
+    common: ['background', 'borderColor', 'radius', 'shadow'],
+    aliases: ['panel', 'boxes', 'sidebar', 'containers'],
+    example: {
+      request: 'Give the panels a 2px edge',
+      state: 'base',
+      prop: 'borderWidth',
       value: 2,
     },
   },
@@ -366,7 +404,7 @@ export const STYLE_ELEMENTS = {
     selector:
       ':is([data-qb-part=composer], [data-qb-part=search-field], input[data-slot=input], textarea[data-slot=textarea])',
     states: ['base', 'hover', 'focus', 'disabled'],
-    props: [...BOX, 'size', 'height', 'ring', 'ringWidth', 'opacity'],
+    props: [...BOX, 'size', 'height', 'ringWidth', 'opacity'],
     common: ['background', 'borderColor', 'radius', 'size'],
     aliases: ['inputs', 'search box', 'composer', 'post box', 'field'],
     example: {
@@ -565,7 +603,8 @@ export const STYLE_ELEMENT_NAMES = Object.keys(STYLE_ELEMENTS) as StyleElement[]
 /** The elements a Home block's own look can set, inside it. */
 export const BLOCK_STYLE_ELEMENTS = [
   'block',
-  'card',
+  'postCard',
+  'panel',
   'heading',
   'body',
   'button',
@@ -627,7 +666,6 @@ export type StyleProps = Partial<{
   height: number
   lift: number
   opacity: number
-  ring: StyleColour
   ringWidth: number
 }>
 export type ElementStyle = Partial<Record<StyleState, StyleProps>>
@@ -635,7 +673,7 @@ export type StyleSheet = Partial<Record<StyleElement, ElementStyle>>
 export type BlockStyleSheet = Partial<Record<BlockStyleElement, ElementStyle>>
 
 /** Colour properties, which dark mode can set apart. */
-export const COLOUR_PROPS = ['background', 'color', 'borderColor', 'ring'] as const
+export const COLOUR_PROPS = ['background', 'color', 'borderColor'] as const
 
 function elementSchema(element: StyleElement, only?: readonly StyleProp[]) {
   const el: StyleElementInfo = STYLE_ELEMENTS[element]
@@ -734,7 +772,7 @@ function defaultOf(element: StyleElement, state: StyleState, prop: StyleProp): s
     el.derived?.includes('darken')
   )
     return 'a little darker (or lighter on a dark fill) than its normal fill, when that is set'
-  if (state === 'focus' && prop === 'ring') return 'the neutral focus ring'
+  if (state === 'focus' && prop === 'ringWidth') return 'the neutral focus ring’s own width'
   return `as its normal look`
 }
 
@@ -779,7 +817,7 @@ export function stylePath(key: string): string | null {
   return `${root}.${element}.${state}.${prop}`
 }
 
-/** A Home block's style key, `style.card.hover.background`, to its path under the block's look. */
+/** A Home block's style key, `style.postCard.hover.background`, to its path under the block's look. */
 export function blockStylePath(key: string): string | null {
   const m = /^style\.(\w+)\.(?:(\w+)\.)?(\w+)$/.exec(key)
   if (!m) return null
@@ -854,5 +892,5 @@ export function styleText(): string {
   const props = STYLE_PROP_NAMES.map(propText).join(', ')
   const roles = COLOUR_ROLES.map((role) => `${role} (${COLOUR_ROLE_INFO[role]})`).join(', ')
   const states = STYLE_STATES.map((state) => `${state} (${STATE_INFO[state].about})`).join(', ')
-  return `style: each element's look in a state, over everything above; set one with op theme, key style.<element>.<state>.<property> (the state may be left out for base), such as style.button.hover.background; null clears it. Elements: ${elements}. States: ${states}. Properties: ${props}; ring and ringWidth only in focus, lift only in hover and active. Colours: a role, drawn as each mode's own so dark mode follows by itself: ${roles}; or a hex. Left out: hover and pressed fills of buttons, menu items, tags and vote boxes are a little darker than a set normal fill; text on any set fill is moved until it reads, and a fill without text takes the text or page colour. styleDark.<element>.<state>.<background|color|borderColor|ring> (op theme): dark mode's own colour, only where dark should differ from the role or colour light uses, such as {"op":"theme","key":"styleDark.link.base.color","value":"#93c5fd"}. A Home block's own look: op set, target the block, key style.<${BLOCK_STYLE_ELEMENTS.join('|')}>.<state>.<property>, where block is its container and the rest are what sits inside it. Prefer the choices and exact values above where one says it exactly; use style for a state (hover, pressed, current, focus), an element no choice reaches, a trait no choice offers, or one block. Capitals of one element are style.<element>.base.case (upper, lower, capitalize): statuses in capitals are style.badge.base.case upper, section headings in capitals style.heading.base.case upper, headlines in lower case style.headline.base.case lower (headlineCase and labelCase take only sentence or upper).`
+  return `style: each element's look in a state, over everything above; set one with op theme, key style.<element>.<state>.<property> (the state may be left out for base), such as style.button.hover.background; null clears it. Elements: ${elements}. States: ${states}. Properties: ${props}; ringWidth only in focus (the focus ring is always neutral grey and has no colour to set), lift only in hover and active. Colours: a role, drawn as each mode's own so dark mode follows by itself: ${roles}; or a hex. Left out: hover and pressed fills of buttons, menu items, tags and vote boxes are a little darker than a set normal fill; text on any set fill is moved until it reads, and a fill without text takes the text or page colour. styleDark.<element>.<state>.<background|color|borderColor> (op theme): dark mode's own colour, only where dark should differ from the role or colour light uses, such as {"op":"theme","key":"styleDark.link.base.color","value":"#93c5fd"}. A Home block's own look: op set, target the block, key style.<${BLOCK_STYLE_ELEMENTS.join('|')}>.<state>.<property>, where block is its container and the rest are what sits inside it. Prefer the choices and exact values above where one says it exactly; use style for a state (hover, pressed, current, focus), an element no choice reaches, a trait no choice offers, or one block. Capitals of one element are style.<element>.base.case (upper, lower, capitalize): statuses in capitals are style.badge.base.case upper, section headings in capitals style.heading.base.case upper, headlines in lower case style.headline.base.case lower (headlineCase and labelCase take only sentence or upper).`
 }

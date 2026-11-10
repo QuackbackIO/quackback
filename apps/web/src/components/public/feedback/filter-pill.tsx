@@ -36,12 +36,13 @@ export function FilterPill({
   return (
     <button
       type="button"
+      data-qb-part="tab"
       aria-pressed={pressed}
       aria-label={ariaLabel}
       title={title}
       onClick={onClick}
       className={cn(
-        'inline-flex max-w-full items-center gap-1.5 rounded-full border font-medium transition-colors',
+        'inline-flex max-w-full items-center gap-1.5 rounded-item border font-medium transition-colors',
         size === 'md' ? 'h-9 px-3 text-sm' : 'h-7 px-2.5 text-xs',
         pressed
           ? 'border-foreground bg-foreground text-background'

@@ -2,7 +2,12 @@ import type { BoardId } from '@quackback/ids'
 import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
-import { useFeedCopy } from '@/components/public/preview-draft-context'
+import {
+  useDesignerPreview,
+  useFeedCopy,
+  usePreviewSamples,
+} from '@/components/public/preview-draft-context'
+import { composerPromptField } from './composer-prompt'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -102,6 +107,11 @@ export function FeedbackHeaderAnimated({
   const [expanded, setExpanded] = useState(startOpen)
   // On Home it opens in place: one line at rest, ideas like the one typed first, then the details.
   const staged = place !== 'feed'
+  // The builder can ask to see the feed's composer open, to edit its button where it sits.
+  const askedOpen = useDesignerPreview().composer && !staged
+  useEffect(() => {
+    if (askedOpen) setExpanded(true)
+  }, [askedOpen])
   const [error, setError] = useState('')
   const { openAuthPopover } = useAuthPopover()
 
@@ -433,7 +443,9 @@ export function FeedbackHeaderAnimated({
                 : 'rounded-full px-3 py-1.5 text-[var(--qb-accent-text,var(--primary))] hover:bg-muted'
             )}
           >
-            {submitLabel ?? intl.formatMessage(homeMessages.composerContinue)}
+            <span data-qb-words="feedback.submit">
+              {submitLabel ?? intl.formatMessage(homeMessages.composerContinue)}
+            </span>
           </button>
         )}
       </div>
@@ -635,9 +647,14 @@ export function FeedbackHeaderAnimated({
                       defaultMessage="Posting..."
                     />
                   ) : (
-                    (submitLabel ?? (
-                      <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Post" />
-                    ))
+                    <span data-qb-words="feedback.submit">
+                      {submitLabel ?? (
+                        <FormattedMessage
+                          id="portal.feedback.header.submit"
+                          defaultMessage="Post"
+                        />
+                      )}
+                    </span>
                   )}
                 </Button>
               </div>
@@ -674,19 +691,20 @@ function TitleInput({
 }) {
   const intl = useIntl()
   const copy = useFeedCopy()
+  const designing = usePreviewSamples()
   const value = useStoreValue(title)
-  return (
+  const prompt =
+    copy.prompt ??
+    intl.formatMessage({
+      id: 'portal.feedback.header.titlePlaceholder',
+      defaultMessage: "What's on your mind?",
+    })
+  return composerPromptField(designing, prompt, (placeholder) => (
     <motion.input
       ref={inputRef}
       type="text"
       maxLength={TITLE_MAX_LENGTH}
-      placeholder={
-        copy.prompt ??
-        intl.formatMessage({
-          id: 'portal.feedback.header.titlePlaceholder',
-          defaultMessage: "What's on your mind?",
-        })
-      }
+      placeholder={placeholder}
       value={value}
       aria-label={intl.formatMessage({
         id: 'portal.feedback.header.titleLabel',
@@ -710,7 +728,7 @@ function TitleInput({
       }}
       transition={{ duration: 0.2 }}
     />
-  )
+  ))
 }
 
 /**

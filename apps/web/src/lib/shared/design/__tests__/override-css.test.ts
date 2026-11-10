@@ -137,7 +137,7 @@ describe('phones', () => {
           },
           {
             id: '',
-            target: { scope: 'page', page: 'roadmap', element: 'card' },
+            target: { scope: 'page', page: 'roadmap', element: 'postCard' },
             phone: { base: { paddingX: 8 } },
           },
         ]

@@ -7,6 +7,7 @@
  * it imports nothing from the app but the frame's request headers and what
  * the frame was first loaded as.
  */
+import { PREVIEW_STATE_ASK, readPreviewState, setDesignerPreview } from './preview-draft-context'
 import { thisDesignerFrame } from '@/lib/client/designer-frame'
 import { designerFrameHeaders } from '@/lib/shared/design/designer-frame'
 
@@ -64,6 +65,8 @@ const ASKED_EVERY_MS = 50
  * may not have drawn yet, so the frame looks again for a moment.
  */
 function editAsked(field: string, tries = ASKED_TRIES): void {
+  // Words visitors meet only in another state are drawn in it first: the open composer's button.
+  if (tries === ASKED_TRIES && field === 'feedback.submit') setDesignerPreview({ composer: true })
   const words = [...document.querySelectorAll<HTMLElement>('[data-qb-words]')].find(
     (each) => each.getAttribute('data-qb-words') === field
   )
@@ -234,17 +237,23 @@ export function startDesigning(): () => void {
     const message = event.data as { type?: unknown; field?: unknown } | null
     if (message?.type === 'quackback:words-edit' && typeof message.field === 'string')
       editAsked(message.field)
+    // What the builder asks the page to show, such as the feed with no posts.
+    const asked = readPreviewState(message)
+    if (asked) setDesignerPreview(asked)
   }
   document.addEventListener('click', onClick, true)
   document.addEventListener('dblclick', onDoubleClick, true)
   document.addEventListener('keydown', onKey, true)
   window.addEventListener('message', onMessage)
+  // Listening now: what the builder asks the page to show, such as the feed empty.
+  post({ type: PREVIEW_STATE_ASK })
   const stopWrites = guardWrites()
   return () => {
     document.removeEventListener('click', onClick, true)
     document.removeEventListener('dblclick', onDoubleClick, true)
     document.removeEventListener('keydown', onKey, true)
     window.removeEventListener('message', onMessage)
+    setDesignerPreview({ empty: false, composer: false })
     stopWrites()
     pointer()
   }

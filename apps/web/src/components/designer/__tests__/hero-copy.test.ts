@@ -19,8 +19,8 @@ import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import { alsoChanges, changeGroup, changeLabel } from '@/lib/shared/design/labels'
 import { outlineKeys, outlineOf, type DesignerPage } from '@/lib/shared/design/outline'
 import { DESIGN_PRESETS } from '@/lib/shared/design/presets'
-import { quickFindItems } from '@/lib/shared/design/quick-find'
 import { defaultDesign } from '@/lib/shared/design/schema'
+import { findIndex } from '../find-index'
 
 const BAND = /\bband\b/i
 const PAGES: DesignerPage[] = [
@@ -56,8 +56,16 @@ describe('the hero’s name in the builder’s words', () => {
           walk(node.children ?? [])
         })
       walk(nodes)
-      for (const item of quickFindItems(nodes, page, PAGES))
-        words.push(item.label, item.where ?? '')
+      const gates = {
+        feedback: true,
+        roadmap: true,
+        changelog: true,
+        help: true,
+        support: true,
+        status: true,
+      }
+      for (const item of findIndex({ design, gates, nodes, page, pages: PAGES }))
+        words.push(item.label, ...item.path)
       expect(outlineKeys(nodes)).not.toContain('band')
     }
     for (const type of [...DESIGN_OPTIONS.blockType, ...SECTION_TYPES, 'hero']) {
@@ -120,13 +128,9 @@ describe('the builder’s components', () => {
   it('never show the word band', () => {
     const files = [
       ...sources(join(SRC, 'components', 'designer')),
-      ...[
-        'section-controls.tsx',
-        'focal-point.tsx',
-        'image-slot.tsx',
-        'design-composer.tsx',
-        'home-section.tsx',
-      ].map((name) => join(SRC, 'components', 'admin', 'settings', 'appearance', name)),
+      ...['focal-point.tsx', 'drawings.tsx', 'design-composer.tsx', 'home-section.tsx'].map(
+        (name) => join(SRC, 'components', 'admin', 'settings', 'appearance', name)
+      ),
     ]
     const found = files.flatMap((file) =>
       shownWords(readFileSync(file, 'utf8'))

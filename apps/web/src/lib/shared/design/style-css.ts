@@ -51,6 +51,7 @@ function stateSelector(el: StyleElementInfo, state: StyleState): string {
   if (state === 'base') return ''
   if (state === 'current')
     return `:is(${el.current ?? '[aria-current=page], [data-state=on]'}, [data-qb-force=current])`
+  if (state === 'focus' && el.focus) return `:is(${el.focus}, [data-qb-force=focus])`
   return STATE_SELECTOR[state]
 }
 
@@ -60,12 +61,20 @@ const SHADES: ReadonlySet<StyleElement> = new Set([
   'secondary',
   'ghost',
   'navItem',
+  'tab',
   'chip',
   'vote',
 ])
 
 /** Elements whose fill sits on a card rather than on the page, when they draw none of their own. */
-const ON_CARD: ReadonlySet<StyleElement> = new Set(['card', 'block', 'input', 'badge', 'chip'])
+const ON_CARD: ReadonlySet<StyleElement> = new Set([
+  'postCard',
+  'panel',
+  'block',
+  'input',
+  'badge',
+  'chip',
+])
 
 /** Large text, which reads at 3:1. */
 const LARGE: ReadonlySet<StyleElement> = new Set(['headline'])
@@ -200,10 +209,9 @@ function declarations(
       return [`min-height: ${v}`]
     case 'opacity':
       return [`opacity: ${v}`]
-    case 'ring':
-      return [`outline-color: ${v}`, 'outline-style: solid']
     case 'ringWidth':
-      return [`outline-width: ${v}`, 'outline-style: solid']
+      // The ring keeps the neutral focus colour; only its width is set.
+      return [`outline-width: ${v}`, 'outline-style: solid', 'outline-color: var(--ring)']
   }
 }
 
@@ -441,15 +449,8 @@ export function styleCss(
                 return null
               }
               if (prop === 'color') return textColour(mode, t)
-              if (prop === 'borderColor' || prop === 'ring') {
-                if (!set) return null
-                const c = styleColourValue(set as StyleColour, doc, t, mode)
-                if (prop === 'ring') {
-                  const used = solveContrast(c, [backdropOf(element, t)], 3) ?? t.foreground
-                  return used
-                }
-                return c
-              }
+              if (prop === 'borderColor')
+                return set ? styleColourValue(set as StyleColour, doc, t, mode) : null
               return set === undefined ? null : plainValue(prop, set)
             }
             function textColour(mode: Mode, t: Vars): string | null {

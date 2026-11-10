@@ -118,7 +118,8 @@ function baseValues(
         weight: String(values.label.weight),
         case: 'none',
       }
-    case 'card':
+    case 'postCard':
+    case 'panel':
     case 'block':
       return {
         background: design.layout.cards === 'list' ? 'transparent' : vars.card,
@@ -356,13 +357,13 @@ export function staticReadings(
       ...stateValues(design, target, vars, tokens),
     }
     // The element styles drawn for it: the site's, then one block's own, at rest and in the state.
-    // The site's card styles reach Home's blocks drawn as cards.
-    const sources = target.element === 'block' ? ['card', 'block'] : [target.element]
+    // The site's panel styles reach Home's blocks drawn as cards.
+    const sources = target.element === 'block' ? ['panel', 'block'] : [target.element]
     const states = target.state === 'base' ? ['base'] : ['base', target.state]
     for (const state of states)
       for (const source of sources)
         for (const scope of scopesOf(design, target, source)) {
-          if (scope && source === 'card' && target.element === 'block') continue
+          if (scope && source === 'panel' && target.element === 'block') continue
           for (const prop of Object.keys(values).concat(TOKEN_PROPS)) {
             const value = tokens[`--qb-st-${scope}${source}-${state}-${prop}`]
             if (value !== undefined) values[prop] = readingOf(prop as StyleProp, value, values)

@@ -34,7 +34,7 @@ export const DESIGN_OPTIONS = {
   /** Where an inline header's menu sits: beside the logo, or centred between it and the buttons. */
   menuAlign: ['start', 'centre'],
   /** What buttons, post cards and links do under the pointer: nothing, rise, or nudge an arrow. */
-  hover: ['none', 'lift', 'arrow'],
+  hover: ['none', 'arrow'],
   /** `plain` marks the current page by darker, heavier text alone. */
   nav: ['tabs', 'underline', 'pills', 'plain'],
   /** The menu's other pages: in a softer grey, or in the text colour, as most brands' menus are. */

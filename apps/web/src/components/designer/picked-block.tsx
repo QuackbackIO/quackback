@@ -32,7 +32,7 @@ import type { Crumb } from './properties/properties-panel'
 import { BlockLayout, BlockLook, BlockWords, ElementRows, LOOK_NAMES } from './block-sections'
 import { ElementPanel } from './element-panel'
 import { PropertySection } from './properties/properties-panel'
-import { ScopeLine } from './properties/scope-line'
+import { ReachNote } from './properties/scope-line'
 import { BLOCK_ACTIONS, BLOCK_SECTIONS, BLOCK_TONES, WORDS } from './properties/words'
 import { useBlockActions } from './use-block-actions'
 import { useBlockSources } from './use-block-sources'
@@ -344,14 +344,7 @@ function SectionLook({
 }) {
   return (
     <PropertySection title={BLOCK_SECTIONS.look}>
-      <ScopeLine
-        className="pb-1.5"
-        one={name}
-        widest={{ id: 'page', phrase: `${name} on ${page}` }}
-        narrower={[]}
-        value="page"
-        onChange={() => {}}
-      />
+      <ReachNote className="pb-1.5" phrase={`${name} on ${page}`} />
       <ElementRows offered={SECTION_ELEMENTS[section]} onElement={onElement} />
     </PropertySection>
   )

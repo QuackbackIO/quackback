@@ -2,6 +2,7 @@ import { useId } from 'react'
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  ChevronRightIcon,
   EllipsisHorizontalIcon,
   EyeIcon,
   EyeSlashIcon,
@@ -29,6 +30,7 @@ import {
 import { PAGE_NAMES } from '@/lib/shared/design/outline'
 import type { PortalPageGates, PortalPageType } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { StyleElement } from '@/lib/shared/design/style-tokens'
 import { cn } from '@/lib/shared/utils'
 import {
   PropertiesPanel,
@@ -37,8 +39,10 @@ import {
   PropertyTiles,
   type Crumb,
 } from './properties/properties-panel'
-import { ScopeLine } from './properties/scope-line'
-import { COLOUR_NAMES, WORDS } from './properties/words'
+import { FIND } from './find-rows'
+import { ReachNote } from './properties/scope-line'
+import { SummaryRow } from './properties/summary-row'
+import { STYLE_CHOICES, WORDS } from './properties/words'
 import { Tag } from './tag'
 import { useNewParts } from './use-new-parts'
 
@@ -53,12 +57,13 @@ const LAYOUTS = [
   ['centered', 'Centred'],
 ] as const
 
-const MENU_STYLES = [
-  ['tabs', 'Tabs'],
-  ['underline', 'Underline'],
-  ['pills', 'Pills'],
-  ['plain', 'Plain'],
-] as const
+/** What the logo shows, in a word or two, on its row. */
+const LOGO_SHOWS: Record<PortalDesign['brand']['logo']['display'], string> = {
+  mark_and_name: 'Icon and title',
+  mark: 'Icon',
+  name: 'Title',
+  wordmark: 'Full logo',
+}
 
 interface RowAction {
   action: PanelAction
@@ -93,10 +98,11 @@ function rowActions(design: PortalDesign, gates: PortalPageGates, part: MenuPart
 }
 
 /**
- * The header's panel, on the properties frame: its layout, the menu as rows
- * (Hide or Show on the row, the rest under ⋯, a link opening its own
- * settings), the landing page, and the menu's style. Names are changed where
- * the menu draws them. There is one header, on every page.
+ * The header's panel, on the properties frame: a row into the logo (its own
+ * element), its layout, the menu as rows (Hide or Show on the row, the rest
+ * under ⋯, a link opening its own settings), the landing page, and the
+ * menu's style. Names are changed where the menu draws them. There is one
+ * header, on every page.
  */
 export function HeaderPanel({
   crumbs,
@@ -106,8 +112,9 @@ export function HeaderPanel({
   update,
   act,
   onAdd,
-  onTheme,
+  onLogo,
   onLanding,
+  onElement,
 }: {
   crumbs: readonly Crumb[]
   /** How many pages the builder shows, each with the header. */
@@ -117,8 +124,11 @@ export function HeaderPanel({
   update: NamedUpdate
   act: (target: MenuPart['id'], action: PanelAction, from: 'panel') => void
   onAdd: () => void
-  onTheme: () => void
+  /** Picks the logo, its own element in the header. */
+  onLogo: () => void
   onLanding: (target: 'home' | PortalPageType) => void
+  /** Picks the element whose look a summary row shows: every menu item. */
+  onElement?: (element: StyleElement) => void
 }) {
   const id = useId()
   const fresh = useNewParts(gates)
@@ -131,21 +141,26 @@ export function HeaderPanel({
     <PropertiesPanel
       crumbs={crumbs}
       title={HEADER_COPY.title}
-      kind={WORDS.everyPage}
       className="pb-24"
       data-header-panel=""
-      scope={
-        <ScopeLine
-          one="header"
-          widest={{ id: 'everywhere', phrase: 'the header', count: pages, countNote: 'pages' }}
-          narrower={[]}
-          value="everywhere"
-          onChange={() => {}}
-        />
-      }
+      scope={<ReachNote phrase="the header" count={pages} countNote="pages" />}
     >
+      <PropertySection>
+        <PropertyRow label={HEADER_COPY.logo}>
+          <button
+            type="button"
+            aria-label={`${HEADER_COPY.logo}: ${LOGO_SHOWS[design.brand.logo.display]}`}
+            onClick={onLogo}
+            className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          >
+            <span className="min-w-0 flex-1 truncate">{LOGO_SHOWS[design.brand.logo.display]}</span>
+            <ChevronRightIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+          </button>
+        </PropertyRow>
+      </PropertySection>
+
       <PropertySection title={HEADER_COPY.layout}>
-        <PropertyRow label={HEADER_COPY.layout}>
+        <PropertyRow label={FIND.headerLayout.label} find={FIND.headerLayout.id}>
           <PropertyTiles
             label={HEADER_COPY.layout}
             value={layout.header}
@@ -156,9 +171,9 @@ export function HeaderPanel({
           />
         </PropertyRow>
         {layout.header === 'inline' && (
-          <PropertyRow label="Menu position">
+          <PropertyRow label={FIND.menuPosition.label} find={FIND.menuPosition.id}>
             <PropertyTiles
-              label="Menu position"
+              label={FIND.menuPosition.label}
               value={layout.menuAlign ?? 'start'}
               options={[
                 ['start', 'By the logo'],
@@ -174,7 +189,11 @@ export function HeaderPanel({
           </PropertyRow>
         )}
         {layout.band !== 'none' && (
-          <PropertyRow label="Blend into hero" htmlFor={`${id}-blend`}>
+          <PropertyRow
+            label={FIND.headerBlend.label}
+            find={FIND.headerBlend.id}
+            htmlFor={`${id}-blend`}
+          >
             <Switch
               id={`${id}-blend`}
               aria-label="Header blends into the hero"
@@ -191,7 +210,7 @@ export function HeaderPanel({
       </PropertySection>
 
       <PropertySection title={HEADER_COPY.menu}>
-        <ul aria-label={HEADER_COPY.menu} className="-mx-1.5">
+        <ul aria-label={FIND.menu.label} data-find={FIND.menu.id} className="-mx-1.5">
           {parts.map((part) => (
             <MenuRow
               key={part.id}
@@ -210,7 +229,11 @@ export function HeaderPanel({
           <PlusIcon className="size-3.5" aria-hidden="true" />
           {HEADER_COPY.add}
         </Button>
-        <PropertyRow label={HEADER_COPY.land} source={HEADER_COPY.landHelp}>
+        <PropertyRow
+          label={FIND.landing.label}
+          find={FIND.landing.id}
+          source={HEADER_COPY.landHelp}
+        >
           <PropertyTiles
             label={HEADER_COPY.land}
             value={landing}
@@ -222,41 +245,12 @@ export function HeaderPanel({
         </PropertyRow>
       </PropertySection>
 
-      <PropertySection
-        title={HEADER_COPY.menuStyle}
-        more={
-          <PropertyRow label={HEADER_COPY.logo}>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-[11px]"
-              aria-label={HEADER_COPY.logoAction}
-              onClick={onTheme}
-            >
-              {WORDS.theme}
-            </Button>
-          </PropertyRow>
-        }
-      >
-        <PropertyRow label="Style">
-          <PropertyTiles
-            label={HEADER_COPY.menuStyle}
-            value={layout.nav}
-            options={MENU_STYLES}
-            onChange={(nav) => update((draft) => void (draft.layout.nav = nav), 'Menu style')}
-          />
-        </PropertyRow>
-        <PropertyRow label="Text">
-          <PropertyTiles
-            label="Menu text"
-            value={layout.navText ?? 'muted'}
-            options={[
-              ['muted', COLOUR_NAMES.muted],
-              ['ink', COLOUR_NAMES.ink],
-            ]}
-            onChange={(text) => update((draft) => void (draft.layout.navText = text), 'Menu text')}
-          />
-        </PropertyRow>
+      <PropertySection title={HEADER_COPY.menuStyle}>
+        <SummaryRow
+          label="Menu look"
+          value={`${STYLE_CHOICES.menu[layout.nav]} · ${STYLE_CHOICES.menuText[layout.navText ?? 'muted']}`}
+          onOpen={() => onElement?.('navItem')}
+        />
       </PropertySection>
     </PropertiesPanel>
   )

@@ -43,7 +43,7 @@ export const STYLE_OPS_EXAMPLES = [
           'top posts to a pale yellow background'
         ),
         op(
-          { op: 'set', target: 'ideas', key: 'style.card.base.radius', value: '0' },
+          { op: 'set', target: 'ideas', key: 'style.postCard.base.radius', value: '0' },
           'its cards to square corners'
         ),
       ],

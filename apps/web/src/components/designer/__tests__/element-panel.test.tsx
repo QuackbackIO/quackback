@@ -100,6 +100,8 @@ describe('the picked element’s properties', () => {
     expect(screen.getByRole('navigation', { name: 'Where it is' }).textContent).toBe(
       'HomeHeroCall to action'
     )
+    // No kind tag mixed in with the scope.
+    expect(view.container.querySelector('header')!.textContent).not.toContain('Element')
     expect(line(view)).toBe('Changing every main button')
     expect(screen.getByRole('button', { name: 'Just this one' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'This page' })).toBeTruthy()
@@ -121,45 +123,92 @@ describe('the picked element’s properties', () => {
     expect(line(view)).toBe('Changing every vote box (3 on this page)')
   })
 
-  it('groups the rows, adds Edge and Shadow with "+", and keeps the rarest under a closed More', () => {
+  it('opens simple: background, text colour and size, and corners; the rest under a closed More', () => {
     const { view } = mount(cta)
-    for (const title of ['Fill', 'Text', 'Shape', 'Edge', 'Shadow'])
-      expect(screen.getByRole('heading', { name: title })).toBeTruthy()
-    expect(screen.getByLabelText('Corners')).toBeTruthy()
-    expect(screen.queryByRole('radiogroup', { name: 'Style' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Add edge' }))
-    expect(screen.getByRole('radiogroup', { name: 'Style' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Remove edge' })).toBeTruthy()
     const more = view.container.querySelector('details')!
     expect(more.open).toBe(false)
-    expect(more.contains(screen.getByLabelText('Letter spacing'))).toBe(true)
-    expect(more.contains(screen.getByLabelText('Corners'))).toBe(false)
+    const outside = [...view.container.querySelectorAll('[data-property-row]')].filter(
+      (row) => !more.contains(row)
+    )
+    expect(outside.map((row) => row.querySelector('label')?.textContent)).toEqual([
+      'Background',
+      'Text colour',
+      'Text size',
+      'Corners',
+    ])
+    for (const label of ['Weight', 'Height', 'Padding across', 'Letter spacing', 'Opacity'])
+      expect(more.contains(screen.getByLabelText(label))).toBe(true)
+    for (const title of ['Text', 'Shape', 'Edge', 'Shadow'])
+      expect(more.contains(screen.getByRole('heading', { name: title }))).toBe(true)
   })
 
-  it('always shows the states, with a dot on each that holds values', () => {
+  it('keeps More open for the visit once opened, and opens it where a value inside is set', () => {
+    const first = mount(cta)
+    const more = first.view.container.querySelector('details')!
+    more.open = true
+    fireEvent(more, new Event('toggle'))
+    cleanup()
+    const again = mount(cta)
+    expect(again.view.container.querySelector('details')!.open).toBe(true)
+    cleanup()
+    window.sessionStorage.clear()
+    const design = home()
+    design.style = { button: { base: { paddingX: 20 } } }
+    const set = mount(cta, design)
+    expect(set.view.container.querySelector('details')!.open).toBe(true)
+  })
+
+  it('shows a measured value in whole pixels', () => {
+    const view = render(
+      <ElementPanel
+        pick={cta}
+        page="home"
+        blockName="Hero"
+        design={home()}
+        update={() => {}}
+        state="base"
+        onState={() => {}}
+        screen="all"
+        onUp={() => {}}
+        measure={(prop) => (prop === 'paddingX' ? 19.35 : undefined)}
+      />
+    )
+    expect((screen.getByLabelText('Padding across') as HTMLInputElement).placeholder).toBe('19')
+    expect(view.container.textContent).not.toContain('19.35')
+  })
+
+  it('shows the state as one chip, with a menu of the others and a mark on each that holds values', async () => {
     const design = home()
     design.style = { button: { hover: { background: 'support' } } }
-    mount(cta, design)
-    const hover = screen.getByRole('radio', { name: /^Hover/ })
-    expect(hover.textContent).toBe('Hover, set')
-    expect(hover.querySelector('[data-state-dot]')).toBeTruthy()
+    const { box } = mount(cta, design)
+    expect(screen.queryByRole('radiogroup', { name: 'State' })).toBeNull()
+    const chip = screen.getByRole('button', { name: /^State: Normal/ })
+    await act(async () => {
+      fireEvent.keyDown(chip, { key: 'ArrowDown' })
+    })
+    const hover = await screen.findByRole('menuitemradio', { name: /^Hover/ })
+    expect(hover.textContent).toContain('Hover, set')
     expect(
-      screen.getByRole('radio', { name: 'Normal' }).querySelector('[data-state-dot]')
+      screen.getByRole('menuitemradio', { name: 'Normal' }).querySelector('[data-state-dot]')
     ).toBeNull()
-    fireEvent.click(screen.getByRole('radio', { name: 'Pressed' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Pressed' }))
+    expect(box.state).toBe('active')
+    expect(screen.getByRole('button', { name: /^State: Pressed/ })).toBeTruthy()
   })
 
   it('writes at the scope picked, shared at first, as one named undo step', () => {
     const { box } = mount(cta)
-    fireEvent.change(screen.getByLabelText('Corners'), { target: { value: '4' } })
-    expect(box.design.style).toEqual({ button: { base: { radius: 4 } } })
-    expect(box.labels.at(-1)).toBe('Call to action · Hero: corners, everywhere')
+    fireEvent.change(screen.getByLabelText('Height'), { target: { value: '40' } })
+    // Every main button's height is its exact value: one home, nothing in the style.
+    expect(box.design.tune).toEqual({ button: { height: 40 } })
+    expect(box.design.style).toBeUndefined()
+    expect(box.labels.at(-1)).toBe('Call to action · Hero: height, everywhere')
     fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
-    fireEvent.change(screen.getByLabelText('Size'), { target: { value: '18' } })
+    fireEvent.change(screen.getByLabelText('Text size'), { target: { value: '18' } })
     expect(
       findOverride(box.design, { scope: 'part', part: 'hero.home.cta', element: 'button' })?.style
     ).toEqual({ base: { size: 18 } })
-    expect(box.labels.at(-1)).toBe('Call to action · Hero: size, this one')
+    expect(box.labels.at(-1)).toBe('Call to action · Hero: size, just this one')
   })
 
   it('shows an unset value as what it has, says where from, and resets a set one to it', () => {
@@ -180,6 +229,7 @@ describe('the picked element’s properties', () => {
     const design = home()
     design.shape.buttons = 'pill'
     const { view } = mount(cta, design)
+    fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
     expect((screen.getByLabelText('Corners') as HTMLInputElement).placeholder).toBe('999')
     expect(view.container.querySelector('[title="From brand"]')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Background: Brand colour' })).toBeTruthy()
@@ -188,8 +238,13 @@ describe('the picked element’s properties', () => {
 
   it('stores a brand colour by its role', async () => {
     const { box } = mount(cta)
+    fireEvent.click(
+      within(screen.getByRole('radiogroup', { name: 'Background' })).getByRole('radio', {
+        name: 'Custom',
+      })
+    )
     await act(async () =>
-      fireEvent.click(screen.getByRole('button', { name: 'Background: Brand colour' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Custom background: Brand colour' }))
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Text' }))
     expect(box.design.style).toEqual({ button: { base: { background: 'ink' } } })
@@ -217,49 +272,165 @@ describe('the picked element’s properties', () => {
 
 describe('the brand’s choices and exact values, in the same panel', () => {
   const style = () => within(screen.getByRole('heading', { name: 'Style' }).closest('section')!)
+  const tiles = (name: string) => within(screen.getByRole('radiogroup', { name }))
 
-  it('offers the brand’s choices as a Style section, only for every one of the kind', () => {
+  it('gives each property one row: the brand’s choices as tiles, and Custom for an exact value', () => {
     const { box } = mount(cta)
-    fireEvent.click(style().getByRole('radio', { name: 'Pill' }))
+    // No Shape tiles above a Corners row: the shapes are the Corners row's.
+    expect(screen.queryByRole('radiogroup', { name: 'Shape' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Fill' })).toBeNull()
+    expect(
+      tiles('Corners')
+        .getAllByRole('radio')
+        .map((t) => t.textContent)
+    ).toEqual(['Match', 'Sharp', 'Round', 'Pill', 'Custom'])
+    expect(tiles('Corners').getByRole('radio', { name: 'Match', checked: true })).toBeTruthy()
+    expect(screen.queryByLabelText('Custom corners')).toBeNull()
+    fireEvent.click(tiles('Corners').getByRole('radio', { name: 'Pill' }))
     expect(box.design.shape.buttons).toBe('pill')
-    expect(box.labels.at(-1)).toBe('Call to action · Hero: shape, everywhere')
-    expect((screen.getByLabelText('Corners') as HTMLInputElement).placeholder).toBe('999')
-    fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
-    expect(screen.queryByRole('heading', { name: 'Style' })).toBeNull()
+    expect(box.labels.at(-1)).toBe('Call to action · Hero: corners, everywhere')
+    fireEvent.click(tiles('Corners').getByRole('radio', { name: 'Custom' }))
+    const exact = screen.getByLabelText('Custom corners') as HTMLInputElement
+    expect(exact.placeholder).toBe('999')
+    fireEvent.change(exact, { target: { value: '6' } })
+    expect(box.design.tune).toEqual({ button: { radius: 6 } })
+    expect(tiles('Corners').getByRole('radio', { name: 'Custom', checked: true })).toBeTruthy()
   })
 
-  it('shows an exact value as the row’s, from brand, and a choice it takes the place of as unpicked', () => {
+  it('shows an exact value as Custom with its number, and a choice picked again clears it', () => {
     const design = home()
     design.tune = { button: { radius: 14 } }
-    const { box, view } = mount(cta, design)
-    const corners = screen.getByLabelText('Corners') as HTMLInputElement
-    expect(corners.placeholder).toBe('14')
-    expect(view.container.querySelector('[title="From brand, set exactly"]')).toBeTruthy()
-    const shape = style().getByRole('radiogroup', { name: 'Shape' })
-    expect(within(shape).queryAllByRole('radio', { checked: true })).toEqual([])
-    // Picking a shape makes it count again.
-    fireEvent.click(within(shape).getByRole('radio', { name: 'Round' }))
+    // An older design's style copy goes too.
+    design.style = { button: { base: { radius: 20 } } }
+    const { box } = mount(cta, design)
+    expect(tiles('Corners').getByRole('radio', { name: 'Custom', checked: true })).toBeTruthy()
+    expect((screen.getByLabelText('Custom corners') as HTMLInputElement).value).toBe('20')
+    fireEvent.click(tiles('Corners').getByRole('radio', { name: 'Round' }))
     expect(box.design.tune).toBeUndefined()
+    expect(box.design.style).toBeUndefined()
     expect(box.design.shape.buttons).toBe('rounded')
+    expect(screen.queryByLabelText('Custom corners')).toBeNull()
   })
 
-  it('clears an element’s exact values from its menu', async () => {
+  it('shows a section heading’s weight once, as its exact value: the brand kit’s fonts hold the brand’s', () => {
+    const design = home()
+    design.style = { heading: { base: { weight: 700 } } }
+    const heading = { element: 'heading', part: null, section: null, index: 0 } as const
+    mount(heading as never, design)
+    expect(screen.queryByRole('radiogroup', { name: 'Weight' })).toBeNull()
+    expect(screen.getAllByLabelText('Weight', { selector: 'input' })).toHaveLength(1)
+    expect((screen.getByLabelText('Weight', { selector: 'input' }) as HTMLInputElement).value).toBe(
+      '700'
+    )
+  })
+
+  it('folds the post cards’ shadow into their Shadow row while the look is Raised', () => {
+    const design = home()
+    design.layout.cards = 'bordered'
+    const postCard = { element: 'postCard', part: null, section: null, index: 0 } as const
+    const { box } = mount(postCard as never, design)
+    expect(screen.queryByRole('radio', { name: 'Deep' })).toBeTruthy()
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Shadow' })).queryByRole('radio', {
+        name: 'Custom',
+      })
+    ).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Raised' }))
+    expect(
+      tiles('Shadow')
+        .getAllByRole('radio')
+        .map((t) => t.textContent)
+    ).toEqual(['Soft', 'Lifted', 'Floating', 'Deep', 'Custom'])
+    fireEvent.click(tiles('Shadow').getByRole('radio', { name: 'Deep' }))
+    expect(box.design.tune).toEqual({ card: { shadow: 'deep' } })
+    expect(box.labels.at(-1)).toBe('Post card: shadow, everywhere')
+  })
+
+  it('folds a headline’s scale into its Size row', () => {
+    const { box } = mount(headline)
+    expect(screen.queryByRole('radiogroup', { name: 'Scale' })).toBeNull()
+    fireEvent.click(tiles('Text size').getByRole('radio', { name: 'Large' }))
+    expect(box.design.brand.fonts.scale).toBe('large')
+  })
+
+  it('keeps the brand’s choices to every one of the kind; a one-off has the exact field only', () => {
+    mount(cta)
+    fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
+    expect(screen.queryByRole('radiogroup', { name: 'Corners' })).toBeNull()
+    expect(screen.getByLabelText('Corners')).toBeTruthy()
+  })
+
+  it('keeps choices that are no one property’s in a Style section', () => {
+    const nav = { element: 'navItem', part: null, section: null, index: 0 } as const
+    mount(nav as never)
+    expect(style().getByRole('radiogroup', { name: 'Menu' })).toBeTruthy()
+    expect(style().queryByRole('radiogroup', { name: 'Text' })).toBeNull()
+  })
+
+  it('shows an exact value as every one’s, set here, and resets it to the theme, not to an older value', () => {
+    // The brand match wrote the headline's size exactly; then it was changed here.
+    const design = home()
+    design.tune = { headline: { size: 48 } }
+    const { box, view } = mount(headline, design)
+    const size = () => screen.getByLabelText('Custom text size') as HTMLInputElement
+    expect(size().value).toBe('48')
+    fireEvent.change(size(), { target: { value: '60' } })
+    expect(box.design.tune).toEqual({ headline: { size: 60 } })
+    expect(box.design.style).toBeUndefined()
+    fireEvent.click(screen.getByRole('button', { name: /^Reset to .* from brand$/ }))
+    expect(box.design.tune).toBeUndefined()
+    expect(box.design.style).toBeUndefined()
+    // Back to the theme's scale, not the 48 the match once wrote.
+    const scale = within(screen.getByRole('radiogroup', { name: 'Text size' }))
+    expect(scale.getByRole('radio', { name: 'Standard', checked: true })).toBeTruthy()
+    fireEvent.click(scale.getByRole('radio', { name: 'Custom' }))
+    expect(size().value).toBe('')
+    expect(size().placeholder).not.toBe('48')
+    expect(view.container.textContent).not.toContain('set exactly')
+  })
+
+  it('clears both layers an older design holds, so Reset never brings a value back', () => {
+    const design = home()
+    design.tune = { headline: { size: 48 } }
+    design.style = { headline: { base: { size: 60 } } }
+    const { box } = mount(headline, design)
+    expect((screen.getByLabelText('Custom text size') as HTMLInputElement).value).toBe('60')
+    fireEvent.click(screen.getByRole('button', { name: /^Reset to .* from brand$/ }))
+    expect(box.design.tune).toBeUndefined()
+    expect(box.design.style).toBeUndefined()
+  })
+
+  it('shows every one’s exact value as where a one-off comes from', () => {
+    const design = home()
+    design.tune = { button: { radius: 14 } }
+    const { view } = mount(cta, design)
+    fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
+    expect((screen.getByLabelText('Corners') as HTMLInputElement).placeholder).toBe('14')
+    expect(view.container.querySelector('[title="From every main button"]')).toBeTruthy()
+  })
+
+  it('resets every main button’s values, its exact ones too, from its menu', async () => {
     const design = home()
     design.tune = { button: { radius: 14, height: 40 }, card: { radius: 3 } }
+    design.style = { button: { hover: { background: 'support' } } }
     const { box } = mount(cta, design)
     await act(async () => {
       fireEvent.keyDown(screen.getByRole('button', { name: /more actions/ }), { key: 'ArrowDown' })
     })
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Reset exact values (2)' }))
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Reset every main button (3 values)' })
+    )
     expect(box.design.tune).toEqual({ card: { radius: 3 } })
+    expect(box.design.style).toBeUndefined()
   })
 
   it('reads a headline’s brand colour choice, and its font from the brand', () => {
     const design = home()
     design.brand.fonts.headlineColour = 'accent'
     mount(headline, design)
-    expect(screen.getByRole('button', { name: 'Colour: Brand colour' })).toBeTruthy()
-    expect(style().getByRole('radio', { name: 'Brand colour', checked: true })).toBeTruthy()
+    expect(
+      tiles('Text colour').getByRole('radio', { name: 'Brand colour', checked: true })
+    ).toBeTruthy()
     expect(style().getByLabelText('Font')).toBeTruthy()
   })
 
@@ -273,7 +444,7 @@ describe('the brand’s choices and exact values, in the same panel', () => {
   it('opened from a block, starts at that block', () => {
     const { box, view } = mount(link, home(), { initialScope: 'block' })
     expect(line(view)).toBe('Changing this block’s links')
-    fireEvent.change(screen.getByLabelText('Size'), { target: { value: '13' } })
+    fireEvent.change(screen.getByLabelText('Text size'), { target: { value: '13' } })
     expect(box.design.pages.home.blocks[0]!.look).toEqual({
       style: { link: { base: { size: 13 } } },
     })

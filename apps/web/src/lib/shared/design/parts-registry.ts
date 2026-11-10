@@ -224,7 +224,7 @@ export function partsOf(design: PortalDesign): PartInfo[] {
       id: 'feed.filters',
       label: 'Filters',
       group: 'Feedback',
-      elements: ['card'],
+      elements: ['panel'],
       pages: ['feedback'],
       anchor: at('feedback', '[data-qb-part=filter-panel]'),
       within: true,

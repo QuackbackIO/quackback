@@ -5,18 +5,22 @@
  * frame; what is not here yet is still each panel's own.
  */
 import { MENU_WORDS } from '@/lib/shared/design/menu-words'
+import { SCOPE_WORDS } from '@/lib/shared/design/names'
 import type { ColourRoleName } from '@/lib/shared/design/style-tokens'
 
 export const WORDS = {
-  /** A one-off: the narrowest scope, a single registered part. */
-  justThisOne: 'Just this one',
-  thisBlock: 'This block',
-  thisPage: 'This page',
+  /** The scope ladder, narrowest first, from its one table. */
+  justThisOne: SCOPE_WORDS.part,
+  thisBlock: SCOPE_WORDS.block,
+  thisPage: SCOPE_WORDS.page,
+  everywhere: SCOPE_WORDS.everywhere,
   /** The places a wider change does not reach, in the overrides footer. */
   setDifferently: 'Set differently',
   /** Going back to the wider value. */
   reset: 'Reset',
   more: 'More',
+  /** The element state shown: "State: Normal". */
+  state: 'State',
   /** The brand sheet. */
   theme: 'Theme',
   fonts: 'Fonts',
@@ -30,12 +34,6 @@ export const WORDS = {
   dark: 'Dark',
   /** Sources a value can come from, on hover. */
   fromBrand: 'From brand',
-  /** A brand value that is an exact value, not a choice's. */
-  fromExact: 'From brand, set exactly',
-  /** A choice an exact value takes the place of, on hover. */
-  setExactly: 'Set exactly: pick one to use it',
-  /** The panel's menu: clears an element's exact values. */
-  resetExact: 'Reset exact values',
   /** Corner steps, sharpest first. */
   corners: { sharp: 'Sharp', soft: 'Soft', round: 'Round', pill: 'Pill' },
   /** Letter case. */
@@ -48,6 +46,8 @@ export const WORDS = {
   onThisPage: 'On this page',
   everyPage: 'Every page',
   words: 'Words',
+  /** The header's logo, its own element. */
+  logo: 'Logo',
   pageTitle: 'Title',
   titlePlain: 'Plain',
   titleInHero: 'In the hero',
@@ -78,8 +78,19 @@ export const THEME = {
     fonts: 'Fonts',
     style: 'Style',
     pageBackground: 'Page background',
+    elements: 'Elements',
     siteImages: 'Site images',
+    advanced: 'Advanced',
   },
+  background: 'Background',
+  pageWidth: 'Page width',
+  widths: { narrow: 'Narrow', default: 'Standard', wide: 'Wide' },
+  hover: 'Hover',
+  hovers: { none: 'None', lift: 'Lift', arrow: 'Arrow' },
+  customCss: 'Custom CSS',
+  /** The brand kit's way to the logo as the header draws it. */
+  sizeAndPlacement: 'Size and placement',
+  height: 'Height',
   icon: 'Icon',
   title: 'Title',
   titlePlaceholder: 'Workspace name',
@@ -183,6 +194,9 @@ export const FONT_NAMES = {
 /** "Changing every main button", from one of the kind, such as "Main button". */
 export const everyOf = (one: string) => `every ${one.toLowerCase()}`
 
+/** A reach that is the only one, as a plain sentence: "Applies to the header". */
+export const appliesTo = (phrase: string) => `Applies to ${phrase}`
+
 /** "Back to every main button". */
 export const backToEvery = (one: string) => `Back to ${everyOf(one)}`
 
@@ -230,6 +244,7 @@ export const STYLE_CHOICES = {
   tint: { neutral: 'Neutral', support: COLOUR_NAMES.support },
   cards: { bordered: 'Outline', raised: 'Raised', list: 'Rows', filled: 'Filled' },
   density: { compact: 'Compact', comfortable: 'Comfortable', spacious: 'Spacious' },
+  shadow: { soft: 'Soft', lifted: 'Lifted', floating: 'Floating', deep: 'Deep' },
   status: { colour: 'Dot', ink: COLOUR_NAMES.ink, pill: 'Tag', brand: 'Logo colours' },
   secondary: { outline: 'Outline', tint: 'Tint', text: 'Text only' },
 } as const
@@ -246,9 +261,6 @@ export const SECTIONS = {
   lift: 'Lift',
   focusRing: 'Focus ring',
 } as const
-
-/** What a picked thing is, beside its title: a block on a page, and an element inside one. */
-export const KINDS = { block: 'Block', element: 'Element' } as const
 
 /** A block's own actions, in its panel's ⋯ menu and in Find. */
 export const BLOCK_ACTIONS = {

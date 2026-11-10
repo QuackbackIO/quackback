@@ -6,6 +6,8 @@
  * except for the keys designs no longer have, which no document keeps.
  */
 import { defaultDesign, portalDesign, type PortalDesign } from './schema'
+import { withHoverLift } from './hover-lift'
+import { withSplitCards } from './split-cards'
 
 type Path = ReadonlyArray<PropertyKey>
 
@@ -23,12 +25,116 @@ const RETIRED_LOGO_KEYS = ['nameColour', 'nameCase', 'nameAccent']
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
+/** A focus ring's colour, gone since focus rings stay neutral grey; its width stays. */
+const RETIRED_STYLE_PROP = 'ring'
+
+/** Whether a style sheet ({ element: { state: props } }) still names a ring colour. */
+const sheetHasRing = (sheet: unknown): boolean =>
+  isRecord(sheet) &&
+  Object.values(sheet).some(
+    (states) =>
+      isRecord(states) &&
+      Object.values(states).some(
+        (props) => isRecord(props) && Object.hasOwn(props, RETIRED_STYLE_PROP)
+      )
+  )
+
+/** A style sheet without ring colours, dropping a state or element left empty; the one given stays. */
+function sheetWithoutRing(sheet: Record<string, unknown>): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {}
+  for (const [element, states] of Object.entries(sheet)) {
+    if (!isRecord(states)) {
+      out[element] = states
+      continue
+    }
+    const kept: Record<string, unknown> = {}
+    for (const [state, props] of Object.entries(states)) {
+      if (!isRecord(props) || !Object.hasOwn(props, RETIRED_STYLE_PROP)) {
+        kept[state] = props
+        continue
+      }
+      const { [RETIRED_STYLE_PROP]: _ring, ...rest } = props
+      if (Object.keys(rest).length) kept[state] = rest
+    }
+    if (Object.keys(kept).length) out[element] = kept
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+/** Replaces each of a record's sheets that names a ring colour, deleting one left empty. */
+function stripRings(holder: Record<string, unknown>, keys: readonly string[]): boolean {
+  let changed = false
+  for (const key of keys) {
+    const sheet = holder[key]
+    if (!sheetHasRing(sheet)) continue
+    const next = sheetWithoutRing(sheet as Record<string, unknown>)
+    if (next) holder[key] = next
+    else delete holder[key]
+    changed = true
+  }
+  return changed
+}
+
+/** An override's looks, each one element's states. */
+const OVERRIDE_LAYERS = ['style', 'styleDark', 'phone'] as const
+
 /**
- * A design document without the keys designs no longer have, so one stored,
+ * A design without focus ring colours, in its site, block and override looks.
+ * A copy where one is found; the document given otherwise.
+ */
+function withoutRingColours(doc: Record<string, unknown>): Record<string, unknown> {
+  const has =
+    sheetHasRing(doc.style) ||
+    sheetHasRing(doc.styleDark) ||
+    (Array.isArray(doc.overrides) &&
+      doc.overrides.some(
+        (o) => isRecord(o) && OVERRIDE_LAYERS.some((layer) => sheetHasRing({ one: o[layer] }))
+      )) ||
+    (isRecord(doc.pages) &&
+      isRecord(doc.pages.home) &&
+      Array.isArray(doc.pages.home.blocks) &&
+      doc.pages.home.blocks.some(
+        (b) => isRecord(b) && isRecord(b.look) && sheetHasRing(b.look.style)
+      ))
+  if (!has) return doc
+  const out = structuredClone(doc)
+  stripRings(out, ['style', 'styleDark'])
+  if (Array.isArray(out.overrides)) {
+    for (const o of out.overrides) {
+      if (!isRecord(o)) continue
+      for (const layer of OVERRIDE_LAYERS) {
+        // An override's look is one element's states: as a sheet of one.
+        if (!sheetHasRing({ one: o[layer] })) continue
+        const states = sheetWithoutRing({ one: o[layer] })?.one
+        if (states) o[layer] = states
+        else delete o[layer]
+      }
+    }
+    // An override left with no look at all goes with it.
+    out.overrides = out.overrides.filter(
+      (o) => !isRecord(o) || OVERRIDE_LAYERS.some((layer) => o[layer] !== undefined)
+    )
+    if (!(out.overrides as unknown[]).length) delete out.overrides
+  }
+  const blocks = isRecord(out.pages) && isRecord(out.pages.home) ? out.pages.home.blocks : null
+  if (Array.isArray(blocks))
+    for (const b of blocks) {
+      if (!isRecord(b) || !isRecord(b.look)) continue
+      stripRings(b.look, ['style'])
+      if (!Object.keys(b.look).length) delete b.look
+    }
+  return out
+}
+
+/**
+ * A design document without the keys designs no longer have, and with the
+ * looks of elements since split carried over (split-cards.ts) and Lift written
+ * as element Hover values (hover-lift.ts), so one stored,
  * sent or written before they went still reads. The document given stays as it is.
  */
-export function withoutRetiredKeys(input: unknown): unknown {
-  if (!isRecord(input)) return input
+export function withoutRetiredKeys(given: unknown): unknown {
+  if (!isRecord(given)) return given
+  const input = withoutRingColours(withHoverLift(withSplitCards(given)))
   const brand = input.brand
   const logo = isRecord(brand) ? brand.logo : undefined
   const retiredLogo = isRecord(logo) && RETIRED_LOGO_KEYS.some((key) => Object.hasOwn(logo, key))

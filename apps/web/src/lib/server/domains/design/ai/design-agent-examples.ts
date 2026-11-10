@@ -70,7 +70,7 @@ export const AGENT_EXAMPLES: Array<{ request: string; note?: string; answer: Age
       ops: [],
       styles: [
         {
-          element: 'card',
+          element: 'postCard',
           state: 'base',
           block: '',
           property: 'shadow',
@@ -96,7 +96,7 @@ export const AGENT_EXAMPLES: Array<{ request: string; note?: string; answer: Age
       ],
       checks: [
         {
-          element: 'card',
+          element: 'postCard',
           state: 'base',
           block: '',
           target: '',
@@ -162,7 +162,7 @@ export const AGENT_EXAMPLES: Array<{ request: string; note?: string; answer: Age
       ],
       styles: [
         {
-          element: 'card',
+          element: 'postCard',
           state: 'base',
           block: '',
           property: 'shadow',
@@ -170,7 +170,7 @@ export const AGENT_EXAMPLES: Array<{ request: string; note?: string; answer: Age
           says: 'cards without a shadow',
         },
         {
-          element: 'card',
+          element: 'postCard',
           state: 'base',
           block: '',
           property: 'borderColor',
@@ -178,7 +178,7 @@ export const AGENT_EXAMPLES: Array<{ request: string; note?: string; answer: Age
           says: 'card edges to a faint line',
         },
         {
-          element: 'card',
+          element: 'postCard',
           state: 'hover',
           block: '',
           property: 'borderColor',
@@ -197,7 +197,7 @@ export const AGENT_EXAMPLES: Array<{ request: string; note?: string; answer: Age
           value: '',
         },
         {
-          element: 'card',
+          element: 'postCard',
           state: 'base',
           block: '',
           target: '',
@@ -206,7 +206,7 @@ export const AGENT_EXAMPLES: Array<{ request: string; note?: string; answer: Age
           value: '',
         },
         {
-          element: 'card',
+          element: 'postCard',
           state: 'base',
           block: '',
           target: '',
