@@ -34,10 +34,10 @@ function pane(over: Partial<Parameters<typeof AiPane>[0]['pane']> = {}) {
   }
 }
 
-function show(state: ReturnType<typeof pane>) {
+function show(state: ReturnType<typeof pane>, viewport = 1440) {
   render(
     <TooltipProvider>
-      <AiPane pane={state} hidden={false}>
+      <AiPane pane={state} hidden={false} viewport={viewport}>
         <p>The chat</p>
       </AiPane>
     </TooltipProvider>
@@ -69,6 +69,34 @@ describe('AiPane', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask AI' }))
     expect(state.expand).toHaveBeenCalledOnce()
     expect(AI_RAIL_WIDTH).toBeLessThan(60)
+  })
+
+  it('narrows to keep the canvas its floor beside the properties', () => {
+    show(pane({ width: 480 }), 1280)
+    const aside = screen.getByRole('complementary', { name: 'Ask AI' })
+    expect(parseInt(aside.style.width)).toBeLessThanOrEqual(1280 - 340 - 640)
+    expect(screen.getByRole('separator').getAttribute('aria-valuenow')).toBe(
+      aside.style.width.replace('px', '')
+    )
+  })
+
+  it('lies over the canvas from its rail when it cannot fit, and the rail closes it', () => {
+    const state = pane({ width: 360 })
+    show(state, 1100)
+    const aside = screen.getByRole('complementary', { name: 'Ask AI' })
+    expect(aside.style.width).toBe(`${AI_RAIL_WIDTH}px`)
+    const over = document.querySelector<HTMLElement>('[data-ai-pane-overlay]')!
+    expect(over.style.width).toBe('360px')
+    expect(over.textContent).toContain('The chat')
+    const button = screen.getByRole('button', { name: 'Ask AI' })
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(button)
+    expect(state.collapse).toHaveBeenCalledOnce()
+  })
+
+  it('shows the chat in a one-column window even when collapsed, never a bare rail', () => {
+    show(pane({ collapsed: true }), 900)
+    expect(screen.getByText('The chat')).toBeTruthy()
   })
 
   it('follows the pointer without easing while dragged, and moves at once for less motion', () => {
