@@ -14,6 +14,7 @@ import {
   STYLE_PROPS,
   blockStylePath,
   readStyleValue,
+  styleAllows,
   stylePath,
   styleText,
   styleTokens,
@@ -117,6 +118,37 @@ describe('the style token registry', () => {
     expect(styleText()).not.toContain('ring (colour)')
     expect(styleText()).not.toContain('|ring>')
     expect(styleText()).toContain('ringWidth (1 to 6px)')
+  })
+
+  it('draws no colour or glow on focus, to the panel, the AI or a stored design', () => {
+    for (const element of ['button', 'input', 'postCard', 'link'] as const) {
+      expect(styleAllows(element, 'focus', 'borderColor'), element).toBe(false)
+      expect(styleAllows(element, 'focus', 'shadow'), element).toBe(false)
+    }
+    // Other states keep them; focus keeps its ring width.
+    expect(styleAllows('button', 'hover', 'borderColor')).toBe(true)
+    expect(styleAllows('button', 'hover', 'shadow')).toBe(true)
+    expect(styleAllows('button', 'focus', 'ringWidth')).toBe(true)
+    expect(stylePath('style.input.focus.borderColor')).toBeNull()
+    expect(stylePath('styleDark.input.focus.borderColor')).toBeNull()
+    expect(stylePath('style.button.focus.shadow')).toBeNull()
+    expect(blockStylePath('style.postCard.focus.borderColor')).toBeNull()
+    expect(
+      styleTokens()
+        .filter((t) => t.state === 'focus')
+        .map((t) => t.prop)
+    ).not.toEqual(expect.arrayContaining(['borderColor']))
+    expect(styleTokens().some((t) => t.state === 'focus' && t.prop === 'shadow')).toBe(false)
+    expect(styleText()).toContain('borderColor and shadow never in focus')
+    for (const path of [
+      'style.input.focus.borderColor',
+      'style.button.focus.shadow',
+      'styleDark.input.focus.borderColor',
+    ]) {
+      const d = defaultDesign()
+      setAt(d, path, path.endsWith('shadow') ? 'glow' : 'accent')
+      expect(portalDesign.safeParse(d).success, path).toBe(false)
+    }
   })
 
   it('bounds a text size as an exact value does, so either layer holds the same sizes', () => {
@@ -307,14 +339,14 @@ describe('element styles, drawn', () => {
     const r = resolveDesign(
       design((d) => {
         d.style = {
-          postCard: { hover: { lift: 2 }, focus: { borderColor: 'accent' } },
+          postCard: { hover: { lift: 2 }, focus: { borderWidth: 2 } },
           panel: { base: { radius: 0 } },
         }
       })
     )
     expect(r.styleCss).toContain('[data-qb-post]:is(:hover, [data-qb-force=hover])')
     expect(r.styleCss).toContain(
-      '[data-qb-post]:is(:has(:focus-visible), [data-qb-force=focus]) { border-color'
+      '[data-qb-post]:is(:has(:focus-visible), [data-qb-force=focus]) { border-width'
     )
     expect(r.styleCss).toContain(
       '[data-portal-theme]:not(#qb) [data-qb-surface=card]:not([data-qb-post]) { border-radius'
