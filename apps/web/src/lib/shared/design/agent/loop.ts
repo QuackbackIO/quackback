@@ -358,6 +358,37 @@ function overrideStyles(
   })
 }
 
+/** The phrases set apart in the design's titles: Home's and the feedback page's headlines, and the other pages'. */
+function titleMarks(design: PortalDesign): string {
+  const { pages } = design
+  return JSON.stringify([
+    pages.home.headline?.accent ?? null,
+    pages.feedback.headline?.accent ?? null,
+    Object.entries(pages.titles ?? {}).map(([page, title]) => [page, title?.accent ?? null]),
+  ])
+}
+
+/** What draws the headline's own colour, beside the phrase a mark sets apart. */
+const headlineColour = (design: PortalDesign) =>
+  JSON.stringify([
+    design.brand.fonts.headlineColour ?? null,
+    design.style?.headline ?? null,
+    design.styleDark?.headline ?? null,
+    design.tune?.headline?.colour ?? null,
+  ])
+
+/**
+ * Whether the request set a phrase of a title apart and left the headline's
+ * own colour as it was: the drawn headline then keeps its colour, and only
+ * the phrase takes the mark's, which no reading of the headline measures.
+ */
+const phraseSetApart = (before: PortalDesign, now: PortalDesign) =>
+  titleMarks(before) !== titleMarks(now) && headlineColour(before) === headlineColour(now)
+
+/** A check of the headline's colour, which says nothing of a phrase set apart; readable still holds. */
+const headlineColourCheck = (check: StyleCheck) =>
+  check.element === 'headline' && check.property === 'color' && check.expect !== 'readable'
+
 const needsBefore = (check: StyleCheck) =>
   (['darker', 'lighter', 'more', 'less'].includes(check.expect) &&
     (check.value === 'before' || check.state === 'base')) ||
@@ -558,7 +589,14 @@ export async function runEditLoop(input: {
       picture = answer.look && deps.picture ? await deps.picture() : null
       const readMs = now() - readStart
       // What was set for phones only is not on the page as read, at full width: not measured.
+      const marked = phraseSetApart(input.design, design)
       const results = checks.map((check): CheckResult => {
+        if (marked && headlineColourCheck(check))
+          return {
+            check,
+            ok: null,
+            saw: `${targetWords(registry, check)}: the phrase set apart takes the mark's colour and the rest keeps the headline's, so the headline's colour is not measured`,
+          }
         const key = `${check.element}|${check.property}`
         if (phoneOnly.has(key) && !allScreens.has(key))
           return {

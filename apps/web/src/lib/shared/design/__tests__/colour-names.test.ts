@@ -41,4 +41,15 @@ describe('plainReason', () => {
     ).toBeNull()
     expect(plainReason('Fields take borderColor, radius or shadow')).toBeNull()
   })
+
+  it('says a setting asked for by its key is not there, without the key or the list', () => {
+    expect(
+      plainReason(
+        'Theme has no setting called hero.composerWidth; it has accent, support, headingFont, and exact values such as headline.size'
+      )
+    ).toBe('Theme has no setting like that')
+    expect(
+      plainReason('The hero has no setting called sparkle; it has look, image, composerWidth')
+    ).toBe('The hero has no setting like that')
+  })
 })

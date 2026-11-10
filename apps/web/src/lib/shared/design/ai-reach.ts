@@ -201,11 +201,15 @@ export function alsoNotes(
   return [...new Set(changes.flatMap((change) => alsoChanges(change.path) ?? []))]
 }
 
-/** A reply's first sentence: replies are one line. */
+/**
+ * A reply's first sentence: replies are one line. Chinese and Japanese end a
+ * sentence with their own full stop, question or exclamation mark, with no
+ * space after it.
+ */
 export function oneSentence(text: string): string {
   const said = text.trim()
-  const first = /^(.+?[.!?])\s+(?=[A-Z“"‘'(])/.exec(said)
-  return first ? first[1]! : said
+  const first = /^(.+?[.!?])\s+(?=[A-Z“"‘'(])|^(.+?[。！？])\s*(?=\S)/u.exec(said)
+  return first ? (first[1] ?? first[2])! : said
 }
 
 /**

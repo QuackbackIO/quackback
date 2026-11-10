@@ -28,6 +28,7 @@ import { heroOf } from '../hero'
 import { homeBlockTypes } from '../home'
 import { landingOf, menuParts } from '../menu'
 import { defaultDesign, portalDesign, type PortalDesign } from '../schema'
+import { plainReason } from '../colour-names'
 
 const GATES = {
   feedback: true,
@@ -246,6 +247,33 @@ describe('setHero, setPageSection, setTheme and setWords', () => {
     expect(heroOf(result.design).look).toBe('tint')
     expect(result.label).toBe('Hero look: Tint')
     expect(setHero(design(), world, 'image', { key: 'x' })).toMatchObject({ ok: false })
+  })
+
+  it('takes a hero setting named through theme as the hero’s, old names included', () => {
+    const d = design()
+    d.pages.home.composer = 'band'
+    const narrow = applyOps(d, model, [
+      { op: 'theme', target: '', key: 'hero.composerWidth', value: 'narrow' },
+    ])
+    expect(narrow.refused).toEqual([])
+    expect(narrow.design.pages.home.composerWidth).toBe('narrow')
+    expect(narrow.done[0]!.label).toBe('Hero composer width: Narrow')
+    for (const key of ['layout.heroAlign', 'layout.bandAlign', 'heroAlign', 'hero.align']) {
+      const centred = applyOp(d, model, { op: 'theme', target: '', key, value: 'centre' })
+      expect(heroOf(ok(centred).design).align, key).toBe('centre')
+    }
+    const set = applyOp(d, model, {
+      op: 'set',
+      target: 'hero',
+      key: 'layout.bandAlign',
+      value: 'centre',
+    })
+    expect(heroOf(ok(set).design).align).toBe('centre')
+    // A hero setting it does not have is refused as the hero's, by its own settings.
+    expect(applyOp(d, model, { op: 'theme', key: 'hero.sparkle', value: 'on' })).toMatchObject({
+      ok: false,
+      refusal: expect.stringContaining('The hero has no setting called sparkle'),
+    })
   })
 
   it('tells the roadmap page from a Roadmap block by the setting', () => {
@@ -480,6 +508,35 @@ describe('words with marks', () => {
       text: { en: 'Acme grows into' },
     })
     expect(lighter.label).toBe('Headline: lighter')
+  })
+
+  it('takes the whole title marked in the brand colour as the headlines’ colour', () => {
+    const d = withWelcome()
+    d.pages.home.headline!.accent = { style: 'highlight', text: { en: 'Acme' } }
+    for (const [value, title] of [
+      ['[Help shape what Acme grows into]{accent}', 'Help shape what Acme grows into'],
+      ['[Help shape what Acme grows into]{accent:accent}.', 'Help shape what Acme grows into.'],
+    ] as const) {
+      const result = applyOps(d, model, [{ op: 'words', target: 'home', key: 'title', value }])
+      expect(result.refused, value).toEqual([])
+      expect(result.design.brand.fonts.headlineColour, value).toBe('accent')
+      // No phrase set apart: the headline's own colour is what was asked for.
+      expect(result.design.pages.home.headline?.accent, value).toBeUndefined()
+      expect(result.design.pages.home.headline?.title, value).toEqual({ en: title })
+    }
+  })
+
+  it('refuses another look over the whole title, with a reason a person can read', () => {
+    for (const value of [
+      '[Help shape what Acme grows into]{highlight}',
+      '[Help shape what Acme grows into]{lighter}',
+      '[Help shape what Acme grows into]{accent:support}',
+    ]) {
+      const result = setWords(withWelcome(), model, 'home', 'title', value)
+      expect(result, value).toMatchObject({ ok: false })
+      const refusal = (result as { refusal: string }).refusal
+      expect(plainReason(refusal), value).toBe(refusal)
+    }
   })
 
   it('clears the accent when the headline is written as plain words', () => {

@@ -628,6 +628,103 @@ describe('the edit loop', () => {
   })
 })
 
+describe('the edit loop, a phrase of the headline set apart', () => {
+  const titled = () => {
+    const d = start()
+    d.pages.home.headline = { title: { en: 'Help shape what Acme grows into' }, subtitle: {} }
+    return portalDesign.parse(d)
+  }
+  const isAccent = {
+    element: 'headline' as const,
+    state: 'base' as const,
+    block: '',
+    target: '',
+    property: 'color' as const,
+    expect: 'is' as const,
+    value: 'accent',
+  }
+
+  it('never holds the whole headline to the colour of the words set apart', async () => {
+    const original = titled()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({
+          plan: 'Set “grows” apart in the brand colour',
+          ops: [
+            {
+              op: 'words',
+              target: 'home',
+              key: 'title',
+              value: 'Help shape what Acme [grows]{accent} into',
+              says: '“grows” in the brand colour',
+            },
+          ],
+          checks: [isAccent],
+          done: true,
+          reply: '“grows” is now in the brand colour.',
+        }),
+        answer({
+          plan: 'Colour the whole headline',
+          styles: [
+            { ...hoverStyle('accent'), element: 'headline', state: 'base', property: 'color' },
+          ],
+          done: true,
+          reply: 'The headline is in the brand colour.',
+        }),
+      ],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+    })
+    if (!result.ok) throw new Error(result.message)
+    // The headline itself is drawn in the text colour: no step is sent to correct that.
+    expect(step).toHaveBeenCalledTimes(1)
+    expect(result.stopped).toBe('done')
+    expect(result.steps[0]!.checks.map((c) => c.ok)).not.toContain(false)
+    expect(result.design.style?.headline).toBeUndefined()
+    expect(result.reply).toBe('“grows” is now in the brand colour.')
+  })
+
+  it('still measures the headline’s own colour where a step sets it', async () => {
+    const original = titled()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({
+          plan: 'Set “grows” apart, and the headline in rust',
+          ops: [
+            {
+              op: 'words',
+              target: 'home',
+              key: 'title',
+              value: 'Help shape what Acme [grows]{accent} into',
+              says: '',
+            },
+            { op: 'theme', target: '', key: 'tune.headline.colour', value: '#7c2d12', says: '' },
+          ],
+          checks: [isAccent],
+          done: true,
+        }),
+      ],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+      budget: { steps: 1, ms: 60_000 },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.steps[0]!.checks.map((c) => c.ok)).toEqual([false])
+  })
+})
+
 describe('the router', () => {
   const route = (message: string, images = 0) => routeRequest(R, { message, images })
   it('takes states, looks by feel, pictures, contrast and element styles through the loop', () => {
