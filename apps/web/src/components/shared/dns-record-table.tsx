@@ -66,6 +66,18 @@ function CopyAsParts({ value, name }: { value: string; name: string }) {
   )
 }
 
+/**
+ * Where the table has less than 36rem to itself (a phone, or a narrow column
+ * beside a sidebar) four columns leave the value a few characters wide. Each
+ * record then stacks: its cells one under another, named by `data-label`,
+ * with the header row left out.
+ */
+const STACKED_CELL =
+  '@max-xl:flex @max-xl:items-start @max-xl:gap-3 @max-xl:py-0.5 @max-xl:pr-0 ' +
+  '@max-xl:before:w-11 @max-xl:before:shrink-0 @max-xl:before:pt-0.5 @max-xl:before:font-sans ' +
+  '@max-xl:before:text-xs @max-xl:before:text-muted-foreground ' +
+  '@max-xl:before:content-[attr(data-label)]'
+
 const STATE_ICON = {
   found: { icon: CheckCircleIcon, label: 'Found', tone: 'text-success' },
   waiting: { icon: ClockIcon, label: 'Waiting', tone: 'text-muted-foreground/70' },
@@ -74,9 +86,9 @@ const STATE_ICON = {
 
 export function DnsRecordTable({ records }: { records: DnsRecordRow[] }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[13px]">
-        <thead>
+    <div className="@container overflow-x-auto">
+      <table className="w-full text-[13px] @max-xl:block">
+        <thead className="@max-xl:hidden">
           <tr className="text-left text-xs text-muted-foreground">
             <th className="py-1.5 pr-3 font-medium">Record</th>
             <th className="py-1.5 pr-3 font-medium">Name</th>
@@ -84,22 +96,27 @@ export function DnsRecordTable({ records }: { records: DnsRecordRow[] }) {
             <th className="py-1.5 font-medium">Value</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="@max-xl:block">
           {records.map((r) => {
             const { icon: Icon, label, tone } = STATE_ICON[r.state]
             return (
               <Fragment key={`${r.type} ${r.name} ${r.value}`}>
-                <tr data-slot="dns-record" className="border-t border-border/50 align-top">
-                  <td className="py-1.5 pr-3 whitespace-nowrap">
+                <tr
+                  data-slot="dns-record"
+                  className="border-t border-border/50 align-top @max-xl:block @max-xl:py-2"
+                >
+                  <td className="py-1.5 pr-3 whitespace-nowrap @max-xl:block @max-xl:pt-0 @max-xl:font-medium">
                     <span className="flex items-center gap-1.5">
                       <Icon className={cn('size-4 shrink-0', tone)} aria-hidden="true" />
                       <span className="sr-only">{label}: </span>
                       {r.label}
                     </span>
                   </td>
-                  <td className="py-1.5 pr-3">
-                    <span className="flex items-start gap-1">
-                      <span className="font-mono whitespace-nowrap">{r.name}</span>
+                  <td data-label="Name" className={cn('py-1.5 pr-3', STACKED_CELL)}>
+                    <span className="flex min-w-0 items-start gap-1">
+                      <span className="font-mono whitespace-nowrap @max-xl:break-all @max-xl:whitespace-normal">
+                        {r.name}
+                      </span>
                       <CopyButton
                         value={r.name}
                         variant="ghost"
@@ -108,9 +125,14 @@ export function DnsRecordTable({ records }: { records: DnsRecordRow[] }) {
                       />
                     </span>
                   </td>
-                  <td className="py-1.5 pr-3 font-mono whitespace-nowrap">{r.type}</td>
-                  <td className="py-1.5">
-                    <span className="flex items-start gap-1">
+                  <td
+                    data-label="Type"
+                    className={cn('py-1.5 pr-3 font-mono whitespace-nowrap', STACKED_CELL)}
+                  >
+                    {r.type}
+                  </td>
+                  <td data-label="Value" className={cn('py-1.5', STACKED_CELL)}>
+                    <span className="flex min-w-0 items-start gap-1">
                       <span className="font-mono break-all">{r.value}</span>
                       <CopyButton
                         value={r.value}
@@ -122,16 +144,21 @@ export function DnsRecordTable({ records }: { records: DnsRecordRow[] }) {
                   </td>
                 </tr>
                 {r.value.length > TXT_STRING_MAX && (
-                  <tr data-slot="dns-record-parts">
-                    <td colSpan={3} />
-                    <td className="pb-1.5">
+                  <tr data-slot="dns-record-parts" className="@max-xl:block">
+                    <td colSpan={3} className="@max-xl:hidden" />
+                    <td className="pb-1.5 @max-xl:block @max-xl:pl-14">
                       <CopyAsParts value={r.value} name={r.name} />
                     </td>
                   </tr>
                 )}
                 {r.state === 'problem' && r.problem && (
-                  <tr data-slot="dns-record-fix">
-                    <td colSpan={4} className="pb-2 text-xs text-destructive break-all">
+                  <tr data-slot="dns-record-fix" className="@max-xl:block">
+                    <td
+                      colSpan={4}
+                      // A long value quoted in the sentence may break anywhere;
+                      // its words break only where they must.
+                      className="pb-2 text-xs text-destructive [overflow-wrap:anywhere] @max-xl:block"
+                    >
                       {r.problem}
                     </td>
                   </tr>
