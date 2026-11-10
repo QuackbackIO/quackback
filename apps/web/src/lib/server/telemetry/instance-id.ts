@@ -25,12 +25,14 @@ import { randomUUID } from 'crypto'
  * callers converge: the loser's `WHERE` no longer matches and it reads back the
  * winner's value.
  */
-export async function getOrCreateInstanceId(): Promise<string> {
+export async function getOrCreateInstanceId(): Promise<string | null> {
   try {
     const { db, settings, eq, sql } = await import('@/lib/server/db')
 
     const org = await db.query.settings.findFirst({ columns: { id: true, metadata: true } })
-    if (!org) return randomUUID()
+    // No settings row means no workspace yet. There is nowhere to keep an id,
+    // and a fresh random one per ping would count as a new install each day.
+    if (!org) return null
     const existing = readInstanceIdFrom(org.metadata)
     if (existing) return existing
 
@@ -54,8 +56,8 @@ export async function getOrCreateInstanceId(): Promise<string> {
     const after = await db.query.settings.findFirst({ columns: { metadata: true } })
     return readInstanceIdFrom(after?.metadata) ?? instanceId
   } catch {
-    // If DB fails, return a random UUID (won't persist but won't crash)
-    return randomUUID()
+    // Same reason: an id that is not stored would count as a new install.
+    return null
   }
 }
 
