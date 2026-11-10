@@ -1282,11 +1282,14 @@ export async function sendConversationClosedEmail(params: {
   inReplyTo?: string
   references?: string[]
   conversationId?: string | null
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }): Promise<EmailResult> {
   const subject =
     conversationReplySubject(params.conversationSubject) ??
     `Re: your conversation with ${params.workspaceName}`
   return sendEmail({
+    brand: params.brand,
     to: params.to,
     subject,
     react: ConversationClosedEmail({
@@ -1317,11 +1320,14 @@ export async function sendConversationAutoAckEmail(params: {
   references?: string[]
   from?: SendingIdentity
   conversationId?: string | null
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }): Promise<EmailResult> {
   const subject =
     conversationReplySubject(params.conversationSubject) ??
     `Re: your message to ${params.workspaceName}`
   return sendEmail({
+    brand: params.brand,
     to: params.to,
     subject,
     react: ConversationReplyEmail({

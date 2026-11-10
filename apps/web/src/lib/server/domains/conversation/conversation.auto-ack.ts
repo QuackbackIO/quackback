@@ -77,6 +77,8 @@ export async function maybeSendColdInboundAck(opts: {
     const { recordOutboundEmail } = await import('./conversation.email-store')
     const { requireSettings } = await import('@/lib/server/domains/settings/settings.helpers')
     const org = await requireSettings()
+    const { emailBranding } = await import('@/lib/server/email/email-brand')
+    const { brand } = await emailBranding(org)
     const workspaceName = org.name ?? 'Support'
     const to = typedAddressRecipient(sender)
     if (!to) return 'no_sender'
@@ -92,6 +94,7 @@ export async function maybeSendColdInboundAck(opts: {
       inReplyTo: inboundId ?? undefined,
       references: inboundId ? [inboundId] : undefined,
       conversationId: opts.conversationId,
+      brand,
     })
     const outboundId = result.messageId === undefined ? minted : (result.messageId ?? undefined)
     if (outboundId) await recordOutboundEmail(outboundId, opts.conversationId)

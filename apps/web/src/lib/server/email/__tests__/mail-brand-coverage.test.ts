@@ -36,9 +36,12 @@ const MAIL_BRAND_CLASS: Record<string, 'visitor' | 'team' | 'plain'> = {
   sendStatusIncidentPublishedEmail: 'visitor',
   sendStatusMaintenanceScheduledEmail: 'visitor',
 
-  // A human-looking reply in neutral greys, with no button or accent to brand.
-  sendConversationClosedEmail: 'plain',
-  sendConversationAutoAckEmail: 'plain',
+  // Human-looking replies to a visitor: neutral today, but carried in the brand
+  // like every other mail in the thread.
+  sendConversationClosedEmail: 'visitor',
+  sendConversationAutoAckEmail: 'visitor',
+
+  // A prerendered body: nothing for the brand to reach.
   sendRawEmail: 'plain',
 
   // To a teammate about the workspace itself, never to a visitor.
