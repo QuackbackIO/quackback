@@ -54,6 +54,8 @@ vi.mock('@/lib/server/domains/settings/tier-enforce', async () => {
 const actions = await import('../design.actions')
 const { draftWaiting } = await import('../revisions')
 const { defaultDesign } = await import('@/lib/shared/design/schema')
+const { applyDraftOps } = await import('../draft-ops')
+const { newBlock } = await import('@/lib/shared/design/home')
 
 const fixture = await createDbTestFixture()
 beforeEach(async () => {
@@ -423,6 +425,149 @@ describe('patchDesignDraft', () => {
       ok: false,
       code: 'INVALID_DESIGN',
     })
+  })
+})
+
+describe('patchDesignDraft on arrays', () => {
+  const ideas = (id: string, y = 0) => ({ ...newBlock('ideas', { x: 0, y }), id })
+
+  it('refuses a patch that replaces Home blocks, overrides or the menu without replace', async () => {
+    const who = await author()
+    for (const patch of [
+      { pages: { home: { blocks: [] } } },
+      { overrides: [] },
+      { nav: { items: null } },
+    ]) {
+      expect(await actions.patchDesignDraft(patch, who)).toMatchObject({
+        ok: false,
+        code: 'REPLACE_REQUIRED',
+      })
+    }
+    expect((await actions.readDesignForEditing()).source).not.toBe('draft')
+  })
+
+  it('refuses Home blocks without their ids, even with replace', async () => {
+    const who = await author()
+    const { id: _id, ...noId } = ideas('blocka01')
+    expect(
+      await actions.patchDesignDraft({ pages: { home: { blocks: [noId] } } }, who, undefined, {
+        replace: true,
+      })
+    ).toMatchObject({ ok: false, code: 'ID_REQUIRED' })
+  })
+
+  it('settles Home blocks a patch stacks on one another', async () => {
+    const who = await author()
+    const result = await actions.patchDesignDraft(
+      { pages: { home: { blocks: [ideas('blockone1', 3), ideas('blocktwo1', 3)] } } },
+      who,
+      undefined,
+      { replace: true }
+    )
+    expect(result.ok).toBe(true)
+    const [one, two] = (await actions.readDesignForEditing()).design.pages.home.blocks
+    expect(one.grid?.y).toBe(0)
+    expect(two.grid?.y).toBe(one.grid!.y + one.grid!.h)
+  })
+})
+
+describe('applyDraftOps', () => {
+  const gates = {
+    feedback: true,
+    roadmap: true,
+    changelog: true,
+    help: true,
+    support: true,
+    status: true,
+  }
+
+  async function withTwoBlocks() {
+    const who = await author()
+    await actions.patchDesignDraft(
+      {
+        pages: {
+          home: {
+            blocks: [
+              { ...newBlock('ideas', { x: 0, y: 0 }), id: 'blockone1' },
+              { ...newBlock('updates', { x: 0, y: 20 }), id: 'blocktwo1' },
+            ],
+          },
+        },
+      },
+      who,
+      undefined,
+      { replace: true }
+    )
+    return { who, revision: (await actions.readDesignForEditing()).revision }
+  }
+
+  it('changes one block and keeps the others, returning the new revision', async () => {
+    const { who, revision } = await withTwoBlocks()
+    const result = await applyDraftOps(
+      [{ op: 'block.set', block: 'blockone1', key: 'count', value: 5 }],
+      who,
+      revision,
+      gates
+    )
+    expect(result).toMatchObject({ ok: true, applied: [0], refused: [] })
+    const after = await actions.readDesignForEditing()
+    expect(after.revision).toBe((result as { revision: string }).revision)
+    expect(after.revision).not.toBe(revision)
+    const blocks = after.design.pages.home.blocks
+    expect(blocks.map((b) => b.id)).toEqual(['blockone1', 'blocktwo1'])
+    expect((blocks[0] as { count?: number }).count).toBe(5)
+  })
+
+  it('refuses one operation plainly and still applies the rest', async () => {
+    const { who, revision } = await withTwoBlocks()
+    const result = await applyDraftOps(
+      [
+        { op: 'block.set', block: 'gone', key: 'count', value: 5 },
+        { op: 'block.set', block: 'blockone1', key: 'count', value: 999 },
+        { op: 'block.remove', block: 'blocktwo1' },
+      ],
+      who,
+      revision,
+      gates
+    )
+    expect(result).toMatchObject({ ok: true, applied: [2] })
+    const refused = (result as { refused: Array<{ index: number; reason: string }> }).refused
+    expect(refused.map((r) => r.index)).toEqual([0, 1])
+    expect(refused[0].reason).toBe('That block is no longer on Home')
+    const blocks = (await actions.readDesignForEditing()).design.pages.home.blocks
+    expect(blocks.map((b) => b.id)).toEqual(['blockone1'])
+  })
+
+  it('refuses a stale revision and saves nothing when every operation is refused', async () => {
+    const { who, revision } = await withTwoBlocks()
+    expect(
+      await applyDraftOps([{ op: 'block.remove', block: 'blocktwo1' }], who, 'stale', gates)
+    ).toMatchObject({ ok: false, code: 'REVISION_MISMATCH' })
+    const none = await applyDraftOps([{ op: 'block.remove', block: 'x' }], who, revision, gates)
+    expect(none).toMatchObject({ ok: true, applied: [], revision })
+  })
+
+  it('settles a Home grid the draft already holds overlapping', async () => {
+    const who = await author()
+    const stacked = defaultDesign()
+    stacked.pages.home.blocks = [
+      { ...newBlock('ideas', { x: 0, y: 2 }), id: 'blockone1' },
+      { ...newBlock('updates', { x: 0, y: 2 }), id: 'blocktwo1' },
+    ]
+    // Saved as the builder saves, which leaves the grid as it is given.
+    const saved = await actions.saveDesignDraft(stacked, who)
+    expect(saved.ok).toBe(true)
+    const revision = (saved as { revision: string }).revision
+    const result = await applyDraftOps(
+      [{ op: 'block.set', block: 'blockone1', key: 'count', value: 5 }],
+      who,
+      revision,
+      gates
+    )
+    expect(result.ok).toBe(true)
+    const [first, second] = (await actions.readDesignForEditing()).design.pages.home.blocks
+    expect(first.grid!.y).toBe(0)
+    expect(second.grid!.y).toBe(first.grid!.h)
   })
 })
 

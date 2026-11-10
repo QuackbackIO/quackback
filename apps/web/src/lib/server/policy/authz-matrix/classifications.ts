@@ -266,6 +266,10 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     [PERMISSIONS.SETTINGS_BRANDING],
     'the key needs the write:settings scope and its owner the branding permission; it writes the draft only'
   ),
+  'routes/api/v1/settings/portal_design.draft.ops.ts::POST': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_BRANDING],
+    'the key needs the write:settings scope and its owner the branding permission; it writes the draft only'
+  ),
   'routes/api/v1/settings/portal_design.draft.ts::DELETE': DYNAMIC_PERMISSION(
     [PERMISSIONS.SETTINGS_BRANDING],
     'the key needs the write:settings scope and its owner the branding permission'

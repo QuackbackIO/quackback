@@ -35,7 +35,10 @@ export const Route = createFileRoute('/api/v1/settings/portal_design')({
        * PATCH /api/v1/settings/portal_design
        * A JSON merge patch onto the design being edited, saved as the draft.
        * If-Match must carry the revision you read. Nothing goes live until a
-       * person publishes the draft.
+       * person publishes the draft. Arrays are replaced whole, so a patch that
+       * names pages.home.blocks, overrides or nav.items needs ?replace=true,
+       * and blocks and menu links need their ids. To change one item, use
+       * POST /portal_design/draft/ops.
        */
       PATCH: async ({ request }) => {
         try {
@@ -64,7 +67,8 @@ export const Route = createFileRoute('/api/v1/settings/portal_design')({
           const result = await actions.patchDesignDraft(
             patch,
             await http.designAuthorFromApiAuth(auth, request.headers),
-            normalizeRevision(ifMatch)
+            normalizeRevision(ifMatch),
+            { replace: new URL(request.url).searchParams.get('replace') === 'true' }
           )
           if (!result.ok) return http.refusalResponse(result)
           const state = await actions.readDesignForEditing()
