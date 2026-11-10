@@ -11,7 +11,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { CanvasFrame } from './designer-canvas'
 import { MenuAdd } from './menu-add'
 import { MenuClickMenu } from './menu-click-menu'
-import { MenuCoachMark } from './menu-coach-mark'
+import { MenuCoachMark, menuHintShown } from './menu-coach-mark'
 import type { NamedUpdate } from './menu-link-form'
 import { MenuRename } from './menu-rename'
 import { menuItemFont, menuKey, MENU_ROW_KEY, useFrameRects } from './use-frame-rects'
@@ -64,6 +64,8 @@ export function MenuLayer({
   const [onPlus, setOnPlus] = useState(false)
   const rects = useFrameRects(canvas.frame, canvas.scale, [
     MENU_ROW_KEY,
+    // The header, which the menu's hint sits under.
+    coach.show ? 'header' : null,
     hovered && menuKey(hovered),
     open && menuKey(open.target),
   ])
@@ -77,7 +79,15 @@ export function MenuLayer({
   const row = rects[MENU_ROW_KEY] ?? null
   const hoveredBox = hovered && hovered !== open?.target && !drag ? rects[menuKey(hovered)] : null
   const openBox = open ? (rects[menuKey(open.target)] ?? null) : null
-  const rowShown = useLinger(headerHot || !!hovered || !!open || adding || onPlus || coach.show)
+  const rowShown = useLinger(headerHot || !!hovered || !!open || adding || onPlus)
+  // The hint shows only while the menu is in play, under the header so it never covers it.
+  const hint = menuHintShown({
+    show: coach.show,
+    hasRow: !!row,
+    hot: headerHot || !!hovered,
+    open: !!open,
+    dragging: !!drag,
+  })
   // The open item's outline, which its menu opens against.
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null)
   // An item that went, such as after its page changed, closes what was open for it.
@@ -198,8 +208,13 @@ export function MenuLayer({
           onCancel={() => editing.close(part.id)}
         />
       )}
-      {coach.show && row && !open && !drag && (
-        <MenuCoachMark row={row} room={canvas.room} onDismiss={coach.dismiss} />
+      {hint && row && (
+        <MenuCoachMark
+          row={row}
+          below={rects.header ?? null}
+          room={canvas.room}
+          onDismiss={coach.dismiss}
+        />
       )}
     </div>
   )

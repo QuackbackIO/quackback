@@ -38,6 +38,7 @@ afterEach(() => {
 function matched() {
   const design = defaultDesign()
   design.brand.light.accent = '#0058a3'
+  design.brand.matchedAt = '2026-11-07T12:00:00.000Z'
   design.nav.home.on = true
   return design
 }

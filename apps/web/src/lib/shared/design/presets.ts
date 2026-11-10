@@ -5,7 +5,7 @@
  * logo alone.
  */
 import type { BundledFontId } from './fonts'
-import { withLook } from './looks'
+import { keepOwn, withLook, type KeepOwn } from './looks'
 import type { PortalDesign } from './schema'
 
 type Brand = PortalDesign['brand']
@@ -223,60 +223,10 @@ export function applyPreset(
   preset: DesignPreset,
   keep: KeepOwn = {}
 ): PortalDesign {
-  return keepOwn(withLook(doc, preset.look), doc, keep)
+  return keepOwn(withLook(doc, preset.look, { itsColours: true }), doc, keep)
 }
 
-/** What of a draft's own look to keep when another look is taken. */
-export interface KeepOwn {
-  colours?: boolean
-  fonts?: boolean
-}
-
-/** The exact values that are colours, which keeping colours keeps. */
-const TUNED_COLOURS = {
-  headline: ['colour'],
-  subtitle: ['colour'],
-  heading: ['colour'],
-  link: ['colour'],
-  button: ['fill', 'ink'],
-} as const
-
-/**
- * A new look with the colours or fonts a draft had, where asked: its palette
- * in light and dark and its exact colours, or its faces and heading weight.
- * Everything else is the new look's.
- */
-export function keepOwn(look: PortalDesign, own: PortalDesign, keep: KeepOwn): PortalDesign {
-  if (!keep.colours && !keep.fonts) return look
-  const next = structuredClone(look)
-  if (keep.colours) {
-    next.brand.light = structuredClone(own.brand.light)
-    if (own.brand.dark) next.brand.dark = structuredClone(own.brand.dark)
-    else delete next.brand.dark
-    const tune = { ...next.tune } as Record<string, Record<string, unknown> | undefined>
-    for (const [part, keys] of Object.entries(TUNED_COLOURS)) {
-      const group = { ...tune[part] }
-      for (const key of keys) {
-        const value = (own.tune as Record<string, Record<string, unknown> | undefined>)?.[part]?.[
-          key
-        ]
-        if (value === undefined) delete group[key]
-        else group[key] = value
-      }
-      if (Object.keys(group).length) tune[part] = group
-      else delete tune[part]
-    }
-    if (Object.keys(tune).length) next.tune = tune as PortalDesign['tune']
-    else delete next.tune
-  }
-  if (keep.fonts) {
-    const { heading, body, display, headingWeight } = own.brand.fonts
-    Object.assign(next.brand.fonts, structuredClone({ heading, body, headingWeight }))
-    if (display) next.brand.fonts.display = structuredClone(display)
-    else delete next.brand.fonts.display
-  }
-  return next
-}
+export { keepOwn, type KeepOwn }
 
 /** Makes a draft being changed into another design in place, removing what that one leaves out. */
 export function replaceDesign(draft: PortalDesign, next: PortalDesign): void {

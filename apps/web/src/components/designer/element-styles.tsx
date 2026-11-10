@@ -501,7 +501,7 @@ function Sample({ element, force }: { element: StyleElement; force?: StyleState 
     case 'headline':
       return (
         <h1 data-qb-part="headline" className="text-2xl">
-          Share your ideas
+          Share a post
         </h1>
       )
     case 'subtitle':
@@ -530,7 +530,7 @@ function Sample({ element, force }: { element: StyleElement; force?: StyleState 
           data-qb-part="band"
           className="w-56 rounded-md bg-[var(--qb-band-bg)] p-4 text-[var(--qb-band-ink)]"
         >
-          <span className="text-base font-semibold">Share your ideas</span>
+          <span className="text-base font-semibold">Share a post</span>
         </div>
       )
     case 'header':

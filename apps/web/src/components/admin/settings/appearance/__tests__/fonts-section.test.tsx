@@ -32,7 +32,7 @@ vi.mock('@/lib/shared/theme/font-loader', () => ({
   loadBrandingFont: async (id: string) => void loaded.push(id),
 }))
 
-const { FontsSection, guessFace, guessFamily } = await import('../fonts-section')
+const { FontsSection, guessFace, guessFamily, requestOwnFont } = await import('../fonts-section')
 
 describe('reading a font file’s name', () => {
   it.each([
@@ -203,5 +203,25 @@ describe('your own font', () => {
     )
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(seen.design.brand.fonts.heading).toEqual(defaultDesign().brand.fonts.heading)
+  })
+})
+
+describe('opening the upload for a font a brand match named', () => {
+  it('opens it with the name and the slot filled in, when asked before it draws', async () => {
+    requestOwnFont({ family: 'Acme Grotesk', slot: 'body' })
+    renderSection()
+    const details = screen.getByText('Upload a font').closest('details')!
+    await waitFor(() => expect(details.open).toBe(true))
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Acme Grotesk')
+    expect(screen.getByLabelText('Use for')).toHaveTextContent('Body')
+  })
+
+  it('opens it when asked while it is already there', async () => {
+    renderSection()
+    const details = screen.getByText('Upload a font').closest('details')!
+    expect(details.open).toBe(false)
+    act(() => requestOwnFont({ family: 'Acme Display', slot: 'heading' }))
+    await waitFor(() => expect(details.open).toBe(true))
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Acme Display')
   })
 })

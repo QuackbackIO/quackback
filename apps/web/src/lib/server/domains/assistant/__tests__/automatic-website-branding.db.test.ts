@@ -12,12 +12,16 @@ import {
   principalRoleAssignments,
   assistantPendingActions,
   auditLog,
+  portalDesigns,
 } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import type { Actor } from '@/lib/server/policy/types'
 import { ALL_PERMISSIONS, PERMISSIONS } from '@/lib/shared/permissions'
 import type { WebsiteBranding } from '@/lib/server/content/website-branding'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
+import { getDesignState, publishDraft, saveDraft } from '@/lib/server/domains/design/design.service'
+import { defaultDesign } from '@/lib/shared/design/schema'
+import { resetConfig } from '@/lib/server/config'
 import {
   acceptWebsiteBrandingOffer,
   declineWebsiteBrandingOffer,
@@ -686,5 +690,59 @@ describe("the branding step's Find logo (real Postgres)", () => {
       code: 'WEBSITE_BRANDING_PERMISSION_REQUIRED',
     })
     expect(seams.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('automatic website branding on the portal design engine (real Postgres)', () => {
+  let saved: NodeJS.ProcessEnv
+  beforeEach(async () => {
+    saved = { ...process.env }
+    Object.assign(process.env, {
+      BASE_URL: 'https://portal.example.com',
+      SECRET_KEY: 'x'.repeat(48),
+    })
+    resetConfig()
+    await testDb.delete(portalDesigns)
+  })
+  afterEach(() => {
+    process.env = saved
+    resetConfig()
+  })
+
+  const author = () => ({
+    principalId: actor.principalId!,
+    actor: { type: 'user' as const },
+  })
+  async function publish(design = defaultDesign()) {
+    await saveDraft(design, author())
+    await publishDraft({ ...author(), source: 'api' })
+  }
+
+  it('puts the logo and colour into the design draft once a design is published, where the old settings no longer reach', async () => {
+    await setRow({ featureFlags: JSON.stringify({ portalDesignV2: true }) })
+    await publish()
+    await lookUpAndUse(actor)
+    const state = await getDesignState()
+    expect(state?.draft?.brand.logo.mark.light).toEqual({ key: good.logoKey })
+    expect(state?.draft?.brand.light.accent.toLowerCase()).toBe(good.color!.toLowerCase())
+    // The published design visitors see is unchanged until someone publishes.
+    expect(state?.published?.document.brand.logo.mark.light).toBeNull()
+  })
+
+  it('keeps an icon and colour the design already has', async () => {
+    await setRow({ featureFlags: JSON.stringify({ portalDesignV2: true }) })
+    const own = defaultDesign()
+    own.brand.logo.mark.light = { key: 'logos/own.png' }
+    own.brand.light.accent = '#7a1f35'
+    await publish(own)
+    await lookUpAndUse(actor)
+    expect((await getDesignState())?.draft).toBeNull()
+  })
+
+  it('leaves the design alone on the legacy theme', async () => {
+    await publish()
+    await lookUpAndUse(actor)
+    expect((await getDesignState())?.draft).toBeNull()
+    expect((await read()).logoKey).toBe(good.logoKey)
   })
 })

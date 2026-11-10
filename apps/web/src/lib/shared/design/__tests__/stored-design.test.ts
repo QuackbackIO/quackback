@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultDesign, portalDesign } from '../schema'
+import { DESIGN_OPTIONS } from '../options'
 import { newBlock } from '../home'
 import { readStoredDesign, withoutRetiredKeys } from '../stored-design'
 
@@ -114,5 +115,86 @@ describe('reading a stored design', () => {
     expect(readStoredDesign(null)).toBeNull()
     expect(readStoredDesign({ version: 1 })).toBeNull()
     expect(readStoredDesign('design')).toBeNull()
+  })
+})
+
+type Node = {
+  _zod: {
+    def: {
+      type: string
+      shape?: Record<string, Node>
+      innerType?: Node
+      entries?: Record<string, string | number>
+    }
+  }
+}
+
+/**
+ * Every optional enum field of the design schema reachable through plain
+ * objects, as a dotted path with the option list that enum is made from.
+ */
+function optionalEnumPaths(): { path: string[]; options: unknown[] }[] {
+  const found: { path: string[]; options: unknown[] }[] = []
+  const visit = (node: Node, path: string[], optional: boolean) => {
+    const def = node._zod.def
+    if (def.type === 'optional' && def.innerType) return visit(def.innerType, path, true)
+    if (def.type === 'enum' && optional) {
+      found.push({ path, options: Object.values(def.entries ?? {}) })
+    }
+    if (def.type === 'object' && def.shape) {
+      for (const [key, child] of Object.entries(def.shape)) visit(child, [...path, key], false)
+    }
+  }
+  visit(portalDesign as unknown as Node, [], false)
+  return found
+}
+
+describe('reading a stored design with a value this build does not offer', () => {
+  const fields = optionalEnumPaths()
+
+  it('finds the optional options, including every DESIGN_OPTIONS list one is made from', () => {
+    expect(fields.length).toBeGreaterThan(15)
+    const paths = fields.map((field) => field.path.join('.'))
+    expect(paths).toEqual(
+      expect.arrayContaining(['layout.bandGlow', 'layout.bandShape', 'shape.hover'])
+    )
+    const used = (list: readonly unknown[]) =>
+      fields.some((field) => JSON.stringify(field.options) === JSON.stringify([...list]))
+    expect(used(DESIGN_OPTIONS.bandGlow)).toBe(true)
+    expect(used(DESIGN_OPTIONS.hover)).toBe(true)
+  })
+
+  it.each(fields.map((field) => [field.path.join('.'), field.path] as const))(
+    'drops only %s, keeping the rest of the design',
+    (_name, path) => {
+      const doc = structuredClone(stored()) as unknown as Json
+      const parent = path.slice(0, -1).reduce((node, key) => (node[key] ??= {}) as Json, doc)
+      // The key is present with a known value first, so the rest is the same design.
+      parent[path.at(-1)!] = 'from-a-newer-build'
+      const read = readStoredDesign(doc)
+      expect(read, 'the design still reads').not.toBeNull()
+      expect(read!.dropped).toEqual([path.join('.')])
+      const keep = structuredClone(doc)
+      const keepParent = path.slice(0, -1).reduce((node, key) => node[key] as Json, keep)
+      delete keepParent[path.at(-1)!]
+      expect(read!.design).toEqual(portalDesign.parse(keep))
+    }
+  )
+
+  it('drops an optional field holding the wrong kind of value, keeping the design', () => {
+    const read = readStoredDesign(written({ 'layout.bandGlow': 7, 'shape.hover': { on: true } }))
+    expect(read?.dropped.sort()).toEqual(['layout.bandGlow', 'shape.hover'])
+    expect(read?.design.brand.light.accent).toBe('#0f766e')
+    expect(read?.design.layout).not.toHaveProperty('bandGlow')
+  })
+
+  it('still sets a required option back to the default design value', () => {
+    const read = readStoredDesign(written({ 'layout.nav': 'sidebar' }))
+    expect(read?.design.layout.nav).toBe(defaultDesign().layout.nav)
+    expect(read?.dropped).toEqual(['layout.nav'])
+  })
+
+  it('still refuses a design whose required field is the wrong kind of value', () => {
+    expect(readStoredDesign(written({ 'layout.nav': 7 }))).toBeNull()
   })
 })

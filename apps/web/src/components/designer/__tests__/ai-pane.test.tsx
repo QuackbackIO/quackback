@@ -26,6 +26,7 @@ function pane(over: Partial<Parameters<typeof AiPane>[0]['pane']> = {}) {
     width: 360,
     resizing: false,
     expand: vi.fn(),
+    reveal: vi.fn(),
     collapse: vi.fn(),
     resize: vi.fn(),
     setResizing: vi.fn(),

@@ -414,6 +414,12 @@ export const portalDesignV2 = z
           })
           .strict(),
         /**
+         * When a brand match last ran into this design (ISO time). The builder
+         * offers the match until one has run, whatever the design already holds:
+         * onboarding's logo alone is not a matched brand.
+         */
+        matchedAt: z.string().datetime().optional(),
+        /**
          * An image for the band, such as a photo or a pattern, with what it
          * shows for those who cannot see it, or marked as decoration.
          */

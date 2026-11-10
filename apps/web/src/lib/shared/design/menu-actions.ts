@@ -67,9 +67,7 @@ export const MENU_COPY = {
   renameKeys: { save: 'to save', cancel: 'to cancel' },
   add: WORDS.addToMenu,
   addLink: WORDS.link,
-  coachTitle: 'Your menu is your list of pages',
-  coachBody:
-    'Click a menu item to go to its page or change it. Double-click to rename it, drag to move it.',
+  coachHint: 'Pick an item to rename or move it.',
   coachDone: 'Got it',
 } as const
 

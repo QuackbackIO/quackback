@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { designerLookChosen, trackBuilder } from '@/lib/client/builder-events'
+import { designerLookChosen, trackBuilder, type MatchFrom } from '@/lib/client/builder-events'
 import { brandLogoChange } from '@/lib/client/brand-logo'
 import { checkBrandMatch } from '@/lib/client/brand-check'
 import {
@@ -8,6 +8,7 @@ import {
   type BrandMatchOutcome,
 } from '@/lib/client/brand-match-stream'
 import { readBrandShot } from '@/lib/client/brand-shots'
+import { readMatchShots } from './match-shots'
 import { askPortalDesignAiFn, designAgentStepFn } from '@/lib/server/functions/portal-design-ai'
 import { readWebsiteFn } from '@/lib/server/functions/site-capture'
 import { readingSummary } from '@/lib/shared/design/agent/website-tool'
@@ -23,6 +24,7 @@ import {
   readAsWordmark,
   titleToSet,
   websiteIn,
+  type UnmatchedFont,
 } from '@/lib/shared/design/match-brand'
 import type {
   AiElementPick,
@@ -139,6 +141,8 @@ export type DesignAiTurn =
       trail?: string[]
       /** The capture of the brand's site a match was made from, with the address to capture again. */
       capture?: BrandMatchCapture & { url: string }
+      /** The brand's own face a match drew in the nearest bundled one, offered for upload. */
+      font?: UnmatchedFont
     }
 
 /** The logo a brand match placed: cut from one screenshot, as an icon and title or a full logo. */
@@ -323,6 +327,7 @@ export function useDesignAi({
           ...(result.capture && website
             ? { capture: { ...result.capture, url: website.url } }
             : {}),
+          ...(result.font ? { font: result.font } : {}),
         })
         if (!checking || !target) return
         // The verified critic loop: read the drawn preview, score it against what was
@@ -590,6 +595,58 @@ export function useDesignAi({
     [matchBrand]
   )
 
+  /**
+   * A brand match started outside the chat, such as from Theme's Brand kit or
+   * a hand-off from onboarding: the brand's website, up to three screenshots,
+   * or both. It runs as one typed in Ask AI does and shows in the conversation,
+   * its changes one undo step. Nothing given, nothing runs.
+   */
+  const startBrandMatch = useCallback(
+    async ({
+      website,
+      screenshots = [],
+      from,
+    }: {
+      website?: string
+      screenshots?: readonly File[]
+      from: MatchFrom
+    }) => {
+      const site = website?.trim() || null
+      if (!site && !screenshots.length) return
+      setStage('Matching your brand…')
+      try {
+        const { attachments, brand } = await readMatchShots(screenshots)
+        trackBuilder('designer_brand_match_started', {
+          from,
+          website: !!site,
+          screenshots: attachments.length,
+        })
+        const thumbnails = attachments.flatMap((each) => (each.image ? [each.image] : []))
+        say({
+          role: 'user',
+          text: site ?? 'Match my brand',
+          ...(thumbnails.length ? { images: thumbnails } : {}),
+        })
+        if (!site && !brand) {
+          say({ role: 'assistant', text: 'Those screenshots could not be read. Try others.' })
+          return
+        }
+        await matchBrand(
+          site ? '' : 'Match my brand',
+          attachments,
+          brand,
+          site ? { url: site } : undefined
+        )
+      } catch {
+        say({ role: 'assistant', text: FAILED })
+      } finally {
+        setBusy(false)
+        setSteps([])
+      }
+    },
+    [matchBrand]
+  )
+
   /** Adds a turn made elsewhere, so its changes show here with Undo. */
   const record = say
   return {
@@ -601,6 +658,7 @@ export function useDesignAi({
     ask,
     adjustLogo,
     recapture,
+    startBrandMatch,
     shaped,
     record,
   }

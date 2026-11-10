@@ -19,12 +19,15 @@ import { AiPane } from './ai-pane'
 import { BuilderColumns, type Pane } from './builder-columns'
 import { useBuilderDialogs } from './builder-dialogs'
 import { BuilderSettings } from './builder-settings'
+import { BrandMatchProvider, type BrandMatchControl } from './brand-match-row'
+import { useBrandWebsite } from './use-brand-website'
 import { BuilderTopBar } from './builder-top-bar'
 import { CanvasBar } from './canvas-bar'
 import { CanvasLayer } from './canvas-layer'
 import { DesignerAi } from './designer-ai'
 import { DesignerCanvas } from './designer-canvas'
 import { ElementPanel, elementPanelKey } from './element-panel'
+import { revealThemeFonts } from './brand-kit-fonts'
 import { usePickReach } from './use-pick-reach'
 import { backgroundPageOf } from '@/lib/shared/design/page-background'
 import { partOf, partSelector } from '@/lib/shared/design/parts-registry'
@@ -38,7 +41,8 @@ import type { DesignerPage } from '@/lib/shared/design/outline'
 import { useCanvasDesign } from './look-preview'
 import { MenuLayer } from './menu-layer'
 import { WordsLayer } from './words/words-layer'
-import { useMenuCoach } from './menu-coach-mark'
+import { useCoach, useMenuCoach } from './menu-coach-mark'
+import { hasMatched } from '@/lib/shared/design/ai-starters'
 import { PreviewBar } from './preview-bar'
 import { usePublishFlow } from './publish-flow'
 import { ReturnVisitNote } from './return-visit-note'
@@ -54,6 +58,7 @@ import { useCanvasView } from './use-canvas-view'
 import { useCountedUpdate, useDesignerEvents } from './use-designer-events'
 import { useDesignerAi } from './use-designer-ai'
 import { useDesignerPage } from './use-designer-page'
+import { useMatchOnArrival } from './use-match-on-arrival'
 import { useMenuEditing } from './use-menu-editing'
 import { usePreviewFollow } from './use-preview-follow'
 import { usePreviewMode } from './use-preview-mode'
@@ -226,6 +231,32 @@ export function DesignerShell({
     },
   })
   const coach = useMenuCoach()
+  // Until a match has run, the first open points at Match your brand, first in Theme.
+  const brandCoach = useCoach('brand')
+  const brandCoachOn = brandCoach.show && !hasMatched(design)
+  const { dispatch: panelDispatch } = panel
+  const coachedOpen = useRef(false)
+  useEffect(() => {
+    if (!brandCoachOn || previewing || coachedOpen.current) return
+    coachedOpen.current = true
+    panelDispatch({ type: 'open', sheet: 'theme', more: false })
+  }, [brandCoachOn, previewing, panelDispatch])
+  // Theme's Match your brand runs the match Ask AI runs, its reply shown in the pane.
+  const brandWebsite = useBrandWebsite()
+  const { reveal } = aiPane
+  const { startBrandMatch } = ai
+  const brandMatch = useMemo<BrandMatchControl>(
+    () => ({
+      busy: ai.busy,
+      website: brandWebsite,
+      start: (input) => {
+        reveal()
+        void startBrandMatch({ ...input, from: 'brand_kit' })
+      },
+      coach: { show: brandCoach.show, dismiss: brandCoach.dismiss },
+    }),
+    [ai.busy, brandWebsite, reveal, startBrandMatch, brandCoach.show, brandCoach.dismiss]
+  )
 
   useDesignerEvents({
     page,
@@ -271,10 +302,17 @@ export function DesignerShell({
     setPane('settings')
   }
   const openTheme = (more = false) => panel.dispatch({ type: 'open', sheet: 'theme', more })
+  // Onboarding's /design?match=<site>: the brand match runs into the draft; or the Brand kit opens.
+  useMatchOnArrival({
+    start: (site) => void startBrandMatch({ website: site, from: 'onboarding' }),
+    showAi: aiPane.expand,
+    openBrandKit: () => openTheme(),
+  })
   const pickAndFocus = (key: Selection) => {
     pick(key)
     focusSettings()
   }
+  const menuHot = picking.hovered === 'header' || selection === 'header'
   const pickedBlock = selection?.startsWith('block-') ? (nameOf(selection) ?? null) : null
   const caption = deviceCaption(size)
 
@@ -377,6 +415,11 @@ export function DesignerShell({
                 onClearSelection={() => setSelection(null)}
                 onCollapse={aiPane.collapse}
                 gates={gates}
+                onFonts={(font) => {
+                  openTheme()
+                  setPane('settings')
+                  revealThemeFonts(font)
+                }}
               />
             </AiPane>
           )}
@@ -443,6 +486,8 @@ export function DesignerShell({
                   onKey={(key) => (key === 'undo' ? undo() : redo())}
                   onEscape={() => {
                     if (previewing) leavePreview()
+                    // The menu's hint shows while the menu is in play; Escape there closes it first.
+                    else if (coach.show && (menuHot || !!menu.hovered)) coach.dismiss()
                     else if (!menu.dismiss()) stepBack()
                   }}
                   onLoad={picking.reload}
@@ -479,7 +524,7 @@ export function DesignerShell({
                           settings={view.settings}
                           update={update}
                           editing={menu}
-                          headerHot={picking.hovered === 'header' || selection === 'header'}
+                          headerHot={menuHot}
                           coach={coach}
                           onSample={view.showSample}
                         />
@@ -492,69 +537,71 @@ export function DesignerShell({
             </ClientOnly>
           </main>
           {!previewing && (
-            <BuilderSettings
-              hidden={column !== 'settings'}
-              open={settingsOpen}
-              shown={shown}
-              route={route}
-              panel={panel}
-              selection={selection}
-              page={page}
-              pages={pages.length}
-              nodes={nodes}
-              design={design}
-              update={update}
-              gates={gates}
-              locale={locale}
-              phone={size === 'phone'}
-              onPhone={(next) => canvas.setSize(next ? 'phone' : 'desktop')}
-              checks={checks}
-              logoUrl={logoUrl}
-              cssWarnings={draft.report.css}
-              menu={menu}
-              pickedBlock={pickedBlock}
-              onSelect={pick}
-              onAdd={addBlock}
-              drag={addDrag}
-              onTheme={(more) => openTheme(more)}
-              say={say}
-              onOverride={jumpTo}
-              onBlock={(id) => {
-                if (page !== 'home' && pages.includes('home')) setPage('home')
-                panel.close()
-                pick(`block-${id}`)
-              }}
-              element={
-                pickedElement && route.panel === 'element' ? (
-                  <ElementPanel
-                    key={elementPanelKey(pickedElement)}
-                    pick={pickedElement}
-                    page={page}
-                    blockName={
-                      pickedElement.section
-                        ? (nameOf(pickedElement.section as Selection) ?? null)
-                        : null
-                    }
-                    design={design}
-                    update={update}
-                    state={elementState}
-                    onState={setElementState}
-                    screen={size === 'phone' ? 'phone' : 'all'}
-                    onScreen={(next) => canvas.setSize(next === 'phone' ? 'phone' : 'desktop')}
-                    onUp={() => picking.pickElement(null)}
-                    reach={pickReach.reach}
-                    measure={pickReach.measure}
-                    onJump={(place) => {
-                      if (place.block) return pick(`block-${place.block}` as Selection)
-                      const to =
-                        place.page ?? (place.part ? partOf(design, place.part)?.pages[0] : null)
-                      if (to && to !== page && pages.includes(to as DesignerPage))
-                        setPage(to as DesignerPage)
-                    }}
-                  />
-                ) : undefined
-              }
-            />
+            <BrandMatchProvider value={brandMatch}>
+              <BuilderSettings
+                hidden={column !== 'settings'}
+                open={settingsOpen}
+                shown={shown}
+                route={route}
+                panel={panel}
+                selection={selection}
+                page={page}
+                pages={pages.length}
+                nodes={nodes}
+                design={design}
+                update={update}
+                gates={gates}
+                locale={locale}
+                phone={size === 'phone'}
+                onPhone={(next) => canvas.setSize(next ? 'phone' : 'desktop')}
+                checks={checks}
+                logoUrl={logoUrl}
+                cssWarnings={draft.report.css}
+                menu={menu}
+                pickedBlock={pickedBlock}
+                onSelect={pick}
+                onAdd={addBlock}
+                drag={addDrag}
+                onTheme={(more) => openTheme(more)}
+                say={say}
+                onOverride={jumpTo}
+                onBlock={(id) => {
+                  if (page !== 'home' && pages.includes('home')) setPage('home')
+                  panel.close()
+                  pick(`block-${id}`)
+                }}
+                element={
+                  pickedElement && route.panel === 'element' ? (
+                    <ElementPanel
+                      key={elementPanelKey(pickedElement)}
+                      pick={pickedElement}
+                      page={page}
+                      blockName={
+                        pickedElement.section
+                          ? (nameOf(pickedElement.section as Selection) ?? null)
+                          : null
+                      }
+                      design={design}
+                      update={update}
+                      state={elementState}
+                      onState={setElementState}
+                      screen={size === 'phone' ? 'phone' : 'all'}
+                      onScreen={(next) => canvas.setSize(next === 'phone' ? 'phone' : 'desktop')}
+                      onUp={() => picking.pickElement(null)}
+                      reach={pickReach.reach}
+                      measure={pickReach.measure}
+                      onJump={(place) => {
+                        if (place.block) return pick(`block-${place.block}` as Selection)
+                        const to =
+                          place.page ?? (place.part ? partOf(design, place.part)?.pages[0] : null)
+                        if (to && to !== page && pages.includes(to as DesignerPage))
+                          setPage(to as DesignerPage)
+                      }}
+                    />
+                  ) : undefined
+                }
+              />
+            </BrandMatchProvider>
           )}
         </div>
 

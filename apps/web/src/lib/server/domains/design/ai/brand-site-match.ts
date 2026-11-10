@@ -36,13 +36,18 @@ function aspectOf(asset: SiteAsset): number {
   return asset.width / Math.max(1, asset.height)
 }
 
+/** Whether a logo file is wide enough to be a full logo, the name in it. */
+export function isFullLogo(asset: SiteAsset): boolean {
+  return aspectOf(asset) >= WORDMARK_FROM
+}
+
 /** The logo's changes: a full logo or an icon beside the name, by its shape. */
 export function siteLogoChanges(key: string, asset: SiteAsset, name: string | null): BrandChange[] {
   const why =
     asset.from === 'header-svg' || asset.from === 'header-img'
       ? 'the logo in your site’s header'
       : 'the logo your site names as its own'
-  if (aspectOf(asset) >= WORDMARK_FROM)
+  if (isFullLogo(asset))
     return [
       { path: 'brand.logo.wordmark.light', value: { key }, why },
       { path: 'brand.logo.display', value: 'wordmark', why: 'the logo shows the name itself' },

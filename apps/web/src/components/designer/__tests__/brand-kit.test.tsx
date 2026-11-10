@@ -34,6 +34,11 @@ vi.mock('@/lib/server/functions/uploads', () => {
     checkS3ConfiguredFn: async () => ({ configured: true }),
   }
 })
+vi.mock('@/lib/client/image-palette', () => ({
+  imageInk: async () => null,
+  imagePalette: async () => ['#0058A3', '#FFFFFF'],
+  imageForModel: async () => null,
+}))
 vi.stubGlobal(
   'fetch',
   vi.fn(async () => new Response(null, { status: 200 }))
@@ -130,6 +135,14 @@ describe('the logo: an icon and a title', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Reset to workspace logo' }))
     expect(seen.design.brand.logo.mark.light).toBeNull()
+  })
+
+  it('fills the logo colours from an uploaded icon, in the same step', async () => {
+    const { seen } = renderKit(defaultDesign())
+    const file = new File(['png'], 'mark.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText('Replace icon'), { target: { files: [file] } })
+    await waitFor(() => expect(seen.design.brand.logoColours).toEqual(['#0058a3', '#ffffff']))
+    expect(seen.design.brand.logo.mark.light).toEqual({ key: 'design/mark.png' })
   })
 
   it('says on hover, not in a paragraph, that the admin keeps the workspace logo', () => {

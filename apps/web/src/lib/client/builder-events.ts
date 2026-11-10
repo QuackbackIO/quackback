@@ -53,7 +53,7 @@ export const PART_IDS: readonly PartId[] = [
 ]
 
 const PAGES = Object.keys(PAGE_NAMES) as Array<keyof typeof PAGE_NAMES>
-export const ENTRIES = ['portal', 'appearance', 'direct'] as const
+export const ENTRIES = ['portal', 'appearance', 'onboarding', 'direct'] as const
 export const PANELS = [
   'overview',
   'settings',
@@ -86,6 +86,9 @@ export const MENU_CHANGES = [
 ] as const
 export const MENU_FROM = ['canvas', 'panel'] as const
 export const LOOK_SOURCES = ['ai', 'saved', 'preset'] as const
+/** Where a brand match started outside the chat. */
+export const MATCH_FROM = ['brand_kit', 'onboarding'] as const
+export type MatchFrom = (typeof MATCH_FROM)[number]
 
 /** A setting's id; only `settingId` makes one, so a raw string cannot be sent as one. */
 export type SettingId = string & { readonly __settingId: true }
@@ -115,13 +118,26 @@ export const BUILDER_EVENTS = {
   /** A change to the menu, or Go to, from a menu item on the page or the header's panel. */
   designer_menu_changed: { change: MENU_CHANGES, from: MENU_FROM },
   /** A one-time coach mark dismissed. */
-  designer_coach_dismissed: { coach: ['menu'] },
+  designer_coach_dismissed: { coach: ['menu', 'brand'] },
   designer_preview_link_shared: {},
   designer_versions_opened: {},
   designer_version_restored: { how: ['restore', 'copy'] },
   designer_look_applied: { source: LOOK_SOURCES, fields: 'count' },
   /** A screenshot in Ask AI warned of a pop-up's dimming or a cookie banner, sent anyway. */
   designer_chat_shot_kept: { warning: ['dimmed', 'banner'] },
+  /** A brand match started outside the chat: from Theme's Brand kit, or handed over from onboarding. */
+  designer_brand_match_started: {
+    from: MATCH_FROM,
+    website: 'flag',
+    screenshots: 'count',
+  },
+  /** Use from your website (no Quackback AI): which of what the site gave were used. */
+  designer_site_brand_used: {
+    logo: 'flag',
+    favicon: 'flag',
+    shareImage: 'flag',
+    colour: 'flag',
+  },
   /** A brand matched from screenshots sent in Ask AI: how many, and the settings it changed. */
   designer_brand_matched: { images: 'count', changes: 'count' },
   /** The check after a brand match: revision rounds tried, changes kept, and why it stopped. */

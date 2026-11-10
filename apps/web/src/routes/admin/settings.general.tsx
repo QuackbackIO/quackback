@@ -136,6 +136,10 @@ function GeneralSettingsPage() {
         onWorkspaceNameChange={handleNameChange}
         maxLength={cloudIdentity ? 80 : undefined}
         focusLogo={focus === 'logo'}
+        // A published design carries the portal's own brand; this logo is then the admin's and emails'.
+        portalInBuilder={
+          settings?.portalDesign?.engine === 'v2' && settings.portalDesign.revision !== null
+        }
       />
 
       <SettingsCard

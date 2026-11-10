@@ -361,10 +361,10 @@ export const OPS_EXAMPLES: Array<{ request: string; picked?: string; answer: Ops
     },
   },
   {
-    request: 'Highlight “ideas” in the feedback headline',
-    picked: 'the feedback headline now "Share your ideas with us"',
+    request: 'Highlight “posts” in the feedback headline',
+    picked: 'the feedback headline now "Share your posts with us"',
     answer: {
-      reply: 'I highlighted “ideas” in the feedback headline.',
+      reply: 'I highlighted “posts” in the feedback headline.',
       outOfScope: false,
       ops: [
         op(
@@ -372,9 +372,9 @@ export const OPS_EXAMPLES: Array<{ request: string; picked?: string; answer: Ops
             op: 'words',
             target: 'feedback',
             key: 'title',
-            value: 'Share your [ideas]{highlight} with us',
+            value: 'Share your [posts]{highlight} with us',
           },
-          'ideas to highlighted in the feedback headline'
+          'posts to highlighted in the feedback headline'
         ),
       ],
     },

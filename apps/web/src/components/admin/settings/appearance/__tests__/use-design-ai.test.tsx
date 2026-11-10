@@ -17,6 +17,9 @@ const stream = vi.hoisted(() => ({ match: vi.fn() }))
 vi.mock('@/lib/client/brand-match-stream', () => ({ streamBrandMatch: stream.match }))
 const events = vi.hoisted(() => ({ trackBuilder: vi.fn(), designerLookChosen: vi.fn() }))
 vi.mock('@/lib/client/builder-events', () => events)
+const shots = vi.hoisted(() => ({ read: vi.fn() }))
+vi.mock('@/lib/client/brand-shots', () => ({ readBrandShot: shots.read }))
+vi.mock('@/lib/client/image-palette', () => ({ imagePalette: async () => ['#0058a3'] }))
 const checker = vi.hoisted(() => ({ check: vi.fn() }))
 vi.mock('@/lib/client/brand-check', () => ({ checkBrandMatch: checker.check }))
 
@@ -451,5 +454,71 @@ describe('a website to match', () => {
     const { result } = hook()
     await act(() => result.current.recapture('acme.test'))
     expect(stream.match.mock.calls[0]![0]).toMatchObject({ url: 'acme.test', recapture: true })
+  })
+})
+
+describe('startBrandMatch', () => {
+  const stamped = () => {
+    const design = defaultDesign()
+    design.brand.matchedAt = '2026-11-07T12:00:00.000Z'
+    return design
+  }
+  const outcome = () => ({
+    ok: true,
+    reply: 'I matched your brand.',
+    design: stamped(),
+    applied: [{ path: 'brand.light.accent', before: '#000000', after: '#0058a3' }],
+    readability: [],
+    report: { adjustments: [], errors: [], css: [] },
+    revision: 'r2',
+  })
+
+  it('matches a website as Ask AI does, adopting the stamped design as one step', async () => {
+    stream.match.mockResolvedValue(outcome())
+    const adopt = vi.fn()
+    const { result } = renderHook(() =>
+      useDesignAi({ flush: async () => {}, adopt, update, workspaceName: 'Acme' })
+    )
+    await act(() => result.current.startBrandMatch({ website: ' acme.test ', from: 'brand_kit' }))
+    expect(stream.match.mock.calls[0]![0]).toMatchObject({ images: [], url: 'acme.test' })
+    expect(adopt).toHaveBeenCalledTimes(1)
+    // The draft takes the design the server saved, which records that a match ran.
+    expect(adopt.mock.calls[0]![0].brand.matchedAt).toBe('2026-11-07T12:00:00.000Z')
+    expect(adopt.mock.calls[0]![2]).toBe('Match your brand')
+    expect(result.current.turns.map((turn) => turn.role)).toEqual(['user', 'assistant'])
+    expect(result.current.busy).toBe(false)
+    expect(events.trackBuilder).toHaveBeenCalledWith('designer_brand_match_started', {
+      from: 'brand_kit',
+      website: true,
+      screenshots: 0,
+    })
+  })
+
+  it('sends up to three screenshots as read in the browser', async () => {
+    stream.match.mockResolvedValue(outcome())
+    shots.read.mockImplementation(async (file: File) => ({
+      id: file.name,
+      jpeg: `data:image/jpeg;base64,${file.name}`,
+      analysis: 'data:image/jpeg;base64,BBBB',
+      width: 1440,
+      height: 900,
+    }))
+    const files = ['a', 'b', 'c', 'd'].map((name) => new File(['x'], name, { type: 'image/png' }))
+    const { result } = hook()
+    await act(() => result.current.startBrandMatch({ screenshots: files, from: 'brand_kit' }))
+    const sent = stream.match.mock.calls[0]![0]
+    expect(sent.images.map((image: { image: string }) => image.image)).toEqual([
+      'data:image/jpeg;base64,a',
+      'data:image/jpeg;base64,b',
+      'data:image/jpeg;base64,c',
+    ])
+    expect(sent.url).toBeUndefined()
+  })
+
+  it('does nothing without a website or a screenshot', async () => {
+    const { result } = hook()
+    await act(() => result.current.startBrandMatch({ website: '  ', from: 'brand_kit' }))
+    expect(stream.match).not.toHaveBeenCalled()
+    expect(result.current.turns).toEqual([])
   })
 })

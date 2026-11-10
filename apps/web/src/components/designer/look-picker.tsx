@@ -1,15 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { XMarkIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LookDrawing } from '@/components/admin/settings/appearance/preset-gallery'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import {
   deletePortalDesignSavedFn,
   savePortalDesignFn,
 } from '@/lib/server/functions/portal-design-saved'
+import { lookTile } from '@/lib/shared/design/look-tile'
 import { lookOf, SAVED_LOOKS_MAX, withLook, type DesignLook } from '@/lib/shared/design/looks'
 import { DESIGN_PRESETS, replaceDesign } from '@/lib/shared/design/presets'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -50,22 +50,39 @@ export function useSavedLooks() {
   return useQuery(portalDesignQueries.saved()).data?.looks ?? []
 }
 
+type Update = (change: (draft: PortalDesign) => void, label?: string) => void
+
 /**
- * Looks to start from: the workspace's own, then the presets. Pointing at one
- * or focusing it shows it on the canvas; only choosing it changes the draft.
+ * Looks to start from: the workspace's own, then the presets. A look gives
+ * the draft its treatment and keeps the brand's own colours and fonts, so each
+ * tile draws the brand with that treatment. "Use its colours too" takes the
+ * look's colours and fonts as well, as one step. Pointing at either or
+ * focusing it shows it on the canvas; only choosing it changes the draft.
  * "Save this look" keeps the draft's look to apply again later.
  */
-export function LookPicker({ design, update }: { design: PortalDesign; update: Update }) {
+export function LookPicker({
+  design,
+  update,
+  logoUrl = null,
+}: {
+  design: PortalDesign
+  update: Update
+  logoUrl?: string | null
+}) {
   const saved = useQuery(portalDesignQueries.saved())
   const queryClient = useQueryClient()
   const looks = saved.data?.looks ?? []
   // Leaving the picker shows the draft again.
   useEffect(() => () => previewOnCanvas(null), [])
-  const choose = (source: 'saved' | 'preset') => (look: DesignLook) => {
-    previewOnCanvas(null)
-    designerLookChosen(source)
-    update((draft) => replaceDesign(draft, withLook(draft, look)))
-  }
+  const choose =
+    (source: 'saved' | 'preset', name: string) => (look: DesignLook, itsColours: boolean) => {
+      previewOnCanvas(null)
+      designerLookChosen(source)
+      update(
+        (draft) => replaceDesign(draft, withLook(draft, look, { itsColours })),
+        itsColours ? THEME.lookAndColoursStep(name) : THEME.lookStep(name)
+      )
+    }
   const remove = async (id: (typeof looks)[number]['id']) => {
     await deletePortalDesignSavedFn({ data: { id } })
     await queryClient.invalidateQueries({ queryKey: portalDesignQueries.saved().queryKey })
@@ -79,7 +96,8 @@ export function LookPicker({ design, update }: { design: PortalDesign; update: U
             name={each.name}
             look={each.look}
             design={design}
-            onChoose={choose('saved')}
+            logoUrl={logoUrl}
+            onChoose={choose('saved', each.name)}
             action={
               <button
                 type="button"
@@ -99,7 +117,8 @@ export function LookPicker({ design, update }: { design: PortalDesign; update: U
             hint={preset.description}
             look={preset.look}
             design={design}
-            onChoose={choose('preset')}
+            logoUrl={logoUrl}
+            onChoose={choose('preset', preset.label)}
           />
         ))}
       </ul>
@@ -113,6 +132,7 @@ function Tile({
   hint,
   look,
   design,
+  logoUrl,
   onChoose,
   action,
 }: {
@@ -120,31 +140,50 @@ function Tile({
   hint?: string
   look: DesignLook
   design: PortalDesign
-  onChoose: (look: DesignLook) => void
+  logoUrl: string | null
+  onChoose: (look: DesignLook, itsColours: boolean) => void
   action?: ReactNode
 }) {
+  const own = useMemo(() => withLook(design, look), [design, look])
+  const whole = useMemo(() => withLook(design, look, { itsColours: true }), [design, look])
+  const tile = useMemo(() => lookTile(own), [own])
   const current = hasLook(design, look)
-  const show = () => previewOnCanvas(withLook(design, look))
+  // Offered where the look's colours or fonts differ from the brand's.
+  const coloursDiffer = canonical(lookOf(whole)) !== canonical(lookOf(own))
   const hide = () => previewOnCanvas(null)
   return (
-    <li className="relative">
+    <li className="group relative">
       <button
         type="button"
         title={hint}
-        onPointerEnter={show}
+        onPointerEnter={() => previewOnCanvas(own)}
         onPointerLeave={hide}
-        onFocus={show}
+        onFocus={() => previewOnCanvas(own)}
         onBlur={hide}
         aria-current={current || undefined}
-        onClick={() => onChoose(look)}
+        onClick={() => onChoose(look, false)}
         className={cn(
           'flex w-full flex-col gap-1 rounded-md border p-1.5 text-start hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
           current ? 'border-foreground' : 'border-border'
         )}
       >
-        <LookDrawing look={look} />
+        <LookDrawing tile={tile} logoUrl={logoUrl} />
         <span className="truncate text-xs font-medium">{name}</span>
       </button>
+      {coloursDiffer && (
+        <button
+          type="button"
+          aria-label={`${name}: ${THEME.useItsColours.toLowerCase()}`}
+          onPointerEnter={() => previewOnCanvas(whole)}
+          onPointerLeave={hide}
+          onFocus={() => previewOnCanvas(whole)}
+          onBlur={hide}
+          onClick={() => onChoose(look, true)}
+          className="absolute inset-x-2.5 bottom-8 rounded bg-background/95 px-1 py-0.5 text-center text-[11px] leading-tight text-foreground opacity-0 shadow-sm pointer-events-none group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 hover:underline focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          {THEME.useItsColours}
+        </button>
+      )}
       {action}
     </li>
   )

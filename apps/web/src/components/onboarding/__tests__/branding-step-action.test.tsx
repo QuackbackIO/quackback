@@ -6,9 +6,15 @@ import type { AutomaticBrandingStatus } from '@/lib/shared/website-branding'
 import type { LaunchTask } from '@/lib/shared/launch-checklist'
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
+  Link: ({
+    to,
+    search,
+    children,
+  }: {
+    to: string
+    search?: Record<string, string>
+    children: React.ReactNode
+  }) => <a href={search ? `${to}?${new URLSearchParams(search)}` : to}>{children}</a>,
 }))
 
 const hook = vi.hoisted(() => ({
@@ -42,7 +48,7 @@ afterEach(() => {
 
 const task = {
   id: 'customize-branding',
-  title: 'Add your logo',
+  title: 'Make the portal look like your brand',
   classification: 'polish',
   isCompleted: false,
   isSkipped: false,
@@ -60,10 +66,10 @@ const status = (extra: Partial<AutomaticBrandingStatus>): AutomaticBrandingStatu
   ...extra,
 })
 
-function show() {
+function show(shown: LaunchTask = task) {
   return render(
     <IntlProvider locale="en" messages={{}}>
-      <BrandingStepAction task={task} variant="outline" />
+      <BrandingStepAction task={shown} variant="outline" />
     </IntlProvider>
   )
 }
@@ -115,5 +121,39 @@ describe("the launch plan's branding step", () => {
     expect(screen.getByText('Looking for a logo on acme.example…')).toBeDefined()
     expect(screen.getByRole('button', { name: 'Finding…' })).toBeDisabled()
     expect(screen.getByRole('alert').textContent).toBe('Still looking. Try again in a moment.')
+  })
+})
+
+describe('the branding step with the portal in the builder', () => {
+  const builder = (search: Record<string, string>) =>
+    ({ ...task, href: '/design', search }) as LaunchTask
+
+  it('hands off to the builder brand match on the website, not a logo upload', () => {
+    hook.state = { status: null }
+    show(builder({ match: 'acme.com', from: 'onboarding' }))
+    expect(screen.getByRole('link', { name: 'Match your brand' })).toHaveAttribute(
+      'href',
+      '/design?match=acme.com&from=onboarding'
+    )
+    expect(screen.queryByRole('button', { name: 'Find logo' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Upload a logo' })).toBeNull()
+  })
+
+  it('matches the website the lookup knows when the plan did not name one', () => {
+    hook.state = { status: status({ status: 'eligible' }) }
+    show(builder({ from: 'onboarding' }))
+    expect(screen.getByRole('link', { name: 'Match your brand' })).toHaveAttribute(
+      'href',
+      '/design?match=acme.example&from=onboarding'
+    )
+  })
+
+  it('just opens the builder when no website is known', () => {
+    hook.state = { status: null }
+    show(builder({ from: 'onboarding' }))
+    expect(screen.getByRole('link', { name: 'Match your brand' })).toHaveAttribute(
+      'href',
+      '/design?from=onboarding'
+    )
   })
 })

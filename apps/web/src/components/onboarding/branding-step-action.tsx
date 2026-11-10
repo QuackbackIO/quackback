@@ -7,8 +7,10 @@ import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-aut
 import type { LaunchTask } from '@/lib/shared/launch-checklist'
 
 /**
- * The launch plan's branding step. Nothing is set for the workspace until
- * someone chooses here: a logo the lookup found on their website is offered
+ * The launch plan's branding step. With the portal in the builder, it hands
+ * off to the builder's brand match on the brand's website (or opens the
+ * Brand kit when no website is known). Otherwise nothing is set for the
+ * workspace until someone chooses here: a logo the lookup found on their website is offered
  * with "Use it", and otherwise (a personal email has no company website, or
  * the lookup found nothing) they can name their website to look it up, or
  * upload a logo in Settings.
@@ -27,6 +29,17 @@ export function BrandingStepAction({
   const status = branding.status
   const offered = status?.status === 'offered' && status.canUse
   const searching = branding.looking || status?.status === 'pending'
+
+  if (task.href === '/design') {
+    const match = task.search?.match ?? status?.domain
+    return (
+      <Button asChild size="sm" variant={variant}>
+        <Link to="/design" search={{ ...(match ? { match } : {}), from: 'onboarding' }}>
+          <FormattedMessage id="onboarding.branding.match" defaultMessage="Match your brand" />
+        </Link>
+      </Button>
+    )
+  }
 
   const upload = task.href ? (
     <Button asChild size="sm" variant="outline">

@@ -144,3 +144,21 @@ describe('what the reply says was left as is', () => {
     expect(left).not.toMatch(/titles/)
   })
 })
+
+describe('a headline font we do not have', () => {
+  const notes = brandReply({
+    shots: 1,
+    roles: null,
+    heading: null,
+    band: 'none',
+    failed: [],
+    logo: 'placed',
+    faceClose: false,
+  }).notes
+
+  it('says where fonts are uploaded: Theme, under the Brand kit’s fonts', () => {
+    const note = notes.find((n) => n.includes('closest match'))
+    expect(note).toContain('Theme > Brand kit > Fonts')
+    expect(note).not.toMatch(/\bin Brand\.$/)
+  })
+})

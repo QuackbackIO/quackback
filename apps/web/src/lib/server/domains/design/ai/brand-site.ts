@@ -19,6 +19,7 @@
 import { BUNDLED_FONTS, closestWeight, type BundledFontId } from '@/lib/shared/design/fonts'
 import { nearestBundledFont } from '@/lib/shared/design/font-match'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { UnmatchedFont } from '@/lib/shared/design/match-brand'
 import { sanitizeSvg } from '@/lib/server/content/svg-sanitize'
 import { deltaE00, parseColor, type RGB } from '../extract/color'
 import { decodeImage } from '../extract/image'
@@ -159,6 +160,36 @@ export function siteFontPlan(facts: SiteFacts | null | undefined): SiteFontPlan 
     headingInherited:
       !heading || (!!body && heading.family === body.family && heading.from === body.from),
   }
+}
+
+/** A family the font upload can take as its name. */
+const UPLOAD_FAMILY = /^[\p{L}\p{N} ._-]{1,64}$/u
+
+/**
+ * The face the site names that no bundled face is (drawn in the nearest
+ * instead), for the reply's "Upload <family>": the heading's first, both
+ * slots when the site sets one face throughout. None for a system stack, a
+ * bundled face, or a family the design already has uploaded.
+ */
+export function unmatchedSiteFont(plan: SiteFontPlan, design: PortalDesign): UnmatchedFont | null {
+  const uploaded = new Set(
+    [design.brand.fonts.heading, design.brand.fonts.body].flatMap((font) =>
+      font.kind === 'uploaded' ? [bare(font.family)] : []
+    )
+  )
+  const own = (r: FontResolution | null): string | null =>
+    r &&
+    r.how !== 'bundled' &&
+    !SYSTEM_FAMILY.test(r.family) &&
+    UPLOAD_FAMILY.test(r.family.trim()) &&
+    !uploaded.has(bare(r.family))
+      ? r.family.trim()
+      : null
+  const heading = own(plan.heading)
+  const body = own(plan.body)
+  if (heading && body && bare(heading) === bare(body)) return { family: heading, slot: 'both' }
+  if (heading) return { family: heading, slot: 'heading' }
+  return body ? { family: body, slot: 'body' } : null
 }
 
 /** The hints the font fitting takes from the site, per role. */
