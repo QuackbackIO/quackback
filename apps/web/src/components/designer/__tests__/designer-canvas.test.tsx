@@ -163,6 +163,31 @@ describe('DesignerCanvas', () => {
     expect(onMenuHover.mock.calls).toEqual([['logo'], [null]])
   })
 
+  it('hands on a right-click from its own frame, where it was in the builder’s window', () => {
+    const onContext = vi.fn()
+    const onMenu = vi.fn()
+    const { send } = show(false, { onContext, onMenu })
+    const iframe = screen.getByTitle('Feedback, phone, light')
+    // The frame drawn at half its width, 100px in and 50px down.
+    iframe.getBoundingClientRect = () =>
+      ({ left: 100, top: 50, width: 195, height: 400 }) as DOMRect
+    Object.defineProperty(iframe, 'offsetWidth', { configurable: true, value: 390 })
+    send({ type: 'quackback:preview-context', section: 'block-a1', x: 40, y: 20 })
+    expect(onContext).toHaveBeenCalledExactlyOnceWith('block-a1', null, { x: 120, y: 60 })
+    // Not from its frame: nothing.
+    send({ type: 'quackback:preview-context', section: 'block-a1', x: 1, y: 1 }, window)
+    send(
+      { type: 'quackback:preview-context', section: 'block-a1', x: 1, y: 1 },
+      undefined,
+      'https://evil.example.com'
+    )
+    expect(onContext).toHaveBeenCalledOnce()
+    // A menu item's actions are its click menu.
+    send({ type: 'quackback:preview-context', section: 'header', menu: 'roadmap', x: 1, y: 1 })
+    expect(onMenu).toHaveBeenCalledExactlyOnceWith('roadmap', 'click', null)
+    expect(onContext).toHaveBeenCalledOnce()
+  })
+
   it('follows a link clicked with Ctrl or Cmd held, in place of picking', () => {
     const onFollow = vi.fn()
     const { send, onSelect } = show(false, { onFollow })

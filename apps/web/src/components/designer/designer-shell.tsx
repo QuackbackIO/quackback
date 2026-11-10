@@ -25,7 +25,7 @@ import { DesignerAi } from './designer-ai'
 import { CanvasSkeleton, skeletonOf } from './canvas-skeleton'
 import { CANVAS_WIDTHS, DesignerCanvas } from './designer-canvas'
 import { ElementPanel, elementPanelKey } from './element-panel'
-import { revealThemeFonts } from './brand-kit-fonts'
+import { revealFontSlot, revealThemeFonts } from './brand-kit-fonts'
 import { usePickReach } from './use-pick-reach'
 import { backgroundPageOf } from '@/lib/shared/design/page-background'
 import { partOf, partSelector } from '@/lib/shared/design/parts-registry'
@@ -55,6 +55,7 @@ import {
   focusHeading,
   focusSettings,
   inSettings,
+  openChipMenu,
   treeReturnRow,
   type TreeOrigin,
 } from './settings-focus'
@@ -629,6 +630,13 @@ export function DesignerShell({
                       else if (how === 'click' && node) picking.select('header', null, node)
                     }}
                     onMenuHover={menu.setHovered}
+                    onContext={(section, target, at) => {
+                      menu.dismiss()
+                      setPageClosed(false)
+                      picking.select(section, null, target)
+                      // A block's actions open where it was right-clicked, as its ⋯ offers them.
+                      if (section?.startsWith('block-')) openChipMenu(section, at)
+                    }}
                     onWords={onWords}
                     onKey={(key) => (key === 'undo' ? undo() : redo())}
                     onEscape={() => {
@@ -652,6 +660,7 @@ export function DesignerShell({
                             onPage={setPage}
                             onDuplicate={blocks.duplicateBlock}
                             onRemove={blocks.removeBlock}
+                            onMove={blocks.moveBlock}
                             onDeselect={stepBack}
                             flash={changeFlash.flash}
                             grid={{
@@ -707,6 +716,7 @@ export function DesignerShell({
                   design={design}
                   update={update}
                   gates={gates}
+                  gateSettings={view.settings}
                   locale={locale}
                   phone={size === 'phone'}
                   onPhone={(next) => canvas.setSize(next ? 'phone' : 'desktop')}
@@ -755,6 +765,10 @@ export function DesignerShell({
                             ? { values: pickReach.drawn, size, dark: canvasDark }
                             : null
                         }
+                        onFonts={(slot) => {
+                          openTheme()
+                          void revealFontSlot(slot)
+                        }}
                         onJump={(place) => {
                           if (place.block) return pick(`block-${place.block}` as Selection)
                           const to =

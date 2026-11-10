@@ -20,6 +20,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
 import { FIND, headingWeightsOf } from './find-rows'
+import { FIND_ROOTS, revealRow } from './find-reveal'
 import { FontFaces } from './properties/token-field'
 import { faceName } from './properties/tokens'
 import { FONT_NAMES, THEME, WORDS } from './properties/words'
@@ -41,6 +42,13 @@ export function revealThemeFonts(font?: OwnFontRequest): void {
     })
   reveal(20)
 }
+
+/** Brings a brand font's row into view in Theme, from an element's font row. */
+export const revealFontSlot = (slot: 'heading' | 'headline') =>
+  revealRow({
+    root: FIND_ROOTS.theme,
+    row: slot === 'headline' ? FIND.headlineFont.id : FIND.headingFont.id,
+  })
 
 type DesignFont = PortalDesign['brand']['fonts']['body']
 type HeadingWeight = PortalDesign['brand']['fonts']['headingWeight']

@@ -1,5 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react'
-import type { TiptapContent } from '@/lib/shared/db-types'
+import { useCallback, useRef } from 'react'
 import {
   readWordsField,
   wordsChangeLabel,
@@ -8,15 +7,13 @@ import {
 } from '@/lib/shared/design/headline-words'
 import { fitDoc, oneLine, plainDoc, sameWords, type WordsDoc } from '@/lib/shared/design/rich-words'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
+import { NO_STRUCTURE } from './designer-canvas'
 import { dispatcher } from './dispatcher'
 
-const EMPTY = { type: 'doc', content: [] } as TiptapContent
-
 /**
- * What the canvas needs beyond the draft's styles: the welcome message on its
- * structural channel, built again only when its words change; and words typed
- * on the page, saved where they belong.
+ * What the canvas needs beyond the draft's design: no structural draft, as
+ * the welcome message travels with the design like every other part; and
+ * words typed on the page, saved where they belong.
  */
 export function useCanvasInput(
   design: PortalDesign,
@@ -25,12 +22,6 @@ export function useCanvasInput(
 ) {
   const latest = useRef(design)
   latest.current = design
-  const welcome = design.pages.feedback.welcome
-  const welcomeKey = welcome.show ? JSON.stringify(welcome.body) : ''
-  const structural = useMemo(() => {
-    const body = welcomeKey ? (JSON.parse(welcomeKey) as TiptapContent) : null
-    return { welcomeCard: { body: body && !isEmptyTiptapDoc(body) ? body : EMPTY } }
-  }, [welcomeKey])
   const onWords = useCallback(
     (mark: string, value: WordsDoc | string) => {
       const field = readWordsField(mark)
@@ -46,5 +37,5 @@ export function useCanvasInput(
     },
     [update, locale]
   )
-  return { structural, onWords }
+  return { structural: NO_STRUCTURE, onWords }
 }

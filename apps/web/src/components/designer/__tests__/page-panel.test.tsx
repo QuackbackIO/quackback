@@ -12,6 +12,9 @@ import { outlineOf, type DesignerPage } from '@/lib/shared/design/outline'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { PagePanel } from '../page-panel'
 
+/** A target at least 24px tall, as small text links and buttons are given. */
+const at24 = (el: Element) => expect(el.className).toMatch(/(^|\s)(min-h-6|size-6|min-h-7)(\s|$)/)
+
 vi.mock('../page-background-settings', () => ({
   PageBackgroundSection: () => <p>Background settings</p>,
 }))
@@ -84,9 +87,12 @@ describe('PagePanel', () => {
     expect(screen.getByText('Background settings')).toBeTruthy()
   })
 
-  it('shows the page width as the brand’s, opening Theme at its styles', () => {
+  it('shows the page width as Theme’s, opening Theme at its styles', () => {
     const { onTheme } = show('roadmap', (draft) => void (draft.layout.width = 'wide'))
-    fireEvent.click(screen.getByRole('button', { name: 'Brand: Wide' }))
+    // Where it comes from, said by its ⓘ.
+    expect(screen.getByRole('button', { name: 'From Theme' })).toBeTruthy()
+    expect(screen.queryByText(/Brand: /)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Theme: Wide' }))
     expect(onTheme).toHaveBeenCalledWith(true)
   })
 
@@ -102,7 +108,11 @@ describe('PagePanel', () => {
     fireEvent.keyDown(within(tree).getByRole('treeitem', { name: 'Board' }), { key: 'Enter' })
     expect(onSelect).toHaveBeenCalledWith('board')
     expect(screen.queryByRole('button', { name: 'Words' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Theme' }))
+    // Every page's Theme is a row as wide as the panel.
+    const theme = screen.getByRole('button', { name: 'Theme' })
+    at24(theme)
+    expect(theme.className).toContain('w-full')
+    fireEvent.click(theme)
     expect(onTheme).toHaveBeenCalledWith(false)
   })
 

@@ -215,6 +215,20 @@ describe('createHistory while the AI works', () => {
     expect(history.getState().group).toBeNull()
   })
 
+  it('names the open group undo will take back, and a drag made meanwhile before it', () => {
+    const history = createHistory()
+    let doc = edit(history, start, 'Headline')
+    history.getState().begin('Make it calmer', 'ai')
+    expect(history.getState().undoLabel()).toBe('Headline')
+    doc = edit(history, doc, 'Make it calmer', 'ai')
+    expect(history.getState().undoLabel()).toBe('Make it calmer')
+    history.getState().begin('Move block')
+    doc = edit(history, doc, 'Step')
+    expect(history.getState().undoLabel()).toBe('Move block')
+    expect(history.getState().undo(doc)?.label).toBe('Move block')
+    expect(history.getState().undoLabel()).toBe('Make it calmer')
+  })
+
   it('keeps a drag made by hand while the AI works one step of its own', () => {
     const history = createHistory()
     history.getState().begin('Make it calmer', 'ai')

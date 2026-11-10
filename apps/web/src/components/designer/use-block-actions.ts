@@ -3,6 +3,7 @@ import type { useDesignDraft } from '@/components/admin/settings/appearance/use-
 import type { HomeBlockType } from '@/lib/shared/design/home'
 import { blockKey, BLOCK_NAMES, type Selection } from '@/lib/shared/design/outline'
 import { dispatcher } from './dispatcher'
+import { focusPicked } from './settings-focus'
 
 /** What a screen reader hears after a block moves. */
 export function movedSaid(name: string, position: number, count: number): string {
@@ -72,6 +73,8 @@ export function useBlockActions({
     const near = done.ok ? done.near : null
     setSelection(near ? blockKey(near, 0) : null)
     say(`${name} removed. Undo brings it back.`)
+    // The chip that had focus went with the block; it comes back on the next pick.
+    focusPicked(!!near)
   }
   /** Copies a block in after it, and picks the copy. */
   const duplicateBlock = (key: Selection) => {
@@ -82,6 +85,7 @@ export function useBlockActions({
     if (copy) {
       setSelection(`block-${copy}`)
       say(`${name} copied.`)
+      focusPicked(true)
     }
   }
 

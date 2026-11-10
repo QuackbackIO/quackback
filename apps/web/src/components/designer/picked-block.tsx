@@ -31,6 +31,7 @@ import { PropertySection } from './properties/properties-panel'
 import { ReachNote } from './properties/scope-line'
 import { BLOCK_ACTIONS, BLOCK_SECTIONS, BLOCK_TONES, WORDS } from './properties/words'
 import { useBlockActions } from './use-block-actions'
+import type { FontSlot } from './element-style-section'
 import { useBlockSources } from './use-block-sources'
 import { FIND } from './find-rows'
 import { PropertyRow } from './properties/properties-panel'
@@ -68,6 +69,7 @@ export function PickedBlock({
   onPhone,
   checks = [],
   onSelect,
+  onFonts,
   say,
 }: {
   selection: Selection
@@ -86,6 +88,8 @@ export function PickedBlock({
   checks?: readonly string[]
   /** Picks another part, such as the copy a duplicate makes; without it, the block has no actions. */
   onSelect?: (selection: Selection | null) => void
+  /** Opens the brand kit's fonts at a slot, from a heading's font row. */
+  onFonts?: (slot: FontSlot) => void
   say: (words: string) => void
 }) {
   const [element, setElement] = useState<StyleElement | null>(null)
@@ -145,6 +149,7 @@ export function PickedBlock({
         // A Home block's element opens at the block; a page section's, at every one of its kind.
         initialScope={section ? undefined : 'block'}
         onUp={() => setElement(null)}
+        onFonts={onFonts}
         onJump={(place) => {
           if (place.block) onSelect?.(`block-${place.block}` as Selection)
         }}

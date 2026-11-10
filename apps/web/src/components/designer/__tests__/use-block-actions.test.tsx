@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /** Home's blocks are added under the picked one and moved by place, each move said aloud. */
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { newBlock } from '@/lib/shared/design/home'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
@@ -66,6 +66,71 @@ describe('useBlockActions', () => {
     // A section of the page is neither copied nor removed.
     act(() => result.current.removeBlock('header'))
     expect(order()).toHaveLength(3)
+  })
+
+  describe('focus after the picked block goes or is copied', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+      document.body.innerHTML = ''
+    })
+    /** The canvas region, and a chip drawn only from the second frame, as its box is measured then. */
+    const page = () => {
+      document.body.innerHTML =
+        '<main data-canvas-region tabindex="-1"></main><div data-editing-layer></div>'
+      const layer = document.querySelector('[data-editing-layer]')!
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          layer.innerHTML = '<button data-chip-name>Top posts</button>'
+        })
+      )
+      ;(document.activeElement as HTMLElement | null)?.blur()
+    }
+    const frames = (count: number) => {
+      for (let i = 0; i < count; i++) vi.advanceTimersByTime(17)
+    }
+
+    it('puts focus on the chip of the block picked next once it is drawn', () => {
+      vi.useFakeTimers({ toFake: ['requestAnimationFrame'] })
+      const { result } = setup('block-b0')
+      page()
+      act(() => result.current.removeBlock('block-b0'))
+      frames(5)
+      expect(document.activeElement?.hasAttribute('data-chip-name')).toBe(true)
+    })
+
+    it('follows the chip as it is drawn again for the copy', () => {
+      vi.useFakeTimers({ toFake: ['requestAnimationFrame'] })
+      const { result } = setup('block-b1')
+      page()
+      // The old block's chip, focused, goes a frame later as the copy is picked.
+      const layer = document.querySelector('[data-editing-layer]')!
+      layer.innerHTML = '<button data-chip-name>Top posts</button>'
+      ;(layer.firstElementChild as HTMLElement).focus()
+      act(() => result.current.duplicateBlock('block-b1'))
+      frames(5)
+      expect(document.activeElement?.hasAttribute('data-chip-name')).toBe(true)
+      expect(document.activeElement?.isConnected).toBe(true)
+    })
+
+    it('puts focus on the chip of the copy after Ctrl+D', () => {
+      vi.useFakeTimers({ toFake: ['requestAnimationFrame'] })
+      const { result } = setup('block-b1')
+      page()
+      act(() => result.current.duplicateBlock('block-b1'))
+      frames(5)
+      expect(document.activeElement?.hasAttribute('data-chip-name')).toBe(true)
+    })
+
+    it('puts focus on the canvas when nothing is left to pick', () => {
+      vi.useFakeTimers({ toFake: ['requestAnimationFrame'] })
+      const { result } = setup()
+      act(() => result.current.removeBlock('block-b0'))
+      act(() => result.current.removeBlock('block-b1'))
+      document.body.innerHTML = '<main data-canvas-region tabindex="-1"></main>'
+      act(() => result.current.removeBlock('block-b2'))
+      frames(3)
+      expect(document.activeElement?.hasAttribute('data-canvas-region')).toBe(true)
+    })
   })
 
   it('moves nothing past either end, and says nothing', () => {

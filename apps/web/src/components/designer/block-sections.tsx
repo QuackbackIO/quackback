@@ -6,7 +6,7 @@
  * apart, and the elements it draws, opened in the element panel).
  */
 import { useId, useMemo, useState } from 'react'
-import { PlusIcon } from '@heroicons/react/16/solid'
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon } from '@heroicons/react/16/solid'
 import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -281,8 +281,62 @@ export function BlockLayout({
   }
   const width = String(place.w)
   const tiles = widthTiles(def.grid.minW)
+  // Fit is the least height, which rows grow from to fit what is in it; Taller, the block's usual or a row more.
+  const fit = def.grid.minH
+  const taller = Math.max(def.grid.h, fit + 1)
+  const height = place.h === fit ? 'fit' : place.h === taller ? 'taller' : undefined
+  const step = (by: -1 | 1) =>
+    change(by < 0 ? BLOCK_WORDS.moveUp.toLowerCase() : BLOCK_WORDS.moveDown.toLowerCase(), {
+      move: { x: place.x, y: place.y + by },
+    })
   return (
-    <PropertySection title={BLOCK_SECTIONS.layout}>
+    <PropertySection
+      title={BLOCK_SECTIONS.layout}
+      more={
+        <>
+          <PropertyRow label={BLOCK_WORDS.column} htmlFor={`${id}-x`}>
+            <ScrubNumber
+              id={`${id}-x`}
+              label={BLOCK_WORDS.column}
+              value={place.x + 1}
+              min={1}
+              max={GRID_COLUMNS - place.w + 1}
+              onChange={(x) =>
+                x !== undefined &&
+                change(BLOCK_WORDS.column.toLowerCase(), { move: { x: x - 1, y: place.y } })
+              }
+            />
+          </PropertyRow>
+          <PropertyRow label={BLOCK_WORDS.row} htmlFor={`${id}-y`}>
+            <ScrubNumber
+              id={`${id}-y`}
+              label={BLOCK_WORDS.row}
+              value={place.y + 1}
+              min={1}
+              max={999}
+              onChange={(y) =>
+                y !== undefined &&
+                change(BLOCK_WORDS.row.toLowerCase(), { move: { x: place.x, y: y - 1 } })
+              }
+            />
+          </PropertyRow>
+          <PropertyRow label={BLOCK_WORDS.rows} htmlFor={`${id}-h`}>
+            <ScrubNumber
+              id={`${id}-h`}
+              label={BLOCK_WORDS.rows}
+              value={place.h}
+              min={def.grid.minH}
+              max={MAX_ROWS}
+              unit={place.h === 1 ? 'row' : 'rows'}
+              onChange={(h) =>
+                h !== undefined &&
+                change(BLOCK_WORDS.height.toLowerCase(), { size: { w: place.w, h } })
+              }
+            />
+          </PropertyRow>
+        </>
+      }
+    >
       <PropertyRow label={FIND.blockWidth.label} find={FIND.blockWidth.id}>
         <PropertyTiles
           label={BLOCK_WORDS.width}
@@ -293,44 +347,43 @@ export function BlockLayout({
           }
         />
       </PropertyRow>
-      <PropertyRow label={BLOCK_WORDS.column} htmlFor={`${id}-x`}>
-        <ScrubNumber
-          id={`${id}-x`}
-          label={BLOCK_WORDS.column}
-          value={place.x + 1}
-          min={1}
-          max={GRID_COLUMNS - place.w + 1}
-          onChange={(x) =>
-            x !== undefined &&
-            change(BLOCK_WORDS.column.toLowerCase(), { move: { x: x - 1, y: place.y } })
-          }
-        />
-      </PropertyRow>
-      <PropertyRow label={BLOCK_WORDS.row} htmlFor={`${id}-y`}>
-        <ScrubNumber
-          id={`${id}-y`}
-          label={BLOCK_WORDS.row}
-          value={place.y + 1}
-          min={1}
-          max={999}
-          onChange={(y) =>
-            y !== undefined &&
-            change(BLOCK_WORDS.row.toLowerCase(), { move: { x: place.x, y: y - 1 } })
-          }
-        />
-      </PropertyRow>
-      <PropertyRow label={BLOCK_WORDS.height} htmlFor={`${id}-h`}>
-        <ScrubNumber
-          id={`${id}-h`}
+      <PropertyRow label={BLOCK_WORDS.height}>
+        <PropertyTiles
           label={BLOCK_WORDS.height}
-          value={place.h}
-          min={def.grid.minH}
-          max={MAX_ROWS}
-          unit={place.h === 1 ? 'row' : 'rows'}
-          onChange={(h) =>
-            h !== undefined && change(BLOCK_WORDS.height.toLowerCase(), { size: { w: place.w, h } })
+          value={height}
+          options={[
+            ['fit', BLOCK_WORDS.fit],
+            ['taller', BLOCK_WORDS.taller],
+          ]}
+          onChange={(next) =>
+            change(BLOCK_WORDS.height.toLowerCase(), {
+              size: { w: place.w, h: next === 'fit' ? fit : taller },
+            })
           }
         />
+      </PropertyRow>
+      <PropertyRow label={BLOCK_WORDS.move}>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="size-7"
+            aria-label={BLOCK_WORDS.moveUp}
+            disabled={place.y === 0}
+            onClick={() => step(-1)}
+          >
+            <ArrowUpIcon className="size-3.5" aria-hidden="true" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="size-7"
+            aria-label={BLOCK_WORDS.moveDown}
+            onClick={() => step(1)}
+          >
+            <ArrowDownIcon className="size-3.5" aria-hidden="true" />
+          </Button>
+        </div>
       </PropertyRow>
     </PropertySection>
   )

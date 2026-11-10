@@ -18,6 +18,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
 import type { StyleElement, StyleState } from '@/lib/shared/design/style-tokens'
 import { BrandKit, BrandKitImages } from './brand-kit'
+import { revealFontSlot } from './brand-kit-fonts'
 import { ADVANCED_OPEN, FIND } from './find-rows'
 import { ElementPanel } from './element-panel'
 import { currentLookName, LookPicker, useSavedLooks } from './look-picker'
@@ -218,6 +219,10 @@ export function ThemeContent({
           screen={phone ? 'phone' : 'all'}
           onScreen={onPhone ? (next) => onPhone(next === 'phone') : undefined}
           onUp={back}
+          onFonts={(slot) => {
+            back()
+            void revealFontSlot(slot)
+          }}
           shared
           crumbs={[{ label: WORDS.theme, onSelect: back }, { label: elementName(view.element) }]}
         />

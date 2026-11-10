@@ -23,6 +23,9 @@ import { FontField, TokenField } from '../properties/token-field'
 import type { ColourToken, FontToken } from '../properties/tokens'
 import { COLOUR_NAMES, WORDS, resetTo } from '../properties/words'
 
+/** A target at least 24px tall, as small text links and buttons are given. */
+const at24 = (el: Element) => expect(el.className).toMatch(/(^|\s)(min-h-6|size-6|min-h-7)(\s|$)/)
+
 afterEach(cleanup)
 
 describe('the panel frame', () => {
@@ -113,7 +116,7 @@ describe('a property row', () => {
       </PropertyRow>
     )
     expect(view.container.querySelector('[data-set-dot]')).toBeNull()
-    expect(view.container.querySelector('[title="From brand"]')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'From brand' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Reset/ })).toBeNull()
   })
 
@@ -192,7 +195,7 @@ describe('drawn tiles', () => {
 })
 
 describe('hover help', () => {
-  it('keeps a row’s and a section’s advice behind an ⓘ, said on hover', () => {
+  it('keeps a row’s and a section’s advice behind an ⓘ, said on hover', async () => {
     render(
       <PropertySection title="Image" help="A photo works best.">
         <PropertyRow label="Alt text" help="What the image shows">
@@ -200,11 +203,13 @@ describe('hover help', () => {
         </PropertyRow>
       </PropertySection>
     )
-    expect(screen.getByRole('img', { name: 'A photo works best.' }).getAttribute('title')).toBe(
-      'A photo works best.'
-    )
-    expect(screen.getByRole('img', { name: 'What the image shows' })).toBeTruthy()
+    // Each ⓘ takes focus, and says its advice in a tooltip, never a title.
+    const help = screen.getByRole('button', { name: 'A photo works best.' })
+    expect(help.getAttribute('title')).toBeNull()
+    expect(screen.getByRole('button', { name: 'What the image shows' })).toBeTruthy()
     expect(screen.queryByText('What the image shows')).toBeNull()
+    act(() => help.focus())
+    expect(await screen.findByText('A photo works best.')).toBeTruthy()
   })
 })
 
@@ -365,7 +370,9 @@ describe('a brand colour field', () => {
     expect(
       screen.getByRole('button', { name: 'Background: #b0123a' }).getAttribute('data-token-state')
     ).toBe('detached')
-    fireEvent.click(screen.getByRole('button', { name: 'Link to Brand colour' }))
+    const back = screen.getByRole('button', { name: 'Link to Brand colour' })
+    at24(back)
+    fireEvent.click(back)
     expect(onChange).toHaveBeenLastCalledWith('accent')
   })
 

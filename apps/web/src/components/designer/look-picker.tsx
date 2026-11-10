@@ -17,6 +17,7 @@ import { cn } from '@/lib/shared/utils'
 import { designerLookChosen } from '@/lib/client/builder-events'
 import { previewOnCanvas } from './look-preview'
 import { THEME } from './properties/words'
+import { Tip } from './properties/properties-panel'
 
 /** A value as text with its keys in order, so two equal looks read the same. */
 function canonical(value: unknown): string {
@@ -103,7 +104,7 @@ export function LookPicker({
                 type="button"
                 aria-label={`Delete ${each.name}`}
                 onClick={() => void remove(each.id)}
-                className="absolute end-1 top-1 rounded bg-background/90 p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                className="absolute end-0.5 top-0.5 grid size-6 place-items-center rounded bg-background/90 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               >
                 <XMarkIcon className="size-3.5" aria-hidden="true" />
               </button>
@@ -153,23 +154,24 @@ function Tile({
   const hide = () => previewOnCanvas(null)
   return (
     <li className="group relative">
-      <button
-        type="button"
-        title={hint}
-        onPointerEnter={() => previewOnCanvas(own)}
-        onPointerLeave={hide}
-        onFocus={() => previewOnCanvas(own)}
-        onBlur={hide}
-        aria-current={current || undefined}
-        onClick={() => onChoose(look, false)}
-        className={cn(
-          'flex w-full flex-col gap-1 rounded-md border p-1.5 text-start hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-          current ? 'border-foreground' : 'border-border'
-        )}
-      >
-        <LookDrawing tile={tile} logoUrl={logoUrl} />
-        <span className="truncate text-xs font-medium">{name}</span>
-      </button>
+      <Tip text={hint}>
+        <button
+          type="button"
+          onPointerEnter={() => previewOnCanvas(own)}
+          onPointerLeave={hide}
+          onFocus={() => previewOnCanvas(own)}
+          onBlur={hide}
+          aria-current={current || undefined}
+          onClick={() => onChoose(look, false)}
+          className={cn(
+            'flex w-full flex-col gap-1 rounded-md border p-1.5 text-start hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            current ? 'border-foreground' : 'border-border'
+          )}
+        >
+          <LookDrawing tile={tile} logoUrl={logoUrl} />
+          <span className="truncate text-xs font-medium">{name}</span>
+        </button>
+      </Tip>
       {coloursDiffer && (
         <button
           type="button"
@@ -179,7 +181,7 @@ function Tile({
           onFocus={() => previewOnCanvas(whole)}
           onBlur={hide}
           onClick={() => onChoose(look, true)}
-          className="absolute inset-x-2.5 bottom-8 rounded bg-background/95 px-1 py-0.5 text-center text-[11px] leading-tight text-foreground opacity-0 shadow-sm pointer-events-none group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 hover:underline focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="absolute inset-x-1.5 bottom-7 flex min-h-6 items-center justify-center rounded bg-background/95 px-1 text-center text-[11px] leading-tight text-foreground opacity-0 shadow-sm pointer-events-none group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 hover:underline focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           {THEME.useItsColours}
         </button>

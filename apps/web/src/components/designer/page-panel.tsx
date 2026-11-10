@@ -41,9 +41,6 @@ const ALL_PAGES: PortalPageGates = {
   status: true,
 }
 
-const link =
-  'rounded text-xs underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
-
 /**
  * The page itself, shown with nothing picked: where its title sits, its
  * background and width, its parts as a tree that picks, hides and moves
@@ -126,15 +123,14 @@ export function PagePanel({
         )}
         <PageTitleRows page={page} design={design} update={update} />
         <BackgroundRow design={design} update={update} page={page} />
-        <PropertyRow label={WORDS.width} source={WORDS.fromBrand}>
+        <PropertyRow label={WORDS.width} source={WORDS.fromTheme}>
           <button
             type="button"
             onClick={() => onTheme(true)}
-            title={WORDS.setInTheme}
             className="inline-flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-[11px] hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
           >
             <span className="truncate">
-              {WORDS.brand}: {THEME.widths[design.layout.width]}
+              {WORDS.theme}: {THEME.widths[design.layout.width]}
             </span>
           </button>
         </PropertyRow>
@@ -159,11 +155,14 @@ export function PagePanel({
         </PropertySection>
       )}
       <PropertySection title={WORDS.everyPage}>
-        <p className="flex min-h-7 items-center gap-3">
-          <button type="button" className={link} onClick={() => onTheme(false)}>
-            {WORDS.theme}
-          </button>
-        </p>
+        <button
+          type="button"
+          onClick={() => onTheme(false)}
+          className="flex min-h-7 w-full items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        >
+          <span className="min-w-0 flex-1 truncate">{WORDS.theme}</span>
+          <ChevronRightIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+        </button>
       </PropertySection>
     </PropertiesPanel>
   )

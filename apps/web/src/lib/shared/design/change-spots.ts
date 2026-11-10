@@ -12,6 +12,7 @@ import { PAGE_NAMES } from './names'
 import type { DesignerPage } from './paths'
 import type { PortalDesign } from './schema'
 import { STATE_INFO, STYLE_ELEMENTS, type StyleElement, type StyleState } from './style-tokens'
+import type { StyleOverride } from './style-overrides'
 
 export interface ChangeSpot {
   /** The page it is on; null where every page that draws the part shows it. */
@@ -113,6 +114,64 @@ function blocksChanged(design: PortalDesign, change: SpotChange): ChangeSpot[] {
     .map((block) => ({ page: 'home', section: `block-${block.id}` }))
 }
 
+/** Where a part is drawn, from its name in the parts registry; null for one not known. */
+function partSpot(part: string): ChangeSpot | null {
+  const [head, second] = part.split('.')
+  if (head === 'header' || head === 'nav') return { page: null, section: 'header' }
+  if ((head === 'hero' || head === 'title') && second && Object.hasOwn(PAGE_NAMES, second))
+    return { page: second as DesignerPage, section: 'hero' }
+  if (head === 'block' && second) return { page: 'home', section: `block-${second}` }
+  if (part === 'feed.filters') return { page: 'feedback', section: 'filters' }
+  if (head === 'feed') return { page: 'feedback', section: 'feed' }
+  if (head === 'board') return { page: 'roadmap', section: 'board' }
+  if (part === 'post.vote') return { page: 'post', section: 'vote' }
+  if (head === 'footer') return { page: null, section: 'footer' }
+  return null
+}
+
+/**
+ * Where an override shows, by its id: a page's on that page, a part's in
+ * the part's section, a Home block's in that block; each on its element.
+ */
+function overrideSpot(id: string): ChangeSpot | null {
+  const m = /^(page|part|block):(.+?)(?::(\w+))?$/.exec(id)
+  if (!m) return null
+  const [, scope, where, kind] = m
+  const element =
+    kind && Object.hasOwn(STYLE_ELEMENTS, kind) ? { element: kind as StyleElement } : {}
+  if (scope === 'block') return { page: 'home', section: `block-${where}`, ...element }
+  if (scope === 'page')
+    return Object.hasOwn(PAGE_NAMES, where!) ? { page: where as DesignerPage, ...element } : null
+  return { ...(partSpot(where!) ?? { page: null }), ...element }
+}
+
+/** The state a look's changed value is in, from `<layer>.<state>.<prop>`, when not base. */
+function stateOf(path: string): { state?: StyleState } {
+  const state = /\.(\w+)\.\w+$/.exec(path)?.[1]
+  return state && state !== 'base' && Object.hasOwn(STATE_INFO, state)
+    ? { state: state as StyleState }
+    : {}
+}
+
+/** The overrides two lists hold differently, each where it shows and in the state it changed. */
+function overridesChanged(before: unknown, after: unknown): ChangeSpot[] {
+  const byId = (value: unknown) =>
+    new Map(
+      (Array.isArray(value) ? (value as StyleOverride[]) : []).map((o) => [
+        o.id,
+        { style: o.style, styleDark: o.styleDark, phone: o.phone },
+      ])
+    )
+  const was = byId(before)
+  const now = byId(after)
+  return [...new Set([...was.keys(), ...now.keys()])].flatMap((id) => {
+    const spot = overrideSpot(id)
+    if (!spot) return []
+    const changed = leaves('', was.get(id), now.get(id))
+    return changed.map((leaf) => (spot.element ? { ...spot, ...stateOf(leaf.path) } : spot))
+  })
+}
+
 /** One field's spot, or null where the whole portal takes it. */
 function spotOfField(path: string): ChangeSpot | null {
   const styled = /^(?:style|styleDark|stylePhone)\.(\w+)\.(\w+)\.\w+$/.exec(path)
@@ -126,6 +185,12 @@ function spotOfField(path: string): ChangeSpot | null {
         ? { state: state as StyleState }
         : {}),
     }
+  }
+  // An override's value as people and the AI write it: `overrides.<id>.<layer>.<state>.<prop>`.
+  const override = /^overrides\.(.+)\.(?:style|styleDark|phone)\.\w+\.\w+$/.exec(path)
+  if (override) {
+    const spot = overrideSpot(override[1]!)
+    return spot && (spot.element ? { ...spot, ...stateOf(path) } : spot)
   }
   const tuned = /^tune\.(\w+)\./.exec(path)
   if (tuned)
@@ -153,10 +218,12 @@ export function changeSpots(design: PortalDesign, change: SpotChange): ChangeSpo
   const spots =
     change.path === 'pages.home.blocks' || change.path.startsWith('pages.home.blocks.')
       ? blocksChanged(design, change)
-      : leaves(change.path, change.before, change.after).flatMap((leaf) => {
-          const spot = spotOfField(leaf.path)
-          return spot ? [spot] : []
-        })
+      : change.path === 'overrides'
+        ? overridesChanged(change.before, change.after)
+        : leaves(change.path, change.before, change.after).flatMap((leaf) => {
+            const spot = spotOfField(leaf.path)
+            return spot ? [spot] : []
+          })
   const seen = new Set<string>()
   return spots.filter((spot) => !seen.has(key(spot)) && !!seen.add(key(spot)))
 }
@@ -187,12 +254,18 @@ export function spotsOfChanges(design: PortalDesign, changes: readonly SpotChang
 /** Where what changed between two designs shows, such as an AI step's draft and the one before. */
 export function spotsBetween(before: PortalDesign, after: PortalDesign): ChangeSpot[] {
   const [patches] = patchesBetween(before, after)
-  return spotsOfChanges(
-    after,
-    patches.map((patch) => ({
-      path: patch.path.join('.'),
-      before: undefined,
-      after: patch.op === 'remove' ? undefined : patch.value,
-    }))
-  )
+  // Overrides are a list: they are compared whole, by id, as an index names a different one after a removal.
+  const overrides = patches.some((patch) => patch.path[0] === 'overrides')
+    ? [{ path: 'overrides', before: before.overrides, after: after.overrides }]
+    : []
+  return spotsOfChanges(after, [
+    ...patches
+      .filter((patch) => patch.path[0] !== 'overrides')
+      .map((patch) => ({
+        path: patch.path.join('.'),
+        before: undefined,
+        after: patch.op === 'remove' ? undefined : patch.value,
+      })),
+    ...overrides,
+  ])
 }

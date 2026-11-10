@@ -10,15 +10,18 @@ export function SummaryRow({
   label,
   value,
   onOpen,
+  find,
 }: {
   label: string
+  /** Its stable name, which quick find goes to. */
+  find?: string
   /** The look now, in a word or two. */
   value: string
   /** Picks the element that sets it. */
   onOpen: () => void
 }) {
   return (
-    <PropertyRow label={label}>
+    <PropertyRow label={label} find={find}>
       <button
         type="button"
         aria-label={`${label}: ${value}`}

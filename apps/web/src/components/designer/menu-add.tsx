@@ -110,12 +110,17 @@ export function MenuAdd({
             size="sm"
             className="w-full justify-start"
             disabled={full}
-            title={full ? `The menu holds ${MENU_MAX}` : undefined}
+            aria-describedby={full ? 'menu-add-full' : undefined}
             onClick={() => setLinking(true)}
           >
             <LinkIcon className="size-4" aria-hidden="true" />
             {MENU_COPY.addLink}
           </Button>
+          {full && (
+            <p id="menu-add-full" className="pt-1 text-xs text-muted-foreground">
+              The menu holds {MENU_MAX}
+            </p>
+          )}
         </li>
       </ul>
     </div>

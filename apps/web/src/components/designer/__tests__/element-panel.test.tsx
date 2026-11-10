@@ -15,6 +15,7 @@ vi.mock('@/components/ui/select', async () => import('@/test/radix-select'))
 import { defaultDesign, portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { findOverride } from '@/lib/shared/design/style-overrides'
 import type { StyleState } from '@/lib/shared/design/style-tokens'
+import { resolveDesign } from '@/lib/shared/design/resolve'
 import { ElementPanel } from '../element-panel'
 
 afterEach(() => {
@@ -64,6 +65,7 @@ function mount(
     initialScope?: 'block'
     drawn?: Parameters<typeof ElementPanel>[0]['drawn']
     onScreen?: (screen: 'all' | 'phone') => void
+    onFonts?: (slot: 'heading' | 'headline') => void
   } = {}
 ) {
   const box = { design, labels: [] as Array<string | undefined>, state: 'base' as StyleState }
@@ -94,6 +96,7 @@ function mount(
       shared={extra.shared}
       initialScope={extra.initialScope}
       drawn={extra.drawn}
+      onFonts={extra.onFonts}
     />
   )
   const view = render(panel())
@@ -228,7 +231,9 @@ describe('the picked element’s properties', () => {
     const corners = screen.getByLabelText('Corners') as HTMLInputElement
     expect(corners.value).toBe('')
     expect(corners.placeholder).toBe('6')
-    expect(view.container.querySelector('[title="From every main button"]')).toBeTruthy()
+    expect(
+      view.container.querySelector('[data-help][aria-label="From every main button"]')
+    ).toBeTruthy()
     fireEvent.change(corners, { target: { value: '2' } })
     fireEvent.click(screen.getByRole('button', { name: 'Reset to 6 px from every main button' }))
     expect(box.design.overrides).toBeUndefined()
@@ -240,7 +245,7 @@ describe('the picked element’s properties', () => {
     const { view } = mount(cta, design)
     fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
     expect((screen.getByLabelText('Corners') as HTMLInputElement).placeholder).toBe('999')
-    expect(view.container.querySelector('[title="From brand"]')).toBeTruthy()
+    expect(view.container.querySelector('[data-help][aria-label="From brand"]')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Background: Brand colour' })).toBeTruthy()
     expect(view.container.textContent).not.toContain('As the theme')
   })
@@ -475,7 +480,9 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     const { view } = mount(cta, design)
     fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
     expect((screen.getByLabelText('Corners') as HTMLInputElement).placeholder).toBe('14')
-    expect(view.container.querySelector('[title="From every main button"]')).toBeTruthy()
+    expect(
+      view.container.querySelector('[data-help][aria-label="From every main button"]')
+    ).toBeTruthy()
   })
 
   it('resets every main button’s values, its exact ones too, from its menu', async () => {
@@ -493,14 +500,20 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     expect(box.design.style).toBeUndefined()
   })
 
-  it('reads a headline’s brand colour choice, and its font from the brand', () => {
+  it('reads a headline’s brand colour choice, and its font from the brand kit, its one writer', () => {
     const design = home()
     design.brand.fonts.headlineColour = 'accent'
-    mount(headline, design)
+    const onFonts = vi.fn()
+    const { box } = mount(headline, design, { onFonts })
     expect(
       tiles('Text colour').getByRole('radio', { name: 'Brand colour', checked: true })
     ).toBeTruthy()
-    expect(style().getByLabelText('Font')).toBeTruthy()
+    // A summary of the brand's font, which opens the brand kit's fonts at the headline's slot.
+    const font = style().getByRole('button', { name: /^Font: / })
+    expect(style().queryByRole('combobox', { name: 'Font' })).toBeNull()
+    fireEvent.click(font)
+    expect(onFonts).toHaveBeenCalledExactlyOnceWith('headline')
+    expect(box.labels).toEqual([])
   })
 
   it('opened from Styles, changes every one of the kind only', () => {
@@ -561,10 +574,35 @@ describe('what the canvas draws, where it is not what a row stores', () => {
     expect(before.view.container.querySelector('[data-in-use]')).toBeNull()
   })
 
-  it('compares no colour while the canvas is dark, where light’s value is not the one drawn', () => {
-    const { view } = mount(headline, styled(), {
+  it('compares a colour on a dark canvas with dark’s, and Use this sets dark mode’s own', () => {
+    const inked = () => {
+      const design = home()
+      design.style = { headline: { base: { color: 'ink' } } }
+      return design
+    }
+    const rgb = (hex: string) =>
+      `rgb(${[1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).join(', ')})`
+    const { light, dark } = resolveDesign(inked())
+    expect(light!.foreground).not.toBe(dark!.foreground)
+    // Drawn as dark draws the ink: nothing to say.
+    const same = mount(headline, inked(), {
+      drawn: { values: { color: rgb(dark!.foreground!) }, size: 'desktop', dark: true },
+    })
+    expect(note(same.view, 'Text colour')).toBeNull()
+    cleanup()
+    // Light's ink is not what dark draws.
+    const lit = mount(headline, inked(), {
+      drawn: { values: { color: rgb(light!.foreground!) }, size: 'desktop', dark: true },
+    })
+    expect(note(lit.view, 'Text colour')).not.toBeNull()
+    cleanup()
+    const { box, view } = mount(headline, inked(), {
       drawn: { values: { color: 'rgb(30, 30, 30)' }, size: 'desktop', dark: true },
     })
-    expect(note(view, 'Text colour')).toBeNull()
+    const colour = note(view, 'Text colour')!
+    expect(colour.textContent).toContain('Shown as #1E1E1E so it reads')
+    fireEvent.click(within(colour as HTMLElement).getByRole('button', { name: 'Use this' }))
+    expect(box.design.styleDark?.headline?.base?.color).toBe('#1e1e1e')
+    expect(box.design.style?.headline?.base?.color).toBe('ink')
   })
 })

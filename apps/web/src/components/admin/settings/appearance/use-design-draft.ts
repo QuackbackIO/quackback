@@ -13,7 +13,12 @@ import { designChanges } from '@/lib/shared/design/diff'
 import { checkDesign } from '@/lib/shared/design/check-design'
 import { changeLabel } from '@/lib/shared/design/labels'
 import { designView, previewStylesheet } from '@/lib/shared/design/design-view'
-import { createHistory, patchesBetween, type Author } from '@/lib/shared/design/history'
+import {
+  createHistory,
+  patchesBetween,
+  undoLabelOf,
+  type Author,
+} from '@/lib/shared/design/history'
 import { releaseOverrides } from '@/lib/shared/design/overrides'
 import { rebaseOnto } from '@/lib/shared/design/rebase'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -79,7 +84,7 @@ export function useDesignDraft() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Undo and redo: each change as labelled patches, a burst of the same change as one step.
   const [history] = useState(() => createHistory({ limit: UNDO_LIMIT, mergeMs: UNDO_MERGE_MS }))
-  const undoLabel = useStore(history, (state) => state.past.at(-1)?.label ?? null)
+  const undoLabel = useStore(history, undoLabelOf)
   const redoLabel = useStore(history, (state) => state.future.at(-1)?.label ?? null)
   const forget = useCallback(() => history.getState().clear(), [history])
 

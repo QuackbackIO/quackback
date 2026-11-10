@@ -338,6 +338,22 @@ describe('useDesignDraft', () => {
       expect(result.current.design).toEqual(original)
     })
 
+    it('names the AI change still under way as what undo takes back', () => {
+      const { result } = setup()
+      act(() => result.current.update((draft) => void (draft.layout.width = 'wide'), 'Width'))
+      const before = structuredClone(result.current.design)
+      act(() => result.current.begin('Make it calmer', 'ai'))
+      // Opened, with nothing changed yet, undo still takes back the last step.
+      expect(result.current.undoLabel).toBe('Width')
+      const next = structuredClone(result.current.design)
+      next.layout.density = 'compact'
+      act(() => result.current.adopt(next, undefined, 'Make it calmer', 'r2'))
+      expect(result.current.undoLabel).toBe('Make it calmer')
+      act(() => result.current.undo())
+      expect(result.current.design).toEqual(before)
+      expect(result.current.undoLabel).toBe('Width')
+    })
+
     it('starts again when another draft is loaded', async () => {
       const { result } = setup()
       act(() => result.current.update((draft) => void (draft.layout.width = 'wide'), 'Width'))

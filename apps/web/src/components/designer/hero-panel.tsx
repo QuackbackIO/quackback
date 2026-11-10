@@ -35,7 +35,6 @@ import { FIND, type FindRow } from './find-rows'
 import { MainActionRows } from './hero-main-action'
 import { HeroPhotoCrop } from './hero-photo-crop'
 import { BackgroundRow } from './page-panel'
-import { PageTitleRows } from './page-section-settings'
 import {
   Help,
   PropertiesPanel,
@@ -56,9 +55,6 @@ type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => vo
 
 type Image = NonNullable<HeroBlock['image']>
 type Scope = 'every' | 'page'
-
-/** The pages whose title the hero can hold, with what sits beside it. */
-const TITLED: readonly DesignerPage[] = ['changelog', 'help']
 
 /** The tiles rows' stable names, which quick find shares. */
 const TILE_FIND: Partial<Record<HeroKey, FindRow>> = {
@@ -309,12 +305,6 @@ export function HeroPanel({
       ]
     : []
 
-  const title = TITLED.includes(page) && (
-    <PropertySection title={HERO_WORDS.title}>
-      <PageTitleRows page={page} design={design} update={update} />
-    </PropertySection>
-  )
-
   return (
     <PropertiesPanel
       data-hero-panel=""
@@ -368,7 +358,6 @@ export function HeroPanel({
             )}
             {tiles('shape', HERO_WORDS.shape, layout.heroShape, 'full')}
           </PropertySection>
-          {title}
           <PropertySection
             more={
               <>

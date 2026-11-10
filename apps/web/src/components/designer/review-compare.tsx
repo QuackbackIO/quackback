@@ -3,12 +3,11 @@ import { ClientOnly } from '@tanstack/react-router'
 import type { PortalPreviewProps } from '@/components/admin/settings/branding/portal-preview'
 import type { DesignerPage } from '@/lib/shared/design/outline'
 import { PAGE_NAMES } from '@/lib/shared/design/outline'
-import { DesignerCanvas } from './designer-canvas'
+import { DesignerCanvas, NO_STRUCTURE } from './designer-canvas'
 import { WidgetFrame } from './widget-sample'
 
 const ignore = () => {}
 /** The same empty structural draft every render, so neither frame posts it again. */
-const NO_STRUCTURE = {}
 
 /**
  * The page as visitors see it now and as it will be once published, side by

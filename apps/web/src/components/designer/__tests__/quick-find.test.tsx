@@ -128,26 +128,37 @@ describe('QuickFind', () => {
     ])
   })
 
-  it('opens when the canvas hands over its Ctrl+K, and not for another origin', async () => {
+  it('opens when the canvas hands over its Ctrl+K, and not for another origin or window', async () => {
     show()
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { type: 'quackback:preview-key', key: 'find' },
-          origin: 'https://elsewhere.example.com',
-        })
-      )
-    })
-    expect(screen.queryByRole('dialog')).toBeNull()
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { type: 'quackback:preview-key', key: 'find' },
-          origin: window.location.origin,
-        })
-      )
-    })
-    expect(await screen.findByRole('dialog')).toBeTruthy()
+    // The canvas's frame, and another frame of the same origin.
+    const box = document.createElement('div')
+    box.setAttribute('data-canvas-box', '')
+    const iframe = document.createElement('iframe')
+    box.append(iframe)
+    document.body.append(box)
+    const canvas = { postMessage: vi.fn() } as unknown as Window
+    Object.defineProperty(iframe, 'contentWindow', { configurable: true, get: () => canvas })
+    const other = { postMessage: vi.fn() } as unknown as Window
+    const send = (origin: string, source: Window | null) =>
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { type: 'quackback:preview-key', key: 'find' },
+            origin,
+            source,
+          })
+        )
+      })
+    try {
+      send('https://elsewhere.example.com', canvas)
+      send(window.location.origin, other)
+      send(window.location.origin, null)
+      expect(screen.queryByRole('dialog')).toBeNull()
+      send(window.location.origin, canvas)
+      expect(await screen.findByRole('dialog')).toBeTruthy()
+    } finally {
+      box.remove()
+    }
   })
 })
 

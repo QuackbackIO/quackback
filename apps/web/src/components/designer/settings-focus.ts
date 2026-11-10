@@ -13,6 +13,63 @@ export const inSettings = () =>
 export const focusCanvas = () =>
   requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-canvas-region]')?.focus())
 
+/** The picked block's chip name on the canvas. */
+export const CHIP_NAME = '[data-editing-layer] [data-chip-name]'
+
+/**
+ * Puts focus on what a selector names once it is drawn: the tag of the
+ * element just picked, drawn again once its box is measured. To `follow`,
+ * it looks again each frame, as the chip of a block picked anew mounts once
+ * its box is measured; once focus is there it is put back only when lost.
+ */
+export function keepFocus(selector: string, frames = 20, follow = false): void {
+  let left = frames
+  let seen: HTMLElement | null = null
+  const tick = () => {
+    const found = document.querySelector<HTMLElement>(selector)
+    const active = document.activeElement
+    const lost = !active || active === document.body || !active.isConnected
+    if (found && found !== active && (!follow || !seen || lost)) found.focus()
+    if (found) seen = found
+    if (--left > 0 && (follow || !seen || seen.isConnected)) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
+
+/**
+ * Focus, after a block was removed or copied: the chip of the block picked
+ * in its place, else the canvas when nothing is left to pick.
+ */
+export const focusPicked = (picked: boolean) =>
+  picked ? keepFocus(CHIP_NAME, 30, true) : focusCanvas()
+
+/**
+ * Opens a picked block's actions at a point in the builder's window, as a
+ * right-click on its chip does: once the chip for that block is drawn, the
+ * frame's right-click is handed to it there.
+ */
+export function openChipMenu(key: string, at: { x: number; y: number }, frames = 30): void {
+  let left = frames
+  const tick = () => {
+    const chip = document.querySelector<HTMLElement>(
+      `[data-editing-layer] [data-chip-for="${CSS.escape(key)}"]`
+    )
+    if (chip) {
+      chip.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: at.x,
+          clientY: at.y,
+        })
+      )
+      return
+    }
+    if (--left > 0) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
+
 const settings = () => document.getElementById('designer-settings')
 
 /** A row of "On this page", by the row's id. */

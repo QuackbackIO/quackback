@@ -212,6 +212,47 @@ describe('startDesigning', () => {
     expect(document.querySelector('[data-qb-words-editing]')).toBeNull()
   })
 
+  it('selects no text on Shift+click or a double-click, but in words being edited', async () => {
+    const down = (el: Element, init: MouseEventInit) => {
+      const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true, ...init })
+      el.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    const vote = document.getElementById('vote')!
+    expect(down(vote, { shiftKey: true })).toBe(true)
+    expect(down(vote, { detail: 2 })).toBe(true)
+    // A plain press is the page's own.
+    expect(down(vote, { detail: 1 })).toBe(false)
+    click(document.querySelector('[data-qb-words]')!, 'dblclick')
+    await editorIn()
+    const editing = document.querySelector('[data-qb-words-editing]')!
+    expect(down(editing, { shiftKey: true })).toBe(false)
+    expect(down(editing, { detail: 2 })).toBe(false)
+    key(document.querySelector('[data-qb-words-editing] .ProseMirror')!, 'Escape')
+  })
+
+  it('opens the builder’s actions on a right-click, where it was, in place of the page’s menu', async () => {
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 12,
+      clientY: 34,
+    })
+    document.getElementById('vote')!.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(posted).toEqual([
+      { type: 'quackback:preview-context', section: 'block-ideas00001', x: 12, y: 34 },
+    ])
+    // Words being edited keep the browser's own menu, for spelling.
+    posted.length = 0
+    click(document.querySelector('[data-qb-words]')!, 'dblclick')
+    await editorIn()
+    const inWords = click(document.querySelector('[data-qb-words-editing]')!, 'contextmenu')
+    expect(inWords.defaultPrevented).toBe(false)
+    expect(posted.filter((m) => m.type === 'quackback:preview-context')).toEqual([])
+    key(document.querySelector('[data-qb-words-editing] .ProseMirror')!, 'Escape')
+  })
+
   it('hands Escape to the designer, which lets go of what is picked', () => {
     key(document.body, 'Escape')
     expect(posted).toEqual([{ type: 'quackback:preview-key', key: 'escape' }])

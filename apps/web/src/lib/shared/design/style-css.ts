@@ -206,6 +206,23 @@ export function styleColourValue(
   }
 }
 
+/**
+ * A colour a row stores, as dark mode draws it: dark mode's own colour as it
+ * is, else light's carried over to dark; null with no dark variables.
+ */
+export function darkDrawnColour(
+  stored: StyleColour,
+  ownDark: StyleColour | undefined,
+  doc: PortalDesign,
+  light: ThemeVariables | null,
+  dark: ThemeVariables | null
+): string | null {
+  if (!dark) return null
+  return ownDark
+    ? styleColourValue(ownDark, doc, dark as Vars, 'dark')
+    : styleColourValue(stored, doc, dark as Vars, 'dark', light ? (light as Vars) : undefined)
+}
+
 /** A fill's colours (one, or a gradient's two) and its CSS. */
 function paintOf(
   paint: StylePaint,

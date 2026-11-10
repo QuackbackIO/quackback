@@ -13,7 +13,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/lib/shared/i18n'
 import type { CanvasZoom } from './designer-canvas'
-import { PropertyRow, PropertyTiles } from './properties/properties-panel'
+import { Help, PropertyRow, PropertyTiles } from './properties/properties-panel'
 import { THEME, WORDS } from './properties/words'
 
 const ZOOMS: Array<readonly [CanvasZoom, string, string]> = [
@@ -88,9 +88,12 @@ export function ViewOptions({
   const id = useId()
   return (
     <section aria-labelledby={`${id}-view`} className="space-y-1 text-[13px]">
-      <h3 id={`${id}-view`} title={THEME.viewHelp} className="text-xs font-semibold">
-        Viewing the page
-      </h3>
+      <div className="flex items-center gap-0.5">
+        <h3 id={`${id}-view`} className="text-xs font-semibold">
+          Viewing the page
+        </h3>
+        <Help text={THEME.viewHelp} />
+      </div>
       {mode === 'auto' && (
         <PropertyRow label={THEME.previewAs} source={THEME.autoHelp}>
           <PropertyTiles
@@ -132,7 +135,7 @@ export function ViewOptions({
       <button
         type="button"
         onClick={onKeys}
-        className="mt-1 rounded-sm text-xs text-muted-foreground underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground"
+        className="mt-1 inline-flex min-h-6 items-center rounded-sm text-xs text-muted-foreground underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground"
       >
         {THEME.keyboardShortcuts}
       </button>
