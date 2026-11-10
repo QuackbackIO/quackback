@@ -80,6 +80,19 @@ describe('<BoardCustomFields>', () => {
     expect(screen.getByRole('radio', { name: 'low' }).getAttribute('aria-checked')).toBe('false')
   })
 
+  it('is one Tab stop, and the arrow keys move to the next choice and pick it', () => {
+    const onChange = renderFields({ impact: 'low' })
+    const radios = screen.getAllByRole('radio')
+    expect(radios.filter((radio) => radio.tabIndex === 0)).toHaveLength(1)
+    const low = screen.getByRole('radio', { name: 'low' })
+    expect(low.tabIndex).toBe(0)
+    low.focus()
+    fireEvent.keyDown(low, { key: 'ArrowRight' })
+    const next = low.nextElementSibling as HTMLElement
+    expect(document.activeElement).toBe(next)
+    expect(onChange).toHaveBeenCalledWith('impact', next.textContent)
+  })
+
   it('keeps selects with more than six options as a dropdown', () => {
     renderFields({ priority: 'p3' })
     const trigger = screen.getByRole('combobox', { name: /Priority/ })

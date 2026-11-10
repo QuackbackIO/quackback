@@ -8,7 +8,6 @@
  */
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import { ChevronRightIcon, MinusIcon, PlusIcon } from '@heroicons/react/16/solid'
-import { DesignTiles } from '@/components/admin/settings/appearance/design-tiles'
 import { presignBandImage } from '@/components/admin/settings/appearance/design-update'
 import { Button } from '@/components/ui/button'
 import { prepareBackgroundImage, type PreparedBackground } from '@/lib/client/background-image'
@@ -42,6 +41,8 @@ import {
   PropertySection,
   PropertyTiles,
   ROW_LABEL,
+  PropertyDrawnTiles,
+  type DrawnOption,
 } from './properties/properties-panel'
 import { ScopeLine } from './properties/scope-line'
 import { ScrubNumber } from './properties/scrub-number'
@@ -415,16 +416,19 @@ function FillSettings({
     case 'pattern':
       return (
         <>
-          <DesignTiles
-            name={`${idPrefix}-pattern`}
+          <LabelledDrawnTiles
+            id={`${idPrefix}-pattern`}
             label="Pattern"
             value={fill.pattern}
             columns={4}
-            options={options('pattern').map(([value, label]) => ({
-              value: value as typeof fill.pattern,
-              label,
-              drawing: <PatternDrawing pattern={value} />,
-            }))}
+            options={options('pattern').map(
+              ([value, label]) =>
+                [
+                  value as NonNullable<typeof fill.pattern>,
+                  label,
+                  <PatternDrawing key={value} pattern={value} />,
+                ] as const
+            )}
             onChange={(pattern) => onChange({ ...fill, pattern }, 'Pattern')}
           />
           <BackgroundColourField
@@ -499,6 +503,29 @@ function FillSettings({
   }
 }
 
+/** Drawn tiles under their name, the builder's one control for a drawn choice. */
+function LabelledDrawnTiles<T extends string>({
+  id,
+  label,
+  ...tiles
+}: {
+  id: string
+  label: string
+  value: T | undefined
+  options: ReadonlyArray<DrawnOption<T>>
+  onChange: (value: T) => void
+  columns: 3 | 4
+}) {
+  return (
+    <div className="space-y-1">
+      <p id={`${id}-label`} className="text-xs text-muted-foreground">
+        {label}
+      </p>
+      <PropertyDrawnTiles id={id} label={label} {...tiles} />
+    </div>
+  )
+}
+
 /** The kinds, each a drawn tile. */
 function KindTiles({
   name,
@@ -514,18 +541,21 @@ function KindTiles({
   kinds?: readonly BackgroundKind[]
 }) {
   return (
-    <DesignTiles
-      name={name}
+    <LabelledDrawnTiles
+      id={name}
       label={label}
       value={value}
       columns={3}
       options={options('kind')
         .filter(([kind]) => kinds.includes(kind as BackgroundKind))
-        .map(([kind, label]) => ({
-          value: kind as BackgroundKind,
-          label,
-          drawing: <KindDrawing kind={kind as BackgroundKind} />,
-        }))}
+        .map(
+          ([kind, label]) =>
+            [
+              kind as BackgroundKind,
+              label,
+              <KindDrawing key={kind} kind={kind as BackgroundKind} />,
+            ] as const
+        )}
       onChange={onChange}
     />
   )

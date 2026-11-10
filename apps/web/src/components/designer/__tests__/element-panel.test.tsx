@@ -290,6 +290,19 @@ describe('the picked element’s properties', () => {
     expect(screen.queryByRole('button', { name: /more actions$/ })).toBeNull()
   })
 
+  it('moves the screen chip with the arrow keys, one Tab stop', () => {
+    const onScreen = vi.fn()
+    mount(cta, home(), { onScreen })
+    const chip = within(screen.getByRole('radiogroup', { name: 'Editing' }))
+    const all = chip.getByRole('radio', { name: 'All screens' })
+    expect(all.tabIndex).toBe(0)
+    expect(chip.getByRole('radio', { name: 'Phone' }).tabIndex).toBe(-1)
+    all.focus()
+    fireEvent.keyDown(all, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(chip.getByRole('radio', { name: 'Phone' }))
+    expect(onScreen).toHaveBeenCalledWith('phone')
+  })
+
   it('tints its scope block on a phone, with the chip on Phone and the way back', () => {
     const onScreen = vi.fn()
     const { view } = mount(cta, home(), { screen: 'phone', onScreen })

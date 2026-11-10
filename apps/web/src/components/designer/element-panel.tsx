@@ -28,6 +28,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { onRadioKeys, radioTabIndex } from '@/components/admin/settings/appearance/radio-keys'
 import { cn } from '@/lib/shared/utils'
 import {
   pickName,
@@ -708,14 +709,16 @@ function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Scr
     ['all', PHONE_WORDS.allScreens],
     ['phone', PHONE_WORDS.phone],
   ]
+  const none = !options.some(([screen]) => screen === value)
   return (
     <div
       role="radiogroup"
       aria-label={PHONE_WORDS.editing}
       data-screen-chip=""
+      onKeyDown={onRadioKeys}
       className="inline-flex h-6 items-center rounded-md border border-border p-0.5"
     >
-      {options.map(([screen, label]) => {
+      {options.map(([screen, label], index) => {
         const on = value === screen
         return (
           <button
@@ -723,13 +726,14 @@ function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Scr
             type="button"
             role="radio"
             aria-checked={on}
+            tabIndex={radioTabIndex(on, none, index)}
             onClick={() => onChange(screen)}
             className={cn(
               'h-full rounded px-1.5 text-[11px] focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
               on
                 ? screen === 'phone'
                   ? PHONE_TINT.chip
-                  : 'bg-foreground text-background'
+                  : 'bg-muted font-medium text-foreground ring-1 ring-foreground forced-colors:outline forced-colors:outline-2'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >

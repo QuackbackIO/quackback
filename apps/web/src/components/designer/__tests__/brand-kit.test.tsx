@@ -108,6 +108,19 @@ describe('the fonts', () => {
     expect(document.getElementById('kit-font-pair')!.textContent).toBe('Editorial')
   })
 
+  it('moves through the pairs with the arrow keys, picking each and staying open', () => {
+    const { seen } = renderKit(imported())
+    fireEvent.click(screen.getByLabelText('Pair'))
+    const radios = within(screen.getByRole('radiogroup', { name: 'Pair' })).getAllByRole('radio')
+    // Custom fonts pick no pair, so the first is the one Tab stop.
+    expect(radios.filter((radio) => radio.tabIndex === 0)).toEqual([radios[0]])
+    radios[0]!.focus()
+    fireEvent.keyDown(radios[0]!, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(radios[1])
+    expect(seen.updates).toBe(1)
+    expect(document.getElementById('kit-font-pair')!.getAttribute('aria-expanded')).toBe('true')
+  })
+
   it('shows the headline font as the heading’s until set, then marks it with a Reset', () => {
     const { seen } = renderKit(imported())
     fireEvent.click(screen.getByRole('button', { name: 'Reset to same as heading' }))
