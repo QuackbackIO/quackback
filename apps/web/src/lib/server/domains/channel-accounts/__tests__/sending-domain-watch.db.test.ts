@@ -327,7 +327,7 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
 
       const bells = await bellsFor([admin, member, portalUser], 'sending_domain_live')
       expect(bells.map((b) => [b.principalId, b.title])).toEqual([
-        [admin, 'help@a.example is live'],
+        [admin, 'help@a.example is ready to send'],
       ])
 
       // Further checks of a live domain ring nothing more.

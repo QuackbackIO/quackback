@@ -144,7 +144,7 @@ export const signingKeyProblem = (domain: string) => `The signing key for ${doma
 export function instructionsText(domain: SendingDomainDTO): string {
   const lines = domain.dnsRecords.map((r) => `${recordTypeLabel(r)}  ${r.host}  ${r.value}`)
   return [
-    `Add these DNS records to ${domain.domain} so replies can be sent from it. Enter each name as shown; most DNS hosts add .${domain.domain} themselves.`,
+    `Add these DNS records to ${domain.domain} so email can be sent from it. Enter each name as shown; most DNS hosts add .${domain.domain} themselves.`,
     '',
     ...lines,
   ].join('\n')

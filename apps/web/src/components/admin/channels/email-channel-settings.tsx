@@ -421,7 +421,7 @@ function removalNote(
   platformName: string
 ): string | null {
   if (senders.default?.mode === 'address' && senders.default.id === id) {
-    return `It's the default address, so email will send from ${platformFrom ?? `the ${platformName.toLowerCase()}`} instead.`
+    return `It's your default address, so email will come from ${platformFrom ?? `the ${platformName.toLowerCase()}`} instead.`
   }
   const using = (
     Object.keys(SENDER_SURFACE_NAMES) as Array<keyof typeof SENDER_SURFACE_NAMES>
@@ -433,7 +433,7 @@ function removalNote(
     )
   })
   if (using.length === 0) return null
-  return `${listOf(using.map((s) => SENDER_SURFACE_NAMES[s]))} email will send from the default address.`
+  return `${listOf(using.map((s) => SENDER_SURFACE_NAMES[s]))} email will come from your default address instead.`
 }
 
 /** The meta line of a row whose domain is not live yet, or is live with its ownership record missing. */
@@ -447,7 +447,7 @@ function pendingMeta(
     const warning = first ? ownershipWarning(domain) : null
     return warning ? `The ownership record is missing. ${warning}` : null
   }
-  if (!first) return `Waiting for ${domain.domain}`
+  if (!first) return `Waiting for ${domain.domain} to be verified`
   if (signingKeyFailing(domain, phase)) return `${signingKeyProblem(domain.domain)}${fallback}`
   if (phase === 'not-found') return `Records not found after 72 hours.${fallback}`
   if (phase === 'attention') {
@@ -516,8 +516,8 @@ function SendingAddressesSection({
   // What email does meanwhile: one workspace still sends as the address; a
   // shared server falls back to the default.
   const fallbackNote = guardPermitsAny
-    ? ' Email still sends from this address but may land in spam until this is fixed.'
-    : ' Email sends from the default address.'
+    ? ' Email is still sent from this address, but it may land in spam until this is fixed.'
+    : " Email comes from your default address until it's fixed."
 
   // Listed oldest first: the panel and the domain's status line sit under the
   // address that has been on the domain longest, so adding another one does
@@ -556,7 +556,7 @@ function SendingAddressesSection({
   const empty = loaded && rows.length === 0 && unused.length === 0
 
   return (
-    <SettingsCard title="Sending addresses" description="Addresses email can be sent from." flush>
+    <SettingsCard title="Sending addresses" flush>
       <SettingsList>
         {rows.map(({ a, domain, phase }) => {
           const first = firstOnDomain.has(a.id)
@@ -616,7 +616,7 @@ function SendingAddressesSection({
                       onClick={() => {
                         setActionError(null)
                         sendTest.mutate(a.id, {
-                          onSuccess: (r) => toast.success(`Test sent to ${r.to}`),
+                          onSuccess: (r) => toast.success(`Test email sent to ${r.to}`),
                           onError: showError("Couldn't send the test email."),
                         })
                       }}
