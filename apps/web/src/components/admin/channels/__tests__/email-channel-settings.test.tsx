@@ -111,10 +111,13 @@ function address(
   id: string,
   addr: string,
   domainId: string | null = 'dom_1',
-  senderName: string | null = null
+  senderName: string | null = null,
+  /** The server's answer, when a case needs one the fixtures would not give. */
+  sendable?: boolean
 ) {
   added += 1
   return {
+    sendable,
     id,
     address: addr,
     senderName,
@@ -153,7 +156,16 @@ function renderSettings({
     forwardingTargetPermitted,
     inboundRoute,
     platformAddress: null,
-    sendingAddresses: addresses,
+    // `sendable` is the server's answer from the send guard. Stood in for
+    // here by the rule the fixtures need: any address on a single-workspace
+    // server, else one whose domain row (if it has one) is verified.
+    sendingAddresses: addresses.map((a) => {
+      const row =
+        domains.find((d) => d.id === a.sendingDomainId) ??
+        domains.find((d) => a.address.endsWith(`@${d.domain}`))
+      const sendable = a.sendable ?? (addressMode === 'any' || !row || row.status === 'verified')
+      return { ...a, sendable }
+    }),
     domains,
     addressMode,
     defaultFrom: 'Acme <notifications@example.com>',
@@ -845,6 +857,17 @@ describe('removing a sending address', () => {
     const dialog = await removeDialog('Acme <hello@acme.com>')
     expect(dialog.textContent).toContain(
       "It's the default address, so email sent from it will send from Acme <notifications@example.com>."
+    )
+  })
+
+  it('does not offer an address the server says cannot send, even with no domain row', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@gone.example', null, null, false)],
+      domains: [],
+      senders: { default: { mode: 'address', id: 'a1' } },
+    })
+    expect(document.body.textContent).toContain(
+      "help@gone.example isn't verified yet, so email sends from Acme <notifications@example.com>."
     )
   })
 

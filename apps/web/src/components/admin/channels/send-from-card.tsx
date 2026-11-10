@@ -53,14 +53,15 @@ function choiceOf(value: string): EmailSenderChoiceDTO | null {
   return { mode: 'address', id: value }
 }
 
-/** The addr-spec of a "Name <address>" label. */
-const addressOf = (label: string): string => /<([^>]+)>/.exec(label)?.[1] ?? label
+/** The addr-spec of a "Name <address>" label: its last bracketed part. */
+const addressOf = (label: string): string => /<([^<>]+)>\s*$/.exec(label)?.[1] ?? label
 
 export function SendFromCard({
   senders,
   identities,
   platformFrom,
   platformName = 'Quackback address',
+  platformInbox = null,
   forwardingTarget,
   forwardingTargetPermitted,
   hasInboundRoute,
@@ -76,6 +77,11 @@ export function SendFromCard({
   platformFrom: string | null
   /** What the address email sends from with nothing chosen is called here. */
   platformName?: string
+  /**
+   * "Workspace <its inbox on the platform>", when it has one: what a reply to
+   * an emailed-in conversation falls back to before the platform address.
+   */
+  platformInbox?: string | null
   forwardingTarget: string | null
   forwardingTargetPermitted: boolean | null
   /** Whether the workspace receives email, so support can reply from the inbox. */
@@ -125,13 +131,16 @@ export function SendFromCard({
     if (!identity || identity.live || !fallback) return undefined
     return `${addressOf(identity.label)} isn't verified yet, so email sends from ${fallback}.`
   }
-  // Said only when what happens differs from what is chosen.
+  // Said only when what happens differs from what is chosen. A reply that
+  // cannot leave from the inbox address leaves from the default, else from the
+  // workspace's own inbox on the platform, else from the platform address.
+  const inboxFallback = defaultIdentity?.label ?? platformInbox ?? platformFrom
   const supportHint =
     senders.support?.mode === 'inbox' &&
     forwardingTarget &&
     forwardingTargetPermitted === false &&
-    resolvedDefault
-      ? `${forwardingTarget} isn't verified yet, so replies come from ${resolvedDefault}.`
+    inboxFallback
+      ? `${forwardingTarget} isn't verified yet, so replies come from ${inboxFallback}.`
       : undefined
 
   const showDefault = rows.includes('default')
