@@ -173,7 +173,10 @@ describe('the pairing, where one text was not read', () => {
   it('never sets body text in a mono headline face unless the text reads as mono', () => {
     const mono = () => match(500, option('jetbrains', 500, 0.74), option('fira-code', 500, 0.7))
     for (const body_type of ['not_visible', undefined] as const) {
-      const type = chooseFaces({ headline: mono(), body: null }, { headline_type: 'mono', body_type })
+      const type = chooseFaces(
+        { headline: mono(), body: null },
+        { headline_type: 'mono', body_type }
+      )
       expect(type.headline!.face.id).toBe('jetbrains')
       expect(type.body!.face.id).toBe('inter')
     }
