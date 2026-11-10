@@ -42,4 +42,15 @@ describe('settings nav Email row', () => {
     }).find((d) => d.href === '/admin/settings/email')
     expect(email?.keywords).toEqual(expect.arrayContaining(['sender', 'from address']))
   })
+
+  it('never offers two palette destinations under the same name', () => {
+    const labels = buildAskDestinations({
+      permissions: new Set([PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE]),
+      featureFlags: { ...FEEDBACK_ONLY, supportInbox: true },
+    }).map((d) => d.defaultMessage)
+    expect(labels.filter((label) => label === 'Email')).toHaveLength(1)
+    expect(labels).toContain('Support email')
+    const repeated = labels.filter((label, i) => labels.indexOf(label) !== i)
+    expect(repeated).toEqual([])
+  })
 })

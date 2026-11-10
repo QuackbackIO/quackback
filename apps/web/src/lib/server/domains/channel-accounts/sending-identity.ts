@@ -644,19 +644,39 @@ export async function refreshSendingDomain(
 }
 
 /**
- * Open a fresh automatic check window on a domain and check it now: the
- * "Verify" action, for a domain whose window ran out before its records
- * were published.
+ * How soon after a check a person asking for another is given that check's
+ * answer. The provider's management API is shared by every workspace on the
+ * server, so pressing the button repeatedly must not cost it a call each time.
+ */
+const MANUAL_CHECK_COOLDOWN_MS = 30_000
+
+/**
+ * Check a domain now, because a person asked: "Check now" while it is being
+ * set up, "Verify" once its window ran out or it stopped verifying.
+ *
+ * A window that ran out (or never opened) is opened afresh, so the automatic
+ * checks resume. One still open keeps its deadline: asking early is not a
+ * reason to be checked for longer. A domain checked within the last moments,
+ * inside an open window, is answered from that check.
  */
 export async function restartSendingDomainChecks(
   id: SendingDomainId
 ): Promise<EmailSendingDomain | null> {
-  const [row] = await db
-    .update(emailSendingDomains)
-    .set({ autoCheckUntil: new Date(Date.now() + AUTO_CHECK_WINDOW_MS), updatedAt: new Date() })
-    .where(eq(emailSendingDomains.id, id))
-    .returning({ id: emailSendingDomains.id })
-  if (!row) return null
+  const stored = await getSendingDomain(id)
+  if (!stored) return null
+  const now = Date.now()
+  const windowOpen = stored.autoCheckUntil !== null && stored.autoCheckUntil.getTime() > now
+  if (!windowOpen) {
+    await db
+      .update(emailSendingDomains)
+      .set({ autoCheckUntil: new Date(now + AUTO_CHECK_WINDOW_MS), updatedAt: new Date() })
+      .where(eq(emailSendingDomains.id, id))
+  } else if (
+    stored.lastCheckedAt &&
+    now - stored.lastCheckedAt.getTime() < MANUAL_CHECK_COOLDOWN_MS
+  ) {
+    return stored
+  }
   return refreshSendingDomain(id)
 }
 

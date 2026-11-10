@@ -1394,7 +1394,7 @@
   "ask.destination.settings_notifications": "Powiadomienia",
   "ask.destination.settings_portal": "Portal",
   "ask.destination.settings_channels_messenger": "Messenger",
-  "ask.destination.settings_channels_email": "E-mail",
+  "ask.destination.settings_channels_email": "E-mail wsparcia",
   "apiKeys.scopes.settings": "Ustawienia",
   "apiKeys.scopes.read": "Odczyt",
   "ask.destination.analytics": "Analityka",

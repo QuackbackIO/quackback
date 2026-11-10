@@ -251,9 +251,22 @@ describe('address rows', () => {
     expect(within(r).getByText('Pending').getAttribute('data-slot')).toBe('badge')
     expect(within(r).queryByText('Needs attention')).toBeNull()
     expect(screen.getByText('Set up acme.com')).toBeTruthy()
-    const footer = screen.getByText("Checking automatically. We'll let you know when it's live.")
-    expect(footer.getAttribute('title')).toBe('Last checked less than a minute ago')
+    // When it was last looked at is said, not left to a tooltip.
+    expect(
+      screen.getByText(
+        "Checking automatically, last checked less than a minute ago. We'll let you know when it's live."
+      )
+    ).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Verify' })).toBeNull()
+  })
+
+  it('lets someone who just published the records check now, without waiting', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain({ dnsRecords: records({ ownership: found }) })],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Check now' }))
+    expect(restartChecks).toHaveBeenCalledWith('dom_1', expect.anything())
   })
 
   it('treats a pending domain with no check window yet as pending', () => {
@@ -1118,7 +1131,11 @@ describe('adding an address', () => {
   })
 
   it('is disabled with one line on a shared server that cannot set up domains', () => {
-    renderSettings({ addressMode: 'unavailable' })
+    renderSettings({
+      addressMode: 'unavailable',
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE],
+    })
     expect(
       screen.getByText("Custom sending addresses aren't available on this server.")
     ).toBeTruthy()
@@ -1172,9 +1189,48 @@ describe('a paused workspace', () => {
   })
 })
 
+describe('a workspace with no sending address', () => {
+  it('says what email comes from and offers the one next step, with nothing to choose', () => {
+    renderSettings({ view: 'workspace' })
+    expect(screen.getByText('No sending addresses yet')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Email comes from Acme <notifications@example.com>. Add an address to send from your own domain.'
+      )
+    ).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Add address' })).toHaveLength(1)
+    // No dropdowns with a single option each.
+    expect(screen.queryByText('Send from')).toBeNull()
+    expect(screen.queryByLabelText('Default')).toBeNull()
+  })
+
+  it('says custom addresses are not available where they are not', () => {
+    renderSettings({ view: 'workspace', addressMode: 'unavailable' })
+    expect(
+      screen.getByText("Custom sending addresses aren't available on this server.")
+    ).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Add address' })).toBeNull()
+  })
+
+  it('shows Send from as soon as there is an address to choose', () => {
+    renderSettings({
+      view: 'workspace',
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE],
+    })
+    expect(screen.queryByText('No sending addresses yet')).toBeNull()
+    expect(screen.getByText('Send from')).toBeTruthy()
+  })
+})
+
 describe('where each part lives', () => {
   it('the workspace page has the addresses and every sender, but no support inbox', () => {
-    renderSettings({ view: 'workspace', surfaces: ['feedback', 'changelog'] })
+    renderSettings({
+      view: 'workspace',
+      surfaces: ['feedback', 'changelog'],
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE],
+    })
     expect(screen.getByText('Sending addresses')).toBeTruthy()
     expect(screen.getByText('Send from')).toBeTruthy()
     expect(screen.queryByText('Support inbox')).toBeNull()

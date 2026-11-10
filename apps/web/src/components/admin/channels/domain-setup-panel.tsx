@@ -31,9 +31,8 @@ export function DomainSetupPanel({
   // Was live once and is not now: the records were there, so this is a fix.
   const broken = phase === 'attention' && domain.verifiedAt !== null
   const checked = lastCheckedAt(domain)
-  const checkedTitle = checked
-    ? `Last checked ${formatDistanceToNow(checked, { addSuffix: true })}`
-    : undefined
+  const checkedAgo = checked ? formatDistanceToNow(checked, { addSuffix: true }) : null
+  const checkedTitle = checkedAgo ? `Last checked ${checkedAgo}` : undefined
 
   return (
     <div
@@ -57,21 +56,29 @@ export function DomainSetupPanel({
         <p className="text-xs text-destructive">{signingKeyProblem(domain.domain)}</p>
       )}
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span className="mr-auto" title={checkedTitle}>
+        {/* While it is being set up, when it was last looked at is said in the
+            line itself: it is what changes when someone presses Check now. The
+            line wraps within its own space, so the actions stay side by side. */}
+        <span
+          className="mr-auto min-w-48 flex-1"
+          title={phase === 'setting-up' ? undefined : checkedTitle}
+        >
           {phase === 'live'
             ? 'Keep these published.'
             : phase === 'setting-up'
-              ? "Checking automatically. We'll let you know when it's live."
+              ? `Checking automatically${checkedAgo ? `, last checked ${checkedAgo}` : ''}. We'll let you know when it's live.`
               : broken
                 ? "We can't find these records any more."
                 : "We couldn't find these records yet."}
         </span>
-        {(phase === 'not-found' || phase === 'attention') && (
-          <Button size="sm" variant="outline" disabled={checking} onClick={onCheckAgain}>
-            Verify
-          </Button>
+        {phase !== 'live' && (
+          <div className="flex shrink-0 gap-2">
+            <Button size="sm" variant="outline" disabled={checking} onClick={onCheckAgain}>
+              {phase === 'setting-up' ? 'Check now' : 'Verify'}
+            </Button>
+            <CopyInstructionsButton domain={domain} />
+          </div>
         )}
-        {phase !== 'live' && <CopyInstructionsButton domain={domain} />}
       </div>
     </div>
   )
