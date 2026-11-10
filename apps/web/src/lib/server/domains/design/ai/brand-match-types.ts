@@ -1,6 +1,7 @@
 /**
  * The brand match's inputs, dependencies and result (brand-match.ts).
  */
+import type { Measures } from './measure-shots'
 import type { AppliedDesignChange, UntrustedChanges } from '@/lib/shared/design/apply-changes'
 import type { Fingerprint } from '@/lib/shared/design/fingerprint'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
@@ -48,6 +49,8 @@ export interface BrandMatchDeps {
   now?: () => number
   /** The font stage, off the request thread by default; gives no match past `deadlineMs`. */
   matchType?: (shot: Shot, deadlineMs: number) => Promise<TypeMatches>
+  /** The measure stage, off the request thread by default. */
+  measure?: (shots: readonly Shot[], primary: Shot) => Promise<Measures>
   /** Stores an image from the brand's site (favicon, logo, share image), giving its key. */
   storeAsset?: SiteAssetStore
 }
