@@ -58,6 +58,17 @@ const shown = () =>
   [...document.querySelectorAll('[cmdk-item]')].map((item) => item.textContent?.trim())
 
 describe('QuickFind', () => {
+  it('sits anchored near the top, so the box never moves as the results change', async () => {
+    show()
+    await typeIn('sort')
+    const box = document.querySelector<HTMLElement>('[data-quick-find]')!
+    const classes = box.className.split(/\s+/)
+    expect(classes).toContain('top-[15vh]')
+    expect(classes).toContain('translate-y-0')
+    expect(classes).not.toContain('top-[50%]')
+    expect(classes).not.toContain('translate-y-[-50%]')
+  })
+
   it('shows each setting with where it is, never an id', async () => {
     show()
     await typeIn('sort')
