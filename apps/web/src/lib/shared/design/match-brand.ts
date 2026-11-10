@@ -26,6 +26,8 @@ export const MATCH_BRAND = {
   cancel: 'Cancel',
   /** A follow-up chip, and the hero panel's prompt, when the site leads with a photo. */
   addHeroPhoto: 'Add a hero photo',
+  /** A follow-up chip when a match wrote Home words but Home is off. */
+  addHome: 'Add a Home page',
   /** Under a hero photo cut from a screenshot. */
   fromScreenshot: 'From your screenshot: replace with the original for best quality',
   adjustCrop: 'Adjust crop',

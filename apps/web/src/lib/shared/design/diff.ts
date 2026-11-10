@@ -38,6 +38,17 @@ export function designChanges(before: unknown, after: unknown, path = ''): Desig
   return canonical(before) === canonical(after) ? [] : [{ path, before, after }]
 }
 
+/**
+ * Fields the builder keeps for itself, not part of the look: when a brand
+ * match ran, and the face it could not match. Never listed as a change.
+ */
+const BOOKKEEPING = /^brand\.(matchedAt|unmatchedFont)(\.|$)/
+
+/** The changes a person sees between two designs: every leaf but the builder's bookkeeping. */
+export function shownChanges(before: unknown, after: unknown): DesignChange[] {
+  return designChanges(before, after).filter((change) => !BOOKKEEPING.test(change.path))
+}
+
 /** Whether two designs are the same, block ids given the same way, as the builder counts changes. */
 export function sameDesign(a: PortalDesign, b: PortalDesign): boolean {
   return designChanges(withBlockIds(a), withBlockIds(b)).length === 0

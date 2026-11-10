@@ -49,6 +49,19 @@ describe('changeLabel', () => {
 })
 
 describe('ChangeList', () => {
+  it('says "hero" for the composer and page titles in the hero, never "band"', () => {
+    const { container } = render(
+      <ChangeList
+        changes={[
+          { path: 'pages.home.composer', before: undefined, after: 'band' },
+          { path: 'layout.pageTitles', before: 'plain', after: 'band' },
+        ]}
+      />
+    )
+    expect(container.textContent).not.toMatch(/band/i)
+    expect(container.textContent).toContain('In the hero')
+  })
+
   it('never says who made a change', () => {
     const { container } = render(
       <ChangeList

@@ -388,6 +388,9 @@ export function wordsChanges(
     out.push(change('pages.feedback.copy.prompt', plainFit(words.prompt, 60), why))
   if (words.submit.trim())
     out.push(change('pages.feedback.copy.submit', plainFit(words.submit, 24), why))
+  // A match changes the look and words, never the portal's shape: with Home
+  // off, its blocks, menu tab and headline are left alone (the reply offers it).
+  if (!design.nav.home.on) return out
   // A Home already arranged keeps its order: the words do not move blocks about.
   const layout = keptHomeLayout(design.pages.home.blocks) ?? ARRANGEMENTS[words.home_layout]
   // With a headline, the composer moves into the band under it, so Home is
@@ -406,8 +409,6 @@ export function wordsChanges(
     out.push(
       change('pages.home.composer', 'band', 'the composer under Home’s headline, as the hero')
     )
-    out.push(change('nav.home.on', true, 'Home leads the portal'))
-    out.push(change('nav.home.tab', true, 'Home leads the portal'))
   }
   return out
 }

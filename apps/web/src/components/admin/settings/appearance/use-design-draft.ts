@@ -9,7 +9,7 @@ import {
   restorePortalDesignVersionFn,
   savePortalDesignDraftFn,
 } from '@/lib/server/functions/portal-design'
-import { designChanges } from '@/lib/shared/design/diff'
+import { shownChanges } from '@/lib/shared/design/diff'
 import { checkDesign } from '@/lib/shared/design/check-design'
 import { changeLabel } from '@/lib/shared/design/labels'
 import { designView, previewStylesheet } from '@/lib/shared/design/design-view'
@@ -424,7 +424,7 @@ export function useDesignDraft() {
     [refresh, flush]
   )
 
-  const changes = useMemo(() => designChanges(data.live, design), [data.live, design])
+  const changes = useMemo(() => shownChanges(data.live, design), [data.live, design])
   // The preview follows a step behind fast typing, so drawing it never holds up a keystroke.
   // The frame takes the design whole and builds its view there, as the server does.
   const preview = useDeferredValue(design)
@@ -505,7 +505,7 @@ export function useDesignDraft() {
 /** A change named for what it changed, such as "Brand colour", or by its first part when it changed several. */
 export function nameOfChange(before: PortalDesign, after: PortalDesign): string {
   const changed = [
-    ...new Set(designChanges(before, after).map((change) => changeLabel(change.path))),
+    ...new Set(shownChanges(before, after).map((change) => changeLabel(change.path))),
   ]
   if (!changed.length) return 'Change'
   return changed.length === 1 ? changed[0]! : `${changed[0]} and ${changed.length - 1} more`

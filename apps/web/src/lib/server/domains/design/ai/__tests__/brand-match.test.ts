@@ -259,8 +259,11 @@ function setup(
     })),
     ...over,
   }
+  // The portal matched has Home on, so its words are written there too.
+  const design = defaultDesign()
+  design.nav.home = { ...design.nav.home, on: true, tab: true }
   const input = {
-    design: defaultDesign(),
+    design,
     shots: shots.map(({ img }) => ({
       analysis: dataUrl(img),
       strip: dataUrl({ width: W, height: 200, data: img.data.slice(0, W * 200 * 4) }),
@@ -292,22 +295,26 @@ describe('brandMatch', () => {
     expect(result.ok).toBe(true)
     expect(steps).toEqual(['read', 'measure', 'fonts', 'hero', 'words'])
     // The roles were settled by rule (one blue): no classifier call. The voice read starts
-    // once the screenshots are read; the hero, asked twice at once so its answers can be
-    // checked against each other, comes before the words: a set from each writing angle at
-    // once, then the words critic's choice.
-    expect(order).toEqual([
-      'find',
-      'voice',
-      'hero',
-      'hero',
-      'words',
-      'words',
-      'words',
-      'layout',
-      'layout',
-      'layout',
-      'words_pick',
-    ])
+    // once the screenshots are read, and the words from it at once (a set from each writing
+    // angle, then the words critic's choice), beside the hero, asked twice at once so its
+    // answers can be checked against each other: the words never wait for the hero.
+    expect(order.slice(0, 2)).toEqual(['find', 'voice'])
+    expect(order.indexOf('words')).toBeLessThan(order.indexOf('hero'))
+    expect([...order].sort()).toEqual(
+      [
+        'find',
+        'voice',
+        'hero',
+        'hero',
+        'words',
+        'words',
+        'words',
+        'layout',
+        'layout',
+        'layout',
+        'words_pick',
+      ].sort()
+    )
     expect(Object.keys(result.timings)).toEqual([
       'read',
       'measure',
@@ -418,6 +425,20 @@ describe('brandMatch', () => {
     expect(plain.result.design.pages.home.headline?.accent).toBeUndefined()
   })
 
+  it('leaves a portal without Home as it is, offering Home as a follow-up', async () => {
+    const { deps, input } = setup()
+    input.design = defaultDesign()
+    const result = (await brandMatch(input, deps)) as BrandMatchResult
+    expect(result.design.nav.home.on).toBe(false)
+    expect(result.design.pages.home).toEqual(defaultDesign().pages.home)
+    expect(
+      result.applied.filter((c) => c.path.startsWith('nav.') || c.path.startsWith('pages.home'))
+    ).toEqual([])
+    expect(result.chips).toContain('Add a Home page')
+    // Home on: no offer.
+    expect((await run()).result.chips).not.toContain('Add a Home page')
+  })
+
   it('offers follow-ups for the brand colour and the hero', async () => {
     const { result } = await run()
     expect(result.chips).toContain('Use more blue')
@@ -482,8 +503,9 @@ describe('brandMatch', () => {
     const { deps, input } = setup()
     deps.now = () => t
     const family = deps.family
+    // Time runs short while the voice is read, before any words are asked for.
     deps.family = vi.fn(async <T>(request: FamilyRequest<T>) => {
-      if (request.family === 'hero') t = 39_500
+      if (request.family === 'voice') t = 39_500
       return family(request)
     }) as unknown as BrandMatchDeps['family']
     const result = (await brandMatch(input, deps)) as BrandMatchResult

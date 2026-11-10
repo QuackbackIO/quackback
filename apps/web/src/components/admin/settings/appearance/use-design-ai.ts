@@ -145,6 +145,8 @@ export type DesignAiTurn =
       capture?: BrandMatchCapture & { url: string }
       /** The brand's own face a match drew in the nearest bundled one, offered for upload. */
       font?: UnmatchedFont
+      /** The fonts drawn are only the nearest to the brand's, so the summary does not claim them. */
+      fontsNearest?: boolean
     }
 
 /** The logo a brand match placed: cut from one screenshot, as an icon and title or a full logo. */
@@ -359,6 +361,7 @@ export function useDesignAi({
             ? { capture: { ...result.capture, url: website.url } }
             : {}),
           ...(result.font ? { font: result.font } : {}),
+          ...(result.fontsNearest ? { fontsNearest: true } : {}),
         })
         // Stopped once the match landed: it stays, and the check does not start.
         if (signal?.aborted) {

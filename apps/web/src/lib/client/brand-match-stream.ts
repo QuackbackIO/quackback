@@ -65,6 +65,8 @@ export type BrandMatchOutcome =
       capture?: BrandMatchCapture
       /** The brand's own face drawn in the nearest bundled one, for the reply's upload. */
       font?: UnmatchedFont
+      /** The fonts drawn are only the nearest to the brand's, so the summary does not claim them. */
+      fontsNearest?: boolean
       /** What was measured, for the check that follows the match. */
       target?: {
         fingerprint: Fingerprint

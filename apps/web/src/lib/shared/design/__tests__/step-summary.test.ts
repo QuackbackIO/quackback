@@ -33,6 +33,29 @@ describe('matchSummary', () => {
   })
 })
 
+describe('matchSummary on fonts', () => {
+  it('names fonts only where a face changed, not a size, weight or case', () => {
+    expect(
+      matchSummary([
+        'brand.light.accent',
+        'brand.fonts.headingWeight',
+        'tune.headline.size',
+        'tune.headline.weight',
+        'tune.button.case',
+      ])
+    ).toBe('Matched your brand: colours.')
+    expect(matchSummary(['brand.light.accent', 'brand.fonts.body'])).toBe(
+      'Matched your brand: colours and fonts.'
+    )
+  })
+
+  it('does not claim fonts drawn only in the nearest face to the brand’s', () => {
+    expect(
+      matchSummary(['brand.light.accent', 'brand.fonts.heading'], { fontsNearest: true })
+    ).toBe('Matched your brand: colours.')
+  })
+})
+
 describe('partsChanged', () => {
   it('puts the hero, page background and Home in plain parts, once each', () => {
     expect(

@@ -138,14 +138,15 @@ describe("Home's launch plan card", () => {
     expect(open.map((task) => task.title)).toEqual([
       'Put Messenger on your site',
       'Publish your first article',
-      'Publish your first update',
+      // A portal goal: the brand leads the polish.
       'Make the portal look like your brand',
+      'Publish your first update',
       'Invite your team',
       'Connect an integration',
     ])
     const later = screen.getByText(/^Later:/)
     expect(later.textContent).toBe(
-      'Later: Put Messenger on your site, publish your first article, publish your first update, and 3 more'
+      'Later: Put Messenger on your site, publish your first article, make the portal look like your brand, and 3 more'
     )
     expect(within(later).getByRole('link', { name: 'Put Messenger on your site' })).toHaveAttribute(
       'href',

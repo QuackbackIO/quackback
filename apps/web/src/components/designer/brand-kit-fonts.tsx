@@ -5,6 +5,7 @@
  * such as a website's, show as Custom and stay until a pair is picked.
  */
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   OwnFont,
@@ -186,6 +187,13 @@ export function BrandKitFonts({ design, update }: { design: PortalDesign; update
   const { fonts } = design.brand
   const uploaded = uploadedFonts(fonts)
   const weights = headingWeightsOf(design)
+  // The brand's own face the last match could only draw in the nearest, until it is uploaded.
+  const missed = design.brand.unmatchedFont
+  const siteFont =
+    missed &&
+    !uploaded.some((font) => font.family.trim().toLowerCase() === missed.family.toLowerCase())
+      ? missed
+      : null
   return (
     <div id={THEME_FONTS_ID} className="scroll-mt-4">
       <PropertySection title={WORDS.fonts}>
@@ -267,6 +275,11 @@ export function BrandKitFonts({ design, update }: { design: PortalDesign; update
               }
             />
           </PropertyRow>
+        )}
+        {siteFont && (
+          <Button variant="outline" size="sm" onClick={() => requestOwnFont(siteFont)}>
+            Upload {siteFont.family}
+          </Button>
         )}
         <OwnFont update={update} />
       </PropertySection>

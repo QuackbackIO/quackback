@@ -6,7 +6,7 @@
  * pixels at a measuring size, kept in the browser, for the dimming check
  * before sending.
  */
-import { looksDimmed, type ShotBox } from '@/lib/shared/design/brand-shots'
+import { keyOutGround, looksDimmed, type ShotBox } from '@/lib/shared/design/brand-shots'
 import { imageForModel } from './image-palette'
 
 /**
@@ -199,7 +199,7 @@ export function boundedJpeg(
   return null
 }
 
-/** Part of a screenshot at its full size, as a PNG, for the portal's icon. */
+/** Part of a screenshot at its full size, as a PNG with the page around it clear, for the portal's icon. */
 export async function cropShot(shot: BrandShot, box: ShotBox): Promise<File> {
   const image = await decode(shot.url)
   const x = Math.round(box.x * shot.width)
@@ -209,7 +209,13 @@ export async function cropShot(shot: BrandShot, box: ShotBox): Promise<File> {
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
-  canvas.getContext('2d')?.drawImage(image, x, y, w, h, 0, 0, w, h)
+  const context = canvas.getContext('2d')
+  context?.drawImage(image, x, y, w, h, 0, 0, w, h)
+  // The page around the logo made clear, so a dark header does not show a slab of it.
+  if (context) {
+    const pixels = context.getImageData(0, 0, w, h)
+    if (keyOutGround(pixels.data, w, h)) context.putImageData(pixels, 0, 0)
+  }
   const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/png'))
   if (!blob) throw new Error('The icon could not be cut from the image.')
   return new File([blob], 'icon.png', { type: 'image/png' })

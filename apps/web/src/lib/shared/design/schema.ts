@@ -433,6 +433,17 @@ export const portalDesignV2 = z
          */
         matchedAt: z.string().datetime().optional(),
         /**
+         * The brand's own face the last match found on its site but could only
+         * draw in the nearest bundled one: Brand kit's fonts offer its upload.
+         */
+        unmatchedFont: z
+          .object({
+            family: z.string().trim().min(1).max(64),
+            slot: z.enum(['heading', 'body', 'both']),
+          })
+          .strict()
+          .optional(),
+        /**
          * An image for the band, such as a photo or a pattern, with what it
          * shows for those who cannot see it, or marked as decoration.
          */

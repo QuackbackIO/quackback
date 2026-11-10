@@ -11,7 +11,7 @@ import type { PortalDesignRevisionId, PrincipalId } from '@quackback/ids'
 import { db, type PortalDesignSource } from '@/lib/server/db'
 import { DomainException } from '@/lib/shared/errors'
 import { convertLegacyBranding } from '@/lib/shared/design/convert'
-import { designChanges } from '@/lib/shared/design/diff'
+import { shownChanges } from '@/lib/shared/design/diff'
 import { withBlockIds } from '@/lib/shared/design/home'
 import { mergePatch } from '@/lib/shared/design/merge-patch'
 import { tidyDesign, withHeroKeys } from '@/lib/shared/design/migrations'
@@ -132,7 +132,7 @@ export async function readDesignForEditing(): Promise<DesignEditorState> {
     revision,
     authors,
     draftSavedAt: state?.draftSavedAt?.toISOString() ?? null,
-    waiting: source === 'draft' ? designChanges(shownLive, shown).length : 0,
+    waiting: source === 'draft' ? shownChanges(shownLive, shown).length : 0,
   }
 }
 
