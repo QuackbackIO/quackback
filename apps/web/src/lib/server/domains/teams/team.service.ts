@@ -192,12 +192,23 @@ export async function countTeamMembers(teamId: TeamId): Promise<number> {
   return Number(row?.n ?? 0)
 }
 
-/** The principal ids of a team's members (for routing distribution). */
+/**
+ * The principal ids of a team's current members (for routing distribution and
+ * team notifications). A membership row whose principal is no longer a teammate
+ * (type `user`, role admin/member) is not a member.
+ */
 export async function listTeamMemberPrincipalIds(teamId: TeamId): Promise<PrincipalId[]> {
   const rows = await db
     .select({ principalId: teamMembers.principalId })
     .from(teamMembers)
-    .where(eq(teamMembers.teamId, teamId))
+    .innerJoin(principal, eq(teamMembers.principalId, principal.id))
+    .where(
+      and(
+        eq(teamMembers.teamId, teamId),
+        eq(principal.type, 'user'),
+        inArray(principal.role, ['admin', 'member'])
+      )
+    )
   return rows.map((r) => r.principalId)
 }
 
