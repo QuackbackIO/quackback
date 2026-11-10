@@ -14,6 +14,7 @@ import { Inspector, type InspectorPart } from './inspector'
 import { LogoPanel } from './logo-panel'
 import { MenuPartSettings } from './menu-part-settings'
 import { PagePanel } from './page-panel'
+import { revealFontSlot } from './brand-kit-fonts'
 import { PickedBlock } from './picked-block'
 import type { Crumb } from './properties/properties-panel'
 import type { MenuEditing } from './use-menu-editing'
@@ -165,6 +166,10 @@ export function PickedSettings({
           onPhone={onPhone}
           checks={checks?.filter((check) => check.part === selection).map((check) => check.text)}
           onSelect={onSelect}
+          onFonts={(slot) => {
+            onTheme()
+            void revealFontSlot(slot)
+          }}
           say={say}
         />
       )

@@ -77,7 +77,12 @@ import {
 } from '@/lib/shared/design/style-tokens'
 import { brandOf, everywhereValue, homeValuesOf, writeEverywhere } from './element-brand'
 import { BASICS, SECTION_PROPS, elementRowFind, elementRowLabel } from './element-rows'
-import { ElementStyleSection, applyChoice, rowChoiceOf } from './element-style-section'
+import {
+  ElementStyleSection,
+  applyChoice,
+  rowChoiceOf,
+  type FontSlot,
+} from './element-style-section'
 import { StyleField } from './element-styles'
 import { placeDetail, valueText } from './set-differently'
 import {
@@ -148,6 +153,7 @@ export function ElementPanel({
   onScreen,
   onUp,
   onJump,
+  onFonts,
   reach,
   measure,
   drawn = null,
@@ -172,6 +178,8 @@ export function ElementPanel({
   onUp: () => void
   /** Goes to a place the look is also set. */
   onJump?: (place: AlsoSet) => void
+  /** Opens the brand kit's fonts at a slot, from a heading's font row. */
+  onFonts?: (slot: FontSlot) => void
   /**
    * How many the canvas shows of its kind, on this page and in its block.
    * Only the page drawn can be counted, so the shared scope's count is this
@@ -623,7 +631,13 @@ export function ElementPanel({
       }
     >
       {at === 'everywhere' && !phone && (
-        <ElementStyleSection element={pick.element} name={name} design={design} update={update} />
+        <ElementStyleSection
+          element={pick.element}
+          name={name}
+          design={design}
+          update={update}
+          onFonts={onFonts}
+        />
       )}
       {basics.length > 0 && <PropertySection>{basics.map(row)}</PropertySection>}
       {groups.length > 0 && (

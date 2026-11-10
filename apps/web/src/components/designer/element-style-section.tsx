@@ -7,7 +7,6 @@
  * Picking a choice clears the exact values that would take its place.
  */
 import type { ReactNode } from 'react'
-import { closestWeight, uploadedFonts } from '@/components/admin/settings/appearance/fonts-section'
 import { setTune } from '@/components/admin/settings/appearance/tune-fields'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleElement, StyleProp } from '@/lib/shared/design/style-tokens'
@@ -15,13 +14,12 @@ import { everywhereValue, writeEverywhere } from './element-brand'
 import { elementStyleFind } from './element-rows'
 import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
 import { ScrubNumber } from './properties/scrub-number'
-import { FontFaces, FontField } from './properties/token-field'
-import { fontTokens } from './properties/tokens'
-import { FONT_NAMES, SECTIONS, STYLE_CHOICES, WORDS } from './properties/words'
+import { SummaryRow } from './properties/summary-row'
+import { faceName } from './properties/tokens'
+import { SECTIONS, STYLE_CHOICES, WORDS } from './properties/words'
 import { fontValue, layoutValue, shapeValue } from '@/lib/shared/design/defaults'
 
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
-type DesignFont = PortalDesign['brand']['fonts']['body']
 type Fonts = PortalDesign['brand']['fonts']
 
 /** A brand choice as tiles: its value, how it is written, and the exact values that take its place. */
@@ -233,66 +231,31 @@ export function applyChoice(
   for (const prop of choice.masks ?? []) writeEverywhere(draft, element, prop, undefined)
 }
 
+/** Which brand font an element's font row shows, and opens in the brand kit. */
+export type FontSlot = 'heading' | 'headline'
+
 /**
- * A brand font as an element's font row: a chip linked to the brand's slot.
- * There is no font for one element alone, so the row changes the brand's
- * own, and its hover says what that reaches.
+ * A brand font as an element's font row: a summary of the brand's font for
+ * it, which opens the brand kit's fonts at that slot, their one writer.
  */
 function BrandFontRow({
   slot,
   design,
-  update,
+  onFonts,
 }: {
-  slot: 'heading' | 'headline'
+  slot: FontSlot
   design: PortalDesign
-  update: NamedUpdate
+  onFonts: (slot: FontSlot) => void
 }) {
   const fonts = design.brand.fonts
-  const own = slot === 'headline' ? fonts.display : fonts.heading
-  const linked = slot === 'headline' && !fonts.display ? 'heading' : slot
-  const reach =
-    slot === 'headline'
-      ? 'Every headline'
-      : fonts.display
-        ? 'Every section heading'
-        : 'Every section heading and every headline'
-  const change = (font: DesignFont | undefined) =>
-    update((draft) => {
-      if (slot === 'headline') {
-        if (font) draft.brand.fonts.display = font
-        else delete draft.brand.fonts.display
-        return
-      }
-      if (!font) return
-      draft.brand.fonts.heading = font
-      draft.brand.fonts.headingWeight = closestWeight(font, draft.brand.fonts.headingWeight)
-    }, `${FONT_NAMES[slot]}, ${WORDS.theme.toLowerCase()}`)
+  const face = slot === 'headline' ? (fonts.display ?? fonts.heading) : fonts.heading
   return (
-    <PropertyRow
+    <SummaryRow
       label="Font"
+      value={faceName(face)}
       find={elementStyleFind(slot, 'Font')}
-      htmlFor={`element-${slot}-font`}
-      source={reach}
-    >
-      <FontField
-        id={`element-${slot}-font`}
-        label="Font"
-        value={linked}
-        slots={fontTokens(design)}
-        editor={(close) => (
-          <FontFaces
-            label={FONT_NAMES[slot]}
-            value={own}
-            uploaded={uploadedFonts(fonts)}
-            same={slot === 'headline' ? 'Same as the heading font' : undefined}
-            onChange={(font) => {
-              change(font)
-              close()
-            }}
-          />
-        )}
-      />
-    </PropertyRow>
+      onOpen={() => onFonts(slot)}
+    />
   )
 }
 
@@ -349,18 +312,21 @@ export function ElementStyleSection({
   name,
   design,
   update,
+  onFonts,
 }: {
   element: StyleElement
   /** The element as an undo step names it. */
   name: string
   design: PortalDesign
   update: NamedUpdate
+  /** Opens the brand kit's fonts at a slot; without it, a heading's font row is not shown. */
+  onFonts?: (slot: FontSlot) => void
 }) {
   // A choice that is one property's sits in that property's row.
   const choices = choicesOf(design, element).filter((choice) => !choice.prop)
   const rows: ReactNode[] = []
-  if (element === 'headline' || element === 'heading')
-    rows.push(<BrandFontRow key="font" slot={element} design={design} update={update} />)
+  if ((element === 'headline' || element === 'heading') && onFonts)
+    rows.push(<BrandFontRow key="font" slot={element} design={design} onFonts={onFonts} />)
   for (const choice of choices) {
     const masked = maskedBy(design, element, choice)
     const id = `element-style-${element}-${choice.label.toLowerCase()}`

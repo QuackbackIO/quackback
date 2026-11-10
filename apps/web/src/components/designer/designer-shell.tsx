@@ -25,7 +25,7 @@ import { DesignerAi } from './designer-ai'
 import { CanvasSkeleton, skeletonOf } from './canvas-skeleton'
 import { CANVAS_WIDTHS, DesignerCanvas } from './designer-canvas'
 import { ElementPanel, elementPanelKey } from './element-panel'
-import { revealThemeFonts } from './brand-kit-fonts'
+import { revealFontSlot, revealThemeFonts } from './brand-kit-fonts'
 import { usePickReach } from './use-pick-reach'
 import { backgroundPageOf } from '@/lib/shared/design/page-background'
 import { partOf, partSelector } from '@/lib/shared/design/parts-registry'
@@ -764,6 +764,10 @@ export function DesignerShell({
                             ? { values: pickReach.drawn, size, dark: canvasDark }
                             : null
                         }
+                        onFonts={(slot) => {
+                          openTheme()
+                          void revealFontSlot(slot)
+                        }}
                         onJump={(place) => {
                           if (place.block) return pick(`block-${place.block}` as Selection)
                           const to =

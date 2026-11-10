@@ -64,6 +64,7 @@ function mount(
     initialScope?: 'block'
     drawn?: Parameters<typeof ElementPanel>[0]['drawn']
     onScreen?: (screen: 'all' | 'phone') => void
+    onFonts?: (slot: 'heading' | 'headline') => void
   } = {}
 ) {
   const box = { design, labels: [] as Array<string | undefined>, state: 'base' as StyleState }
@@ -94,6 +95,7 @@ function mount(
       shared={extra.shared}
       initialScope={extra.initialScope}
       drawn={extra.drawn}
+      onFonts={extra.onFonts}
     />
   )
   const view = render(panel())
@@ -493,14 +495,20 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     expect(box.design.style).toBeUndefined()
   })
 
-  it('reads a headline’s brand colour choice, and its font from the brand', () => {
+  it('reads a headline’s brand colour choice, and its font from the brand kit, its one writer', () => {
     const design = home()
     design.brand.fonts.headlineColour = 'accent'
-    mount(headline, design)
+    const onFonts = vi.fn()
+    const { box } = mount(headline, design, { onFonts })
     expect(
       tiles('Text colour').getByRole('radio', { name: 'Brand colour', checked: true })
     ).toBeTruthy()
-    expect(style().getByLabelText('Font')).toBeTruthy()
+    // A summary of the brand's font, which opens the brand kit's fonts at the headline's slot.
+    const font = style().getByRole('button', { name: /^Font: / })
+    expect(style().queryByRole('combobox', { name: 'Font' })).toBeNull()
+    fireEvent.click(font)
+    expect(onFonts).toHaveBeenCalledExactlyOnceWith('headline')
+    expect(box.labels).toEqual([])
   })
 
   it('opened from Styles, changes every one of the kind only', () => {
