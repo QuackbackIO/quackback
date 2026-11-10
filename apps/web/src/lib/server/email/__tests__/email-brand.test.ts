@@ -51,6 +51,8 @@ describe('emailBranding', () => {
     const result = await emailBranding({ logoKey: 'logos/acme.png', featureFlags: FLAG_ON })
     expect(result.brand?.accent).toBe('#0c862c')
     expect(result.logoUrl).toBe('https://files.example/design/icon.png')
+    // A stored icon is no drawn image.
+    expect(result.drawn).toBeUndefined()
   })
 
   it('sends an SVG icon as the PNG the portal draws of it', async () => {
@@ -64,6 +66,7 @@ describe('emailBranding', () => {
     publish(() => {})
     const none = await emailBranding({ logoKey: null, featureFlags: FLAG_ON, name: 'Acme' })
     expect(none.logoUrl).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=\w+&kind=icon$/)
+    expect(none.drawn).toBe('icon')
     // The tile shows the design's title, so a new title is a new address.
     publish((d) => (d.brand.logo.name = 'Other'))
     const renamed = await emailBranding({ logoKey: null, featureFlags: FLAG_ON, name: 'Acme' })
@@ -88,6 +91,7 @@ describe('emailBranding', () => {
     publish((d) => (d.brand.logo.wordmark.light = { key: 'design/full.svg' }))
     const result = await emailBranding({ logoKey: 'logos/acme.png', featureFlags: FLAG_ON })
     expect(result.logoUrl).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=\w+&kind=logo$/)
+    expect(result.drawn).toBe('logo')
   })
 
   it('never sends an SVG workspace logo', async () => {

@@ -375,8 +375,9 @@ export function WidgetShell({
 
       <main className="relative z-10 flex-1 overflow-hidden min-h-0">{children}</main>
 
-      {/* Bottom tab bar + footer — solid so the hero backdrop never bleeds through. */}
-      <div
+      {/* Bottom tab bar + footer — solid so the hero backdrop never bleeds through. A
+          footer landmark, so nothing in the panel sits outside one. */}
+      <footer
         className="relative z-10 border-t border-border/40 shrink-0 bg-background"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
@@ -410,7 +411,8 @@ export function WidgetShell({
                         'flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors',
                         active
                           ? 'text-foreground'
-                          : 'text-muted-foreground/60 hover:text-muted-foreground'
+                          : // Solid muted text: a faded one falls below 4.5:1 on the panel.
+                            'text-muted-foreground hover:text-foreground'
                       )}
                     >
                       <div className="relative">
@@ -492,7 +494,7 @@ export function WidgetShell({
             </a>
           </div>
         ) : null}
-      </div>
+      </footer>
     </div>
   )
 }

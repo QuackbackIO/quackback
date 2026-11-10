@@ -115,6 +115,7 @@ export function PickedBlock({
     },
     nameOf,
     say,
+    gates: gates ?? ALL_PAGES,
   })
   const picked = blocks.find((each, i) => blockKey(each, i) === selection)
   const sources = useBlockSources(picked?.type === 'roadmap' ? picked.roadmapId : null)

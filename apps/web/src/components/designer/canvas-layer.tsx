@@ -11,7 +11,7 @@ import { ComposerWidthHandles } from './composer-width-handles'
 import { GridHandles } from './grid-handles'
 import { useComposerWidthEdit } from './use-composer-width'
 import { useGridEdit, type GridEditing } from './use-grid-edit'
-import { revealInFrame, useFrameRects } from './use-frame-rects'
+import { MENU_ROW_KEY, revealInFrame, useFrameRects } from './use-frame-rects'
 import { ElementOutlines, type OutlinedElement } from './element-outline'
 import { locateTarget, outlineTargets } from './change-outlines'
 import type { ChangeFlash } from './use-change-flash'
@@ -25,6 +25,7 @@ import {
   type ElementPick,
 } from '@/lib/shared/design/element-pick'
 import { destinationName } from '@/lib/shared/design/content-kinds'
+import { overlaps } from '@/lib/shared/design/layer-geometry'
 import { CHIP_NAME, keepFocus } from './settings-focus'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { OverridePage } from '@/lib/shared/design/style-overrides'
@@ -122,6 +123,8 @@ export function CanvasLayer({
       elements?.picked ?? null,
       ...otherKeys,
       ...flashKeys,
+      // The menu's items, which the chip of something small beside them, such as the logo, keeps clear of.
+      picked ? MENU_ROW_KEY : null,
     ],
     locate
   )
@@ -235,6 +238,7 @@ export function CanvasLayer({
   const homeBlocks = (elements?.design ?? grid?.design)?.pages.home.blocks ?? []
   const placeAt = block ? homeBlocks.findIndex((each, i) => blockKey(each, i) === block) : -1
   const pickedRect = picked ? (rects[picked] ?? null) : null
+  const menuRow = picked ? rects[MENU_ROW_KEY] : undefined
   const pointedRect =
     elements?.hovered && elements.hovered !== elements.picked && !resizing
       ? (rects[elements.hovered] ?? null)
@@ -247,6 +251,7 @@ export function CanvasLayer({
       }
       picked={pickedRect}
       pickedKey={picked}
+      avoid={menuRow && pickedRect && !overlaps(menuRow, pickedRect) ? [menuRow] : []}
       changed={
         flash
           ? {

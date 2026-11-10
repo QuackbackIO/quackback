@@ -91,6 +91,7 @@ export function PagePanel({
     setSelection: () => {},
     nameOf: (key) => treeRows(tree).find((row) => row.key === key)?.label,
     say: (words) => say?.(words),
+    gates,
   })
   return (
     <PropertiesPanel crumbs={crumbs} title={title} data-page-panel="" className="pb-24">

@@ -43,6 +43,7 @@ import {
   type HomeBlockType,
 } from './home'
 import type { GridPlace } from './home-grid'
+import { setLanding } from './menu'
 import { takeHomeLayout, type HomeLayout } from './home-layouts'
 import type { Selection } from './outline'
 import { PAGE_CHOICE_DEFAULTS, type PageChoices } from './page-choices'
@@ -67,8 +68,17 @@ export type DesignOp =
       settings: Readonly<Record<string, unknown>>
       locale?: string
     }
-  /** A new block under the block with id `after`, at its column; without one, under them all. */
-  | { op: 'block.add'; type: HomeBlockType; after?: string | null }
+  /**
+   * A new block under the block with id `after`, at its column; without one,
+   * under them all. With `turnOnHome`, Home is turned on too while it is off,
+   * as Quick find's Turn on Home does, so the block is seen.
+   */
+  | {
+      op: 'block.add'
+      type: HomeBlockType
+      after?: string | null
+      turnOnHome?: { gates: PortalPageGates }
+    }
   /**
    * A block dropped from Add at a cell of the grid the page draws. `from` is
    * Home's blocks as the drag began, laid out again before each drop is shown.
@@ -220,8 +230,12 @@ function run(draft: PortalDesign, op: DesignOp): DispatchResult {
       blocks[at] = next.block
       return { ok: true }
     }
-    case 'block.add':
-      return { ok: true, block: insertHomeBlock(draft, op.type, op.after) }
+    case 'block.add': {
+      const block = insertHomeBlock(draft, op.type, op.after)
+      // With the block in, Home is turned on as it is, never filled with starters.
+      if (op.turnOnHome && !draft.nav.home.on) setLanding(draft, op.turnOnHome.gates, 'home')
+      return { ok: true, block }
+    }
     case 'block.drop': {
       if (op.from) draft.pages.home.blocks = structuredClone(op.from) as HomeBlock[]
       const place = op.at

@@ -36,6 +36,12 @@ export interface EmailBranding {
   brand: EmailBrand | undefined
   /** The portal's name as its header shows it: the Brand kit title, else the workspace's. */
   title?: string
+  /**
+   * When the header image is one /brand.png draws from the published design,
+   * which: the icon (or initial tile) or the full logo. A sample of a draft
+   * draws its own in place of the address.
+   */
+  drawn?: 'icon' | 'logo'
 }
 
 /** Mail clients do not draw SVG, so an SVG logo is left out rather than sent broken. */
@@ -67,6 +73,21 @@ function drawnBrandUrl(doc: PortalDesign, workspaceName: string | null | undefin
   }
 }
 
+/** The header image in order of preference, and which drawn image it is, if one. */
+function headerImage(
+  icon: string | null | undefined,
+  drawn: ReturnType<typeof drawnBrandUrl>,
+  logoKey: string | null | undefined
+): Pick<EmailBranding, 'logoUrl' | 'drawn'> {
+  const stored = icon ? getEmailSafeUrl(icon) : null
+  if (stored) return { logoUrl: stored }
+  if (drawn.svgIcon) return { logoUrl: drawn.svgIcon, drawn: 'icon' }
+  if (drawn.fullLogo) return { logoUrl: drawn.fullLogo, drawn: 'logo' }
+  const workspace = workspaceLogo(logoKey)
+  if (workspace) return { logoUrl: workspace }
+  return drawn.tile ? { logoUrl: drawn.tile, drawn: 'icon' } : { logoUrl: undefined }
+}
+
 /**
  * A design's email brand: its colours, and its icon where mail clients draw
  * it (an SVG one drawn to PNG by the portal), else its full logo, else the
@@ -82,12 +103,7 @@ export function designEmailBranding(
   const title = doc.brand.logo.name?.trim() || workspaceName || undefined
   return {
     ...(title && { title }),
-    logoUrl:
-      (icon ? getEmailSafeUrl(icon) : null) ??
-      drawn.svgIcon ??
-      drawn.fullLogo ??
-      workspaceLogo(logoKey) ??
-      drawn.tile,
+    ...headerImage(icon, drawn, logoKey),
     brand: emailPalette(doc),
   }
 }

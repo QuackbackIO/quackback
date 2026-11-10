@@ -356,7 +356,11 @@ export function PropertyRow({
         {...refusal.handlers}
       >
         <span className="flex w-[92px] shrink-0 items-center gap-0.5">
-          <label htmlFor={htmlFor} className="min-w-0 truncate text-xs text-muted-foreground">
+          {/* A label longer than the column wraps, never cut off. */}
+          <label
+            htmlFor={htmlFor}
+            className="min-w-0 text-xs leading-tight break-words text-muted-foreground"
+          >
             {label}
           </label>
           {help && <Help text={help} />}

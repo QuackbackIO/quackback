@@ -272,7 +272,7 @@ export function DesignerShell({
   const { refuse, clear: clearRefusal } = refusalLines
   const refusals = useMemo(() => ({ refuse, clear: clearRefusal }), [refuse, clearRefusal])
   const update = useCountedUpdate(draft, page, refusals)
-  const blocks = useBlockActions({ draft, selection, setSelection: pick, nameOf, say })
+  const blocks = useBlockActions({ draft, selection, setSelection: pick, nameOf, say, gates })
   const { structural, onWords } = useCanvasInput(design, update, locale)
   const menu = useMenuEditing({ design, gates, update, page, setPage, pick, say })
   // A block dragged from Add onto the page: dropped, it is picked and the sheet closes.

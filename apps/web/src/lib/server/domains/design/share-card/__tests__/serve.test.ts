@@ -3,7 +3,12 @@ import { designView } from '@/lib/shared/design/design-view'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { portalFavicon, portalShareImage, type PortalHeadTemplates } from '@/lib/shared/portal-head'
 import { decodePng, encodePng } from '../../extract/png'
-import { serveBrandImage, shareCardSample, type BrandImageDeps } from '../serve'
+import {
+  brandSquareSample,
+  serveBrandImage,
+  shareCardSample,
+  type BrandImageDeps,
+} from '../serve'
 
 const red = () => {
   const data = new Uint8Array(40 * 20 * 4)
@@ -259,5 +264,40 @@ describe('shareCardSample', () => {
     cjk.brand.logo.name = '反馈中心'
     const settings = { name: 'Acme', brandingData: { logoUrl: '/api/storage/logo.png' } }
     expect(await shareCardSample(cjk, settings, value)).toBe('/api/storage/logo.png')
+  })
+})
+
+describe('brandSquareSample', () => {
+  const bytesOf = (url: string) => Buffer.from(url.split(',')[1]!, 'base64')
+
+  it('is the very initial tile /brand.png serves once the design is published', async () => {
+    const doc = defaultDesign()
+    doc.brand.light.accent = '#0c862c'
+    const { value, settings } = deps(doc)
+    const served = await serveBrandImage(queryOf(portalFavicon(settings)), value)
+    const sample = await brandSquareSample(doc, 'Acme Corp', 'icon', value)
+    expect(sample.startsWith('data:image/png;base64,')).toBe(true)
+    expect(bytesOf(sample).equals(Buffer.from(await served.arrayBuffer()))).toBe(true)
+  })
+
+  it('is the very full logo /brand.png serves for email headers', async () => {
+    const doc = defaultDesign()
+    doc.brand.logo.wordmark.light = { key: 'logos/full.png' }
+    const { value } = deps(doc, red())
+    const served = await serveBrandImage(new URLSearchParams('v=x&kind=logo'), value)
+    const sample = await brandSquareSample(doc, 'Acme Corp', 'logo', value)
+    expect(bytesOf(sample).equals(Buffer.from(await served.arrayBuffer()))).toBe(true)
+    const img = decodePng(new Uint8Array(bytesOf(sample)))
+    const mid = (img.height / 2) * img.width * 4 + (img.width / 2) * 4
+    expect([...img.data.subarray(mid, mid + 3)]).toEqual([220, 20, 20])
+  })
+
+  it("draws the draft's own colour, whatever is published", async () => {
+    const draft = defaultDesign()
+    draft.brand.light.accent = '#1414dc'
+    const { value } = deps(defaultDesign())
+    const img = decodePng(new Uint8Array(bytesOf(await brandSquareSample(draft, 'A', 'icon', value))))
+    const o = ((img.height / 2) * img.width + img.width - 20) * 4
+    expect([...img.data.subarray(o, o + 3)]).toEqual([0x14, 0x14, 0xdc])
   })
 })

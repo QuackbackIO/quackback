@@ -2,6 +2,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
 import type { HomeBlockType } from '@/lib/shared/design/home'
 import { blockKey, BLOCK_NAMES, type Selection } from '@/lib/shared/design/outline'
+import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { dispatcher } from './dispatcher'
 import { focusPicked } from './settings-focus'
 
@@ -24,6 +25,7 @@ export function useBlockActions({
   setSelection,
   nameOf,
   say,
+  gates,
 }: {
   draft: Pick<ReturnType<typeof useDesignDraft>, 'design' | 'update'>
   selection: Selection | null
@@ -31,6 +33,8 @@ export function useBlockActions({
   /** A block's name as the outline shows it. */
   nameOf: (key: Selection) => string | undefined
   say: (text: string) => void
+  /** The pages that exist, for Home turned on by a block added while it is off. */
+  gates: PortalPageGates
 }) {
   const blocks = draft.design.pages.home.blocks
   const indexOf = (key: Selection | null) =>
@@ -51,13 +55,27 @@ export function useBlockActions({
     dispatch({ op: 'block.place', id: idOf(key), place }, 'Move block')
     say(movedSaid(nameOf(key) ?? 'Block', positionOf(at, place, blocks.length), blocks.length))
   }
-  /** Adds a block under the picked block, else under them all; then picks it. */
+  /**
+   * Adds a block under the picked block, else under them all; then picks it
+   * and puts focus on its chip. While Home is off, the same step turns Home
+   * on as Quick find's Turn on Home does, so the block is seen and one undo
+   * takes back both.
+   */
   const addBlock = (type: HomeBlockType) => {
-    const after = selection?.startsWith('block-') ? idOf(selection) : null
+    const homeOff = !draft.design.nav.home.on
+    const after = !homeOff && selection?.startsWith('block-') ? idOf(selection) : null
     const afterName = after && selection ? nameOf(selection) : undefined
-    const done = dispatch({ op: 'block.add', type, after }, `Add ${BLOCK_NAMES[type]}`)
+    const name = BLOCK_NAMES[type]
+    const done = homeOff
+      ? dispatch({ op: 'block.add', type, turnOnHome: { gates } }, `Add ${name} and turn on Home`)
+      : dispatch({ op: 'block.add', type, after }, `Add ${name}`)
     if (done.ok && done.block) setSelection(blockKey(done.block, 0))
-    say(`${BLOCK_NAMES[type]} added ${afterName ? `under ${afterName}` : 'at the end of Home'}.`)
+    say(
+      homeOff
+        ? `Home turned on. ${name} added. Undo takes both back.`
+        : `${name} added ${afterName ? `under ${afterName}` : 'at the end of Home'}.`
+    )
+    if (done.ok && done.block) focusPicked(true)
   }
 
   /**
