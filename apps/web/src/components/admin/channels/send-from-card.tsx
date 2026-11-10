@@ -5,7 +5,7 @@
  * address the customer wrote to, once the workspace receives email.
  */
 import { useState } from 'react'
-import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ChevronDownIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import {
@@ -276,7 +276,7 @@ export function SendFromCard({
                 disabled={setSender.isPending}
                 onClick={() => drop(surface)}
               >
-                <XMarkIcon className="size-4" />
+                <XMarkIcon className="size-4" aria-hidden="true" />
               </Button>
             )}
           </>
@@ -327,8 +327,8 @@ export function SendFromCard({
           <div className="py-3.5">
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
-                <PlusIcon className="size-4" />
                 Use a different address for
+                <ChevronDownIcon className="size-3.5" aria-hidden="true" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 {addable.map(({ surface, label }) => (
