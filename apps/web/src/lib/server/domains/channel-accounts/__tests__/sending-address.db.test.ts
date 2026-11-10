@@ -102,8 +102,9 @@ import {
   addSendingAddress,
   removeSendingAddress,
   sendTestEmail,
-  sendingAddressMode,
+  addressModeFor,
 } from '../sending-address'
+import { sendingIdentityContext } from '../outbound-identity'
 import { deleteSendingDomain, SendingDomainInUseError } from '../channel-account.service'
 
 const identity = (domain: string): SesDomainIdentity => ({
@@ -427,7 +428,9 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
     })
   })
 
-  describe('sendingAddressMode', () => {
+  describe('addressModeFor', () => {
+    const sendingAddressMode = async () => addressModeFor(await sendingIdentityContext())
+
     it('is any on a single-workspace server, whatever it can set up', async () => {
       vi.stubEnv('QUACKBACK_TENANCY', '')
       expect(await sendingAddressMode()).toBe('any')

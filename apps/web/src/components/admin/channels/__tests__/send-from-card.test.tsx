@@ -71,6 +71,7 @@ function renderCard(
     rows: Array<keyof EmailSendersDTO>
     platformFrom: string | null
     platformName: string
+    platformInbox: string | null
   }> = {}
 ) {
   return render(
@@ -79,6 +80,7 @@ function renderCard(
       identities={[HELLO, NEWS, PENDING]}
       platformFrom={over.platformFrom === undefined ? PLATFORM : over.platformFrom}
       platformName={over.platformName}
+      platformInbox={over.platformInbox}
       forwardingTarget={over.forwardingTarget ?? null}
       forwardingTargetPermitted={over.forwardingTargetPermitted ?? null}
       hasInboundRoute={over.hasInboundRoute ?? false}
@@ -109,9 +111,55 @@ describe('a server with its own default address', () => {
   })
 })
 
+describe('an inbox address that cannot send yet', () => {
+  const unverifiedInbox = {
+    senders: { support: { mode: 'inbox' as const } },
+    hasInboundRoute: true,
+    forwardingTarget: 'support@acme.com',
+    forwardingTargetPermitted: false,
+  }
+
+  it("names the workspace's own inbox on the platform, which replies fall back to", () => {
+    renderCard({ ...unverifiedInbox, platformInbox: 'Acme <acme@in.platform.test>' })
+    expect(
+      screen.getByText(
+        "support@acme.com isn't verified yet, so replies come from Acme <acme@in.platform.test>."
+      )
+    ).toBeTruthy()
+  })
+
+  it('names the default when one is chosen, which comes first', () => {
+    renderCard({
+      ...unverifiedInbox,
+      senders: { ...unverifiedInbox.senders, default: { mode: 'address', id: HELLO.id } },
+      platformInbox: 'Acme <acme@in.platform.test>',
+    })
+    expect(
+      screen.getByText(`support@acme.com isn't verified yet, so replies come from ${HELLO.label}.`)
+    ).toBeTruthy()
+  })
+})
+
 describe('a chosen address that cannot send', () => {
   it('says the default goes out from the platform address meanwhile', () => {
     renderCard({ senders: { default: { mode: 'address', id: PENDING.id } } })
+    expect(
+      screen.getByText(`help@pending.example isn't verified yet, so email sends from ${PLATFORM}.`)
+    ).toBeTruthy()
+  })
+
+  it('reads the address off a label whose name has brackets of its own', () => {
+    render(
+      <SendFromCard
+        senders={{ ...NONE, default: { mode: 'address', id: 'ca_odd' } }}
+        identities={[{ id: 'ca_odd', label: 'Acme <Support> <help@pending.example>', live: false }]}
+        platformFrom={PLATFORM}
+        forwardingTarget={null}
+        forwardingTargetPermitted={null}
+        hasInboundRoute={false}
+        onError={() => undefined}
+      />
+    )
     expect(
       screen.getByText(`help@pending.example isn't verified yet, so email sends from ${PLATFORM}.`)
     ).toBeTruthy()

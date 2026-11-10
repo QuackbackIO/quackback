@@ -61,13 +61,9 @@ const log = logger.child({ component: 'sending-address' })
 export type SendingAddressMode = 'any' | 'verified-domains' | 'unavailable'
 
 /** The mode for a guard context: the same answer the guard gives for an unknown From. */
-function addressModeFor(ctx: SendingIdentityContext): SendingAddressMode {
+export function addressModeFor(ctx: SendingIdentityContext): SendingAddressMode {
   if (!ctx.pooled) return 'any'
   return customSendingDomainsAvailable() ? 'verified-domains' : 'unavailable'
-}
-
-export async function sendingAddressMode(): Promise<SendingAddressMode> {
-  return addressModeFor(await sendingIdentityContext())
 }
 
 /** The A-label domain of an address, or null when it has none. */

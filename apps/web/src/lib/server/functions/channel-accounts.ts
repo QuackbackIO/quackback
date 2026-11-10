@@ -39,7 +39,10 @@ import {
   setEmailSender,
   type EmailSenderSurface,
 } from '@/lib/server/domains/channel-accounts/email-senders'
-import { permittedSendingIdentity } from '@/lib/server/domains/channel-accounts/outbound-identity'
+import {
+  isSendingIdentityPermitted,
+  sendingIdentityContext,
+} from '@/lib/server/domains/channel-accounts/outbound-identity'
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import {
@@ -51,7 +54,7 @@ import {
   addSendingAddress,
   removeSendingAddress,
   sendTestEmail,
-  sendingAddressMode,
+  addressModeFor,
 } from '@/lib/server/domains/channel-accounts/sending-address'
 import {
   domainActionMessage,
@@ -129,6 +132,15 @@ export interface ChannelAccountDTO {
   createdAt: string
 }
 
+/**
+ * A sending address as the settings page lists it, with the send guard's own
+ * answer for it: whether email can leave from it right now. The page shows a
+ * domain's progress from the domain, but only the guard knows every way an
+ * address is or is not sendable (a verified parent domain, the platform's own
+ * address, a server that sends from anything).
+ */
+export type SendingAddressDTO = ChannelAccountDTO & { sendable: boolean }
+
 /** Pre-flight findings for a domain (see `preflight.ts`). Every field may be absent. */
 export interface SendingDomainPreflightDTO {
   dnsHost?: 'cloudflare' | 'route53' | 'godaddy' | 'namecheap' | 'google' | 'other'
@@ -193,7 +205,7 @@ export interface EmailChannelConfigDTO {
    */
   forwardingTargetPermitted: boolean | null
   inboundRoute: ChannelAccountDTO | null
-  sendingAddresses: ChannelAccountDTO[]
+  sendingAddresses: SendingAddressDTO[]
   domains: SendingDomainDTO[]
   /**
    * The workspace's own address, which it receives on with nothing configured.
@@ -207,11 +219,14 @@ export interface EmailChannelConfigDTO {
    */
   platformAddress: string | null
   /**
-   * Which addresses the add form accepts (see `sendingAddressMode`): any
+   * Which addresses the add form accepts (see `addressModeFor`): any
    * address, addresses whose domain can be set up, or only the default.
    */
   addressMode: 'any' | 'verified-domains' | 'unavailable'
-  /** The address mail sends from when no sending address is live, or null when none is set. */
+  /**
+   * The From email leaves with when no sending address is chosen, as an inbox
+   * shows it ("Name <address>"), or null when this install has none configured.
+   */
   defaultFrom: string | null
   /**
    * Set when the email provider has paused this workspace's sending, with the
@@ -220,14 +235,13 @@ export interface EmailChannelConfigDTO {
   sendingPaused: { cause: string | null } | null
 }
 
-/** This install's default From, or null when it has none configured. */
-async function defaultFromAddress(): Promise<string | null> {
-  const { getEmailFrom } = await import('@quackback/email')
-  try {
-    return getEmailFrom()
-  } catch {
-    return null
-  }
+/**
+ * The From a workspace's mail carries on the platform address, as an inbox
+ * shows it: the send point's own decision, so a page never names it differently.
+ */
+async function platformFromFor(workspaceName: string | null | undefined): Promise<string | null> {
+  const { platformFromPreview } = await import('@quackback/email')
+  return platformFromPreview(workspaceName)
 }
 
 const toAccount = (a: ChannelAccount, domains: EmailSendingDomain[] = []): ChannelAccountDTO => {
@@ -282,12 +296,16 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
     // Read by the workspace Email page and the support inbox page alike.
     assertAnyPermission(await requireAuth(), SUPPORT_SENDER_PERMISSIONS)
     const platformAddress = platformInboxAddress(currentMailSlug())
-    const defaultFrom = await defaultFromAddress()
-    const addressMode = await sendingAddressMode()
+    // One read of the guard's context answers every "may this be sent as"
+    // question on the page. The pure rule, not the send-time check: a page
+    // read is not a refused send, and must not log one.
+    const guard = await sendingIdentityContext()
+    const addressMode = addressModeFor(guard)
     const sendingPaused = await sesTenantPausedNotice()
     const teamId = await defaultTeamId()
     const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
     const workspaceName = (await requireSettingsCached()).name
+    const defaultFrom = await platformFromFor(workspaceName)
     const choices = await getEmailSenders()
     const senders = Object.fromEntries(
       EMAIL_SENDER_SURFACES.map((surface) => {
@@ -326,12 +344,15 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
       workspaceName,
       senders,
       forwardingTargetPermitted: forwardingTarget
-        ? (await permittedSendingIdentity(forwardingTarget)) !== null
+        ? isSendingIdentityPermitted(forwardingTarget, guard)
         : null,
       inboundRoute: inbound ? toAccount(inbound, domains) : null,
       sendingAddresses: accounts
         .filter((a) => a.role === 'sending')
-        .map((a) => toAccount(a, domains)),
+        .map((a) => ({
+          ...toAccount(a, domains),
+          sendable: a.address ? isSendingIdentityPermitted(a.address, guard) : false,
+        })),
       domains: domains.map(toDomain),
       platformAddress,
       addressMode,
@@ -435,10 +456,9 @@ export const getSurfaceSenderFn = createServerFn({ method: 'GET' })
     const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
     const workspaceName = (await requireSettingsCached()).name?.trim()
     const resolved = await resolveSender({ surface: data.surface })
-    const from = resolved?.from ?? (await defaultFromAddress())
-    if (!from) return { from: null }
-    const name = resolved?.senderName?.trim() || workspaceName
-    const address = bareSenderAddress(from)
+    if (!resolved) return { from: await platformFromFor(workspaceName) }
+    const name = resolved.senderName?.trim() || workspaceName
+    const address = bareSenderAddress(resolved.from)
     return { from: name ? `${name} <${address}>` : address }
   })
 

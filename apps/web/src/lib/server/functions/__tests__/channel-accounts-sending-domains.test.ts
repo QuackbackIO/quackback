@@ -35,7 +35,7 @@ const hoisted = vi.hoisted(() => ({
   getEmailSenders: vi.fn(),
   setEmailSender: vi.fn(),
   updateName: vi.fn(),
-  permitted: vi.fn(),
+  guardContext: vi.fn(),
   resolveSender: vi.fn(),
 }))
 
@@ -48,7 +48,7 @@ vi.mock('@/lib/server/domains/channel-accounts/outbound-identity', async (import
   ...(await importOriginal<
     typeof import('@/lib/server/domains/channel-accounts/outbound-identity')
   >()),
-  permittedSendingIdentity: hoisted.permitted,
+  sendingIdentityContext: hoisted.guardContext,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.helpers', async (importOriginal) => ({
@@ -60,7 +60,7 @@ vi.mock('@/lib/server/domains/channel-accounts/sending-address', () => ({
   addSendingAddress: hoisted.addAddress,
   removeSendingAddress: hoisted.removeAddress,
   sendTestEmail: hoisted.sendTest,
-  sendingAddressMode: hoisted.addressMode,
+  addressModeFor: hoisted.addressMode,
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', async (importOriginal) => ({
@@ -73,11 +73,6 @@ vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', async (importOr
     typeof import('@/lib/server/domains/channel-accounts/sender-resolver')
   >()),
   resolveSender: hoisted.resolveSender,
-}))
-
-vi.mock('@quackback/email', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@quackback/email')>()),
-  getEmailFrom: () => 'Quackback Cloud <noreply@mail.quackback.test>',
 }))
 
 vi.mock(
@@ -146,7 +141,21 @@ beforeEach(() => {
   actingWith('settings.manage', 'channel_account.manage')
   hoisted.defaultTeamId.mockResolvedValue('team_1')
   hoisted.getEmailSenders.mockResolvedValue(new Map())
+  hoisted.guardContext.mockResolvedValue(guard())
+  hoisted.addressMode.mockReturnValue('verified-domains')
+  vi.stubEnv('EMAIL_FROM', 'noreply@mail.quackback.test')
 })
+
+/** The send guard's context for a shared server, with these domains verified. */
+function guard(verifiedDomains: string[] = []) {
+  return {
+    verifiedDomains,
+    platformFrom: 'noreply@mail.quackback.test',
+    inboundDomain: null,
+    mailSlug: null,
+    pooled: true,
+  }
+}
 
 describe('restartSendingDomainChecksFn and deleteSendingDomainFn', () => {
   it('asks for a retry on a transient provider failure', async () => {
@@ -309,7 +318,7 @@ describe('getEmailChannelConfigFn', () => {
   it.each(['any', 'verified-domains', 'unavailable'] as const)(
     'tells the page the %s address mode the server decided',
     async (mode) => {
-      hoisted.addressMode.mockResolvedValue(mode)
+      hoisted.addressMode.mockReturnValue(mode)
       hoisted.defaultTeamId.mockResolvedValue(null)
       expect(await getConfig()).toMatchObject({ addressMode: mode })
     }
@@ -318,7 +327,7 @@ describe('getEmailChannelConfigFn', () => {
 
 describe('getEmailChannelConfigFn domains', () => {
   it('returns a domain no address uses, so the page can list it', async () => {
-    hoisted.addressMode.mockResolvedValue('verified-domains')
+    hoisted.addressMode.mockReturnValue('verified-domains')
     hoisted.getInboundRoute.mockResolvedValue(null)
     hoisted.listChannelAccounts.mockResolvedValue([])
     hoisted.listSendingDomains.mockResolvedValue([
@@ -343,7 +352,7 @@ describe('getEmailChannelConfigFn domains', () => {
 
 describe('the sending domain DTO', () => {
   it.each(['easy', 'byo', 'shared'] as const)('carries the %s signing mode', async (dkimMode) => {
-    hoisted.addressMode.mockResolvedValue('verified-domains')
+    hoisted.addressMode.mockReturnValue('verified-domains')
     hoisted.getInboundRoute.mockResolvedValue(null)
     hoisted.listChannelAccounts.mockResolvedValue([])
     hoisted.listSendingDomains.mockResolvedValue([
@@ -375,7 +384,7 @@ describe('the sending domain DTO', () => {
 
 describe('choosing which address each kind of email sends from', () => {
   it('reports every surface, the workspace name, and whether the forwarded address may send', async () => {
-    hoisted.addressMode.mockResolvedValue('verified-domains')
+    hoisted.addressMode.mockReturnValue('verified-domains')
     hoisted.listChannelAccounts.mockResolvedValue([])
     hoisted.listSendingDomains.mockResolvedValue([])
     hoisted.getInboundRoute.mockResolvedValue({
@@ -394,7 +403,6 @@ describe('choosing which address each kind of email sends from', () => {
         ['support', { mode: 'inbox', account: null }],
       ])
     )
-    hoisted.permitted.mockResolvedValue(null)
 
     const config = (await getConfig()) as Record<string, unknown>
     expect(config.workspaceName).toBe('Acme')
@@ -405,18 +413,48 @@ describe('choosing which address each kind of email sends from', () => {
       changelog: null,
       status: null,
     })
-    expect(hoisted.permitted).toHaveBeenCalledWith('support@acme.com')
     expect(config.forwardingTargetPermitted).toBe(false)
+
+    hoisted.guardContext.mockResolvedValue(guard(['acme.com']))
+    expect(await getConfig()).toMatchObject({ forwardingTargetPermitted: true })
+  })
+
+  it('says for each address whether email can leave from it now, as the guard decides', async () => {
+    const row = (id: string, address: string) => ({
+      id,
+      role: 'sending',
+      address,
+      senderName: null,
+      config: {},
+      inboundTrust: 'strict',
+      sendingDomainId: null,
+      createdAt: new Date('2026-11-01T09:00:00.000Z'),
+    })
+    hoisted.getInboundRoute.mockResolvedValue(null)
+    hoisted.listSendingDomains.mockResolvedValue([])
+    hoisted.listChannelAccounts.mockResolvedValue([
+      row('a1', 'help@mail.acme.com'),
+      row('a2', 'help@elsewhere.example'),
+      row('a3', 'noreply@mail.quackback.test'),
+    ])
+    hoisted.guardContext.mockResolvedValue(guard(['acme.com']))
+    const config = (await getConfig()) as { sendingAddresses: Array<Record<string, unknown>> }
+    expect(config.sendingAddresses.map((a) => [a.id, a.sendable])).toEqual([
+      ['a1', true],
+      ['a2', false],
+      ['a3', true],
+    ])
+    // One read of the guard's context answers for every address on the page.
+    expect(hoisted.guardContext).toHaveBeenCalledTimes(1)
   })
 
   it('says nothing about a forwarded address when none is forwarded', async () => {
-    hoisted.addressMode.mockResolvedValue('verified-domains')
+    hoisted.addressMode.mockReturnValue('verified-domains')
     hoisted.listChannelAccounts.mockResolvedValue([])
     hoisted.listSendingDomains.mockResolvedValue([])
     hoisted.getInboundRoute.mockResolvedValue(null)
     const config = (await getConfig()) as Record<string, unknown>
     expect(config.forwardingTargetPermitted).toBeNull()
-    expect(hoisted.permitted).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -503,7 +541,7 @@ describe('who may change sending', () => {
     'the email config reads with %s',
     async (permission) => {
       actingWith(permission)
-      hoisted.addressMode.mockResolvedValue('verified-domains')
+      hoisted.addressMode.mockReturnValue('verified-domains')
       hoisted.defaultTeamId.mockResolvedValue(null)
       await expect(getConfig()).resolves.toMatchObject({ addressMode: 'verified-domains' })
     }

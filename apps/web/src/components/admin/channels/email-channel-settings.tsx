@@ -75,25 +75,23 @@ function useEmailConfigView() {
   const workspaceName = data?.workspaceName ?? ''
   const addresses = data?.sendingAddresses ?? []
   const domains = data?.domains ?? []
-  const defaultFrom = data?.defaultFrom ?? null
-  const platformFrom = defaultFrom
+  // Named by the server, the way the send itself names it.
+  const platformFrom = data?.defaultFrom ?? null
+  // One workspace on its own server falls back to that server's own address.
+  const platformName = data?.addressMode === 'any' ? 'Server default' : 'Quackback address'
+  // The workspace's own inbox on the platform, which a reply to an emailed-in
+  // conversation falls back to before the platform's general address.
+  const platformInbox = data?.platformAddress
     ? workspaceName
-      ? `${workspaceName} <${bareAddress(defaultFrom)}>`
-      : bareAddress(defaultFrom)
+      ? `${workspaceName} <${data.platformAddress}>`
+      : data.platformAddress
     : null
-  // One workspace on its own server sends from any address it is given, so
-  // every address is usable there and the fallback is the server's own.
-  const anyAddress = data?.addressMode === 'any'
-  const platformName = anyAddress ? 'Server default' : 'Quackback address'
-  const now = new Date()
-  const identities: SenderIdentity[] = oldestFirst(addresses).map((a) => {
-    const domain = domainOf(a, domains)
-    return {
-      id: a.id,
-      label: senderLabel(a, workspaceName),
-      live: anyAddress || !domain || domainPhase(domain, now) === 'live',
-    }
-  })
+  // Whether an address can send is the send guard's answer, from the server.
+  const identities: SenderIdentity[] = oldestFirst(addresses).map((a) => ({
+    id: a.id,
+    label: senderLabel(a, workspaceName),
+    live: a.sendable,
+  }))
   return {
     data,
     workspaceName,
@@ -102,6 +100,7 @@ function useEmailConfigView() {
     senders: data?.senders ?? NO_SENDERS,
     platformFrom,
     platformName,
+    platformInbox,
     identities,
   }
 }
@@ -134,6 +133,7 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
         identities={view.identities}
         platformFrom={view.platformFrom}
         platformName={view.platformName}
+        platformInbox={view.platformInbox}
         forwardingTarget={inboundTarget(data?.inboundRoute)}
         forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
         hasInboundRoute={!!data?.inboundRoute}
@@ -165,6 +165,7 @@ export function SupportInboxSettings({ canManageSending }: { canManageSending: b
         identities={view.identities}
         platformFrom={view.platformFrom}
         platformName={view.platformName}
+        platformInbox={view.platformInbox}
         forwardingTarget={inboundTarget(data?.inboundRoute)}
         forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
         hasInboundRoute={!!data?.inboundRoute}
@@ -366,10 +367,9 @@ type SendingAddress = {
   sendingDomainId?: string | null
   sendingDomain: { domain: string; status: string } | null
   createdAt?: string
+  /** Whether email can leave from it right now (the send guard's answer). */
+  sendable: boolean
 }
-
-/** The bare address inside a `Name <address>` From, or the string as given. */
-const bareAddress = (from: string): string => /<([^>]+)>/.exec(from)?.[1] ?? from
 
 /** "Sender name <address>", the sender name being the workspace's when unset. */
 const senderLabel = (a: SendingAddress, workspaceName: string): string => {
