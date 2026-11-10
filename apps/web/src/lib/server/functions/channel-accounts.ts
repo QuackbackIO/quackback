@@ -398,15 +398,18 @@ export const createSendingAddressFn = createServerFn({ method: 'POST' })
     // domain with it and sends from the default until the domain is live; the
     // send guard reads the domain, so a pending address claims nothing. See
     // `sending-address.ts`.
-    return withDomainActionMessage('address', async () =>
-      toAccount(
-        await addSendingAddress({
-          owningTeamId: teamId,
-          address: data.address,
-          senderName: data.senderName ?? null,
-        })
-      )
-    )
+    return withDomainActionMessage('address', async () => {
+      const added = await addSendingAddress({
+        owningTeamId: teamId,
+        address: data.address,
+        senderName: data.senderName ?? null,
+      })
+      // A workspace's first address becomes its default sender, which is the
+      // one time adding an address changes what email sends from: the page
+      // says so.
+      const madeDefault = (await getEmailSenders()).get('default')?.account?.id === added.id
+      return { ...toAccount(added), madeDefault }
+    })
   })
 
 export const updateSendingAddressNameFn = createServerFn({ method: 'POST' })
