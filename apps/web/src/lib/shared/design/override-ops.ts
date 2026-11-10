@@ -393,11 +393,20 @@ const SCOPE_PARTS: Partial<Record<DesignAiScope, readonly string[]>> = {
  */
 export function overrideInScope(
   o: OverrideOp,
-  within: { scope: DesignAiScope; blockId?: string }
+  within: {
+    scope: DesignAiScope
+    blockId?: string
+    element?: { element: StyleElement; part: string | null }
+  }
 ): boolean {
   const { scope, blockId } = within
   if (scope === 'site' || scope === 'brand') return true
   const { where } = o
+  // An element picked: every one of its kind, those on a page, or the one picked, as its panel offers.
+  if (within.element && o.element === within.element.element) {
+    if (where.kind === 'everywhere' || where.kind === 'page') return true
+    if (where.kind === 'part' && where.part.id === within.element.part) return true
+  }
   if (blockId)
     return (
       (where.kind === 'block' && where.block === blockId) ||
@@ -418,6 +427,70 @@ export function overrideInScope(
     case 'everywhere':
       return false
   }
+}
+
+/**
+ * Whether an override stays as near as the request may reach: anywhere for
+ * every page; on the page shown (its page, a part only there, a Home block
+ * on Home) for one page; the part picked, or the Home block picked, for one.
+ */
+export function overrideInReach(
+  o: OverrideOp,
+  within: {
+    blockId?: string
+    element?: { part: string | null }
+    reach?: 'one' | 'page' | 'every'
+    page?: OverridePage
+  }
+): boolean {
+  const { reach, page } = within
+  if (!reach || reach === 'every') return true
+  const { where } = o
+  if (reach === 'one') {
+    const part = within.element?.part
+    if (part) {
+      if (where.kind === 'part') return where.part.id === part
+      // A Home block's slot is written as the block's own look.
+      if (where.kind === 'block') return part.startsWith(`block.${where.block}.`)
+      return false
+    }
+    if (within.blockId)
+      return (
+        (where.kind === 'block' && where.block === within.blockId) ||
+        (where.kind === 'part' && where.part.block === within.blockId)
+      )
+  }
+  if (!page) return false
+  switch (where.kind) {
+    case 'page':
+      return where.page === page
+    case 'part':
+      return where.part.pages.length === 1 && where.part.pages[0] === page
+    case 'block':
+      return page === 'home'
+    case 'everywhere':
+      return false
+  }
+}
+
+/**
+ * The parts a picked section holds that are drawn as an element kind, on
+ * the page given or on every page: the hero's buttons for a hover asked of
+ * the hero, so a style lands on them as overrides, never on every button.
+ */
+export function pickedParts(
+  design: PortalDesign,
+  scope: DesignAiScope,
+  element: StyleElement,
+  page?: OverridePage
+): PartInfo[] {
+  const starts = SCOPE_PARTS[scope] ?? []
+  return partsOf(design).filter(
+    (part) =>
+      starts.some((start) => part.id.startsWith(start)) &&
+      (part.elements as readonly string[]).includes(element) &&
+      (!page || (part.pages.length === 1 && part.pages[0] === page))
+  )
 }
 
 /* What the AI is told */

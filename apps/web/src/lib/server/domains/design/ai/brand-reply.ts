@@ -1,7 +1,8 @@
 /**
- * What a brand match says: a line on what was matched, the questions the
- * screenshots could not settle (thin evidence, a conflict) asked quietly,
- * what was left as is because it was not visible or a stage failed, and
+ * What a brand match says: one sentence on what was matched, the questions
+ * the screenshots could not settle (thin evidence, a conflict) asked
+ * quietly, notes that are specific to this match (a stage that failed, a
+ * font or logo it could not use, a photo to replace) for Show changes, and
  * follow-ups the person can send next, each of which fills the request box.
  */
 import { parseOklch } from '@/lib/shared/theme/expand'
@@ -45,9 +46,6 @@ export function pageBackgroundWords(decided: PageFillDecision): string {
   const way = from === to ? from : `${from}-to-${to}`
   return `a soft ${way} gradient behind the page, as your site has`
 }
-
-/** Not visible in screenshots, so never guessed: left at the house defaults. */
-export const NOT_VISIBLE = 'hover effects or status labels'
 
 export interface BrandReplyInput {
   shots: number
@@ -104,10 +102,8 @@ export function brandReply(input: BrandReplyInput): BrandReply {
   const matched = parts.length
     ? `I matched your brand from ${from}: ${parts.join(', ')}.`
     : `I matched what I could from ${from}.`
-  const reply =
-    input.photo === 'placed'
-      ? `${matched} The hero photo is cut from ${from}: replace it with the original for best quality.`
-      : matched
+  // One sentence: what was matched. Anything else is a row under Show changes.
+  const reply = matched
   const ask = roles?.ask
   const asks = !ask
     ? []
@@ -117,6 +113,9 @@ export function brandReply(input: BrandReplyInput): BrandReply {
         ]
       : [ask.message]
   const notes = [
+    input.photo === 'placed'
+      ? `The hero photo is cut from ${from}: replace it with the original for best quality.`
+      : '',
     ...input.failed,
     input.faceClose === false
       ? 'Your headline font is not one we have, so I used the closest match. You can upload yours in Theme > Brand kit > Fonts.'
@@ -126,7 +125,6 @@ export function brandReply(input: BrandReplyInput): BrandReply {
     input.photo === 'offered'
       ? `Your site leads with a photo${input.photoWhy ? `, but ${input.photoWhy.replace(/^the photo /, 'it ')}` : ''}. Add one to the hero for the same feel.`
       : '',
-    `Your screenshots do not show ${NOT_VISIBLE}, so those are as they were.`,
   ].filter(Boolean)
   const chips = followUps(roles, input.band)
   // A photo-led site is offered a hero photo first, whether or not one was cut.

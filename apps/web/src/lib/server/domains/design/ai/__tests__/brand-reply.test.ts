@@ -137,11 +137,25 @@ describe('the reply about colour', () => {
 })
 
 describe('what the reply says was left as is', () => {
-  it('does not say the other pages’ titles were left, now that they follow Home’s hero', () => {
-    const notes = reply(roles({})).notes
-    const left = notes.find((note) => note.startsWith('Your screenshots do not show'))
-    expect(left).toBeDefined()
-    expect(left).not.toMatch(/titles/)
+  it('adds no note that every match would say alike', () => {
+    expect(reply(roles({})).notes).toEqual([])
+  })
+
+  it('keeps the reply to one sentence, and the photo to replace under Show changes', () => {
+    const said = brandReply({
+      shots: 1,
+      roles: null,
+      heading: null,
+      band: 'none',
+      failed: [],
+      logo: 'placed',
+      faceClose: null,
+      photo: 'placed',
+    })
+    expect(said.reply).toBe('I matched your brand from your screenshot: a plain hero.')
+    expect(said.notes).toEqual([
+      'The hero photo is cut from your screenshot: replace it with the original for best quality.',
+    ])
   })
 })
 

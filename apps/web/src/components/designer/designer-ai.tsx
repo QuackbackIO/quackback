@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { ChevronDoubleLeftIcon, SparklesIcon } from '@heroicons/react/24/outline'
-import { AskAiPanel } from '@/components/admin/settings/appearance/ask-ai-panel'
+import { AskAiPanel, type ShowChange } from '@/components/admin/settings/appearance/ask-ai-panel'
 import {
   DesignComposer,
   type ChatContext,
@@ -13,7 +13,8 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import type { AiElementPick, DesignAiScope } from '@/lib/shared/design/apply-changes'
-import type { Selection } from '@/lib/shared/design/outline'
+import type { DesignerPage, Selection } from '@/lib/shared/design/outline'
+import { reachChoices, type AiReach } from '@/lib/shared/design/ai-reach'
 import { heroOf, writeHero } from '@/lib/shared/design/hero'
 import { isMenuSelection } from '@/lib/shared/design/menu'
 import { siteCaptureUsageFn } from '@/lib/server/functions/site-capture'
@@ -54,17 +55,21 @@ export function aiScopeOf(selection: Selection | null): {
 /** The id of Ask AI's request box, which "/" focuses. */
 export const AI_BOX_ID = 'designer-ai-box'
 
-/** Before the first request: one line, and what to start from for this portal. */
+/** Before the first request: one line, and what to start from for this portal, page and pick. */
 function AiEmpty({
   design,
   gates,
+  page,
+  selection,
   onStarter,
 }: {
   design: PortalDesign
   gates?: Partial<PortalPageGates>
+  page?: DesignerPage
+  selection: Selection | null
   onStarter: (text: string) => void
 }) {
-  const starters = aiStarters(design, gates)
+  const starters = aiStarters(design, gates, { ...(page ? { page } : {}), selection })
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-3 py-8 text-center">
       <span className="grid size-10 place-items-center rounded-full border border-border">
@@ -134,11 +139,13 @@ export function DesignerAi({
   element = null,
   elementName = null,
   pageName,
+  page = 'home',
   update,
   onClearSelection,
   onCollapse,
   gates,
   onFonts,
+  show,
 }: {
   /** The conversation, kept by the designer so a match made in the inspector joins it. */
   ai: ReturnType<typeof useDesignAi>
@@ -152,6 +159,11 @@ export function DesignerAi({
   elementName?: string | null
   /** The page shown, which the picked part is on. */
   pageName: string
+  /**
+   * The page shown, by its id: the starters keep to it with nothing picked, and
+   * a request kept to one page keeps to it.
+   */
+  page?: DesignerPage
   update: Update
   onClearSelection: () => void
   /** Folds the pane to its rail. */
@@ -160,6 +172,8 @@ export function DesignerAi({
   gates?: Partial<PortalPageGates>
   /** Opens Theme's Brand kit fonts, with the upload for a font a brand match could not match. */
   onFonts?: (font?: UnmatchedFont) => void
+  /** Shows a change on the canvas from its Show changes row. */
+  show?: ShowChange
 }) {
   const { available } = useSuspenseQuery(portalDesignQueries.aiStatus()).data
   const { scope, blockId } = aiScopeOf(selection)
@@ -170,13 +184,29 @@ export function DesignerAi({
       // Match my brand points at the box: the website or screenshots go there.
       ...(text === MATCH_STARTER ? { text: '', hint: MATCH_HINT } : { text }),
     }))
+  // How far a request may reach: the panel's own scope first, until another is chosen
+  // for this pick on this page.
+  const choices = reachChoices(draft.design, { scope, blockId, element }, page, gates)
+  const pickKey = `${selection}|${element?.element ?? ''}|${element?.part ?? ''}|${page}`
+  const [chosen, setChosen] = useState<{ key: string; reach: AiReach } | null>(null)
+  const within: AiReach | undefined =
+    chosen?.key === pickKey && choices.some((choice) => choice.reach === chosen.reach)
+      ? chosen.reach
+      : choices[0]?.reach
+  const reach = within
+    ? {
+        choices,
+        value: within,
+        onChange: (next: AiReach) => setChosen({ key: pickKey, reach: next }),
+      }
+    : undefined
   // A block, a section of the page or an item of the menu; never the site's own settings.
   // An element picked inside it leads, with the section it is in beside it.
   const context: ChatContext | null =
     selection && selectionName && selection !== 'site' && !selection.startsWith('site:')
       ? element && elementName
-        ? { name: elementName, section: selectionName, page: pageName }
-        : { name: selectionName, page: pageName }
+        ? { name: elementName, section: selectionName, page: pageName, ...(reach && { reach }) }
+        : { name: selectionName, page: pageName, ...(reach && { reach }) }
       : null
   return (
     <section
@@ -212,7 +242,13 @@ export function DesignerAi({
         className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
       >
         {available && ai.turns.length === 0 ? (
-          <AiEmpty design={draft.design} gates={gates} onStarter={fill} />
+          <AiEmpty
+            design={draft.design}
+            gates={gates}
+            page={page}
+            selection={selection}
+            onStarter={fill}
+          />
         ) : (
           <AskAiPanel
             available={available}
@@ -222,6 +258,7 @@ export function DesignerAi({
             steps={ai.steps}
             design={draft.design}
             update={update}
+            {...(show ? { show } : {})}
             renderBrand={(turn, index) =>
               turn.brand && (
                 <BrandLogoCard
@@ -255,12 +292,16 @@ export function DesignerAi({
             context={context}
             busy={ai.busy}
             limited={ai.limited}
+            onStop={ai.stop}
             onClearScope={onClearSelection}
             onAsk={(text, images, brand) =>
-              // An element picked inside the selection rides along, so "just this" names it.
-              void (element
-                ? ai.ask(text, scope, images, blockId, brand, element)
-                : ai.ask(text, scope, images, blockId, brand))
+              // An element picked inside the selection rides along, so "just this" names it,
+              // and the chip's reach with it, which the server holds every change to.
+              void (context && within
+                ? ai.ask(text, scope, images, blockId, brand, element ?? undefined, within)
+                : element
+                  ? ai.ask(text, scope, images, blockId, brand, element)
+                  : ai.ask(text, scope, images, blockId, brand))
             }
             prefill={prefill}
             below={(text) => <CapturesLeft text={text} />}

@@ -4,9 +4,11 @@
  * step; nothing reaches visitors until a person publishes.
  */
 import { createServerFn } from '@tanstack/react-start'
+import { getRequest } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { DESIGN_AI_SCOPES } from '@/lib/shared/design/apply-changes'
+import { AI_REACHES } from '@/lib/shared/design/ai-reach'
 import { BLOCK_ID } from '@/lib/shared/design/schema'
 import { STYLE_ELEMENT_NAMES, type StyleElement } from '@/lib/shared/design/style-tokens'
 import { PART_ID } from '@/lib/shared/design/style-overrides'
@@ -54,6 +56,8 @@ export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
         blockId: z.string().regex(BLOCK_ID).optional(),
         /** An element picked on the canvas, which "just this" names. */
         element: elementPick.optional(),
+        /** How far the request may reach from the pick, as the composer's chip says: just it, the page shown, or everywhere it is. */
+        within: z.enum(AI_REACHES).optional(),
         history: z
           .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(2000) }))
           .max(12),
@@ -77,6 +81,8 @@ export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
       designAllowances(),
       listDesignerPlaces(),
     ])
+    // The builder's Stop ends the request: the model call ends, and nothing is saved after it.
+    const signal = getRequest().signal
     // Boards, roadmaps and help topics by name, so a request can name them.
     const result = await askDesignAi({
       ...data,
@@ -84,8 +90,13 @@ export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
       allows,
       gates: allows.gates,
       places,
+      signal,
+    }).catch((err: unknown) => {
+      if (signal.aborted) return STOPPED
+      throw err
     })
     if (!result.ok || result.applied.length === 0) return result
+    if (signal.aborted) return STOPPED
     const saved = await actions.saveDesignDraft(
       result.design,
       { ...(await designAuthor(auth)), via: 'ai' },
@@ -120,6 +131,8 @@ export const designAgentStepFn = createServerFn({ method: 'POST' })
         blockId: z.string().regex(BLOCK_ID).optional(),
         /** An element picked on the canvas, which "just this" names. */
         element: elementPick.optional(),
+        /** How far the request may reach from the pick, as the composer's chip says: just it, the page shown, or everywhere it is. */
+        within: z.enum(AI_REACHES).optional(),
         history: z
           .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(2000) }))
           .max(12),
@@ -177,6 +190,8 @@ export const designAgentStepFn = createServerFn({ method: 'POST' })
       storedSiteImages(),
     ])
     const { step, maxSteps, ...rest } = data
+    // The builder's Stop ends the step: the model call ends, and nothing is saved after it.
+    const signal = getRequest().signal
     const reply = await agentStep({
       ...rest,
       design: current.design,
@@ -185,10 +200,15 @@ export const designAgentStepFn = createServerFn({ method: 'POST' })
       places,
       request: step,
       maxSteps,
+      signal,
+    }).catch((err: unknown) => {
+      if (signal.aborted) return STOPPED
+      throw err
     })
     if (!reply.ok) return reply
     if (reply.outcome.applied.length === 0)
       return { ...reply, revision: current.revision, report: null }
+    if (signal.aborted) return STOPPED
     const saved = await actions.saveDesignDraft(
       reply.design,
       { ...(await designAuthor(auth)), via: 'ai' },
@@ -197,6 +217,9 @@ export const designAgentStepFn = createServerFn({ method: 'POST' })
     if (!saved.ok) return movedOn(saved)
     return { ...reply, report: saved.report, revision: saved.revision }
   })
+
+/** A request the builder stopped: nothing more is saved, and no one is waiting for the answer. */
+const STOPPED = { ok: false as const, code: 'STOPPED' as const, message: 'Stopped.' }
 
 /**
  * A save refused because the draft moved while the request was worked on,

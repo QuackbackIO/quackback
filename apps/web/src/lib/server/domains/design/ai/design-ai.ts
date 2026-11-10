@@ -24,6 +24,14 @@ import { designContext } from '@/lib/shared/design/design-context'
 import { scopeNote as requestScopeNote, scopeOf } from '@/lib/shared/design/agent/router'
 import type { StyleElement } from '@/lib/shared/design/style-tokens'
 import {
+  alsoNotes,
+  oneSentence,
+  reachClause,
+  reachNote,
+  withReach,
+  type AiReach,
+} from '@/lib/shared/design/ai-reach'
+import {
   applyOps,
   OP_KINDS,
   type AiPlaces,
@@ -170,27 +178,39 @@ export const SCOPE_NAMES: Record<Exclude<DesignAiScope, 'site'>, string> = {
 const opKey = (op: FlatOp) => JSON.stringify([op.op, op.target ?? '', op.key ?? '', op.value ?? ''])
 
 /**
- * The reply, said only of what happened. The model writes its reply before
- * its operations are checked, so when any did not apply the reply is built
- * from the ones that did, by their labels, and when none did the server says
- * why: a reply never claims a change the draft does not have.
+ * The reply, said only of what happened, in one sentence. The model writes
+ * its reply before its operations are checked, so when any did not apply
+ * the reply is built from the ones that did, by their labels, and when none
+ * did the server says why: a reply never claims a change the draft does not
+ * have. What was left alone, and why, is said under Show changes.
  */
 function honestReply(
   answer: OpsAnswer,
   result: OpsOutcome,
   outOfScope: boolean,
   /** What was picked, such as "the hero". */
-  where: string
-): string {
+  where: string,
+  /** How far the request could reach, when narrower than everywhere the pick is. */
+  reach: AiReach | undefined
+): { reply: string; notes: string[] } {
   const { done, refused, already } = result
   const why = plainReasons(refused.map((each) => each.reason))
-  if (done.length === 0 && outOfScope) return `That is outside ${where}, so nothing changed.`
+  const narrowed = reach === 'page' ? 'this page' : reach === 'one' ? 'this one' : null
+  const leftOut = result.outOfScope.length > 0
+  if (done.length === 0 && (outOfScope || (leftOut && !narrowed)))
+    return { reply: `That is outside ${where}, so nothing changed.`, notes: [] }
+  if (done.length === 0 && leftOut)
+    return { reply: `That reaches beyond ${narrowed}, so nothing changed.`, notes: [] }
   if (done.length === 0 && refused.length > 0)
-    return why ? `Nothing changed: ${why}.` : 'Nothing changed: I could not do that here.'
-  if (done.length === 0 && already.length > 0) return 'Nothing changed: it is already like that.'
+    return {
+      reply: why ? `Nothing changed: ${why}.` : 'Nothing changed: I could not do that here.',
+      notes: [],
+    }
+  if (done.length === 0 && already.length > 0)
+    return { reply: 'Nothing changed: it is already like that.', notes: [] }
   const applied = new Set(done.map((each) => opKey(each.op)))
   const said = answer.ops.every((each) => applied.has(opKey(each)))
-    ? answer.reply
+    ? oneSentence(answer.reply)
     : `I changed ${done
         .map((each) => {
           const own = answer.ops.find((op) => opKey(op) === opKey(each.op))?.says?.trim()
@@ -198,9 +218,19 @@ function honestReply(
           return `${words.charAt(0).toLowerCase()}${words.slice(1)}`
         })
         .join(', ')}.`
-  const reply = outOfScope ? `${said} Part of that is outside ${where} and was left alone.` : said
-  if (refused.length === 0) return reply
-  return why ? `${reply} I left the rest: ${why}.` : `${reply} I could not do the rest here.`
+  const notes = [
+    ...(leftOut
+      ? [
+          narrowed
+            ? `Part of that reaches beyond ${narrowed} and was left alone.`
+            : `Part of that is outside ${where} and was left alone.`,
+        ]
+      : []),
+    ...(refused.length === 0
+      ? []
+      : [why ? `I left the rest: ${why}.` : 'I could not do the rest here.']),
+  ]
+  return { reply: said, notes }
 }
 
 function newAdjustments(before: PortalDesign, after: PortalDesign): string[] {
@@ -217,8 +247,10 @@ export type DesignAiResult =
       design: PortalDesign
       applied: AppliedDesignChange[]
       skipped: number
-      /** The request reached outside the section picked; asking about the whole site may do it. */
+      /** The request names something outside the part picked; asking about the whole site may do it. */
       outOfScope: boolean
+      /** What was left alone and why, and what else a change reaches, for Show changes. */
+      notes?: string[]
       /** What the solver now adjusts to keep text readable that it did not before. */
       readability: string[]
     }
@@ -233,6 +265,8 @@ export async function askDesignAi(input: {
   blockId?: string
   /** An element picked on the canvas: its kind and the part it is, which "just this" names. */
   element?: { element: StyleElement; part: string | null }
+  /** How far the request may reach from the pick, as the composer's chip says; every place the pick is when not given. */
+  within?: AiReach
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   /** The images the person attached: each one's main colours, and the picture itself (a JPEG data URL) for a model that reads images. */
   images?: Array<{ palette: string[]; image?: string }>
@@ -245,6 +279,8 @@ export async function askDesignAi(input: {
   places?: AiPlaces
   /** The pages the portal has; every one when not given. */
   gates?: PortalPageGates
+  /** The builder's Stop: the model call ends with it. */
+  signal?: AbortSignal
 }): Promise<DesignAiResult> {
   const model = designAiModel()
   if (!model) {
@@ -259,17 +295,22 @@ export async function askDesignAi(input: {
   const places = input.places ?? NO_PLACES
   const gates = input.gates ?? EVERY_PAGE
   const block = input.scope === 'home' ? pickedBlock(input.design, input.blockId) : null
+  const reachTo = input.scope === 'site' ? undefined : input.within
   const within = {
     scope: input.scope,
     ...(block ? { blockId: input.blockId } : {}),
     ...(input.element ? { element: input.element } : {}),
+    ...(reachTo ? { reach: reachTo } : {}),
+    ...(input.page ? { page: input.page } : {}),
   }
   const picked = block ?? SCOPE_NAMES[input.scope as 'home']
+  const reach = reachNote(reachTo, input.page, input.element?.part)
   const scopeNote =
     input.scope === 'site'
       ? ''
-      : `\nThe person picked the ${picked} in the preview. Change only it. If the request is about anything else, make no operations for that part and set outOfScope to true.`
+      : `\nThe person picked the ${picked} in the preview. Change only it.${reach ? ` ${reach}` : ''} If the request is about anything else, make no operations for that part and set outOfScope to true.`
   const view = viewNote(input.page, input.locale)
+  // The request's own words are a hint for the model; the chip's reach is what holds.
   const reads = requestScopeNote(input.message)
   const attached = (input.images ?? []).filter((attachment) => attachment.palette.length > 0)
   const text =
@@ -327,6 +368,7 @@ export async function askDesignAi(input: {
       // A change to match a picture can take many operations.
       maxTokens: 4000,
       middleware: designUsage(model, 'edit'),
+      ...(input.signal ? { signal: input.signal } : {}),
     })
   try {
     // An answer that does not fit is asked for once more, then without the
@@ -363,22 +405,36 @@ export async function askDesignAi(input: {
       })),
       within
     )
-    const outOfScope = input.scope !== 'site' && (answer.outOfScope || result.outOfScope.length > 0)
+    // Asking about the whole site is offered only when the request names something
+    // outside the pick: all of it went elsewhere, or the model read it so and part of
+    // it was left out. A request about the pick itself never offers it.
+    const leftOut = result.outOfScope.length > 0
+    const nothing = result.done.length === 0
+    const outOfScope =
+      input.scope !== 'site' &&
+      (answer.outOfScope
+        ? leftOut || nothing
+        : leftOut && nothing && (!reachTo || reachTo === 'every'))
+    const said = honestReply(
+      answer,
+      result,
+      outOfScope,
+      input.scope === 'site' ? 'the section picked' : `the ${picked}`,
+      reachTo
+    )
+    const clause = reachClause(result.design, result.applied, {
+      scope: input.scope,
+      ...(input.page ? { page: input.page } : {}),
+    })
+    const words = wordsNote(result, input.locale)
     return {
       ok: true,
-      reply:
-        plainWords(
-          honestReply(
-            answer,
-            result,
-            outOfScope,
-            input.scope === 'site' ? 'the section picked' : `the ${picked}`
-          )
-        ) + wordsNote(result, input.locale),
+      reply: plainWords(result.done.length ? withReach(said.reply, clause) : said.reply),
       design: result.design,
       applied: result.applied,
       skipped: result.refused.length + result.outOfScope.length,
       outOfScope,
+      notes: [...said.notes, ...alsoNotes(result.applied, input.scope), ...(words ? [words] : [])],
       readability: newAdjustments(input.design, result.design),
     }
   } catch (err) {
@@ -408,7 +464,7 @@ function wordsNote(result: OpsOutcome, locale: string | undefined): string {
   const wrote = result.done.some(
     ({ op }) => op.op === 'words' || (op.op === 'set' && ['heading', 'body'].includes(op.key ?? ''))
   )
-  return wrote ? ` The words are in ${languageName(locale)}, the language shown.` : ''
+  return wrote ? `The words are in ${languageName(locale)}, the language shown.` : ''
 }
 
 export { designDirections, type DesignLook, type DirectionsResult } from './design-directions'

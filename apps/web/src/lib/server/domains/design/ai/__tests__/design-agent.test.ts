@@ -191,3 +191,142 @@ describe('one step', () => {
     expect(await step(hover)).toMatchObject({ ok: false, code: 'AI_FAILED' })
   })
 })
+
+describe('a step keeps to what was picked and how far the chip says it reaches', () => {
+  const hoverDarker = {
+    plan: 'Darken the main button on hover',
+    ops: [],
+    styles: [
+      {
+        element: 'button',
+        state: 'hover',
+        block: '',
+        property: 'background',
+        value: 'darker',
+        says: '',
+      },
+    ],
+    checks: [],
+    read: [],
+    look: false,
+    read_website: '',
+    match_website: '',
+    done: true,
+    reply: 'The main button is darker on hover.',
+  }
+  const calmer = {
+    ...hoverDarker,
+    plan: 'Calm the hero',
+    ops: [{ op: 'set', target: 'hero', key: 'look', value: 'tint', says: 'the hero to a tint' }],
+    styles: [],
+    reply: 'The hero is calmer.',
+  }
+  const overrides = (design: { overrides?: unknown }) =>
+    (design.overrides ?? []) as Array<{
+      target: { scope: string; part?: string; page?: string }
+      style?: { hover?: { background?: unknown } }
+    }>
+
+  for (const message of [
+    'Make the main button darker when hovered',
+    // Read by no English pattern: the chip's reach holds it all the same.
+    'Mach den Hauptbutton dunkler, wenn man darüber fährt',
+  ])
+    it(`with the hero picked, “${message}” changes the hero’s buttons, never every main button`, async () => {
+      const reply = await step(hoverDarker, {
+        message,
+        scope: 'band',
+        within: 'every',
+        page: 'home',
+      })
+      if (!reply.ok) throw new Error(reply.message)
+      // No site-wide style: the main buttons elsewhere are as they were.
+      expect(reply.design.style?.button?.hover).toBeUndefined()
+      expect(reply.design.tune).toEqual(fixtureDesign().tune)
+      // The hero's own button holds it, as an override on that part.
+      const cta = overrides(reply.design).find((o) => o.target.part === 'hero.home.cta')
+      expect(cta?.style?.hover?.background).toMatch(/^#[0-9a-f]{6}$/)
+      expect(
+        overrides(reply.design).every(
+          (o) => o.target.scope === 'part' && /^(hero|title)\./.test(o.target.part ?? '')
+        )
+      ).toBe(true)
+    })
+
+  it('with the hero picked for this page only, a hover style lands on this page’s hero alone', async () => {
+    const reply = await step(hoverDarker, {
+      message: 'Make the main button darker when hovered',
+      scope: 'band',
+      within: 'page',
+      page: 'home',
+    })
+    if (!reply.ok) throw new Error(reply.message)
+    expect(reply.design.style?.button?.hover).toBeUndefined()
+    const parts = overrides(reply.design).map((o) => o.target.part)
+    expect(parts).toEqual(['hero.home.cta'])
+  })
+
+  it('with the hero’s call to action picked, keeps a hover style to the reach the chip says', async () => {
+    const element = { element: 'button' as const, part: 'hero.home.cta' }
+    const one = await step(hoverDarker, {
+      scope: 'band',
+      element,
+      within: 'one',
+      page: 'home',
+    })
+    if (!one.ok) throw new Error(one.message)
+    expect(one.design.style?.button?.hover).toBeUndefined()
+    expect(overrides(one.design).map((o) => o.target.part)).toEqual(['hero.home.cta'])
+    const page = await step(hoverDarker, { scope: 'band', element, within: 'page', page: 'home' })
+    if (!page.ok) throw new Error(page.message)
+    expect(page.design.style?.button?.hover).toBeUndefined()
+    expect(overrides(page.design).map((o) => o.target)).toEqual([
+      { scope: 'page', page: 'home', element: 'button' },
+    ])
+    // Every main button: the panel's own default for an element, said on the chip.
+    const every = await step(hoverDarker, { scope: 'band', element, within: 'every', page: 'home' })
+    if (!every.ok) throw new Error(every.message)
+    expect(every.design.style?.button?.hover?.background).toMatch(/^#[0-9a-f]{6}$/)
+  })
+
+  for (const message of ['Make this calmer', 'Mach das ruhiger'])
+    it(`with the hero picked for this page only, “${message}” changes no other page`, async () => {
+      const before = fixtureDesign()
+      const reply = await step(calmer, { message, scope: 'band', within: 'page', page: 'home' })
+      if (!reply.ok) throw new Error(reply.message)
+      // The hero's look is one for every page, so it is left, and said so.
+      expect(reply.design.layout).toEqual(before.layout)
+      expect(reply.outcome.applied).toEqual([])
+      expect(reply.outcome.outOfScope.length).toBeGreaterThan(0)
+    })
+
+  it('with the hero picked for every page, the same request changes the hero everywhere', async () => {
+    const reply = await step(calmer, {
+      message: 'Make this calmer',
+      scope: 'band',
+      within: 'every',
+      page: 'home',
+    })
+    if (!reply.ok) throw new Error(reply.message)
+    expect(reply.design.layout.band).toBe('tint')
+  })
+
+  it('reports a style outside the pick as left alone, never drops it silently', async () => {
+    const reply = await step(
+      {
+        ...hoverDarker,
+        styles: [{ ...hoverDarker.styles[0]!, element: 'card', property: 'shadow', value: 'soft' }],
+      },
+      { message: 'Add a shadow to the cards', scope: 'band', within: 'every', page: 'home' }
+    )
+    if (!reply.ok) throw new Error(reply.message)
+    expect(reply.design.style?.card).toBeUndefined()
+    expect(reply.outcome.outOfScope).toEqual(['Cards on hover'])
+  })
+
+  it('tells the model how far it may reach', async () => {
+    await step(calmer, { message: 'Make this calmer', scope: 'band', within: 'page', page: 'home' })
+    const system = model.calls[0]!.systemPrompts.join('\n')
+    expect(system).toContain('only on the Home page')
+  })
+})

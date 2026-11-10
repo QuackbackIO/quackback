@@ -13,7 +13,7 @@ import { askPortalDesignAiFn, designAgentStepFn } from '@/lib/server/functions/p
 import { readWebsiteFn } from '@/lib/server/functions/site-capture'
 import { readingSummary } from '@/lib/shared/design/agent/website-tool'
 import { runBuilderEditLoop, type ServerStep } from '@/lib/client/edit-loop'
-import { LOOP_BUDGET, trailOf } from '@/lib/shared/design/agent/loop'
+import { LOOP_BUDGET, stoppedReply, trailOf } from '@/lib/shared/design/agent/loop'
 import { routeRequest } from '@/lib/shared/design/agent/router'
 import { STYLE_REGISTRY } from '@/lib/shared/design/agent/style-registry'
 import { designPreview } from './use-design-draft'
@@ -32,6 +32,7 @@ import type {
   DesignAiScope,
 } from '@/lib/shared/design/apply-changes'
 import type { DesignerPage } from '@/lib/shared/design/outline'
+import type { AiReach } from '@/lib/shared/design/ai-reach'
 import type { DesignAdjustment } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { SupportedLocale } from '@/lib/shared/i18n'
@@ -185,8 +186,8 @@ export function useDesignAi({
   /** Saves a pending draft change first, so the server reads the latest draft. */
   flush: () => Promise<void>
   adopt: (design: PortalDesign, report: Report, label?: string, revision?: string) => void
-  /** Changes the draft as one named step, as the logo a brand match places is. */
-  update: (change: (draft: PortalDesign) => void, label?: string) => void
+  /** Changes the draft as one named step, as the logo a brand match places is; `ai` when the AI makes it. */
+  update: (change: (draft: PortalDesign) => void, label?: string, by?: 'ai') => void
   /** The workspace's name, which a title read from screenshots only replaces when it differs. */
   workspaceName: string
   /** The page and language the person sees, so a request is read, and words written, for them. */
@@ -208,6 +209,26 @@ export function useDesignAi({
   const seen = useRef(view)
   seen.current = view
   const say = (turn: DesignAiTurn) => setTurns((previous) => [...previous, turn])
+  // The request running, which Stop aborts.
+  const running = useRef<AbortController | null>(null)
+  /** A request starts: its signal, which Stop aborts. */
+  const started = () => {
+    const controller = new AbortController()
+    running.current = controller
+    return controller.signal
+  }
+  /** A request ends, unless a newer one has started since. */
+  const ended = (signal: AbortSignal) => {
+    if (running.current?.signal === signal) running.current = null
+  }
+  /** Why a request ended early: Stop, said as such, or a failure. */
+  const failed = (signal: AbortSignal) =>
+    say({ role: 'assistant', text: signal.aborted ? stoppedReply(false) : FAILED })
+  /**
+   * Stops the request running: the server takes no further step, what
+   * already applied stays (with its Undo), and the conversation says so.
+   */
+  const stop = useCallback(() => running.current?.abort(), [])
   /** A refusal said in the conversation; one for the allowance is kept to show in place of the composer. */
   const refused = (result: { code: string; message: string }, prefix = '') => {
     if (result.code === 'AI_LIMIT') setLimited(result.message)
@@ -232,7 +253,7 @@ export function useDesignAi({
       const logo = { shot, box, full, title: titleToSet(brand.name, workspaceName) }
       try {
         const change = await brandLogoChange(shot, box, { full, title: logo.title })
-        update(change, full ? 'Full logo' : 'Icon and title')
+        update(change, full ? 'Full logo' : 'Icon and title', 'ai')
         return logo
       } catch {
         return null
@@ -252,7 +273,8 @@ export function useDesignAi({
       text: string,
       attachments: ChatImage[],
       given: BrandContext | null,
-      website?: { url: string; recapture?: boolean }
+      website?: { url: string; recapture?: boolean },
+      signal?: AbortSignal
     ) => {
       await flush()
       const result = await streamBrandMatch(
@@ -278,7 +300,9 @@ export function useDesignAi({
         (step) => {
           setStage(`${step}…`)
           setSteps((now) => [...now, step])
-        }
+        },
+        undefined,
+        signal
       )
       if (!result.ok) {
         refused(result)
@@ -329,7 +353,8 @@ export function useDesignAi({
             : {}),
           ...(result.font ? { font: result.font } : {}),
         })
-        if (!checking || !target) return
+        // Stopped once the match landed: it stays, and the check does not start.
+        if (!checking || !target || signal?.aborted) return
         // The verified critic loop: read the drawn preview, score it against what was
         // measured, and keep a revision only when the measured match improves.
         setSteps((now) => [...now, CHECK_STEP])
@@ -397,7 +422,9 @@ export function useDesignAi({
       /** Screenshots as the browser read them, for a brand matched from them. */
       brand?: BrandContext,
       /** An element picked on the canvas, which "just this" names. */
-      element?: AiElementPick
+      element?: AiElementPick,
+      /** How far the request may reach from the pick, as the composer's chip says. */
+      within?: AiReach
     ) => {
       const images = attachments?.length ?? 0
       // A website named with screenshots is read beside them; named alone, it is captured.
@@ -409,11 +436,18 @@ export function useDesignAi({
         attached.image ? [attached.image] : []
       )
       setStage(matching ? 'Matching your brand…' : 'Working on it…')
+      const signal = started()
       const history = turns.map((turn) => ({ role: turn.role, content: turn.text }))
       say({ role: 'user', text, ...(thumbnails.length ? { images: thumbnails } : {}) })
       try {
         if (matching) {
-          await matchBrand(text, attachments ?? [], brand ?? null, site ? { url: site } : undefined)
+          await matchBrand(
+            text,
+            attachments ?? [],
+            brand ?? null,
+            site ? { url: site } : undefined,
+            signal
+          )
           return
         }
         await flush()
@@ -434,15 +468,18 @@ export function useDesignAi({
                 scope,
                 ...(blockId ? { blockId } : {}),
                 ...(element ? { element } : {}),
+                ...(within && scope !== 'site' ? { within } : {}),
                 history,
                 ...(attachments?.length ? { images: attachments } : {}),
                 ...(seen.current ?? {}),
                 design: check.current(),
                 targets: route.targets,
                 budget: LOOP_BUDGET,
+                signal,
               },
               {
-                step: async (body) => (await designAgentStepFn({ data: body })) as ServerStep,
+                step: async (body) =>
+                  (await designAgentStepFn({ data: body, signal })) as ServerStep,
                 adopt: (design, report, revision) =>
                   adopt(design, report as Report, requestLabel(text), revision),
                 ...(check.open ? { open: check.open } : {}),
@@ -453,34 +490,43 @@ export function useDesignAi({
                   found.push(readingSummary(read.reading))
                   return read
                 },
-                matchWebsite: async (url) => {
-                  const matched = await streamBrandMatch({ message: '', images: [], url }, () => {})
-                  if (!matched.ok)
+                // A whole brand match restyles the whole site: offered only when the
+                // request is about the whole site. One part borrows with read_website.
+                ...(scope === 'site' && {
+                  matchWebsite: async (url: string) => {
+                    const matched = await streamBrandMatch(
+                      { message: '', images: [], url },
+                      () => {},
+                      undefined,
+                      signal
+                    )
+                    if (!matched.ok)
+                      return {
+                        match: {
+                          ok: false,
+                          host: url,
+                          reply: matched.message,
+                          changed: [],
+                          notes: [],
+                        },
+                        design: null,
+                        applied: [],
+                      }
+                    if (matched.report && matched.revision && matched.applied.length > 0)
+                      adopt(matched.design, matched.report, requestLabel(text), matched.revision)
                     return {
                       match: {
-                        ok: false,
-                        host: url,
-                        reply: matched.message,
-                        changed: [],
-                        notes: [],
+                        ok: true,
+                        host: matched.capture?.host ?? url,
+                        reply: matched.reply,
+                        changed: matched.applied.map((c) => c.path),
+                        notes: matched.notes ?? [],
                       },
-                      design: null,
-                      applied: [],
+                      design: matched.design,
+                      applied: matched.applied,
                     }
-                  if (matched.report && matched.revision && matched.applied.length > 0)
-                    adopt(matched.design, matched.report, requestLabel(text), matched.revision)
-                  return {
-                    match: {
-                      ok: true,
-                      host: matched.capture?.host ?? url,
-                      reply: matched.reply,
-                      changed: matched.applied.map((c) => c.path),
-                      notes: matched.notes ?? [],
-                    },
-                    design: matched.design,
-                    applied: matched.applied,
-                  }
-                },
+                  },
+                }),
                 progress: (line) => {
                   setStage(`${line}…`)
                   setSteps((now) => [...now, line])
@@ -498,7 +544,9 @@ export function useDesignAi({
               text: result.reply,
               changes: result.applied,
               trail: trailOf(result.steps),
-              ...(found.length ? { notes: found } : {}),
+              ...(result.notes.length || found.length
+                ? { notes: [...result.notes, ...found] }
+                : {}),
               ...(shown && {
                 capture: {
                   host: shown[0],
@@ -522,10 +570,12 @@ export function useDesignAi({
             scope,
             ...(blockId ? { blockId } : {}),
             ...(element ? { element } : {}),
+            ...(within && scope !== 'site' ? { within } : {}),
             history,
             ...(attachments?.length ? { images: attachments } : {}),
             ...(seen.current ?? {}),
           },
+          signal,
         })
         if (!result.ok) {
           refused(result)
@@ -540,12 +590,15 @@ export function useDesignAi({
           text: result.reply,
           changes: result.applied,
           readability: result.readability,
+          ...('notes' in result && result.notes?.length ? { notes: result.notes } : {}),
           ...(scope !== 'site' ? { where: SCOPE_LABEL[scope] } : {}),
           ...(result.outOfScope ? { widen: text } : {}),
         })
       } catch {
-        say({ role: 'assistant', text: FAILED })
+        // Only when nothing changed: a loop that fails after a step applied keeps it, with its Undo.
+        failed(signal)
       } finally {
+        ended(signal)
         setBusy(false)
         setSteps([])
       }
@@ -583,11 +636,13 @@ export function useDesignAi({
   const recapture = useCallback(
     async (url: string) => {
       setStage('Matching your brand…')
+      const signal = started()
       try {
-        await matchBrand('', [], null, { url, recapture: true })
+        await matchBrand('', [], null, { url, recapture: true }, signal)
       } catch {
-        say({ role: 'assistant', text: FAILED })
+        failed(signal)
       } finally {
+        ended(signal)
         setBusy(false)
         setSteps([])
       }
@@ -614,6 +669,7 @@ export function useDesignAi({
       const site = website?.trim() || null
       if (!site && !screenshots.length) return
       setStage('Matching your brand…')
+      const signal = started()
       try {
         const { attachments, brand } = await readMatchShots(screenshots)
         trackBuilder('designer_brand_match_started', {
@@ -635,11 +691,13 @@ export function useDesignAi({
           site ? '' : 'Match my brand',
           attachments,
           brand,
-          site ? { url: site } : undefined
+          site ? { url: site } : undefined,
+          signal
         )
       } catch {
-        say({ role: 'assistant', text: FAILED })
+        failed(signal)
       } finally {
+        ended(signal)
         setBusy(false)
         setSteps([])
       }
@@ -656,6 +714,7 @@ export function useDesignAi({
     steps,
     limited,
     ask,
+    stop,
     adjustLogo,
     recapture,
     startBrandMatch,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ClientOnly } from '@tanstack/react-router'
 import { MotionConfig } from 'framer-motion'
@@ -57,6 +57,10 @@ import { useCanvasSelection } from './use-canvas-selection'
 import { useCanvasView } from './use-canvas-view'
 import { useCountedUpdate, useDesignerEvents } from './use-designer-events'
 import { useDesignerAi } from './use-designer-ai'
+import { SHOW_MS, useChangeFlash } from './use-change-flash'
+import type { ShowChange } from '@/components/admin/settings/appearance/ask-ai-panel'
+import { changeSpots, pageForSpot, spotsBetween } from '@/lib/shared/design/change-spots'
+import type { PortalDesign } from '@/lib/shared/design/schema'
 import { useDesignerPage } from './use-designer-page'
 import { useMatchOnArrival } from './use-match-on-arrival'
 import { useMenuEditing } from './use-menu-editing'
@@ -99,8 +103,22 @@ export function DesignerShell({
   const follow = usePreviewFollow({ previewing, ...view, homeOn: design.nav.home.on })
   const panel = useBuilderPanel()
   const aiPane = useAiPane(previewing, () => setPane('ai'))
+  // What an AI step changed is outlined on the canvas for a moment, where this page shows it.
+  const changeFlash = useChangeFlash()
+  const shownPage = useRef(page)
+  shownPage.current = page
+  const { show: flashChange } = changeFlash
+  const onAiApplied = useCallback(
+    (before: PortalDesign, after: PortalDesign) =>
+      flashChange(
+        spotsBetween(before, after).filter(
+          (spot) => spot.page === null || spot.page === shownPage.current
+        )
+      ),
+    [flashChange]
+  )
   // Quackback AI's conversation.
-  const { ai } = useDesignerAi(draft, { page, locale }, workspaceName)
+  const { ai } = useDesignerAi(draft, { page, locale }, workspaceName, onAiApplied)
   const [now] = useState(() => new Date())
   const livePreview = useMemo(() => designPreview(draft.live), [draft.live])
   const canvasDesign = useCanvasDesign(draft.preview)
@@ -312,6 +330,23 @@ export function DesignerShell({
     pick(key)
     focusSettings()
   }
+  // A Show changes row's Show: the page the change is on, its part outlined, its state forced.
+  const showChange: ShowChange = {
+    can: (at) => changeSpots(design, at).some((spot) => pageForSpot(spot, page, pages) !== null),
+    go: (at, words) => {
+      const spots = changeSpots(design, at)
+      const first = spots.find((spot) => pageForSpot(spot, page, pages) !== null)
+      const to = first ? pageForSpot(first, page, pages) : null
+      if (!to) return
+      if (to !== page) setPage(to)
+      setPane('page')
+      flashChange(
+        spots.filter((spot) => pageForSpot(spot, to, pages) === to),
+        SHOW_MS
+      )
+      say(`Showing ${words}${to === page ? '' : ` on ${PAGE_NAMES[to]}`}.`)
+    },
+  }
   const menuHot = picking.hovered === 'header' || selection === 'header'
   const pickedBlock = selection?.startsWith('block-') ? (nameOf(selection) ?? null) : null
   const caption = deviceCaption(size)
@@ -410,6 +445,7 @@ export function DesignerShell({
                 elementName={
                   pickedElement ? pickLabel(pickedElement, design, backgroundPageOf(page)) : null
                 }
+                page={page}
                 pageName={PAGE_NAMES[page]}
                 update={update}
                 onClearSelection={() => setSelection(null)}
@@ -420,6 +456,7 @@ export function DesignerShell({
                   setPane('settings')
                   revealThemeFonts(font)
                 }}
+                show={showChange}
               />
             </AiPane>
           )}
@@ -505,6 +542,7 @@ export function DesignerShell({
                           onDuplicate={blocks.duplicateBlock}
                           onRemove={blocks.removeBlock}
                           onDeselect={stepBack}
+                          flash={changeFlash.flash}
                           grid={{ design, gates, update, begin: draft.begin, end: draft.end, say }}
                           elements={{
                             design,

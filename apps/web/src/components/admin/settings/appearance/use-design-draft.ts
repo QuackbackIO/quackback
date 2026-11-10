@@ -12,7 +12,7 @@ import {
 import { designChanges } from '@/lib/shared/design/diff'
 import { changeLabel } from '@/lib/shared/design/labels'
 import { designView } from '@/lib/shared/design/design-view'
-import { createHistory, patchesBetween } from '@/lib/shared/design/history'
+import { createHistory, patchesBetween, type Author } from '@/lib/shared/design/history'
 import { releaseOverrides } from '@/lib/shared/design/overrides'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalDesignRevisionId } from '@quackback/ids'
@@ -150,7 +150,7 @@ export function useDesignDraft() {
    * named for what changed unless a name is given.
    */
   const update = useCallback(
-    (change: (draft: PortalDesign) => void, label?: string) => {
+    (change: (draft: PortalDesign) => void, label?: string, by?: Author) => {
       // A plain copy, not a proxy: the builder's changes may copy parts of what they are handed.
       const before = latest.current
       const next = structuredClone(before)
@@ -158,7 +158,7 @@ export function useDesignDraft() {
       // A choice picked again counts: the exact value it competes with goes, in the same step.
       releaseOverrides(before, next)
       const [patches, inverse] = patchesBetween(before, next)
-      history.getState().push(label ?? nameOfChange(before, next), patches, inverse)
+      history.getState().push(label ?? nameOfChange(before, next), patches, inverse, undefined, by)
       commit(next)
     },
     [commit, history]
@@ -170,10 +170,11 @@ export function useDesignDraft() {
    * values stay as they are: nothing is released, unlike a change picked.
    */
   const replace = useCallback(
-    (next: PortalDesign, label?: string) => {
+    (next: PortalDesign, label?: string, by?: Author) => {
       const [patches, inverse] = patchesBetween(latest.current, next)
       if (!patches.length) return
-      history.getState().push(label ?? nameOfChange(latest.current, next), patches, inverse)
+      const name = label ?? nameOfChange(latest.current, next)
+      history.getState().push(name, patches, inverse, undefined, by)
       commit(next)
     },
     [commit, history]
@@ -193,10 +194,14 @@ export function useDesignDraft() {
 
   /**
    * Makes the changes until `end` one step, under one label, such as a drag
-   * or an AI reply. Groups nest; the outermost names the step.
+   * or an AI reply. Groups nest; the outermost names the step. The AI's
+   * group says so, so a change made by hand meanwhile is a step of its own.
    */
-  const begin = useCallback((label: string) => history.getState().begin(label), [history])
-  const end = useCallback(() => history.getState().end(), [history])
+  const begin = useCallback(
+    (label: string, by?: Author) => history.getState().begin(label, by),
+    [history]
+  )
+  const end = useCallback((by?: Author) => history.getState().end(by), [history])
 
   /** Saves a change still waiting on its pause, or waits for the save under way. */
   const flush = useCallback(async () => {
@@ -221,9 +226,10 @@ export function useDesignDraft() {
       // A step of its own, never merged into the one before, named for what it changed.
       const [patches, inverse] = patchesBetween(latest.current, next)
       const name = label ?? nameOfChange(latest.current, next)
-      history.getState().begin(name)
-      history.getState().push(name, patches, inverse)
-      history.getState().end()
+      // Quackback AI's, so a change made by hand meanwhile never joins its step.
+      history.getState().begin(name, 'ai')
+      history.getState().push(name, patches, inverse, undefined, 'ai')
+      history.getState().end('ai')
       latest.current = next
       setDesign(next)
       if (nextReport) setReport(nextReport)

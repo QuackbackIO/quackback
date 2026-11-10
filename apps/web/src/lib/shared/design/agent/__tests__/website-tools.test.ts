@@ -105,9 +105,36 @@ describe('read_website and match_website in the loop', () => {
     expect(asked[2]!.capture ?? null).toBeNull()
     expect(asked[2]!.website?.[1]).toContain('Website matched (acme.test)')
     expect(result.ok && result.design.mode).toBe('dark')
-    expect(result.ok && result.reply).toBe(
-      'I matched your brand from acme.test. Kept the buttons square.'
+    // One sentence: the match; what the steps after it added is under Show changes.
+    expect(result.ok && result.reply).toBe('I matched your brand from acme.test.')
+  })
+
+  it('never matches a whole site for a request about one part, and borrows by reading instead', async () => {
+    // A request about one part is run without match_website: the builder passes it only for
+    // the whole site, so "make this button feel like acme.test" cannot restyle the site.
+    const original = portalDesign.parse(defaultDesign())
+    const { step, asked } = model(
+      [
+        answer({ plan: 'Match it', match_website: 'acme.test' }),
+        answer({ plan: 'Read it', read_website: 'acme.test' }),
+        answer({ plan: 'Done', done: true, reply: 'The button is like acme.test’s.' }),
+      ],
+      original
     )
+    const readWebsite = vi.fn(async () => ({ reading, capture: null }))
+    const result = await runEditLoop({
+      registry: STYLE_REGISTRY,
+      design: original,
+      targets: [],
+      deps: { step, read: vi.fn(async () => ({})), readWebsite } as LoopDeps,
+      budget: { steps: 4, ms: 60_000 },
+      pick: { scope: 'band', page: 'home' },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.design).toEqual(original)
+    // The model is told why, so it reads the site and sets the part itself.
+    expect(asked[1]!.website?.[0]).toMatch(/match_website is not offered/)
+    expect(readWebsite).toHaveBeenCalledWith('acme.test')
   })
 
   it('reads and matches a site once, however often the model asks', async () => {

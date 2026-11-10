@@ -257,7 +257,9 @@ describe('a brand match on a site that leads with a photo', { timeout: 60_000 },
     expect(result.design.layout.imagePoint).toBeDefined()
     // The words reach 4.5:1 on the veiled photo: no readability problem left.
     expect(result.readability).toEqual([])
-    expect(result.reply).toMatch(/cut from your screenshot: replace it with the original/)
+    expect(result.notes).toContainEqual(
+      expect.stringMatching(/cut from your screenshot: replace it with the original/)
+    )
     expect(result.chips[0]).toBe(MATCH_BRAND.addHeroPhoto)
   })
 

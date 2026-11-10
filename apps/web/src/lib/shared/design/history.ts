@@ -2,8 +2,10 @@
  * The builder's history: every change as a labelled step of patches, so undo
  * and redo replay exactly what changed. A quick burst of the same change,
  * such as typing, merges into one step; a group, such as a drag or an AI
- * reply, is one step however many changes it makes. Only so many steps are
- * kept.
+ * reply, is one step however many changes it makes. A change made by hand
+ * while the AI works is never part of the AI's step: the AI's step so far
+ * closes, the hand's change is a step of its own, and what the AI changes
+ * after it is one more step under the AI's name. Only so many steps are kept.
  */
 import { createStore } from 'zustand/vanilla'
 import { enablePatches, Immer, type Draft, type Patch } from 'immer'
@@ -64,11 +66,15 @@ export function patchesBetween<T extends object>(before: T, after: T): [Patch[],
 
 const apply = <T>(doc: T, patches: Patch[]): T => immer.applyPatches(doc as object, patches) as T
 
+/** Who made a change: a person in the builder, or Quackback AI. */
+export type Author = 'person' | 'ai'
+
 interface Group {
   label: string
   depth: number
   patches: Patch[]
   inversePatches: Patch[]
+  by: Author
 }
 
 export interface HistoryState {
@@ -76,14 +82,22 @@ export interface HistoryState {
   future: HistoryStep[]
   /** A group still open, whose changes become one step when it ends. */
   group: Group | null
+  /** A person's group, such as a drag, opened while the AI's is open: a step of its own. */
+  side: Group | null
   /** The last step pushed, and when, to merge a burst of the same change. */
   last: { label: string; at: number } | null
-  /** Records a change; one that changed nothing is not a step. */
-  push: (label: string, patches: Patch[], inversePatches: Patch[], at?: number) => void
+  /** Records a change, a person's unless said; one that changed nothing is not a step. */
+  push: (
+    label: string,
+    patches: Patch[],
+    inversePatches: Patch[],
+    at?: number,
+    by?: Author
+  ) => void
   /** Opens a group; groups nest, and the outermost names the step. */
-  begin: (label: string) => void
+  begin: (label: string, by?: Author) => void
   /** Closes a group, recording it as one step once the outermost ends. */
-  end: () => void
+  end: (by?: Author) => void
   /** Takes back the last step from a document, or null with nothing to undo. */
   undo: <T>(doc: T) => { doc: T; label: string } | null
   /** Puts back the last step undone, or null with nothing to redo. */
@@ -122,48 +136,76 @@ export function createHistory({
         last: at === null ? null : { label: step.label, at },
       })
     }
+    const stepOf = (group: Group): HistoryStep => ({
+      label: group.label,
+      patches: group.patches,
+      inversePatches: group.inversePatches,
+    })
+    const joined = (group: Group, patches: Patch[], inversePatches: Patch[]): Group => ({
+      ...group,
+      patches: [...group.patches, ...patches],
+      inversePatches: [...inversePatches, ...group.inversePatches],
+    })
+    /** Records what the AI's open group holds so far as its own step; the group stays open. */
+    const cut = () => {
+      const { group } = get()
+      if (!group?.patches.length) return
+      set({ group: { ...group, patches: [], inversePatches: [] } })
+      record(stepOf(group), null)
+    }
+    /** Whether a change is a person's made while the AI's group is open. */
+    const byHandDuringAi = (by: Author) => get().group?.by === 'ai' && by !== 'ai'
     /** Closes any open group at once, as undo and redo need a settled history. */
     const settle = () => {
-      const { group } = get()
-      if (!group) return
-      set({ group: null })
-      if (group.patches.length)
-        record(
-          { label: group.label, patches: group.patches, inversePatches: group.inversePatches },
-          null
-        )
+      const { group, side } = get()
+      if (!group && !side) return
+      set({ group: null, side: null })
+      for (const open of [group, side])
+        if (open?.patches.length) record(stepOf(open), null)
     }
     return {
       past: [],
       future: [],
       group: null,
+      side: null,
       last: null,
-      push: (label, patches, inversePatches, at = Date.now()) => {
+      push: (label, patches, inversePatches, at = Date.now(), by = 'person') => {
         if (!patches.length) return
-        const { group } = get()
-        if (group)
-          return set({
-            group: {
-              ...group,
-              patches: [...group.patches, ...patches],
-              inversePatches: [...inversePatches, ...group.inversePatches],
-            },
-          })
+        const { group, side } = get()
+        // A person's group opened while the AI worked holds their changes until it ends.
+        if (by !== 'ai' && side) return set({ side: joined(side, patches, inversePatches) })
+        if (byHandDuringAi(by)) {
+          cut()
+          return record({ label, patches, inversePatches }, at)
+        }
+        if (group) return set({ group: joined(group, patches, inversePatches) })
         record({ label, patches, inversePatches }, at)
       },
-      begin: (label) => {
-        const { group } = get()
+      begin: (label, by = 'person') => {
+        const { group, side } = get()
+        if (by !== 'ai' && side) return set({ side: { ...side, depth: side.depth + 1 } })
+        if (byHandDuringAi(by)) {
+          cut()
+          return set({ side: { label, depth: 1, patches: [], inversePatches: [], by } })
+        }
         set({
           group: group
             ? { ...group, depth: group.depth + 1 }
-            : { label, depth: 1, patches: [], inversePatches: [] },
+            : { label, depth: 1, patches: [], inversePatches: [], by },
         })
       },
-      end: () => {
-        const { group } = get()
+      end: (by = 'person') => {
+        const { group, side } = get()
+        if (by !== 'ai' && side) {
+          if (side.depth > 1) return set({ side: { ...side, depth: side.depth - 1 } })
+          set({ side: null })
+          if (side.patches.length) record(stepOf(side), null)
+          return
+        }
         if (!group) return
         if (group.depth > 1) return set({ group: { ...group, depth: group.depth - 1 } })
-        settle()
+        set({ group: null })
+        if (group.patches.length) record(stepOf(group), null)
       },
       undo: (doc) => {
         settle()
@@ -189,7 +231,7 @@ export function createHistory({
       },
       undoLabel: () => get().past.at(-1)?.label ?? null,
       redoLabel: () => get().future.at(-1)?.label ?? null,
-      clear: (past = []) => set({ past, future: [], group: null, last: null }),
+      clear: (past = []) => set({ past, future: [], group: null, side: null, last: null }),
     }
   })
 }

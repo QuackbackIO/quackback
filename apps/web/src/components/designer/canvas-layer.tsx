@@ -8,6 +8,8 @@ import { useComposerWidthEdit } from './use-composer-width'
 import { useGridEdit, type GridEditing } from './use-grid-edit'
 import { revealInFrame, useFrameRects } from './use-frame-rects'
 import { ElementOutlines, type LiveValue, type OutlinedElement } from './element-outline'
+import { locateTarget, outlineTargets } from './change-outlines'
+import type { ChangeFlash } from './use-change-flash'
 import {
   kindNote,
   locatePick,
@@ -45,6 +47,7 @@ export function CanvasLayer({
   onDeselect,
   grid,
   elements,
+  flash = null,
 }: {
   canvas: CanvasFrame
   hovered: Selection | null
@@ -71,8 +74,22 @@ export function CanvasLayer({
     onPick: (pick: ElementPick | null) => void
     say: (words: string) => void
   }
+  /** What a change touched, outlined for a moment, its elements in the state it changed. */
+  flash?: ChangeFlash | null
 }) {
+  const doc = canvas.frame?.contentDocument ?? null
+  // What the change outlines, found in the page as drawn now.
+  const changedTargets = flash && doc ? outlineTargets(doc, flash.spots) : []
+  const flashKeys = changedTargets.map((_, at) => `flash:${flash!.seq}:${at}`)
+  const flashTargetOf = (key: string) => {
+    const m = /^flash:\d+:(\d+)$/.exec(key)
+    return m ? changedTargets[Number(m[1])] : undefined
+  }
   const locate = (doc: Document, key: string) => {
+    if (key.startsWith('flash:')) {
+      const target = flashTargetOf(key)
+      return target ? locateTarget(doc, target) : null
+    }
     const live = liveOfKey(key)
     if (live) {
       const scope = [...doc.querySelectorAll('[data-qb-section]')].find(
@@ -83,7 +100,6 @@ export function CanvasLayer({
     const pick = pickOfKey(key)
     return pick && elements ? locatePick(doc, pick, elements.design, elements.page) : null
   }
-  const doc = canvas.frame?.contentDocument ?? null
   const element = elements?.picked ? pickOfKey(elements.picked) : null
   const pointed = elements?.hovered ? pickOfKey(elements.hovered) : null
   const traitsOf = (pick: ElementPick | null) =>
@@ -120,6 +136,7 @@ export function CanvasLayer({
       elements?.picked ?? null,
       ...otherKeys,
       ...liveKeys,
+      ...flashKeys,
     ],
     locate
   )
@@ -127,6 +144,26 @@ export function CanvasLayer({
     pick && elements ? pickName(pick, elements.design, elements.page) : null
   const locateRef = useRef(locate)
   locateRef.current = locate
+  // A style changed in a state shows in it while outlined: its elements are forced into it.
+  const forcedFlash = changedTargets.flatMap((target, at) =>
+    target.state && rects[flashKeys[at]!] ? [`${flashKeys[at]}|${target.state}`] : []
+  )
+  const forcedFlashKey = forcedFlash.join(' ')
+  useEffect(() => {
+    const doc = canvas.frame?.contentDocument
+    if (!doc || !forcedFlashKey) return
+    const set: Element[] = []
+    for (const entry of forcedFlashKey.split(' ')) {
+      const [key, state] = entry.split('|')
+      const node = locateRef.current(doc, key!)
+      if (!node || node.hasAttribute('data-qb-force')) continue
+      node.setAttribute('data-qb-force', state!)
+      set.push(node)
+    }
+    return () => {
+      for (const node of set) node.removeAttribute('data-qb-force')
+    }
+  }, [canvas.frame, forcedFlashKey])
   // The picked element is drawn in the state its settings show.
   const force = elements?.force ?? 'base'
   const forcedKey = elements?.picked ?? null
@@ -221,6 +258,14 @@ export function CanvasLayer({
       }
       picked={pickedRect}
       pickedKey={picked}
+      changed={
+        flash
+          ? {
+              seq: flash.seq,
+              rects: flashKeys.flatMap((key) => (rects[key] ? [rects[key]] : [])),
+            }
+          : null
+      }
       name={name}
       onDuplicate={block ? () => onDuplicate(block) : undefined}
       onRemove={block ? () => onRemove(block) : undefined}

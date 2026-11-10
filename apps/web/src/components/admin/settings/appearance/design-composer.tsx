@@ -4,6 +4,7 @@ import {
   useState,
   type ClipboardEvent,
   type DragEvent,
+  type KeyboardEvent,
   type ReactNode,
 } from 'react'
 import { ExclamationTriangleIcon, XMarkIcon } from '@heroicons/react/16/solid'
@@ -15,6 +16,7 @@ import { readBrandShot, type BrandShot } from '@/lib/client/brand-shots'
 import { imageForModel, imagePalette } from '@/lib/client/image-palette'
 import { MATCH_BRAND } from '@/lib/shared/design/match-brand'
 import type { DesignAiScope } from '@/lib/shared/design/apply-changes'
+import type { AiReach, ReachChoice } from '@/lib/shared/design/ai-reach'
 import type { BrandContext, ChatImage } from './use-design-ai'
 import { useShotChecks } from './use-shot-checks'
 
@@ -104,6 +106,7 @@ export function DesignComposer({
   limited,
   onClearScope,
   onAsk,
+  onStop,
   prefill = null,
   below,
 }: {
@@ -120,6 +123,8 @@ export function DesignComposer({
   onClearScope: () => void
   /** A message; with screenshots, how they were read, for a brand started from them. */
   onAsk: (text: string, images?: ChatImage[], brand?: BrandContext) => void
+  /** Stops the request running; while one runs, Stop takes Send's place and Escape stops it. */
+  onStop?: () => void
   /**
    * Words to put in the box, such as an example chosen; a new `seq` puts them
    * in again. A hint instead says in the empty box what to put there.
@@ -199,6 +204,14 @@ export function DesignComposer({
     const added = read.filter((item): item is Attached => item !== null)
     if (added.length) setImages((current) => [...current, ...added].slice(0, MAX_IMAGES))
   }
+  // While a request runs, the send button is Stop: the same button, so focus stays on it.
+  const stoppable = busy && !!onStop
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || !stoppable || event.defaultPrevented) return
+    // Escape here stops the request; it does not also step back in the builder.
+    event.preventDefault()
+    onStop()
+  }
   const onPaste = (event: ClipboardEvent) => {
     const files = filesOf(event.clipboardData)
     if (!files.length) return
@@ -222,6 +235,7 @@ export function DesignComposer({
   return (
     <div
       onPaste={onPaste}
+      onKeyDown={onKeyDown}
       onDragOver={(event) => {
         if (!carriesFiles(event)) return
         event.preventDefault()
@@ -378,26 +392,38 @@ export function DesignComposer({
             </TooltipContent>
           </Tooltip>
         )}
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon-sm"
-          aria-label="Send"
-          className="ms-auto shrink-0 rounded-full focus-visible:ring-muted-foreground"
-          disabled={!sendable}
-          onClick={send}
-        >
-          <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
-            <path
-              d="M8 13V3M3.5 7.5 8 3l4.5 4.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon-sm"
+              aria-label={stoppable ? 'Stop' : 'Send'}
+              aria-keyshortcuts={stoppable ? 'Escape' : undefined}
+              className="ms-auto shrink-0 rounded-full focus-visible:ring-muted-foreground"
+              disabled={!stoppable && !sendable}
+              onClick={stoppable ? onStop : send}
+            >
+              {stoppable ? (
+                <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
+                  <rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="currentColor" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
+                  <path
+                    d="M8 13V3M3.5 7.5 8 3l4.5 4.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{stoppable ? 'Stop (Esc)' : 'Send'}</TooltipContent>
+        </Tooltip>
       </div>
     </div>
   )
@@ -405,28 +431,67 @@ export function DesignComposer({
 
 /**
  * What rides along with a request: the picked block, section or element by
- * name, the page it is on, and for an element the section it is in.
+ * name, the page it is on, and for an element the section it is in. Its
+ * reach says how far a request may change it, the panel's own scope first,
+ * and goes with the request as its `within`.
  */
 export interface ChatContext {
   name: string
   page: string
   /** The section an element picked inside it is in: "Hero". */
   section?: string
+  /** How far a request may reach: the choices, the one chosen, and a way to choose another. */
+  reach?: {
+    choices: readonly ReachChoice[]
+    value: AiReach
+    onChange: (reach: AiReach) => void
+  }
+}
+
+const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`
+
+/** Where the picked part is and how far a request reaches: "Hero · every main button", "Every page (4)". */
+function reachLine(context: ChatContext): string {
+  const chosen = context.reach?.choices.find((choice) => choice.reach === context.reach!.value)
+  if (!chosen)
+    return context.section ? `${context.section} on ${context.page}` : `On ${context.page}`
+  return context.section ? `${context.section} · ${chosen.words}` : capital(chosen.words)
 }
 
 /**
- * The picked block or element riding along with a request: its name and
- * where it is, and an X that takes it out of the chat and lets go of it on
- * the page.
+ * The picked block or element riding along with a request: its name, where
+ * it is and how far a request reaches (a click takes the next reach, where
+ * there is more than one), and an X that takes it out of the chat and lets
+ * go of it on the page.
  */
 export function ContextChip({ context, onClear }: { context: ChatContext; onClear: () => void }) {
+  const line = reachLine(context)
+  const choices = context.reach?.choices ?? []
+  const next = () => {
+    const at = choices.findIndex((choice) => choice.reach === context.reach!.value)
+    context.reach!.onChange(choices[(at + 1) % choices.length]!.reach)
+  }
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 rounded-lg bg-muted py-0.5 ps-2 pe-0.5 text-xs">
       <span className="min-w-0 leading-tight">
         <span className="block truncate font-medium text-foreground">{context.name}</span>
-        <span className="block truncate text-muted-foreground">
-          {context.section ? `${context.section} on ${context.page}` : `On ${context.page}`}
-        </span>
+        {choices.length > 1 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={`How far a request reaches: ${line}`}
+                className="block max-w-full truncate rounded text-start text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                onClick={next}
+              >
+                {line}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>How far a request reaches</TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="block truncate text-muted-foreground">{line}</span>
+        )}
       </span>
       <Tooltip>
         <TooltipTrigger asChild>

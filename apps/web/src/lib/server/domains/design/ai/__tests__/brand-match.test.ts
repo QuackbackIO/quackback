@@ -358,7 +358,8 @@ describe('brandMatch', () => {
     expect(result.logo).toMatchObject({ image: 0, full: true })
     expect(result.logo!.box.x).toBeGreaterThan(0.02)
     expect(result.reply).toMatch(/blue/)
-    expect(result.notes.at(-1)).toMatch(/Your screenshots do not show hover effects/)
+    // No note every match would say alike.
+    expect(result.notes.join(' ')).not.toMatch(/Your screenshots do not show/)
     expect(result.target?.measured?.fields.typeScale).toBe('display')
     // For the check: what was measured as a fingerprint, and every field set, unchanged ones too.
     expect(result.target?.fingerprint.headline?.size).toBeCloseTo(48, -1)

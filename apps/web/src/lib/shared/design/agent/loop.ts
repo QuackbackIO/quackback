@@ -12,8 +12,10 @@
  * Pure: the model, the draft and the preview come in as dependencies, so
  * the builder, the server and the eval run the same loop.
  */
-import type { AppliedDesignChange } from '../apply-changes'
+import type { AppliedDesignChange, DesignAiScope } from '../apply-changes'
+import { alsoNotes, oneSentence, reachClause, withReach } from '../ai-reach'
 import { plainReasons, plainWords } from '../colour-names'
+import type { DesignerPage } from '../paths'
 import type { PortalDesign } from '../schema'
 import type { AgentStepAnswer } from './step-schema'
 import {
@@ -95,7 +97,11 @@ export interface LoopDeps {
   now?: () => number
   /** read_website: the site's facts and a capture (as a JPEG data URL), cache first. */
   readWebsite?: (url: string) => Promise<{ reading: WebsiteReading; capture: string | null }>
-  /** match_website: the whole brand match on the site, saved to the draft; its design after. */
+  /**
+   * match_website: the whole brand match on the site, saved to the draft; its
+   * design after. Given only for a request about the whole site: a request
+   * about one part borrows from a site with read_website.
+   */
   matchWebsite?: (
     url: string
   ) => Promise<{ match: WebsiteMatch; design: PortalDesign | null; applied: AppliedDesignChange[] }>
@@ -130,7 +136,13 @@ export type LoopResult =
       /** Checks that failed in the last step that made any. */
       unmet: CheckResult[]
       refused: Array<{ what: string; reason: string }>
-      stopped: 'done' | 'steps' | 'time' | 'failed' | 'stalled'
+      /**
+       * What the reply leaves to Show changes: what was left alone and why,
+       * what did not come out as asked, what else a change reaches.
+       */
+      notes: string[]
+      /** Why it ended; `stopped` is the person's Stop. */
+      stopped: 'done' | 'steps' | 'time' | 'failed' | 'stalled' | 'stopped'
       ms: number
     }
   | { ok: false; code: string; message: string }
@@ -156,7 +168,15 @@ export function trailOf(steps: readonly StepRecord[]): string[] {
 
 const lowerFirst = (text: string) => `${text.charAt(0).toLowerCase()}${text.slice(1)}`
 
-/** The reply, said only of what happened. */
+/** What a request stopped by the person says: whether anything it did stays. */
+export const stoppedReply = (changed: boolean) =>
+  changed ? 'Stopped. What changed so far stays.' : 'Stopped. Nothing changed.'
+
+/**
+ * The reply, said only of what happened, in one sentence: what changed, how
+ * far it reached beyond the page shown, and that the loop stopped early
+ * where it did. Everything else is said under Show changes (loopNotes).
+ */
 export function loopReply(input: {
   answer: AgentStepAnswer | null
   applied: readonly AppliedDesignChange[]
@@ -164,32 +184,59 @@ export function loopReply(input: {
   refused: ReadonlyArray<{ what: string; reason: string }>
   unmet: readonly CheckResult[]
   stopped: Extract<LoopResult, { ok: true }>['stopped']
+  /** Parts of the request left alone because they are outside what was picked. */
+  leftAlone?: readonly string[]
+  /** How far the changes reached beyond the page shown, such as "on every page". */
+  reach?: string
 }): string {
   const { answer, applied, done, refused, unmet } = input
+  if (input.stopped === 'stopped') return stoppedReply(applied.length > 0)
   const why = plainReasons(refused.map((each) => each.reason))
   if (applied.length === 0) {
     if (refused.length > 0)
       return why ? `Nothing changed: ${why}.` : 'Nothing changed: I could not do that here.'
-    return plainWords(answer?.reply?.trim() || 'Nothing changed.')
+    if (input.leftAlone?.length) return 'That is outside what was picked, so nothing changed.'
+    return plainWords(oneSentence(answer?.reply?.trim() || 'Nothing changed.'))
   }
   const clean = unmet.length === 0 && refused.length === 0 && !!answer?.done
   const said =
     clean && answer?.reply.trim()
-      ? answer.reply.trim()
+      ? oneSentence(answer.reply)
       : `I changed ${[...new Set(done)].slice(0, 8).map(lowerFirst).join(', ')}.`
-  const notMet = unmet.length
-    ? ' Some of it did not come out as asked, so ask again to finish.'
-    : ''
-  const left = refused.length
-    ? why
-      ? ` I left the rest: ${why}.`
-      : ' I could not do the rest here.'
-    : ''
-  const time =
-    input.stopped === 'time' || input.stopped === 'failed'
-      ? ' I stopped before checking everything.'
-      : ''
-  return plainWords(`${said}${notMet}${left}${time}`)
+  const reached = withReach(said, input.reach ?? '')
+  const stoppedEarly = input.stopped === 'time' || input.stopped === 'failed'
+  return plainWords(
+    stoppedEarly
+      ? `${reached.replace(/[.!]+$/, '')}, but I stopped before checking everything.`
+      : reached
+  )
+}
+
+/** What the reply leaves to Show changes, each a short line. */
+export function loopNotes(input: {
+  unmet: readonly CheckResult[]
+  refused: ReadonlyArray<{ what: string; reason: string }>
+  leftAlone: readonly string[]
+  applied: readonly AppliedDesignChange[]
+  /** Notes the steps brought, such as the language words were written in. */
+  own: readonly string[]
+  scope: DesignAiScope
+}): string[] {
+  const why = plainReasons(input.refused.map((each) => each.reason))
+  const left = [...new Set(input.leftAlone)]
+  return [
+    ...(input.applied.length && input.unmet.length
+      ? ['Some of it did not come out as asked, so ask again to finish.']
+      : []),
+    ...(left.length
+      ? [`Left alone, as it is outside what was picked: ${left.map(lowerFirst).join(', ')}.`]
+      : []),
+    ...(input.applied.length && input.refused.length
+      ? [why ? `I left the rest: ${why}.` : 'I could not do the rest here.']
+      : []),
+    ...alsoNotes(input.applied, input.scope),
+    ...new Set(input.own),
+  ].map(plainWords)
 }
 
 const uniqueTargets = (targets: readonly StyleTarget[]) => {
@@ -288,6 +335,10 @@ export async function runEditLoop(input: {
   targets: readonly StyleTarget[]
   deps: LoopDeps
   budget?: LoopBudget
+  /** What was picked and the page shown, for how far the reply says the changes reached. */
+  pick?: { scope: DesignAiScope; page?: DesignerPage }
+  /** The person's Stop: no step starts after it, and what applied stays. */
+  signal?: AbortSignal
 }): Promise<LoopResult> {
   const { registry, deps } = input
   const budget = input.budget ?? LOOP_BUDGET
@@ -298,6 +349,8 @@ export async function runEditLoop(input: {
   const lists: AppliedDesignChange[][] = []
   const refused: Array<{ what: string; reason: string }> = []
   const done: string[] = []
+  const leftAlone: string[] = []
+  const own: string[] = []
   let design = input.design
   let answer: AgentStepAnswer | null = null
   let unmet: CheckResult[] = []
@@ -322,159 +375,195 @@ export async function runEditLoop(input: {
   // The website tools' own time (a capture, a match) is not the steps' budget.
   let toolMs = 0
 
-  for (let step = 0; step < budget.steps; step++) {
-    const spent = now() - started - toolMs
-    const usual = records.length
-      ? records.reduce((sum, r) => sum + r.ms.step + r.ms.read, 0) / records.length
-      : 0
-    if (step > 0 && spent + usual > budget.ms) {
-      stopped = 'time'
-      break
-    }
-    deps.progress?.(
-      step === 0
-        ? 'Step 1: planning the change'
-        : `Step ${step + 1}: correcting what the check found`
-    )
-    const stepStart = now()
-    const reply = await deps.step({
-      step,
-      turns: [...turns],
-      readings,
-      picture,
-      last: step === budget.steps - 1,
-      ...(website.length ? { website: [...website] } : {}),
-      ...(capture ? { capture } : {}),
-    })
-    const stepMs = now() - stepStart
-    if (!reply.ok) {
-      if (records.length === 0) return reply
-      stopped = 'failed'
-      break
-    }
-    answer = reply.answer
-    design = reply.design
-    lists.push(reply.outcome.applied)
-    refused.push(...reply.outcome.refused)
-    done.push(...reply.outcome.done)
-    // read_website and match_website: once a site, whatever the model asks.
-    capture = null
-    const toolStart = now()
-    const toRead = hostKey(answer.read_website ?? '')
-    if (toRead && deps.readWebsite) {
-      const kept = readSites.get(toRead)
-      if (kept) website.push(`${toRead} is already read; use the result above.`)
-      else {
-        deps.progress?.(`Reading ${toRead}`)
-        const got = await deps.readWebsite(answer.read_website)
-        readSites.set(toRead, got)
-        website.push(readingText(got.reading))
-        capture = got.capture
+  // Whether anything has landed in the draft: a step that fails after one did keeps it.
+  const changed = () => lists.some((list) => list.length > 0)
+  try {
+    for (let step = 0; step < budget.steps; step++) {
+      if (input.signal?.aborted) {
+        stopped = 'stopped'
+        break
       }
-    }
-    const toMatch = hostKey(answer.match_website ?? '')
-    if (toMatch && deps.matchWebsite && !matchedSites.has(toMatch)) {
-      matchedSites.add(toMatch)
-      deps.progress?.(`Matching ${toMatch}`)
-      const matched = await deps.matchWebsite(answer.match_website)
-      website.push(matchText(matched.match))
-      if (matched.design) {
-        design = matched.design
-        lists.push(matched.applied)
-        done.push(`matched ${toMatch}`)
-        matchReply = matched.match.reply
+      const spent = now() - started - toolMs
+      const usual = records.length
+        ? records.reduce((sum, r) => sum + r.ms.step + r.ms.read, 0) / records.length
+        : 0
+      if (step > 0 && spent + usual > budget.ms) {
+        stopped = 'time'
+        break
       }
-    }
-    const usedTools = !!toRead || !!toMatch
-    toolMs += now() - toolStart
-
-    // verify: every check so far (a correction is held to what the first step meant),
-    // read as drawn, with what the step asked to read.
-    const overridden = overrideStyles(design, answer.ops)
-    for (const set of overridden)
-      if (set.phone) phoneOnly.add(`${set.element}|${set.property}`)
-      else allScreens.add(`${set.element}|${set.property}`)
-    for (const style of answer.styles) allScreens.add(`${style.element}|${style.property}`)
-    for (const check of uniqueChecks([
-      ...answer.checks,
-      ...readabilityChecks([...answer.styles, ...overridden.filter((set) => !set.phone)]),
-    ] as StyleCheck[]))
-      // A check restated for the same element and property replaces the one before.
-      active.set(`${targetKey(check)}|${check.property}`, check)
-    const checks = [...active.values()]
-    const asked = answer.read.map((r) => ({ ...r }) as StyleTarget)
-    const targets = uniqueTargets([...checks.flatMap(checkTargets), ...asked])
-    const readStart = now()
-    if (targets.length) deps.progress?.(`Step ${step + 1}: checking the drawn preview`)
-    const drawn = targets.length ? await deps.read(targets, 'now') : {}
-    const missing = uniqueTargets(
-      checks
-        .filter(needsBefore)
-        .flatMap(checkTargets)
-        .filter((t) => !before[targetKey(t)])
-    )
-    if (missing.length) Object.assign(before, await deps.read(missing, 'before'))
-    picture = answer.look && deps.picture ? await deps.picture() : null
-    const readMs = now() - readStart
-    // What was set for phones only is not on the page as read, at full width: not measured.
-    const results = checks.map((check): CheckResult => {
-      const key = `${check.element}|${check.property}`
-      if (phoneOnly.has(key) && !allScreens.has(key))
-        return {
-          check,
-          ok: null,
-          saw: `${targetWords(registry, check)}: ${check.property} on phones, not measured at full width`,
+      deps.progress?.(
+        step === 0
+          ? 'Step 1: planning the change'
+          : `Step ${step + 1}: correcting what the check found`
+      )
+      const stepStart = now()
+      let reply: StepReply
+      try {
+        reply = await deps.step({
+          step,
+          turns: [...turns],
+          readings,
+          picture,
+          last: step === budget.steps - 1,
+          ...(website.length ? { website: [...website] } : {}),
+          ...(capture ? { capture } : {}),
+        })
+      } catch (err) {
+        // A step cut off by Stop: what the steps before applied stays.
+        if (!input.signal?.aborted) throw err
+        stopped = 'stopped'
+        break
+      }
+      const stepMs = now() - stepStart
+      if (!reply.ok) {
+        if (records.length === 0 && !changed()) return reply
+        stopped = 'failed'
+        break
+      }
+      answer = reply.answer
+      design = reply.design
+      lists.push(reply.outcome.applied)
+      refused.push(...reply.outcome.refused)
+      done.push(...reply.outcome.done)
+      const outside = reply.outcome.outOfScope ?? []
+      leftAlone.push(...outside)
+      own.push(...(reply.outcome.notes ?? []))
+      // read_website and match_website: once a site, whatever the model asks.
+      capture = null
+      const toolStart = now()
+      const toRead = hostKey(answer.read_website ?? '')
+      if (toRead && deps.readWebsite) {
+        const kept = readSites.get(toRead)
+        if (kept) website.push(`${toRead} is already read; use the result above.`)
+        else {
+          deps.progress?.(`Reading ${toRead}`)
+          const got = await deps.readWebsite(answer.read_website)
+          readSites.set(toRead, got)
+          website.push(readingText(got.reading))
+          capture = got.capture
         }
-      return evaluateCheck(registry, withRoleColour(registry, check, design), drawn, before)
-    })
-    const failing = results.filter((r) => r.ok === false)
-    unmet = failing
+      }
+      const toMatch = hostKey(answer.match_website ?? '')
+      if (toMatch && !deps.matchWebsite)
+        website.push(
+          'match_website is not offered: only part of the site was picked. Use read_website to borrow from a site.'
+        )
+      if (toMatch && deps.matchWebsite && !matchedSites.has(toMatch)) {
+        matchedSites.add(toMatch)
+        deps.progress?.(`Matching ${toMatch}`)
+        const matched = await deps.matchWebsite(answer.match_website)
+        website.push(matchText(matched.match))
+        if (matched.design) {
+          design = matched.design
+          lists.push(matched.applied)
+          done.push(`matched ${toMatch}`)
+          matchReply = matched.match.reply
+        }
+      }
+      const usedTools = !!toRead || !!toMatch
+      toolMs += now() - toolStart
 
-    records.push({
-      step,
-      plan: answer.plan,
-      did: reply.outcome.done,
-      refused: reply.outcome.refused,
-      checks: results,
-      ms: { step: stepMs, read: readMs },
-    })
-    turns.push({
-      step,
-      plan: answer.plan,
-      did: reply.outcome.done,
-      refused: reply.outcome.refused,
-      checks: results.map((r) => ({ ok: r.ok, saw: r.saw })),
-    })
-    readings = notes(registry, asked, drawn)
+      // verify: every check so far (a correction is held to what the first step meant),
+      // read as drawn, with what the step asked to read.
+      const overridden = overrideStyles(design, answer.ops)
+      for (const set of overridden)
+        if (set.phone) phoneOnly.add(`${set.element}|${set.property}`)
+        else allScreens.add(`${set.element}|${set.property}`)
+      for (const style of answer.styles) allScreens.add(`${style.element}|${style.property}`)
+      for (const check of uniqueChecks([
+        ...answer.checks,
+        ...readabilityChecks([...answer.styles, ...overridden.filter((set) => !set.phone)]),
+      ] as StyleCheck[]))
+        // A check restated for the same element and property replaces the one before.
+        active.set(`${targetKey(check)}|${check.property}`, check)
+      const checks = [...active.values()]
+      const asked = answer.read.map((r) => ({ ...r }) as StyleTarget)
+      const targets = uniqueTargets([...checks.flatMap(checkTargets), ...asked])
+      const readStart = now()
+      if (targets.length) deps.progress?.(`Step ${step + 1}: checking the drawn preview`)
+      const drawn = targets.length ? await deps.read(targets, 'now') : {}
+      const missing = uniqueTargets(
+        checks
+          .filter(needsBefore)
+          .flatMap(checkTargets)
+          .filter((t) => !before[targetKey(t)])
+      )
+      if (missing.length) Object.assign(before, await deps.read(missing, 'before'))
+      picture = answer.look && deps.picture ? await deps.picture() : null
+      const readMs = now() - readStart
+      // What was set for phones only is not on the page as read, at full width: not measured.
+      const results = checks.map((check): CheckResult => {
+        const key = `${check.element}|${check.property}`
+        if (phoneOnly.has(key) && !allScreens.has(key))
+          return {
+            check,
+            ok: null,
+            saw: `${targetWords(registry, check)}: ${check.property} on phones, not measured at full width`,
+          }
+        return evaluateCheck(registry, withRoleColour(registry, check, design), drawn, before)
+      })
+      const failing = results.filter((r) => r.ok === false)
+      unmet = failing
 
-    if (answer.done && failing.length === 0 && !usedTools) {
-      stopped = 'done'
-      break
+      records.push({
+        step,
+        plan: answer.plan,
+        did: reply.outcome.done,
+        refused: reply.outcome.refused,
+        checks: results,
+        ms: { step: stepMs, read: readMs },
+      })
+      turns.push({
+        step,
+        plan: answer.plan,
+        did: reply.outcome.done,
+        // What was left outside the pick, so the next step can put it on the pick instead.
+        refused: [
+          ...reply.outcome.refused,
+          ...outside.map((what) => ({ what, reason: 'outside what was picked: left alone' })),
+        ],
+        checks: results.map((r) => ({ ok: r.ok, saw: r.saw })),
+      })
+      readings = notes(registry, asked, drawn)
+
+      if (answer.done && failing.length === 0 && !usedTools) {
+        stopped = 'done'
+        break
+      }
+      // A step that neither changes, reads nor finds anything to correct twice running is stuck.
+      const acted =
+        reply.outcome.done.length > 0 || asked.length > 0 || failing.length > 0 || usedTools
+      idle = acted ? 0 : idle + 1
+      if (idle >= 2) {
+        stopped = 'stalled'
+        break
+      }
     }
-    // A step that neither changes, reads nor finds anything to correct twice running is stuck.
-    const acted =
-      reply.outcome.done.length > 0 || asked.length > 0 || failing.length > 0 || usedTools
-    idle = acted ? 0 : idle + 1
-    if (idle >= 2) {
-      stopped = 'stalled'
-      break
-    }
+  } catch (err) {
+    // Stopped by the person: what applied stays. Otherwise, nothing changed: the
+    // request failed as a whole; something did: it stays, with its Undo.
+    if (input.signal?.aborted) stopped = 'stopped'
+    else if (!changed()) throw err
+    else stopped = 'failed'
   }
 
   const applied = mergeChanges(input.design, design, lists)
-  const said = loopReply({ answer, applied, done, refused, unmet, stopped })
+  const scope = input.pick?.scope ?? 'site'
+  const reach = reachClause(design, applied, {
+    scope,
+    ...(input.pick?.page ? { page: input.pick.page } : {}),
+  })
+  const said = loopReply({ answer, applied, done, refused, unmet, stopped, leftAlone, reach })
   return {
     ok: true,
-    // A match says what it did first; the steps after it say what they added.
-    reply:
-      matchReply && !said.includes(matchReply)
-        ? `${matchReply} ${answer?.reply?.trim() ?? ''}`.trim()
-        : said,
+    // A match says what it did; what the steps added is under Show changes.
+    reply: matchReply ? plainWords(oneSentence(matchReply)) : said,
     design,
     applied,
     steps: records,
     unmet,
     refused,
+    notes: loopNotes({ unmet, refused, leftAlone, applied, own, scope }),
     stopped,
     ms: now() - started,
   }

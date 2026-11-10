@@ -40,7 +40,12 @@ const ONE_BLOCK =
 
 const ONE_CALL_ELEMENTS = new Set(['page', 'headline', 'subtitle'])
 
-/** Where a request's change goes, read from its words: one page, phones, one part. */
+/**
+ * Where a request's change goes, read from its words: one page, phones, one
+ * part. English words only, so a hint for the model and the route, never
+ * the authority: how far a request may reach is the composer chip's
+ * (ai-reach.ts), which the server holds every change to.
+ */
 export interface RequestScope {
   page?: OverridePage
   phone: boolean
