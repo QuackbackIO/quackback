@@ -34,6 +34,33 @@ describe('lintDesignCss', () => {
     expect(messages(errors).join(' ')).toContain(named)
   })
 
+  it.each([
+    ['body { background: image-set("https://example.com/x.png" 1x); }', 'image-set'],
+    ['body { background: -webkit-image-set("//example.com/x.png" 1x); }', '-webkit-image-set'],
+    ['body { background: \\69 mage-set("https://example.com/x.png" 1x); }', 'image-set'],
+    ['body { background: src("https://example.com/x.png"); }', 'src('],
+    ['body { --hero: url(https://example.com/x.png); background: var(--hero); }', 'example.com'],
+    ['body { --hero: image-set("https://example.com/x.png" 1x); }', 'example.com'],
+    ['body { --hero: \\75 rl(https://example.com/x.png); }', 'example.com'],
+    ['body { background: url(/api/storage/../api/v1/export); }', '/api/storage/../'],
+    ['body { background: url(/api/storage/%2e%2e/%2e%2e/logout); }', '%2e%2e'],
+    ['body { background: url("/api/storage/..\\\\..\\\\x"); }', 'url('],
+  ])('refuses what loads from outside its storage: %s', (css, named) => {
+    const { errors } = lintDesignCss(css)
+    expect(errors.length).toBeGreaterThan(0)
+    expect(messages(errors).join(' ')).toContain(named)
+  })
+
+  it('lets image-set(), src() and custom properties load from its own storage', () => {
+    const report = lintDesignCss(`
+      body { background: image-set("/api/storage/a.png" 1x, url(/api/storage/a@2x.png) 2x); }
+      body { background: image-set("/api/storage/a.avif" type("image/avif") 1x); }
+      body { --hero: url(/api/storage/hero.png); --gap: 1rem; background: var(--hero); }
+      body { font-family: "Inter", sans-serif; content: "image(not a load)"; }
+    `)
+    expect(report.errors).toEqual([])
+  })
+
   it('refuses CSS that does not parse, with the line', () => {
     const { errors } = lintDesignCss('a { color: red;\n}\n}}} {{')
     expect(errors.length).toBeGreaterThan(0)

@@ -2,8 +2,10 @@
  * The workspace's own CSS, checked as it is saved. It runs in the tenant layer
  * over the design, so what it may do is narrow:
  *
- * - Refused: `@import`, `url()` anywhere but the workspace's own storage,
- *   `expression()`, `behavior` and `<`, any of which reaches past styling.
+ * - Refused: `@import`, `url()` and the strings `image-set()` and `src()`
+ *   load, anywhere but the workspace's own storage (a custom property's
+ *   value included, since var() puts it in place), `expression()`, `behavior`
+ *   and `<`, any of which reaches past styling.
  * - Warned: internal class names (with the part to use instead, which "Fix it
  *   for me" swaps in), `!important`, setting a token no part reads, a part
  *   name kept only as an alias, and text and background colours on a part
@@ -34,6 +36,72 @@ export interface CssLintReport {
 
 /** Where the workspace's uploads are served from; nothing else may be loaded. */
 const OWN_STORAGE = /^\/api\/storage\/[^\s"'()]+$/
+
+/** Whether a URL is the workspace's own storage, still once `..`, `%2e%2e` and `\` resolve. */
+function isOwnStorage(value: string): boolean {
+  const url = value.trim()
+  if (!OWN_STORAGE.test(url)) return false
+  const resolved = new URL(url, 'https://own.invalid')
+  return resolved.origin === 'https://own.invalid' && resolved.pathname.startsWith('/api/storage/')
+}
+
+/** Functions whose string arguments the browser loads, as url() does. */
+const LOADERS = new Set([
+  'image-set',
+  '-webkit-image-set',
+  'src',
+  'image',
+  'cross-fade',
+  '-webkit-cross-fade',
+])
+
+/** A loading function anywhere in raw text, such as a custom property's value. */
+const LOADER_TEXT = /(?:^|[^\w-])(?:url|(?:-webkit-)?image-set|src|image|(?:-webkit-)?cross-fade)\s*\(/i
+
+/** An identifier with its CSS escapes read, so `\69 mage-set` is image-set. */
+function unescapeCss(text: string): string {
+  return text.replace(/\\(?:([0-9a-f]{1,6})\s?|([^\n]))/gi, (_, hex: string, char: string) =>
+    hex ? String.fromCodePoint(Number.parseInt(hex, 16) || 0xfffd) : char
+  )
+}
+
+const notOwn = (what: string) =>
+  `${what} is not allowed: only images and fonts uploaded to this workspace load.`
+
+/**
+ * What a node loads from outside the workspace's storage: a url(), a string
+ * handed to image-set(), src() and the like, or either inside raw text.
+ */
+function externalLoad(node: CssNode, within: { name: string } | null): string | null {
+  if (node.type === 'Url') return isOwnStorage(node.value) ? null : `url(${node.value})`
+  if (node.type === 'Raw') return rawLoads(node.value)[0] ?? null
+  if (node.type !== 'String' || !within) return null
+  const name = unescapeCss(within.name).toLowerCase()
+  return LOADERS.has(name) && !isOwnStorage(node.value) ? `${name}("${node.value}")` : null
+}
+
+/** The walker's context: the function a node sits in. */
+type WalkContext = { function: { name: string } | null }
+
+/**
+ * Raw text css-tree kept unparsed, such as a custom property's value, which
+ * var() puts in place later: a loading function in it is checked as one, and
+ * one that cannot be read is refused.
+ */
+function rawLoads(raw: string): string[] {
+  const text = unescapeCss(raw)
+  if (!LOADER_TEXT.test(text)) return []
+  try {
+    const found: string[] = []
+    csstree.walk(csstree.parse(text, { context: 'value' }), function (this: WalkContext, node) {
+      const load = externalLoad(node, this.function)
+      if (load) found.push(load)
+    })
+    return found
+  } catch {
+    return [text.trim()]
+  }
+}
 
 /**
  * The portal's internal classes a workspace's CSS used before parts, each with
@@ -86,7 +154,7 @@ export function lintDesignCss(css: string): CssLintReport {
   }
 
   csstree.walk(ast, {
-    enter(node: CssNode) {
+    enter(this: WalkContext, node: CssNode) {
       if (node.type === 'Atrule' && node.name.toLowerCase() === 'import') {
         errors.push({
           message: '@import is not allowed: put the CSS here instead.',
@@ -95,12 +163,8 @@ export function lintDesignCss(css: string): CssLintReport {
         // Its url() is the same refusal.
         return csstree.walk.skip
       }
-      if (node.type === 'Url' && !OWN_STORAGE.test(node.value.trim())) {
-        errors.push({
-          message: `url(${node.value}) is not allowed: only images and fonts uploaded to this workspace load.`,
-          line: lineOf(node),
-        })
-      }
+      const load = externalLoad(node, this.function)
+      if (load) errors.push({ message: notOwn(load), line: lineOf(node) })
       if (node.type === 'Function' && node.name.toLowerCase() === 'expression') {
         errors.push({ message: 'expression() is not allowed.', line: lineOf(node) })
       }
