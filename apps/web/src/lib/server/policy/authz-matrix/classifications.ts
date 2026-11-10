@@ -110,7 +110,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/channel-accounts.ts::getSurfaceSenderFn': DYNAMIC_PERMISSION(
     [
       PERMISSIONS.SETTINGS_MANAGE,
-      PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
       PERMISSIONS.BOARD_MANAGE,
       PERMISSIONS.CHANGELOG_MANAGE,
       PERMISSIONS.STATUS_PAGE_MANAGE,

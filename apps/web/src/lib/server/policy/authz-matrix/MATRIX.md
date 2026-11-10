@@ -302,7 +302,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/channel-accounts.ts`::updateSendingAddressNameFn | settings.manage |
 | `lib/server/functions/channel-accounts.ts`::setEmailSenderFn | DYNAMIC (settings.manage | channel_account.manage) |
 | `lib/server/functions/channel-accounts.ts`::setEmailSenderFn | settings.manage |
-| `lib/server/functions/channel-accounts.ts`::getSurfaceSenderFn | DYNAMIC (settings.manage | channel_account.manage | board.manage | changelog.manage | status_page.manage) |
+| `lib/server/functions/channel-accounts.ts`::getSurfaceSenderFn | DYNAMIC (settings.manage | board.manage | changelog.manage | status_page.manage) |
 | `lib/server/functions/channel-accounts.ts`::restartSendingDomainChecksFn | settings.manage |
 | `lib/server/functions/channel-accounts.ts`::deleteSendingDomainFn | settings.manage |
 | `lib/server/functions/channel-accounts.ts`::updateInboundTrustFn | channel_account.manage |

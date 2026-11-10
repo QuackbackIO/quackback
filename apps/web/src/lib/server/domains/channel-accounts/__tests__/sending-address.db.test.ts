@@ -525,6 +525,26 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       expect(await domainsOf(teamId)).toHaveLength(1)
     })
 
+    it('removes only a sending address, never the inbox a customer writes to', async () => {
+      const teamId = await seedTeam()
+      const [route] = await testDb
+        .insert(channelAccounts)
+        .values({
+          owningTeamId: teamId,
+          role: 'inbound',
+          config: { forwardingTarget: 'support@acme.com' },
+        })
+        .returning()
+      await expect(removeSendingAddress(route.id)).rejects.toThrow(
+        'That sending address no longer exists.'
+      )
+      const [kept] = await testDb
+        .select({ deletedAt: channelAccounts.deletedAt })
+        .from(channelAccounts)
+        .where(eq(channelAccounts.id, route.id))
+      expect(kept.deletedAt).toBeNull()
+    })
+
     it('flags nothing for an address with no domain', async () => {
       const teamId = await seedTeam()
       const account = await addSendingAddress({
