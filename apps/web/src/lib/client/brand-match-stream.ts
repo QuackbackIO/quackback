@@ -11,6 +11,7 @@ import type { DesignAdjustment } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { Fingerprint } from '@/lib/shared/design/fingerprint'
 import type { UnmatchedFont } from '@/lib/shared/design/match-brand'
+import type { OtherLook } from '@/lib/shared/design/match-steps'
 
 /** The colours a match measured and their roles, as far as the check needs them. */
 interface MeasuredRoles {
@@ -67,6 +68,8 @@ export type BrandMatchOutcome =
       font?: UnmatchedFont
       /** The fonts drawn are only the nearest to the brand's, so the summary does not claim them. */
       fontsNearest?: boolean
+      /** Other looks written beside the one placed, for Try another look. */
+      others?: OtherLook[]
       /** What was measured, for the check that follows the match. */
       target?: {
         fingerprint: Fingerprint
