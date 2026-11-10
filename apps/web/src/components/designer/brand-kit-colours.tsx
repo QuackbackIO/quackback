@@ -329,24 +329,25 @@ function FromLogo({
   const offered = colours.filter((colour) => colour.toLowerCase() !== accent.toLowerCase())
   if (!offered.length) return null
   return (
-    <div
-      role="group"
-      aria-label={THEME.fromLogo}
-      className="flex min-h-7 items-center gap-1.5 ps-[100px]"
-    >
-      <span className="me-0.5 text-[11px] text-muted-foreground">{THEME.fromLogo}</span>
-      {offered.map((colour) => (
-        <button
-          key={colour}
-          type="button"
-          aria-label={THEME.useAsBrand(colour)}
-          title={colour}
-          onClick={() => onPick(colour)}
-          className="grid size-6 place-items-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-        >
-          <Swatch colour={colour} className="size-4" />
-        </button>
-      ))}
+    <div role="group" aria-label={THEME.fromLogo} className="flex min-h-7 items-center gap-2">
+      {/* In the rows' label column, on one line; the swatches wrap beside it. */}
+      <span className="w-[92px] shrink-0 text-[11px] whitespace-nowrap text-muted-foreground">
+        {THEME.fromLogo}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        {offered.map((colour) => (
+          <button
+            key={colour}
+            type="button"
+            aria-label={THEME.useAsBrand(colour)}
+            title={colour}
+            onClick={() => onPick(colour)}
+            className="grid size-6 place-items-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          >
+            <Swatch colour={colour} className="size-4" />
+          </button>
+        ))}
+      </span>
     </div>
   )
 }

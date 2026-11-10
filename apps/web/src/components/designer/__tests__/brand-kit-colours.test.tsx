@@ -50,6 +50,8 @@ describe('From your logo', () => {
     design.brand.logoColours = ['#0058a3', '#e4002b', '#111111']
     render(<Harness start={design} />)
     const group = screen.getByRole('group', { name: 'From your logo' })
+    // Its name sits on one line, in the rows' label column.
+    expect(within(group).getByText('From your logo').className).toContain('whitespace-nowrap')
     // The colour already in use is not offered again.
     expect(within(group).queryByRole('button', { name: /#0058a3/ })).toBeNull()
     fireEvent.click(within(group).getByRole('button', { name: 'Use #e4002b as brand colour' }))
