@@ -333,7 +333,7 @@
   "portal.postDetail.commentsLocked": "Comments are locked on this post",
   "portal.changelog.title": "Changelog",
   "portal.changelog.description": "Stay up to date with the latest product updates and shipped features.",
-  "portal.changelog.rssFeed": "RSS Feed",
+  "portal.changelog.rssFeed": "RSS feed",
   "portal.changelog.loading": "Loading changelog…",
   "portal.changelog.loadMore": "Load more",
   "portal.changelog.loadingMore": "Loading…",
