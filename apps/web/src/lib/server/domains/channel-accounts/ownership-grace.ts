@@ -11,7 +11,16 @@
  * when the period ends.
  */
 import type { SendingDomainId } from '@quackback/ids'
-import { and, db, eq, isNull, emailSendingDomains, type EmailSendingDomain } from '@/lib/server/db'
+import {
+  and,
+  db,
+  eq,
+  isNull,
+  lt,
+  or,
+  emailSendingDomains,
+  type EmailSendingDomain,
+} from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import type { OwnershipAnswer } from './domain-verification'
 import { notifySendingDomainOwnershipMissing } from './sending-domain-notify'
@@ -66,7 +75,11 @@ export async function startOwnershipGrace(
 ): Promise<EmailSendingDomain | null> {
   const [started] = await db
     .update(emailSendingDomains)
-    .set({ ownershipMissingSince: since, ownershipWarningSentAt: null })
+    .set({
+      ownershipMissingSince: since,
+      ownershipWarningClaimedAt: null,
+      ownershipWarningSentAt: null,
+    })
     .where(and(eq(emailSendingDomains.id, id), isNull(emailSendingDomains.ownershipMissingSince)))
     .returning()
   if (!started) return null
@@ -78,15 +91,23 @@ export async function startOwnershipGrace(
 }
 
 /**
+ * How long a claim on the warning holds. A check that claimed it and then died
+ * before confirming (a deploy stopping the process mid-sweep) leaves a claim
+ * behind; once it is this old, the next check claims it again.
+ */
+export const OWNERSHIP_WARNING_LEASE_MS = 15 * 60 * 1000
+
+/**
  * Warn a row's managers that its ownership record is missing, unless that
  * warning was already delivered for the running period. Called by every check
  * that finds a verified row in its grace period, so a delivery that failed is
  * tried again by the next one.
  *
- * The delivered mark is claimed with a conditional update before sending, so
- * however many checks run at once only one of them sends; a delivery that
- * fails gives the claim back, so a later check tries again. Returns the row as
- * it stands after this call.
+ * A check first takes a lease (`ownershipWarningClaimedAt`) with a conditional
+ * update, so however many checks run at once only one sends. On success it
+ * confirms (`ownershipWarningSentAt`); on failure it gives the lease back. A
+ * lease nobody confirmed or gave back expires, so a check that died mid-send
+ * does not silence the warning. Returns the row as it stands after this call.
  */
 export async function deliverOwnershipWarning(
   row: EmailSendingDomain
@@ -96,27 +117,41 @@ export async function deliverOwnershipWarning(
   const claimedAt = new Date()
   const [claimed] = await db
     .update(emailSendingDomains)
-    .set({ ownershipWarningSentAt: claimedAt })
+    .set({ ownershipWarningClaimedAt: claimedAt })
     .where(
       and(
         eq(emailSendingDomains.id, row.id),
         eq(emailSendingDomains.status, 'verified'),
         eq(emailSendingDomains.ownershipMissingSince, since),
-        isNull(emailSendingDomains.ownershipWarningSentAt)
+        isNull(emailSendingDomains.ownershipWarningSentAt),
+        or(
+          isNull(emailSendingDomains.ownershipWarningClaimedAt),
+          lt(
+            emailSendingDomains.ownershipWarningClaimedAt,
+            new Date(claimedAt.getTime() - OWNERSHIP_WARNING_LEASE_MS)
+          )
+        )
       )
     )
     .returning()
   if (!claimed) return row
-  if (await notifySendingDomainOwnershipMissing(claimed, ownershipGraceEnds(since))) return claimed
+  const delivered = await notifySendingDomainOwnershipMissing(claimed, ownershipGraceEnds(since))
+  const ours = and(
+    eq(emailSendingDomains.id, row.id),
+    eq(emailSendingDomains.ownershipWarningClaimedAt, claimedAt)
+  )
+  if (delivered) {
+    const [confirmed] = await db
+      .update(emailSendingDomains)
+      .set({ ownershipWarningSentAt: new Date() })
+      .where(ours)
+      .returning()
+    return confirmed ?? claimed
+  }
   const [released] = await db
     .update(emailSendingDomains)
-    .set({ ownershipWarningSentAt: null })
-    .where(
-      and(
-        eq(emailSendingDomains.id, row.id),
-        eq(emailSendingDomains.ownershipWarningSentAt, claimedAt)
-      )
-    )
+    .set({ ownershipWarningClaimedAt: null })
+    .where(ours)
     .returning()
   log.warn(
     { sending_domain_id: row.id, domain: row.domain },

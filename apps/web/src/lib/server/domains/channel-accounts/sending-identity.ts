@@ -93,6 +93,7 @@ export {
 import { notifySendingDomainLive, notifySendingDomainNeedsAttention } from './sending-domain-notify'
 import { deliverOwnershipWarning, ownershipGrace, startOwnershipGrace } from './ownership-grace'
 import { enqueueSesTenantReconcile } from './ses-tenant-queue'
+import { saveSendingDomainCheck } from './sending-domain-check-write'
 import { rekeyToHeldSigningKey, sealSigningKey, shouldHoldSigningKey } from './pending-signing-key'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
@@ -564,33 +565,28 @@ export async function refreshSendingDomain(
     checkRecords(row.domain, composed, resolver, now),
     readDmarc(row.domain, resolver),
   ])
-  // The one place a domain stops verifying, whether the daily sweep, the watch
-  // job or a person's click found it. Conditional, so when two checks find it
-  // failing at once only the one whose update moved it off verified tells the
-  // managers; the write below then sets the same status again.
+  // Every field but the move to verified, which is made below on its own. A
+  // demotion is reported by the one check that made it (see the module).
   const promoted = status === 'verified'
-  const [demoted] = promoted
-    ? []
-    : await db
-        .update(emailSendingDomains)
-        .set({ status, updatedAt: now })
-        .where(and(eq(emailSendingDomains.id, id), eq(emailSendingDomains.status, 'verified')))
-        .returning({ id: emailSendingDomains.id })
-
-  // Every field but the move to verified, which is made below on its own.
-  const [written] = await db
-    .update(emailSendingDomains)
-    .set({
-      ...(promoted ? {} : { status }),
+  const { demoted, written } = await saveSendingDomainCheck(id, {
+    status,
+    wasVerified,
+    now,
+    fields: {
       dnsRecords,
       ...(dmarc ? { preflight: { ...row.preflight, dmarc } } : {}),
       // Found again: the clock for a missing record starts over.
-      ...(ownershipProven ? { ownershipMissingSince: null, ownershipWarningSentAt: null } : {}),
+      ...(ownershipProven
+        ? {
+            ownershipMissingSince: null,
+            ownershipWarningClaimedAt: null,
+            ownershipWarningSentAt: null,
+          }
+        : {}),
       lastCheckedAt: now,
       updatedAt: now,
-    })
-    .where(eq(emailSendingDomains.id, id))
-    .returning()
+    },
+  })
   let updated = written
 
   if (written && demoted) {

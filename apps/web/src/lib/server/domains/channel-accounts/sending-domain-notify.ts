@@ -174,8 +174,10 @@ export function formatDeadline(at: Date): string {
 /**
  * A verified domain's ownership record went missing: a bell per manager and an
  * email naming the record and the date it has to be back by. The domain keeps
- * sending as itself until then. Resolves true when the bell and every email
- * went out (or there was nobody to tell), false when any part failed.
+ * sending as itself until then. Resolves true once the bell rang and at least
+ * one email went out (or none was due), so one recipient whose address keeps
+ * failing does not have every manager warned again on each check; false when
+ * the bell failed or every email did.
  */
 export async function notifySendingDomainOwnershipMissing(
   domain: EmailSendingDomain,
@@ -202,7 +204,10 @@ export async function notifySendingDomainOwnershipMissing(
   }
 }
 
-/** Email every manager whose preference allows it. False when any send failed. */
+/**
+ * Email every manager whose preference allows it. False only when emails were
+ * due and every one failed; a recipient whose send failed is logged at warn.
+ */
 async function emailManagers(
   managers: Manager[],
   domain: EmailSendingDomain,
@@ -217,13 +222,15 @@ async function emailManagers(
   const { getBaseUrl } = await import('@/lib/server/config')
   const workspace = await getWorkspaceSettings()
   const base = getBaseUrl().replace(/\/$/, '')
-  let delivered = true
+  let due = 0
+  let sent = 0
   for (const manager of managers) {
     const p = prefs.get(manager.principalId)
     if (p && !shouldNotify(p, 'sending_domain_needs_attention', 'email')) continue
     if (!manager.userId) continue
     const to = await resolveAccountRecipient(manager.userId)
     if (!to) continue
+    due += 1
     try {
       await sendSendingDomainAttentionEmail({
         to,
@@ -233,13 +240,13 @@ async function emailManagers(
         settingsUrl: base ? `${base}/admin/settings/channels/email` : null,
         workspaceName: workspace?.settings?.name,
       })
+      sent += 1
     } catch (err) {
-      delivered = false
       log.warn(
         { err, sending_domain_id: domain.id, principal_id: manager.principalId },
         'sending domain attention email failed'
       )
     }
   }
-  return delivered
+  return due === 0 || sent > 0
 }
