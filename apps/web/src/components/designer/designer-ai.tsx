@@ -280,6 +280,10 @@ export function DesignerAi({
               void ai.ask(text, 'site')
             }}
             onChip={fill}
+            onDirect={({ label, reply, changes }) => {
+              ai.record({ role: 'user', text: label })
+              ai.record({ role: 'assistant', text: reply, changes })
+            }}
             onRecapture={(url) => void ai.recapture(url)}
             {...(onFonts && {
               onUploadFont: (font: UnmatchedFont) => onFonts(font),
