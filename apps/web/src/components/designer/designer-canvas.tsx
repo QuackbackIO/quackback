@@ -148,6 +148,7 @@ export function DesignerCanvas({
   onHover,
   onMenu,
   onMenuHover,
+  onContext,
   onWords,
   onKey,
   onEscape,
@@ -188,6 +189,12 @@ export function DesignerCanvas({
   onMenu?: (menu: MenuTarget, how: 'click' | 'rename', target?: Element | null) => void
   /** The menu item the pointer is over, or null. */
   onMenuHover?: (menu: MenuTarget | null) => void
+  /**
+   * A right-click on the page, not on the menu: the block under it and the
+   * element there, as a click names them, and where it was in the builder's
+   * window, to open the actions there.
+   */
+  onContext?: (section: string | null, target: Element | null, at: { x: number; y: number }) => void
   onWords: (field: string, value: WordsDoc | string) => void
   onKey: (key: 'undo' | 'redo') => void
   /** An Escape the page did not take: to leave Preview, or to let go of what is picked. */
@@ -247,6 +254,7 @@ export function DesignerCanvas({
     onHover,
     onMenu,
     onMenuHover,
+    onContext,
     onWords,
     onKey,
     onEscape,
@@ -259,6 +267,7 @@ export function DesignerCanvas({
     onHover,
     onMenu,
     onMenuHover,
+    onContext,
     onWords,
     onKey,
     onEscape,
@@ -293,6 +302,23 @@ export function DesignerCanvas({
           target
         )
         handlers.current.onMenuHover?.(menu)
+      } else if (message?.type === 'quackback:preview-context') {
+        const section = typeof message.section === 'string' ? message.section : null
+        // A menu item's actions are its click menu.
+        if (menu && handlers.current.onMenu) handlers.current.onMenu(menu, 'click', target)
+        else if (
+          handlers.current.onContext &&
+          typeof message.x === 'number' &&
+          typeof message.y === 'number'
+        ) {
+          const frame = iframeRef.current!
+          const box = frame.getBoundingClientRect()
+          const scale = frame.offsetWidth ? box.width / frame.offsetWidth : 1
+          handlers.current.onContext(section, target, {
+            x: box.left + message.x * scale,
+            y: box.top + message.y * scale,
+          })
+        }
       } else if (message?.type === 'quackback:preview-rename') {
         if (menu) handlers.current.onMenu?.(menu, 'rename')
       } else if (message?.type === 'quackback:preview-words') {

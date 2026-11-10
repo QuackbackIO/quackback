@@ -55,6 +55,7 @@ import {
   focusHeading,
   focusSettings,
   inSettings,
+  openChipMenu,
   treeReturnRow,
   type TreeOrigin,
 } from './settings-focus'
@@ -628,6 +629,13 @@ export function DesignerShell({
                       else if (how === 'click' && node) picking.select('header', null, node)
                     }}
                     onMenuHover={menu.setHovered}
+                    onContext={(section, target, at) => {
+                      menu.dismiss()
+                      setPageClosed(false)
+                      picking.select(section, null, target)
+                      // A block's actions open where it was right-clicked, as its ⋯ offers them.
+                      if (section?.startsWith('block-')) openChipMenu(section, at)
+                    }}
                     onWords={onWords}
                     onKey={(key) => (key === 'undo' ? undo() : redo())}
                     onEscape={() => {
@@ -651,6 +659,7 @@ export function DesignerShell({
                             onPage={setPage}
                             onDuplicate={blocks.duplicateBlock}
                             onRemove={blocks.removeBlock}
+                            onMove={blocks.moveBlock}
                             onDeselect={stepBack}
                             flash={changeFlash.flash}
                             grid={{

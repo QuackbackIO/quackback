@@ -43,6 +43,33 @@ export function keepFocus(selector: string, frames = 20, follow = false): void {
 export const focusPicked = (picked: boolean) =>
   picked ? keepFocus(CHIP_NAME, 30, true) : focusCanvas()
 
+/**
+ * Opens a picked block's actions at a point in the builder's window, as a
+ * right-click on its chip does: once the chip for that block is drawn, the
+ * frame's right-click is handed to it there.
+ */
+export function openChipMenu(key: string, at: { x: number; y: number }, frames = 30): void {
+  let left = frames
+  const tick = () => {
+    const chip = document.querySelector<HTMLElement>(
+      `[data-editing-layer] [data-chip-for="${CSS.escape(key)}"]`
+    )
+    if (chip) {
+      chip.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: at.x,
+          clientY: at.y,
+        })
+      )
+      return
+    }
+    if (--left > 0) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
+
 const settings = () => document.getElementById('designer-settings')
 
 /** A row of "On this page", by the row's id. */

@@ -1,5 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { locationOfPath, type DesignerPage, type Selection } from '@/lib/shared/design/outline'
+import {
+  blockKey,
+  locationOfPath,
+  type DesignerPage,
+  type Selection,
+} from '@/lib/shared/design/outline'
 import type { CanvasFrame } from './designer-canvas'
 import { EditingLayer } from './editing-layer'
 import { ComposerWidthHandles } from './composer-width-handles'
@@ -44,6 +49,7 @@ export function CanvasLayer({
   onPage,
   onDuplicate,
   onRemove,
+  onMove,
   onDeselect,
   grid,
   elements,
@@ -60,6 +66,8 @@ export function CanvasLayer({
   onPage: (page: DesignerPage, item?: string | null) => void
   onDuplicate: (key: Selection) => void
   onRemove: (key: Selection) => void
+  /** Moves a block a place up or down, as its ⋯ does. */
+  onMove?: (key: Selection, by: -1 | 1) => void
   onDeselect: () => void
   /** What moving and resizing Home's blocks needs; without it, blocks stay put. */
   grid?: GridEditing
@@ -224,6 +232,8 @@ export function CanvasLayer({
         }
       : null
   const block = picked?.startsWith('block-') ? picked : null
+  const homeBlocks = (elements?.design ?? grid?.design)?.pages.home.blocks ?? []
+  const placeAt = block ? homeBlocks.findIndex((each, i) => blockKey(each, i) === block) : -1
   const pickedRect = picked ? (rects[picked] ?? null) : null
   const pointedRect =
     elements?.hovered && elements.hovered !== elements.picked && !resizing
@@ -248,6 +258,14 @@ export function CanvasLayer({
       name={name}
       onDuplicate={block ? () => onDuplicate(block) : undefined}
       onRemove={block ? () => onRemove(block) : undefined}
+      onMove={
+        block && onMove && placeAt >= 0
+          ? {
+              up: placeAt > 0 ? () => onMove(block, -1) : null,
+              down: placeAt < homeBlocks.length - 1 ? () => onMove(block, 1) : null,
+            }
+          : undefined
+      }
       onSettings={() => document.getElementById('designer-settings')?.focus()}
       onDown={elements ? down : undefined}
       grip={
