@@ -198,7 +198,7 @@ export function ManagePostActions({
                 <DropdownMenuItem onClick={actions.onMergeInto}>
                   <FormattedMessage
                     id="portal.postDetail.metadata.mergeIntoAnother"
-                    defaultMessage="Merge into another..."
+                    defaultMessage="Merge into another…"
                   />
                 </DropdownMenuItem>
               </DropdownMenuContent>

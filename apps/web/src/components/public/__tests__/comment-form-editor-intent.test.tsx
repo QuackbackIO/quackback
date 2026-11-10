@@ -56,12 +56,12 @@ describe('CommentForm editor', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(editorModule.loaded).toBe(false)
     expect(screen.queryByTestId('editor')).toBeNull()
-    expect(screen.getByRole('textbox', { name: 'Write a comment...' })).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: 'Write a comment…' })).toBeTruthy()
   })
 
   it('mounts the editor once the pointer reaches the composer', async () => {
     renderForm()
-    fireEvent.pointerEnter(screen.getByRole('textbox', { name: 'Write a comment...' }))
+    fireEvent.pointerEnter(screen.getByRole('textbox', { name: 'Write a comment…' }))
     expect(await screen.findByTestId('editor')).toBeTruthy()
   })
 
@@ -70,7 +70,7 @@ describe('CommentForm editor', () => {
       isTeamMember: true,
       statuses: [{ id: 'status_1', name: 'Open', color: '#3b82f6' }],
     })
-    const standIn = screen.getByRole('textbox', { name: 'Write a comment...' })
+    const standIn = screen.getByRole('textbox', { name: 'Write a comment…' })
     expect(screen.queryByTestId('editor')).toBeNull()
     fireEvent.focus(standIn)
     expect(await screen.findByTestId('editor')).toBeTruthy()

@@ -326,7 +326,7 @@ export function StatusPageView({
               {isFetchingNextPage ? (
                 <FormattedMessage
                   id="portal.status.history.loadingMore"
-                  defaultMessage="Loading..."
+                  defaultMessage="Loading…"
                 />
               ) : (
                 <FormattedMessage id="portal.status.history.loadMore" defaultMessage="Load more" />

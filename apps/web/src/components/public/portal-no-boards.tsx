@@ -24,7 +24,7 @@ export function PortalNoBoards({ orgName, items }: { orgName: string; items: Por
         icon={ChatBubbleOvalLeftEllipsisIcon}
         title={intl.formatMessage({
           id: 'portal.feedback.empty.comingSoonTitle',
-          defaultMessage: 'Coming Soon',
+          defaultMessage: 'Coming soon',
         })}
         description={intl.formatMessage(
           {

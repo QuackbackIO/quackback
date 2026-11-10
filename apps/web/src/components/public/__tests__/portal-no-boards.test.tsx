@@ -35,7 +35,7 @@ function renderEmpty(items: ReturnType<typeof resolvePortalNavItems>) {
 
 it('points visitors of a workspace without a board to the pages that are live', () => {
   renderEmpty(resolvePortalNavItems({ ...gates, help: true, status: true }))
-  expect(screen.queryByText('Coming Soon')).toBeNull()
+  expect(screen.queryByText('Coming soon')).toBeNull()
   expect(screen.getByRole('link', { name: 'Help Center' })).toHaveAttribute('href', '/hc')
   expect(screen.getByRole('link', { name: 'Status' })).toHaveAttribute('href', '/status')
   // Feedback and Roadmap lead back to this same empty board.
@@ -45,6 +45,6 @@ it('points visitors of a workspace without a board to the pages that are live', 
 
 it('keeps the coming soon state when the board is the only page', () => {
   renderEmpty(resolvePortalNavItems(gates))
-  expect(screen.getByText('Coming Soon')).toBeInTheDocument()
+  expect(screen.getByText('Coming soon')).toBeInTheDocument()
   expect(screen.queryAllByRole('link')).toHaveLength(0)
 })

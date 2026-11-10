@@ -354,14 +354,14 @@ export function PostCard({
             <ArrowTopRightOnSquareIcon className="h-4 w-4" />
             {intl.formatMessage({
               id: 'portal.postCard.quickActions.viewInPortal',
-              defaultMessage: 'View in Portal',
+              defaultMessage: 'View in portal',
             })}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleCopyLink}>
             <LinkIcon className="h-4 w-4" />
             {intl.formatMessage({
               id: 'portal.postCard.quickActions.copyLink',
-              defaultMessage: 'Copy Link',
+              defaultMessage: 'Copy link',
             })}
           </DropdownMenuItem>
         </DropdownMenuContent>

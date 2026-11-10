@@ -173,10 +173,10 @@ describe('mainActionsOffered', () => {
     expect(offered.actions).toEqual(['composer', 'button', 'none'])
     expect(offered.buttonTo).toEqual(['composer', 'support'])
     expect(offered.notes).toEqual({
-      actions: ['Search needs the help centre on.'],
+      actions: ['Search needs the Help Center on.'],
       buttonTo: [
         'The roadmap needs to be on for a button to go there.',
-        'The help centre needs to be on for a button to go there.',
+        'The Help Center needs to be on for a button to go there.',
       ],
     })
   })

@@ -29,7 +29,7 @@ export const PORTAL_KEY_MESSAGES: KeyDialogMessages = defineMessages({
       'Any applications using the current key will lose access until you update them with the new key. The key name and settings will be preserved.',
   },
   rotateConfirm: { id: 'portal.settings.apiKeys.rotate.confirm', defaultMessage: 'Rotate key' },
-  rotatePending: { id: 'portal.settings.apiKeys.rotate.pending', defaultMessage: 'Rotating...' },
+  rotatePending: { id: 'portal.settings.apiKeys.rotate.pending', defaultMessage: 'Rotating…' },
   revokeTitle: { id: 'portal.settings.apiKeys.revoke.title', defaultMessage: 'Revoke API key' },
   revokeDescription: {
     id: 'portal.settings.apiKeys.revoke.description',
@@ -45,7 +45,7 @@ export const PORTAL_KEY_MESSAGES: KeyDialogMessages = defineMessages({
       'Any applications using this key will immediately lose access to the API. You will need to create a new key and update your integrations.',
   },
   revokeConfirm: { id: 'portal.settings.apiKeys.revoke.confirm', defaultMessage: 'Revoke key' },
-  revokePending: { id: 'portal.settings.apiKeys.revoke.pending', defaultMessage: 'Revoking...' },
+  revokePending: { id: 'portal.settings.apiKeys.revoke.pending', defaultMessage: 'Revoking…' },
   revealTitle: { id: 'portal.settings.apiKeys.reveal.title', defaultMessage: 'API key created' },
   revealDescription: {
     id: 'portal.settings.apiKeys.reveal.description',

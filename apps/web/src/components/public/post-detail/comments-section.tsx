@@ -173,7 +173,7 @@ export function CommentsSection({
         {isLoadingMoreComments
           ? intl.formatMessage({
               id: 'portal.postDetail.comments.loadingMore',
-              defaultMessage: 'Loading...',
+              defaultMessage: 'Loading…',
             })
           : remainingCommentCount && remainingCommentCount > 0
             ? intl.formatMessage(

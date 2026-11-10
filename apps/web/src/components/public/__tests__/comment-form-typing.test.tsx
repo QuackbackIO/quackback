@@ -70,7 +70,7 @@ async function renderForm(props: Partial<Parameters<typeof CommentForm>[0]> = {}
       </IntlProvider>
     </QueryClientProvider>
   )
-  fireEvent.pointerEnter(screen.getByRole('textbox', { name: 'Write a comment...' }))
+  fireEvent.pointerEnter(screen.getByRole('textbox', { name: 'Write a comment…' }))
   await screen.findByTestId('editor')
   return { mutate }
 }

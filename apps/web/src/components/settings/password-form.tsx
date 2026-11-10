@@ -218,12 +218,12 @@ export function PasswordForm({ hasPassword, onSaved }: PasswordFormProps) {
                   {hasPassword ? (
                     <FormattedMessage
                       id="portal.settings.password.changing"
-                      defaultMessage="Changing..."
+                      defaultMessage="Changing…"
                     />
                   ) : (
                     <FormattedMessage
                       id="portal.settings.password.setting"
-                      defaultMessage="Setting..."
+                      defaultMessage="Setting…"
                     />
                   )}
                 </>

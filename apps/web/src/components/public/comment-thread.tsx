@@ -961,7 +961,7 @@ function CommentItem({
                 {isBeingRestored
                   ? intl.formatMessage({
                       id: 'portal.commentThread.restoring',
-                      defaultMessage: 'Restoring...',
+                      defaultMessage: 'Restoring…',
                     })
                   : intl.formatMessage({
                       id: 'portal.commentThread.restore',
@@ -999,7 +999,7 @@ function CommentItem({
                 {isBeingDeleted
                   ? intl.formatMessage({
                       id: 'portal.commentThread.deleting',
-                      defaultMessage: 'Deleting...',
+                      defaultMessage: 'Deleting…',
                     })
                   : intl.formatMessage({
                       id: 'portal.commentThread.delete',

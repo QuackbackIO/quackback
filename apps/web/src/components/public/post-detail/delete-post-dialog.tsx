@@ -123,12 +123,12 @@ export function DeletePostDialog({
         isPending
           ? intl.formatMessage({
               id: 'portal.postDetail.deleteDialog.deleting',
-              defaultMessage: 'Deleting...',
+              defaultMessage: 'Deleting…',
             })
           : isLoadingLinks
             ? intl.formatMessage({
                 id: 'portal.postDetail.deleteDialog.loading',
-                defaultMessage: 'Loading...',
+                defaultMessage: 'Loading…',
               })
             : intl.formatMessage({
                 id: 'portal.postDetail.deleteDialog.confirmLabel',

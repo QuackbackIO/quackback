@@ -262,7 +262,7 @@ export function CommentForm({
                         onVideoUpload={onImageUpload}
                         placeholder={intl.formatMessage({
                           id: 'portal.commentForm.placeholder',
-                          defaultMessage: 'Write a comment...',
+                          defaultMessage: 'Write a comment…',
                         })}
                         onDocumentChange={(document) =>
                           recordEditorChange(document, field.onChange)
@@ -450,7 +450,7 @@ export function CommentForm({
                 {isSubmitting
                   ? intl.formatMessage({
                       id: 'portal.commentForm.submitting',
-                      defaultMessage: 'Posting...',
+                      defaultMessage: 'Posting…',
                     })
                   : selectedStatus
                     ? intl.formatMessage(
@@ -513,7 +513,7 @@ export function CommentForm({
                     onVideoUpload={onImageUpload}
                     placeholder={intl.formatMessage({
                       id: 'portal.commentForm.placeholder',
-                      defaultMessage: 'Write a comment...',
+                      defaultMessage: 'Write a comment…',
                     })}
                     onDocumentChange={(document) => recordEditorChange(document, field.onChange)}
                   />
@@ -613,7 +613,7 @@ export function CommentForm({
             {isSubmitting
               ? intl.formatMessage({
                   id: 'portal.commentForm.submitting',
-                  defaultMessage: 'Posting...',
+                  defaultMessage: 'Posting…',
                 })
               : parentId
                 ? intl.formatMessage({ id: 'portal.commentForm.reply', defaultMessage: 'Reply' })

@@ -498,7 +498,7 @@ export function FeedbackHeaderAnimated({
                     onDocumentChange={handleContentChange}
                     placeholder={intl.formatMessage({
                       id: 'portal.feedback.header.detailsPlaceholder',
-                      defaultMessage: 'Add more details... Type / for commands',
+                      defaultMessage: 'Add more details… Type / for commands',
                     })}
                     minHeight="150px"
                     borderless
@@ -647,7 +647,7 @@ export function FeedbackHeaderAnimated({
                     {createPost.isPending ? (
                       <FormattedMessage
                         id="portal.feedback.header.submitting"
-                        defaultMessage="Posting..."
+                        defaultMessage="Posting…"
                       />
                     ) : (
                       <span data-qb-words="feedback.submit">

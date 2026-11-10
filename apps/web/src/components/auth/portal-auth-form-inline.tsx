@@ -1323,10 +1323,10 @@ export function PortalAuthFormInline({
               mode === 'signup' ? (
                 <FormattedMessage
                   id="portal.auth.creatingAccount"
-                  defaultMessage="Creating account..."
+                  defaultMessage="Creating account…"
                 />
               ) : (
-                <FormattedMessage id="portal.auth.signingIn" defaultMessage="Signing in..." />
+                <FormattedMessage id="portal.auth.signingIn" defaultMessage="Signing in…" />
               )
             ) : mode === 'signup' ? (
               <FormattedMessage id="portal.auth.createAccount" defaultMessage="Create account" />
@@ -1471,10 +1471,7 @@ export function PortalAuthFormInline({
             {loadingAction === 'forgot' ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                <FormattedMessage
-                  id="portal.auth.forgot.sending"
-                  defaultMessage="Sending link..."
-                />
+                <FormattedMessage id="portal.auth.forgot.sending" defaultMessage="Sending link…" />
               </>
             ) : (
               <FormattedMessage id="portal.auth.forgot.send" defaultMessage="Send reset link" />

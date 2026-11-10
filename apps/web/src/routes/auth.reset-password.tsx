@@ -224,7 +224,7 @@ function ResetPasswordContent({ token, urlError }: { token: string; urlError: st
               <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
               <FormattedMessage
                 id="portal.auth.resetPassword.resetting"
-                defaultMessage="Resetting password..."
+                defaultMessage="Resetting password…"
               />
             </>
           ) : (
