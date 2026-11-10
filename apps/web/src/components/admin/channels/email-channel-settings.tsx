@@ -29,8 +29,8 @@ import { DomainSetupPanel } from './domain-setup-panel'
 import { SendingPausedNotice } from './sending-paused-notice'
 import {
   domainPhase,
-  failingRecord,
   failingRecordName,
+  ownershipWarning,
   signingKeyFailing,
   signingKeyProblem,
   type DomainPhase,
@@ -289,7 +289,7 @@ function defaultMeta(uncovered: string[]): string {
     : `Default for ${listOf(uncovered)}`
 }
 
-/** The meta line of a row whose domain is not live yet. */
+/** The meta line of a row whose domain is not live yet, or is live with its ownership record missing. */
 function pendingMeta(
   domain: SendingDomainDTO,
   phase: DomainPhase,
@@ -297,12 +297,15 @@ function pendingMeta(
   area: string,
   fallback: string
 ): string | null {
-  if (phase === 'live') return null
+  if (phase === 'live') {
+    const warning = first ? ownershipWarning(domain) : null
+    return warning ? `The ownership record is missing. ${warning}` : null
+  }
   if (!first) return `${area} · Waiting for ${domain.domain}`
   if (signingKeyFailing(domain, phase)) return `${signingKeyProblem(domain.domain)}${fallback}`
   if (phase === 'not-found') return `Records not found after 72 hours.${fallback}`
   if (phase === 'attention') {
-    const failing = failingRecord(domain)
+    const failing = domain.dnsRecords.find((r) => r.check && r.check.state !== 'found')
     const name = failingRecordName(domain)
     if (failing && name) {
       const what =
@@ -417,8 +420,10 @@ function SendingAddressesSection({
         {oldestFirst.map(({ a, domain, phase }) => {
           const smtp = a.config.smtp as SmtpConfig | undefined
           const first = firstOnDomain.has(a.id)
+          // A live domain whose ownership record went missing still needs a record.
+          const warned = !!domain && first && ownershipWarning(domain) !== null
           // Always open while the domain needs its records; opened from the menu once live.
-          const open = domain ? phase !== 'live' || (expanded[domain.id] ?? false) : false
+          const open = domain ? phase !== 'live' || (expanded[domain.id] ?? warned) : false
           const label = a.address ?? ''
           const items = [
             ...(domain && phase === 'live'
@@ -476,7 +481,7 @@ function SendingAddressesSection({
                     pendingMeta(domain, phase, first, moduleLabel(a.module), fallbackNote)) ||
                   moduleLabel(a.module)
                 }
-                wrapMeta={phase !== 'live'}
+                wrapMeta={phase !== 'live' || warned}
                 badges={<PhaseBadge phase={phase} />}
                 actions={items}
               />

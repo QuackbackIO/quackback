@@ -55,31 +55,18 @@ export async function sendingDomainManagers(): Promise<Manager[]> {
   return managers
 }
 
-/**
- * Whether a record only proves ownership: the ownership TXT, or the row's own
- * key TXT on an identity that signs with another key.
- */
-function provesOwnershipOnly(domain: EmailSendingDomain, record: SendingDomainDnsRecord): boolean {
-  return record.purpose === 'ownership' || (domain.dkimMode === 'shared' && isKeyRecord(record))
-}
-
-/**
- * The first record whose own check says it is wrong, in the order they are
- * published. A domain that has verified before has established its ownership
- * once and for all, so a missing ownership record is never what failed it.
- */
+/** The first record whose own check says it is wrong, in the order they are published. */
 export function failingRecord(domain: EmailSendingDomain): SendingDomainAttentionProblem {
-  const established = domain.verifiedAt != null
   const failing = (domain.dnsRecords ?? []).find(
-    (r: SendingDomainDnsRecord) =>
-      r.check && r.check.state !== 'found' && !(established && provesOwnershipOnly(domain, r))
+    (r: SendingDomainDnsRecord) => r.check && r.check.state !== 'found'
   )
   // Every listed record looks right (or the key signing the mail is not one of
   // them), yet the domain stopped verifying: the signing key is what failed.
   if (!failing?.check || failing.check.state === 'found') return 'signing-key'
   // On a row whose identity already had a key, the row's own key TXT proves
   // ownership and signs nothing, so it is named as the ownership record.
-  const purpose = provesOwnershipOnly(domain, failing) ? 'ownership' : failing.purpose
+  const purpose =
+    domain.dkimMode === 'shared' && isKeyRecord(failing) ? 'ownership' : failing.purpose
   return {
     purpose,
     type: failing.type,
@@ -156,10 +143,67 @@ export async function notifySendingDomainNeedsAttention(domain: EmailSendingDoma
   }
 }
 
+/**
+ * The record that proves this row's ownership, as the warning names it: the
+ * ownership TXT, or on a row with a key of its own, that key's TXT. Carries the
+ * value, since the warning asks for the record to be added back.
+ */
+export function ownershipProblem(domain: EmailSendingDomain): SendingDomainAttentionProblem {
+  const records = domain.dnsRecords ?? []
+  const proof =
+    records.find((r) => r.purpose === 'ownership') ??
+    (domain.dkimMode === 'easy' ? undefined : records.find(isKeyRecord))
+  if (!proof) return 'signing-key'
+  const state = proof.check?.state
+  return {
+    purpose: 'ownership',
+    type: proof.type,
+    name: recordName(domain.domain, proof.host),
+    state: state === 'mismatch' || state === 'proxied' ? state : 'missing',
+    ...(proof.check?.seen ? { seen: proof.check.seen } : {}),
+    value: proof.value,
+  }
+}
+
+/** A date as the warning gives it, in UTC so every reader sees the same day. */
+export function formatDeadline(at: Date): string {
+  return new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(at)
+}
+
+/**
+ * A verified domain's ownership record went missing: a bell per manager and an
+ * email naming the record and the date it has to be back by. The domain keeps
+ * sending as itself until then.
+ */
+export async function notifySendingDomainOwnershipMissing(
+  domain: EmailSendingDomain,
+  deadline: Date
+): Promise<void> {
+  try {
+    const managers = await sendingDomainManagers()
+    if (managers.length === 0) return
+    const record = ownershipProblem(domain)
+    const by = formatDeadline(deadline)
+    const { sendingDomainProblem, sendingDomainDeadline } = await import('@quackback/email')
+    await ringManagers(managers, 'sending_domain_needs_attention', {
+      title: `Sending from ${domain.domain} needs attention`,
+      body: `${sendingDomainProblem(domain.domain, record)} ${sendingDomainDeadline(domain.domain, by)}`,
+      metadata: { sendingDomainId: domain.id, domain: domain.domain, audience: 'admin' },
+    })
+    await emailManagers(managers, domain, record, by)
+  } catch (err) {
+    log.warn(
+      { err, sending_domain_id: domain.id },
+      'sending domain ownership warning notification failed'
+    )
+  }
+}
+
 async function emailManagers(
   managers: Manager[],
   domain: EmailSendingDomain,
-  record: SendingDomainAttentionProblem
+  record: SendingDomainAttentionProblem,
+  deadline?: string
 ): Promise<void> {
   const { sendSendingDomainAttentionEmail, isEmailConfigured } = await import('@quackback/email')
   if (!isEmailConfigured()) return
@@ -180,6 +224,7 @@ async function emailManagers(
         to,
         domain: domain.domain,
         record,
+        deadline,
         settingsUrl: base ? `${base}/admin/settings/channels/email` : null,
         workspaceName: workspace?.settings?.name,
       })

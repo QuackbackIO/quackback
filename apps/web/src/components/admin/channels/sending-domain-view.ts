@@ -44,29 +44,38 @@ const PURPOSE_NAME: Record<string, string> = {
   'mail-from': 'return path record',
 }
 
-/**
- * Whether a record has done its job for good: a record that only proves
- * ownership, on a domain that has verified. Ownership is established once, so
- * removing the record afterwards is not a problem.
- */
-export function ownershipSettled(
-  domain: Pick<SendingDomainDTO, 'verifiedAt' | 'dkimMode' | 'signingKeyPending'>,
-  record: Pick<DnsRecordDTO, 'purpose' | 'type'>
-): boolean {
-  return Boolean(domain.verifiedAt) && recordLabel(record, signingMode(domain)) === 'Ownership'
+/** The kind of record a failing check is, in words, or null when all are found. */
+export function failingRecordName(domain: SendingDomainDTO): string | null {
+  const failing = domain.dnsRecords.find((r) => r.check && r.check.state !== 'found')
+  return failing ? (PURPOSE_NAME[failing.purpose] ?? 'DNS record') : null
 }
 
-/** The first record whose check says it needs fixing, if any. */
-export function failingRecord(domain: SendingDomainDTO): DnsRecordDTO | undefined {
-  return domain.dnsRecords.find(
-    (r) => r.check && r.check.state !== 'found' && !ownershipSettled(domain, r)
+/**
+ * Whether a record proves this domain's ownership: the ownership TXT, or on a
+ * domain with a key TXT of its own, that key.
+ */
+export function provesOwnership(
+  domain: Pick<SendingDomainDTO, 'dkimMode'>,
+  record: Pick<DnsRecordDTO, 'purpose' | 'type'>
+): boolean {
+  return (
+    record.purpose === 'ownership' ||
+    (domain.dkimMode !== 'easy' && record.purpose === 'dkim' && record.type === 'TXT')
   )
 }
 
-/** The kind of record a failing check is, in words, or null when all are found. */
-export function failingRecordName(domain: SendingDomainDTO): string | null {
-  const failing = failingRecord(domain)
-  return failing ? (PURPOSE_NAME[failing.purpose] ?? 'DNS record') : null
+/**
+ * The line for a live domain whose ownership record has gone missing: the
+ * date it has to be back by. Null when the record is in place.
+ */
+export function ownershipWarning(
+  domain: Pick<SendingDomainDTO, 'domain' | 'ownershipDeadline'>
+): string | null {
+  if (!domain.ownershipDeadline) return null
+  const by = new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(
+    new Date(domain.ownershipDeadline)
+  )
+  return `Add this record back by ${by} to keep sending from ${domain.domain}.`
 }
 
 /** The display line for a record's type: an MX carries its priority. */
@@ -122,10 +131,7 @@ export function signsWithUnlistedKey(domain: SendingDomainDTO): boolean {
 export function signingKeyFailing(domain: SendingDomainDTO, phase: DomainPhase): boolean {
   if (phase !== 'not-found' && phase !== 'attention') return false
   const records = domain.dnsRecords
-  return (
-    records.length > 0 &&
-    records.every((r) => r.check?.state === 'found' || ownershipSettled(domain, r))
-  )
+  return records.length > 0 && records.every((r) => r.check?.state === 'found')
 }
 
 /** The sentence for a signing key that is not working. */

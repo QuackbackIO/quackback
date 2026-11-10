@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { EmailSendingDomain } from '@/lib/server/db'
-import { failingRecord } from '../sending-domain-notify'
+import { failingRecord, formatDeadline, ownershipProblem } from '../sending-domain-notify'
 
 const CHECKED = '2026-11-03T10:00:00.000Z'
 
@@ -36,62 +36,57 @@ describe('failingRecord', () => {
       reason: 'truncated',
     })
   })
+})
 
-  const missing = { state: 'missing', checkedAt: CHECKED }
-  const found = { state: 'found', checkedAt: CHECKED }
-  const ownershipTxt = {
-    type: 'TXT',
-    host: '_quackback',
-    value: 'quackback-verification=abc',
-    purpose: 'ownership',
-  }
-  const returnPathMx = {
-    type: 'MX',
-    host: 'qb-bounce',
-    value: 'feedback-smtp.eu-west-2.amazonses.com',
-    priority: 10,
-    purpose: 'mail-from',
-  }
-
-  it('names a missing ownership record on a domain that has never been verified', () => {
+describe('ownershipProblem', () => {
+  it('names the ownership TXT with the value to add back', () => {
     const domain = {
       domain: 'acme.com',
       dkimMode: 'easy',
-      verifiedAt: null,
-      dnsRecords: [{ ...ownershipTxt, check: missing }],
-    } as unknown as EmailSendingDomain
-    expect(failingRecord(domain)).toMatchObject({ purpose: 'ownership' })
-  })
-
-  it('passes over the ownership record once the domain has been verified', () => {
-    const domain = {
-      domain: 'acme.com',
-      dkimMode: 'easy',
-      verifiedAt: new Date(CHECKED),
       dnsRecords: [
-        { ...ownershipTxt, check: missing },
-        { ...returnPathMx, check: missing },
+        {
+          type: 'TXT',
+          host: '_quackback',
+          value: 'quackback-domain-verification=abc',
+          purpose: 'ownership',
+          check: { state: 'missing', checkedAt: CHECKED },
+        },
       ],
     } as unknown as EmailSendingDomain
-    expect(failingRecord(domain)).toMatchObject({ purpose: 'mail-from', type: 'MX' })
+    expect(ownershipProblem(domain)).toEqual({
+      purpose: 'ownership',
+      type: 'TXT',
+      name: '_quackback.acme.com',
+      state: 'missing',
+      value: 'quackback-domain-verification=abc',
+    })
   })
 
-  it('passes over the key record that only proves ownership once the domain has been verified', () => {
+  it('names the key TXT on a domain whose own key proves ownership', () => {
+    const key = `v=DKIM1; k=rsa; p=${'A'.repeat(392)}`
     const domain = {
       domain: 'acme.com',
-      dkimMode: 'shared',
-      verifiedAt: new Date(CHECKED),
+      dkimMode: 'byo',
       dnsRecords: [
         {
           type: 'TXT',
           host: 'qb1._domainkey',
-          value: `v=DKIM1; k=rsa; p=${'A'.repeat(392)}`,
+          value: key,
           purpose: 'dkim',
-          check: missing,
+          check: { state: 'missing', checkedAt: CHECKED },
         },
-        { ...returnPathMx, check: found },
       ],
     } as unknown as EmailSendingDomain
-    expect(failingRecord(domain)).toBe('signing-key')
+    expect(ownershipProblem(domain)).toMatchObject({
+      purpose: 'ownership',
+      name: 'qb1._domainkey.acme.com',
+      value: key,
+    })
+  })
+})
+
+describe('formatDeadline', () => {
+  it('gives the day in UTC', () => {
+    expect(formatDeadline(new Date('2026-11-17T23:30:00.000Z'))).toBe('November 17, 2026')
   })
 })

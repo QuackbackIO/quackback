@@ -286,14 +286,19 @@ describe.skipIf(!fixture.available)('re-keying a squatted identity (real DB, rol
     expect(putDkimKey).toHaveBeenCalledTimes(1)
   })
 
-  it('re-keys only on a check that finds the key record, even on a row verified before', async () => {
+  it('re-keys only on a check that finds the key record, never on a row kept by its grace period', async () => {
     await squat('PENDING')
     const owner = await provisionSendingDomain({ owningTeamId: await seedTeam(), domain: DOMAIN })
     const sealed = await storedKey(owner.id)
-    // A verified stamp keeps a status; it is not proof for a write on the identity.
+    // A verified row inside its grace period keeps a status; that is not proof
+    // for a write on the identity.
     await testDb
       .update(emailSendingDomains)
-      .set({ verifiedAt: new Date(Date.now() - 86_400_000) })
+      .set({
+        status: 'verified',
+        verifiedAt: new Date(Date.now() - 86_400_000),
+        ownershipMissingSince: new Date(Date.now() - 3_600_000),
+      })
       .where(eq(emailSendingDomains.id, owner.id))
 
     const checked = await refreshSendingDomain(owner.id)

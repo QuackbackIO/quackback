@@ -195,6 +195,12 @@ export const emailSendingDomains = pgTable(
      * returned, logged or sent anywhere else.
      */
     pendingSigningKey: text('pending_signing_key'),
+    /**
+     * When a verified row's ownership record was first found missing. The row
+     * stays verified for a grace period from then and is demoted after it.
+     * Null while the record is published.
+     */
+    ownershipMissingSince: timestamp('ownership_missing_since', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
