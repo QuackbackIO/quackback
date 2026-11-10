@@ -84,7 +84,7 @@ import {
   useRefusalLines,
   type RefusalValue,
 } from './properties/change-refusal'
-import { useSaid } from './use-said'
+import { SaidRegion, useSaid } from './use-said'
 
 /** Escape inside these belongs to them. */
 const OWNS_ESCAPE =
@@ -555,9 +555,7 @@ export function DesignerShell({
                 !previewing && column !== 'page' && 'max-[1100px]:hidden'
               )}
             >
-              <p role="status" className="sr-only">
-                {said}
-              </p>
+              <SaidRegion said={said} />
               {!previewing && (
                 <div className="mb-2 space-y-2 empty:hidden">
                   <DraftNotices draft={draft} />
