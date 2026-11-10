@@ -226,6 +226,10 @@ const DesignStateSchema = z
       errors: z.array(z.string()).meta({ description: 'Pairs it could not fix.' }),
     }),
     revision: RevisionSchema,
+    newerFormat: z.boolean().meta({
+      description:
+        'True when a newer version of Quackback saved the design. It is shown without what this version does not know, and every change answers 409 with DESIGN_NEWER_FORMAT until Quackback is updated.',
+    }),
   })
   .meta({ id: 'PortalDesignState' })
 
@@ -265,7 +269,7 @@ registerPath('/settings/portal_design', {
     tags: ['Settings'],
     summary: 'Change the portal design draft',
     description:
-      'Applies a JSON merge patch to the design being edited and saves the result as the draft. Nothing goes live until a person publishes the draft in Settings › Portal. If-Match must carry the revision you read: 428 when missing, 412 when stale. A design that fails the schema answers 400 with INVALID_DESIGN, and one whose ink cannot be read answers 400 with UNREADABLE_DESIGN. A patch written for version 2, with the hero keys named band (layout.band, layout.bandShape, brand.bandImage), is still accepted: its keys take their version 3 names. Requires the write:settings scope and the settings.branding permission.',
+      'Applies a JSON merge patch to the design being edited and saves the result as the draft. Nothing goes live until a person publishes the draft in Settings › Portal. If-Match must carry the revision you read: 428 when missing, 412 when stale. A design that fails the schema answers 400 with INVALID_DESIGN, and one whose ink cannot be read answers 400 with UNREADABLE_DESIGN. A patch written for version 2, with the hero keys named band (layout.band, layout.bandShape, brand.bandImage), is still accepted: its keys take their version 3 names. A design a newer version of Quackback saved answers 409 with DESIGN_NEWER_FORMAT. Requires the write:settings scope and the settings.branding permission.',
     parameters: [
       {
         name: 'If-Match',
@@ -293,7 +297,7 @@ registerPath('/settings/portal_design', {
           },
         },
       },
-      ...errorResponses(400, 403, 412, 428),
+      ...errorResponses(400, 403, 409, 412, 428),
     },
   },
 })
@@ -303,7 +307,7 @@ registerPath('/settings/portal_design/draft', {
     tags: ['Settings'],
     summary: 'Discard the portal design draft',
     description:
-      'Discards the draft. The published design stays as it is. With If-Match, a draft that changed since that revision is kept and the discard answers 412. Requires the write:settings scope and the settings.branding permission.',
+      'Discards the draft. The published design stays as it is. With If-Match, a draft that changed since that revision is kept and the discard answers 412. A design a newer version of Quackback saved answers 409 with DESIGN_NEWER_FORMAT. Requires the write:settings scope and the settings.branding permission.',
     parameters: [
       {
         name: 'If-Match',
@@ -315,7 +319,7 @@ registerPath('/settings/portal_design/draft', {
     ],
     responses: {
       204: { description: 'Discarded' },
-      ...errorResponses(403, 412),
+      ...errorResponses(403, 409, 412),
     },
   },
 })

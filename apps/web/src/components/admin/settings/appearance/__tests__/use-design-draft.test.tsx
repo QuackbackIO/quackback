@@ -8,6 +8,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { defaultDesign } from '@/lib/shared/design/schema'
+import type { PortalDesignRevisionId } from '@quackback/ids'
 
 const server = vi.hoisted(() => ({
   saves: [] as unknown[],
@@ -26,6 +27,7 @@ const server = vi.hoisted(() => ({
   discardResult: null as unknown,
   workspaceLogo: [] as Array<boolean | undefined>,
   publishResult: { ok: true, revisionId: 'portal_design_revision_1', number: 1 } as unknown,
+  restored: 0,
 }))
 
 vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ invalidate: async () => {} }) }))
@@ -55,11 +57,20 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
     server.workspaceLogo.push(data.workspaceLogo)
     return server.publishResult
   },
-  restorePortalDesignVersionFn: async () => ({ ok: true }),
+  restorePortalDesignVersionFn: async () => {
+    server.restored++
+    return { ok: true }
+  },
 }))
 
-const { useDesignDraft, DRAFT_SAVE_DELAY_MS, UNDO_MERGE_MS, nameOfChange, designPreviewCss } =
-  await import('../use-design-draft')
+const {
+  useDesignDraft,
+  DRAFT_SAVE_DELAY_MS,
+  UNDO_MERGE_MS,
+  NEWER_FORMAT_LINE,
+  nameOfChange,
+  designPreviewCss,
+} = await import('../use-design-draft')
 const { portalDesignQueries } = await import('@/lib/client/queries/portal-design')
 
 function editorState() {
@@ -73,13 +84,14 @@ function editorState() {
     authors: {},
     draftSavedAt: null,
     waiting: 0,
+    newerFormat: false,
     canPublish: true,
   }
 }
 
-function setup() {
+function setup(extra: Record<string, unknown> = {}) {
   const client = new QueryClient()
-  client.setQueryData(portalDesignQueries.editor().queryKey, editorState())
+  client.setQueryData(portalDesignQueries.editor().queryKey, { ...editorState(), ...extra })
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   )
@@ -96,6 +108,7 @@ beforeEach(() => {
   server.discardResult = null
   server.workspaceLogo = []
   server.publishResult = { ok: true, revisionId: 'portal_design_revision_1', number: 1 }
+  server.restored = 0
 })
 afterEach(() => {
   cleanup()
@@ -526,6 +539,45 @@ describe('useDesignDraft', () => {
       // Nothing was thrown away: this person's change is still on screen.
       expect(result.current.design.layout.width).toBe('wide')
       expect(result.current.undoLabel).not.toBe('Discard draft')
+    })
+  })
+
+  describe('a design a newer build of Quackback saved', () => {
+    it('opens read-only: no change commits, nothing saves, publishes, discards or restores', async () => {
+      vi.useFakeTimers()
+      const { result } = setup({ newerFormat: true })
+      expect(result.current.readOnly).toBe(true)
+      let outcome: unknown
+      act(() => {
+        outcome = result.current.update((draft) => void (draft.layout.width = 'wide'))
+      })
+      expect(outcome).toEqual({ ok: false, reason: NEWER_FORMAT_LINE })
+      act(() => result.current.replace({ ...defaultDesign(), mode: 'dark' }, 'Dark'))
+      expect(result.current.design.layout.width).toBe(defaultDesign().layout.width)
+      expect(result.current.design.mode).toBe(defaultDesign().mode)
+      expect(result.current.undoLabel).toBeNull()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS * 2)
+      })
+      vi.useRealTimers()
+      await act(async () => {
+        expect(await result.current.publish()).toMatchObject({ ok: false })
+        expect(await result.current.discard()).toMatchObject({ ok: false })
+        expect(
+          await result.current.restore('portal_design_revision_1' as PortalDesignRevisionId)
+        ).toMatchObject({ ok: false })
+      })
+      expect(server.saves).toEqual([])
+      expect(server.published).toEqual([])
+      expect(server.discarded).toEqual([])
+      expect(server.restored).toBe(0)
+    })
+
+    it('edits as usual when this build wrote the design', () => {
+      const { result } = setup({ newerFormat: false })
+      expect(result.current.readOnly).toBe(false)
+      act(() => void result.current.update((draft) => void (draft.layout.width = 'wide')))
+      expect(result.current.design.layout.width).toBe('wide')
     })
   })
 

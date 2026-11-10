@@ -35,6 +35,10 @@ export const UNDO_MERGE_MS = 1000
 /** How many steps undo remembers. */
 const UNDO_LIMIT = 100
 
+/** Why nothing can change: a newer build of Quackback saved the design, and this one would lose part of it. */
+export const NEWER_FORMAT_LINE =
+  'A newer version of Quackback saved this design. Update Quackback to edit it.'
+
 type Outcome = { ok: true } | { ok: false; message: string }
 /** A change's outcome: committed, or refused before it reached the draft, with why in a line. */
 export type ChangeOutcome = { ok: true } | { ok: false; reason: string }
@@ -56,11 +60,17 @@ type PublishOutcome = { ok: true; address?: PortalAddress } | { ok: false; messa
  * the reason in a line to show under its control. Should the server still
  * refuse a save, that same document is never sent again, publishing waits,
  * and the person can go back to the last saved draft in one step.
+ *
+ * A design a newer build of Quackback saved opens read-only: it shows, and
+ * nothing changes, saves, publishes, discards or restores until the update.
  */
 export function useDesignDraft() {
   const queryClient = useQueryClient()
   const router = useRouter()
   const { data } = useSuspenseQuery(portalDesignQueries.editor())
+  const readOnly = data.newerFormat === true
+  const frozen = useRef(readOnly)
+  frozen.current = readOnly
   const [design, setDesign] = useState<PortalDesign>(data.design)
   const [report, setReport] = useState(data.report)
   const [saving, setSaving] = useState(false)
@@ -97,7 +107,7 @@ export function useDesignDraft() {
   const inflight = useRef<Promise<void>>(Promise.resolve())
   const save = useCallback((next: PortalDesign): Promise<void> => {
     const run = inflight.current.then(async () => {
-      if (blocked.current) return
+      if (blocked.current || frozen.current) return
       const sent = refused.current ? JSON.stringify(next) : null
       if (refused.current && sent === refused.current.doc) return
       setSaving(true)
@@ -163,6 +173,7 @@ export function useDesignDraft() {
   /** Shows a design and saves it after a short pause. */
   const commit = useCallback(
     (next: PortalDesign) => {
+      if (frozen.current) return
       latest.current = next
       setDesign(next)
       if (timer.current) clearTimeout(timer.current)
@@ -180,6 +191,7 @@ export function useDesignDraft() {
    */
   const update = useCallback(
     (change: (draft: PortalDesign) => void, label?: string, by?: Author): ChangeOutcome => {
+      if (frozen.current) return { ok: false, reason: NEWER_FORMAT_LINE }
       // A plain copy, not a proxy: the builder's changes may copy parts of what they are handed.
       const before = latest.current
       const next = structuredClone(before)
@@ -208,6 +220,7 @@ export function useDesignDraft() {
    */
   const replace = useCallback(
     (next: PortalDesign, label?: string, by?: Author) => {
+      if (frozen.current) return
       const [patches, inverse] = patchesBetween(latest.current, next)
       if (!patches.length) return
       const name = label ?? nameOfChange(latest.current, next)
@@ -363,6 +376,7 @@ export function useDesignDraft() {
    * save: load their changes or keep their own.
    */
   const discard = useCallback(async (): Promise<Outcome> => {
+    if (frozen.current) return { ok: false, message: NEWER_FORMAT_LINE }
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
     await inflight.current
@@ -388,6 +402,7 @@ export function useDesignDraft() {
       message?: string,
       options: { workspaceLogo?: boolean } = {}
     ): Promise<PublishOutcome> => {
+      if (frozen.current) return { ok: false, message: NEWER_FORMAT_LINE }
       await flush()
       if (blocked.current)
         return { ok: false, message: 'Choose whose changes to keep first, then publish.' }
@@ -415,6 +430,7 @@ export function useDesignDraft() {
 
   const restore = useCallback(
     async (revisionId: PortalDesignRevisionId): Promise<Outcome> => {
+      if (frozen.current) return { ok: false, message: NEWER_FORMAT_LINE }
       await flush()
       const result = await restorePortalDesignVersionFn({ data: { revisionId } })
       if (!result.ok) return { ok: false, message: result.message }
@@ -437,6 +453,8 @@ export function useDesignDraft() {
       published: data.published,
       /** Whether this person may publish, or only edit the draft. */
       canPublish: data.canPublish,
+      /** A newer build of Quackback saved the design: it shows, and nothing changes. */
+      readOnly,
       update,
       replace,
       flush,
@@ -472,6 +490,7 @@ export function useDesignDraft() {
       data.live,
       data.published,
       data.canPublish,
+      readOnly,
       update,
       replace,
       flush,

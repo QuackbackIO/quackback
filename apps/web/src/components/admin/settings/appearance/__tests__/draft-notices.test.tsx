@@ -54,3 +54,17 @@ describe('a refused save', () => {
     expect(recover).toHaveBeenCalledOnce()
   })
 })
+
+describe('a design a newer build saved', () => {
+  it('says so in one quiet line, and nothing when this build wrote it', () => {
+    const draft = { conflict: false, refusal: null, readOnly: true }
+    render(<DraftNotices draft={draft as unknown as Draft} />)
+    expect(screen.getByRole('status').textContent).toBe(
+      'A newer version of Quackback saved this design. Update Quackback to edit it.'
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+    cleanup()
+    render(<DraftNotices draft={{ ...draft, readOnly: false } as unknown as Draft} />)
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+})

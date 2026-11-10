@@ -45,6 +45,7 @@ const REFUSAL_CODES = [
   'NOT_SWITCHABLE',
   'NOT_SWITCHED',
   'NO_PORTAL_LOGO',
+  'DESIGN_NEWER_FORMAT',
 ] as const
 export type DesignRefusalCode = (typeof REFUSAL_CODES)[number]
 export type DesignRefusal = { ok: false; code: DesignRefusalCode; message: string }
@@ -72,6 +73,8 @@ export interface DesignEditorState {
   draftSavedAt: string | null
   /** How many changes the draft waits to publish; 0 without a draft. */
   waiting: number
+  /** A newer build of Quackback saved this design: it shows, but every write is refused. */
+  newerFormat: boolean
 }
 
 function reportOf(doc: PortalDesign): DesignReport {
@@ -133,6 +136,7 @@ export async function readDesignForEditing(): Promise<DesignEditorState> {
     authors,
     draftSavedAt: state?.draftSavedAt?.toISOString() ?? null,
     waiting: source === 'draft' ? shownChanges(shownLive, shown).length : 0,
+    newerFormat: state?.newerFormat ?? false,
   }
 }
 

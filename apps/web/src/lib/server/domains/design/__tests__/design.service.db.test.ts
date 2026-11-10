@@ -345,7 +345,11 @@ describe('a design saved by a newer build', () => {
     const state = await getDesignState()
     expect(state?.published?.document.brand.logo.display).toBe('mark_and_name')
     expect(state?.draft?.brand.light.accent).toBe('#7a1f35')
-    expect((await restoreRevision(first.revisionId, who)).number).toBe(2)
+    // Writing it back would lose what this build does not know, so writes wait for the update.
+    expect(state?.newerFormat).toBe(true)
+    await expect(restoreRevision(first.revisionId, who)).rejects.toMatchObject({
+      code: 'DESIGN_NEWER_FORMAT',
+    })
   })
 })
 

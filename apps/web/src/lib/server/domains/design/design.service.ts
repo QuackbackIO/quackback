@@ -22,7 +22,6 @@ import { recordAuditEventInTransaction, type AuditActor } from '@/lib/server/aud
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { ConflictError, NotFoundError } from '@/lib/shared/errors'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import { readStoredDesign } from '@/lib/shared/design/stored-design'
 import { sameDesign } from '@/lib/shared/design/diff'
 import { withoutOrphanedOverrides } from '@/lib/shared/design/override-cascade'
 import { logger } from '@/lib/server/logger'
@@ -30,9 +29,10 @@ import { digestOf } from '@/lib/server/utils/canonical-json'
 import { authorKey, recordAuthors, type DraftAuthors } from './draft-authors'
 import { draftRevision, EMPTY_REVISION } from './draft-revision'
 import { dropDraft, NO_DRAFT } from './no-draft'
+import { assertWritable, storedDesign, storedRead } from './stored-read'
 import { validateDesign } from './validate-design'
 
-export { validateDesign }
+export { storedDesign, validateDesign }
 
 const log = logger.child({ module: 'design.service' })
 
@@ -59,23 +59,11 @@ export interface DesignState {
   authors: DraftAuthors | null
   /** When the draft was last saved, or null without a draft. */
   draftSavedAt: Date | null
-}
-
-/**
- * A stored document as this build reads it. Fields a newer build added are set
- * aside, so a rollback keeps the brand; a document that is not a design at all
- * reads as null.
- */
-export function storedDesign(document: unknown, which: string): PortalDesign | null {
-  const read = readStoredDesign(document)
-  if (!read) {
-    log.error({ which }, 'stored design no longer parses')
-    return null
-  }
-  if (read.dropped.length > 0) {
-    log.warn({ which, dropped: read.dropped }, 'stored design has fields this build does not know')
-  }
-  return read.design
+  /**
+   * Whether a newer build saved the draft or the published version: this build
+   * reads it without what it does not know, and refuses to write it back.
+   */
+  newerFormat: boolean
 }
 
 /**
@@ -128,18 +116,20 @@ export async function getDesignState(): Promise<DesignState | null> {
   const row = await designRow(db)
   if (!row) return null
   const published = await revision(db, row.publishedRevisionId)
-  const document = published ? storedDesign(published.document, 'published') : null
+  const live = published ? storedRead(published.document, 'published') : null
+  const draft = row.draft ? storedRead(row.draft, 'draft') : null
   return {
     id: row.id,
     published:
-      published && document
-        ? { revisionId: published.id, number: published.number, document }
+      published && live
+        ? { revisionId: published.id, number: published.number, document: live.design }
         : null,
-    draft: row.draft ? storedDesign(row.draft, 'draft') : null,
+    draft: draft?.design ?? null,
     draftBaseRevisionId: row.draftBaseRevisionId,
     revision: draftRevision(row),
     authors: row.draft ? (row.draftAuthors ?? null) : null,
     draftSavedAt: row.draft ? (row.draftUpdatedAt ?? null) : null,
+    newerFormat: !!live?.newer || !!draft?.newer,
   }
 }
 
@@ -192,6 +182,7 @@ export async function saveDraft(
     }
     if (expectedRevision !== undefined && expectedRevision !== draftRevision(row))
       throw new ConflictError('REVISION_MISMATCH', 'The draft changed since you opened it.')
+    await assertWritable(tx, row)
     // Saving the draft as it is changes nothing, so its revision stays where it is.
     if (row.draft && draftDigest(row.draft) === draftDigest(document)) return draftRevision(row)
     const published = await revision(tx, row.publishedRevisionId)
@@ -230,6 +221,7 @@ export async function discardDraft(expectedRevision?: string): Promise<string> {
     if (!row) return EMPTY_REVISION
     if (expectedRevision !== undefined && expectedRevision !== draftRevision(row))
       throw new ConflictError('REVISION_MISMATCH', 'The draft changed since you opened it.')
+    await assertWritable(tx, row)
     return dropDraft(tx, row)
   })
 }
@@ -309,6 +301,7 @@ export async function publishDraftInTransaction(
 ): Promise<{ revisionId: PortalDesignRevisionId; number: number }> {
   const row = await designRow(tx, true)
   if (!row?.draft) throw new NotFoundError('NO_DRAFT', 'There is no draft to publish.')
+  await assertWritable(tx, row)
   if (row.draftBaseRevisionId !== row.publishedRevisionId) {
     throw new ConflictError(
       'DESIGN_CHANGED',
@@ -374,6 +367,8 @@ export async function publishSwitchedDesign(
     if (row.publishedRevisionId) {
       throw new ConflictError('DESIGN_CHANGED', 'This portal already uses the design system.')
     }
+    // Publishing clears the draft, which a newer build may have saved.
+    await assertWritable(tx, row)
     const published = await publishDocument(
       tx,
       row.id,
@@ -437,6 +432,7 @@ export async function restoreRevision(
     if (!row || !old || old.designId !== row.id) {
       throw new NotFoundError('REVISION_NOT_FOUND', 'That version no longer exists.')
     }
+    await assertWritable(tx, row, old.document)
     const draft = row.draft
     const document = storedDesign(old.document, `revision ${old.number}`)
     if (!document)
