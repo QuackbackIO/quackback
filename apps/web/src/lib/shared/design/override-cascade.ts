@@ -29,14 +29,35 @@ import {
 } from './style-tokens'
 
 /**
+ * The design with Home and every menu item shown. A part that is only hidden
+ * is still the design's, so its looks wait for it rather than being dropped.
+ */
+function withEveryPartShown(design: PortalDesign): PortalDesign {
+  return {
+    ...design,
+    nav: {
+      ...design.nav,
+      home: { ...design.nav.home, on: true, tab: true },
+      items: design.nav.items.map((item) =>
+        item.type === 'link' ? item : { ...item, shown: true }
+      ),
+    },
+  }
+}
+
+/**
  * Overrides whose part (or the block it was in) the design no longer has,
  * or that name an element kind their part is not. The draft keeps them,
- * drawn nowhere, and publishing drops them.
+ * drawn nowhere, and publishing drops them. A hidden menu item, or Home
+ * while it is off, is not gone: its looks are kept for when it is shown.
  */
 export function orphanedOverrides(design: PortalDesign): StyleOverride[] {
-  return (design.overrides ?? []).filter((o) => {
+  const overrides = design.overrides ?? []
+  if (!overrides.some((o) => o.target.scope === 'part')) return []
+  const every = withEveryPartShown(design)
+  return overrides.filter((o) => {
     if (o.target.scope !== 'part') return false
-    const part = partOf(design, o.target.part)
+    const part = partOf(every, o.target.part)
     return !part || !part.elements.includes(o.target.element)
   })
 }
