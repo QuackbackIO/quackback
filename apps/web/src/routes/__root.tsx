@@ -363,7 +363,11 @@ function RootDocument({
           key={themeStorageKey}
           storageKey={themeStorageKey}
           attribute="class"
-          defaultTheme={defaultTheme}
+          // Under a forced theme the provider starts from the device's: when it
+          // reads the device after hydrating it learns nothing new, so it does not
+          // change its context while parts of the page still hydrate, which made
+          // React draw those parts again from nothing (Home's blocks blinked out).
+          defaultTheme={forcedTheme ? 'system' : defaultTheme}
           enableSystem={!forcedTheme}
           forcedTheme={forcedTheme}
           disableTransitionOnChange

@@ -62,7 +62,8 @@ function Toaster({
   locale,
   ...props
 }: ToasterProps & { /** The page language. */ locale?: string }): React.ReactElement {
-  const { theme = 'system' } = useTheme()
+  // A forced theme (a portal's design) wins over the visitor's own.
+  const { theme = 'system', forcedTheme } = useTheme()
   // The label itself is the snapshot, so a surface that picks the language
   // the page already has does not render the toaster again.
   const label = useSyncExternalStore(
@@ -73,7 +74,7 @@ function Toaster({
 
   return (
     <Sonner
-      theme={theme as ToasterProps['theme']}
+      theme={(forcedTheme ?? theme) as ToasterProps['theme']}
       className="toaster group"
       containerAriaLabel={label}
       icons={{
