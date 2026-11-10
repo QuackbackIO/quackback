@@ -30,7 +30,6 @@ import type { EmailSendersDTO, SendingDomainDTO } from '@/lib/server/functions/c
 import { DomainSetupPanel } from './domain-setup-panel'
 import { SendingPausedNotice } from './sending-paused-notice'
 import { SENDER_SURFACE_NAMES, SendFromCard, type SenderIdentity } from './send-from-card'
-import { SEND_FROM_ANCHOR } from './surface-sender-row'
 import {
   errorText,
   SendingAddressDialog,
@@ -150,7 +149,10 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
           forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
           hasInboundRoute={!!data?.inboundRoute}
           rows={['default', ...surfaces]}
-          id={SEND_FROM_ANCHOR}
+          // Where "Change" on a product's page lands: `SEND_FROM_ANCHOR` in
+          // surface-sender-row.tsx, repeated here because importing that row
+          // would load it with this page. A test holds the two together.
+          id="send-from"
           onError={reason("Couldn't change where email is sent from.")}
         />
       )}

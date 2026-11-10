@@ -45,6 +45,7 @@ vi.mock('@/lib/client/mutations/channel-accounts', () => {
 })
 
 const { WorkspaceEmailSettings, SupportInboxSettings } = await import('../email-channel-settings')
+const { SEND_FROM_ANCHOR } = await import('../surface-sender-row')
 const { emailChannelConfigQuery } = await import('@/lib/client/queries/channel-accounts')
 
 const HOUR = 60 * 60 * 1000
@@ -1485,13 +1486,13 @@ describe('where each part lives', () => {
     expect(screen.queryByLabelText('Feedback board')).toBeNull()
   })
 
-  it('lands a link to the Send from card on it', () => {
+  it('gives the Send from card the anchor a product page links to', () => {
     renderSettings({
       view: 'workspace',
       addresses: [address('a1', 'help@acme.com')],
       domains: [LIVE],
     })
-    expect(document.getElementById('send-from')?.textContent).toContain('Send from')
+    expect(document.getElementById(SEND_FROM_ANCHOR)?.textContent).toContain('Send from')
   })
 
   it('the support page has the inbox and the support sender only', () => {

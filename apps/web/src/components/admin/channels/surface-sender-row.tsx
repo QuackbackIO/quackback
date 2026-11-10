@@ -14,7 +14,10 @@ import {
   type ProductSenderSurface,
 } from '@/lib/shared/email-sending-permissions'
 
-/** The Send from card's anchor on Settings → Email, where "Change" lands. */
+/**
+ * The Send from card's anchor on Settings → Email, where "Change" lands. The
+ * card carries the same id (see `WorkspaceEmailSettings`).
+ */
 export const SEND_FROM_ANCHOR = 'send-from'
 
 export function SurfaceSenderRow({ surface }: { surface: ProductSenderSurface }) {
