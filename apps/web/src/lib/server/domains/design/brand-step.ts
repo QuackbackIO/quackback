@@ -1,21 +1,23 @@
 /**
  * The launch plan's branding step, as the portal design sees it. A portal
  * drawn by the design engine has its brand in the builder's Brand kit, so the
- * step is done when a brand match has run there, or the Brand kit has an
- * icon, a colour and a font of its own, in the published design or the draft.
+ * step is done when the design visitors see carries the brand (brandIsSet):
+ * the published design, or with none yet the branding settings it draws. A
+ * branded draft not yet published leaves the step open, waiting to publish.
  * A portal on the legacy theme is left to the workspace logo (null here).
  */
 import { config } from '@/lib/server/config'
 import { brandIsSet } from '@/lib/shared/design/brand-set'
-import { convertLegacyBranding } from '@/lib/shared/design/convert'
-import type { PortalDesign } from '@/lib/shared/design/schema'
 import { getDesignState } from './design.service'
 import { legacyBrandingOf, resolveDesignSource, type LegacySettings } from './engine'
 
 export interface BrandStep {
   /** The portal's look is edited in the builder. */
   inBuilder: true
+  /** Visitors see the brand. */
   done: boolean
+  /** The draft carries the brand and waits to be published. */
+  drafted: boolean
 }
 
 export async function brandStepOf(input: {
@@ -35,10 +37,8 @@ export async function brandStepOf(input: {
     legacy,
   })
   if (source.engine !== 'v2') return null
-  const designs: PortalDesign[] = [published?.document, state?.draft].filter(
-    (design): design is PortalDesign => !!design
-  )
-  // Nothing published or drafted yet: the portal draws the branding settings, converted.
-  if (designs.length === 0) designs.push(convertLegacyBranding(legacy))
-  return { inBuilder: true, done: designs.some(brandIsSet) }
+  // What visitors see: the published design, or the branding settings, converted.
+  const done = brandIsSet(source.doc)
+  const drafted = !done && !!state?.draft && brandIsSet(state.draft)
+  return { inBuilder: true, done, drafted }
 }

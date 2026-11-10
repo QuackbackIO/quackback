@@ -19,6 +19,8 @@ export const Route = createFileRoute('/design')({
     match: z.string().max(253).optional().catch(undefined),
     /** `match`: open the Brand kit at its match row, as Settings > Portal's Match your brand links it. */
     brand: z.literal('match').optional().catch(undefined),
+    /** `open`: open publish, as onboarding's branding step links it while a matched brand waits in the draft. */
+    publish: z.literal('open').optional().catch(undefined),
   }),
   beforeLoad: async ({ search, context }) => {
     const returnPath = designerReturnPath(search.path)

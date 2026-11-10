@@ -167,6 +167,7 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
     hasTeamInvite: humanMembers.some((member) => member.teamInvited),
     hasBranding,
     brandInBuilder: Boolean(brandStep),
+    brandDrafted: Boolean(brandStep?.drafted),
     brandDomain,
     hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
     widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
