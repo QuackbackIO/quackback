@@ -272,6 +272,32 @@ describe('the subtitle', () => {
   })
 })
 
+describe('a subtitle only in the hero', () => {
+  it('reads on the hero, not the page under it, so a white one on navy is drawn', () => {
+    const navy = { background: '#ffffff', band: ['#0b1f4d'], mixed: false }
+    // Some titles sit on the page: white cannot read there, so it is not drawn.
+    expect(tunedColours({ subtitle: { colour: '#ffffff' } }, navy)[0]!.used).toBeNull()
+    const [inHero] = tunedColours(
+      { subtitle: { colour: '#ffffff' } },
+      { ...navy, subtitleInHero: true }
+    )
+    expect(inHero!.used).toBe('#ffffff')
+    expect(inHero!.on).toBe('#0b1f4d')
+  })
+
+  it('knows every subtitle is in the hero when the pages’ titles sit there too', () => {
+    const design = defaultDesign()
+    design.brand.light.accent = '#0b1f4d'
+    design.layout.hero = 'brand'
+    design.tune = { subtitle: { colour: '#ffffff' } }
+    const plain = resolveDesign(design).tuned.find((each) => each.part === 'Subtitle')!
+    design.layout.pageTitles = 'band'
+    const band = resolveDesign(design).tuned.find((each) => each.part === 'Subtitle')!
+    expect(plain.used).toBeNull()
+    expect(band.used).toBe('#ffffff')
+  })
+})
+
 describe('exact colours by brand role', () => {
   const withTune = (tune: Record<string, unknown>) =>
     portalDesign.parse({

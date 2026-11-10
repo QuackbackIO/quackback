@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 
 const { BrandKitColours } = await import('../brand-kit-colours')
+const { colourPairs } = await import('@/lib/shared/design/colour-pairs')
 
 /** A target at least 24px tall, as small text links and buttons are given. */
 const at24 = (el: Element) => expect(el.className).toMatch(/(^|\s)(min-h-6|size-6|min-h-7)(\s|$)/)
@@ -67,6 +68,17 @@ describe('BrandKitColours', () => {
     // Quiet: the mark shows, its words are for a screen reader and on hover.
     expect(screen.getByText('Every pair reads well').className).toContain('sr-only')
     expect(screen.queryByRole('button', { name: /^Fix/ })).toBeNull()
+  })
+
+  it('counts no part colour that is not drawn, as it has no row to fix it on', () => {
+    // A white subtitle on a navy hero, with titles that sit on the white page: none reads on both.
+    const design = defaultDesign()
+    design.brand.light.accent = '#0b1f4d'
+    design.layout.hero = 'brand'
+    design.tune = { subtitle: { colour: '#ffffff' } }
+    expect(colourPairs(design).some((pair) => pair.unused && !pair.passes)).toBe(true)
+    render(<Harness start={design} />)
+    expect(screen.getByText('Every pair reads well')).toBeTruthy()
   })
 
   it('marks a text colour that is hard to read on its row, and fixes it in one click', () => {

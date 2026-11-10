@@ -155,7 +155,11 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
   const { light } = design.brand
   const extra = light.extra ?? []
   const [adding, setAdding] = useState(false)
-  const failing = useMemo(() => colourPairs(design).filter((pair) => !pair.passes).length, [design])
+  // A part's own exact colour that no lightness of reads is not drawn, so it is no pair to fix here.
+  const failing = useMemo(
+    () => colourPairs(design).filter((pair) => !pair.passes && !pair.unused).length,
+    [design]
+  )
   const issues = useMemo(() => colourRowIssues(design), [design])
   const worked = useMemo(() => resolveDesign({ ...design, mode: 'light' }).light, [design])
   const autoOf: Record<MoreKey, string | undefined> = {
