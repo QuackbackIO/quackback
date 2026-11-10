@@ -84,10 +84,14 @@ export { setEmailPoweredByResolver } from './powered-by'
 export { setSesTenantHooks } from './tenant-hooks'
 export type { SesTenantHooks, SesTenantSendContext } from './tenant-hooks'
 export { SesTenantPausedError } from './ses'
-export { setDefaultFromResolver, resetDefaultFromResolver } from './default-from'
+export {
+  setDefaultFromResolver,
+  setDefaultFromShared,
+  resetDefaultFromResolver,
+} from './default-from'
 import { createElement } from 'react'
 import { EmailPoweredByProvider, resolveEmailPoweredBy } from './powered-by'
-import { resolvedDefaultFrom } from './default-from'
+import { defaultFromIsShared, resolvedDefaultFrom } from './default-from'
 import { platformDisplayName } from './platform-name'
 export { platformDisplayName, QUACKBACK_DISPLAY_NAME } from './platform-name'
 
@@ -105,6 +109,36 @@ export function getEmailFrom(): string {
     throw new EmailConfigError('EMAIL_FROM environment variable is required for sending emails')
   }
   return from
+}
+
+/**
+ * Whether a default From is this install's own `EMAIL_FROM` with a display name
+ * the operator gave it. Never true of a platform's shared address, whose name
+ * names the platform rather than anyone the mail is about.
+ */
+function isOperatorNamed(defaultFrom: string): boolean {
+  return !defaultFromIsShared() && typeof parseAddress(defaultFrom) !== 'string'
+}
+
+/**
+ * The From a workspace's own mail carries when it leaves from the platform
+ * address, as an inbox shows it, or null when no address is configured. The
+ * decision the send point makes, for a settings page that says where email
+ * comes from.
+ */
+export function platformFromPreview(workspaceName: string | null | undefined): string | null {
+  let from: string
+  try {
+    from = getEmailFrom()
+  } catch {
+    return null
+  }
+  const written = plainAddress(from)
+  const address = typeof written === 'string' ? written : written.address
+  const name =
+    platformDisplayName('RawEmail', workspaceName, { operatorNamed: isOperatorNamed(from) }) ??
+    (typeof written === 'string' ? '' : written.name)
+  return name ? `${name} <${address}>` : address
 }
 
 /**
@@ -418,10 +452,7 @@ async function dispatch(
   // On the platform address the registry's display name names the platform, so
   // the name is decided here for every sender rather than trusted to each one.
   // An install's own EMAIL_FROM (no registry From) keeps a name it already has.
-  const operatorNamed =
-    !options.from &&
-    resolvedDefaultFrom() === null &&
-    typeof parseAddress(resolvedFrom) !== 'string'
+  const operatorNamed = !options.from && isOperatorNamed(resolvedFrom)
   const displayName = options.from
     ? options.fromDisplayName
     : platformDisplayName(emailType, options.workspaceName, {

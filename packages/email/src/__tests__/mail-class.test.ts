@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   EMAIL_BILLABLE,
   EMAIL_TENANTED,
+  EMAIL_VOICE,
+  emailVoice,
   METERED_EMAIL_TYPES,
   isEmailBillable,
   isTenantedEmailType,
@@ -75,5 +77,34 @@ describe('provider tenant classes', () => {
 
   it('sends a type nobody classified untenanted, as before tenants', () => {
     expect(isTenantedEmailType('SomeNewEmail')).toBe(false)
+  })
+})
+
+describe('whose name a platform-address email goes under', () => {
+  it('classifies every type the meter classifies, and no other', () => {
+    expect(Object.keys(EMAIL_VOICE).sort()).toEqual(Object.keys(EMAIL_BILLABLE).sort())
+  })
+
+  it('speaks for the product only on mail about the product', () => {
+    const product = Object.entries(EMAIL_VOICE)
+      .filter(([, voice]) => voice === 'product')
+      .map(([type]) => type)
+      .sort()
+    expect(product).toEqual(
+      ['OnboardingNudgeEmail', 'OnboardingWelcomeEmail', 'SendingDomainAttentionEmail'].sort()
+    )
+  })
+
+  it('speaks as a person only on a conversation message', () => {
+    const person = Object.entries(EMAIL_VOICE)
+      .filter(([, voice]) => voice === 'person')
+      .map(([type]) => type)
+      .sort()
+    expect(person).toEqual(['ConversationMessageEmail', 'ConversationReplyEmail'])
+  })
+
+  it('speaks for the workspace when the type is unknown or absent', () => {
+    expect(emailVoice('SomethingNew')).toBe('workspace')
+    expect(emailVoice(undefined)).toBe('workspace')
   })
 })
