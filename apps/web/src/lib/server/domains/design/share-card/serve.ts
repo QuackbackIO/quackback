@@ -63,7 +63,11 @@ const isSvg = (key: string) => /\.svg$/i.test(key)
  * A stored image's pixels, or null when it is missing or not a PNG, JPEG or
  * SVG this can draw. An SVG is drawn with its longest side at `side`.
  */
-async function pixels(deps: BrandImageDeps, key: string, side: number): Promise<Image | null> {
+async function pixels(
+  deps: Pick<BrandImageDeps, 'readObject'>,
+  key: string,
+  side: number
+): Promise<Image | null> {
   const bytes = await deps.readObject(key)
   if (!bytes) return null
   if (isSvg(key)) return rasteriseSvg(bytes, side)
