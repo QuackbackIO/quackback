@@ -53,7 +53,7 @@ export const Route = createFileRoute('/_portal/u/$principalId')({
 
 function ProfileNotFound() {
   return (
-    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-16 text-center">
+    <div className="qb-page py-16 text-center">
       <p className="text-lg font-medium">
         <FormattedMessage id="portal.profile.notFound" defaultMessage="Profile not found" />
       </p>
@@ -87,7 +87,7 @@ function PublicProfilePage() {
   })
 
   return (
-    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-8 space-y-4">
+    <div className="qb-page py-8 space-y-4">
       {/* Profile header card */}
       <div className="rounded-xl border border-border/60 bg-card p-6 animate-in fade-in duration-200 fill-mode-backwards">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">

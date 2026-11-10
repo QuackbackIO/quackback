@@ -104,7 +104,7 @@ export function PortalHome({
         data-qb-section="home"
         data-qb-grid=""
         style={HOME_GRID_STYLE}
-        className={`mx-auto w-full max-w-[var(--qb-page-max,72rem)] gap-[var(--qb-feed-gap,1rem)] px-4 py-6 sm:px-6 [[data-qb-cards=list]_&]:gap-4 ${HOME_GRID_CLASS}`}
+        className={`qb-page gap-[var(--qb-feed-gap,1rem)] py-6 [[data-qb-cards=list]_&]:gap-4 ${HOME_GRID_CLASS}`}
       >
         <WithAreas messages={messages}>
           <Suspense fallback={blocks(emptyBlocks(home.blocks, {}, { samples }))}>

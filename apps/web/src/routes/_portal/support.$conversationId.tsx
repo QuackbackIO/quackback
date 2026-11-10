@@ -134,7 +134,7 @@ function SupportThreadPage() {
     // Same container as the feedback/roadmap pages (the page width), sized to the
     // viewport, less the header and footer, so the thread fills the page
     // instead of floating in a strip.
-    <div className="mx-auto flex h-[calc(100dvh-7rem-var(--portal-footer-height,0px))] min-h-0 w-full max-w-[var(--qb-page-max,72rem)] flex-col px-4 py-6 sm:px-6">
+    <div className="qb-page flex h-[calc(100dvh-7rem-var(--portal-footer-height,0px))] min-h-0 flex-col py-6">
       <div className="mb-3 shrink-0">
         <BackLink to="/support">
           <FormattedMessage id="portal.support.back" defaultMessage="All conversations" />

@@ -29,7 +29,7 @@ export function FeedPage() {
   return (
     <>
       <PortalBand />
-      <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-6">
+      <div className="qb-page py-6">
         {/* Hero renders immediately (context-only, no feed dependency). */}
         <PortalHero />
         {/* Only the feed region suspends on the streamed portalData query. */}

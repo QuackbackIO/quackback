@@ -348,16 +348,13 @@ function PostDetailPage() {
           with the way back to its board: the band's colour or art squeezed into a strip this short
           reads as a stray stripe, not a hero. */}
       <div data-qb-part="post-band" className="qb-band-title-only">
-        <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 pt-5 sm:px-6">
+        <div className="qb-page pt-5">
           <BackLink to="/" search={{ board: slug }} className="font-medium">
             {board.name}
           </BackLink>
         </div>
       </div>
-      <div
-        data-testid="post-detail"
-        className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-6"
-      >
+      <div data-testid="post-detail" className="qb-page py-6">
         <UnsubscribeBanner postId={post.id as PostId} />
 
         <BackLink to="/" search={{ board: slug }} className="mb-6 qb-band-title-off">

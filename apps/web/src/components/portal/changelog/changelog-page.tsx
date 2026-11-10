@@ -63,12 +63,7 @@ export function ChangelogPage() {
           actionPlace={choices.subscribe}
         />
       )}
-      <div
-        className={cn(
-          'mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6',
-          designTitles ? 'pt-8 pb-8' : 'py-8'
-        )}
-      >
+      <div className={cn('qb-page', designTitles ? 'pt-8 pb-8' : 'py-8')}>
         {!designTitles && (
           <PortalPageHeader
             size="large"
