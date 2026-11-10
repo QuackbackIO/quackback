@@ -74,7 +74,8 @@ const areaOf = (place: GridPlace) =>
   `${place.y + 1} / ${place.x + 1} / span ${place.h} / span ${place.w}`
 
 /** Places a block in its area on tablets and up; on phones blocks stack in reading order. */
-const AREA_CLASS = 'md:[grid-area:var(--qb-area-md)] lg:[grid-area:var(--qb-area-lg)]'
+const AREA_CLASS =
+  'md:[grid-area:var(--qb-area-md)] md:max-lg:self-start lg:[grid-area:var(--qb-area-lg)]'
 
 /** Home's grid: one column on phones, two on tablets, twelve from lg, rows at least a unit tall. */
 export const HOME_GRID_CLASS =
