@@ -31,9 +31,9 @@ export function WidgetChangelogTeaser({ onOpenEntry, onSeeAll }: WidgetChangelog
   return (
     <div className="rounded-2xl border border-border/60 bg-card p-2">
       <div className="flex items-center justify-between px-2 pt-1.5 pb-1">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">
+        <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           <FormattedMessage id="widget.launcher.changelog.heading" defaultMessage="What's new" />
-        </p>
+        </h2>
         <button
           type="button"
           onClick={onSeeAll}
@@ -50,14 +50,14 @@ export function WidgetChangelogTeaser({ onOpenEntry, onSeeAll }: WidgetChangelog
         <LocalDate
           date={latest.publishedAt}
           options={ENTRY_DATE}
-          className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide"
+          className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide"
         />
-        <h3 className="mt-0.5 text-sm font-semibold text-foreground line-clamp-1 leading-snug">
+        <span className="mt-0.5 block text-sm font-semibold text-foreground line-clamp-1 leading-snug">
           {latest.title}
-        </h3>
-        <p className="mt-0.5 text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
+        </span>
+        <span className="mt-0.5 block text-xs text-muted-foreground line-clamp-2 leading-relaxed">
           {contentPreview(latest.content, 120)}
-        </p>
+        </span>
       </button>
     </div>
   )
