@@ -68,3 +68,16 @@ describe('getEmailChannelStatusFn customDomains', () => {
     expect(await getStatus()).toMatchObject({ provider: 'smtp', customDomains: 'unavailable' })
   })
 })
+
+describe('getEmailChannelStatusFn ownServer', () => {
+  it("says the server is the workspace's own when it runs one workspace", async () => {
+    stubEnv(SES_ENV)
+    expect(await getStatus()).toMatchObject({ ownServer: true })
+  })
+
+  it('says it is not on a server shared by many workspaces', async () => {
+    stubEnv(SES_ENV)
+    vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+    expect(await getStatus()).toMatchObject({ ownServer: false })
+  })
+})
