@@ -611,7 +611,6 @@ export function DesignerShell({
                     theme={design.mode === 'auto' ? theme : design.mode}
                     locale={locale}
                     sort={design.pages.feedback.defaultSort}
-                    refreshKey={`${draft.published?.number ?? 0}`}
                     design={canvasDesign}
                     structural={structural}
                     zoom={previewing ? 'fit' : canvas.zoom}

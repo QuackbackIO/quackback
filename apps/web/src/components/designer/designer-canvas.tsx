@@ -107,7 +107,7 @@ export function DesignerCanvas({
   theme,
   locale,
   sort,
-  refreshKey,
+  refreshKey = '',
   design,
   structural,
   zoom = 'fit',
@@ -139,8 +139,11 @@ export function DesignerCanvas({
   theme: 'light' | 'dark'
   locale: string
   sort: 'trending' | 'top' | 'new'
-  /** Changes when a publish lands, to load the page afresh. */
-  refreshKey: string
+  /**
+   * A new key loads the page afresh. The builder's own canvas keeps its page
+   * when a publish lands: it already draws the design just published.
+   */
+  refreshKey?: string
   design: PortalPreviewProps['design']
   structural: PortalPreviewDraft
   /** Scaled to fit the room, or at a set scale that scrolls, so zooming the browser can enlarge it. */
