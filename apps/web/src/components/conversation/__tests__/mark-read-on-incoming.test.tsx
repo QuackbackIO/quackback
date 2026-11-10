@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
 /**
  * useMarkReadOnIncoming writes the caller's read watermark when the newest
- * message came from the other side. A thread whose watermark already covers
- * that message has nothing to clear, so opening it again writes nothing (each
- * write is broadcast to every open inbox, which then refreshes its list).
+ * message that can be unread for the caller (the other side's, not an internal
+ * note) is past it. System events and the caller's own messages never count, so
+ * they neither trigger a write nor hide an earlier unread reply. A thread whose
+ * watermark already covers that message has nothing to clear, so opening it
+ * again writes nothing (each write is broadcast to every open inbox, which then
+ * refreshes its list).
  */
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -23,9 +26,21 @@ afterEach(cleanup)
 
 const CONVERSATION = 'conversation_01h00000000000000000000000' as ConversationId
 
-function message(id: string, createdAt: string): ConversationMessageDTO {
-  return { id, senderType: 'visitor', createdAt } as unknown as ConversationMessageDTO
+function message(
+  id: string,
+  createdAt: string,
+  overrides: { senderType?: 'visitor' | 'agent' | 'system'; isInternal?: boolean } = {}
+): ConversationMessageDTO {
+  return {
+    id,
+    senderType: overrides.senderType ?? 'visitor',
+    isInternal: overrides.isInternal ?? false,
+    createdAt,
+  } as unknown as ConversationMessageDTO
 }
+
+const system = (id: string, createdAt: string) => message(id, createdAt, { senderType: 'system' })
+const agent = (id: string, createdAt: string) => message(id, createdAt, { senderType: 'agent' })
 
 function setup(initial: { messages: ConversationMessageDTO[]; readThrough?: string | null }) {
   const markConversationRead = vi.fn().mockResolvedValue({ ok: true })
@@ -101,6 +116,77 @@ describe('useMarkReadOnIncoming', () => {
     })
     await new Promise((r) => setTimeout(r, 20))
     expect(markConversationRead).not.toHaveBeenCalled()
+  })
+
+  it('marks read when a system event follows the unread message', async () => {
+    const { markConversationRead } = setup({
+      messages: [
+        message('m1', '2026-07-02T10:00:00.000Z'),
+        system('s1', '2026-07-02T11:00:00.000Z'),
+      ],
+      readThrough: '2026-07-01T10:00:00.000Z',
+    })
+    await waitFor(() => expect(markConversationRead).toHaveBeenCalledTimes(1))
+  })
+
+  it('marks read when the caller replied after the unread message', async () => {
+    const { markConversationRead } = setup({
+      messages: [
+        message('m1', '2026-07-02T10:00:00.000Z'),
+        agent('a1', '2026-07-02T11:00:00.000Z'),
+      ],
+      readThrough: '2026-07-01T10:00:00.000Z',
+    })
+    await waitFor(() => expect(markConversationRead).toHaveBeenCalledTimes(1))
+  })
+
+  it('writes nothing when only system events and own messages follow the watermark', async () => {
+    const { markConversationRead } = setup({
+      messages: [
+        message('m1', '2026-07-02T10:00:00.000Z'),
+        system('s1', '2026-07-02T11:00:00.000Z'),
+        agent('a1', '2026-07-02T12:00:00.000Z'),
+      ],
+      readThrough: '2026-07-02T10:00:00.000Z',
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(markConversationRead).not.toHaveBeenCalled()
+  })
+
+  it('writes nothing for a thread with no message from the other side', async () => {
+    const { markConversationRead } = setup({
+      messages: [agent('a1', '2026-07-02T10:00:00.000Z'), system('s1', '2026-07-02T11:00:00.000Z')],
+      readThrough: null,
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(markConversationRead).not.toHaveBeenCalled()
+  })
+
+  it('ignores internal notes', async () => {
+    const { markConversationRead } = setup({
+      messages: [message('n1', '2026-07-02T10:00:00.000Z', { isInternal: true })],
+      readThrough: null,
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(markConversationRead).not.toHaveBeenCalled()
+  })
+
+  it('does not write again when a system event or own message lands after a read', async () => {
+    const { hook, markConversationRead } = setup({
+      messages: [message('m1', '2026-07-02T10:00:00.000Z')],
+      readThrough: null,
+    })
+    await waitFor(() => expect(markConversationRead).toHaveBeenCalledTimes(1))
+    hook.rerender({
+      messages: [
+        message('m1', '2026-07-02T10:00:00.000Z'),
+        system('s1', '2026-07-02T11:00:00.000Z'),
+        agent('a1', '2026-07-02T12:00:00.000Z'),
+      ],
+      readThrough: null,
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(markConversationRead).toHaveBeenCalledTimes(1)
   })
 
   it('marks read again when the host shows the thread, with no new message', async () => {
