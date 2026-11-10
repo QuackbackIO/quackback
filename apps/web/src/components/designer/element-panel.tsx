@@ -84,6 +84,7 @@ import {
   ElementStyleSection,
   applyChoice,
   rowChoiceOf,
+  sameOption,
   type FontSlot,
 } from './element-style-section'
 import { StyleField } from './element-styles'
@@ -94,6 +95,7 @@ import {
   PropertyRow,
   PropertySection,
   PropertyTiles,
+  ROW_INDENT,
   type Crumb,
   type OverridePlace,
   type PanelAction,
@@ -351,7 +353,10 @@ export function ElementPanel({
     return (
       <p
         data-in-use={label}
-        className="-mt-0.5 flex min-w-0 items-center gap-1.5 ps-[100px] text-[11px] text-muted-foreground"
+        className={cn(
+          '-mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground',
+          ROW_INDENT
+        )}
       >
         <span className="min-w-0 truncate">{note.text}</span>
         <button
@@ -377,7 +382,20 @@ export function ElementPanel({
       : `${WORDS.reset} ${label.toLowerCase()}`
     // For every one, a brand choice that sets this property is its row's tiles, with Custom for the exact field.
     const choice = widest && state === 'base' ? rowChoiceOf(design, pick.element, prop) : undefined
-    const fieldLabel = choice ? `${WORDS.custom} ${label.toLowerCase()}` : label
+    // A choice whose options are values of the row's own control is that control, as on every element.
+    const pickChoice = (option: string) =>
+      choice &&
+      update(
+        (draft) => applyChoice(draft, pick.element, choice, option),
+        undoName(label.toLowerCase())
+      )
+    const writeRow = (value: unknown) => {
+      const option = sameOption(choice, value)
+      if (option) pickChoice(option)
+      else write(prop, value)
+    }
+    const tiled = choice && !choice.same
+    const fieldLabel = tiled ? `${WORDS.custom} ${label.toLowerCase()}` : label
     const control = (() => {
       switch (info.kind) {
         case 'paint':
@@ -392,7 +410,7 @@ export function ElementPanel({
                 value={here as string | undefined}
                 inherited={typeof from?.value === 'string' ? from.value : undefined}
                 tokens={tokens}
-                onChange={(v) => write(prop, v)}
+                onChange={writeRow}
                 dark={darkOf(prop)}
               />
               {info.kind === 'paint' && (
@@ -449,7 +467,7 @@ export function ElementPanel({
               value={here as string | undefined}
               inherited={from?.value as string | undefined}
               options={Object.entries(tiles) as Array<[string, string]>}
-              onChange={(v) => write(prop, v)}
+              onChange={writeRow}
             />
           )
         }
@@ -464,7 +482,7 @@ export function ElementPanel({
         readAt(design, ctx, at, 'phone', state, prop) !== undefined,
       onUseAllScreens: phone ? () => write(prop, undefined) : undefined,
     }
-    if (choice) {
+    if (choice && tiled) {
       const custom = here !== undefined || customOpen.has(prop)
       return (
         <Fragment key={`${state}-${prop}`}>
@@ -490,11 +508,7 @@ export function ElementPanel({
                     else next.delete(prop)
                     return next
                   })
-                  if (value !== CUSTOM)
-                    update(
-                      (draft) => applyChoice(draft, pick.element, choice, value),
-                      undoName(label.toLowerCase())
-                    )
+                  if (value !== CUSTOM) pickChoice(value)
                 }}
               />
               {custom && <div className="flex min-w-0 items-center gap-1.5">{control}</div>}

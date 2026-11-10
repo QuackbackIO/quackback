@@ -23,7 +23,14 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { hexOf } from './properties/tokens'
 import { cn } from '@/lib/shared/utils'
 import { FIND, type FindRow } from './find-rows'
-import { PropertyMore, PropertyRow, PropertySection } from './properties/properties-panel'
+import {
+  PropertyMore,
+  PropertyRow,
+  PropertyRowNote,
+  PropertySection,
+  ROW_INDENT_MARGIN,
+  ROW_LABEL,
+} from './properties/properties-panel'
 import { COLOUR_NAMES, THEME, WORDS, resetToValue } from './properties/words'
 
 type Palette = PortalDesign['brand']['light']
@@ -331,7 +338,7 @@ function FromLogo({
   return (
     <div role="group" aria-label={THEME.fromLogo} className="flex min-h-7 items-center gap-2">
       {/* In the rows' label column, on one line; the swatches wrap beside it. */}
-      <span className="w-[92px] shrink-0 text-[11px] whitespace-nowrap text-muted-foreground">
+      <span className={cn(ROW_LABEL, 'shrink-0 text-xs whitespace-nowrap text-muted-foreground')}>
         {THEME.fromLogo}
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
@@ -365,7 +372,7 @@ function RowIssue({
 }) {
   if (!issue) return null
   return (
-    <p className="flex min-h-7 items-center gap-1.5 ps-[100px] text-[11px] text-muted-foreground">
+    <PropertyRowNote className="flex min-h-7 items-center gap-1.5">
       <ExclamationTriangleIcon className="size-3.5 shrink-0 text-warning" aria-hidden="true" />
       <span className="me-auto">{THEME.hardOn(issue.on.join(', '))}</span>
       {issue.fix && (
@@ -380,7 +387,7 @@ function RowIssue({
           {THEME.fix}
         </Button>
       )}
-    </p>
+    </PropertyRowNote>
   )
 }
 
@@ -409,7 +416,7 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
   return (
     <details className="group/dark" data-dark-values="" data-find={FIND.darkMode.id}>
       <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 rounded focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none [&::-webkit-details-marker]:hidden">
-        <span className="w-[92px] shrink-0 truncate text-xs text-muted-foreground">
+        <span className={cn(ROW_LABEL, 'shrink-0 text-xs leading-tight text-muted-foreground')}>
           {THEME.darkMode}
         </span>
         <span role="img" aria-label="Dark colours" className="flex gap-1">
@@ -450,7 +457,10 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
           <button
             type="button"
             onClick={() => update((draft) => void delete draft.brand.dark)}
-            className="ms-[100px] inline-flex min-h-6 items-center rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className={cn(
+              'inline-flex min-h-6 items-center rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              ROW_INDENT_MARGIN
+            )}
           >
             {THEME.resetAllToAuto}
           </button>

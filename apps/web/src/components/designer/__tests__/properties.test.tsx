@@ -14,6 +14,7 @@ import {
   PropertyRow,
   PropertySection,
   PropertyTiles,
+  tileColumns,
 } from '../properties/properties-panel'
 import { ReachNote, ScopeLine } from '../properties/scope-line'
 import { SCOPE_NAMES } from '@/lib/shared/design/override-cascade'
@@ -143,27 +144,56 @@ describe('a row of tiles', () => {
     ['logo', 'Logo colours'],
   ] as const
 
-  it('never cuts a label off: a tile that does not fit wraps to the next row', () => {
+  it('lies in an even grid when the names do not fit one row, so no tile is left alone', () => {
     render(<PropertyTiles label="Style" value="tabs" options={LONG} onChange={() => {}} />)
     const group = screen.getByRole('radiogroup', { name: 'Style' })
-    expect(group.className).toContain('flex-wrap')
+    expect(group.className).toContain('grid-cols-2')
+    expect(group.className).not.toContain('flex-wrap')
     for (const [, name] of LONG) {
       const tile = screen.getByRole('radio', { name })
       expect(tile.textContent).toBe(name)
-      // As wide as its whole label, never truncated to fit beside the others.
-      expect(tile.className).not.toMatch(/truncate|min-w-0/)
-      expect(tile.className).toContain('whitespace-nowrap')
+      // Never cut off: a long name wraps between words inside its tile.
+      expect(tile.className).not.toMatch(/truncate|break-words|whitespace-nowrap/)
     }
   })
 
-  it('goes three to a row past four, and shares the row as one line up to four', () => {
-    render(<PropertyTiles label="Many" value="tabs" options={LONG} onChange={() => {}} />)
-    expect(screen.getByRole('radio', { name: 'Tabs' }).className).toContain('basis-[30%]')
-    cleanup()
+  it('shares one row, each tile as wide as its name, when the names fit', () => {
+    render(
+      <PropertyTiles label="Few" value="tabs" options={LONG.slice(0, 3)} onChange={() => {}} />
+    )
+    const group = screen.getByRole('radiogroup', { name: 'Few' })
+    expect(group.className).toContain('flex')
+    expect(group.className).not.toMatch(/grid|flex-wrap/)
+    expect(screen.getByRole('radio', { name: 'Tabs' }).className).toContain('whitespace-nowrap')
+  })
+
+  it('outlines the picked tile rather than filling it, so dark mode shows no white block', () => {
     render(
       <PropertyTiles label="Few" value="tabs" options={LONG.slice(0, 2)} onChange={() => {}} />
     )
-    expect(screen.getByRole('radio', { name: 'Tabs' }).className).toContain('basis-0')
+    const picked = screen.getByRole('radio', { name: 'Tabs' })
+    expect(picked.className).toContain('ring-foreground')
+    expect(picked.className).toContain('forced-colors:outline')
+    expect(picked.className).not.toMatch(/bg-foreground|text-background/)
+  })
+})
+
+describe('tileColumns', () => {
+  it('keeps short names on one row', () => {
+    expect(tileColumns(['Composer', 'Button', 'None'])).toBe(0)
+    expect(tileColumns(['Short', 'Roomy', 'Tall'])).toBe(0)
+  })
+  it('never orphans a tile: four that do not fit go two by two', () => {
+    expect(tileColumns(['Home', 'Feedback', 'Roadmap', 'Changelog'])).toBe(2)
+    expect(tileColumns(['Standard', 'Large', 'Display', 'Custom'])).toBe(2)
+  })
+  it('keeps three that do not fit as three equal columns', () => {
+    expect(tileColumns(['As written', 'All capitals', 'Custom'])).toBe(3)
+  })
+  it('takes five or more three to a row when they fit, else two', () => {
+    expect(tileColumns(['Aa', 'AA', 'aa', 'Ab', 'Abc', 'Def'])).toBe(0)
+    expect(tileColumns(['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven'])).toBe(3)
+    expect(tileColumns(['Comfortable', 'Help Center', 'Logo colours', 'Tabs', 'Pills'])).toBe(2)
   })
 })
 
@@ -555,14 +585,32 @@ describe('one ladder of scope words', () => {
 })
 
 describe('a row’s label', () => {
-  it('wraps when longer than its column, as "Logo colours" beside its ⓘ is, never cut off', () => {
+  it('wraps between words when longer than its column, never inside a word, never cut off', () => {
     render(
       <PropertyRow label="Logo colours" source="Read from your logo">
         <span />
       </PropertyRow>
     )
     const label = screen.getByText('Logo colours')
-    expect(label.className).not.toMatch(/truncate|text-ellipsis|whitespace-nowrap/)
-    expect(label.className).toContain('break-words')
+    expect(label.className).not.toMatch(
+      /truncate|text-ellipsis|whitespace-nowrap|break-words|break-all/
+    )
+  })
+
+  it('keeps the end slot on every row, so set and unset rows end at one edge', () => {
+    render(
+      <>
+        <PropertyRow label="Unset">
+          <span />
+        </PropertyRow>
+        <PropertyRow label="Set" set onReset={() => {}}>
+          <span />
+        </PropertyRow>
+      </>
+    )
+    const ends = document.querySelectorAll('[data-row-end]')
+    expect(ends).toHaveLength(2)
+    expect(ends[0].className).toBe(ends[1].className)
+    expect(ends[1].querySelector('button[aria-label="Reset set"]')).not.toBeNull()
   })
 })

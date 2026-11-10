@@ -41,6 +41,7 @@ import {
   PropertyRow,
   PropertySection,
   PropertyTiles,
+  ROW_LABEL,
 } from './properties/properties-panel'
 import { ScopeLine } from './properties/scope-line'
 import { ScrubNumber } from './properties/scrub-number'
@@ -758,7 +759,7 @@ export function PageBackgroundEntry({
         onClick={() => (onOpen ? onOpen() : setOpen(!open))}
         className="flex min-h-7 w-full items-center gap-2 rounded-md text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
       >
-        <span className="w-[92px] shrink-0 truncate text-muted-foreground">
+        <span className={cn(ROW_LABEL, 'shrink-0 leading-tight text-muted-foreground')}>
           {label ?? (onOpen ? whose : THEME.sections.pageBackground)}
         </span>
         <span className="min-w-0 flex-1 truncate px-1.5">
