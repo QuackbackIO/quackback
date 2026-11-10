@@ -15,6 +15,7 @@ import {
   eq,
   and,
   or,
+  ne,
   isNull,
   isNotNull,
   inArray,
@@ -472,16 +473,17 @@ export async function createSendingAddress(input: {
     })
     .returning()
   if (!row) throw new ChannelAddressInUseError(address)
-  // The first address a workspace adds becomes its default, so a new setup
-  // sends from it without a second step. Only while no address is chosen for
-  // anything: once one is, or an admin has cleared the default, adding an
-  // address never changes what any email sends from.
-  const [chosen] = await db
-    .select({ id: emailSenders.id })
-    .from(emailSenders)
-    .where(eq(emailSenders.mode, 'address'))
+  // The first sending address a workspace ever has becomes its default, so a
+  // new setup sends from it without a second step. Never after that: a
+  // workspace that has had an address (one it still has, or one it removed) has
+  // made its choices, and adding another never changes what any email sends
+  // from.
+  const [earlier] = await db
+    .select({ id: channelAccounts.id })
+    .from(channelAccounts)
+    .where(and(eq(channelAccounts.role, 'sending'), ne(channelAccounts.id, row.id)))
     .limit(1)
-  if (!chosen) {
+  if (!earlier) {
     await db
       .insert(emailSenders)
       .values({ surface: 'default', channelAccountId: row.id })

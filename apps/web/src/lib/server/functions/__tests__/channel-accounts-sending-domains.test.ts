@@ -415,6 +415,16 @@ describe('choosing which address each kind of email sends from', () => {
     })
     expect(config.forwardingTargetPermitted).toBe(false)
 
+    // The address behind the inbox, when it has one, so the page can name it.
+    hoisted.getEmailSenders.mockResolvedValue(
+      new Map<string, unknown>([
+        ['support', { mode: 'inbox', account: { id: 'channel_account_2' } }],
+      ])
+    )
+    expect(((await getConfig()) as { senders: unknown }).senders).toMatchObject({
+      support: { mode: 'inbox', fallbackId: 'channel_account_2' },
+    })
+
     hoisted.guardContext.mockResolvedValue(guard(['acme.com']))
     expect(await getConfig()).toMatchObject({ forwardingTargetPermitted: true })
   })
@@ -569,7 +579,7 @@ describe('getSurfaceSenderFn', () => {
       senderName: 'Acme Updates',
     })
     const result = await surfaceSender({ data: { surface: 'changelog' } })
-    expect(hoisted.resolveSender).toHaveBeenCalledWith({ surface: 'changelog' })
+    expect(hoisted.resolveSender).toHaveBeenCalledWith({ surface: 'changelog', preview: true })
     expect(result).toEqual({ from: 'Acme Updates <hello@updates.acme.com>' })
   })
 

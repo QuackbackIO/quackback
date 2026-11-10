@@ -23,7 +23,7 @@
  * that is the neighbour's" case here vacuous.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import type { PrincipalId, TeamId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, TeamId } from '@quackback/ids'
 
 // Read lazily through getters, so seeding before any config access is what makes
 // config.baseUrl resolve for the insert-time trusted-url gate.
@@ -77,7 +77,11 @@ import {
   addressesPlatformInbox,
   setInboundForwardingTarget,
 } from '@/lib/server/domains/channel-accounts/channel-account.service'
-import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/sender-resolver'
+import { resolveConversationSender } from '@/lib/server/domains/channel-accounts/sender-resolver'
+
+/** The address a conversation's email leaves from. */
+const resolveConversationFrom = async (id: ConversationId) =>
+  (await resolveConversationSender(id))?.from ?? null
 import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 
 const fixture = await createDbTestFixture({
