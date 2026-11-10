@@ -35,6 +35,16 @@ export function portalSiteName(settings: PortalHeadSettings | null | undefined):
 }
 
 /**
+ * The brand's icon as the header shows it: the design's own, its dark one
+ * when it has only that, then the workspace's logo; null for the initial.
+ */
+export function portalBrandMark(settings: PortalHeadSettings | null | undefined): string | null {
+  const design = settings?.portalDesign
+  const mark = design?.engine === 'v2' ? design.logo.mark : undefined
+  return mark?.light || mark?.dark || settings?.brandingData?.logoUrl || null
+}
+
+/**
  * The workspace's main language. Until it has a setting of its own, the
  * help center's default language is the one place a workspace states it.
  */

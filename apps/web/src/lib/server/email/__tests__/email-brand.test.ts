@@ -77,6 +77,20 @@ describe('emailBranding', () => {
     expect(renamed.logoUrl).not.toBe(none.logoUrl)
   })
 
+  it('names the brand as the portal does: the Brand kit title, else the workspace', async () => {
+    expect(
+      (await emailBranding({ logoKey: null, featureFlags: FLAG_ON, name: 'Acme' })).title
+    ).toBe('Acme')
+    publish((d) => (d.brand.logo.name = 'GitHub'))
+    expect(
+      (await emailBranding({ logoKey: null, featureFlags: FLAG_ON, name: 'Acme' })).title
+    ).toBe('GitHub')
+    publish(() => {})
+    expect(
+      (await emailBranding({ logoKey: null, featureFlags: FLAG_ON, name: 'Acme' })).title
+    ).toBe('Acme')
+  })
+
   it('never sends an SVG workspace logo', async () => {
     const result = await emailBranding({ logoKey: 'logos/acme.svg', featureFlags: FLAG_ON })
     expect(result.logoUrl).toBeUndefined()

@@ -27,6 +27,8 @@ export interface EmailBranding {
   logoUrl: string | undefined
   /** Absent keeps Quackback gold. */
   brand: EmailBrand | undefined
+  /** The portal's name as its header shows it: the Brand kit title, else the workspace's. */
+  title?: string
 }
 
 /** Mail clients do not draw SVG, so an SVG logo is left out rather than sent broken. */
@@ -59,7 +61,9 @@ export function designEmailBranding(
   workspaceName?: string | null
 ): EmailBranding {
   const icon = emailIconKey(doc)
+  const title = doc.brand.logo.name?.trim() || workspaceName || undefined
   return {
+    ...(title && { title }),
     logoUrl:
       (icon ? getEmailSafeUrl(icon) : null) ??
       workspaceLogo(logoKey) ??
@@ -75,7 +79,11 @@ export async function emailBranding(workspace: {
   /** The settings row's stored flags, or flags already resolved (cached settings). */
   featureFlags: string | null | undefined | FeatureFlags
 }): Promise<EmailBranding> {
-  const fallback: EmailBranding = { logoUrl: workspaceLogo(workspace.logoKey), brand: undefined }
+  const fallback: EmailBranding = {
+    logoUrl: workspaceLogo(workspace.logoKey),
+    brand: undefined,
+    ...(workspace.name && { title: workspace.name }),
+  }
   if (config.portalDesignEngine === 'legacy') return fallback
   const flags =
     typeof workspace.featureFlags === 'object' && workspace.featureFlags

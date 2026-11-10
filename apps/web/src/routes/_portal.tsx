@@ -42,12 +42,13 @@ import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
-import { usePreviewCss } from '@/components/public/preview-draft-context'
+import { usePortalDesign, usePreviewCss } from '@/components/public/preview-draft-context'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import {
   portalFavicon,
   portalHeadWords,
   portalShareImage,
+  portalBrandMark,
   portalSiteName,
 } from '@/lib/shared/portal-head'
 import { shownName } from '@/lib/shared/greeting-name'
@@ -187,7 +188,6 @@ export const Route = createFileRoute('/_portal')({
         void recordPortalAccessDeniedFn({ data: { reason: accessResult.reason } }).catch(() => {})
       }
 
-      const brandingData = settings?.brandingData ?? null
       const theme = portalTheme(settings)
       // Locale so the gate's auth dialog renders under PortalIntlProvider.
       const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
@@ -209,8 +209,9 @@ export const Route = createFileRoute('/_portal')({
       const gate: PortalAccessGateError = {
         type: 'portal-access-gate',
         reason: accessResult.reason,
-        workspaceName: settings?.name ?? '',
-        logoUrl: brandingData?.logoUrl ?? null,
+        // The brand as the header shows it: the Brand kit title and icon.
+        workspaceName: settings ? portalSiteName(settings) : '',
+        logoUrl: portalBrandMark(settings),
         customCss: theme.customCss,
         configFontSans: theme.configFontSans,
         locale,
@@ -450,13 +451,30 @@ function PortalLayout() {
                 </FileViewerProvider>
               </main>
               <PortalFooter showPoweredBy={showPoweredBy} workspaceSlug={workspaceSlug} />
-              <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
+              <PortalAuthDialog authConfig={authConfig} workspaceName={workspaceName} />
               <SharedPreviewNotice />
             </PortalShell>
           </PortalPreviewProvider>
         </AuthPopoverProvider>
       </PortalPermissionsProvider>
     </PortalIntlProvider>
+  )
+}
+
+/** The sign-in dialog, named as the header names the portal: the Brand kit title, the draft's in the builder. */
+function PortalAuthDialog({
+  authConfig,
+  workspaceName,
+}: {
+  authConfig: Parameters<typeof AuthDialog>[0]['authConfig']
+  workspaceName: string
+}) {
+  const portalDesign = usePortalDesign()
+  return (
+    <AuthDialog
+      authConfig={authConfig}
+      workspaceName={portalSiteName({ name: workspaceName, portalDesign })}
+    />
   )
 }
 

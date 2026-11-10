@@ -6,6 +6,7 @@ import { portalHeadTemplates } from '@/lib/server/domains/settings/portal-head-w
 import {
   pageShareMeta,
   pageTitle,
+  portalBrandMark,
   portalFavicon,
   portalHeadWords,
   portalMainLanguage,
@@ -106,6 +107,24 @@ describe('portalFavicon', () => {
     expect(tile).toMatch(/^\/brand\.png\?v=\w+&kind=icon$/)
     expect(tile).not.toBe(portalFavicon(withDesign((doc) => (doc.brand.logo.name = 'Other'))))
     expect(portalFavicon({ name: 'Acme', portalDesign: { engine: 'legacy' } })).toBe('/logo.png')
+  })
+})
+
+describe('portalBrandMark', () => {
+  it('is the design’s own icon, its dark one alone, then the workspace logo', () => {
+    const logo = { brandingData: { logoUrl: '/api/storage/logo.png' } }
+    const light = withDesign((doc) => {
+      doc.brand.logo.mark.light = { key: 'logos/l.png' }
+      doc.brand.logo.mark.dark = { key: 'logos/d.png' }
+    })
+    expect(portalBrandMark({ ...light, ...logo })).toBe('/api/storage/logos/l.png')
+    const dark = withDesign((doc) => (doc.brand.logo.mark.dark = { key: 'logos/d.png' }))
+    expect(portalBrandMark(dark)).toBe('/api/storage/logos/d.png')
+    expect(portalBrandMark({ ...withDesign(), ...logo })).toBe('/api/storage/logo.png')
+    expect(portalBrandMark({ portalDesign: { engine: 'legacy' }, ...logo })).toBe(
+      '/api/storage/logo.png'
+    )
+    expect(portalBrandMark(withDesign())).toBeNull()
   })
 })
 
