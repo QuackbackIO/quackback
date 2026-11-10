@@ -69,7 +69,7 @@ import {
 import { checkSendingDomainOwnership, type ZoneReader } from './domain-verification'
 import { interactiveResolver, systemResolver } from '@/lib/server/dns/resolver'
 import { checkRecords } from './record-check'
-import { readDmarc, runPreflight } from './preflight'
+import { readDmarc, readHostedZone, runPreflight } from './preflight'
 import { generateDkimKey, isKeyRecord } from './dkim-key'
 import { returnPathTarget as operatorReturnPathTarget } from './return-path'
 import {
@@ -560,10 +560,13 @@ export async function refreshSendingDomain(
     row.dnsRecords ?? []
   )
   // DMARC is read on every check because it is one lookup and the owner may
-  // add one while setting up; a failed read keeps what was there.
-  const [dnsRecords, dmarc] = await Promise.all([
+  // add one while setting up; a failed read keeps what was there. The zone is
+  // read until it is known, which a domain set up before it was kept is not:
+  // its record names are shown relative to the zone from then on.
+  const [dnsRecords, dmarc, zone] = await Promise.all([
     checkRecords(row.domain, composed, resolver, now, row.preflight?.zone),
     readDmarc(row.domain, resolver),
+    row.preflight?.zone ? undefined : readHostedZone(row.domain, resolver),
   ])
   // Every field but the move to verified, which is made below on its own. A
   // demotion is reported by the one check that made it (see the module).
@@ -574,7 +577,9 @@ export async function refreshSendingDomain(
     now,
     fields: {
       dnsRecords,
-      ...(dmarc ? { preflight: { ...row.preflight, dmarc } } : {}),
+      ...(dmarc || zone
+        ? { preflight: { ...row.preflight, ...zone, ...(dmarc ? { dmarc } : {}) } }
+        : {}),
       // Found again: the clock for a missing record starts over.
       ...(ownershipProven
         ? {
