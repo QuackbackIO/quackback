@@ -271,7 +271,7 @@ export function AddDragCard({ drag }: { drag: AddDrag }) {
     <div
       aria-hidden="true"
       data-add-drag-card=""
-      className="pointer-events-none fixed z-50 space-y-1.5"
+      className="pointer-events-none fixed z-drag space-y-1.5"
       style={{ left: view.x - view.hold.x, top: view.y - view.hold.y, width: view.hold.width }}
     >
       <div

@@ -18,7 +18,7 @@ export function BuilderColumns({ pane, onPane }: { pane: Pane; onPane: (pane: Pa
   return (
     <nav
       aria-label="Builder columns"
-      className="flex shrink-0 gap-1 border-b border-border bg-background p-2 min-[1100px]:hidden"
+      className="flex shrink-0 gap-1 border-b border-border bg-background p-2 builder:hidden"
     >
       {PANES.map(([key, name]) => (
         <button
