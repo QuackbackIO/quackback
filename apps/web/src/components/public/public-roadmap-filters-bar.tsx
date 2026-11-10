@@ -246,7 +246,7 @@ function AddFilterButton({
             <button
               type="button"
               onClick={() => setActiveCategory(null)}
-              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-muted-foreground hover:text-foreground border-b border-border/50"
+              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground border-b border-border/50"
             >
               <ChevronRightIcon className="h-2.5 w-2.5 rotate-180" />
               <FormattedMessage id="portal.feedback.filter.back" defaultMessage="Back" />

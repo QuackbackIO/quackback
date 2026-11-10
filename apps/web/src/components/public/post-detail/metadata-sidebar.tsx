@@ -804,7 +804,7 @@ export function MetadataSidebar({
                   disabled={isUpdating}
                   className={cn(
                     'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
-                    'rounded-full text-[11px] font-medium border',
+                    'rounded-full text-xs font-medium border',
                     TAG_TINT,
                     TAG_EDGE,
                     'hover:opacity-80',
@@ -826,7 +826,7 @@ export function MetadataSidebar({
                       disabled={isUpdating}
                       className={cn(
                         'inline-flex items-center gap-0.5 px-1.5 py-0.5',
-                        'rounded-full text-[11px] font-medium',
+                        'rounded-full text-xs font-medium',
                         'text-muted-foreground hover:text-muted-foreground',
                         'border border-dashed border-border/60 hover:border-border',
                         'hover:bg-muted/40',
@@ -881,7 +881,7 @@ export function MetadataSidebar({
                   key={tag.id}
                   data-qb-part="tag"
                   className={cn(
-                    'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium',
+                    'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
                     TAG_TINT
                   )}
                   style={tagStyle(tag.color)}

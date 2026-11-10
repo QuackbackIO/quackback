@@ -167,7 +167,7 @@ export function StatusUptimeBar({ days, componentName, className }: StatusUptime
           {shown && days[shown.index] ? dayLabel(days[shown.index]) : null}
         </TooltipContent>
       </Tooltip>
-      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>
           {ranges.map((range) => (
             <span key={range.key} className={range.className}>

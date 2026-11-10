@@ -1,7 +1,8 @@
-import { Button, Heading, Section, Text } from '@react-email/components'
+import { Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
-import { typography, button } from './shared-styles'
+import { typography } from './shared-styles'
 import { withLineBreaks } from './line-breaks'
+import { BrandButton } from './brand-parts'
 
 const MAINTENANCE_BLUE = '#3b82f6'
 const MAINTENANCE_BLUE_BG = '#eff6ff'
@@ -109,9 +110,7 @@ export function StatusMaintenanceScheduledEmail({
 
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={incidentUrl}>
-          View status page
-        </Button>
+        <BrandButton href={incidentUrl}>View status page</BrandButton>
       </Section>
 
       {/* Footer */}

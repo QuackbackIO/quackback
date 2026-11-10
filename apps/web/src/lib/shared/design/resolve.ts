@@ -37,8 +37,9 @@ import {
   type ModeBackgrounds,
 } from './page-background'
 import { wordsColourCss } from './words-colour'
-import { DESIGN_LAYERS, styleCss, type StyleCheck } from './style-css'
+import { DESIGN_LAYERS, largeHeadline, styleCss, type StyleCheck } from './style-css'
 import type { PortalDesign } from './schema'
+import { drawnSurfaces, surfacesDrawing, type Drawn, type Surface } from './surfaces'
 
 type Mode = 'light' | 'dark'
 
@@ -135,7 +136,9 @@ function solveMode(
   adjustments: DesignAdjustment[],
   errors: string[],
   /** What page text sits on beyond the page colour: a page background's colours, once the brand colour is settled. */
-  pageBehind: (vars: Required<ThemeVariables>) => string[] = () => []
+  pageBehind: (vars: Required<ThemeVariables>) => string[] = () => [],
+  /** The other surfaces the site's colours are drawn on (surfaces.ts), once the brand colour is settled. */
+  drawn: (vars: Required<ThemeVariables>) => Surface[] = () => []
 ) {
   const t = vars as Required<ThemeVariables>
   const set = (token: keyof ThemeVariables, to: string, reason: string) => {
@@ -173,6 +176,11 @@ function solveMode(
   const behind = pageBehind(t)
   if (behind.some((bg) => contrastRatio(t.foreground, bg) < 4.5))
     errors.push(`${mode}: ink on the page background is below 4.5:1`)
+  const surfaces = drawn(t)
+  for (const surface of surfaces)
+    if (surface.draws.includes('Text') && contrastRatio(t.foreground, surface.colour) < 4.5)
+      errors.push(`${mode}: ink on ${surface.on} is below 4.5:1`)
+  const on = (what: Drawn) => surfacesDrawing(surfaces, what)
 
   const solve = (
     token: keyof ThemeVariables,
@@ -184,14 +192,25 @@ function solveMode(
     if (solved) set(token, solved, reason)
     else errors.push(`${mode}: ${reason} cannot reach ${target}:1`)
   }
-  solve('mutedForeground', [t.background, t.card, t.muted, ...behind], 4.5, 'secondary text')
-  solve('accentInk', [t.background, t.card, t.accent, ...behind], 4.5, 'links and accent text')
+  solve(
+    'mutedForeground',
+    [t.background, t.card, t.muted, ...behind, ...on('Secondary text')],
+    4.5,
+    'secondary text'
+  )
+  solve(
+    'accentInk',
+    [t.background, t.card, t.accent, ...behind, ...on('Links')],
+    4.5,
+    'links and accent text'
+  )
   solve('destructive', [t.background], 4.5, 'error text')
   solve('input', [t.background], 3, 'field edges')
   // The ring reads on the page and cards, and on brand-colour buttons wherever one colour can.
-  const ring = solveContrast(String(vars.ring), [t.background, t.card, t.primary], 3)
+  const rings = [t.background, t.card, ...on('The focus ring')]
+  const ring = solveContrast(String(vars.ring), [...rings, t.primary], 3)
   if (ring) set('ring', ring, 'the focus ring on buttons')
-  solve('ring', [t.background, t.card], 3, 'the focus ring')
+  solve('ring', rings, 3, 'the focus ring')
 }
 
 export function resolveDesign(doc: PortalDesign): ResolvedDesign {
@@ -201,15 +220,22 @@ export function resolveDesign(doc: PortalDesign): ResolvedDesign {
   const paints = hasPageBackground(doc)
   const resolveMode = (mode: Mode) => {
     const vars = expandMode(doc, mode)
-    solveMode(vars, mode, adjustments, errors, (t) => {
-      if (!paints) return []
-      drawn[mode] = drawBackgrounds(
-        doc,
-        { page: t.background, ink: t.foreground, accent: t.primary },
-        mode
-      )
-      return backgroundsBehind(drawn[mode]!)
-    })
+    solveMode(
+      vars,
+      mode,
+      adjustments,
+      errors,
+      (t) => {
+        if (!paints) return []
+        drawn[mode] = drawBackgrounds(
+          doc,
+          { page: t.background, ink: t.foreground, accent: t.primary },
+          mode
+        )
+        return backgroundsBehind(drawn[mode]!)
+      },
+      (t) => drawnSurfaces(doc, t, mode)
+    )
     const band = bandError(doc, vars, mode)
     if (band) errors.push(band)
     return vars
@@ -262,6 +288,7 @@ function tuneSurface(
     background: light.background,
     band,
     mixed,
+    headline: largeHeadline(doc) ? 3 : 4.5,
     ...(page.length ? { page } : {}),
     ...(subtitle
       ? { subtitle: { ink: subtitle, target: tokens['--qb-band-subtitle-size'] ? 3 : 4.5 } }

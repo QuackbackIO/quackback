@@ -4,12 +4,13 @@
  * brand when it changes; one whose dark mode value differs shows a half
  * swatch. A colour picked by hand is detached: it shows its hex with a
  * broken link, and "Link to {role}" goes back. Picking a brand swatch always
- * stores the role's name, never its hex.
+ * stores the role's name, never its hex. With a dark value, the popover
+ * opens on the mode the canvas shows.
  *
  * FontField works the same way for the brand's fonts: a chip "Heading font ·
  * Fraunces", linked by its slot's name.
  */
-import { useState, type ReactNode } from 'react'
+import { useContext, useState, type ReactNode } from 'react'
 import { LinkSlashIcon } from '@heroicons/react/16/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ColourField } from '@/components/admin/settings/appearance/colour-field'
@@ -17,6 +18,7 @@ import { cn } from '@/lib/shared/utils'
 import { BUNDLED_FONTS, fontStack } from '@/lib/shared/design/fonts'
 import type { BundledFontId } from '@/lib/shared/design/fonts'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import { CanvasModeContext } from './canvas-mode'
 import { faceName, hexOf, type ColourToken, type FontToken } from './tokens'
 import { WORDS, linkTo } from './words'
 
@@ -90,19 +92,30 @@ export function TokenField({
 }) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'brand' | 'custom'>(isHex(value) ? 'custom' : 'brand')
-  const [mode, setMode] = useState<'light' | 'dark'>('light')
+  const canvasMode = useContext(CanvasModeContext)
+  const [mode, setMode] = useState<'light' | 'dark'>(dark ? canvasMode : 'light')
   const shown = value ?? inherited
   const token = shown ? tokens.find((t) => t.id === shown) : undefined
   const differs = !!dark && dark.value !== undefined && dark.value !== value
+  const darkToken = differs ? tokens.find((t) => t.id === dark.value) : undefined
   const darkShown = differs
-    ? (tokens.find((t) => t.id === dark.value)?.light ?? dark.value)
+    ? darkToken
+      ? (darkToken.dark ?? darkToken.light)
+      : dark.value
     : undefined
   const back = isHex(value) ? nearestToken(value, tokens) : null
   const editing = mode === 'dark' && dark ? dark : { value, onChange }
   const pick = (next: string | undefined) => editing.onChange(next)
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1.5">
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          // Each time it opens, on the colours the canvas shows.
+          if (next) setMode(dark ? canvasMode : 'light')
+          setOpen(next)
+        }}
+      >
         <PopoverTrigger asChild>
           <button
             id={id}

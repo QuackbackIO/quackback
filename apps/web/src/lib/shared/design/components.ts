@@ -17,6 +17,8 @@ import { clearerInk, contrastRatio, isLight, overlay, solveContrast } from './co
 import { fontStack, wordGap } from './fonts'
 import { roleFill, roleTokens, textOn } from './colour-roles'
 import { votedInk } from './voted'
+import { supportTintColour } from './surfaces'
+import { largeHeadline } from './style-css'
 import { LOGO_FILTER } from './logo'
 import { pageChoiceAttributes } from './page-choices'
 import { drawFill, fillFor, hasPageBackground, type BackgroundPage } from './page-background'
@@ -248,6 +250,8 @@ function bandWords(
 ): { headline: string; subtitle: string; large: boolean } | null {
   if (doc.layout.band !== 'brand' && doc.layout.band !== 'support') return null
   if ((doc.layout.bandShape ?? 'full') === 'panel' || doc.brand.bandImage) return null
+  // A headline set smaller than large text anywhere reads as body text does.
+  if (!largeHeadline(doc)) return null
   const light = [t.background, t.foreground, NEAR_WHITE, '#ffffff'].filter(isLight)
   const headline = clearerInk(surface.ink, surface.behind, light, 3)
   if (headline === surface.ink) return null
@@ -317,8 +321,9 @@ function supportTokens(
   out['--qb-action-bg'] = action
   out['--qb-action-ink'] =
     action === t.primary ? t.primaryForeground : (textOn([action], t) ?? t.primaryForeground)
-  if (support && doc.layout.tint === 'support') {
-    out['--qb-support-tint'] = tintOf(support, t.card, 0.06)
+  const tint = supportTintColour(doc, t.card, mode)
+  if (support && tint) {
+    out['--qb-support-tint'] = tint
     const edge = mixColor(support, t.card, 0.55)
     out['--qb-support-edge'] = solveContrast(edge, [t.card, t.background], 3) ?? edge
     if (!headerOnBand(doc)) {

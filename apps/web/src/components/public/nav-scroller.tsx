@@ -58,7 +58,7 @@ export function NavScroller({ className, children }: { className?: string; child
         aria-hidden="true"
         data-qb-nav-more=""
         onClick={scrollOn}
-        className="absolute inset-y-0 end-0 hidden w-6 items-center justify-center text-[var(--header-foreground,currentColor)] [[data-more-end]+&]:flex"
+        className="absolute inset-y-0 end-0 hidden min-h-6 w-6 items-center justify-center text-[var(--header-foreground,currentColor)] [[data-more-end]+&]:flex"
       >
         <ChevronRightIcon className="size-4 rtl:rotate-180" />
       </button>

@@ -12,6 +12,13 @@ import { rewritePartAliases } from './parts'
 import { designFontIds, fontStack, uploadedFontFaces } from './fonts'
 import { renderDesignCss, resolveDesign, type ResolvedDesign } from './resolve'
 import { readableStatusColours } from './status-colours'
+import {
+  shareCardFacts,
+  shareCardVersion,
+  shortHash,
+  squareIconPath,
+  themeColours,
+} from './share-card'
 import type { PortalDesign } from './schema'
 import type { BandImage, DesignLogo, PortalDesignView } from './view'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
@@ -45,6 +52,9 @@ export function designView(
     icons: {
       favicon: doc.brand.favicon ? designAssetUrl(doc.brand.favicon.key) : null,
       shareImage: doc.brand.shareImage ? designAssetUrl(doc.brand.shareImage.key) : null,
+      mark: markIcon(doc),
+      card: shareCardVersion(shareCardFacts(doc, resolved)),
+      themeColor: themeColours(resolved),
     },
     statusColours: statusColours(doc, resolved),
   }
@@ -60,14 +70,47 @@ function statusColours(doc: PortalDesign, resolved: ResolvedDesign): string[] | 
   return backgrounds.length ? readableStatusColours(colours, backgrounds) : [...colours]
 }
 
+/**
+ * The brand icon as a favicon: an SVG as it is, since it scales; any other
+ * image fitted into a square on the server, so a wide icon is not squashed.
+ */
+function markIcon(doc: PortalDesign): string | null {
+  const { mark } = doc.brand.logo
+  const key = (mark.light ?? mark.dark)?.key
+  if (!key) return null
+  return /\.svg$/i.test(key) ? designAssetUrl(key) : squareIconPath(shortHash(key))
+}
+
 /** Where the portal loads a stored brand file from: its own origin. */
 export const designAssetUrl = (key: string) => `/api/storage/${key}`
+
+/**
+ * An uploaded image's srcset: its smaller copies, then the image itself, by
+ * width. Only when the image's own width is known, so the browser can size
+ * every candidate; an image stored as one file has none.
+ */
+export function imageSrcSet(image: {
+  key: string
+  width?: number
+  variants?: ReadonlyArray<{ key: string; w: number }>
+}): string | null {
+  if (!image.width || !image.variants?.length) return null
+  return [
+    ...image.variants
+      .filter((variant) => variant.w < image.width!)
+      .sort((a, b) => a.w - b.w)
+      .map((variant) => `${designAssetUrl(variant.key)} ${variant.w}w`),
+    `${designAssetUrl(image.key)} ${image.width}w`,
+  ].join(',')
+}
 
 function bandImage(doc: PortalDesign): BandImage | null {
   const image = doc.brand.bandImage
   if (!image) return null
+  const srcSet = imageSrcSet(image)
   return {
     url: designAssetUrl(image.key),
+    ...(srcSet ? { srcSet } : {}),
     place: doc.layout.imagePlace ?? 'side',
     ...(image.alt && !image.decorative ? { alt: image.alt } : {}),
     ...(image.homeOnly ? { homeOnly: true } : {}),

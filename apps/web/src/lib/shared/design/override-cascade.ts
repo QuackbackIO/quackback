@@ -3,7 +3,7 @@
  * page, its Home block and its part, each over the last, and which
  * overrides no longer reach anything.
  */
-import { effectiveValues } from './effective-values'
+import { brandValues } from './effective-values'
 import { styleValueWords } from './labels'
 import { BLOCK_NAMES, SCOPE_WORDS } from './names'
 import { partOf } from './parts-registry'
@@ -41,7 +41,7 @@ export function orphanedOverrides(design: PortalDesign): StyleOverride[] {
   })
 }
 
-type EffectiveValues = ReturnType<typeof effectiveValues>
+type BrandValues = ReturnType<typeof brandValues>
 
 /* The scopes of a picked element */
 
@@ -529,7 +529,7 @@ export function themeRole(
 
 /** The numbers the brand's choices and exact values give an element, by property. */
 const BRAND_NUMBERS: Partial<
-  Record<StyleElement, Partial<Record<StyleProp, (v: EffectiveValues) => number | undefined>>>
+  Record<StyleElement, Partial<Record<StyleProp, (v: BrandValues) => number | undefined>>>
 > = {
   button: {
     radius: (v) => v.button.radius,
@@ -563,7 +563,7 @@ export function brandValue(
   const info = STYLE_PROPS[prop]
   if (info.kind === 'colour' || info.kind === 'paint') return themeRole(design, element, prop)
   const read = BRAND_NUMBERS[element]?.[prop]
-  return read ? read(effectiveValues(design)) : undefined
+  return read ? read(brandValues(design)) : undefined
 }
 
 /** Where an override's element is, as the cascade reads it. */

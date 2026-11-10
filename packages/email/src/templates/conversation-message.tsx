@@ -1,6 +1,7 @@
-import { Column, Heading, Link, Row, Section, Text } from '@react-email/components'
+import { Column, Heading, Row, Section, Text } from '@react-email/components'
 import { EmailLayout } from './email-layout'
-import { typography, colors, utils } from './shared-styles'
+import { typography, colors } from './shared-styles'
+import { AccentBar, BrandLink } from './brand-parts'
 
 interface ConversationMessageEmailProps {
   heading: string
@@ -57,7 +58,7 @@ export function ConversationMessageEmail({
           {senderName}
         </Text>
         <Row>
-          <Column style={{ width: '3px', backgroundColor: colors.primary, borderRadius: '2px' }} />
+          <AccentBar />
           <Column style={{ paddingLeft: '16px' }}>
             {bodyHtml ? (
               // The full message body. Pre-sanitized upstream (write-time TipTap
@@ -87,9 +88,9 @@ export function ConversationMessageEmail({
       </Section>
 
       <Section style={{ textAlign: 'center', marginTop: '24px', marginBottom: '24px' }}>
-        <Link href={ctaUrl} style={{ ...utils.link, fontWeight: 500, fontSize: '15px' }}>
+        <BrandLink href={ctaUrl} style={{ fontWeight: 500, fontSize: '15px' }}>
           {ctaLabel}
-        </Link>
+        </BrandLink>
       </Section>
 
       <Text style={typography.footer}>{reason}</Text>

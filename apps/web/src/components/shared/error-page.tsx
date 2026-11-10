@@ -1,4 +1,4 @@
-import { lazy, Suspense, useContext } from 'react'
+import { createContext, lazy, Suspense, useContext, type ComponentType } from 'react'
 import { IntlContext, useIntl, type MessageDescriptor } from 'react-intl'
 import { DocumentLocaleContext } from '@/components/shared/document-locale-context'
 import { Button } from '@/components/ui/button'
@@ -37,7 +37,7 @@ const AreaMessages = lazy(() =>
  * error pages can also render above every IntlProvider; with none mounted they
  * stay English rather than throwing the way `useIntl` would.
  */
-function ErrorPageCopy({ children }: { children: (copy: Copy) => React.ReactNode }) {
+export function ErrorPageCopy({ children }: { children: (copy: Copy) => React.ReactNode }) {
   const intl = useContext(IntlContext)
   const documentLocale = useContext(DocumentLocaleContext)
   if (!intl || documentLocale === DEFAULT_LOCALE) return children(english)
@@ -63,16 +63,37 @@ function PageLanguage({ children }: { children: (copy: Copy) => React.ReactNode 
   return children((message) => intl.formatMessage(message))
 }
 
+/**
+ * Inside the portal's shell (header, footer and the design's CSS), an error
+ * or a missing page is a page of the portal: the brand's icon or no image,
+ * never Quackback's, and the portal's own not-found page with its ways on.
+ * The shell provides it, so this module stays free of the portal's code.
+ */
+export const PortalErrorContext = createContext<{
+  /** The brand icon, or null to show no image. */
+  icon: string | null
+  NotFound: ComponentType
+} | null>(null)
+
 export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps) {
+  const portal = useContext(PortalErrorContext)
   return (
     <div
       className={cn(
         'flex items-center justify-center px-4',
-        fullPage ? 'min-h-screen' : 'min-h-[400px]'
+        portal ? 'flex-1 py-16' : fullPage ? 'min-h-screen' : 'min-h-[400px]'
       )}
     >
       <div className="w-full max-w-md text-center">
-        <img src="/logo.png" alt="Quackback" className="mx-auto mb-6 h-16 w-16" />
+        {!portal ? (
+          <img src="/logo.png" alt="Quackback" className="mx-auto mb-6 h-16 w-16" />
+        ) : portal.icon ? (
+          <img
+            src={portal.icon}
+            alt=""
+            className="mx-auto mb-6 size-12 object-contain [border-radius:calc(var(--radius)*0.6)]"
+          />
+        ) : null}
         {children}
       </div>
     </div>
@@ -248,6 +269,8 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
 }
 
 export function NotFoundPage() {
+  const portal = useContext(PortalErrorContext)
+  if (portal) return <portal.NotFound />
   return (
     <FriendlyShell>
       <ErrorPageCopy>

@@ -1,6 +1,7 @@
-import { Button, Column, Heading, Row, Section, Text } from '@react-email/components'
+import { Column, Heading, Row, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
-import { typography, button, colors } from './shared-styles'
+import { typography, colors } from './shared-styles'
+import { AccentBar, BrandButton } from './brand-parts'
 
 export interface PostMentionEmailProps {
   mentionerName: string
@@ -66,7 +67,7 @@ export function PostMentionEmail({
       {/* Excerpt — using Row/Column instead of border-left for Outlook compatibility */}
       {hasExcerpt ? (
         <Row style={{ marginBottom: '24px' }}>
-          <Column style={{ width: '3px', backgroundColor: colors.primary, borderRadius: '2px' }} />
+          <AccentBar />
           <Column style={{ paddingLeft: '16px' }}>
             <Text
               style={{
@@ -84,9 +85,7 @@ export function PostMentionEmail({
 
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={postUrl}>
-          View post
-        </Button>
+        <BrandButton href={postUrl}>View post</BrandButton>
       </Section>
 
       {/* Footer */}

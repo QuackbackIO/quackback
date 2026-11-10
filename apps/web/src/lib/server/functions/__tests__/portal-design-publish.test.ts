@@ -36,6 +36,19 @@ vi.mock('@/lib/server/domains/design/design.actions', () => ({
   },
   restoreDesign: async () => ({ ok: true, number: 3 }),
 }))
+vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://acme.quackback.io' } }))
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getWorkspaceSettingsRow: async () => ({
+    cloudIdentity: {
+      version: 1,
+      displayName: 'Acme',
+      canonicalOrigin: 'https://acme.quackback.io',
+      platformHostname: 'acme.quackback.io',
+      customDomains: [],
+      updatedAt: '2026-11-01T00:00:00.000Z',
+    },
+  }),
+}))
 vi.mock('@/lib/server/domains/design/switch', () => ({
   switchToDesign: async () => ({ ok: true, number: 1 }),
   switchBackFromDesign: async () => ({ ok: true }),
@@ -97,5 +110,23 @@ describe('using the new portal logo in the admin and emails', () => {
       code: 'FORBIDDEN',
     })
     expect(hoisted.published).toEqual([])
+  })
+})
+
+describe('where the portal went live', () => {
+  it('reports the live address, offering a domain to someone who may set one up', async () => {
+    hoisted.permissions = [
+      PERMISSIONS.SETTINGS_BRANDING,
+      PERMISSIONS.DESIGN_PUBLISH,
+      PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+    ]
+    await expect(fns.publishPortalDesignFn!({ data: {} })).resolves.toMatchObject({
+      ok: true,
+      address: { url: 'https://acme.quackback.io', offerDomain: true },
+    })
+    hoisted.permissions = [PERMISSIONS.SETTINGS_BRANDING, PERMISSIONS.DESIGN_PUBLISH]
+    await expect(fns.publishPortalDesignFn!({ data: {} })).resolves.toMatchObject({
+      address: { offerDomain: false },
+    })
   })
 })

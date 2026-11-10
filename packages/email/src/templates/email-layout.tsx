@@ -1,16 +1,7 @@
-import {
-  Body,
-  Container,
-  Head,
-  Html,
-  Img,
-  Preview,
-  Section,
-  Text,
-  Link,
-} from '@react-email/components'
-import { layout, branding, typography, utils, colors, DEFAULT_LOGO_URL } from './shared-styles'
+import { Body, Container, Head, Html, Img, Preview, Section, Text } from '@react-email/components'
+import { layout, branding, typography, colors, DEFAULT_LOGO_URL } from './shared-styles'
 import { useEmailShowPoweredBy } from '../powered-by'
+import { BrandLink } from './brand-parts'
 
 interface EmailLayoutProps {
   preview: string
@@ -73,9 +64,9 @@ export function EmailLayout({
             {footer}
             {showPoweredBy ? (
               <Text style={typography.footer}>
-                <Link href="https://quackback.io" style={{ ...utils.link, fontSize: '13px' }}>
+                <BrandLink href="https://quackback.io" style={{ fontSize: '13px' }}>
                   Powered by Quackback
-                </Link>
+                </BrandLink>
               </Text>
             ) : null}
           </Container>
@@ -106,15 +97,15 @@ export function NotificationFooter({
     <Text style={typography.footer}>
       {reason}
       <br />
-      <Link href={unsubscribeUrl} style={{ ...utils.link, fontSize: '13px' }}>
+      <BrandLink href={unsubscribeUrl} style={{ fontSize: '13px' }}>
         {unsubscribeLabel}
-      </Link>
+      </BrandLink>
       {preferencesUrl ? (
         <>
           {' · '}
-          <Link href={preferencesUrl} style={{ ...utils.link, fontSize: '13px' }}>
+          <BrandLink href={preferencesUrl} style={{ fontSize: '13px' }}>
             Manage notification preferences
-          </Link>
+          </BrandLink>
         </>
       ) : null}
     </Text>

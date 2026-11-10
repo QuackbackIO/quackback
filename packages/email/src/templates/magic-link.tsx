@@ -1,6 +1,7 @@
-import { Button, Heading, Hr, Section, Text } from '@react-email/components'
+import { Heading, Hr, Section, Text } from '@react-email/components'
 import { EmailLayout, TransactionalFooter } from './email-layout'
-import { typography, button, utils } from './shared-styles'
+import { typography, utils } from './shared-styles'
+import { BrandButton } from './brand-parts'
 
 interface MagicLinkEmailProps {
   signInUrl: string
@@ -31,9 +32,7 @@ export function MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName }: Magi
       </Text>
 
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={signInUrl}>
-          Sign in
-        </Button>
+        <BrandButton href={signInUrl}>Sign in</BrandButton>
       </Section>
 
       <Hr style={{ margin: '32px 0', borderColor: '#e5e7eb' }} />

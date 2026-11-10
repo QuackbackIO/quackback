@@ -17,13 +17,40 @@ const body = {
 describe('designView', () => {
   it('carries the design’s own favicon and share image, where it has them', () => {
     const doc = defaultDesign()
-    expect(designView(doc, null).icons).toEqual({ favicon: null, shareImage: null })
+    expect(designView(doc, null).icons).toMatchObject({ favicon: null, shareImage: null })
     doc.brand.favicon = { key: 'favicons/a.png' }
     doc.brand.shareImage = { key: 'portal-images/b.png' }
-    expect(designView(doc, null).icons).toEqual({
+    expect(designView(doc, null).icons).toMatchObject({
       favicon: '/api/storage/favicons/a.png',
       shareImage: '/api/storage/portal-images/b.png',
     })
+  })
+
+  it('offers the brand icon as a favicon: an SVG as it is, else squared on the server', () => {
+    const doc = defaultDesign()
+    expect(designView(doc, null).icons?.mark).toBeNull()
+    doc.brand.logo.mark.light = { key: 'logos/icon.svg' }
+    expect(designView(doc, null).icons?.mark).toBe('/api/storage/logos/icon.svg')
+    doc.brand.logo.mark.light = { key: 'logos/icon.png' }
+    expect(designView(doc, null).icons?.mark).toMatch(/^\/brand\.png\?v=\w+&kind=icon$/)
+  })
+
+  it('versions the share card by what it shows', () => {
+    const doc = defaultDesign()
+    const before = designView(doc, null).icons?.card
+    expect(before).toBeTruthy()
+    expect(designView(defaultDesign(), null).icons?.card).toBe(before)
+    doc.brand.light.background = '#112233'
+    expect(designView(doc, null).icons?.card).not.toBe(before)
+  })
+
+  it('gives the browser the page colour for each mode the design shows', () => {
+    const doc = defaultDesign()
+    doc.brand.light.background = '#fafafa'
+    expect(designView(doc, null).icons?.themeColor?.light).toBe('#fafafa')
+    expect(designView(doc, null).icons?.themeColor?.dark).toMatch(/^#[0-9a-f]{6}$/)
+    doc.mode = 'light'
+    expect(designView(doc, null).icons?.themeColor?.dark).toBeNull()
   })
 
   it('carries the welcome message when it is on and has text', () => {
@@ -130,6 +157,35 @@ describe('designView', () => {
     expect(designView(doc, 1).bandImage?.alt).toBe('Our team at work')
     doc.brand.bandImage.decorative = true
     expect(designView(doc, 1).bandImage).not.toHaveProperty('alt')
+  })
+
+  it('offers the smaller copies made on upload as a srcset, the full image last', () => {
+    const doc = defaultDesign()
+    doc.brand.bandImage = {
+      key: 'portal-images/room.webp',
+      width: 2560,
+      variants: [
+        { key: 'portal-images/room-640.webp', w: 640 },
+        { key: 'portal-images/room-1280.webp', w: 1280 },
+      ],
+    }
+    expect(designView(doc, 1).bandImage?.srcSet).toBe(
+      '/api/storage/portal-images/room-640.webp 640w,' +
+        '/api/storage/portal-images/room-1280.webp 1280w,' +
+        '/api/storage/portal-images/room.webp 2560w'
+    )
+  })
+
+  it('leaves an image stored before copies were made as the one file it is', () => {
+    const doc = defaultDesign()
+    doc.brand.bandImage = { key: 'portal-images/room.jpg' }
+    expect(designView(doc, 1).bandImage).not.toHaveProperty('srcSet')
+    // Copies without the full image's width still lead to it, which the browser cannot size.
+    doc.brand.bandImage = {
+      key: 'portal-images/room.jpg',
+      variants: [{ key: 'portal-images/room-640.webp', w: 640 }],
+    }
+    expect(designView(doc, 1).bandImage).not.toHaveProperty('srcSet')
   })
 
   it('carries a name the header shows in place of the workspace’s', () => {

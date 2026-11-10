@@ -1,10 +1,24 @@
 import { useRouteContext, useRouterState } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
+import { lazy, Suspense, useMemo, type ReactNode } from 'react'
+import { PortalErrorContext } from '@/components/shared/error-page'
 import { backgroundPageOf, locationOfPath } from '@/lib/shared/design/paths'
 import { usePreviewDesignNav } from './preview-draft-context'
 
+// Only a missing page draws it, so a page that is found never loads it (nor the
+// search field it holds, which would split into one more script on every page).
+const LazyNotFound = lazy(() =>
+  import('./portal-not-found').then((m) => ({ default: m.PortalNotFound }))
+)
+function PortalNotFound() {
+  return (
+    <Suspense fallback={null}>
+      <LazyNotFound />
+    </Suspense>
+  )
+}
+
 /** A turned-off page's sample, which the builder shows at /design-sample/<page>. */
-const SAMPLE = /^\/design-sample\/([a-z]+)/
+const SAMPLE = /^\/design-sample\/([a-z-]+)/
 
 /** The page a portal path shows, as page backgrounds name it, or null for one they do not. */
 export function shellPageOf(pathname: string, homeOn: boolean): string | null {
@@ -30,13 +44,23 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const homeOn = draftNav ? draftNav.home.on : savedHomeOn
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const page = shellPageOf(pathname, homeOn)
+  // An error or a missing page inside the shell shows the brand's icon, or none.
+  const icon = useRouteContext({
+    from: '__root__',
+    select: (context) => {
+      const design = context.settings?.portalDesign
+      const mark = design?.engine === 'v2' ? design.logo.mark : undefined
+      return mark?.light ?? mark?.dark ?? null
+    },
+  })
+  const errors = useMemo(() => ({ icon, NotFound: PortalNotFound }), [icon])
   return (
     <div
       data-portal=""
       data-qb-page={page ?? undefined}
       className="min-h-screen bg-background flex flex-col"
     >
-      {children}
+      <PortalErrorContext.Provider value={errors}>{children}</PortalErrorContext.Provider>
     </div>
   )
 }

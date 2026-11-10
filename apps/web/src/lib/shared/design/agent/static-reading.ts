@@ -8,7 +8,7 @@
  * the drawn preview is right.
  */
 import { resolveDesign } from '../resolve'
-import { effectiveValues, LABEL_WEIGHT } from '../effective-values'
+import { brandValues, LABEL_WEIGHT } from '../effective-values'
 import type { PortalDesign } from '../schema'
 import { tuneHexes } from '../tune'
 import type { ThemeVariables } from '@/lib/shared/theme/types'
@@ -73,7 +73,7 @@ function baseValues(
   vars: Required<ThemeVariables>,
   tokens: Record<string, string>
 ): Record<string, string> {
-  const values = effectiveValues(design)
+  const values = brandValues(design)
   const tune = tuneHexes(design) ?? {}
   const dark = shownMode(design) === 'dark'
   const cardShadow = tune.card?.shadow ?? (design.layout.cards === 'raised' ? 'soft' : 'none')

@@ -81,6 +81,22 @@ export const screenshotSourceSchema = z
   .strict()
 
 /**
+ * A smaller WebP copy of an uploaded image, made in the browser on upload,
+ * by its width, for the image's srcset. Its key goes into that srcset as it
+ * is, so it holds nothing that could end a candidate (no space or comma).
+ */
+export const imageVariantSchema = z
+  .object({
+    key: z
+      .string()
+      .min(1)
+      .max(512)
+      .regex(/^[\w./-]+$/),
+    w: z.number().int().min(1).max(8192),
+  })
+  .strict()
+
+/**
  * The veil over a hero image behind the words, measured from the image:
  * black under white words or white under dark ones, its strength in percent,
  * and the colour the words read on at worst. Absent, the band's own colour
@@ -431,6 +447,10 @@ export const portalDesignV2 = z
             shade: imageShadeSchema.optional(),
             /** Shown in Home's hero only; the other pages' heroes keep their colour. */
             homeOnly: z.boolean().optional(),
+            /** The stored file's width in pixels, when known; with the copies it makes the srcset. */
+            width: z.number().int().min(1).max(8192).optional(),
+            /** Smaller copies for smaller screens; absent on images stored before they were made. */
+            variants: z.array(imageVariantSchema).min(1).max(4).optional(),
           })
           .strict()
           .optional(),

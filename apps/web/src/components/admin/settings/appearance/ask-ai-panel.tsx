@@ -16,6 +16,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 import { changeRows, type ChangeRow, type RowChange, type RowSide } from './change-rows'
 import { HeroPhotoChip } from './hero-photo-chip'
+import type { StoredHero } from './use-image-upload'
 import type { DesignAiTurn } from './use-design-ai'
 
 /** Changes the draft, naming the change for undo when a name is given. */
@@ -271,7 +272,7 @@ export function AskAiPanel({
   /** Puts a follow-up into the request box. */
   onChip?: (text: string) => void
   /** A hero photo uploaded from the "Add a hero photo" follow-up, by its key. */
-  onHeroPhoto?: (key: string) => void
+  onHeroPhoto?: (image: StoredHero) => void
   /** Captures a brand's site again, from the capture a match was made from. */
   onRecapture?: (url: string) => void
   /** Opens the font upload for the brand's own face a match could not match. */

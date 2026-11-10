@@ -3,13 +3,13 @@
  * example.com, and it is the same whoever asks.
  */
 import { describe, expect, it } from 'vitest'
-import { SAMPLE_PAGES } from '@/lib/shared/design/sample-pages'
+import { PAGE_SAMPLES } from '@/lib/shared/design/sample-pages'
 import { sampleContent } from '../sample-content'
 
 const now = new Date('2026-11-02T12:00:00Z')
 
 describe('sampleContent', () => {
-  it.each(SAMPLE_PAGES)('marks every id in the %s sample as a sample', (page) => {
+  it.each(PAGE_SAMPLES)('marks every id in the %s sample as a sample', (page) => {
     const text = JSON.stringify(sampleContent(page, now))
     const ids = [...text.matchAll(/"(?:id|componentId)":"([^"]+)"/g)].map((match) => match[1])
     expect(ids.length).toBeGreaterThan(0)
@@ -52,5 +52,11 @@ describe('sampleContent', () => {
     expect(snapshot.activeIncidents[0]!.startedAt < now.toISOString()).toBe(true)
     expect(uptime[0]!.days).toHaveLength(90)
     expect(uptime[0]!.days.at(-1)!.date).toBe('2026-11-02')
+  })
+})
+
+describe('the not-found sample', () => {
+  it('has words only, no content', () => {
+    expect(sampleContent('not-found', now)).toEqual({ page: 'not-found' })
   })
 })

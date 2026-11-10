@@ -45,4 +45,28 @@ describe('useDesignerPage and samples', () => {
     expect(result.current.pages.filter((page) => page === 'changelog')).toHaveLength(1)
     settings.featureFlags = { ...settings.featureFlags, changelog: false }
   })
+
+  it('shows the not-found sample over the page the builder was on, which the panels keep', () => {
+    const { result } = view()
+    act(() => result.current.showSample('not-found'))
+    expect(result.current.sample).toBe('not-found')
+    expect(result.current.page).toBe('roadmap')
+    expect(result.current.shownPages).not.toContain('not-found')
+    expect(result.current.here).toEqual({ page: 'roadmap', item: null })
+  })
+})
+
+describe('useDesignerPage and the widget', () => {
+  it('shows the widget over the page, and a page or a sample gives it way', () => {
+    const { result } = view()
+    act(() => result.current.showWidget())
+    expect(result.current.widget).toBe(true)
+    // The panels stay on the page the builder was on.
+    expect(result.current.page).toBe('roadmap')
+    act(() => result.current.setPage('feedback'))
+    expect(result.current.widget).toBe(false)
+    act(() => result.current.showWidget())
+    act(() => result.current.showSample('changelog'))
+    expect(result.current.widget).toBe(false)
+  })
 })

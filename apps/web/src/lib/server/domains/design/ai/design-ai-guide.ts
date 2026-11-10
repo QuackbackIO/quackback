@@ -257,12 +257,13 @@ export function fieldGuide(
 
 /**
  * The design as it looks now where a choice gives pixels: what a relative
- * request such as "a little smaller" starts from.
+ * request such as "a little smaller" starts from. Each element's own look
+ * comes first, as the canvas draws it; the headline's size is its widest.
  */
 export function valuesNow(design: PortalDesign): string {
   const { headline, heading, label, button, card, field } = effectiveValues(design)
   const type = (t: { size: number; weight: number }) => `${t.size}px, weight ${t.weight}`
-  return `Type and shapes now: headline ${type(headline)}, spacing ${headline.tracking}em; section headings ${type(heading)}; menu and button text ${type(label)}; buttons ${px(button.radius)} corners, ${button.height}px tall; cards ${px(card.radius)} corners; fields ${px(field.radius)} corners.`
+  return `Type and shapes now: headline ${type(headline)} on wide screens (smaller on phones), spacing ${headline.tracking}em; section headings ${type(heading)}; menu and button text ${type(label)}; buttons ${px(button.radius)} corners, ${button.height}px tall; cards ${px(card.radius)} corners; fields ${px(field.radius)} corners.`
 }
 
 /** An answer as the model writes it: each operation with what it does in a few words. */

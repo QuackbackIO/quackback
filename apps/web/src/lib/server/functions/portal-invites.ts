@@ -160,8 +160,12 @@ async function sendOnePortalInvite({
     magicLinkTokens: [magicLinkToken],
   })
 
-  const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-  const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
+  const { emailBranding } = await import('@/lib/server/email/email-brand')
+  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const { logoUrl, brand } = await emailBranding({
+    logoKey: auth.settings.logoKey,
+    featureFlags: (await getWorkspaceSettings())?.featureFlags,
+  })
   // Sealed class: no account exists for the invitee.
   const { sealedRecipient } = await import('@/lib/server/email/recipient')
   await sendPortalInviteEmail({
@@ -169,6 +173,7 @@ async function sendOnePortalInvite({
     workspaceName: auth.settings.name,
     inviteLink,
     logoUrl,
+    brand,
     personalMessage: message,
   })
 
@@ -402,8 +407,12 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
       throw new Error('Invitation is no longer pending — refresh and try again')
     }
 
-    const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-    const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
+    const { emailBranding } = await import('@/lib/server/email/email-brand')
+    const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+    const { logoUrl, brand } = await emailBranding({
+      logoKey: auth.settings.logoKey,
+      featureFlags: (await getWorkspaceSettings())?.featureFlags,
+    })
     let result: Awaited<ReturnType<typeof sendPortalInviteEmail>>
     try {
       const { sealedRecipient } = await import('@/lib/server/email/recipient')
@@ -412,6 +421,7 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
         workspaceName: auth.settings.name,
         inviteLink,
         logoUrl,
+        brand,
       })
     } catch (sendError) {
       // The new link never went out — drop it from the set and revoke it.

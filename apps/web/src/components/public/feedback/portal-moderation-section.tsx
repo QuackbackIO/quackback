@@ -321,7 +321,7 @@ function PendingPostCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
             <EyeSlashIcon className="h-3.5 w-3.5" />
             <FormattedMessage
               id="portal.moderation.card.pendingLabel"

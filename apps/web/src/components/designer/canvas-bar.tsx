@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { PAGE_NAMES, type CanvasLocation, type DesignerPage } from '@/lib/shared/design/outline'
-import { ALWAYS_SAMPLED } from '@/lib/shared/design/sample-pages'
+import { ALWAYS_SAMPLED, isPageSample } from '@/lib/shared/design/sample-pages'
 import type { PickablePost, useDesignerPage } from './use-designer-page'
 import { Tag } from './tag'
 
@@ -35,13 +35,13 @@ export function locationName(at: CanvasLocation, posts: readonly PickablePost[])
  * where the builder is and the way back.
  */
 export function CanvasBar({
-  view: { here, posts, setPage, sample, showSample: onSample, gates },
+  view: { here, posts, setPage, sample, showSample: onSample, gates, widget },
   note,
   onBack,
 }: {
   view: Pick<
     ReturnType<typeof useDesignerPage>,
-    'here' | 'posts' | 'setPage' | 'sample' | 'showSample' | 'gates'
+    'here' | 'posts' | 'setPage' | 'sample' | 'showSample' | 'gates' | 'widget'
   >
   /** Where Preview began, once it left the builder somewhere else. */
   note: { from: CanvasLocation } | null
@@ -52,21 +52,37 @@ export function CanvasBar({
   const partOn = here.page in gates && gates[here.page as keyof typeof gates]
   const sampleable = ALWAYS_SAMPLED.find((page) => page === here.page && partOn)
   const picking = here.page === 'post' && posts.length > 0
+  if (widget)
+    return (
+      <div className="mb-2 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <p className="flex items-center gap-1.5">
+          <Tag>Sample</Tag>
+          <span>Read only.</span>
+          <Button variant="link" size="sm" className="h-auto p-0 text-xs" asChild>
+            <a href="/admin/settings/widget">Widget settings</a>
+          </Button>
+        </p>
+      </div>
+    )
   if (!sample && !sampleable && !picking && !note) return null
   return (
     <div className="mb-2 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
       {sample ? (
         <p className="flex items-center gap-1.5">
           <Tag>Sample</Tag>
-          <span>Made-up content, to design {PAGE_NAMES[sample]} before it has its own.</span>
-          {partOn && (
+          <span>
+            {isPageSample(sample)
+              ? `Made-up content, to design ${PAGE_NAMES[sample]} before it has its own.`
+              : 'What visitors see at an address with nothing at it.'}
+          </span>
+          {(partOn || !isPageSample(sample)) && (
             <Button
               variant="link"
               size="sm"
               className="h-auto p-0 text-xs"
               onClick={() => onSample(null)}
             >
-              Show the real page
+              {isPageSample(sample) ? 'Show the real page' : 'Back to the page'}
             </Button>
           )}
         </p>

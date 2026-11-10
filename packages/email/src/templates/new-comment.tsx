@@ -1,6 +1,7 @@
-import { Button, Column, Heading, Row, Section, Text } from '@react-email/components'
+import { Column, Heading, Row, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
-import { typography, button, colors } from './shared-styles'
+import { typography, colors } from './shared-styles'
+import { AccentBar, BrandButton } from './brand-parts'
 
 interface NewCommentEmailProps {
   postTitle: string
@@ -64,7 +65,7 @@ export function NewCommentEmail({
 
       {/* Comment Preview - using Row/Column instead of border-left for Outlook compatibility */}
       <Row style={{ marginBottom: '24px' }}>
-        <Column style={{ width: '3px', backgroundColor: colors.primary, borderRadius: '2px' }} />
+        <AccentBar />
         <Column style={{ paddingLeft: '16px' }}>
           <Text
             style={{
@@ -81,9 +82,7 @@ export function NewCommentEmail({
 
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={postUrl}>
-          View Comment
-        </Button>
+        <BrandButton href={postUrl}>View Comment</BrandButton>
       </Section>
 
       {/* Footer */}

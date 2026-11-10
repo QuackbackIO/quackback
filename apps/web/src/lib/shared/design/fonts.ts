@@ -1,6 +1,6 @@
 import { DEFAULT_FONT_SANS } from '@/lib/shared/theme/expand'
 import type { PortalDesign } from './schema'
-import { DESIGN_OPTIONS, type BUNDLED_FONT_IDS } from './options'
+import type { BUNDLED_FONT_IDS } from './options'
 
 export type BundledFontId = (typeof BUNDLED_FONT_IDS)[number]
 type DesignFont = PortalDesign['brand']['fonts']['body']
@@ -440,8 +440,15 @@ type HeadingWeight = PortalDesign['brand']['fonts']['headingWeight']
  * it, else the nearest it has (the lighter on a tie), so a light headline
  * stays light and a heavy one heavy; 600 for a font with none of the steps.
  */
+/**
+ * The heading weights a design offers, the same list as DESIGN_OPTIONS.headingWeight
+ * (a test holds them equal), kept here so admin pages that only name fonts do not
+ * load every design option.
+ */
+export const HEADING_WEIGHTS = [300, 400, 500, 600, 700, 800] as const
+
 export function closestWeight(font: DesignFont, current: HeadingWeight): HeadingWeight {
-  const offered = DESIGN_OPTIONS.headingWeight.filter((weight) =>
+  const offered = HEADING_WEIGHTS.filter((weight) =>
     fontWeights(font).includes(weight)
   )
   if (!offered.length) return 600

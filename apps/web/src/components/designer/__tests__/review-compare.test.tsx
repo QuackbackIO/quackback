@@ -40,4 +40,29 @@ describe('ReviewCompare', () => {
     expect(paths()).toEqual(['/b/ideas/posts/p1', '/b/ideas/posts/p1'])
     expect(screen.getByRole('button', { name: 'A post' }).getAttribute('aria-pressed')).toBe('true')
   })
+
+  it('shows the widget before and after, since the brand reaches it too', () => {
+    render(
+      <ReviewCompare
+        page="feedback"
+        pages={['feedback']}
+        theme="light"
+        locale="en"
+        sort="top"
+        live={design}
+        draft={design}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Widget' }))
+    expect(screen.getByRole('button', { name: 'Widget' }).getAttribute('aria-pressed')).toBe('true')
+    expect(
+      [...document.querySelectorAll('iframe')].map((frame) => frame.getAttribute('src'))
+    ).toEqual([
+      '/widget?theme=light&locale=en&preview=true',
+      '/widget?theme=light&locale=en&preview=true',
+    ])
+    expect(screen.getByTitle('Widget, live now')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback' }))
+    expect(document.querySelector('iframe')?.getAttribute('src')).toMatch(/^\/feedback/)
+  })
 })

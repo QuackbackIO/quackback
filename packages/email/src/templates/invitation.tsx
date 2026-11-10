@@ -1,6 +1,7 @@
-import { Button, Heading, Link, Section, Text } from '@react-email/components'
+import { Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, TransactionalFooter } from './email-layout'
-import { typography, button, utils } from './shared-styles'
+import { typography } from './shared-styles'
+import { BrandButton, BrandLink } from './brand-parts'
 
 /** The invitation's words in the team's language, written by the caller. */
 export interface InvitationEmailCopy {
@@ -59,16 +60,14 @@ export function InvitationEmail(props: InvitationEmailProps) {
       <Text style={typography.text}>{copy.body}</Text>
 
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={inviteLink}>
-          {copy.cta}
-        </Button>
+        <BrandButton href={inviteLink}>{copy.cta}</BrandButton>
       </Section>
 
       <Text style={typography.textSmall}>
         {copy.fallback}{' '}
-        <Link href={inviteLink} style={{ ...utils.link, direction: 'ltr', unicodeBidi: 'isolate' }}>
+        <BrandLink href={inviteLink} style={{ direction: 'ltr', unicodeBidi: 'isolate' }}>
           {inviteLink}
-        </Link>
+        </BrandLink>
       </Text>
 
       <TransactionalFooter>{copy.footer}</TransactionalFooter>

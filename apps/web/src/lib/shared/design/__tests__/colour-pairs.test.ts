@@ -20,6 +20,7 @@ describe('colourPairs', () => {
       'The focus ring on the page',
       'The focus ring on cards',
       'Vote box edges on cards',
+      'Secondary text on the footer',
     ])
     expect(pairs.every((p) => p.passes)).toBe(true)
   })

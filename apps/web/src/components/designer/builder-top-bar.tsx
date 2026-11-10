@@ -11,6 +11,7 @@ import type { CanvasView } from './use-canvas-view'
 import type { useDesignerPage } from './use-designer-page'
 import { ViewMenu } from './view-menu'
 import { ViewOptions, ZoomControl } from './view-options'
+import type { PortalAddress } from '@/lib/shared/design/portal-address'
 
 /**
  * The builder's top bar, wired: the page switcher and the blocks on the
@@ -28,6 +29,7 @@ export function BuilderTopBar({
   selection,
   onPick,
   checks,
+  onFixCheck,
   onUndo,
   onRedo,
   onTurnOn,
@@ -35,6 +37,8 @@ export function BuilderTopBar({
   onSheet,
   onPreview,
   onPublish,
+  published,
+  onPublishedClose,
   onDiscard,
   onDialog,
 }: {
@@ -50,6 +54,8 @@ export function BuilderTopBar({
   /** Picks a part and moves focus to its settings. */
   onPick: (selection: Selection) => void
   checks: readonly DesignCheck[]
+  /** Makes a check's one-step fix. */
+  onFixCheck: (check: DesignCheck) => void
   onUndo: () => void
   onRedo: () => void
   /** Turns a part on from the switcher, by way of the menu's "+". */
@@ -58,6 +64,9 @@ export function BuilderTopBar({
   onSheet: (sheet: Sheet) => void
   onPreview: () => void
   onPublish: () => void
+  /** Where the portal just went live, shown on Publish until closed. */
+  published?: PortalAddress | null
+  onPublishedClose?: () => void
   onDiscard: () => void
   onDialog: (dialog: 'keys' | 'versions' | 'share' | 'find') => void
 }) {
@@ -73,8 +82,10 @@ export function BuilderTopBar({
           gates={view.gates}
           here={view.here}
           sample={view.sample}
+          widget={view.widget}
           onPage={view.setPage}
           onSample={view.showSample}
+          onWidget={view.showWidget}
           onTurnOn={onTurnOn}
         />
       }
@@ -123,12 +134,15 @@ export function BuilderTopBar({
           onFind={() => onDialog('find')}
           checks={checks}
           onShowCheck={onPick}
+          onFixCheck={onFixCheck}
         />
       }
       sheet={sheet}
       onSheet={onSheet}
       onPreview={onPreview}
       onPublish={onPublish}
+      published={published}
+      onPublishedClose={onPublishedClose}
       canPublish={draft.canPublish}
       changes={draft.changes.length}
     />

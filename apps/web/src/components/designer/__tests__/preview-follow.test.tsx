@@ -104,20 +104,30 @@ describe('CanvasBar', () => {
     here: CanvasLocation,
     sample: SamplePage | null = null,
     note = false,
-    on: Partial<typeof gates> = {}
+    on: Partial<typeof gates> = {},
+    widget = false
   ) {
     const setPage = vi.fn()
     const showSample = vi.fn()
     const onBack = vi.fn()
     const { container } = render(
       <CanvasBar
-        view={{ here, posts, setPage, sample, showSample, gates: { ...gates, ...on } }}
+        view={{ here, posts, setPage, sample, showSample, gates: { ...gates, ...on }, widget }}
         note={note ? { from: { page: 'feedback', item: null } } : null}
         onBack={onBack}
       />
     )
     return { setPage, showSample, onBack, container }
   }
+
+  it('marks the widget a read-only sample, set in Widget settings', () => {
+    bar({ page: 'roadmap', item: null }, null, false, {}, true)
+    expect(screen.getByText('Sample')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Widget settings' }).getAttribute('href')).toBe(
+      '/admin/settings/widget'
+    )
+    cleanup()
+  })
 
   it('says nothing when there is nothing to say', () => {
     expect(bar({ page: 'roadmap', item: null }).container.textContent).toBe('')

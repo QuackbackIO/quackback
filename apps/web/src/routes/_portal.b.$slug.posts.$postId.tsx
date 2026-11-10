@@ -41,6 +41,7 @@ import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { headSettings, pageShareMeta, portalHeadWords } from '@/lib/shared/portal-head'
 
 // Dialogs the post's author or the team open from its menu; they load on first use.
 const DeletePostDialog = lazy(() =>
@@ -120,11 +121,12 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
       baseUrl: context.baseUrl ?? '',
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
     const { postTitle, boardName, slug, postId, baseUrl } = loaderData
+    const settings = headSettings(matches)
     const title = `${postTitle} - ${boardName}`
-    const description = `${postTitle}. Vote and comment on this ${boardName} post.`
+    const description = portalHeadWords(settings).post(postTitle, boardName)
     const canonicalUrl = baseUrl ? `${baseUrl}/b/${slug}/posts/${postId}` : ''
     return {
       meta: [
@@ -135,6 +137,7 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
         ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
         { name: 'twitter:title', content: title },
         { name: 'twitter:description', content: description },
+        ...pageShareMeta(settings, baseUrl, 'feedback'),
       ],
       links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }

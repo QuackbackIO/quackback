@@ -1,6 +1,7 @@
-import { Button, Heading, Section, Text } from '@react-email/components'
+import { Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
-import { typography, button, colors } from './shared-styles'
+import { typography, colors } from './shared-styles'
+import { AccentQuote, BrandButton } from './brand-parts'
 
 interface TicketEventEmailProps {
   heading: string
@@ -60,13 +61,12 @@ export function TicketEventEmail({
       <Text style={typography.text}>{intro}</Text>
 
       {paragraphs.length > 0 && (
-        <Section
+        <AccentQuote
           style={{
             backgroundColor: colors.surfaceMuted,
             borderRadius: '8px',
             padding: '16px 20px',
             marginBottom: '16px',
-            borderLeft: `3px solid ${colors.primary}`,
           }}
         >
           {authorName && (
@@ -93,7 +93,7 @@ export function TicketEventEmail({
               {p}
             </Text>
           ))}
-        </Section>
+        </AccentQuote>
       )}
 
       {statusChange && (
@@ -120,9 +120,7 @@ export function TicketEventEmail({
       {note && <Text style={{ ...typography.textSmall, color: colors.textMuted }}>{note}</Text>}
 
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={ctaUrl}>
-          {ctaLabel}
-        </Button>
+        <BrandButton href={ctaUrl}>{ctaLabel}</BrandButton>
       </Section>
 
       <NotificationFooter

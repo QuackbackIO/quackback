@@ -240,6 +240,35 @@ export function measuredValue(node: Element, prop: StyleProp): number | undefine
   return +n.toFixed(2)
 }
 
+/** The colours a row may store, by the computed property the browser draws them with. */
+const DRAWN_COLOURS: Partial<Record<StyleProp, keyof CSSStyleDeclaration>> = {
+  color: 'color',
+  background: 'backgroundColor',
+  borderColor: 'borderTopColor',
+}
+
+/**
+ * What an element is drawn with: its numbers as measuredValue reads them, and
+ * its colours as the browser computes them, for a row to say where what it
+ * stores is not what the canvas draws.
+ */
+export function drawnValues(node: Element): Partial<Record<StyleProp, number | string>> {
+  const out: Partial<Record<StyleProp, number | string>> = {}
+  for (const prop of Object.keys(MEASURED) as StyleProp[]) {
+    const value = measuredValue(node, prop)
+    if (value !== undefined) out[prop] = value
+  }
+  const style = node.ownerDocument.defaultView?.getComputedStyle(node)
+  if (style)
+    for (const [prop, key] of Object.entries(DRAWN_COLOURS) as Array<
+      [StyleProp, keyof CSSStyleDeclaration]
+    >) {
+      const value = String(style[key] ?? '')
+      if (value) out[prop] = value
+    }
+  return out
+}
+
 /** A pick as one string, for the canvas's boxes and for comparing picks. */
 export function pickKey(pick: ElementPick): string {
   return `el:${pick.section ?? ''}|${pick.element}|${pick.part ?? ''}|${pick.index}`

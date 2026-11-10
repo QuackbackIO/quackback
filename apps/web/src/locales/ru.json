@@ -1919,6 +1919,8 @@
   "common.errorPage.technicalDetails": "Технические сведения",
   "common.errorPage.tryAgain": "Попробовать снова",
   "common.errorPage.goHome": "На главную",
+  "common.errorPage.notFound.board": "Перейти к доске",
+  "common.errorPage.notFound.search": "Искать публикации",
   "portal.header.auth.accountMenu": "Открыть меню аккаунта",
   "portal.feedback.header.titleLabel": "Заголовок публикации",
   "portal.feedback.header.postingToBoard": "Публикация на доске {board}",

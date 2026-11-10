@@ -7,6 +7,13 @@ import { BackLink } from '@/components/ui/back-link'
 import type { ChangelogId } from '@quackback/ids'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
+import {
+  headSettings,
+  pageShareMeta,
+  pageTitle,
+  portalHeadWords,
+  portalSiteName,
+} from '@/lib/shared/portal-head'
 
 export const Route = createFileRoute('/_portal/changelog/$entryId')({
   loader: async ({ context, params }) => {
@@ -30,11 +37,12 @@ export const Route = createFileRoute('/_portal/changelog/$entryId')({
       baseUrl: context.baseUrl ?? '',
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
-    const { entryTitle, entryId, workspaceName, baseUrl } = loaderData
-    const title = `${entryTitle} - ${workspaceName} Changelog`
-    const description = `${entryTitle}. A product update from ${workspaceName}.`
+    const { entryTitle, entryId, baseUrl } = loaderData
+    const settings = headSettings(matches)
+    const title = `${entryTitle} - ${pageTitle(settings, 'changelog')}`
+    const description = portalHeadWords(settings).entry(entryTitle, portalSiteName(settings))
     const canonicalUrl = baseUrl ? `${baseUrl}/changelog/${entryId}` : ''
     return {
       meta: [
@@ -45,6 +53,7 @@ export const Route = createFileRoute('/_portal/changelog/$entryId')({
         ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
         { name: 'twitter:title', content: title },
         { name: 'twitter:description', content: description },
+        ...pageShareMeta(settings, baseUrl, 'changelog'),
       ],
       links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }

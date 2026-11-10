@@ -71,12 +71,47 @@ export function mixColor(a: string, b: string, weight: number): string {
   return oklchToHex(formatOklch(l, c, h))
 }
 
-type Lch = { l: number; c: number; h: number }
+/**
+ * Below this chroma a colour the browser converts into oklch (hex, rgb()) has
+ * no hue, so a mix takes the other colour's: Chromium's rule, measured.
+ */
+const HUELESS = 0.02
 
-function lchOf(color: string): Lch {
+/**
+ * `a` mixed into `b` as `color-mix(in oklch, a <weight>, b)` draws it:
+ * lightness and chroma run straight, hue the shorter way round, a hueless
+ * colour taking the other's hue. As hex, so it measures as painted.
+ */
+export function mixOklch(a: string, b: string, weight: number): string {
+  const read = (color: string) => {
+    const parsed = parseOklch(color.startsWith('#') ? hexToOklch(color) : color)
+    if (!parsed) throw new Error(`Cannot mix "${color}"`)
+    return { ...parsed, hueless: color.startsWith('#') && parsed.c < HUELESS }
+  }
+  const [x, y] = [read(a), read(b)]
+  const mix = (p: number, q: number) => p * weight + q * (1 - weight)
+  const turn = ((y.h - x.h + 540) % 360) - 180
+  const h = x.hueless ? y.h : y.hueless ? x.h : (x.h + turn * (1 - weight) + 360) % 360
+  return oklchToHex(formatOklch(mix(x.l, y.l), mix(x.c, y.c), h))
+}
+
+export type Lch = { l: number; c: number; h: number }
+
+export function lchOf(color: string): Lch {
   const parsed = parseOklch(color.startsWith('#') ? hexToOklch(color) : color)
   if (!parsed) throw new Error(`Cannot read "${color}"`)
   return parsed
+}
+
+/** How far apart two colours are in oklab: 0 for one colour, about 0.02 for a just visible step. */
+export function oklabDistance(a: string, b: string): number {
+  const lab = (color: string) => {
+    const { l, c, h } = lchOf(color)
+    const radians = (h * Math.PI) / 180
+    return [l, c * Math.cos(radians), c * Math.sin(radians)]
+  }
+  const [x, y] = [lab(a), lab(b)]
+  return Math.hypot(x[0]! - y[0]!, x[1]! - y[1]!, x[2]! - y[2]!)
 }
 
 /** Whether an oklch colour is one a screen shows, as linear sRGB in [0, 1]. */
@@ -97,7 +132,7 @@ function shown({ l, c, h }: Lch): boolean {
 }
 
 /** The colour as hex, giving up chroma (never hue or lightness) until a screen shows it. */
-function fitted(colour: Lch): string {
+export function fitted(colour: Lch): string {
   let { c } = colour
   if (!shown(colour)) {
     let [low, high] = [0, c]

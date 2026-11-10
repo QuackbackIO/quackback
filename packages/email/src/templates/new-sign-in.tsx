@@ -1,6 +1,7 @@
-import { Heading, Hr, Link, Section, Text } from '@react-email/components'
+import { Heading, Hr, Section, Text } from '@react-email/components'
 import { EmailLayout, TransactionalFooter } from './email-layout'
 import { typography, utils } from './shared-styles'
+import { BrandLink } from './brand-parts'
 
 interface NewSignInEmailProps {
   workspaceName?: string
@@ -71,10 +72,8 @@ export function NewSignInEmail({
             If that was you, no action needed. If it wasn’t,{' '}
             {settingsUrl ? (
               <>
-                <Link href={settingsUrl} style={utils.link}>
-                  set or change your password
-                </Link>{' '}
-                from your profile settings. This signs out other sessions.
+                <BrandLink href={settingsUrl}>set or change your password</BrandLink> from your
+                profile settings. This signs out other sessions.
               </>
             ) : (
               'set or change your password from your profile settings. This signs out other sessions.'

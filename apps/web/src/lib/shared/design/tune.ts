@@ -350,6 +350,8 @@ export interface TuneSurface {
   page?: string[]
   /** The band's own subtitle, where it turns light on a bright band, and the contrast it reads at (components.ts bandWords). */
   subtitle?: { ink: string; target: number }
+  /** The contrast a headline reads at: 3:1 while it is large text everywhere (style-css.ts largeHeadline). */
+  headline?: number
 }
 
 /** An exact text colour as drawn: the one set, and the one used so it reads, or null when none does. */
@@ -365,7 +367,7 @@ export interface TunedColour {
 /**
  * The exact text colours a tune sets, in light mode, each moved in lightness
  * until it reads where it sits, so its hue stays: a headline at 3:1 on the
- * page and the band, its subtitle and a section heading at 4.5:1. A
+ * page and the band while it is large text, else 4.5:1, its subtitle and a section heading at 4.5:1. A
  * headline or subtitle over a blend or an image is not set, as no one colour reads there.
  */
 export function tunedColours(tune: Tune | undefined, surface: TuneSurface | null): TunedColour[] {
@@ -380,7 +382,7 @@ export function tunedColours(tune: Tune | undefined, surface: TuneSurface | null
   }
   const headline = tune.headline?.colour
   if (headline && !surface.mixed)
-    add('Headline', headline, [surface.background, ...page, ...surface.band], 3)
+    add('Headline', headline, [surface.background, ...page, ...surface.band], surface.headline ?? 3)
   const subtitle = tune.subtitle?.colour
   const own = surface.subtitle
   if (subtitle && own) {

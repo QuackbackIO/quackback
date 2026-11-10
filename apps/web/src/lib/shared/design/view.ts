@@ -60,8 +60,18 @@ export type PortalDesignView =
       statusColours: string[] | null
       /** The band's image and where it sits, or null. */
       bandImage: BandImage | null
-      /** The design's own favicon and share image, where it has them. */
-      icons?: { favicon: string | null; shareImage: string | null }
+      /**
+       * The design's own favicon and share image, where it has them; the
+       * brand icon as a favicon; the drawn share card's version; and the
+       * page colour per mode for the browser's chrome.
+       */
+      icons?: {
+        favicon: string | null
+        shareImage: string | null
+        mark?: string | null
+        card?: string
+        themeColor?: { light: string | null; dark: string | null }
+      }
     }
 
 export interface BandImage {
@@ -73,6 +83,8 @@ export interface BandImage {
   homeOnly?: boolean
   /** Behind the words under a measured veil: the band sets its photo words (--qb-photo-ink) on it. */
   shaded?: boolean
+  /** The smaller copies and the image itself by width, as an <img> srcset; absent for one file. */
+  srcSet?: string
 }
 
 /**

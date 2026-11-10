@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
@@ -14,6 +15,13 @@ import { PortalDesignStyle } from '@/lib/shared/safe-inline-content'
 import { Button } from '@/components/ui/button'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
 import { isTeamMember } from '@/lib/shared/roles'
+
+/** The draft design's channel, for the builder's frame alone: no visitor's widget loads it. */
+const WidgetDesignPreview = lazy(() =>
+  import('@/components/widget/widget-design-preview').then((m) => ({
+    default: m.WidgetDesignPreview,
+  }))
+)
 
 const setIframeHeaders = createServerFn({ method: 'GET' }).handler(async () => {
   setResponseHeader('Content-Security-Policy', 'frame-ancestors *')
@@ -50,12 +58,14 @@ export const Route = createFileRoute('/widget')({
   ssr: 'data-only',
   validateSearch: (
     search: Record<string, unknown>
-  ): { locale?: string; theme?: 'light' | 'dark' } => ({
+  ): { locale?: string; theme?: 'light' | 'dark'; preview?: true } => ({
     locale: typeof search.locale === 'string' ? search.locale : undefined,
     // Forces the widget document's theme regardless of visitor preference or
     // branding themeMode. Used by the admin settings preview's Light/Dark
     // toggle; resolved in __root so it never persists to the theme cookie.
     theme: search.theme === 'light' || search.theme === 'dark' ? search.theme : undefined,
+    // The builder's Widget sample: the draft design is posted in, and nothing can be used.
+    preview: search.preview === true || search.preview === 'true' ? true : undefined,
   }),
   loader: async ({ context, location }) => {
     const { settings, session, userRole } = context
@@ -162,6 +172,7 @@ function WidgetLayout() {
     locale,
     messages,
   } = Route.useLoaderData()
+  const { preview } = Route.useSearch()
 
   // Widget documents render branding fonts the same way the portal does (the
   // custom CSS / theme config font-family cascades into the iframe below) —
@@ -190,6 +201,11 @@ function WidgetLayout() {
       <FileViewerProvider compact>
         <Outlet />
       </FileViewerProvider>
+      {preview && (
+        <Suspense fallback={null}>
+          <WidgetDesignPreview />
+        </Suspense>
+      )}
     </WidgetAuthProvider>
   )
 }

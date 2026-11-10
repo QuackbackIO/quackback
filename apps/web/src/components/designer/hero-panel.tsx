@@ -7,7 +7,7 @@ import {
 } from '@/components/admin/settings/appearance/drawings'
 import { FocalPoint } from '@/components/admin/settings/appearance/focal-point'
 import { presignBandImage } from '@/components/admin/settings/appearance/design-update'
-import { useImageUpload } from '@/components/admin/settings/appearance/use-image-upload'
+import { useHeroImageUpload } from '@/components/admin/settings/appearance/use-image-upload'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -499,7 +499,7 @@ function HeroImage({
 }) {
   const id = useId()
   const file = useRef<HTMLInputElement>(null)
-  const { busy, problem, upload } = useImageUpload(presignBandImage, (key) => onChange({ key }))
+  const { busy, problem, upload } = useHeroImageUpload(presignBandImage, onChange)
   const picker = (
     <input
       ref={file}
@@ -641,9 +641,15 @@ function FromScreenshot({
   const source = image.screenshot!
   // The box being saved, for the image the upload hands back.
   const pending = useRef<ShotBox | null>(null)
-  const { busy, upload } = useImageUpload(presignBandImage, (key) => {
+  const { busy, upload } = useHeroImageUpload(presignBandImage, (stored) => {
     setCropping(false)
-    onChange({ ...image, key, screenshot: { ...source, box: pending.current ?? source.box } })
+    // The new crop's own width and copies; the old crop's would draw the old picture.
+    const { width: _width, variants: _variants, ...kept } = image
+    onChange({
+      ...kept,
+      ...stored,
+      screenshot: { ...source, box: pending.current ?? source.box },
+    })
   })
   return (
     <>

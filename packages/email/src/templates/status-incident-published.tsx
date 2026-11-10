@@ -1,7 +1,8 @@
-import { Button, Heading, Section, Text } from '@react-email/components'
+import { Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
-import { typography, button, colors } from './shared-styles'
+import { typography, colors } from './shared-styles'
 import { withLineBreaks } from './line-breaks'
+import { BrandButton } from './brand-parts'
 
 export type IncidentImpact = 'none' | 'minor' | 'major' | 'critical'
 
@@ -140,9 +141,7 @@ export function StatusIncidentPublishedEmail({
 
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={incidentUrl}>
-          View live status
-        </Button>
+        <BrandButton href={incidentUrl}>View live status</BrandButton>
       </Section>
 
       {/* Footer */}

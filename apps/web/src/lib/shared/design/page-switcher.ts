@@ -7,7 +7,7 @@ import { MENU_WORDS } from './menu-words'
 import { landingOf, menuParts, type MenuPart } from './menu'
 import { PAGE_NAMES, type CanvasLocation, type DesignerPage } from './outline'
 import { portalFeedbackPath, type PortalPageGates, type PortalPageType } from './paths'
-import { isSamplePage, type SamplePage } from './sample-pages'
+import { isSamplePage, NOT_FOUND_SAMPLE, SAMPLE_NAMES, type SamplePage } from './sample-pages'
 import type { PortalDesign } from './schema'
 
 /** A place in the portal with its own address. */
@@ -59,6 +59,8 @@ export type SwitcherGo =
   | { kind: 'page'; page: DesignerPage; item: string | null }
   | { kind: 'choose'; list: ChooseList }
   | { kind: 'sample'; page: SamplePage }
+  /** The widget, drawn in the design: a sample to look at, set in Settings > Widget. */
+  | { kind: 'widget' }
   | { kind: 'turn-on' }
   /** Not drawn by the builder yet. */
   | { kind: 'none' }
@@ -93,6 +95,7 @@ export const SWITCHER_COPY = {
   lands: MENU_WORDS.landingPage,
   choose: 'Choose one',
   sample: 'Sample',
+  widget: 'Widget',
   turnOn: 'Turn one on',
   hidden: MENU_WORDS.hidden,
   back: 'All pages',
@@ -135,17 +138,22 @@ export function switcherColumns({
   places,
   here,
   sample,
+  widget = false,
 }: {
   design: PortalDesign
   gates: PortalPageGates
   places: DesignerPlaces
   here: CanvasLocation
   sample: SamplePage | null
+  /** Whether the widget's sample is shown. */
+  widget?: boolean
 }): SwitcherColumn[] {
   const parts = menuParts(design, gates)
   const landing = landingOf(design, gates)
   const partOf = (type: PortalPageType) => parts.find((part) => part.id === type)
   const isHere = (go: SwitcherGo, alsoWhenNoItem = false) => {
+    if (widget) return go.kind === 'widget'
+    if (go.kind === 'widget') return false
     if (sample) return go.kind === 'sample' && go.page === sample
     if (go.kind === 'choose')
       return (
@@ -192,6 +200,19 @@ export function switcherColumns({
             }),
           ]
         : []),
+      row(
+        'widget',
+        SWITCHER_COPY.widget,
+        { kind: 'widget' },
+        { hint: SWITCHER_COPY.sample, keywords: ['Widget', 'messenger', 'sample'] }
+      ),
+      // The page an address with nothing at it shows: the brand, and its words.
+      row(
+        `sample:${NOT_FOUND_SAMPLE}`,
+        SAMPLE_NAMES[NOT_FOUND_SAMPLE],
+        { kind: 'sample', page: NOT_FOUND_SAMPLE },
+        { hint: SWITCHER_COPY.sample, keywords: ['404', 'missing', 'error', 'sample'] }
+      ),
     ],
   }
 

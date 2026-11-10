@@ -183,7 +183,7 @@ export function DeletePostDialog({
                     </span>
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5 ml-6">
-                    <code className="rounded bg-muted px-1 py-0.5 text-[11px]">{displayId}</code>
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">{displayId}</code>
                     {!link.integrationActive
                       ? `: integration disconnected, cannot ${verb.toLowerCase()}.`
                       : !link.syncManaged

@@ -20,6 +20,13 @@ import { BackLink } from '@/components/ui/back-link'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { DEFAULT_LOCALE, loadAreaMessages } from '@/lib/shared/i18n'
 import type { StatusIncidentId } from '@quackback/ids'
+import {
+  headSettings,
+  pageShareMeta,
+  pageTitle,
+  portalHeadWords,
+  portalSiteName,
+} from '@/lib/shared/portal-head'
 
 export const Route = createFileRoute('/_portal/status/$incidentId')({
   loader: async ({ context, params }) => {
@@ -51,11 +58,12 @@ export const Route = createFileRoute('/_portal/status/$incidentId')({
       messages: await messagesPromise,
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
-    const { incidentTitle, incidentId, workspaceName, baseUrl } = loaderData
-    const title = `${incidentTitle} - ${workspaceName} Status`
-    const description = `${incidentTitle}. A status update from ${workspaceName}.`
+    const { incidentTitle, incidentId, baseUrl } = loaderData
+    const settings = headSettings(matches)
+    const title = `${incidentTitle} - ${pageTitle(settings, 'status')}`
+    const description = portalHeadWords(settings).incident(incidentTitle, portalSiteName(settings))
     const canonicalUrl = baseUrl ? `${baseUrl}/status/${incidentId}` : ''
     return {
       meta: [
@@ -66,6 +74,7 @@ export const Route = createFileRoute('/_portal/status/$incidentId')({
         ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
         { name: 'twitter:title', content: title },
         { name: 'twitter:description', content: description },
+        ...pageShareMeta(settings, baseUrl, 'status'),
       ],
       links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }
@@ -121,7 +130,7 @@ function StatusIncidentPage() {
             {intl.formatMessage(IMPACT_LABEL[incident.impact])}
           </span>
           <span
-            className={cn('text-[11px] font-semibold tracking-wide uppercase', lifecycleStyle.text)}
+            className={cn('text-xs font-semibold tracking-wide uppercase', lifecycleStyle.text)}
           >
             {intl.formatMessage(LIFECYCLE_LABEL[incident.status])}
           </span>

@@ -18,6 +18,18 @@ const sentAndRead = (draft: ReturnType<typeof defaultDesign>) => {
 }
 
 describe('a draft sent to the canvas', () => {
+  it('arrives with the hero image’s smaller copies', () => {
+    const draft = defaultDesign()
+    draft.brand.bandImage = {
+      key: 'portal-images/room.webp',
+      width: 2560,
+      variants: [{ key: 'portal-images/room-640.webp', w: 640 }],
+    }
+    const { sent, read } = sentAndRead(draft)
+    expect(read?.bandImage?.srcSet).toBe(sent.bandImage?.srcSet)
+    expect(read?.bandImage?.srcSet).toContain('640w')
+  })
+
   it('arrives with everything the builder sends', () => {
     const draft = defaultDesign()
     draft.pages.home.blocks = [

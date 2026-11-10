@@ -15,6 +15,7 @@ import {
   type PublicProfileActivityItemView,
 } from '@/lib/server/functions/public-profile'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
+import { headSettings, portalSiteName } from '@/lib/shared/portal-head'
 
 export const Route = createFileRoute('/_portal/u/$principalId')({
   loader: async ({ params, context }) => {
@@ -31,10 +32,10 @@ export const Route = createFileRoute('/_portal/u/$principalId')({
       baseUrl: context.baseUrl ?? '',
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
-    const { profile, workspaceName, baseUrl } = loaderData
-    const title = `${profile.displayName || 'Profile'} - ${workspaceName}`
+    const { profile, baseUrl } = loaderData
+    const title = `${profile.displayName || 'Profile'} - ${portalSiteName(headSettings(matches))}`
     const canonicalUrl = baseUrl ? `${baseUrl}/u/${profile.principalId}` : ''
     return {
       meta: [
