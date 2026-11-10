@@ -132,6 +132,28 @@ describe('Add', () => {
     expect(screen.queryByText(/Drag one onto the page/)).toBeNull()
   })
 
+  it('shows a block whose page is off greyed, with the page it needs and Turn on', () => {
+    const design = defaultDesign()
+    render(
+      <AddContent
+        design={design}
+        update={vi.fn()}
+        gates={{ ...ALL_ON, help: false }}
+        settings={{}}
+        after={null}
+        onHome
+        onAdd={vi.fn()}
+      />
+    )
+    // Not a button to add it, and not left out.
+    expect(screen.queryByRole('button', { name: /^Help search/ })).toBeNull()
+    const card = screen.getByText('Help search', { exact: false }).closest('div')!
+    expect(card.textContent).toContain('Needs Help Center')
+    const turnOn = within(card).getByRole('link', { name: /Turn on/ })
+    expect(turnOn.getAttribute('href')).toBe('/admin/settings/general')
+    expect(turnOn.getAttribute('target')).toBe('_blank')
+  })
+
   it('says where a new block goes', () => {
     expect(addHint(null, true)).toBe(
       'Drag one onto the page, or click to add it at the end of Home.'

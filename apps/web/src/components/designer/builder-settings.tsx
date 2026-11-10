@@ -7,7 +7,7 @@ import type { HomeBlockType } from '@/lib/shared/design/home'
 import type { DesignerPage, OutlineNode, Selection } from '@/lib/shared/design/outline'
 import type { TreeRow } from '@/lib/shared/design/page-tree'
 import type { PanelRoute } from '@/lib/shared/design/panel-routes'
-import type { PortalPageGates } from '@/lib/shared/design/paths'
+import type { PageGateSettings, PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleElement } from '@/lib/shared/design/style-tokens'
 import { PanelSheet } from './panel-sheet'
@@ -37,6 +37,7 @@ export function BuilderSettings({
   design,
   update,
   gates,
+  gateSettings,
   phone,
   onPhone,
   locale,
@@ -80,6 +81,8 @@ export function BuilderSettings({
   design: PortalDesign
   update: NamedUpdate
   gates: PortalPageGates
+  /** What says where a page that is off is turned on, for Add. */
+  gateSettings?: PageGateSettings | null
   locale: string
   /** Whether the canvas shows a phone. */
   phone: boolean
@@ -117,6 +120,7 @@ export function BuilderSettings({
             design={design}
             update={update}
             gates={gates}
+            settings={gateSettings}
             logoUrl={logoUrl}
             cssWarnings={cssWarnings}
             pickedBlock={pickedBlock}

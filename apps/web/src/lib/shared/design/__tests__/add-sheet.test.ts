@@ -35,13 +35,22 @@ describe('addSheetGroups', () => {
     expect(groups[0]!.rows.map((row) => row.type)).toEqual(['help_search', 'help_topics', 'status'])
   })
 
-  it('offers only blocks for the parts that are on, and drops an empty job', () => {
+  it('shows a block whose page is off greyed, with the page it needs', () => {
     const groups = addSheetGroups(withBlocks([]), {
       ...ALL_ON,
       help: false,
       status: false,
     })
-    expect(groups.map((group) => group.job)).not.toContain('answers')
+    const answers = groups.find((group) => group.job === 'answers')!
+    expect(answers.rows.map((row) => [row.type, row.needs, row.disabled])).toEqual([
+      ['help_search', 'help', true],
+      ['help_topics', 'help', true],
+      ['status', 'status', true],
+    ])
+    // A block whose page is on, or that needs no page, can still be added.
+    const rows = groups.flatMap((group) => group.rows)
+    expect(rows.find((row) => row.type === 'ideas')).toMatchObject({ needs: null, disabled: false })
+    expect(rows.find((row) => row.type === 'links')).toMatchObject({ needs: null, disabled: false })
   })
 
   it('says which are on Home already, and a block Home holds once cannot be added again', () => {

@@ -706,6 +706,7 @@ export function DesignerShell({
                   design={design}
                   update={update}
                   gates={gates}
+                  gateSettings={view.settings}
                   locale={locale}
                   phone={size === 'phone'}
                   onPhone={(next) => canvas.setSize(next ? 'phone' : 'desktop')}

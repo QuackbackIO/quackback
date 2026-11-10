@@ -1,7 +1,7 @@
 import type { CssWarning } from '@/components/admin/settings/appearance/css-section'
 import type { PanelAction, PanelState, PanelView } from '@/lib/shared/design/builder-chrome'
 import type { HomeBlockType } from '@/lib/shared/design/home'
-import type { PortalPageGates } from '@/lib/shared/design/paths'
+import type { PageGateSettings, PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
 import { AddContent } from './add-sheet'
@@ -18,6 +18,7 @@ export function PanelSheet({
   design,
   update,
   gates,
+  settings,
   logoUrl,
   cssWarnings,
   pickedBlock,
@@ -47,6 +48,8 @@ export function PanelSheet({
   design: PortalDesign
   update: (change: (draft: PortalDesign) => void, label?: string) => void
   gates: PortalPageGates
+  /** What says where a page that is off is turned on, for Add. */
+  settings?: PageGateSettings | null
   logoUrl: string | null
   cssWarnings: readonly CssWarning[]
   /** The picked block's name, which Add puts a new block under. */
@@ -89,6 +92,7 @@ export function PanelSheet({
           design={design}
           update={update}
           gates={gates}
+          settings={settings}
           after={pickedBlock}
           onHome={onHome}
           onAdd={onAdd}

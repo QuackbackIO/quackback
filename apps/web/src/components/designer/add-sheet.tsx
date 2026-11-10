@@ -1,9 +1,12 @@
 import { useMemo } from 'react'
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/16/solid'
 import type { Update } from '@/components/admin/settings/appearance/design-update'
 import { addSheetGroups, type AddRow } from '@/lib/shared/design/add-sheet'
 import { HOME_BLOCKS_MAX, type HomeBlockType } from '@/lib/shared/design/home'
 import { homeSuggestions } from '@/lib/shared/design/overview'
-import type { PortalPageGates } from '@/lib/shared/design/paths'
+import { offParts } from '@/lib/shared/design/menu'
+import { PAGE_NAMES } from '@/lib/shared/design/names'
+import type { PageGateSettings, PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { BlockIcon } from './block-icon'
 import { HomeLayoutPicker } from './home-layout-picker'
@@ -42,7 +45,8 @@ function cardTag(row: { onHome: boolean; disabled: boolean }, onHome: boolean): 
 /**
  * One block Add offers: its picture, name and what it is for, or why it is
  * suggested. Clicked, it adds the block; pressed and dragged past the
- * threshold, it is dragged onto the page.
+ * threshold, it is dragged onto the page. One whose page is off is greyed,
+ * says the page it needs, and links to where that page is turned on.
  */
 export function AddCard({
   row,
@@ -51,6 +55,7 @@ export function AddCard({
   onAdd,
   drag,
   hint,
+  turnOn,
 }: {
   row: AddRow
   /** Where it goes, on hover. */
@@ -61,7 +66,42 @@ export function AddCard({
   onHome: boolean
   onAdd: (type: HomeBlockType) => void
   drag?: Pick<AddDrag, 'press'>
+  /** Where the page a gated block needs is turned on. */
+  turnOn?: string
 }) {
+  if (row.needs)
+    return (
+      <div className="flex w-full items-center gap-3 rounded-lg border border-border p-2">
+        <span
+          aria-hidden="true"
+          className="grid h-10 w-14 shrink-0 place-items-center rounded-md bg-muted opacity-50"
+        >
+          <BlockIcon type={row.type} className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1 leading-tight text-muted-foreground">
+          <span className="block text-[13px] font-medium">
+            {row.def.name}
+            <span className="font-normal"> · Needs {PAGE_NAMES[row.needs]}</span>
+          </span>
+          <span className="block text-xs">{row.def.purpose}</span>
+        </span>
+        {turnOn && (
+          <a
+            href={turnOn}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex min-h-6 shrink-0 items-center gap-1 text-xs font-medium underline underline-offset-2"
+          >
+            Turn on
+            <span className="sr-only">
+              {' '}
+              {PAGE_NAMES[row.needs]} (goes live, opens in a new tab)
+            </span>
+            <ArrowTopRightOnSquareIcon className="size-3.5" aria-hidden="true" />
+          </a>
+        )}
+      </div>
+    )
   const tag = cardTag(row, onHome)
   return (
     <button
@@ -101,6 +141,7 @@ export function AddContent({
   design,
   update,
   gates,
+  settings,
   after,
   onHome,
   onAdd,
@@ -109,6 +150,8 @@ export function AddContent({
   design: PortalDesign
   update: Update
   gates: PortalPageGates
+  /** What says where a page that is off is turned on. */
+  settings?: PageGateSettings | null
   /** The picked block's name, which a new block goes under. */
   after: string | null
   /** Whether Home is the page shown. */
@@ -127,6 +170,10 @@ export function AddContent({
     })
   }, [design, gates, fresh, groups])
   const hint = addHint(after, onHome)
+  const turnOn = useMemo(
+    () => new Map(offParts(gates, settings ?? {}).map((part) => [part.type, part.href])),
+    [gates, settings]
+  )
   return (
     <div className="space-y-5">
       {suggested.length > 0 && (
@@ -158,7 +205,14 @@ export function AddContent({
           <ul className="space-y-2">
             {group.rows.map((row) => (
               <li key={row.type}>
-                <AddCard row={row} hint={hint} onHome={onHome} onAdd={onAdd} drag={drag} />
+                <AddCard
+                  row={row}
+                  hint={hint}
+                  onHome={onHome}
+                  onAdd={onAdd}
+                  drag={drag}
+                  turnOn={row.needs ? turnOn.get(row.needs) : undefined}
+                />
               </li>
             ))}
           </ul>
