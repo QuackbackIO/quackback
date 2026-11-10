@@ -18,32 +18,16 @@ export const isShareCardPage = (value: unknown): value is ShareCardPage =>
 
 /**
  * What the card's bundled faces draw: their files are Latin only, so this
- * is the part of that range every face has (the fallback's cmap pins it).
- * A title or page name with anything else would be left blank on the card.
+ * is the part of that range every face has (the fallback's cmap pins it),
+ * and spaces. A title or page name with anything else would be left blank
+ * on the card. One character class rather than a table of ranges, as every
+ * portal page's head reads it from the entry chunk.
  */
-const CARD_RANGES: ReadonlyArray<readonly [number, number]> = [
-  [0x20, 0x7e],
-  [0xa0, 0xac],
-  [0xae, 0xff],
-  [0x131, 0x131],
-  [0x152, 0x153],
-  [0x2013, 0x2014],
-  [0x2018, 0x201a],
-  [0x201c, 0x201e],
-  [0x2022, 0x2022],
-  [0x2026, 0x2026],
-  [0x20ac, 0x20ac],
-  [0x2122, 0x2122],
-]
+const CARD_TEXT =
+  /^[\s\x20-\x7e\xa0-\xac\xae-\xff\u0131\u0152\u0153\u2013\u2014\u2018-\u201a\u201c-\u201e\u2022\u2026\u20ac\u2122]*$/
 
 /** Whether the card's faces can draw every visible character of the text. */
-export function cardCanDraw(text: string): boolean {
-  return [...text].every((ch) => {
-    if (!ch.trim()) return true
-    const cp = ch.codePointAt(0)!
-    return CARD_RANGES.some(([from, to]) => cp >= from && cp <= to)
-  })
-}
+export const cardCanDraw = (text: string): boolean => CARD_TEXT.test(text)
 
 /** Where the portal serves its drawn brand images. */
 export const BRAND_IMAGE_PATH = '/brand.png'
