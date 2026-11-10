@@ -283,6 +283,12 @@ export interface PublishDraftInput extends DesignAuthor {
   expectedDraft?: string
   /** The draft revision the person reviewed; a draft that moved since is refused. */
   expectedRevision?: string
+  /**
+   * The published version the person reviewed the draft against, after a
+   * publish was refused because another version went live, such as by a
+   * restore, after the draft started. Only the version live now counts.
+   */
+  reviewedAgainst?: PortalDesignRevisionId | null
 }
 
 export async function publishDraft(
@@ -302,7 +308,10 @@ export async function publishDraftInTransaction(
   const row = await designRow(tx, true)
   if (!row?.draft) throw new NotFoundError('NO_DRAFT', 'There is no draft to publish.')
   await assertWritable(tx, row)
-  if (row.draftBaseRevisionId !== row.publishedRevisionId) {
+  if (
+    row.draftBaseRevisionId !== row.publishedRevisionId &&
+    input.reviewedAgainst !== row.publishedRevisionId
+  ) {
     throw new ConflictError(
       'DESIGN_CHANGED',
       'Another version was published after this draft started. Review the draft against it, then publish again.'
@@ -447,13 +456,14 @@ export async function restoreRevision(
       'restore',
       `Restored version ${old.number}`
     )
-    // A draft kept through a restore now builds on the restored version, with its authors.
+    // A draft kept through a restore stays as it was, with its authors and the version it
+    // started from, so publishing it asks for a review against the restored version first.
     if (draft) {
       await tx
         .update(portalDesigns)
         .set({
           draft,
-          draftBaseRevisionId: published.revisionId,
+          draftBaseRevisionId: row.draftBaseRevisionId,
           draftUpdatedAt: row.draftUpdatedAt,
           draftUpdatedByPrincipalId: row.draftUpdatedByPrincipalId,
           draftAuthors: row.draftAuthors,

@@ -60,6 +60,8 @@ export const publishPortalDesignFn = createServerFn({ method: 'POST' })
       revision: z.string().max(64).optional(),
       /** Also use the draft's portal logo in the admin and emails. */
       workspaceLogo: z.boolean().optional(),
+      /** The version live now, which the person reviewed the draft against after it moved. */
+      reviewedAgainst: typeIdSchema('portal_design_revision').optional(),
     })
   )
   .handler(async ({ data }) => {
@@ -81,6 +83,7 @@ export const publishPortalDesignFn = createServerFn({ method: 'POST' })
       message: data.message,
       expectedRevision: data.revision,
       workspaceLogo: data.workspaceLogo === true,
+      reviewedAgainst: data.reviewedAgainst as PortalDesignRevisionId | undefined,
     })
     if (!result.ok) return result
     log.info({ revision: result.number }, 'portal design published from appearance')

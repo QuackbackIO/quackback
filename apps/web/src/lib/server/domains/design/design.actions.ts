@@ -228,6 +228,8 @@ export async function publishDesign(
     source: PortalDesignSource
     message?: string
     expectedRevision?: string
+    /** The version live now, which the person reviewed the draft against after it moved. */
+    reviewedAgainst?: PortalDesignRevisionId
     /** Also makes the draft's portal logo the workspace's, for the admin and emails. */
     workspaceLogo?: boolean
   }

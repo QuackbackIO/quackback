@@ -42,8 +42,13 @@ export const NEWER_FORMAT_LINE =
 type Outcome = { ok: true } | { ok: false; message: string }
 /** A change's outcome: committed, or refused before it reached the draft, with why in a line. */
 export type ChangeOutcome = { ok: true } | { ok: false; reason: string }
-/** A publish's outcome: where the portal is now live. */
-type PublishOutcome = { ok: true; address?: PortalAddress } | { ok: false; message: string }
+/**
+ * A publish's outcome: where the portal is now live, or why not, with
+ * `changed` when another version went live after the draft started.
+ */
+type PublishOutcome =
+  | { ok: true; address?: PortalAddress }
+  | { ok: false; message: string; changed?: true }
 
 /**
  * The Appearance draft: the design being edited, saved to the server shortly
@@ -101,6 +106,8 @@ export function useDesignDraft() {
   // The draft revision the next save is made against, and whether saving waits on a choice.
   const revision = useRef(data.revision)
   const blocked = useRef(false)
+  // The version live now, once a publish said another went live after the draft started.
+  const reviewAgainst = useRef<PortalDesignRevisionId | undefined>(undefined)
 
   // The save under way, so a reader on the server can wait for it; each waits for the one before.
   // A step that fails never breaks the chain: the next save still runs.
@@ -412,8 +419,14 @@ export function useDesignDraft() {
           message,
           revision: revision.current,
           workspaceLogo: options.workspaceLogo === true,
+          reviewedAgainst: reviewAgainst.current,
         },
       })
+      if (!result.ok && result.code === 'DESIGN_CHANGED') {
+        // What visitors see now, such as a restored version, for the review to show the draft against.
+        reviewAgainst.current = (await fetchEditor()).published?.revisionId ?? undefined
+        return { ok: false, message: result.message, changed: true }
+      }
       if (!result.ok)
         return {
           ok: false,
@@ -422,10 +435,11 @@ export function useDesignDraft() {
               ? 'The draft changed while you reviewed it. Review it again, then publish.'
               : result.message,
         }
+      reviewAgainst.current = undefined
       await refresh()
       return { ok: true, address: result.address }
     },
-    [refresh, flush]
+    [refresh, flush, fetchEditor]
   )
 
   const restore = useCallback(

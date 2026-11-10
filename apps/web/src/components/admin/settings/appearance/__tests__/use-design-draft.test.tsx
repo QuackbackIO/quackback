@@ -28,6 +28,10 @@ const server = vi.hoisted(() => ({
   workspaceLogo: [] as Array<boolean | undefined>,
   publishResult: { ok: true, revisionId: 'portal_design_revision_1', number: 1 } as unknown,
   restored: 0,
+  /** The published version each publish said it was reviewed against. */
+  reviewedAgainst: [] as Array<string | undefined>,
+  /** The version visitors see, as the server reads it. */
+  live: null as { revisionId: PortalDesignRevisionId; number: number } | null,
 }))
 
 vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ invalidate: async () => {} }) }))
@@ -51,9 +55,10 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
   publishPortalDesignFn: async ({
     data,
   }: {
-    data: { revision?: string; workspaceLogo?: boolean }
+    data: { revision?: string; workspaceLogo?: boolean; reviewedAgainst?: string }
   }) => {
     server.published.push(data.revision)
+    server.reviewedAgainst.push(data.reviewedAgainst)
     server.workspaceLogo.push(data.workspaceLogo)
     return server.publishResult
   },
@@ -78,7 +83,7 @@ function editorState() {
     design: defaultDesign(),
     live: defaultDesign(),
     source: 'converted' as const,
-    published: null,
+    published: server.live,
     report: { adjustments: [], errors: [], css: [] },
     revision: server.revision,
     authors: {},
@@ -109,6 +114,8 @@ beforeEach(() => {
   server.workspaceLogo = []
   server.publishResult = { ok: true, revisionId: 'portal_design_revision_1', number: 1 }
   server.restored = 0
+  server.reviewedAgainst = []
+  server.live = null
 })
 afterEach(() => {
   cleanup()
@@ -142,15 +149,15 @@ describe('useDesignDraft', () => {
   it('reports a refused publish', async () => {
     server.publishResult = {
       ok: false,
-      code: 'DESIGN_CHANGED',
-      message: 'Another version was published.',
+      code: 'NO_DRAFT',
+      message: 'There is no draft to publish.',
     }
     const { result } = setup()
     let outcome: unknown
     await act(async () => {
       outcome = await result.current.publish()
     })
-    expect(outcome).toEqual({ ok: false, message: 'Another version was published.' })
+    expect(outcome).toEqual({ ok: false, message: 'There is no draft to publish.' })
   })
 
   it('waits for a save already under way before the server reads the draft', async () => {
@@ -539,6 +546,39 @@ describe('useDesignDraft', () => {
       // Nothing was thrown away: this person's change is still on screen.
       expect(result.current.design.layout.width).toBe('wide')
       expect(result.current.undoLabel).not.toBe('Discard draft')
+    })
+  })
+
+  describe('a draft that started before the version live now, such as one kept through a restore', () => {
+    it('says so, shows the version live now, and the next publish says it was reviewed against it', async () => {
+      server.live = { revisionId: 'portal_design_revision_old' as PortalDesignRevisionId, number: 1 }
+      const { result } = setup()
+      server.publishResult = {
+        ok: false,
+        code: 'DESIGN_CHANGED',
+        message: 'Another version was published after this draft started.',
+      }
+      // Restored elsewhere: the server has a newer version live.
+      server.live = { revisionId: 'portal_design_revision_restored' as PortalDesignRevisionId, number: 3 }
+      let outcome: unknown
+      await act(async () => {
+        outcome = await result.current.publish()
+      })
+      expect(outcome).toMatchObject({ ok: false, changed: true })
+      await waitFor(() => expect(result.current.published?.number).toBe(3))
+      expect(server.reviewedAgainst).toEqual([undefined])
+
+      server.publishResult = { ok: true, revisionId: 'portal_design_revision_4', number: 4 }
+      await act(async () => {
+        outcome = await result.current.publish()
+      })
+      expect(outcome).toMatchObject({ ok: true })
+      expect(server.reviewedAgainst).toEqual([undefined, 'portal_design_revision_restored'])
+      // Once published, the next draft starts over.
+      await act(async () => {
+        await result.current.publish()
+      })
+      expect(server.reviewedAgainst[2]).toBeUndefined()
     })
   })
 
