@@ -269,6 +269,19 @@ export const DESIGN_MIGRATIONS: readonly DesignMigration[] = [
 ]
 
 /**
+ * A design, or what a patch or a change makes of one, with every tidy run
+ * whatever its version: a format 3 design patched with a key only format 2
+ * had (one card look, Lift as a motion, a ring colour) reads as a stored one
+ * does. Format changes are left to migrateDesign. The same document when no
+ * tidy has anything to do.
+ */
+export function tidyDesign(given: Json): Json {
+  let doc = given
+  for (const step of DESIGN_MIGRATIONS) if (step.to === undefined) doc = step.up(doc)
+  return doc
+}
+
+/**
  * A stored, sent or written design document as this build reads it: every
  * step that applies, run once each in order. What is not a document comes
  * back as it is, and so does a document no step changes.

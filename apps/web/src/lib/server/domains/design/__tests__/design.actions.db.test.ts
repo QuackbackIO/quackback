@@ -376,6 +376,20 @@ describe('patchDesignDraft', () => {
     expect(design.layout).not.toHaveProperty('band')
   })
 
+  it('takes a patch written before the format 2 tidies: one card look, Lift as a motion', async () => {
+    const who = await author()
+    const cards = await actions.patchDesignDraft({ style: { card: { base: { radius: 4 } } } }, who)
+    expect(cards.ok).toBe(true)
+    const lift = await actions.patchDesignDraft({ shape: { hover: 'lift' } }, who)
+    expect(lift.ok).toBe(true)
+    const { design } = await actions.readDesignForEditing()
+    expect(design.style?.panel).toEqual({ base: { radius: 4 } })
+    expect(design.style?.postCard).toMatchObject({ base: { radius: 4 }, hover: { lift: 2 } })
+    expect(design.style?.button?.hover).toMatchObject({ lift: 2 })
+    expect(design.style).not.toHaveProperty('card')
+    expect(design.shape).not.toHaveProperty('hover')
+  })
+
   it('refuses a patch that breaks the design', async () => {
     const who = await author()
     expect(await actions.patchDesignDraft({ layout: { density: 'roomy' } }, who)).toMatchObject({

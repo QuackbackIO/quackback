@@ -15,7 +15,7 @@
 import { normaliseColor } from './color'
 import { newBlock, settleHome, type HomeBlockType } from './home'
 import { LEGACY_WIDTH_COLUMNS, withGridPlaces } from './home-legacy'
-import { withHeroKeys, withHeroPath } from './migrations'
+import { tidyDesign, withHeroKeys, withHeroPath } from './migrations'
 import { BUNDLED_FONT_IDS } from './options'
 import { resolveDesign } from './resolve'
 import { portalDesign, type PortalDesign } from './schema'
@@ -581,7 +581,9 @@ export function applyDesignChanges(
     let next: PortalDesign | null = null
     let reason = 'the design does not allow it'
     for (const attempt of attempts) {
-      const written = write(design, path, attempt, untrusted?.language)
+      const raw = write(design, path, attempt, untrusted?.language)
+      // A key format 2 had (one card look, Lift as a motion) lands as a stored design's does.
+      const written = typeof raw === 'string' ? raw : (tidyDesign(raw as never) as PortalDesign)
       const why =
         typeof written === 'string'
           ? written
@@ -596,14 +598,20 @@ export function applyDesignChanges(
       refused.push({ path, reason })
       continue
     }
-    const before = read(design, path)
-    const after = read(next, path)
-    if (same(before, after)) continue
-    applied.push({
-      path,
-      before: structuredClone(before ?? null) as DesignValue,
-      after: structuredClone(after ?? null) as DesignValue,
-    })
+    // A tidied change lands elsewhere than its path: each top-level field it moved is the change.
+    const paths = same(read(design, path), read(next, path))
+      ? Object.keys({ ...design, ...next }).filter(
+          (key) => !same(read(design, key), read(next, key))
+        )
+      : [path]
+    if (!paths.length) continue
+    for (const each of paths) {
+      applied.push({
+        path: each,
+        before: structuredClone(read(design, each) ?? null) as DesignValue,
+        after: structuredClone(read(next, each) ?? null) as DesignValue,
+      })
+    }
     design = portalDesign.parse(next)
   }
   return { design, applied, skipped: refused.length + outOfScope.length, outOfScope, refused }
