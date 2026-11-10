@@ -45,7 +45,8 @@ const FACES = /^brand\.fonts\.(heading|body|display)$/
 /**
  * A brand match in one line: "Matched your brand: colours, fonts, logo and
  * words." Fonts are named only where a face changed and is the brand's own,
- * not the nearest to it (fontsNearest).
+ * not the nearest to it (fontsNearest). A match that turned Home on says it
+ * added a Home page, as that changes where visitors land.
  */
 export function matchSummary(
   paths: readonly string[],
@@ -55,5 +56,9 @@ export function matchSummary(
   if (options.logo) parts.add('logo')
   if (options.fontsNearest || !paths.some((path) => FACES.test(path))) parts.delete('fonts')
   const sorted = NAMED.filter((part) => parts.has(part))
-  return sorted.length ? `Matched your brand: ${listed(sorted)}.` : 'Matched your brand.'
+  // Turning Home on changes where visitors land, so the line always says so.
+  const home = paths.includes('nav.home.on')
+  if (!sorted.length)
+    return home ? 'Matched your brand and added a Home page.' : 'Matched your brand.'
+  return `Matched your brand: ${listed(sorted)}${home ? ', and added a Home page' : ''}.`
 }
