@@ -58,11 +58,17 @@ const cache = new WorkspaceKeyedCache<Uint8Array>(CACHE_ENTRIES)
  */
 const drawing = new Map<string, Promise<Uint8Array | null>>()
 
+/** A draw's key in `drawing`: the workspace first, so two workspaces never share a draw. */
+const drawingKey = (key: string) => `${currentWorkspaceNamespace()}|${key}`
+
 /** The image kept under `key`, else drawn once however many ask meanwhile, and kept. */
-function drawnOnce(key: string, draw: () => Promise<Uint8Array | null>): Promise<Uint8Array | null> {
+function drawnOnce(
+  key: string,
+  draw: () => Promise<Uint8Array | null>
+): Promise<Uint8Array | null> {
   const kept = cache.get(key)
   if (kept) return Promise.resolve(kept)
-  const at = `${currentWorkspaceNamespace()}|${key}`
+  const at = drawingKey(key)
   const pending = drawing.get(at)
   if (pending) return pending
   const run = draw()
