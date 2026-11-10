@@ -45,46 +45,51 @@ export function expireRouteContext(): void {
 }
 
 export interface RouteContextMemo<T> {
-  /** The kept answer while it is current, else `load()`'s, which is then kept. */
-  get(load: () => Promise<T>): Promise<T>
+  /**
+   * The kept answer while it is current and was asked for with the same `key`,
+   * else `load()`'s, which is then kept. The key names what the answer depends
+   * on beyond the viewer and the workspace, such as a preview link.
+   */
+  get(load: () => Promise<T>, key?: string): Promise<T>
   /**
    * Keep the answer the page was server-rendered with, so the first navigation
    * after hydration need not ask again. Takes effect once per page load, and
    * only if nothing has been fetched or expired before it.
    */
-  seed(value: T): void
+  seed(value: T, key?: string): void
 }
 
 const onServer = () => typeof window === 'undefined'
 
 export function createRouteContextMemo<T>(): RouteContextMemo<T> {
-  let kept: { generation: number; at: number; value: Promise<T> } | null = null
+  let kept: { generation: number; at: number; key: string; value: Promise<T> } | null = null
   let seeded = false
   let last: T | undefined
   const shareParts = (value: T): T => (last = replaceEqualDeep(last, value))
 
-  const isCurrent = () =>
+  const isCurrent = (key: string) =>
     kept !== null &&
+    kept.key === key &&
     kept.generation === generation &&
     Date.now() - kept.at < ROUTE_CONTEXT_MAX_AGE_MS
 
   return {
-    get(load) {
+    get(load, key = '') {
       if (onServer()) return load()
-      if (isCurrent()) return kept!.value
-      const entry = { generation, at: Date.now(), value: load().then(shareParts) }
+      if (isCurrent(key)) return kept!.value
+      const entry = { generation, at: Date.now(), key, value: load().then(shareParts) }
       kept = entry
       entry.value.catch(() => {
         if (kept === entry) kept = null
       })
       return entry.value
     },
-    seed(value) {
+    seed(value, key = '') {
       if (onServer() || seeded) return
       seeded = true
       if (kept !== null || generation !== 0) return
       last = value
-      kept = { generation, at: Date.now(), value: Promise.resolve(value) }
+      kept = { generation, at: Date.now(), key, value: Promise.resolve(value) }
     },
   }
 }

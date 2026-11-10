@@ -7,6 +7,8 @@ import { generateContentHTML } from '@/lib/shared/content-html'
 interface RichTextContentProps {
   content: JSONContent
   className?: string
+  /** In the builder's frame: what these words are, so they can be edited where they sit. */
+  words?: string
 }
 
 // DOMPurify config for sanitizing rendered TipTap HTML (defense-in-depth)
@@ -74,13 +76,15 @@ const DOMPURIFY_CONFIG = {
     'data-quackback-embed',
     'data-kind',
     'data-id',
+    // Rich words in a brand colour role.
+    'data-qb-colour',
   ],
   ALLOW_DATA_ATTR: false,
   ADD_TAGS: ['iframe'],
   ADD_ATTR: ['allowfullscreen', 'frameborder', 'allow'],
 }
 
-export function RichTextContent({ content, className }: RichTextContentProps) {
+export function RichTextContent({ content, className, words }: RichTextContentProps) {
   // Generate HTML from JSON content, with DOMPurify defense-in-depth on client
   if (typeof content === 'object' && content.type === 'doc') {
     const rawHtml = generateContentHTML(content)
@@ -89,6 +93,7 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
     const html = DOMPurify.isSupported ? DOMPurify.sanitize(rawHtml, DOMPURIFY_CONFIG) : rawHtml
     return (
       <div
+        data-qb-words={words}
         className={cn(
           'prose prose-neutral dark:prose-invert min-w-0 max-w-full [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto',
           className

@@ -1,4 +1,5 @@
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
+import { StatusColourDot } from '@/components/ui/status-badge'
 import { useIntl } from 'react-intl'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { RoadmapCard } from './roadmap-card'
@@ -20,6 +21,10 @@ interface RoadmapColumnProps {
   icon?: string | null
   color: string
   filters?: RoadmapFilters
+  /** A column on a board, or a group down a list. */
+  layout?: 'column' | 'group'
+  /** The vote box on its cards. */
+  votes?: boolean
 }
 
 export function RoadmapColumn({
@@ -30,7 +35,10 @@ export function RoadmapColumn({
   icon,
   color,
   filters,
+  layout = 'column',
+  votes = true,
 }: RoadmapColumnProps) {
+  const headingId = `roadmap-group-${statusId ?? bucketId ?? title}`
   const intl = useIntl()
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } = usePublicRoadmapPosts(
     {
@@ -50,12 +58,76 @@ export function RoadmapColumn({
     onLoadMore: fetchNextPage,
   })
 
+  const cards = posts.map((post, index) => (
+    <div
+      key={post.id}
+      className="animate-in fade-in duration-200 fill-mode-backwards"
+      style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+    >
+      <RoadmapCard
+        id={post.id}
+        title={post.title}
+        voteCount={post.voteCount}
+        commentCount={post.commentCount}
+        board={{ id: post.board.id, slug: post.board.slug, name: post.board.name }}
+        eta={post.eta}
+        voting
+        votes={votes}
+      />
+    </div>
+  ))
+  const more = hasNextPage && (
+    <div ref={sentinelRef} className="py-2 flex justify-center">
+      {isFetchingNextPage && (
+        <ArrowPathIcon className="h-4 w-4 animate-spin text-muted-foreground" />
+      )}
+    </div>
+  )
+  const empty = (
+    <p className="text-sm text-muted-foreground">
+      {intl.formatMessage({
+        id: 'portal.roadmap.column.empty',
+        defaultMessage: 'No items yet',
+      })}
+    </p>
+  )
+
+  if (layout === 'group')
+    return (
+      <section aria-labelledby={headingId} className="space-y-3">
+        <div className="flex items-center gap-2">
+          <StatusColourDot colour={color} className="size-3" />
+          <h2 id={headingId} className="text-base font-semibold text-foreground">
+            {icon && (
+              <span className="me-1.5" aria-hidden>
+                {icon}
+              </span>
+            )}
+            {title}
+          </h2>
+          <Badge variant="secondary" className="text-xs">
+            {total}
+          </Badge>
+        </div>
+        {isLoading ? (
+          <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
+        ) : posts.length === 0 ? (
+          empty
+        ) : (
+          <div className="space-y-2">
+            {cards}
+            {more}
+          </div>
+        )}
+      </section>
+    )
+
   return (
-    <Card className="flex-1 min-w-[300px] max-w-[350px] flex flex-col h-full">
+    <Card className="w-full flex flex-col h-full">
       <CardHeader className="pb-3 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
+            <StatusColourDot colour={color} className="size-3" />
             <CardTitle className="text-base">
               {icon && (
                 <span className="me-1.5" aria-hidden>
@@ -78,38 +150,12 @@ export function RoadmapColumn({
             </div>
           ) : posts.length === 0 ? (
             <div className="h-full flex items-center justify-center py-8 animate-in fade-in duration-200">
-              <p className="text-sm text-muted-foreground">
-                {intl.formatMessage({
-                  id: 'portal.roadmap.column.empty',
-                  defaultMessage: 'No items yet',
-                })}
-              </p>
+              {empty}
             </div>
           ) : (
             <div className="space-y-2">
-              {posts.map((post, index) => (
-                <div
-                  key={post.id}
-                  className="animate-in fade-in duration-200 fill-mode-backwards"
-                  style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
-                >
-                  <RoadmapCard
-                    id={post.id}
-                    title={post.title}
-                    voteCount={post.voteCount}
-                    commentCount={post.commentCount}
-                    board={{ slug: post.board.slug, name: post.board.name }}
-                    eta={post.eta}
-                  />
-                </div>
-              ))}
-              {hasNextPage && (
-                <div ref={sentinelRef} className="py-2 flex justify-center">
-                  {isFetchingNextPage && (
-                    <ArrowPathIcon className="h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-              )}
+              {cards}
+              {more}
             </div>
           )}
           <ScrollBar />

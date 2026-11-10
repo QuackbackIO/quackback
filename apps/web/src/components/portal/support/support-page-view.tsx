@@ -1,0 +1,249 @@
+import { Link } from '@tanstack/react-router'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { ChatBubbleLeftRightIcon, ChevronRightIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/button'
+import { PortalPageTitle, useDesignTitles } from '@/components/public/portal-page-title'
+import { cn } from '@/lib/shared/utils'
+import { EmptyState } from '@/components/shared/empty-state'
+import { Skeleton } from '@/components/ui/skeleton'
+import { TimeAgo } from '@/components/ui/time-ago'
+import { StageChip } from '@/components/shared/ticket-stage'
+import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
+
+/** What a row of the list reads from a conversation. */
+export interface SupportListConversation {
+  id: string
+  status: string
+  subject: string | null
+  lastMessagePreview: string | null
+  lastMessageAt: string
+  unreadCount?: number | null
+}
+
+/** A paired conversation's ticket, as its row shows it. */
+export interface SupportListTicket {
+  reference: string
+  title: string
+  stage: { slot: string | null; label: string | null; closed?: boolean }
+}
+
+/** Status chip copy for an unpaired conversation, localized per status. */
+function StatusLabel({ status }: { status: string }) {
+  switch (status) {
+    // Snooze is internal queue discipline; customers see a snoozed thread as open.
+    case 'open':
+    case 'snoozed':
+      return <FormattedMessage id="portal.support.status.open" defaultMessage="Open" />
+    case 'closed':
+      return <FormattedMessage id="portal.support.status.closed" defaultMessage="Closed" />
+    default:
+      return <>{status}</>
+  }
+}
+
+/** Pending state for the Messages list — mirrors the loaded `<li>` row (title +
+ *  status/time line, in a bordered card) so the list doesn't reflow height when
+ *  the real rows arrive. */
+function ConversationListSkeleton() {
+  return (
+    <ul className="flex flex-col gap-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <li
+          key={i}
+          data-qb-surface="card"
+          className="flex w-full items-center gap-3 rounded-lg border border-border/60 bg-card px-4 py-3"
+        >
+          <span className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-4 w-2/5" />
+            <Skeleton className="h-3 w-1/4" />
+          </span>
+          <Skeleton className="size-4 shrink-0 rounded-full" />
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * The portal Messages surface — ONE list for every thread the requester has
+ * with the team, chat- and ticket-backed alike (converged Messages: a customer
+ * ticket IS a conversation pair). Paired rows carry their ticket's StageChip +
+ * reference and key their displayed state off the TICKET stage (the pair-state
+ * rule); unpaired rows keep the plain Open/Closed status. The chat-start
+ * button shows only when the messenger is on. It draws what it is given, so
+ * the designer's sample draws it too.
+ */
+export function SupportPageView({
+  signedIn,
+  loading = false,
+  messenger,
+  conversations,
+  linkedTickets,
+}: {
+  signedIn: boolean
+  loading?: boolean
+  messenger: boolean
+  conversations: readonly SupportListConversation[]
+  linkedTickets: Readonly<Record<string, SupportListTicket | undefined>>
+}) {
+  const intl = useIntl()
+  const designTitles = useDesignTitles()
+  const authPopover = useAuthPopoverSafe()
+
+  const title = intl.formatMessage({ id: 'portal.support.title', defaultMessage: 'Support' })
+  const subtitle = intl.formatMessage({
+    id: 'portal.support.subtitle',
+    defaultMessage: 'Your conversations with our team',
+  })
+  const newConversation = signedIn && messenger && (
+    <Button asChild size="sm">
+      <Link to="/support/$conversationId" params={{ conversationId: 'new' }}>
+        <PlusIcon className="me-1.5 h-4 w-4" />
+        <FormattedMessage id="portal.support.newConversation" defaultMessage="New conversation" />
+      </Link>
+    </Button>
+  )
+
+  return (
+    <>
+      {designTitles && (
+        <PortalPageTitle
+          page="support"
+          title={title}
+          subtitle={subtitle}
+          action={newConversation || undefined}
+        />
+      )}
+      <div
+        className={cn(
+          'mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 sm:px-6',
+          designTitles ? 'pt-6 pb-8' : 'py-8'
+        )}
+      >
+        {!designTitles && (
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
+            </div>
+            {newConversation}
+          </div>
+        )}
+
+        {!signedIn ? (
+          // Signed out, the way in sits on a card, as the conversations would.
+          <div
+            data-qb-surface="card"
+            className="mx-auto max-w-xl rounded-xl border border-border/50 bg-card px-6 py-6 shadow-sm"
+          >
+            <EmptyState
+              icon={ChatBubbleLeftRightIcon}
+              heading="h2"
+              title={intl.formatMessage({
+                id: 'portal.support.signIn.title',
+                defaultMessage: 'Sign in to view your conversations',
+              })}
+              description={intl.formatMessage({
+                id: 'portal.support.signIn.body',
+                defaultMessage: 'Your support conversations are tied to your account.',
+              })}
+              action={
+                authPopover ? (
+                  <Button onClick={() => authPopover.openAuthPopover({ mode: 'login' })}>
+                    <FormattedMessage id="portal.support.signIn.cta" defaultMessage="Log in" />
+                  </Button>
+                ) : undefined
+              }
+            />
+          </div>
+        ) : loading ? (
+          <ConversationListSkeleton />
+        ) : conversations.length === 0 ? (
+          <EmptyState
+            icon={ChatBubbleLeftRightIcon}
+            heading="h2"
+            title={intl.formatMessage({
+              id: 'portal.support.empty.title',
+              defaultMessage: 'No conversations yet',
+            })}
+            description={intl.formatMessage({
+              id: 'portal.support.empty.body',
+              defaultMessage: "Start a conversation and we'll get back to you.",
+            })}
+            action={
+              messenger ? (
+                <Button asChild>
+                  <Link to="/support/$conversationId" params={{ conversationId: 'new' }}>
+                    <PlusIcon className="me-1.5 h-4 w-4" />
+                    <FormattedMessage
+                      id="portal.support.newConversation"
+                      defaultMessage="New conversation"
+                    />
+                  </Link>
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {conversations.map((c) => {
+              const ticket = linkedTickets[c.id]
+              return (
+                <li key={c.id}>
+                  <Link
+                    to="/support/$conversationId"
+                    params={{ conversationId: c.id }}
+                    data-qb-surface="card"
+                    className="flex w-full items-center gap-3 rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:bg-muted/40"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate text-sm font-medium text-foreground">
+                          {ticket?.title ||
+                            c.subject ||
+                            c.lastMessagePreview ||
+                            intl.formatMessage({
+                              id: 'portal.support.untitled',
+                              defaultMessage: 'Conversation',
+                            })}
+                        </span>
+                        {(c.unreadCount ?? 0) > 0 && (
+                          <span className="inline-flex min-w-[18px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground">
+                            {c.unreadCount}
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        {ticket ? (
+                          // Pair-state rule: the ticket's stage is the row's
+                          // displayed truth (a closed conversation with an open
+                          // ticket must not read "Closed").
+                          <>
+                            <StageChip
+                              slot={ticket.stage.slot}
+                              label={ticket.stage.label}
+                              closed={ticket.stage.closed}
+                              closedLabelId="portal.tickets.stage.closed"
+                            />
+                            <span className="font-mono text-[11px] text-muted-foreground">
+                              {ticket.reference}
+                            </span>
+                          </>
+                        ) : (
+                          <StatusLabel status={c.status} />
+                        )}
+                        <span>·</span>
+                        <TimeAgo date={c.lastMessageAt} />
+                      </span>
+                    </span>
+                    <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground rtl:rotate-180" />
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </>
+  )
+}

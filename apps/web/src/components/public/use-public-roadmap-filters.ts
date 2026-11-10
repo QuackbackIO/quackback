@@ -1,12 +1,12 @@
-import { useNavigate } from '@tanstack/react-router'
-import { Route } from '@/routes/_portal/roadmap.index'
+import { useNavigate, useSearch } from '@tanstack/react-router'
+import type { RoadmapSearch } from '@/routes/_portal/roadmap.index'
 import { useMemo, useCallback } from 'react'
 import { toggleItem } from '@/components/shared/filter-utils'
 import type { RoadmapFilters } from '@/lib/shared/types'
 
 export function usePublicRoadmapFilters() {
   const navigate = useNavigate()
-  const search = Route.useSearch()
+  const search = useSearch({ strict: false }) as RoadmapSearch
 
   const filters: RoadmapFilters = useMemo(
     () => ({
@@ -22,7 +22,7 @@ export function usePublicRoadmapFilters() {
   const setFilters = useCallback(
     (updates: Partial<RoadmapFilters>) => {
       void navigate({
-        to: '/roadmap',
+        to: '.',
         search: {
           ...search,
           ...('search' in updates && { search: updates.search }),
@@ -39,7 +39,7 @@ export function usePublicRoadmapFilters() {
 
   const clearFilters = useCallback(() => {
     void navigate({
-      to: '/roadmap',
+      to: '.',
       search: { roadmap: search.roadmap },
       replace: true,
     })

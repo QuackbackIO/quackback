@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Who the idea composer says you post as. An anonymous visitor posts under
+ * Who the composer says you post as. An anonymous visitor posts under
  * their generated name, and is not offered "sign out", which means nothing to
  * someone who never signed in.
  */
@@ -110,7 +110,7 @@ function openComposer(user?: { name: string; email: string }) {
       </IntlProvider>
     </QueryClientProvider>
   )
-  fireEvent.focus(screen.getByRole('textbox', { name: 'Feedback title' }))
+  fireEvent.focus(screen.getByRole('textbox', { name: 'Post title' }))
 }
 
 afterEach(() => {

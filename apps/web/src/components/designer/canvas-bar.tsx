@@ -1,0 +1,120 @@
+import { ChevronDownIcon } from '@heroicons/react/20/solid'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { PAGE_NAMES, type CanvasLocation, type DesignerPage } from '@/lib/shared/design/outline'
+import { ALWAYS_SAMPLED } from '@/lib/shared/design/sample-pages'
+import type { PickablePost, useDesignerPage } from './use-designer-page'
+import { Tag } from './tag'
+
+const ITEM_NAMES: Partial<Record<DesignerPage, string>> = {
+  post: 'a post',
+  changelog: 'a changelog entry',
+  help: 'a help article',
+  status: 'an incident',
+  support: 'a conversation',
+}
+
+/** What a place in the portal is called: a post by its title, else the page or its item. */
+export function locationName(at: CanvasLocation, posts: readonly PickablePost[]): string {
+  if (at.page === 'post') return posts.find((post) => post.path === at.item)?.title ?? 'A post'
+  const item = at.item ? ITEM_NAMES[at.page] : null
+  return item ? `${PAGE_NAMES[at.page]}, ${item}` : PAGE_NAMES[at.page]
+}
+
+/**
+ * The quiet line over the canvas, shown only when there is something to say:
+ * the post the post page shows, with the others a signed-out visitor can
+ * open; a sample and how to leave it; and, after Preview went elsewhere,
+ * where the builder is and the way back.
+ */
+export function CanvasBar({
+  view: { here, posts, setPage, sample, showSample: onSample, gates },
+  note,
+  onBack,
+}: {
+  view: Pick<
+    ReturnType<typeof useDesignerPage>,
+    'here' | 'posts' | 'setPage' | 'sample' | 'showSample' | 'gates'
+  >
+  /** Where Preview began, once it left the builder somewhere else. */
+  note: { from: CanvasLocation } | null
+  onBack: () => void
+}) {
+  const onPost = (path: string) => setPage('post', path)
+  // Whether the page's part is on, so it has a real page to go back to.
+  const partOn = here.page in gates && gates[here.page as keyof typeof gates]
+  const sampleable = ALWAYS_SAMPLED.find((page) => page === here.page && partOn)
+  const picking = here.page === 'post' && posts.length > 0
+  if (!sample && !sampleable && !picking && !note) return null
+  return (
+    <div className="mb-2 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      {sample ? (
+        <p className="flex items-center gap-1.5">
+          <Tag>Sample</Tag>
+          <span>Made-up content, to design {PAGE_NAMES[sample]} before it has its own.</span>
+          {partOn && (
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs"
+              onClick={() => onSample(null)}
+            >
+              Show the real page
+            </Button>
+          )}
+        </p>
+      ) : (
+        sampleable && (
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs text-muted-foreground"
+            onClick={() => onSample(sampleable)}
+          >
+            Show sample content
+          </Button>
+        )
+      )}
+      {picking && !sample && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 max-w-80 gap-1 px-2 text-xs">
+              <span className="truncate">Showing: {locationName(here, posts)}</span>
+              <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-72">
+            <DropdownMenuLabel>Posts every visitor can see</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              aria-label="Post shown"
+              value={here.item ?? ''}
+              onValueChange={(path: string) => onPost(path)}
+            >
+              {posts.map((post) => (
+                <DropdownMenuRadioItem key={post.id} value={post.path}>
+                  <span className="truncate">{post.title}</span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      {note && (
+        <p className="ms-auto flex items-center gap-1.5">
+          <span>Editing: {locationName(here, posts)}</span>
+          <span aria-hidden="true">·</span>
+          <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={onBack}>
+            Back to {locationName(note.from, posts)}
+          </Button>
+        </p>
+      )}
+    </div>
+  )
+}

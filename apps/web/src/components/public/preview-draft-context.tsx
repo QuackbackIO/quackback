@@ -1,4 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { useIntl } from 'react-intl'
+import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { BandImage, DesignLogo } from '@/lib/shared/design/view'
 import type { PortalNavConfig, PortalWelcomeCard } from '@/lib/shared/types/settings'
 
 /**
@@ -79,4 +82,96 @@ export function usePreviewWelcomeCard(): PortalWelcomeCard | undefined {
 /** The theme editor's unsaved stylesheet, or undefined when there is none. */
 export function usePreviewCss(): string | undefined {
   return useContext(PreviewCssContext)
+}
+
+/** A draft design's page headline: undefined outside a design preview, null when it has none. */
+export type PreviewHeadline = NonNullable<PortalDesign['pages']['feedback']['headline']> | null
+
+export const PreviewHeadlineContext = createContext<PreviewHeadline | undefined>(undefined)
+
+/** The draft design's feedback page headline, or undefined (always, outside a design preview). */
+export function usePreviewHeadline(): PreviewHeadline | undefined {
+  return useContext(PreviewHeadlineContext)
+}
+
+/** A draft design's Home and menu, as the design stores them. */
+export type PreviewDesignPages = {
+  home: PortalDesign['pages']['home'] | null
+  titles: NonNullable<PortalDesign['pages']['titles']>
+  nav: PortalDesign['nav'] | null
+}
+
+export const PreviewPagesContext = createContext<PreviewDesignPages | undefined>(undefined)
+
+/** A draft design's Home, or undefined (always, outside a design preview). */
+export function usePreviewHome(): PortalDesign['pages']['home'] | undefined {
+  return useContext(PreviewPagesContext)?.home ?? undefined
+}
+
+/**
+ * Whether the page is drawn in the builder while designing: there a Home
+ * block whose data has nothing to show draws samples, marked as such, so it
+ * can be seen and styled. False everywhere else, the builder's Preview too.
+ */
+export const PreviewSamplesContext = createContext(false)
+
+export function usePreviewSamples(): boolean {
+  return useContext(PreviewSamplesContext)
+}
+
+/** A draft design's page titles, or undefined (always, outside a design preview). */
+export function usePreviewTitles(): PreviewDesignPages['titles'] | undefined {
+  return useContext(PreviewPagesContext)?.titles
+}
+
+/** A draft design's menu, or undefined (always, outside a design preview). */
+export function usePreviewDesignNav(): PortalDesign['nav'] | undefined {
+  return useContext(PreviewPagesContext)?.nav ?? undefined
+}
+
+/** The workspace's own wording for the composer and the empty feed, by language. */
+export type FeedCopy = PortalDesign['pages']['feedback']['copy']
+
+/**
+ * The own wording in force: the portal layout's from the saved design, and
+ * the preview's from the draft below it. None outside a portal.
+ */
+export const FeedCopyContext = createContext<FeedCopy | undefined>(undefined)
+
+/**
+ * The own wording in the visitor's language. A language left blank has none,
+ * so its strings say the portal's own translation, never another language.
+ */
+export function useFeedCopy(): { prompt?: string; submit?: string; emptyTitle?: string } {
+  const copy = useContext(FeedCopyContext)
+  const locale = useIntl().locale.toLowerCase()
+  return useMemo(
+    () => ({
+      prompt: copy?.prompt?.[locale] || undefined,
+      submit: copy?.submit?.[locale] || undefined,
+      emptyTitle: copy?.emptyTitle?.[locale] || undefined,
+    }),
+    [copy, locale]
+  )
+}
+
+export const PreviewBandImageContext = createContext<BandImage | null | undefined>(undefined)
+
+/** A draft design's band image: undefined outside a design preview, null when it has none. */
+export function usePreviewBandImage(): BandImage | null | undefined {
+  return useContext(PreviewBandImageContext)
+}
+
+export const PreviewLogoContext = createContext<DesignLogo | undefined>(undefined)
+
+/** A draft design's logo, or undefined (always, outside a design preview). */
+export function usePreviewLogo(): DesignLogo | undefined {
+  return useContext(PreviewLogoContext)
+}
+
+export const PreviewAttributesContext = createContext<Record<string, string> | undefined>(undefined)
+
+/** A draft design's structural attributes, or undefined (always, outside a design preview). */
+export function usePreviewDesignAttributes(): Record<string, string> | undefined {
+  return useContext(PreviewAttributesContext)
 }

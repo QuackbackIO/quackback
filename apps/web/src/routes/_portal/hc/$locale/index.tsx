@@ -2,6 +2,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
+import { usePageChoices } from '@/components/public/use-page-choices'
+import { useDesignTitles } from '@/components/public/portal-page-title'
+import { topicsSectionClass } from '@/components/help-center/help-center-sections'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
 import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
 import {
@@ -102,23 +105,38 @@ function LocaleHelpCenterLandingPage() {
   const { categories, title: chromeTitle, description: chromeDescription } = Route.useLoaderData()
   const { locale } = Route.useParams()
   const collectionCount = getTopLevelCategories(categories).length
+  const choices = usePageChoices().help
+  const designTitles = useDesignTitles()
   const { title, description } = landingCopy(chromeTitle, chromeDescription, (copy) =>
     intl.formatMessage(copy)
   )
 
   return (
     <>
-      <HelpCenterHero variant="home" title={title} description={description}>
-        <HelpCenterHeroSearch locale={locale} />
+      <HelpCenterHero
+        variant="home"
+        title={title}
+        description={description}
+        search={choices.search}
+      >
+        <HelpCenterHeroSearch
+          locale={locale}
+          size={choices.search === 'large' ? 'large' : 'hero'}
+        />
       </HelpCenterHero>
 
       <section
         aria-labelledby="hc-topics"
-        className="mx-auto max-w-6xl px-4 pb-16 pt-2 sm:px-6 animate-in fade-in duration-300 fill-mode-backwards"
+        data-qb-section="topics"
+        className={topicsSectionClass(designTitles, choices.topics)}
         style={{ animationDelay: '100ms' }}
       >
         <div className="mb-6 flex items-baseline justify-between gap-4">
-          <h2 id="hc-topics" className="text-2xl font-semibold tracking-tight text-foreground">
+          <h2
+            id="hc-topics"
+            data-qb-part="section-heading"
+            className="text-2xl font-semibold tracking-tight text-foreground"
+          >
             <FormattedMessage id="portal.hc.home.browseByTopic" defaultMessage="Browse by topic" />
           </h2>
           {collectionCount > 0 && (
@@ -131,7 +149,7 @@ function LocaleHelpCenterLandingPage() {
             </span>
           )}
         </div>
-        <HelpCenterCategoryGrid categories={categories} locale={locale} />
+        <HelpCenterCategoryGrid categories={categories} locale={locale} layout={choices.topics} />
       </section>
     </>
   )

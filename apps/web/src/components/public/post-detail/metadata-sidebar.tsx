@@ -37,6 +37,7 @@ import {
   type VotersQuerySource,
 } from '@/components/admin/feedback/voters-avatar-stack'
 import { cn, formatMonthYear } from '@/lib/shared/utils'
+import { TAG_EDGE, TAG_TINT, useTagStyle } from '@/components/ui/status-badge'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { OwnerRef } from '@/lib/server/functions/post-owner-context'
 import type { PostId, PostStatusId, PostTagId, BoardId, PrincipalId } from '@quackback/ids'
@@ -53,6 +54,7 @@ export function MetadataSidebarSkeleton({
       )}
     >
       <div
+        {...(isCard ? { 'data-qb-surface': 'card' } : {})}
         className={cn(
           isCard
             ? 'mt-6 me-4 ms-1 rounded-xl border border-border/20 bg-card shadow-sm p-4 space-y-5'
@@ -385,6 +387,7 @@ export function MetadataSidebar({
   onVotersInvalidate,
   manageActions,
 }: MetadataSidebarProps) {
+  const tagStyle = useTagStyle()
   const intl = useIntl()
   const [tagOpen, setTagOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
@@ -473,6 +476,7 @@ export function MetadataSidebar({
       style={{ animationDelay: '100ms' }}
     >
       <div
+        {...(isCard ? { 'data-qb-surface': 'card' } : {})}
         className={cn(
           'p-4 space-y-5',
           isCard && 'mt-6 me-4 ms-1 rounded-xl border border-border/20 bg-card shadow-sm'
@@ -591,7 +595,7 @@ export function MetadataSidebar({
                     disabled={isUpdating}
                     className={cn(
                       'text-sm font-medium text-end',
-                      etaLabel ? 'text-foreground' : 'text-muted-foreground/70',
+                      etaLabel ? 'text-foreground' : 'text-muted-foreground',
                       'hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                     )}
                   >
@@ -640,7 +644,7 @@ export function MetadataSidebar({
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <FolderIcon className="h-4 w-4" />
             <span>
-              <FormattedMessage id="portal.postDetail.metadata.board" defaultMessage="Board" />
+              <FormattedMessage id="portal.postDetail.metadata.board" defaultMessage={'Board'} />
             </span>
           </div>
           {onBoardChange && allBoards && allBoards.length > 0 ? (
@@ -719,7 +723,7 @@ export function MetadataSidebar({
                       <span className="truncate text-foreground">{owner.name}</span>
                     </>
                   ) : (
-                    <span className="text-muted-foreground/70">
+                    <span className="text-muted-foreground">
                       <FormattedMessage
                         id="portal.postDetail.metadata.ownerUnassigned"
                         defaultMessage="Unassigned"
@@ -801,15 +805,14 @@ export function MetadataSidebar({
                   className={cn(
                     'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
                     'rounded-full text-[11px] font-medium border',
+                    TAG_TINT,
+                    TAG_EDGE,
                     'hover:opacity-80',
                     'transition-all duration-150',
                     'disabled:opacity-50 disabled:cursor-not-allowed'
                   )}
-                  style={{
-                    backgroundColor: tag.color + '20',
-                    borderColor: tag.color + '40',
-                    color: tag.color,
-                  }}
+                  data-qb-part="tag"
+                  style={tagStyle(tag.color)}
                 >
                   {tag.name}
                   <XMarkIcon className="h-2.5 w-2.5 opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -824,7 +827,7 @@ export function MetadataSidebar({
                       className={cn(
                         'inline-flex items-center gap-0.5 px-1.5 py-0.5',
                         'rounded-full text-[11px] font-medium',
-                        'text-muted-foreground/70 hover:text-muted-foreground',
+                        'text-muted-foreground hover:text-muted-foreground',
                         'border border-dashed border-border/60 hover:border-border',
                         'hover:bg-muted/40',
                         'transition-all duration-150',
@@ -868,7 +871,7 @@ export function MetadataSidebar({
                 </Popover>
               )}
               {tags.length === 0 && availableTags.length === 0 && !tagOpen && (
-                <span className="text-xs text-muted-foreground/60">-</span>
+                <span className="text-xs text-muted-foreground">-</span>
               )}
             </div>
           ) : tags.length > 0 ? (
@@ -876,18 +879,19 @@ export function MetadataSidebar({
               {tags.map((tag) => (
                 <span
                   key={tag.id}
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
-                  style={{
-                    backgroundColor: tag.color + '20',
-                    color: tag.color,
-                  }}
+                  data-qb-part="tag"
+                  className={cn(
+                    'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium',
+                    TAG_TINT
+                  )}
+                  style={tagStyle(tag.color)}
                 >
                   {tag.name}
                 </span>
               ))}
             </div>
           ) : (
-            <span className="text-xs text-muted-foreground/60">-</span>
+            <span className="text-xs text-muted-foreground">-</span>
           )}
         </div>
 
@@ -974,10 +978,10 @@ export function MetadataSidebar({
                 disabled={!isMember}
               />
             </div>
-            <p className="text-xs text-muted-foreground/70 mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               <FormattedMessage
                 id="portal.postDetail.metadata.subscribeHint"
-                defaultMessage="Get notified when there are updates to this post"
+                defaultMessage={'Get notified when there are updates to this post'}
               />
             </p>
           </div>

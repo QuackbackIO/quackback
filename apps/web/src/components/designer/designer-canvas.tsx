@@ -1,0 +1,354 @@
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { usePreviewPosting } from '@/components/admin/settings/branding/use-preview-posting'
+import type { PortalPreviewProps } from '@/components/admin/settings/branding/portal-preview'
+import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
+import { PAGE_NAMES, pagePath, type DesignerPage } from '@/lib/shared/design/outline'
+import type { CanvasVisitor } from '@/lib/shared/design/designer-frame'
+import { isMenuTarget, type MenuTarget } from '@/lib/shared/design/menu-actions'
+import { samplePath, type SamplePage } from '@/lib/shared/design/sample-pages'
+import { isWordsDoc, type WordsDoc } from '@/lib/shared/design/rich-words'
+import { readWordsField, wordsKindOf, wordsLimitOf } from '@/lib/shared/design/headline-words'
+import { checkedWords } from '@/lib/shared/design/words-schema'
+
+/** The widths a visitor's browser lays the portal out at: desktop, tablet and phone. */
+export const CANVAS_WIDTHS = { desktop: 1280, tablet: 768, phone: 390 } as const
+export type CanvasSize = keyof typeof CANVAS_WIDTHS
+
+/**
+ * The address the canvas loads: the page as a preview, in the theme and
+ * language asked for, signed in or out; or the page's sample.
+ */
+export function canvasSrc({
+  page,
+  theme,
+  locale,
+  sort,
+  postPath = null,
+  visitor = 'in',
+  sample = null,
+}: {
+  page: DesignerPage
+  theme: 'light' | 'dark'
+  locale: string
+  sort: 'trending' | 'top' | 'new'
+  /** The item the page shows, such as the post on the post page. */
+  postPath?: string | null
+  visitor?: CanvasVisitor
+  /** The page drawn from sample content instead. */
+  sample?: SamplePage | null
+}): string {
+  const search = new URLSearchParams({ theme, preview: 'true', lang: locale, designer: '1' })
+  // A sample is served to the designer alone, so it is drawn for them as themselves.
+  if (sample) return `${samplePath(sample)}?${search}`
+  // The root shows Home whatever the saved design leads with.
+  if (page === 'home') search.set('page', 'home')
+  if (page === 'feedback') search.set('sort', sort)
+  if (visitor === 'out') search.set('visitor', 'out')
+  // An item can carry its own search, such as a board on the feed.
+  const [path, own] = pagePath(page, postPath).split('?') as [string, string | undefined]
+  for (const [name, value] of new URLSearchParams(own ?? '')) search.set(name, value)
+  return `${path}?${search}`
+}
+
+/** A path the frame says it is at: the portal's own, never another site's. */
+function framePath(value: unknown): string | null {
+  return typeof value === 'string' && /^\/(?!\/)/.test(value) && value.length <= 2048 ? value : null
+}
+
+/** How the canvas is scaled: to fit, or at a set share of its true width. */
+export type CanvasZoom = 'fit' | 0.5 | 0.75 | 1
+
+/** The scale a page of a width is drawn at in a room of a width. */
+export function canvasScale(room: number, width: number, zoom: CanvasZoom): number {
+  if (zoom !== 'fit') return zoom
+  return room > 0 ? Math.min(1, room / width) : 1
+}
+
+/** The frame's border, drawn outside the page so the layer over it lines up exactly. */
+const FRAME_BORDER = 1
+
+/**
+ * The frame's scale and sizes in a room: `outer` is the bordered box, `room`
+ * the page as drawn inside it, which is what the editing layer covers.
+ */
+export function frameBox(
+  space: { width: number; height: number },
+  width: number,
+  zoom: CanvasZoom
+): {
+  scale: number
+  height: number
+  outer: { width: number; height: number }
+  room: { width: number; height: number }
+} {
+  const edge = FRAME_BORDER * 2
+  const scale = canvasScale(Math.max(0, space.width - edge), width, zoom)
+  const height = space.height > edge ? (space.height - edge) / scale : 800
+  const room = { width: width * scale, height: height * scale }
+  return { scale, height, room, outer: { width: room.width + edge, height: room.height + edge } }
+}
+
+/** What the editing layer over the canvas is drawn from. */
+export interface CanvasFrame {
+  /** The frame, whose same-origin page the layer reads block boxes from. */
+  frame: HTMLIFrameElement | null
+  /** The scale the page is drawn at. */
+  scale: number
+  /** The canvas's visible size on the layer. */
+  room: { width: number; height: number }
+}
+
+/**
+ * Words the frame sent back: plain text, or a document checked against its
+ * kind's schema and fitted if it fails, so nothing the schema refuses is kept.
+ */
+export function framedWords(
+  message: Record<string, unknown>
+): { field: string; value: WordsDoc | string } | null {
+  const field = readWordsField(message.field)
+  if (!field) return null
+  if (isWordsDoc(message.doc))
+    return {
+      field: message.field as string,
+      value: checkedWords(message.doc, wordsKindOf(field), wordsLimitOf(field)),
+    }
+  return typeof message.text === 'string'
+    ? { field: message.field as string, value: message.text }
+    : null
+}
+
+/**
+ * The page being designed, in a same-origin frame laid out at a true width
+ * and scaled down to fit. The draft travels in by message; clicks, the
+ * pointer, words and keys come back out, from that frame only. The editing
+ * layer is drawn over it.
+ */
+export function DesignerCanvas({
+  page,
+  postPath = null,
+  visitor = 'in',
+  sample = null,
+  size,
+  theme,
+  locale,
+  sort,
+  refreshKey,
+  design,
+  structural,
+  zoom = 'fit',
+  name,
+  trying = false,
+  onSelect,
+  onFollow,
+  onHover,
+  onMenu,
+  onMenuHover,
+  onWords,
+  onKey,
+  onEscape,
+  onLoad,
+  onLocation,
+  layer,
+}: {
+  page: DesignerPage
+  /** The item the page shows, such as the post on the post page. */
+  postPath?: string | null
+  /** Who the page is drawn for. */
+  visitor?: CanvasVisitor
+  /** The page drawn from sample content instead. */
+  sample?: SamplePage | null
+  size: CanvasSize
+  theme: 'light' | 'dark'
+  locale: string
+  sort: 'trending' | 'top' | 'new'
+  /** Changes when a publish lands, to load the page afresh. */
+  refreshKey: string
+  design: PortalPreviewProps['design']
+  structural: PortalPreviewDraft
+  /** Scaled to fit the room, or at a set scale that scrolls, so zooming the browser can enlarge it. */
+  zoom?: CanvasZoom
+  /** What the frame is named, after the page it shows; such as "Live now" in a review. */
+  name?: string
+  /** Preview: clicks act as a visitor's, links open within the frame, nothing is picked. */
+  trying?: boolean
+  /** A click: the block under it, or null for empty canvas, and the portal path of a link there. */
+  /** The element under the click, in the frame's page, names what in the block is picked. */
+  onSelect: (section: string | null, link: string | null, target?: Element | null) => void
+  /** A click with Ctrl or Cmd held on a link of the portal, to go where it goes. */
+  onFollow?: (link: string) => void
+  /** The block the pointer is over, or null, and the element under it. */
+  onHover?: (section: string | null, target?: Element | null) => void
+  /** A click or a double-click on a menu item, the logo or sign in, in place of picking. */
+  onMenu?: (menu: MenuTarget, how: 'click' | 'rename', target?: Element | null) => void
+  /** The menu item the pointer is over, or null. */
+  onMenuHover?: (menu: MenuTarget | null) => void
+  onWords: (field: string, value: WordsDoc | string) => void
+  onKey: (key: 'undo' | 'redo') => void
+  /** An Escape the page did not take: to leave Preview, or to let go of what is picked. */
+  onEscape?: () => void
+  /** The frame loaded a page, afresh or after following a link. */
+  onLoad?: () => void
+  /** Where the page went, in Preview. */
+  onLocation?: (path: string) => void
+  /** The editing layer, drawn over the frame. */
+  layer?: (canvas: CanvasFrame) => ReactNode
+}) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  // The frame element itself, for the layer: a new one each time the page loads afresh.
+  const [frame, setFrame] = useState<HTMLIFrameElement | null>(null)
+  const frameRef = useCallback((element: HTMLIFrameElement | null) => {
+    iframeRef.current = element
+    setFrame(element)
+  }, [])
+  const box = useRef<HTMLDivElement>(null)
+  const [room, setRoom] = useState({ width: 0, height: 0 })
+  useEffect(() => {
+    const element = box.current
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) =>
+      setRoom({ width: entry.contentRect.width, height: entry.contentRect.height })
+    )
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  const told = useRef(trying)
+  told.current = trying
+  const tellDesigner = useCallback((target: Window | null | undefined) => {
+    target?.postMessage(
+      { type: 'quackback:preview-designer', trying: told.current },
+      window.location.origin
+    )
+  }, [])
+  usePreviewPosting(iframeRef, {
+    draftCss: '',
+    cssDirty: false,
+    draft: structural,
+    draftDirty: true,
+    design,
+    onReady: tellDesigner,
+  })
+  useEffect(() => tellDesigner(iframeRef.current?.contentWindow), [trying, tellDesigner])
+
+  const handlers = useRef({
+    onSelect,
+    onFollow,
+    onHover,
+    onMenu,
+    onMenuHover,
+    onWords,
+    onKey,
+    onEscape,
+    onLocation,
+    trying,
+  })
+  handlers.current = {
+    onSelect,
+    onFollow,
+    onHover,
+    onMenu,
+    onMenuHover,
+    onWords,
+    onKey,
+    onEscape,
+    onLocation,
+    trying,
+  }
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (
+        event.origin !== window.location.origin ||
+        event.source !== iframeRef.current?.contentWindow
+      )
+        return
+      const message = event.data as Record<string, unknown> | null
+      const menu = isMenuTarget(message?.menu) ? message.menu : null
+      // The element at the point the frame names, read from its own page.
+      const target =
+        typeof message?.x === 'number' && typeof message?.y === 'number'
+          ? (iframeRef.current?.contentDocument?.elementFromPoint(message.x, message.y) ?? null)
+          : null
+      if (message?.type === 'quackback:preview-section') {
+        const section = typeof message.section === 'string' ? message.section : null
+        const link = framePath(message.link)
+        if (message.follow === true && link && handlers.current.onFollow)
+          handlers.current.onFollow(link)
+        else if (menu && handlers.current.onMenu) handlers.current.onMenu(menu, 'click', target)
+        else handlers.current.onSelect(section, link, target)
+      } else if (message?.type === 'quackback:preview-pointer') {
+        handlers.current.onHover?.(
+          typeof message.section === 'string' ? message.section : null,
+          target
+        )
+        handlers.current.onMenuHover?.(menu)
+      } else if (message?.type === 'quackback:preview-rename') {
+        if (menu) handlers.current.onMenu?.(menu, 'rename')
+      } else if (message?.type === 'quackback:preview-words') {
+        const words = framedWords(message)
+        if (words) handlers.current.onWords(words.field, words.value)
+      } else if (
+        message?.type === 'quackback:preview-key' &&
+        (message.key === 'undo' || message.key === 'redo')
+      )
+        handlers.current.onKey(message.key)
+      else if (message?.type === 'quackback:preview-key' && message.key === 'escape')
+        handlers.current.onEscape?.()
+      else if (
+        (message?.type === 'quackback:preview-location' ||
+          message?.type === 'quackback:preview-ready') &&
+        handlers.current.trying
+      ) {
+        const path = framePath(message.path)
+        if (path) handlers.current.onLocation?.(path)
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
+
+  const width = CANVAS_WIDTHS[size]
+  const { scale, height, outer, room: drawn } = frameBox(room, width, zoom)
+  const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample })
+  return (
+    <div
+      ref={box}
+      className={`relative h-full min-h-0 w-full flex-1 ${zoom === 'fit' ? 'overflow-hidden' : 'overflow-auto'}`}
+    >
+      <div
+        className="relative mx-auto overflow-hidden rounded-lg border border-border bg-background shadow-sm"
+        style={outer}
+      >
+        <iframe
+          // Leaving Preview loads the page afresh, back where the builder is.
+          key={`${src}:${refreshKey}:${trying}`}
+          ref={frameRef}
+          onLoad={onLoad}
+          src={src}
+          title={[
+            name,
+            PAGE_NAMES[page],
+            sample && 'sample content',
+            size,
+            theme,
+            trying && 'preview, links work',
+          ]
+            .filter(Boolean)
+            .join(', ')}
+          // The page's own links and fields are not stops on the way to the settings;
+          // its parts are reached from the outline. In Preview, they are the page.
+          tabIndex={trying ? 0 : -1}
+          // The designer's own canvas, which its checks measure; not a review's frames.
+          data-designer-canvas={name ? undefined : ''}
+          className="border-0 bg-background"
+          style={{
+            width,
+            height,
+            transform: scale < 1 ? `scale(${scale})` : undefined,
+            transformOrigin: 'top left',
+          }}
+        />
+        {layer?.({ frame, scale, room: drawn })}
+      </div>
+    </div>
+  )
+}

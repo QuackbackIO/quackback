@@ -34,7 +34,11 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
   },
   helpCenter: {
     users: /^(components\/help-center\/|routes\/_portal\/hc\/)/,
-    importers: /^(components\/help-center\/|routes\/_portal\/hc(\.tsx$|\/))/,
+    // Home's help blocks show the help center's search and topics; the Home
+    // route loads the area's strings when it has them. The designer's sample
+    // page loads them for its sample.
+    importers:
+      /^(components\/help-center\/|routes\/_portal\/hc(\.tsx$|\/)|components\/public\/home\/|routes\/_portal\/design-sample\.\$page\.tsx$)/,
   },
   twoFactor: {
     users: /^components\/auth\/two-factor-(challenge-step|enroll-steps)\.tsx$/,
@@ -59,7 +63,7 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
   statusPage: {
     users: /^(components\/portal\/status\/|routes\/_portal\/status\.(index|\$incidentId)\.tsx$)/,
     importers:
-      /^(components\/portal\/status\/|routes\/_portal\/status\.(index|\$incidentId)\.tsx$)/,
+      /^(components\/portal\/status\/|routes\/_portal\/(status\.(index|\$incidentId)|design-sample\.\$page)\.tsx$)/,
   },
 }
 

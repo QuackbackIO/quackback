@@ -53,9 +53,14 @@ function DropdownMenuContent({
   side = 'bottom',
   disablePortal: _disablePortal,
   avoidCollisions = true,
+  anchor,
+  collisionBoundary,
   ...props
 }: MenuPrimitive.Popup.Props &
-  Pick<MenuPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
+  Pick<
+    MenuPrimitive.Positioner.Props,
+    'align' | 'alignOffset' | 'side' | 'sideOffset' | 'anchor' | 'collisionBoundary'
+  > & {
     /**
      * Accepted for API compatibility but ignored: Base UI Positioner
      * requires Menu.Portal, so the menu always portals (document.body).
@@ -75,6 +80,8 @@ function DropdownMenuContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
+        anchor={anchor}
+        collisionBoundary={collisionBoundary}
         collisionAvoidance={avoidCollisions ? undefined : { side: 'none', align: 'none' }}
       >
         <MenuPrimitive.Popup

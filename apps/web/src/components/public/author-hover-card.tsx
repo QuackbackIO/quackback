@@ -117,7 +117,8 @@ export function AuthorHoverCard({
           onFocus={scheduleOpen}
           onBlur={scheduleClose}
           className={cn(
-            'cursor-pointer rounded-sm hover:underline focus:outline-none focus-visible:underline',
+            // A 24px target, and a ring for keyboard focus, as the portal's other links have.
+            'qb-hit-24 cursor-pointer rounded-sm hover:underline focus:outline-none focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring',
             className
           )}
         >

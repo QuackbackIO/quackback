@@ -2,6 +2,7 @@ import type { BoardId } from '@quackback/ids'
 import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
+import { useFeedCopy } from '@/components/public/preview-draft-context'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -33,6 +34,8 @@ import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { shownName } from '@/lib/shared/greeting-name'
 import { TITLE_MAX_LENGTH } from './feedback-header'
+import { homeMessages } from '@/components/public/home/home-messages'
+import { cn } from '@/lib/shared/utils'
 
 interface BoardOption {
   id: string
@@ -64,6 +67,16 @@ export interface FeedbackHeaderProps {
    * nothing. A new `key` opens it again with the same title.
    */
   draft?: { title: string; key: number }
+  /**
+   * Where it sits: atop the feed, or on Home, on the grid or in the band.
+   * On Home it keeps the brand's composer shape and carries its own button
+   * until it opens.
+   */
+  place?: 'feed' | 'home' | 'band'
+  /** Opens with its details showing, as a call to action that opens it does. */
+  startOpen?: boolean
+  /** Called on Cancel, so a call to action that opened it can come back. */
+  onClose?: () => void
 }
 
 /** The server's limits for a new post's title and details (createPublicPostSchema). */
@@ -77,12 +90,18 @@ export function FeedbackHeaderAnimated({
   onPostCreated,
   draft,
   boardLocked = false,
+  place = 'feed',
+  startOpen = false,
+  onClose,
 }: FeedbackHeaderProps) {
   const intl = useIntl()
+  const submitLabel = useFeedCopy().submit
   const router = useRouter()
   const queryClient = useQueryClient()
   const session = useSessionContext()
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(startOpen)
+  // On Home it opens in place: one line at rest, ideas like the one typed first, then the details.
+  const staged = place !== 'feed'
   const [error, setError] = useState('')
   const { openAuthPopover } = useAuthPopover()
 
@@ -116,6 +135,10 @@ export function FeedbackHeaderAnimated({
 
   // Board selection - only default if on a specific board page
   const [selectedBoardId, setSelectedBoardId] = useState(defaultBoardId || '')
+  // A default that arrives after the first render is taken while none is chosen.
+  useEffect(() => {
+    if (defaultBoardId) setSelectedBoardId((chosen) => chosen || defaultBoardId)
+  }, [defaultBoardId])
 
   // Sync selectedBoardId when defaultBoardId prop changes
   useEffect(() => {
@@ -205,7 +228,7 @@ export function FeedbackHeaderAnimated({
             })
           : intl.formatMessage({
               id: 'portal.feedback.header.errorSignIn',
-              defaultMessage: 'Please sign in to submit feedback',
+              defaultMessage: 'Please sign in to post',
             })
       )
       return
@@ -265,7 +288,7 @@ export function FeedbackHeaderAnimated({
       toast.success(
         intl.formatMessage({
           id: 'portal.feedback.header.toastSubmitted',
-          defaultMessage: 'Feedback submitted',
+          defaultMessage: 'Post submitted',
         }),
         {
           action: {
@@ -283,7 +306,7 @@ export function FeedbackHeaderAnimated({
       setError(
         intl.formatMessage({
           id: 'portal.feedback.header.errorSubmit',
-          defaultMessage: 'Could not submit your feedback. Please try again.',
+          defaultMessage: 'Could not submit your post. Please try again.',
         })
       )
     }
@@ -300,51 +323,80 @@ export function FeedbackHeaderAnimated({
   function handleCancel() {
     resetForm()
     setExpanded(false)
+    onClose?.()
   }
 
   const handleKeyDown = useKeyboardSubmit(handleSubmit, handleCancel)
 
+  const boardPicker = (
+    <AnimatePresence>
+      {expanded && boards.length > 0 && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="overflow-hidden"
+        >
+          <PostingToBoard
+            boards={boards}
+            selectedBoardId={selectedBoardId}
+            locked={boardLocked}
+            onSelect={(id) => {
+              setSelectedBoardId(id)
+              // Answers are per-board: switching boards drops the previous
+              // board's field values rather than smuggling them across.
+              setCustomFieldValues({})
+            }}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
   return (
     <motion.div
-      className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden"
+      data-qb-part="composer"
+      data-state={expanded ? 'open' : undefined}
+      className={cn(
+        // Typing in it shows as a ring on the whole composer, the way a field's focus does.
+        'bg-card border border-border overflow-hidden focus-within:border-ring focus-within:outline-1 focus-within:outline-ring',
+        place === 'feed'
+          ? 'rounded-lg mb-5 shadow-sm'
+          : // The brand's composer shape, eased to a card's corners once it opens.
+            'rounded-[var(--qb-radius-composer,0.5rem)] data-[state=open]:rounded-[min(var(--qb-radius-composer,0.5rem),1.25rem)]',
+        place === 'home' && 'shadow-sm',
+        // In the band it follows the cards: raised casts a shadow, the rest sit flat.
+        place === 'band' &&
+          '[[data-qb-cards=raised]_&]:shadow-lg [[data-qb-cards=filled]_&]:border-transparent'
+      )}
       initial={false}
-      animate={{
-        boxShadow: expanded
-          ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
-          : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-      }}
+      animate={
+        place === 'feed'
+          ? {
+              boxShadow: expanded
+                ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
+                : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+            }
+          : undefined
+      }
       transition={{ duration: 0.2 }}
       onKeyDown={handleKeyDown}
       // The editor renders once the header expands; hovering warms its chunk.
       onPointerEnter={preloadRichTextEditor}
     >
-      {/* Destination board, above title when expanded */}
-      <AnimatePresence>
-        {expanded && boards.length > 0 && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <PostingToBoard
-              boards={boards}
-              selectedBoardId={selectedBoardId}
-              locked={boardLocked}
-              onSelect={(id) => {
-                setSelectedBoardId(id)
-                // Answers are per-board: switching boards drops the previous
-                // board's field values rather than smuggling them across.
-                setCustomFieldValues({})
-              }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Destination board, above title when expanded (on Home, under the ideas like it) */}
+      {!staged && boardPicker}
 
       {/* Icon + Title Row - Always visible */}
-      <div className="flex items-center gap-3 px-4 py-3.5">
+      <div
+        className={cn(
+          'flex items-center gap-3 px-4 py-3.5',
+          // In the band the button goes under the field whenever the row has no room for it
+          // (a narrow band, a brand's larger or capital label), never cut by the composer's edge.
+          place === 'band' && !expanded && 'flex-wrap py-3'
+        )}
+      >
         {/* Icon - fades out when expanded */}
         <AnimatePresence>
           {!expanded && (
@@ -366,8 +418,31 @@ export function FeedbackHeaderAnimated({
           inputRef={titleInputRef}
           expanded={expanded}
           onExpand={() => setExpanded(true)}
+          staged={staged}
         />
+        {place !== 'feed' && !expanded && (
+          <button
+            type="button"
+            data-qb-label=""
+            data-qb-action={place === 'band' ? '' : undefined}
+            onClick={() => setExpanded(true)}
+            className={cn(
+              'shrink-0 text-sm font-medium',
+              place === 'band'
+                ? 'basis-full max-w-full rounded-[var(--qb-radius-button,999px)] bg-[var(--qb-action-bg,var(--primary))] px-4 py-2 font-semibold text-[var(--qb-action-ink,var(--primary-foreground))] hover:opacity-90 sm:ms-auto sm:basis-auto'
+                : 'rounded-full px-3 py-1.5 text-[var(--qb-accent-text,var(--primary))] hover:bg-muted'
+            )}
+          >
+            {submitLabel ?? intl.formatMessage(homeMessages.composerContinue)}
+          </button>
+        )}
       </div>
+
+      {/* On Home, ideas like the one typed, before its details */}
+      {staged && (
+        <StagedSimilar title={title} expanded={expanded} onDetails={() => setExpanded(true)} />
+      )}
+      {staged && boardPicker}
 
       {/* Expandable content */}
       <AnimatePresence>
@@ -443,7 +518,7 @@ export function FeedbackHeaderAnimated({
             )}
 
             {/* Similar posts card - shown above footer as pre-submit prompt */}
-            <SimilarPostsPrompt title={title} enabled={expanded} />
+            {!staged && <SimilarPostsPrompt title={title} enabled={expanded} />}
 
             {/* Footer with auth and actions */}
             <motion.div
@@ -456,7 +531,7 @@ export function FeedbackHeaderAnimated({
                 <p className="text-xs text-muted-foreground">
                   <FormattedMessage
                     id="portal.feedback.header.noAccess"
-                    defaultMessage="You don't have access to post on this board"
+                    defaultMessage={"You don't have access to post on this board"}
                   />
                 </p>
               ) : isAnonymousSession && canPostAnonymously ? (
@@ -515,11 +590,11 @@ export function FeedbackHeaderAnimated({
                 <button
                   type="button"
                   onClick={() => openAuthPopover({ mode: 'login' })}
-                  className="text-xs text-primary hover:underline font-medium"
+                  className="relative rounded-sm text-xs text-primary hover:underline font-medium after:absolute after:-inset-y-1 after:inset-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <FormattedMessage
                     id="portal.feedback.header.signInToPost"
-                    defaultMessage="Sign in to post"
+                    defaultMessage={'Sign in to post'}
                   />
                 </button>
               )}
@@ -528,6 +603,7 @@ export function FeedbackHeaderAnimated({
                   type="button"
                   variant="ghost"
                   size="sm"
+                  data-qb-label=""
                   onClick={handleCancel}
                   disabled={createPost.isPending}
                 >
@@ -535,6 +611,7 @@ export function FeedbackHeaderAnimated({
                 </Button>
                 <Button
                   size="sm"
+                  data-qb-label=""
                   onClick={handleSubmit}
                   disabled={createPost.isPending || !canSubmit}
                   title={
@@ -546,7 +623,7 @@ export function FeedbackHeaderAnimated({
                           })
                         : intl.formatMessage({
                             id: 'portal.feedback.header.submitTooltipSignIn',
-                            defaultMessage: 'Please sign in to submit feedback',
+                            defaultMessage: 'Please sign in to post',
                           })
                       : undefined
                   }
@@ -558,7 +635,9 @@ export function FeedbackHeaderAnimated({
                       defaultMessage="Posting..."
                     />
                   ) : (
-                    <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Post" />
+                    (submitLabel ?? (
+                      <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Post" />
+                    ))
                   )}
                 </Button>
               </div>
@@ -584,34 +663,46 @@ function TitleInput({
   inputRef,
   expanded,
   onExpand,
+  staged,
 }: {
   title: TitleStore
   inputRef: RefObject<HTMLInputElement | null>
   expanded: boolean
   onExpand: () => void
+  /** Opened by what is typed rather than by focus, as on Home; Enter opens it. */
+  staged: boolean
 }) {
   const intl = useIntl()
+  const copy = useFeedCopy()
   const value = useStoreValue(title)
   return (
     <motion.input
       ref={inputRef}
       type="text"
       maxLength={TITLE_MAX_LENGTH}
-      placeholder={intl.formatMessage({
-        id: 'portal.feedback.header.titlePlaceholder',
-        defaultMessage: "What's on your mind?",
-      })}
+      placeholder={
+        copy.prompt ??
+        intl.formatMessage({
+          id: 'portal.feedback.header.titlePlaceholder',
+          defaultMessage: "What's on your mind?",
+        })
+      }
       value={value}
       aria-label={intl.formatMessage({
         id: 'portal.feedback.header.titleLabel',
-        defaultMessage: 'Feedback title',
+        defaultMessage: 'Post title',
       })}
       onChange={(e) => {
         title.set(e.target.value)
-        if (!expanded) onExpand()
+        if (!expanded && !staged) onExpand()
       }}
-      onFocus={() => !expanded && onExpand()}
-      className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary"
+      onFocus={() => !expanded && !staged && onExpand()}
+      onKeyDown={(e) => {
+        if (!staged || expanded || e.key !== 'Enter' || e.metaKey || e.ctrlKey) return
+        e.preventDefault()
+        onExpand()
+      }}
+      className="min-w-0 flex-1 text-ellipsis bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground placeholder:font-normal caret-primary"
       initial={false}
       animate={{
         fontSize: expanded ? '1.25rem' : '1rem',
@@ -630,4 +721,54 @@ function SimilarPostsPrompt({ title, enabled }: { title: TitleStore; enabled: bo
   const value = useStoreValue(title)
   const { posts } = useSimilarPosts({ title: value, enabled })
   return <SimilarPostsCard posts={posts} show={value.length >= 5} className="px-4 sm:px-5 pb-3" />
+}
+
+/** How many characters the similar-posts search waits for (useSimilarPosts' minimum). */
+const SEARCH_FROM = 5
+
+/**
+ * Home's ideas like the one being typed, before its details: the top matches
+ * with their votes and status, to vote instead, and a way on to the details.
+ * With nothing like it, once the search has answered, the details follow by
+ * themselves. It never holds posting up: the composer's button goes on too.
+ */
+function StagedSimilar({
+  title,
+  expanded,
+  onDetails,
+}: {
+  title: TitleStore
+  expanded: boolean
+  onDetails: () => void
+}) {
+  const intl = useIntl()
+  const value = useStoreValue(title)
+  const typed = value.trim().length >= SEARCH_FROM
+  const { posts, settled } = useSimilarPosts({ title: value })
+  const none = typed && settled && posts.length === 0
+  useEffect(() => {
+    if (none && !expanded) onDetails()
+  }, [none, expanded, onDetails])
+  return (
+    <SimilarPostsCard
+      posts={posts}
+      show={typed}
+      className="px-4 sm:px-5 pb-3"
+      heading={intl.formatMessage({
+        id: 'portal.feedback.similarPosts.voteInstead',
+        defaultMessage: 'Already asked? Vote instead',
+      })}
+      more={
+        expanded
+          ? undefined
+          : {
+              label: intl.formatMessage({
+                id: 'portal.feedback.similarPosts.notThese',
+                defaultMessage: 'Not these: add details and post',
+              }),
+              onClick: onDetails,
+            }
+      }
+    />
+  )
 }

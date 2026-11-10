@@ -43,8 +43,6 @@ const baseProps = {
   workspaceName: 'Acme',
   logoUrl: null,
   authConfig: { found: true, oauth: { password: true }, oidcProviders: undefined },
-  themeStyles: '',
-  customCss: '',
   userEmail: null,
   locale: 'en' as const,
 }
@@ -68,6 +66,19 @@ describe('PortalAccessGate — inline auth form', () => {
     render(<PortalAccessGate {...baseProps} reason="unauthorized" userEmail="alice@example.com" />)
     expect(screen.queryByTestId('auth-form-body')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument()
+  })
+
+  it('ends with the same Powered by Quackback footer as every portal page', () => {
+    render(<PortalAccessGate {...baseProps} workspaceSlug="acme" />)
+    expect(screen.getByRole('contentinfo')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /Powered by Quackback/ }).getAttribute('href')
+    ).toContain('utm_campaign=acme')
+  })
+
+  it('leaves the footer out where the workspace may hide the credit', () => {
+    render(<PortalAccessGate {...baseProps} showPoweredBy={false} />)
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument()
   })
 
   it('seeds the form mode from autoOpenSignin', () => {

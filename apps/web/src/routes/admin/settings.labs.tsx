@@ -1,8 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { useState } from 'react'
 import { useIntl } from 'react-intl'
-import { BeakerIcon } from '@heroicons/react/24/solid'
+import { useMutation } from '@tanstack/react-query'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
-import { EmptyState } from '@/components/shared/empty-state'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
+import { Switch } from '@/components/ui/switch'
+import { AUTOSAVE } from '@/lib/client/autosave'
+import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
+import { updateFeatureFlagsFn } from '@/lib/server/functions/feature-flags'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 
@@ -13,22 +19,77 @@ export const Route = createFileRoute('/admin/settings/labs')({
   component: LabsSettingsPage,
 })
 
+type LabsFlag = 'portalDesignV2' | 'brandCheckLoop'
+
+/** One Labs switch. The portal reads the flag from the root route context. */
+function LabsSwitch({
+  flag,
+  label,
+  description,
+}: {
+  flag: LabsFlag
+  label: string
+  description: string
+}) {
+  const router = useRouter()
+  const flags = useFeatureFlags()
+  const [on, setOn] = useState(flags?.[flag] === true)
+  const toggle = useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (next: boolean) => updateFeatureFlagsFn({ data: { [flag]: next } }),
+    onMutate: (next) => setOn(next),
+    onSuccess: () => void router.invalidate(),
+    onError: (_error, next) => setOn(!next),
+  })
+  const id = `labs-${flag}`
+  return (
+    <SettingRow
+      label={label}
+      htmlFor={id}
+      description={description}
+      control={
+        <Switch
+          id={id}
+          checked={on}
+          disabled={toggle.isPending}
+          onCheckedChange={(next) => toggle.mutate(next)}
+        />
+      }
+    />
+  )
+}
+
 function LabsSettingsPage() {
   const intl = useIntl()
   return (
     <SettingsPage page="/admin/settings/labs">
-      <EmptyState
-        icon={BeakerIcon}
-        size="compact"
-        title={intl.formatMessage({
-          id: 'settings.labs.empty.title',
-          defaultMessage: 'No experiments right now',
-        })}
-        description={intl.formatMessage({
-          id: 'settings.labs.empty.description',
-          defaultMessage: 'Features you can try before they ship show up here.',
-        })}
-      />
+      <SettingsCard>
+        <SettingRows>
+          <LabsSwitch
+            flag="portalDesignV2"
+            label={intl.formatMessage({
+              id: 'settings.labs.portalDesignV2.label',
+              defaultMessage: 'New portal design',
+            })}
+            description={intl.formatMessage({
+              id: 'settings.labs.portalDesignV2.description',
+              defaultMessage: 'Brand the portal from Appearance, with drafts and versions.',
+            })}
+          />
+          <LabsSwitch
+            flag="brandCheckLoop"
+            label={intl.formatMessage({
+              id: 'settings.labs.brandCheckLoop.label',
+              defaultMessage: 'Refine after brand match',
+            })}
+            description={intl.formatMessage({
+              id: 'settings.labs.brandCheckLoop.description',
+              defaultMessage:
+                'Quackback AI reviews the new design and keeps only changes that bring it closer to your site.',
+            })}
+          />
+        </SettingRows>
+      </SettingsCard>
     </SettingsPage>
   )
 }

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useRouterState } from '@tanstack/react-router'
 import { browserOptedOutOfTracking } from '@/lib/client/analytics'
+import { PREVIEW_LINK_PARAM } from '@/lib/shared/design/preview-link'
 
 /**
  * Fires an anonymous pageview beacon on portal route changes (visitor
@@ -30,10 +31,11 @@ export function VisitorBeacon() {
   // portal tree plus the standalone changelog and help-center trees, the
   // latter also serving the subdomain), so a navigation elsewhere renders
   // nothing. The admin's framed portal preview (`?preview=true`) is not a
-  // visit either.
+  // visit either, and nor is a shared preview link, whose URL is a credential.
   const href = useRouterState({
     select: (s) =>
       (s.location.search as { preview?: unknown }).preview !== true &&
+      (s.location.search as Record<string, unknown>)[PREVIEW_LINK_PARAM] === undefined &&
       s.matches.some((m) =>
         ['/_portal', '/changelog', '/hc', '/help'].some((prefix) => m.routeId.startsWith(prefix))
       )

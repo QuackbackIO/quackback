@@ -211,7 +211,7 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
     })
     expect(await sendOnboardingEmail('nudge', owner)).toEqual({ sent: true })
     expect(mail.nudge.mock.calls[0][0]).toMatchObject({
-      cta: { label: 'A customer creates a post', url: 'https://acme.quackback.test/admin' },
+      cta: { label: 'A customer writes a post', url: 'https://acme.quackback.test/admin' },
     })
   })
 

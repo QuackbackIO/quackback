@@ -113,7 +113,7 @@ function ConfirmFlow({
           <p className="text-sm text-muted-foreground">
             <FormattedMessage
               id="unsubscribe.postLabel"
-              defaultMessage="Post: {title}"
+              defaultMessage={'Post: {title}'}
               values={{ title: <span className="font-medium">{preview.postTitle}</span> }}
             />
           </p>
@@ -172,7 +172,7 @@ function DoneView({ result }: { result: UnsubscribeResult }) {
               to="/b/$slug/posts/$postId"
               params={{ slug: result.boardSlug, postId: result.postId }}
             >
-              <FormattedMessage id="unsubscribe.viewPost" defaultMessage="View post" />
+              <FormattedMessage id="unsubscribe.viewPost" defaultMessage={'View post'} />
             </Link>
           </Button>
         ) : (
@@ -256,7 +256,10 @@ const ACTION_COPY: Record<string, ActionCopy> = {
     },
   },
   mute_post: {
-    confirmTitle: { id: 'unsubscribe.mute.confirmTitle', defaultMessage: 'Mute this post?' },
+    confirmTitle: {
+      id: 'unsubscribe.mute.confirmTitle',
+      defaultMessage: 'Mute this post?',
+    },
     confirmBody: {
       id: 'unsubscribe.mute.confirmBody',
       defaultMessage: 'You will stop getting notifications about it.',

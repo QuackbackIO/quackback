@@ -47,7 +47,7 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
 }))
 
 import { ProductAnalytics } from '../product-analytics'
-import { setAnalyticsClient, track } from '@/lib/client/analytics'
+import { setAnalyticsClient, track, trackOnceStarted } from '@/lib/client/analytics'
 
 /** The options the component passed to `posthog.init`. */
 const initOptions = () =>
@@ -186,6 +186,8 @@ describe('ProductAnalytics', () => {
   it.each([
     [['__root__', '/onboarding', '/onboarding/_layout', '/onboarding/_layout/workspace']],
     [['__root__', '/admin/signup']],
+    // The builder is the team's own screen.
+    [['__root__', '/design']],
   ])('runs on the signup and onboarding path %j', async (ids) => {
     route.ids = ids
     render(<ProductAnalytics />)
@@ -219,6 +221,28 @@ describe('ProductAnalytics', () => {
     })
   })
 
+  it('sends an event made as a page opens once the SDK starts', async () => {
+    trackOnceStarted('designer_opened', { entry: 'portal' })
+    expect(posthog.capture).not.toHaveBeenCalled()
+    render(<ProductAnalytics />)
+    await waitFor(() =>
+      expect(posthog.capture).toHaveBeenCalledWith('designer_opened', { entry: 'portal' })
+    )
+    expect(posthog.capture).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['analytics is not configured', () => (ctx.analytics = null)],
+    ['the browser opted out', () => optOut('1', undefined)],
+  ])('never sends an event made as a page opens when %s', async (_name, off) => {
+    off()
+    trackOnceStarted('designer_opened', { entry: 'portal' })
+    render(<ProductAnalytics />)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(posthog.init).not.toHaveBeenCalled()
+    expect(posthog.capture).not.toHaveBeenCalled()
+  })
+
   it('forgets a previous person when a tracked page is reached signed out', async () => {
     ctx.session = null
     route.ids = ['__root__', '/onboarding', '/onboarding/_layout/account']
@@ -239,6 +263,8 @@ describe('ProductAnalytics', () => {
     expect(beforeSend(event)).toBe(event)
     window.history.pushState({}, '', '/onboarding/account')
     expect(beforeSend(event)).toBe(event)
+    window.history.pushState({}, '', '/design?path=%2F')
+    expect(beforeSend(event)).toBe(event)
     // The SDK records a client-side navigation before React re-renders, so the
     // URL itself is the gate, not component state.
     for (const path of [
@@ -247,6 +273,7 @@ describe('ProductAnalytics', () => {
       '/hc/guide',
       '/auth/login',
       '/administrator',
+      '/designs',
       '/auth/open-handoff',
       '/complete-signup/inv_1',
     ]) {

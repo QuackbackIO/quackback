@@ -5,10 +5,9 @@ import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
-import { useRouter } from '@tanstack/react-router'
+import { useRouter, useRouterState } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
-import { PortalPoweredBy } from '@/components/public/feedback/portal-powered-by'
 import { PortalFilterPanel } from '@/components/public/feedback/portal-filter-panel'
 import { PortalFilterSheet } from '@/components/public/feedback/portal-filter-sheet'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
@@ -47,12 +46,13 @@ import type { PostId, PostStatusId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { shownName } from '@/lib/shared/greeting-name'
-import { useFeedHandoff } from '@/components/public/feedback/feed-input-handoff'
+import { takeArrivedTitle, useFeedHandoff } from '@/components/public/feedback/feed-input-handoff'
+import { useFeedCopy } from '@/components/public/preview-draft-context'
 
 const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
   mine: {
     id: 'portal.feedback.list.emptyMine',
-    defaultMessage: "You haven't created any posts yet.",
+    defaultMessage: "You haven't written any posts yet.",
   },
   voted: {
     id: 'portal.feedback.list.emptyVoted',
@@ -77,7 +77,6 @@ const WIDENED_SEARCH_MESSAGES: Record<WidenedSearch, MessageDescriptor> = {
 
 interface FeedbackContainerProps {
   workspaceName: string
-  workspaceSlug: string
   boards: PublicBoardWithStats[]
   posts: PublicPostListItem[]
   statuses: PostStatusEntity[]
@@ -87,6 +86,8 @@ interface FeedbackContainerProps {
   currentBoard?: string
   currentSearch?: string
   currentSort?: PublicPostSort
+  /** The sort when the visitor has not picked one, which clearing a search returns to. */
+  defaultSort?: 'trending' | 'top' | 'new'
   defaultBoardId?: string
   /** User info if authenticated */
   user?: { name: string | null; email: string } | null
@@ -96,7 +97,6 @@ interface FeedbackContainerProps {
    * every card — including infinite-scroll pages — and the submit CTA.
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
-  showPoweredBy?: boolean
   /** Filter panel counts as rendered on the server. */
   facets?: PublicPostFacetCounts | null
   /** How the server-rendered search was widened, if it was. */
@@ -147,7 +147,6 @@ export function postsMatchFilters(
 
 export function FeedbackContainer({
   workspaceName,
-  workspaceSlug,
   boards,
   posts: initialPosts,
   statuses,
@@ -157,15 +156,16 @@ export function FeedbackContainer({
   currentBoard,
   currentSearch,
   currentSort = 'trending',
+  defaultSort = 'trending',
   defaultBoardId,
   user,
   boardPermissions,
-  showPoweredBy = true,
   facets,
   searchMode: initialSearchMode,
   postsFilters,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
+  const feedCopy = useFeedCopy()
   const router = useRouter()
   const session = useSessionContext()
   const { filters, setFilters, clearFilters, activeFilterCount } = usePublicFilters()
@@ -300,8 +300,6 @@ export function FeedbackContainer({
     />
   )
 
-  const poweredBy = showPoweredBy ? <PortalPoweredBy workspaceSlug={workspaceSlug} /> : null
-
   const posts = flattenPublicPosts(postsData)
   // Dim the list only during an actual filter transition (placeholderData is
   // still showing the previous filter's results while the new ones load) —
@@ -356,7 +354,7 @@ export function FeedbackContainer({
   function handleSearchChange(search: string): void {
     setFilters({
       search: search || undefined,
-      sort: sortForSearch(activeSort, activeSearch, search, 'trending'),
+      sort: sortForSearch(activeSort, activeSearch, search, defaultSort),
     })
   }
 
@@ -377,6 +375,14 @@ export function FeedbackContainer({
     const title = handoff?.take('composeTitle')
     if (title !== undefined) setDraft({ title, key: Date.now() })
   }, [handoff])
+  // Home's Share an idea sends what was typed there with the navigation.
+  const arrivedTitle = useRouterState({
+    select: (state) => (state.location.state as { composeTitle?: unknown }).composeTitle,
+  })
+  useEffect(() => {
+    const title = takeArrivedTitle(router.state.location.state)
+    if (title !== undefined) setDraft({ title, key: Date.now() })
+  }, [arrivedTitle, router])
   const canStartIdea =
     !isRealUser || canPostTo(boardPermissions, boardLocked ? boardIdForCreate : undefined)
 
@@ -460,8 +466,8 @@ export function FeedbackContainer({
   }
 
   return (
-    <div>
-      <div className="flex gap-6 lg:gap-8">
+    <div data-qb-section="feed">
+      <div className="flex gap-6 lg:gap-8 [[data-qb-filters=start]_&]:flex-row-reverse">
         <div className="flex-1 min-w-0">
           <FeedbackHeader
             workspaceName={workspaceName}
@@ -481,7 +487,7 @@ export function FeedbackContainer({
             onSearchChange={handleSearchChange}
             filterButton={
               <div className="lg:hidden">
-                <PortalFilterSheet activeCount={filterCount} footer={poweredBy}>
+                <PortalFilterSheet activeCount={filterCount}>
                   {filterPanel('sheet')}
                 </PortalFilterSheet>
               </div>
@@ -552,7 +558,7 @@ export function FeedbackContainer({
                     >
                       {intl.formatMessage({
                         id: 'portal.feedback.list.postSearchAsIdea',
-                        defaultMessage: 'Create a post from it',
+                        defaultMessage: 'Make it a new post',
                       })}
                     </Button>
                   )}
@@ -569,16 +575,17 @@ export function FeedbackContainer({
               ) : (
                 <div className="text-center py-10 px-4 space-y-3">
                   <p className="text-base font-medium text-foreground">
-                    {intl.formatMessage({
-                      id: 'portal.feedback.list.noPostsYetTitle',
-                      defaultMessage: 'No posts yet. Be the first to post',
-                    })}
+                    {feedCopy.emptyTitle ??
+                      intl.formatMessage({
+                        id: 'portal.feedback.list.noPostsYetTitle',
+                        defaultMessage: 'Got something to say? Be the first to post',
+                      })}
                   </p>
                   <p className="text-sm text-muted-foreground max-w-sm mx-auto">
                     {intl.formatMessage(
                       {
                         id: 'portal.feedback.list.noPostsYetDescription',
-                        defaultMessage: 'The {workspace} team reads every request.',
+                        defaultMessage: 'The {workspace} team reads every post.',
                       },
                       { workspace: workspaceName }
                     )}
@@ -592,10 +599,11 @@ export function FeedbackContainer({
                     {intl.formatMessage(WIDENED_SEARCH_MESSAGES[widenedSearch])}
                   </p>
                 )}
-                <div key={listKey} className="space-y-3">
+                <div key={listKey} className="space-y-[var(--qb-feed-gap,0.75rem)]">
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
+                      data-qb-surface="card"
                       className="bg-card border border-border/40 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
                       style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                     >
@@ -645,7 +653,7 @@ export function FeedbackContainer({
           </div>
         </div>
 
-        <FeedbackSidebar footer={poweredBy}>{filterPanel('sidebar')}</FeedbackSidebar>
+        <FeedbackSidebar>{filterPanel('sidebar')}</FeedbackSidebar>
       </div>
     </div>
   )

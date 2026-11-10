@@ -20,7 +20,7 @@
     },
     "doc:portal-post": {
       "dbQueries": 15,
-      "htmlKB": 36.9
+      "htmlKB": 40
     },
     "doc:help-center": {
       "dbQueries": 3,
@@ -69,8 +69,8 @@
     "ui:portal-load": {
       "dbQueries": 7,
       "serverRequests": 2,
-      "requests": 144,
-      "jsRequests": 138,
+      "requests": 145,
+      "jsRequests": 140,
       "jsKB": 496.4,
       "htmlTransferKB": 22,
       "componentRenders": 465
@@ -78,8 +78,8 @@
     "ui:portal-open-post": {
       "dbQueries": 14,
       "serverRequests": 6,
-      "requests": 43,
-      "jsRequests": 37,
+      "requests": 45,
+      "jsRequests": 39,
       "jsKB": 68.8,
       "htmlTransferKB": 0,
       "componentRenders": 96
@@ -89,15 +89,15 @@
       "serverRequests": 3,
       "requests": 135,
       "jsRequests": 130,
-      "jsKB": 459.6,
+      "jsKB": 470.2,
       "htmlTransferKB": 18,
       "componentRenders": 203
     },
     "ui:portal-open-post-with-comments": {
       "dbQueries": 15,
       "serverRequests": 6,
-      "requests": 43,
-      "jsRequests": 37,
+      "requests": 45,
+      "jsRequests": 39,
       "jsKB": 68.8,
       "htmlTransferKB": 0,
       "componentRenders": 116
@@ -107,7 +107,7 @@
       "serverRequests": 3,
       "requests": 170,
       "jsRequests": 163,
-      "jsKB": 765,
+      "jsKB": 782.9,
       "htmlTransferKB": 13.1,
       "componentRenders": 295
     },
@@ -141,8 +141,8 @@
     "ui:admin-open-post": {
       "dbQueries": 17,
       "serverRequests": 1,
-      "requests": 54,
-      "jsRequests": 52,
+      "requests": 56,
+      "jsRequests": 54,
       "jsKB": 277.7,
       "htmlTransferKB": 0,
       "componentRenders": 562
@@ -150,26 +150,26 @@
     "ui:admin-inbox-load": {
       "dbQueries": 22,
       "serverRequests": 1,
-      "requests": 222,
-      "jsRequests": 217,
-      "jsKB": 881.1,
+      "requests": 223,
+      "jsRequests": 218,
+      "jsKB": 901,
       "htmlTransferKB": 34.6,
       "componentRenders": 525
     },
     "ui:admin-nav-feedback-to-roadmap": {
       "dbQueries": 18,
       "serverRequests": 2,
-      "requests": 44,
-      "jsRequests": 42,
-      "jsKB": 82.9,
+      "requests": 45,
+      "jsRequests": 43,
+      "jsKB": 86,
       "htmlTransferKB": 0,
       "componentRenders": 455
     },
     "ui:portal-hover-open-post": {
       "dbQueries": 14,
       "serverRequests": 6,
-      "requests": 43,
-      "jsRequests": 37,
+      "requests": 45,
+      "jsRequests": 39,
       "jsKB": 68.8,
       "htmlTransferKB": 0,
       "componentRenders": 95
@@ -177,9 +177,9 @@
     "ui:admin-hover-nav-feedback-to-roadmap": {
       "dbQueries": 18,
       "serverRequests": 2,
-      "requests": 44,
-      "jsRequests": 42,
-      "jsKB": 82.9,
+      "requests": 45,
+      "jsRequests": 43,
+      "jsKB": 86,
       "htmlTransferKB": 0,
       "componentRenders": 455
     },
@@ -204,8 +204,8 @@
     "ui:portal-post-type-comment": {
       "dbQueries": 0,
       "serverRequests": 0,
-      "requests": 10,
-      "jsRequests": 9,
+      "requests": 12,
+      "jsRequests": 11,
       "jsKB": 255.6,
       "htmlTransferKB": 0,
       "componentRenders": 203
@@ -267,8 +267,8 @@
     "ui:admin-settings-click-through": {
       "dbQueries": 52,
       "serverRequests": 7,
-      "requests": 66,
-      "jsRequests": 62,
+      "requests": 67,
+      "jsRequests": 63,
       "jsKB": 312.3,
       "htmlTransferKB": 0,
       "componentRenders": 673
@@ -295,7 +295,7 @@
       "serverRequests": 3,
       "requests": 130,
       "jsRequests": 126,
-      "jsKB": 460.4,
+      "jsKB": 472.4,
       "htmlTransferKB": 31.1,
       "componentRenders": 548
     },
@@ -347,7 +347,7 @@
       "serverRequests": 2,
       "requests": 146,
       "jsRequests": 141,
-      "jsKB": 467.4,
+      "jsKB": 477.5,
       "htmlTransferKB": 31.9,
       "componentRenders": 495
     },
@@ -397,9 +397,9 @@
     "sweep:ui:admin:/admin/inbox": {
       "dbQueries": 22,
       "serverRequests": 1,
-      "requests": 222,
-      "jsRequests": 217,
-      "jsKB": 881.1,
+      "requests": 223,
+      "jsRequests": 218,
+      "jsKB": 901,
       "htmlTransferKB": 34.6,
       "componentRenders": 632
     },
@@ -436,9 +436,9 @@
     "sweep:ui:admin:/admin/users?sort=newest": {
       "dbQueries": 21,
       "serverRequests": 1,
-      "requests": 130,
-      "jsRequests": 126,
-      "jsKB": 432.5,
+      "requests": 131,
+      "jsRequests": 127,
+      "jsKB": 442.6,
       "htmlTransferKB": 33.4,
       "componentRenders": 434
     },
@@ -477,7 +477,7 @@
       "serverRequests": 1,
       "requests": 124,
       "jsRequests": 119,
-      "jsKB": 424.3,
+      "jsKB": 435.2,
       "htmlTransferKB": 31.9,
       "componentRenders": 399
     },
@@ -516,7 +516,7 @@
       "serverRequests": 1,
       "requests": 118,
       "jsRequests": 113,
-      "jsKB": 404.6,
+      "jsKB": 415.6,
       "htmlTransferKB": 30.0,
       "componentRenders": 355
     },
@@ -529,7 +529,7 @@
       "serverRequests": 1,
       "requests": 107,
       "jsRequests": 102,
-      "jsKB": 396.6,
+      "jsKB": 405,
       "htmlTransferKB": 31.5,
       "componentRenders": 425
     },
@@ -555,7 +555,7 @@
       "serverRequests": 1,
       "requests": 125,
       "jsRequests": 120,
-      "jsKB": 420.4,
+      "jsKB": 432.4,
       "htmlTransferKB": 32.6,
       "componentRenders": 423
     },
@@ -594,7 +594,7 @@
       "serverRequests": 1,
       "requests": 118,
       "jsRequests": 113,
-      "jsKB": 415.9,
+      "jsKB": 425,
       "htmlTransferKB": 31.5,
       "componentRenders": 396
     },
@@ -639,7 +639,7 @@
     },
     "sweep:doc:admin:/admin/settings/labs": {
       "dbQueries": 8,
-      "htmlKB": 65.6
+      "htmlKB": 69.5
     },
     "sweep:ui:admin:/admin/settings/labs": {
       "dbQueries": 8,
@@ -748,8 +748,8 @@
     "sweep:ui:admin:/admin/settings/portal": {
       "dbQueries": 40,
       "serverRequests": 6,
-      "requests": 290,
-      "jsRequests": 275,
+      "requests": 292,
+      "jsRequests": 279,
       "jsKB": 1167.4,
       "htmlTransferKB": 34.3,
       "componentRenders": 1517
@@ -763,7 +763,7 @@
       "serverRequests": 1,
       "requests": 156,
       "jsRequests": 151,
-      "jsKB": 460.3,
+      "jsKB": 470.6,
       "htmlTransferKB": 32.4,
       "componentRenders": 427
     },
@@ -876,13 +876,13 @@
       "htmlKB": 43.3
     },
     "sweep:ui:anon:/roadmap": {
-      "dbQueries": 11,
-      "serverRequests": 4,
-      "requests": 106,
-      "jsRequests": 99,
-      "jsKB": 401.3,
+      "dbQueries": 12,
+      "serverRequests": 6,
+      "requests": 119,
+      "jsRequests": 110,
+      "jsKB": 421.1,
       "htmlTransferKB": 18.3,
-      "componentRenders": 771
+      "componentRenders": 1235
     },
     "sweep:doc:anon:/changelog": {
       "dbQueries": 0,
@@ -893,9 +893,9 @@
       "serverRequests": 4,
       "requests": 99,
       "jsRequests": 92,
-      "jsKB": 389.9,
+      "jsKB": 403.2,
       "htmlTransferKB": 15.7,
-      "componentRenders": 182
+      "componentRenders": 201
     },
     "sweep:doc:anon:/hc": {
       "dbQueries": 3,
@@ -904,9 +904,9 @@
     "sweep:ui:anon:/hc": {
       "dbQueries": 3,
       "serverRequests": 3,
-      "requests": 102,
-      "jsRequests": 96,
-      "jsKB": 442.7,
+      "requests": 114,
+      "jsRequests": 108,
+      "jsKB": 461.5,
       "htmlTransferKB": 17.6,
       "componentRenders": 173
     },
@@ -917,9 +917,9 @@
     "sweep:ui:anon:/support": {
       "dbQueries": 0,
       "serverRequests": 2,
-      "requests": 85,
-      "jsRequests": 80,
-      "jsKB": 369.7,
+      "requests": 88,
+      "jsRequests": 83,
+      "jsKB": 384.4,
       "htmlTransferKB": 15.9,
       "componentRenders": 152
     },
@@ -930,35 +930,35 @@
     "sweep:ui:anon:/notifications": {
       "dbQueries": 0,
       "serverRequests": 3,
-      "requests": 98,
-      "jsRequests": 92,
-      "jsKB": 386.2,
+      "requests": 101,
+      "jsRequests": 95,
+      "jsKB": 397,
       "htmlTransferKB": 16.2,
       "componentRenders": 183
     },
     "sweep:doc:admin:/settings/profile": {
       "dbQueries": 11,
-      "htmlKB": 38.9
+      "htmlKB": 41.2
     },
     "sweep:ui:admin:/settings/profile": {
       "dbQueries": 16,
       "serverRequests": 3,
-      "requests": 97,
-      "jsRequests": 91,
-      "jsKB": 403.7,
+      "requests": 101,
+      "jsRequests": 95,
+      "jsKB": 417.6,
       "htmlTransferKB": 20.2,
       "componentRenders": 276
     },
     "sweep:doc:admin:/settings/preferences": {
       "dbQueries": 6,
-      "htmlKB": 45
+      "htmlKB": 47.5
     },
     "sweep:ui:admin:/settings/preferences": {
       "dbQueries": 11,
       "serverRequests": 3,
-      "requests": 92,
-      "jsRequests": 86,
-      "jsKB": 380.5,
+      "requests": 96,
+      "jsRequests": 90,
+      "jsKB": 393.8,
       "htmlTransferKB": 20.8,
       "componentRenders": 336
     },
@@ -969,9 +969,9 @@
     "sweep:ui:admin:/notifications": {
       "dbQueries": 18,
       "serverRequests": 4,
-      "requests": 99,
-      "jsRequests": 92,
-      "jsKB": 386.2,
+      "requests": 105,
+      "jsRequests": 98,
+      "jsKB": 399.8,
       "htmlTransferKB": 17.5,
       "componentRenders": 267
     },
@@ -982,9 +982,9 @@
     "sweep:ui:admin:/support": {
       "dbQueries": 10,
       "serverRequests": 3,
-      "requests": 86,
-      "jsRequests": 80,
-      "jsKB": 369.7,
+      "requests": 92,
+      "jsRequests": 86,
+      "jsKB": 387.2,
       "htmlTransferKB": 16.4,
       "componentRenders": 240
     },
@@ -1036,9 +1036,9 @@
     "ui:admin-nav-inbox-to-roadmap": {
       "dbQueries": 26,
       "serverRequests": 3,
-      "requests": 45,
-      "jsRequests": 42,
-      "jsKB": 80.5,
+      "requests": 47,
+      "jsRequests": 44,
+      "jsKB": 82.7,
       "htmlTransferKB": 0,
       "componentRenders": 448
     },

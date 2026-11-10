@@ -53,19 +53,24 @@ vi.mock('@tanstack/react-router', () => ({
     () =>
     <T extends object>(options: T) => ({
       ...options,
-      useLoaderData: () => ({ workspaceName: 'Acme', baseUrl: '', showPoweredBy: false }),
+      useLoaderData: () => ({ workspaceName: 'Acme', baseUrl: '' }),
       useSearch: () => ({ sort: 'trending' }),
     }),
   notFound: () => new Error('not found'),
   redirect: () => new Error('redirect'),
+  useLoaderData: () => ({ workspaceName: 'Acme', baseUrl: '' }),
+  useSearch: () => ({ sort: 'trending' }),
   useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
     const context = useSyncExternalStore(rootContext.subscribe, rootContext.get)
     return opts?.select ? opts.select(context as never) : context
   },
 }))
-vi.mock('@/lib/server/functions/powered-by', () => ({ getShowPoweredByFn: vi.fn() }))
 vi.mock('@/components/public/preview-draft-context', () => ({
   usePreviewWelcomeCard: () => null,
+  usePreviewHeadline: () => undefined,
+  usePreviewTitles: () => undefined,
+  usePreviewHome: () => undefined,
+  usePreviewBandImage: () => undefined,
 }))
 vi.mock('@/components/public/feedback/portal-welcome-card', () => ({
   PortalWelcomeCard: () => null,
@@ -83,14 +88,13 @@ vi.mock('@/lib/client/queries/portal', () => ({
 vi.mock('@/components/public/feedback/portal-feed-skeleton', () => ({
   PortalFeedSkeleton: () => <div data-testid="feed-skeleton" />,
 }))
-vi.mock('@/components/public/feedback/portal-powered-by', () => ({ PortalPoweredBy: () => null }))
 vi.mock('@/components/public/feedback/feedback-container', () => ({
   FeedbackContainer: ({ posts }: { posts: { id: string }[] }) => {
     const [draft, setDraft] = useState('')
     return (
       <div data-testid="feed" data-posts={posts.length}>
         <input
-          aria-label="Feedback title"
+          aria-label="Idea title"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
@@ -99,7 +103,8 @@ vi.mock('@/components/public/feedback/feedback-container', () => ({
   },
 }))
 
-import { Route } from '../index'
+import { Route } from '../feedback'
+import { hasFeedSearch } from '@/components/public/feedback/feed-route'
 
 const Page = (Route as unknown as { component: React.ComponentType }).component
 
@@ -141,7 +146,7 @@ afterEach(() => {
 describe('portal feed when the viewer changes', () => {
   it('keeps the feed and the draft in it on screen while the new viewer feed loads', async () => {
     renderPortal()
-    const title = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+    const title = screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' })
     fireEvent.change(title, { target: { value: 'Dark mode' } })
 
     // The visitor's first post mints an anonymous session.
@@ -149,7 +154,7 @@ describe('portal feed when the viewer changes', () => {
 
     expect(document.querySelector('.animate-pulse')).toBeNull()
     expect(isShown(screen.getByTestId('feed'))).toBe(true)
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' }).value).toBe(
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' }).value).toBe(
       'Dark mode'
     )
 
@@ -159,7 +164,7 @@ describe('portal feed when the viewer changes', () => {
 
     await waitFor(() => expect(screen.getByTestId('feed').dataset.posts).toBe('1'))
     expect(isShown(screen.getByTestId('feed'))).toBe(true)
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' }).value).toBe(
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' }).value).toBe(
       'Dark mode'
     )
   })
@@ -177,5 +182,14 @@ describe('portal feed when the viewer changes', () => {
 
     await waitFor(() => expect(feed.pending.has('user_b')).toBe(true))
     expect(feed.pending.has(undefined)).toBe(false)
+  })
+})
+
+describe('hasFeedSearch', () => {
+  it('spots the feed’s own parameters, so an old link can follow the feed', () => {
+    expect(hasFeedSearch({ board: 'bugs' })).toBe(true)
+    expect(hasFeedSearch({ sort: 'top', status: ['open'] })).toBe(true)
+    expect(hasFeedSearch({})).toBe(false)
+    expect(hasFeedSearch({ utm_source: 'mail', theme: 'dark' })).toBe(false)
   })
 })

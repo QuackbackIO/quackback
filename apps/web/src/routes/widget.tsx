@@ -2,14 +2,15 @@ import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-ro
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
+import { portalFontIds, portalTheme } from '@/lib/shared/design/view'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { FileViewerProvider } from '@/components/shared/files/file-viewer-context'
 import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
-import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
+import { PortalDesignStyle } from '@/lib/shared/safe-inline-content'
 import { Button } from '@/components/ui/button'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
 import { isTeamMember } from '@/lib/shared/roles'
@@ -67,11 +68,7 @@ export const Route = createFileRoute('/widget')({
     await setIframeHeaders()
 
     const brandingData = settings.brandingData ?? null
-    const brandingConfig = settings.brandingConfig ?? {}
-    const customCss = settings.customCss ?? ''
-    const themeMode = brandingConfig.themeMode ?? 'user'
-
-    const themeStyles = generateWorkspaceThemeCSS(brandingConfig)
+    const { themeMode, themeStyles, customCss, configFontSans } = portalTheme(settings)
 
     // If user is logged into the portal (same-origin), extract the signed
     // session cookie so the widget can reuse it directly as a Bearer token.
@@ -119,7 +116,7 @@ export const Route = createFileRoute('/widget')({
       themeMode,
       themeStyles,
       customCss,
-      configFontSans: readFontSans(brandingConfig.light),
+      configFontSans,
       portalUser,
       portalSessionToken,
       hmacRequired: settings?.publicWidgetConfig?.hmacRequired ?? false,
@@ -170,7 +167,7 @@ function WidgetLayout() {
   // custom CSS / theme config font-family cascades into the iframe below) —
   // load the chosen family on demand instead of shipping every self-hosted
   // family's @font-face rules to every embedded widget.
-  useBrandingFont(customCss, configFontSans)
+  useBrandingFont(customCss, configFontSans, portalFontIds(useWorkspaceSettings()))
 
   return (
     <WidgetAuthProvider
@@ -181,20 +178,12 @@ function WidgetLayout() {
       initialLocale={locale}
       initialMessages={messages}
     >
-      {themeStyles && (
-        <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
-      )}
-      {customCss && <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />}
+      <PortalDesignStyle themeStyles={themeStyles} customCss={customCss} />
       <style
         dangerouslySetInnerHTML={{
           __html: `
             body { overflow: hidden; margin: 0; }
             html, body, #root { height: 100%; }
-            /* Prevent white flash before theme resolves */
-            html.system { background: #fff; }
-            @media (prefers-color-scheme: dark) {
-              html.system { background: #09090b; }
-            }
           `,
         }}
       />

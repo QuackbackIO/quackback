@@ -14,6 +14,7 @@ import {
   getProfileTeamContextFn,
   type PublicProfileActivityItemView,
 } from '@/lib/server/functions/public-profile'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 export const Route = createFileRoute('/_portal/u/$principalId')({
   loader: async ({ params, context }) => {
@@ -51,11 +52,11 @@ export const Route = createFileRoute('/_portal/u/$principalId')({
 
 function ProfileNotFound() {
   return (
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
+    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-16 text-center">
       <p className="text-lg font-medium">
         <FormattedMessage id="portal.profile.notFound" defaultMessage="Profile not found" />
       </p>
-      <Link to="/" className="mt-4 inline-block text-sm text-primary hover:underline">
+      <Link to={PORTAL_LANDING} className="mt-4 inline-block text-sm text-primary hover:underline">
         <FormattedMessage id="portal.profile.backHome" defaultMessage="Back to feedback" />
       </Link>
     </div>
@@ -85,7 +86,7 @@ function PublicProfilePage() {
   })
 
   return (
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-8 space-y-4">
+    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-8 space-y-4">
       {/* Profile header card */}
       <div className="rounded-xl border border-border/60 bg-card p-6 animate-in fade-in duration-200 fill-mode-backwards">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
@@ -216,7 +217,7 @@ function PublicProfilePage() {
       <Tabs defaultValue="posts" className="animate-in fade-in duration-300 fill-mode-backwards">
         <TabsList>
           <TabsTrigger value="posts">
-            <FormattedMessage id="portal.profile.tabs.posts" defaultMessage="Posts" />
+            <FormattedMessage id="portal.profile.tabs.posts" defaultMessage={'Posts'} />
           </TabsTrigger>
           <TabsTrigger value="comments">
             <FormattedMessage id="portal.profile.tabs.comments" defaultMessage="Comments" />

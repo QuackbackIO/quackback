@@ -85,6 +85,10 @@ export function PublicRoadmapToolbar({
           options={sortOptions}
           size="sm"
           className="w-[140px]"
+          ariaLabel={intl.formatMessage({
+            id: 'portal.roadmap.toolbar.sortBy',
+            defaultMessage: 'Sort by',
+          })}
         />
       </div>
 

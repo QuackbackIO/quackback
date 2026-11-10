@@ -28,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn } from '@/lib/shared/utils'
+import { TAG_TINT, useTagStyle } from '@/components/ui/status-badge'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import type { ChangelogId, PostId, PostStatusId, PrincipalId } from '@quackback/ids'
@@ -151,6 +152,7 @@ export function PostCard({
 }: PostCardProps): React.ReactElement {
   // Safe hook - returns null in admin context where AuthPopoverProvider isn't available
   const intl = useIntl()
+  const tagStyle = useTagStyle()
   const authPopover = useAuthPopoverSafe()
   // "Admin mode" here means the inbox list rendering: modal-style navigation
   // (onClick instead of a title link) plus the admin quick-actions overlay. It
@@ -230,11 +232,15 @@ export function PostCard({
       })
     : undefined
 
+  // The designer can show every vote box as voted; the button still says what is true.
+  const shownVoted = currentHasVoted
   // Vote button - always interactive
   const voteButton = (
     <button
       type="button"
       data-testid="vote-button"
+      data-qb-part="vote-button"
+      data-state={shownVoted ? 'voted' : undefined}
       title={voteNoAccessMsg}
       aria-disabled={voteNoAccess || undefined}
       aria-label={
@@ -260,12 +266,13 @@ export function PostCard({
       disabled={isVotePending || isAnonSigningIn}
       className={cn(
         'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
+        'qb-focus-ring',
         'w-12 py-2 gap-0.5',
-        currentHasVoted
+        shownVoted
           ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
           : 'bg-muted/40 text-muted-foreground border-border/50',
         // Hover affordances only when the button is actionable (not denied).
-        !currentHasVoted &&
+        !shownVoted &&
           !voteNoAccess &&
           'hover:border-border hover:bg-muted/60 hover:text-foreground/80',
         (isVotePending || isAnonSigningIn) && 'opacity-70 cursor-wait',
@@ -275,13 +282,13 @@ export function PostCard({
       <ChevronUpIcon
         className={cn(
           'transition-transform duration-200 h-4 w-4',
-          currentHasVoted && 'fill-post-card-voted',
+          shownVoted && 'fill-post-card-voted',
           !isVotePending && !voteNoAccess && 'group-hover/vote:-translate-y-0.5'
         )}
       />
       <span
         data-testid="vote-count"
-        className={cn('font-semibold tabular-nums text-sm', !currentHasVoted && 'text-foreground')}
+        className={cn('font-semibold tabular-nums text-sm', !shownVoted && 'text-foreground')}
       >
         {currentVoteCount}
       </span>
@@ -494,10 +501,13 @@ export function PostCard({
     </Link>
   )
 
-  const tagClassName = 'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium'
+  const tagClassName = cn(
+    'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium',
+    TAG_TINT
+  )
 
   const cardContent = (
-    <div className="flex items-start p-4 gap-4">
+    <div className="qb-card-body flex items-start gap-4">
       {/* Vote column */}
       {voteButton}
 
@@ -523,59 +533,65 @@ export function PostCard({
           statusDisplay
         )}
         {/* Title */}
-        <h3
+        <h2
+          data-qb-part="post-title"
           className={cn(
-            'font-semibold text-base line-clamp-1',
+            'qb-card-title font-semibold line-clamp-1',
             isDone ? 'text-foreground/75' : 'text-foreground'
           )}
         >
           {titleText}
-        </h3>
+        </h2>
 
         {/* Description */}
         {content && (
-          <p className="text-sm text-muted-foreground/60 line-clamp-1 mt-1">
+          <p
+            data-qb-part="post-excerpt"
+            className="text-sm text-muted-foreground line-clamp-1 mt-1 qb-card-excerpt"
+          >
             {contentPreview(content)}
           </p>
         )}
 
         {/* Tags */}
         {tags.length > 0 && (
-          <div className="flex items-center gap-1 mt-1.5">
+          <div className="flex items-center gap-1 mt-1.5 qb-card-tags">
             {tags.slice(0, 3).map((tag) => {
-              const style = { backgroundColor: tag.color + '20', color: tag.color }
+              const style = tagStyle(tag.color)
               return onTagClick ? (
                 <button
                   key={tag.id}
                   type="button"
+                  data-qb-part="tag"
                   onClick={() => onTagClick(tag.id)}
                   className={cn(
                     tagClassName,
-                    'hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                    // A 24px target around a small chip.
+                    'qb-hit-24 hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                   )}
                   style={style}
                 >
                   {tag.name}
                 </button>
               ) : (
-                <span key={tag.id} className={tagClassName} style={style}>
+                <span key={tag.id} data-qb-part="tag" className={tagClassName} style={style}>
                   {tag.name}
                 </span>
               )
             })}
             {tags.length > 3 && (
-              <span className="text-xs text-muted-foreground/60">+{tags.length - 3}</span>
+              <span className="text-xs text-muted-foreground">+{tags.length - 3}</span>
             )}
           </div>
         )}
 
         {/* Meta row */}
-        <div className="flex items-center text-muted-foreground gap-2 text-xs mt-2.5">
+        <div className="flex items-center text-muted-foreground gap-2 text-xs mt-2.5 qb-card-meta">
           {authorMeta}
-          <span className="text-muted-foreground/40">·</span>
-          <TimeAgo date={createdAtDate} className="text-muted-foreground/70" />
+          <span className="text-muted-foreground">·</span>
+          <TimeAgo date={createdAtDate} className="text-muted-foreground" />
           {commentCount > 0 && (
-            <span className="flex items-center gap-1 text-muted-foreground/50 ms-auto">
+            <span className="flex items-center gap-1 text-muted-foreground ms-auto">
               <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
               {commentCount}
             </span>
@@ -611,6 +627,8 @@ export function PostCard({
       onMouseLeave={onMouseLeave}
       data-post-id={id}
       data-done={isDone || undefined}
+      data-qb-part="post-card"
+      data-state={isDone ? 'done' : undefined}
     >
       {cardContent}
     </div>

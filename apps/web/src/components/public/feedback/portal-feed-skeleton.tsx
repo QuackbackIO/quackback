@@ -88,7 +88,10 @@ function PanelSkeleton({ layout }: { layout: 'sidebar' | 'sheet' }) {
   const boards = (
     <PanelSection
       key="boards"
-      title={intl.formatMessage({ id: 'portal.feedback.sidebar.boards', defaultMessage: 'Boards' })}
+      title={intl.formatMessage({
+        id: 'portal.feedback.sidebar.boards',
+        defaultMessage: 'Boards',
+      })}
     >
       <div className="space-y-1">
         <button
@@ -193,9 +196,14 @@ function LoadingComposer() {
  * the boards, statuses and tags stand in as bars, laid out like the loaded
  * page so it swaps in without moving.
  */
-export function PortalFeedSkeleton({ poweredBy }: { poweredBy?: React.ReactNode }) {
+export function PortalFeedSkeleton({
+  defaultSort = 'trending',
+}: {
+  /** The feed's sort when the visitor has not picked one. */
+  defaultSort?: 'trending' | 'top' | 'new'
+}) {
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
-  const sort = filters.sort ?? 'trending'
+  const sort = filters.sort ?? defaultSort
 
   return (
     <div>
@@ -210,12 +218,12 @@ export function PortalFeedSkeleton({ poweredBy }: { poweredBy?: React.ReactNode 
             onSearchChange={(search) =>
               setFilters({
                 search: search || undefined,
-                sort: sortForSearch(sort, filters.search, search, 'trending'),
+                sort: sortForSearch(sort, filters.search, search, defaultSort),
               })
             }
             filterButton={
               <div className="lg:hidden">
-                <PortalFilterSheet activeCount={activeFilterCount} footer={poweredBy}>
+                <PortalFilterSheet activeCount={activeFilterCount}>
                   <PanelSkeleton layout="sheet" />
                 </PortalFilterSheet>
               </div>
@@ -227,7 +235,7 @@ export function PortalFeedSkeleton({ poweredBy }: { poweredBy?: React.ReactNode 
             ))}
           </div>
         </div>
-        <FeedbackSidebar footer={poweredBy}>
+        <FeedbackSidebar>
           <PanelSkeleton layout="sidebar" />
         </FeedbackSidebar>
       </div>

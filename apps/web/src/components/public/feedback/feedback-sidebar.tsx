@@ -3,8 +3,6 @@ import { useEffect, useRef } from 'react'
 interface FeedbackSidebarProps {
   /** The filter panel. */
   children: React.ReactNode
-  /** Pinned under the panel, outside its scroll area, so it stays in view. */
-  footer?: React.ReactNode
 }
 
 /** Gap kept between the column and the viewport's bottom edge. */
@@ -24,28 +22,28 @@ function headerHeight(): number {
   return parseFloat(value) || 0
 }
 
-export function FeedbackSidebar({ children, footer }: FeedbackSidebarProps) {
+export function FeedbackSidebar({ children }: FeedbackSidebarProps) {
   const columnRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
-  // The column fills the space from where it sits down to the viewport's
-  // bottom edge: below the portal header at the top of the page, and below
-  // the sticky header once it sticks. The panel scrolls inside it and the footer stays
-  // in view throughout.
+  // The column is as tall as the room it has once it sticks below the header,
+  // down to the viewport's bottom edge; the panel scrolls inside it there.
+  // Sitting lower on the page (under a hero), it runs on past the screen's
+  // edge with the page rather than folding early: a fold there cut the rows
+  // at the screen's edge (a filter's label) for a panel the page's own scroll
+  // brings up whole.
   useEffect(() => {
     const column = columnRef.current
     if (!column) return
     let frame = 0
     const fit = () => {
       frame = 0
-      const top = Math.max(headerHeight() + STICK_GAP, column.getBoundingClientRect().top)
-      column.style.maxHeight = `${window.innerHeight - top - EDGE}px`
+      column.style.maxHeight = `${window.innerHeight - headerHeight() - STICK_GAP - EDGE}px`
     }
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(fit)
     }
     fit()
-    window.addEventListener('scroll', schedule, { passive: true })
     window.addEventListener('resize', schedule)
     // The header can change height after mount (a late font, custom CSS),
     // which moves where the column sticks.
@@ -54,7 +52,6 @@ export function FeedbackSidebar({ children, footer }: FeedbackSidebarProps) {
     if (header) observer.observe(header)
     return () => {
       cancelAnimationFrame(frame)
-      window.removeEventListener('scroll', schedule)
       window.removeEventListener('resize', schedule)
       observer.disconnect()
     }
@@ -85,18 +82,22 @@ export function FeedbackSidebar({ children, footer }: FeedbackSidebarProps) {
   }, [])
 
   return (
-    <aside className="hidden w-72 shrink-0 lg:block xl:w-80">
+    <aside
+      data-qb-section="filters"
+      data-qb-part="filter-panel"
+      className="hidden w-72 shrink-0 lg:block xl:w-80"
+    >
       <div
         ref={columnRef}
         className="sticky top-[calc(var(--portal-header-height,0px)+1.5rem)] flex max-h-[calc(100vh-3rem)] flex-col gap-3"
       >
         <div
           ref={panelRef}
+          data-qb-surface="card"
           className="min-h-0 overflow-y-auto scrollbar-thin rounded-lg border border-border/50 bg-card shadow-sm data-more-below:[mask-image:linear-gradient(to_bottom,black_calc(100%-2.5rem),transparent)]"
         >
           {children}
         </div>
-        {footer && <div className="shrink-0">{footer}</div>}
       </div>
     </aside>
   )

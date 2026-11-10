@@ -1,9 +1,11 @@
 import { nameInitial } from '@/lib/shared/utils/initial'
-import { memo, useEffect, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useEffect, useRef, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
 import { isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
 import { usePortalNavItems } from './use-portal-nav-items'
+import { NavScroller } from './nav-scroller'
+import { useMenuFold } from './use-menu-fold'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
@@ -44,6 +46,26 @@ import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { usePreviewDesignAttributes, usePreviewLogo } from './preview-draft-context'
+import { LogoFilters } from './logo-filters'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
+
+// Only team members see it, so visitors never load it or the design queries behind it.
+const CustomiseButton = lazy(() =>
+  import('./customise-button').then((m) => ({ default: m.CustomiseButton }))
+)
+
+/**
+ * A logo image where the design says its ink would vanish into the header:
+ * drawn through one of the header's logo filters (LogoFilters).
+ */
+const ICON_TILE = '[border-radius:calc(var(--radius)*0.6)] [filter:var(--qb-logo-filter,none)]'
+/** The title, in the theme's heading font and weight, in the header's text colour. */
+const TITLE = 'portal-header__name qb-header-title max-w-[18ch] truncate leading-none'
+
+/** On the band, the header's button takes the colour the design picks to read there. */
+const ON_BAND_ACTION = 'qb-band-action'
+const ON_BAND_GHOST = 'qb-band-ghost'
 
 interface PortalHeaderProps {
   orgName: string
@@ -70,6 +92,7 @@ export function PortalHeader({
   const intl = useIntl()
   const router = useRouter()
   const headerRef = useStickyHeaderHeight()
+  const inlineRow = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
   // Each part is selected: the route context is a new object after every
   // navigation, while these stay the same until the viewer or workspace
@@ -181,161 +204,350 @@ export function PortalHeader({
     queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
     removeViewerScopedPortalQueries(queryClient)
     router.invalidate() // Refetch session
-    router.navigate({ to: '/' })
+    router.navigate({ to: PORTAL_LANDING })
   }
 
   // Auth/admin buttons. Plain elements rather than a component declared in
   // here: a component declared in render is a new type each time, so every
   // render of the header would tear these menus down and build them again.
+  // Each is its own element, so a centred header can lay them on both sides.
+  const themeToggle = showThemeToggle && <ThemeToggle />
+  const customise = canAccessAdmin && (
+    <Suspense fallback={null}>
+      <CustomiseButton />
+    </Suspense>
+  )
+  // Admin Button (visible for team members)
+  const adminButton = canAccessAdmin && (
+    <Button variant="outline" size="sm" asChild className="ms-1 me-2">
+      <Link to="/admin" search={{}}>
+        <ShieldCheckIcon className="me-2 h-4 w-4" />
+        <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
+      </Link>
+    </Button>
+  )
+  // Notification Bell (logged in users only)
+  const bell = isLoggedIn && <NotificationBell popoverSide="bottom" className="me-1" />
+  // Logged-in user - show user dropdown
+  const accountMenu = isLoggedIn ? (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className="relative h-9 w-9 rounded-full"
+          aria-label={intl.formatMessage({
+            id: 'portal.header.auth.accountMenu',
+            defaultMessage: 'Open account menu',
+          })}
+        >
+          <Avatar className="h-9 w-9" src={avatarUrl} name={name} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>
+          <div className="flex flex-col space-y-1">
+            <p className="text-sm font-medium">{name}</p>
+            <p className="text-xs text-muted-foreground">{email}</p>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <div className="px-2 py-2">
+          <UserStatsBar />
+        </div>
+        <DropdownMenuSeparator />
+        {canAccessAdmin && (
+          <DropdownMenuItem asChild>
+            <Link to="/admin" search={{}}>
+              <ShieldCheckIcon className="me-2 h-4 w-4" />
+              <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
+            </Link>
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem asChild>
+          <Link to="/settings">
+            <Cog6ToothIcon className="me-2 h-4 w-4" />
+            <FormattedMessage id="portal.header.auth.settings" defaultMessage="Settings" />
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleSignOut}>
+          <ArrowRightStartOnRectangleIcon className="me-2 h-4 w-4" />
+          <FormattedMessage id="portal.header.auth.signOut" defaultMessage="Sign out" />
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : null
+  // Anonymous user with auth popover available. Show "Sign up" only when it
+  // leads somewhere different from "Log in" (see hasDistinctSignup);
+  // otherwise the sole "Log in" button becomes the primary CTA.
+  const signInOffered = !isLoggedIn && Boolean(openAuthPopover) && portalAuthEnabled
+  const logIn = (
+    <Button
+      variant={showSignup ? 'ghost' : 'default'}
+      size="sm"
+      data-qb-label=""
+      data-qb-menu="sign-in"
+      className={showSignup ? ON_BAND_GHOST : ON_BAND_ACTION}
+      onClick={() =>
+        soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover?.({ mode: 'login' })
+      }
+    >
+      <FormattedMessage id="portal.header.auth.logIn" defaultMessage="Log in" />
+    </Button>
+  )
+  const signUp = (
+    <Button
+      size="sm"
+      data-qb-label=""
+      className={ON_BAND_ACTION}
+      onClick={() =>
+        soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover?.({ mode: 'signup' })
+      }
+    >
+      <FormattedMessage id="portal.header.auth.signUp" defaultMessage="Sign up" />
+    </Button>
+  )
   const authButtons = (
     <div className="flex items-center">
       {/* Theme Toggle (when admin allows user choice) */}
-      {showThemeToggle && <ThemeToggle />}
+      {themeToggle}
 
-      {/* Admin Button (visible for team members) */}
-      {canAccessAdmin && (
-        <Button variant="outline" size="sm" asChild className="ms-1 me-2">
-          <Link to="/admin" search={{}}>
-            <ShieldCheckIcon className="me-2 h-4 w-4" />
-            <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
-          </Link>
-        </Button>
-      )}
+      {customise}
 
-      {/* Notification Bell (logged in users only) */}
-      {isLoggedIn && <NotificationBell popoverSide="bottom" className="me-1" />}
+      {adminButton}
+
+      {bell}
 
       {/* Auth Buttons */}
       {isLoggedIn ? (
-        // Logged-in user - show user dropdown
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="relative h-9 w-9 rounded-full"
-              aria-label={intl.formatMessage({
-                id: 'portal.header.auth.accountMenu',
-                defaultMessage: 'Open account menu',
-              })}
-            >
-              <Avatar className="h-9 w-9" src={avatarUrl} name={name} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium">{name}</p>
-                <p className="text-xs text-muted-foreground">{email}</p>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <div className="px-2 py-2">
-              <UserStatsBar />
-            </div>
-            <DropdownMenuSeparator />
-            {canAccessAdmin && (
-              <DropdownMenuItem asChild>
-                <Link to="/admin" search={{}}>
-                  <ShieldCheckIcon className="me-2 h-4 w-4" />
-                  <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
-                </Link>
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem asChild>
-              <Link to="/settings">
-                <Cog6ToothIcon className="me-2 h-4 w-4" />
-                <FormattedMessage id="portal.header.auth.settings" defaultMessage="Settings" />
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleSignOut}>
-              <ArrowRightStartOnRectangleIcon className="me-2 h-4 w-4" />
-              <FormattedMessage id="portal.header.auth.signOut" defaultMessage="Sign out" />
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : openAuthPopover && portalAuthEnabled ? (
-        // Anonymous user with auth popover available. Show "Sign up" only when it
-        // leads somewhere different from "Log in" (see hasDistinctSignup);
-        // otherwise the sole "Log in" button becomes the primary CTA.
+        accountMenu
+      ) : signInOffered ? (
         <div className="flex items-center gap-2">
-          <Button
-            variant={showSignup ? 'ghost' : 'default'}
-            size="sm"
-            onClick={() =>
-              soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'login' })
-            }
-          >
-            <FormattedMessage id="portal.header.auth.logIn" defaultMessage="Log in" />
-          </Button>
-          {showSignup && (
-            <Button
-              size="sm"
-              onClick={() =>
-                soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'signup' })
-              }
-            >
-              <FormattedMessage id="portal.header.auth.signUp" defaultMessage="Sign up" />
-            </Button>
-          )}
+          {logIn}
+          {showSignup && signUp}
         </div>
       ) : null}
     </div>
   )
+
+  // The design's header layout; in the admin preview, the draft's.
+  const previewAttributes = usePreviewDesignAttributes()
+  const savedDesign = settings?.portalDesign
+  const headerLayout =
+    previewAttributes?.['data-qb-header'] ??
+    (savedDesign?.engine === 'v2' ? savedDesign.attributes['data-qb-header'] : undefined) ??
+    'stacked'
+
+  // How the design shows the brand; in the admin preview, the draft's.
+  const previewLogo = usePreviewLogo()
+  const designLogo = previewLogo ?? (savedDesign?.engine === 'v2' ? savedDesign.logo : undefined)
+  const brandName = designLogo?.name || orgName
+  const wordmark = designLogo?.wordmark
+  // A wordmark without a file shows the mark and name, as before one is uploaded.
+  const display =
+    designLogo?.display === 'wordmark' && !wordmark?.light && !wordmark?.dark
+      ? 'mark_and_name'
+      : (designLogo?.display ?? 'mark_and_name')
+
+  // Beside the name, the mark is decoration; alone, it names the portal. The
+  // design's own logo comes first, its dark one in dark mode, then the workspace's.
+  const own = designLogo?.mark
+  const ownMark = own?.light ?? own?.dark
+  const mark = ownMark ? (
+    <>
+      <img
+        src={ownMark}
+        alt={display === 'mark' ? orgName : ''}
+        className={`size-[var(--qb-logo-height,2rem)] object-contain ${ICON_TILE} ${own?.dark && own.light ? 'dark:hidden' : ''}`}
+      />
+      {own?.dark && own.light ? (
+        <img
+          src={own.dark}
+          alt={display === 'mark' ? orgName : ''}
+          className={`hidden size-[var(--qb-logo-height,2rem)] object-contain dark:block ${ICON_TILE}`}
+        />
+      ) : null}
+    </>
+  ) : orgLogo ? (
+    <img
+      src={orgLogo}
+      alt={display === 'mark' ? orgName : ''}
+      className="size-[var(--qb-logo-height,2rem)] [border-radius:calc(var(--radius)*0.6)]"
+    />
+  ) : (
+    <div className="size-[var(--qb-logo-height,2rem)] [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
+      {nameInitial(orgName)}
+    </div>
+  )
+  // The logo filters only act on the design's own logo images.
+  const filtered = display === 'wordmark' || !!ownMark
+  const logo = (
+    <Link
+      to={PORTAL_LANDING}
+      // Named for what it shows, so a wordmark or a mark alone still says whose portal it is.
+      aria-label={display === 'wordmark' || display === 'mark' ? brandName : undefined}
+      // Never shrunk under the menu (it folds to its own row instead); on a phone it gives
+      // way to the buttons, the wordmark scaled down within it, never below a readable size.
+      className="portal-header__logo flex min-h-6 min-w-[min(calc(var(--qb-logo-height,2rem)*2.5),30vw)] items-center gap-2 md:shrink-0"
+      data-qb-part="logo"
+      data-qb-menu="logo"
+      data-qb-logo={display}
+    >
+      {filtered ? <LogoFilters /> : null}
+      {display === 'wordmark' ? (
+        <>
+          {/* The light file shows in dark mode too when there is no dark one. */}
+          <img
+            src={(wordmark?.light ?? wordmark?.dark)!}
+            alt={brandName}
+            className={`h-[var(--qb-logo-height,2rem)] w-auto max-w-[min(calc(var(--qb-logo-height,2rem)*6),45vw)] max-md:max-w-[min(calc(var(--qb-logo-height,2rem)*6),45vw,100%)] object-contain ${ICON_TILE} ${wordmark?.dark && wordmark.light ? 'dark:hidden' : ''}`}
+          />
+          {wordmark?.dark && wordmark.light ? (
+            <img
+              src={wordmark.dark}
+              alt={brandName}
+              className={`hidden h-[var(--qb-logo-height,2rem)] w-auto max-w-[min(calc(var(--qb-logo-height,2rem)*6),45vw)] max-md:max-w-[min(calc(var(--qb-logo-height,2rem)*6),45vw,100%)] object-contain dark:block ${ICON_TILE}`}
+            />
+          ) : null}
+        </>
+      ) : display === 'name' ? (
+        // A stored design's title alone: shown on phones too.
+        <span title={brandName} className={`${TITLE} text-xl`}>
+          {brandName}
+        </span>
+      ) : (
+        <>
+          {mark}
+          {display === 'mark_and_name' ? (
+            <span title={brandName} className={`${TITLE} text-lg sr-only sm:not-sr-only sm:block`}>
+              {brandName}
+            </span>
+          ) : null}
+        </>
+      )}
+    </Link>
+  )
+  const navigation = (
+    <Navigation
+      navItems={navItems}
+      helpHeaderLinks={settings?.helpCenterConfig?.headerLinks}
+      supportUnreadTotal={supportUnreadTotal}
+    />
+  )
+  const menuFolded = useMenuFold(inlineRow, headerLayout === 'inline')
+  // How the header meets the design's band (qb-header in globals.css).
+  const headerClassName =
+    'portal-header qb-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm'
+
+  // A design can put the menu beside the logo or centre both. Below md an
+  // inline header folds back to two rows, so the menu always has room; wider,
+  // it folds too when the menu is wider than the room beside the logo.
+  if (headerLayout === 'inline') {
+    return (
+      <header
+        ref={headerRef}
+        className={headerClassName}
+        data-qb-section="header"
+        data-qb-part="header"
+      >
+        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+          <div ref={inlineRow} className="flex h-12 items-center gap-4" data-qb-header-row="">
+            {logo}
+            {menuFolded ? null : (
+              <NavScroller className="hidden min-w-0 flex-1 md:block">{navigation}</NavScroller>
+            )}
+            <div className="ms-auto shrink-0" data-qb-header-actions="">
+              {authButtons}
+            </div>
+          </div>
+        </div>
+        <NavScroller className={menuFolded ? 'mt-2' : 'mt-2 md:hidden'}>
+          <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+            {navigation}
+          </div>
+        </NavScroller>
+      </header>
+    )
+  }
+  if (headerLayout === 'centered') {
+    return (
+      <header
+        ref={headerRef}
+        className={headerClassName}
+        data-qb-section="header"
+        data-qb-part="header"
+      >
+        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+          {/* From md, three columns: the theme toggle and Log in at the start, the logo
+              between, Sign up or the account at the end, each edge on the content
+              column's. On a phone the logo leads, every button together at the end. */}
+          <div
+            className="flex h-12 items-center gap-2 md:grid md:grid-cols-[1fr_auto_1fr]"
+            data-qb-header-row=""
+          >
+            <div
+              className="order-1 ms-auto flex items-center md:order-none md:ms-0 md:justify-self-start"
+              data-qb-header-lead=""
+            >
+              {themeToggle}
+              {customise}
+              {adminButton}
+              {signInOffered && showSignup ? logIn : null}
+            </div>
+            {logo}
+            <div
+              className="order-2 flex items-center md:order-none md:justify-self-end"
+              data-qb-header-actions=""
+            >
+              {bell}
+              {accountMenu}
+              {signInOffered ? (showSignup ? signUp : logIn) : null}
+            </div>
+          </div>
+        </div>
+        {/* Centred while it fits; wider than the screen, it scrolls from its start. */}
+        <NavScroller className="mt-2">
+          <div className="max-w-[var(--qb-page-max,72rem)] mx-auto flex w-max min-w-full justify-center px-4 sm:px-6">
+            {navigation}
+          </div>
+        </NavScroller>
+      </header>
+    )
+  }
 
   // Two-row layout: Logo + Auth on top, Navigation below
   return (
     // A banner landmark, so the logo and account controls sit in one.
     <header
       ref={headerRef}
-      className="portal-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm"
+      className={headerClassName}
+      data-qb-section="header"
+      data-qb-part="header"
     >
       {/* Row 1: Logo + Name + Auth */}
       <div>
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
+        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
           <div className="flex h-12 items-center justify-between">
-            <Link to="/" className="portal-header__logo flex items-center gap-2">
-              {orgLogo ? (
-                <img
-                  src={orgLogo}
-                  alt={orgName}
-                  className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
-                />
-              ) : (
-                <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
-                  {nameInitial(orgName)}
-                </div>
-              )}
-              <span
-                title={orgName}
-                className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
-              >
-                {orgName}
-              </span>
-            </Link>
+            {logo}
             {authButtons}
           </div>
         </div>
       </div>
 
       {/* Row 2: Navigation */}
-      <div className="mt-2 overflow-x-auto scrollbar-none">
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
-          <Navigation
-            navItems={navItems}
-            helpHeaderLinks={settings?.helpCenterConfig?.headerLinks}
-            supportUnreadTotal={supportUnreadTotal}
-          />
+      <NavScroller className="mt-2">
+        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+          {navigation}
         </div>
-      </div>
+      </NavScroller>
     </header>
   )
 }
 
 const navItemClass = (isActive: boolean) =>
   cn(
-    'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:calc(var(--radius)*0.8)]',
+    'portal-nav__item qb-nav-item px-3 py-2 text-sm font-medium transition-colors',
     isActive
-      ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)]'
+      ? 'portal-nav__item--active qb-nav-active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)]'
       : 'text-[var(--nav-inactive-color)] hover:text-[var(--nav-active-foreground)] hover:bg-[var(--nav-active-background)]/50'
   )
 
@@ -355,7 +567,7 @@ function Navigation({
   const helpLinks = onHelpPages ? (helpHeaderLinks ?? []).slice(0, 3) : []
 
   return (
-    <nav className="portal-nav flex items-center gap-1 whitespace-nowrap">
+    <nav className="portal-nav flex items-center gap-1 whitespace-nowrap" data-qb-menu-row="">
       {navItems.map((item) => {
         if (item.kind === 'link') {
           return (
@@ -365,6 +577,8 @@ function Navigation({
               target={item.newTab ? '_blank' : undefined}
               rel="noopener noreferrer"
               className={navItemClass(false)}
+              data-qb-part="nav-item"
+              data-qb-menu={`link:${item.id}`}
             >
               {item.label}
             </a>
@@ -387,6 +601,7 @@ function Navigation({
             target={external ? '_blank' : undefined}
             rel={external ? 'noopener noreferrer' : undefined}
             className={navItemClass(false)}
+            data-qb-part="nav-item"
           >
             {link.label}
           </a>
@@ -407,9 +622,15 @@ type BuiltInNavItem = Extract<PortalNavItem, { kind: 'builtin' }>
 const NavTab = memo(
   function NavTab({ item, unread }: { item: BuiltInNavItem; unread: number }) {
     const intl = useIntl()
-    const isActive = useRouterState({ select: (s) => isTabActive(item.to, s.location.pathname) })
+    const isActive = useRouterState({ select: (s) => isTabActive(item, s.location.pathname) })
     return (
-      <Link to={item.to} className={navItemClass(isActive)}>
+      <Link
+        to={item.to}
+        className={navItemClass(isActive)}
+        data-qb-part="nav-item"
+        data-qb-menu={item.type}
+        data-state={isActive ? 'active' : undefined}
+      >
         {item.label ??
           intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
         {unread > 0 && (

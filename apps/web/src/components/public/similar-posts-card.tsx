@@ -1,4 +1,5 @@
 'use client'
+import { StatusColourDot } from '@/components/ui/status-badge'
 
 import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -13,6 +14,10 @@ interface SimilarPostsCardProps {
   posts: SimilarPost[]
   show: boolean
   className?: string
+  /** Its heading in place of "Similar posts", such as Home's invitation to vote instead. */
+  heading?: string
+  /** A way on past the matches, under them, such as adding details to post anyway. */
+  more?: { label: string; onClick: () => void }
 }
 
 function useContentHeight() {
@@ -43,6 +48,8 @@ export const SimilarPostsCard = memo(function SimilarPostsCard({
   posts,
   show,
   className,
+  heading,
+  more,
 }: SimilarPostsCardProps): React.ReactElement {
   const intl = useIntl()
   const showCard = show && posts.length > 0
@@ -60,11 +67,12 @@ export const SimilarPostsCard = memo(function SimilarPostsCard({
         >
           <div ref={contentRef}>
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2">
-              <LightBulbIcon className="h-3.5 w-3.5 text-muted-foreground/60" />
-              {intl.formatMessage({
-                id: 'portal.feedback.similarPosts.heading',
-                defaultMessage: 'Similar posts',
-              })}
+              <LightBulbIcon className="h-3.5 w-3.5 text-muted-foreground" />
+              {heading ??
+                intl.formatMessage({
+                  id: 'portal.feedback.similarPosts.heading',
+                  defaultMessage: 'Similar posts',
+                })}
             </p>
             <div className="space-y-1.5">
               {posts.slice(0, MAX_SIMILAR_POSTS).map((post) => (
@@ -87,10 +95,7 @@ export const SimilarPostsCard = memo(function SimilarPostsCard({
                   <div className="flex-1 min-w-0">
                     {post.status && (
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <span
-                          className="size-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: post.status.color }}
-                        />
+                        <StatusColourDot colour={post.status.color} className="size-1.5" />
                         {post.status.name}
                       </span>
                     )}
@@ -101,6 +106,15 @@ export const SimilarPostsCard = memo(function SimilarPostsCard({
                 </a>
               ))}
             </div>
+            {more && (
+              <button
+                type="button"
+                onClick={more.onClick}
+                className="mt-2 rounded-sm px-2 text-xs font-medium text-[var(--qb-accent-text,var(--primary))] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {more.label}
+              </button>
+            )}
           </div>
         </motion.div>
       )}

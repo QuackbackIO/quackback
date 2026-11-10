@@ -1,0 +1,342 @@
+/**
+ * Small drawings for the design tiles. Each shows the choice itself: the
+ * corner, the spacing, the card style, the menu style, the width or the
+ * filter side.
+ */
+import { cn } from '@/lib/shared/utils'
+import type { PortalDesign } from '@/lib/shared/design/schema'
+
+type Layout = PortalDesign['layout']
+
+export function ModeDrawing({ mode }: { mode: PortalDesign['mode'] }) {
+  return (
+    <span className="flex h-full w-full">
+      {mode !== 'dark' && <span className="flex-1 bg-white" />}
+      {mode !== 'light' && <span className="flex-1 bg-neutral-900" />}
+    </span>
+  )
+}
+
+const DENSITY_GAP: Record<Layout['density'], string> = {
+  compact: 'gap-0.5',
+  comfortable: 'gap-1',
+  spacious: 'gap-1.5',
+}
+
+export function DensityDrawing({ density }: { density: Layout['density'] }) {
+  return (
+    <span className={cn('flex w-12 flex-col', DENSITY_GAP[density])}>
+      {[0, 1, 2].map((row) => (
+        <span key={row} className="h-1.5 rounded-sm bg-foreground/40" />
+      ))}
+    </span>
+  )
+}
+
+export function CardsDrawing({ cards }: { cards: Layout['cards'] }) {
+  return (
+    <span className={cn('flex w-14 flex-col', cards === 'list' ? 'gap-0' : 'gap-1')}>
+      {[0, 1].map((row) => (
+        <span
+          key={row}
+          className={cn(
+            'h-3 bg-background',
+            cards === 'bordered' && 'rounded-sm border border-foreground/40',
+            cards === 'raised' && 'rounded-sm shadow-[0_1px_3px_rgba(0,0,0,0.35)]',
+            cards === 'list' && 'border-b border-foreground/40',
+            cards === 'filled' && 'rounded-md bg-foreground/15'
+          )}
+        />
+      ))}
+    </span>
+  )
+}
+
+const WIDTH_CLASS: Record<Layout['width'], string> = {
+  narrow: 'w-7',
+  default: 'w-10',
+  wide: 'w-14',
+}
+
+export function WidthDrawing({ width }: { width: Layout['width'] }) {
+  return <span className={cn('h-5 rounded-sm bg-foreground/30', WIDTH_CLASS[width])} />
+}
+
+export function NavDrawing({ nav }: { nav: Layout['nav'] }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span
+        className={cn(
+          'h-2.5 w-5',
+          nav === 'tabs' && 'rounded-sm bg-foreground/25',
+          nav === 'pills' && 'rounded-full bg-primary/40',
+          nav === 'underline' && 'border-b-2 border-primary',
+          nav === 'plain' && 'rounded-sm bg-foreground/70'
+        )}
+      />
+      <span className="h-1.5 w-4 rounded-sm bg-foreground/20" />
+      <span className="h-1.5 w-4 rounded-sm bg-foreground/20" />
+    </span>
+  )
+}
+
+/** The menu's other pages in a soft grey or the text colour, beside the current one. */
+export function NavTextDrawing({ text }: { text: NonNullable<Layout['navText']> }) {
+  const other = text === 'ink' ? 'bg-foreground/75' : 'bg-foreground/30'
+  return (
+    <span className="flex items-center gap-1">
+      <span className="h-1.5 w-4 rounded-sm bg-foreground/80" />
+      <span className={cn('h-1.5 w-4 rounded-sm', other)} />
+      <span className={cn('h-1.5 w-4 rounded-sm', other)} />
+    </span>
+  )
+}
+
+const SHADOW_CLASS = {
+  soft: 'shadow-[0_1px_2px_rgba(0,0,0,0.12),0_1px_3px_rgba(0,0,0,0.12)]',
+  lifted: 'shadow-[0_4px_6px_-1px_rgba(0,0,0,0.18),0_2px_4px_-2px_rgba(0,0,0,0.18)]',
+  floating: 'shadow-[0_4px_10px_-2px_rgba(0,0,0,0.28)]',
+  deep: 'shadow-[0_9px_20px_-6px_rgba(0,0,0,0.4)]',
+} as const
+
+/** A card on its shadow: a hairline, lifted, or floating well above the page. */
+export function ShadowDrawing({ shadow }: { shadow: keyof typeof SHADOW_CLASS }) {
+  return <span className={cn('h-4 w-10 rounded-sm bg-background', SHADOW_CLASS[shadow])} />
+}
+
+export function HeaderDrawing({ header }: { header: Layout['header'] }) {
+  const logo = <span className="size-2.5 shrink-0 rounded-sm bg-foreground/50" />
+  const menu = (
+    <span className="flex gap-0.5">
+      <span className="h-1.5 w-3 rounded-sm bg-foreground/30" />
+      <span className="h-1.5 w-3 rounded-sm bg-foreground/30" />
+    </span>
+  )
+  if (header === 'inline')
+    return (
+      <span className="flex w-14 items-center gap-1.5">
+        {logo}
+        {menu}
+      </span>
+    )
+  return (
+    <span className={cn('flex w-14 flex-col gap-1', header === 'centered' && 'items-center')}>
+      {logo}
+      {menu}
+    </span>
+  )
+}
+
+export function BandDrawing({ band }: { band: Layout['band'] }) {
+  return (
+    <span className="flex h-full w-full flex-col">
+      <span
+        className={cn(
+          'h-4 w-full',
+          band === 'tint' && 'bg-primary/20',
+          band === 'fade' && 'bg-gradient-to-b from-primary/25 to-transparent',
+          band === 'brand' && 'bg-primary',
+          band === 'support' && 'bg-foreground/45',
+          band === 'blend' && 'bg-gradient-to-r from-primary to-foreground/30'
+        )}
+      />
+      <span className="mx-auto mt-1 h-1.5 w-8 rounded-sm bg-foreground/20" />
+    </span>
+  )
+}
+
+/** Bars for a feed's order: rising for trending, falling for top, a dot on the newest. */
+export function SortDrawing({ sort }: { sort: 'trending' | 'top' | 'new' }) {
+  const heights = sort === 'top' ? ['h-5', 'h-3.5', 'h-2'] : ['h-2', 'h-3.5', 'h-5']
+  if (sort === 'new')
+    return (
+      <span className="flex w-12 flex-col gap-1">
+        {[0, 1, 2].map((row) => (
+          <span key={row} className="flex items-center gap-1">
+            <span
+              className={cn('size-1.5 rounded-full', row === 0 ? 'bg-primary' : 'bg-transparent')}
+            />
+            <span className="h-1.5 flex-1 rounded-sm bg-foreground/30" />
+          </span>
+        ))}
+      </span>
+    )
+  return (
+    <span className="flex items-end gap-1">
+      {heights.map((height, index) => (
+        <span key={index} className={cn('w-2 rounded-sm bg-foreground/35', height)} />
+      ))}
+    </span>
+  )
+}
+
+export function FiltersDrawing({ filters }: { filters: Layout['filters'] }) {
+  return (
+    <span className={cn('flex w-14 gap-1', filters === 'start' && 'flex-row-reverse')}>
+      <span className="h-6 flex-1 rounded-sm bg-foreground/20" />
+      <span className="h-6 w-4 rounded-sm border border-foreground/40" />
+    </span>
+  )
+}
+
+export function BlendDrawing({ blend }: { blend: NonNullable<Layout['blend']> }) {
+  if (blend === 'ribbon')
+    return (
+      <span className="h-5 w-14 rounded-sm bg-[linear-gradient(62deg,transparent_50%,var(--primary)_65%,color-mix(in_oklch,var(--foreground)_35%,transparent)_80%,transparent_92%)]" />
+    )
+  return blend === 'mesh' ? (
+    <span className="h-5 w-14 rounded-sm bg-[radial-gradient(circle_at_75%_30%,var(--primary),transparent_55%),radial-gradient(circle_at_95%_90%,color-mix(in_oklch,var(--foreground)_35%,transparent),transparent_55%)]" />
+  ) : (
+    <span className="h-5 w-14 rounded-sm bg-gradient-to-r from-primary to-foreground/30" />
+  )
+}
+
+export function AlignDrawing({ align }: { align: NonNullable<Layout['bandAlign']> }) {
+  return (
+    <span className={cn('flex w-12 flex-col gap-1', align === 'centre' && 'items-center')}>
+      <span className="h-2 w-9 rounded-sm bg-foreground/45" />
+      <span className="h-1.5 w-6 rounded-sm bg-foreground/25" />
+    </span>
+  )
+}
+
+export function ImagePlaceDrawing({ place }: { place: NonNullable<Layout['imagePlace']> }) {
+  const words = <span className="h-1.5 w-5 rounded-sm bg-foreground/50" />
+  if (place === 'side')
+    return (
+      <span className="flex w-14 items-center gap-1">
+        {words}
+        <span className="h-6 flex-1 rounded-sm bg-foreground/25" />
+      </span>
+    )
+  return (
+    <span
+      className={cn(
+        'relative flex h-7 w-14 items-start justify-start overflow-hidden rounded-sm p-1',
+        place === 'cover' && 'bg-foreground/25',
+        place === 'pattern' &&
+          'bg-[radial-gradient(circle,color-mix(in_oklch,var(--foreground)_30%,transparent)_1px,transparent_1.5px)] bg-[length:5px_5px]'
+      )}
+    >
+      {words}
+      {place === 'edge' && <span className="absolute inset-x-0 bottom-0 h-2 bg-foreground/30" />}
+    </span>
+  )
+}
+
+export function StatusDrawing({ status }: { status: NonNullable<Layout['status']> }) {
+  const colours = ['bg-warning', 'bg-primary', 'bg-success']
+  if (status === 'pill')
+    return (
+      <span className="flex gap-1">
+        {['bg-warning/25', 'bg-success/25'].map((tint) => (
+          <span key={tint} className={cn('h-2.5 w-5 rounded-sm', tint)} />
+        ))}
+      </span>
+    )
+  return (
+    <span className="flex gap-1.5">
+      {colours.map((colour, index) => (
+        <span
+          key={colour}
+          className={cn(
+            'size-2 rounded-full',
+            status === 'ink' && 'bg-foreground/70',
+            status === 'colour' && colour,
+            status === 'brand' && ['bg-primary', 'bg-primary/60', 'bg-foreground/50'][index]
+          )}
+        />
+      ))}
+    </span>
+  )
+}
+
+export function TypeStyleDrawing({
+  style,
+}: {
+  style: 'quiet' | 'confident' | 'display' | 'poster'
+}) {
+  return (
+    <span
+      className={cn(
+        'font-semibold leading-none text-foreground/80',
+        style === 'quiet' && 'text-[11px]',
+        style === 'confident' && 'text-sm tracking-tight',
+        style === 'display' && 'text-lg font-bold tracking-tighter',
+        style === 'poster' && 'text-base font-extrabold uppercase tracking-tighter'
+      )}
+    >
+      {style === 'poster' ? 'AA' : 'Aa'}
+    </span>
+  )
+}
+
+export function ComposerPlaceDrawing({ place }: { place: 'band' | 'block' }) {
+  return (
+    <span className="flex h-full w-full flex-col">
+      <span className={cn('flex h-5 w-full items-end px-1.5', place === 'band' && 'bg-primary/25')}>
+        {place === 'band' && <span className="mb-1 h-1.5 w-8 rounded-full bg-background" />}
+      </span>
+      <span className="mt-1 flex gap-1 px-1.5">
+        {place === 'block' && <span className="h-2 w-6 rounded-sm border border-foreground/40" />}
+        <span className="h-2 flex-1 rounded-sm bg-foreground/20" />
+      </span>
+    </span>
+  )
+}
+
+export function BandArtDrawing({ art }: { art: NonNullable<Layout['bandArt']> }) {
+  const tile: Partial<Record<typeof art, string>> = {
+    dots: 'bg-[radial-gradient(circle,color-mix(in_oklch,var(--primary)_55%,transparent)_1.2px,transparent_1.6px)] bg-[length:7px_7px]',
+    grid: 'bg-[linear-gradient(color-mix(in_oklch,var(--primary)_35%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_oklch,var(--primary)_35%,transparent)_1px,transparent_1px)] bg-[length:8px_8px]',
+    lines:
+      'bg-[repeating-linear-gradient(45deg,color-mix(in_oklch,var(--primary)_35%,transparent)_0_1px,transparent_1px_5px)]',
+    petals:
+      'bg-[radial-gradient(ellipse_3px_1.5px,color-mix(in_oklch,var(--primary)_50%,transparent)_80%,transparent)] bg-[length:10px_9px]',
+    confetti:
+      'bg-[radial-gradient(circle,color-mix(in_oklch,var(--primary)_60%,transparent)_1px,transparent_1.5px),radial-gradient(circle,color-mix(in_oklch,var(--foreground)_35%,transparent)_1px,transparent_1.5px)] bg-[length:9px_9px,13px_11px]',
+  }
+  return (
+    <span
+      className={cn('relative block h-7 w-14 overflow-hidden rounded-sm bg-primary/10', tile[art])}
+    >
+      {art === 'hills' && (
+        <span className="absolute inset-x-0 bottom-0 h-3 rounded-t-[100%] bg-primary/60" />
+      )}
+      {art === 'waves' && (
+        <span className="absolute inset-x-0 bottom-0 h-2.5 bg-[radial-gradient(circle_at_50%_0,transparent_4px,color-mix(in_oklch,var(--primary)_55%,transparent)_4.5px)] bg-[length:10px_10px]" />
+      )}
+    </span>
+  )
+}
+
+export function FocusDrawing({ focus }: { focus: NonNullable<Layout['imageFocus']> }) {
+  return (
+    <span
+      className={cn(
+        'flex h-6 w-14 rounded-sm border border-foreground/30 p-0.5',
+        focus === 'left' && 'justify-start',
+        focus === 'centre' && 'justify-center',
+        focus === 'right' && 'justify-end'
+      )}
+    >
+      <span className="h-full w-5 rounded-[2px] bg-foreground/40" />
+    </span>
+  )
+}
+
+export function PageTitlesDrawing({ place }: { place: NonNullable<Layout['pageTitles']> }) {
+  return (
+    <span className="flex h-full w-full flex-col">
+      <span
+        className={cn('flex h-5 w-full items-center px-1.5', place === 'band' && 'bg-primary/25')}
+      >
+        <span className="h-1.5 w-7 rounded-full bg-foreground/60" />
+      </span>
+      <span className="mt-1 flex flex-col gap-1 px-1.5">
+        <span className="h-2 w-full rounded-sm border border-foreground/40" />
+        <span className="h-2 w-full rounded-sm border border-foreground/40" />
+      </span>
+    </span>
+  )
+}

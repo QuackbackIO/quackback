@@ -40,7 +40,7 @@ interface WidgetOverviewProps {
   team: { name: string; avatarUrl: string | null }[]
   /** Top help articles for the search card (SSR'd by the loader). */
   topArticles: { slug: string; title: string }[]
-  /** Open the feedback feed (Suggest a feature). */
+  /** Open the feedback feed (Write a post). */
   onLeaveFeedback: () => void
   /** Open the help articles surface. */
   onOpenHelp: () => void
@@ -137,7 +137,7 @@ export function WidgetOverview({
               card.title ?? (
                 <FormattedMessage
                   id="widget.launcher.action.feedback"
-                  defaultMessage="Suggest a feature"
+                  defaultMessage="Write a post"
                 />
               )
             }
@@ -145,7 +145,7 @@ export function WidgetOverview({
               card.subtitle ?? (
                 <FormattedMessage
                   id="widget.launcher.action.feedback.sub"
-                  defaultMessage="Post or vote on feedback"
+                  defaultMessage={'Or vote on what others posted'}
                 />
               )
             }

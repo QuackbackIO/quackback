@@ -13,7 +13,6 @@ export interface PortalAccessGateError {
   reason: 'unauthenticated' | 'unauthorized'
   workspaceName: string
   logoUrl: string | null
-  themeStyles: string
   customCss: string
   /**
    * The structured theme config's light-mode font-family, so the gate can
@@ -39,6 +38,10 @@ export interface PortalAccessGateError {
   userEmail?: string | null
   /** Pending destination to navigate to once access is granted post-sign-in. */
   callbackUrl?: string
+  /** Whether the footer's Powered by Quackback credit shows, as on every portal page. */
+  showPoweredBy?: boolean
+  /** The workspace's slug, for the credit's link. */
+  workspaceSlug?: string
   /** When set, the gate opens the sign-in dialog automatically on mount. */
   autoOpenSignin?: 'login' | 'signup'
   authConfig: {

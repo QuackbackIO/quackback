@@ -1,0 +1,305 @@
+import { useEffect, useRef } from 'react'
+import { locationOfPath, type DesignerPage, type Selection } from '@/lib/shared/design/outline'
+import type { CanvasFrame } from './designer-canvas'
+import { EditingLayer } from './editing-layer'
+import { ComposerWidthHandles } from './composer-width-handles'
+import { GridHandles } from './grid-handles'
+import { useComposerWidthEdit } from './use-composer-width'
+import { useGridEdit, type GridEditing } from './use-grid-edit'
+import { revealInFrame, useFrameRects } from './use-frame-rects'
+import { ElementOutlines, type LiveValue, type OutlinedElement } from './element-outline'
+import {
+  kindNote,
+  locatePick,
+  pickKey,
+  pickName,
+  pickOfKey,
+  picksIn,
+  pickTraits,
+  type ElementPick,
+} from '@/lib/shared/design/element-pick'
+import { destinationName, LIVE_SOURCES, livesIn } from '@/lib/shared/design/content-kinds'
+import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { OverridePage } from '@/lib/shared/design/style-overrides'
+import type { StyleState } from '@/lib/shared/design/style-tokens'
+
+/**
+ * The editing layer over the canvas, drawn from where the frame's page puts
+ * the blocks under the pointer and picked. A block picked elsewhere, such as
+ * in the panel, is scrolled into view in the frame. Escape lets go of the
+ * pick even when nothing has focus, as after the focused chip button goes.
+ * A picked Home block on the grid takes a grip and resize handles, and the
+ * composer picked in Home's hero takes width handles. Open sits on the
+ * picked link's or item's own tag, never on the block's chip.
+ */
+export function CanvasLayer({
+  canvas,
+  hovered,
+  picked,
+  name,
+  homeOn,
+  pages,
+  onPage,
+  onDuplicate,
+  onRemove,
+  onDeselect,
+  grid,
+  elements,
+}: {
+  canvas: CanvasFrame
+  hovered: Selection | null
+  picked: Selection | null
+  /** The picked block's name. */
+  name: string | null
+  homeOn: boolean
+  /** The pages the builder draws, which Open can go to. */
+  pages: readonly DesignerPage[]
+  onPage: (page: DesignerPage, item?: string | null) => void
+  onDuplicate: (key: Selection) => void
+  onRemove: (key: Selection) => void
+  onDeselect: () => void
+  /** What moving and resizing Home's blocks needs; without it, blocks stay put. */
+  grid?: GridEditing
+  /** Elements in blocks: the one pointed at and the one picked, by pick key. */
+  elements?: {
+    design: PortalDesign
+    page: OverridePage | null
+    hovered: string | null
+    picked: string | null
+    /** The state the picked element is drawn in, so its look in that state shows. */
+    force: StyleState
+    onPick: (pick: ElementPick | null) => void
+    say: (words: string) => void
+  }
+}) {
+  const locate = (doc: Document, key: string) => {
+    const live = liveOfKey(key)
+    if (live) {
+      const scope = [...doc.querySelectorAll('[data-qb-section]')].find(
+        (node) => node.getAttribute('data-qb-section') === live.section
+      )
+      return scope ? (livesIn(scope)[live.at]?.node ?? null) : null
+    }
+    const pick = pickOfKey(key)
+    return pick && elements ? locatePick(doc, pick, elements.design, elements.page) : null
+  }
+  const doc = canvas.frame?.contentDocument ?? null
+  const element = elements?.picked ? pickOfKey(elements.picked) : null
+  const pointed = elements?.hovered ? pickOfKey(elements.hovered) : null
+  const traitsOf = (pick: ElementPick | null) =>
+    pick && elements && doc ? pickTraits(doc, pick, elements.design, elements.page) : null
+  const pickedTraits = traitsOf(element)
+  const pointedTraits = traitsOf(pointed)
+  // A data item styles every item of its kind in its block: each is outlined.
+  const otherKeys =
+    element && pickedTraits
+      ? pickedTraits.others.map((index) => pickKey({ ...element, index }))
+      : []
+  // Live values in the block picked, else the one pointed at.
+  const liveSection = picked ?? hovered
+  const liveMarks = (() => {
+    if (!doc || !liveSection || !elements) return []
+    const scope = [...doc.querySelectorAll('[data-qb-section]')].find(
+      (node) => node.getAttribute('data-qb-section') === liveSection
+    )
+    return scope
+      ? livesIn(scope).map((live) => ({
+          mark: live.mark,
+          words: live.node.hasAttribute('data-qb-live'),
+        }))
+      : []
+  })()
+  const liveKeys = liveMarks.map((_, at) => `live:${liveSection}|${at}`)
+  const rects = useFrameRects(
+    canvas.frame,
+    canvas.scale,
+    [
+      hovered,
+      picked,
+      elements?.hovered ?? null,
+      elements?.picked ?? null,
+      ...otherKeys,
+      ...liveKeys,
+    ],
+    locate
+  )
+  const nameOf = (pick: ElementPick | null) =>
+    pick && elements ? pickName(pick, elements.design, elements.page) : null
+  const locateRef = useRef(locate)
+  locateRef.current = locate
+  // The picked element is drawn in the state its settings show.
+  const force = elements?.force ?? 'base'
+  const forcedKey = elements?.picked ?? null
+  const forcedRect = forcedKey ? rects[forcedKey] : undefined
+  useEffect(() => {
+    const doc = canvas.frame?.contentDocument
+    if (!doc || !forcedKey || force === 'base') return
+    const node = locateRef.current(doc, forcedKey)
+    if (!node) return
+    node.setAttribute('data-qb-force', force)
+    return () => node.removeAttribute('data-qb-force')
+  }, [canvas.frame, forcedKey, force, forcedRect])
+  const step = (to: 'next' | 'previous' | 'up') => {
+    if (!elements || !element) return
+    if (to === 'up') {
+      elements.onPick(null)
+      keepFocus('[data-editing-layer] [data-chip-name]')
+      return
+    }
+    const doc = canvas.frame?.contentDocument
+    if (!doc || !element.section) return
+    const all = picksIn(doc, element.section, elements.design, elements.page)
+    if (!all.length) return
+    const at = all.findIndex((p) => pickKey(p) === pickKey(element))
+    const next = all[(at + (to === 'next' ? 1 : -1) + all.length) % all.length]!
+    elements.onPick(next)
+    elements.say(`${nameOf(next)} selected.`)
+    keepFocus('[data-editing-layer] [data-element-tag]')
+  }
+  const down = () => {
+    const doc = canvas.frame?.contentDocument
+    if (!doc || !elements || !picked) return
+    const first = picksIn(doc, picked, elements.design, elements.page)[0]
+    if (!first) return
+    elements.onPick(first)
+    elements.say(`${nameOf(first)} selected.`)
+    keepFocus('[data-editing-layer] [data-element-tag]')
+  }
+  const gridEdit = useGridEdit({
+    frame: canvas.frame,
+    scale: canvas.scale,
+    room: canvas.room,
+    picked,
+    name,
+    editing: grid,
+  })
+  const composerWidth = useComposerWidthEdit({
+    frame: canvas.frame,
+    scale: canvas.scale,
+    picked: elements?.picked ?? null,
+    editing: grid,
+  })
+  const resizing = !!gridEdit.view || !!composerWidth.view
+  useEffect(() => revealInFrame(canvas.frame, picked), [canvas.frame, picked])
+  const deselect = useRef(onDeselect)
+  deselect.current = onDeselect
+  useEffect(() => {
+    if (!picked) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && event.target === document.body)
+        deselect.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [picked])
+  // The picked link or item opens where it goes, if the builder draws that page.
+  const at = pickedTraits?.link ? locationOfPath(pickedTraits.link, homeOn) : null
+  const opens = at && pages.includes(at.page) ? at : null
+  const outlined = (
+    pick: ElementPick | null,
+    traits: ReturnType<typeof traitsOf>,
+    rect: (typeof rects)[string] | null
+  ): OutlinedElement | null =>
+    pick && traits && rect
+      ? { rect, name: nameOf(pick) ?? '', kind: traits.kind, note: kindNote(traits) }
+      : null
+  const lives: LiveValue[] = liveMarks.flatMap(({ mark, words }, i) => {
+    const rect = rects[liveKeys[i]!]
+    return rect && !resizing ? [{ rect, words, ...LIVE_SOURCES[mark] }] : []
+  })
+  const block = picked?.startsWith('block-') ? picked : null
+  const pickedRect = picked ? (rects[picked] ?? null) : null
+  const pointedRect =
+    elements?.hovered && elements.hovered !== elements.picked && !resizing
+      ? (rects[elements.hovered] ?? null)
+      : null
+  return (
+    <EditingLayer
+      room={canvas.room}
+      hovered={
+        hovered && hovered !== picked && !resizing && !pointedRect ? (rects[hovered] ?? null) : null
+      }
+      picked={pickedRect}
+      pickedKey={picked}
+      name={name}
+      onDuplicate={block ? () => onDuplicate(block) : undefined}
+      onRemove={block ? () => onRemove(block) : undefined}
+      onSettings={() => document.getElementById('designer-settings')?.focus()}
+      onDown={elements ? down : undefined}
+      grip={
+        gridEdit.on
+          ? {
+              onPointerDown: (event) => gridEdit.start('move', event),
+              onKeyDown: (event) => {
+                if (gridEdit.step(event)) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }
+              },
+            }
+          : undefined
+      }
+    >
+      {elements && (
+        <ElementOutlines
+          room={canvas.room}
+          hovered={outlined(pointed, pointedTraits, pointedRect)}
+          picked={outlined(
+            element,
+            pickedTraits,
+            elements.picked && !resizing ? (rects[elements.picked] ?? null) : null
+          )}
+          others={resizing ? [] : otherKeys.flatMap((key) => (rects[key] ? [rects[key]] : []))}
+          open={
+            opens
+              ? {
+                  label: `Open ${destinationName(opens)}`,
+                  onOpen: () => onPage(opens.page, opens.item),
+                }
+              : null
+          }
+          lives={lives}
+          block={pickedRect}
+          onStep={step}
+        />
+      )}
+      {composerWidth.on && composerWidth.box && (
+        <ComposerWidthHandles
+          box={composerWidth.box}
+          centred={composerWidth.centred}
+          view={composerWidth.view}
+          onStart={(edge, event) => composerWidth.start(edge, event)}
+        />
+      )}
+      {gridEdit.on && (
+        <GridHandles
+          picked={pickedRect}
+          view={gridEdit.view}
+          onStart={(edge, event) => gridEdit.start(edge, event)}
+        />
+      )}
+    </EditingLayer>
+  )
+}
+
+/**
+ * Puts focus on what a selector names once it is drawn: the tag of the
+ * element just picked, drawn again once its box is measured.
+ */
+function keepFocus(selector: string, frames = 20): void {
+  let left = frames
+  let seen: HTMLElement | null = null
+  const tick = () => {
+    const found = document.querySelector<HTMLElement>(selector)
+    if (found && found !== document.activeElement) found.focus()
+    if (found) seen = found
+    if (--left > 0 && (!seen || seen.isConnected)) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
+
+/** A live value's key among the frame's boxes: its block and which of the block's live values. */
+function liveOfKey(key: string): { section: string; at: number } | null {
+  const m = /^live:(.+)\|(\d+)$/.exec(key)
+  return m ? { section: m[1]!, at: Number(m[2]) } : null
+}
