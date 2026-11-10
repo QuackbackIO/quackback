@@ -45,6 +45,8 @@ const REFUSAL_CODES = [
   'NOT_SWITCHABLE',
   'NOT_SWITCHED',
   'NO_PORTAL_LOGO',
+  'DESIGN_TOO_LARGE',
+  'WELCOME_TOO_LONG',
 ] as const
 export type DesignRefusalCode = (typeof REFUSAL_CODES)[number]
 export type DesignRefusal = { ok: false; code: DesignRefusalCode; message: string }

@@ -27,6 +27,8 @@ const REFUSAL_STATUS: Record<DesignRefusalCode, number> = {
   NOT_SWITCHABLE: 409,
   NOT_SWITCHED: 409,
   NO_PORTAL_LOGO: 400,
+  DESIGN_TOO_LARGE: 413,
+  WELCOME_TOO_LONG: 400,
 }
 
 /** The key needs the settings scope and its owner the branding permission. */
