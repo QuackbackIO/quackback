@@ -70,6 +70,21 @@ async function findZone(
   return { nameservers: [] }
 }
 
+/**
+ * The zone a domain sits in and the DNS host that serves it, or undefined when
+ * the nameservers could not be read. Part of the pre-flight, and read again on
+ * a later check for a domain set up before the zone was kept.
+ */
+export async function readHostedZone(
+  domain: string,
+  resolver: DnsResolver
+): Promise<Pick<SendingDomainPreflight, 'zone' | 'dnsHost'> | undefined> {
+  const found = await findZone(domain, resolver)
+  if (!found) return undefined
+  const dnsHost = dnsHostFromNameservers(found.nameservers)
+  return { ...(dnsHost ? { dnsHost } : {}), ...(found.zone ? { zone: found.zone } : {}) }
+}
+
 const normalName = (n: string) => n.trim().toLowerCase().replace(/\.$/, '')
 const normalText = (t: string) => t.trim().replace(/\s+/g, ' ').toLowerCase()
 
@@ -196,14 +211,12 @@ export async function runPreflight(
   returnPathTarget: string | null = null
 ): Promise<SendingDomainPreflight> {
   const [zone, inUse, dmarc] = await Promise.all([
-    findZone(domain, resolver),
+    readHostedZone(domain, resolver),
     mailFromNameTaken(`${mailFromLabel}.${domain}`, domain, region, resolver, returnPathTarget),
     readDmarc(domain, resolver),
   ])
-  const dnsHost = zone ? dnsHostFromNameservers(zone.nameservers) : undefined
   return {
-    ...(dnsHost ? { dnsHost } : {}),
-    ...(zone?.zone ? { zone: zone.zone } : {}),
+    ...zone,
     ...(inUse !== undefined ? { mailFromFree: !inUse } : {}),
     ...(dmarc ? { dmarc } : {}),
     checkedAt: now.toISOString(),

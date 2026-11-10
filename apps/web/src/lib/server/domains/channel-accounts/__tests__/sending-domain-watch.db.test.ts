@@ -244,19 +244,21 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       await provisionSendingDomain({ owningTeamId: teamId, domain: 'b.example' })
       await provisionSendingDomain({ owningTeamId: teamId, domain: 'c.example' })
       zoneLookups.length = 0
+      // The domain a lookup was for: "NS a.example" and "TXT _dmarc.a.example" are both a.example.
+      const domainOf = (lookup: string) => lookup.split(' ')[1].split('.').slice(-2).join('.')
       // The first domain takes the whole budget.
       const clock = vi.fn<() => number>().mockReturnValueOnce(0).mockReturnValueOnce(0)
       clock.mockReturnValue(WATCH_BUDGET_MS)
 
       expect((await watchSendingDomains(new Date(), { clock })).watched).toBe(1)
-      const looked = new Set(zoneLookups.map((l) => l.split('.').slice(-2).join('.')))
+      const looked = new Set(zoneLookups.map(domainOf))
       expect(looked.size).toBe(1)
 
       // The next tick starts with the ones left unchecked.
       zoneLookups.length = 0
       const next = await watchSendingDomains(new Date(Date.now() + 60_000))
       expect(next.watched).toBe(3)
-      const order = [...new Set(zoneLookups.map((l) => l.split('.').slice(-2).join('.')))]
+      const order = [...new Set(zoneLookups.map(domainOf))]
       expect(order[order.length - 1]).toBe([...looked][0])
     })
 
@@ -356,6 +358,43 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       expect(first?.status).toBe('verified')
       expect(second?.status).toBe('verified')
       expect(await bellsFor([admin], 'sending_domain_live')).toHaveLength(1)
+    })
+  })
+
+  describe('the zone a domain sits in', () => {
+    it('is named on the next check for a domain set up before the zone was kept', async () => {
+      zone.set('zoned.example', { NS: ['ada.ns.cloudflare.com'] })
+      const row = await provisionSendingDomain({
+        owningTeamId: teamId,
+        domain: 'updates.zoned.example',
+      })
+      expect(row.preflight.zone).toBe('zoned.example')
+
+      // As a row from before the zone was kept: everything else, no zone.
+      await testDb
+        .update(emailSendingDomains)
+        .set({ preflight: { mailFromFree: true, dmarc: { found: false } } })
+        .where(eq(emailSendingDomains.id, row.id))
+      const refreshed = await refreshSendingDomain(row.id)
+      expect(refreshed?.preflight).toMatchObject({
+        zone: 'zoned.example',
+        dnsHost: 'cloudflare',
+        mailFromFree: true,
+      })
+    })
+
+    it('is not asked for again once it is known', async () => {
+      zone.set('zoned.example', { NS: ['ada.ns.cloudflare.com'] })
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'zoned.example' })
+      expect(row.preflight.zone).toBe('zoned.example')
+
+      zoneLookups.length = 0
+      const refreshed = await refreshSendingDomain(row.id)
+      expect(zoneLookups.filter((l) => l.startsWith('NS '))).toEqual([])
+      expect(refreshed?.preflight).toMatchObject({
+        zone: 'zoned.example',
+        dnsHost: 'cloudflare',
+      })
     })
   })
 
