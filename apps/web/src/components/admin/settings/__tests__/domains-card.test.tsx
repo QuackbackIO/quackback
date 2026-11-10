@@ -129,21 +129,78 @@ describe('<DomainsCard>', () => {
     provenBy,
   })
 
-  it('shows a covered hostname as already verified in place of the challenge record', () => {
-    renderCard([challenged('email-sending')])
-    const rows = [...document.querySelectorAll('[data-slot="dns-record"]')]
-    expect(rows.map((r) => r.textContent)).toEqual([
-      'Waiting: Routingfeedback.example.comCNAMEedge.example.net',
+  /** A hostname whose ownership the operator accepted through a proven zone. */
+  const accepted = (provenBy: ShownProofSource) => ({
+    ...base,
+    readiness: 'pending' as const,
+    updatedAt: '2026-10-01T12:00:00.000Z',
+    ownershipTxt: null,
+    ownershipProof: null,
+    ownership: 'proven-zone' as const,
+    routing: 'pending' as const,
+    ownershipVerified: true,
+    provenBy,
+  })
+
+  const rowTexts = () =>
+    [...document.querySelectorAll('[data-slot="dns-record"]')].map((r) => r.textContent)
+
+  it('shows each record its own state when routing is ready but ownership is not', () => {
+    renderCard([{ ...challenged(null), routing: 'ready', ownershipVerified: false }])
+    expect(rowTexts()).toEqual([
+      'Found: Routingfeedback.example.comCNAMEedge.example.net',
+      'Waiting: Ownership_quackback-challenge.feedback.example.comTXTproof-1',
     ])
-    expect(screen.queryByText('proof-1')).toBeNull()
+    expect(screen.queryByText(/Already verified/)).toBeNull()
+  })
+
+  it('keeps asking for the challenge record while ownership is not accepted', () => {
+    renderCard([challenged('email-sending')])
+    expect(rowTexts()).toEqual([
+      'Waiting: Routingfeedback.example.comCNAMEedge.example.net',
+      'Waiting: Ownership_quackback-challenge.feedback.example.comTXTproof-1',
+    ])
+  })
+
+  it('says how ownership was accepted and waits only on routing', () => {
+    renderCard([accepted('email-sending')])
+    expect(rowTexts()).toEqual(['Waiting: Routingfeedback.example.comCNAMEedge.example.net'])
     expect(screen.getByText('Already verified through email sending')).toBeTruthy()
   })
 
   it('says only that the workspace proved it when the viewer may not see the source', () => {
-    renderCard([challenged('workspace')])
+    renderCard([accepted('workspace')])
     expect(screen.getByText('Already verified by this workspace')).toBeTruthy()
     expect(screen.queryByText(/email sending|single sign-on/)).toBeNull()
-    expect(screen.queryByText('proof-1')).toBeNull()
+  })
+
+  it('follows overall readiness for every row when the operator sends no per-record state', () => {
+    renderCard([challenged(null)])
+    expect(rowTexts()).toEqual([
+      'Waiting: Routingfeedback.example.comCNAMEedge.example.net',
+      'Waiting: Ownership_quackback-challenge.feedback.example.comTXTproof-1',
+    ])
+    cleanup()
+    renderCard([{ ...challenged(null), readiness: 'failed' }])
+    expect(rowTexts().every((t) => t?.startsWith('Needs a fix:'))).toBe(true)
+  })
+
+  it('explains a failure only under a record that is not found', () => {
+    renderCard([
+      { ...challenged(null), readiness: 'failed', routing: 'ready', ownershipVerified: false },
+    ])
+    const rows = [...document.querySelectorAll('[data-slot="dns-record"]')]
+    expect(rows.map((r) => r.textContent?.split(':')[0])).toEqual(['Found', 'Needs a fix'])
+    const fixes = document.querySelectorAll('[data-slot="dns-record-fix"]')
+    expect(fixes).toHaveLength(1)
+    expect(rows[1]!.nextElementSibling).toBe(fixes[0])
+  })
+
+  it('explains a failed route under the routing record once ownership is accepted', () => {
+    renderCard([{ ...accepted('email-sending'), readiness: 'failed', routing: 'failed' }])
+    const rows = [...document.querySelectorAll('[data-slot="dns-record"]')]
+    expect(rows.map((r) => r.textContent?.split(':')[0])).toEqual(['Needs a fix'])
+    expect(document.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(1)
   })
 
   it('asks for the challenge record as before when nothing covers the hostname', () => {

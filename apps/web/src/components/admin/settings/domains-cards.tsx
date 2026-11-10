@@ -14,7 +14,7 @@ import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import { pendingProvenLabel, type ShownProofSource } from '@/lib/shared/domain-proof'
 import { WEB_ADDRESSES_TITLE } from './domains-overview'
 
-/** A hostname, with the proof that covers it when this workspace already holds one. */
+/** A hostname, with how its ownership was accepted when a proven zone covered it. */
 type HostnameRow = CustomDomainInstruction & { provenBy?: ShownProofSource | null }
 
 export function QuackbackUrlCard(props: {
@@ -82,34 +82,36 @@ const READINESS_STATE = {
 } as const
 
 /**
- * The records a hostname needs: the CNAME that routes it and, until it is
- * seen, the TXT that proves this workspace controls it, unless a zone the
- * workspace already proved covers it. Readiness is reported for the hostname
- * as a whole, so every row shares it and a failure is explained once, under
- * the last row.
+ * The records a hostname needs: the CNAME that routes it and, until ownership
+ * is accepted, the TXT that proves this workspace controls it. Each row shows
+ * its own state when the operator reports one, else the hostname's overall
+ * readiness. A failure is explained once, under the last record not yet found.
  */
 function hostnameRecords(domain: HostnameRow): DnsRecordRow[] {
-  const state = READINESS_STATE[domain.readiness]
+  const failed = domain.readiness === 'failed'
   const records: DnsRecordRow[] = [
     {
       label: 'Routing',
       type: 'CNAME',
       name: domain.hostname,
       value: domain.cnameTarget,
-      state,
+      state: READINESS_STATE[domain.routing ?? domain.readiness],
     },
   ]
-  if (!domain.provenBy && isTxtRecord(domain.ownershipProof)) {
+  if (isTxtRecord(domain.ownershipProof)) {
     records.push({
       label: 'Ownership',
       type: 'TXT',
       name: domain.ownershipProof.name,
       value: domain.ownershipProof.value,
-      state,
+      state: domain.ownershipVerified === true ? 'found' : failed ? 'problem' : 'waiting',
     })
   }
-  records[records.length - 1]!.problem =
-    "We couldn't confirm these records. Check each name and value, then verify."
+  const unresolved = records.filter((record) => record.state !== 'found').at(-1)
+  if (unresolved) {
+    unresolved.problem =
+      "We couldn't confirm these records. Check each name and value, then verify."
+  }
   return records
 }
 
