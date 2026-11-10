@@ -122,17 +122,16 @@ export function panelView(
 }
 
 /**
- * What Escape does: closes a sheet first, then goes up a level from a pick;
- * with nothing picked, it closes the page's panel, the only one it closes.
+ * What Escape does: closes a sheet first, then goes up a level from a pick.
+ * With nothing picked it does nothing: the panels stay where they are.
  */
 export function escapeStep(
   state: PanelState,
-  selection: string | null,
-  pageOpen = false
-): 'close-sheet' | 'up' | 'close-page' | null {
+  selection: string | null
+): 'close-sheet' | 'up' | null {
   if (state.sheet) return 'close-sheet'
   if (selection) return 'up'
-  return pageOpen ? 'close-page' : null
+  return null
 }
 
 /* Ask AI's pane */
@@ -156,6 +155,28 @@ export function paneWidthOnKey(key: string, width: number): number | null {
 
 /** The pane's width while its edge is dragged, kept within its limits. */
 export const paneWidthAt = clampPane
+
+/** The right column's width: the properties, and the sheets over them. */
+export const SETTINGS_WIDTH = 340
+/** The collapsed pane: a thin rail holding the way back in. */
+export const AI_RAIL_WIDTH = 48
+/** The narrowest the canvas gets beside an open Ask AI before the pane lies over it instead. */
+export const CANVAS_FLOOR = 640
+
+/**
+ * How Ask AI's open pane fits a window `viewport` wide beside the properties:
+ * docked, as wide as asked but never squeezing the canvas under its floor; or,
+ * when even its narrowest would, lying over the canvas from the rail, which
+ * keeps the canvas its room.
+ */
+export function aiPaneFit(
+  width: number,
+  viewport: number
+): { mode: 'docked' | 'overlay'; width: number } {
+  const room = viewport - SETTINGS_WIDTH - CANVAS_FLOOR
+  if (room >= AI_PANE.min) return { mode: 'docked', width: Math.min(clampPane(width), room) }
+  return { mode: 'overlay', width: clampPane(width) }
+}
 
 /**
  * The pane as remembered on this device: collapsed or not, its width, and

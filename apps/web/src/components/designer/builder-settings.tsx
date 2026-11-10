@@ -27,7 +27,6 @@ type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => vo
  */
 export function BuilderSettings({
   hidden,
-  open,
   shown,
   route,
   panel,
@@ -68,8 +67,6 @@ export function BuilderSettings({
   element?: ReactNode
   /** Out of view in a narrow window while another column shows. */
   hidden: boolean
-  /** Whether the panel is open: always, unless Escape closed the page's panel. */
-  open: boolean
   shown: PanelView
   /** What the panel shows for the pick, from the route table. */
   route: PanelRoute
@@ -107,7 +104,6 @@ export function BuilderSettings({
 }) {
   return (
     <RightPanel
-      open={open}
       hidden={hidden}
       showing={element ? 'element' : (selection ?? 'page')}
       pinned={

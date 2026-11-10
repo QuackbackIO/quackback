@@ -150,7 +150,6 @@ function mountBuilder(start: PortalDesign, startPage: DesignerPage, pickedButton
     return (
       <BuilderSettings
         hidden={false}
-        open
         shown={panelView(state, selection, nameOf(selection) ?? PAGE_NAMES[page])}
         route={panelFor(selection, false, page, nameOf)}
         panel={{ state, dispatch, close: () => dispatch({ type: 'close' }) }}

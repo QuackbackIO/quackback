@@ -46,7 +46,7 @@ export function BuilderSheet({
       id={id}
       aria-labelledby={`${id}-title`}
       data-designer-sheet=""
-      className="absolute inset-2 z-10 flex flex-col overflow-hidden rounded-xl border border-border bg-background shadow-lg max-[1100px]:inset-0 max-[1100px]:rounded-none"
+      className="absolute inset-0 z-raised flex flex-col overflow-hidden bg-background"
     >
       <header className="space-y-1 border-b border-border px-4 pt-3 pb-3">
         <div className="flex items-center gap-2">

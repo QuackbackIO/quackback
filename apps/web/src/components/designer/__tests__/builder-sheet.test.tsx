@@ -14,7 +14,7 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 vi.mock('../home-layout-picker', () => ({ HomeLayoutPicker: () => null }))
 
 const { BuilderSheet } = await import('../builder-sheet')
-const { RightPanel } = await import('../right-panel')
+const { RightPanel, RIGHT_PANEL_WIDTH } = await import('../right-panel')
 const { AddContent, addHint } = await import('../add-sheet')
 
 afterEach(cleanup)
@@ -33,7 +33,6 @@ function panel(sheet: boolean, back: string | null = null) {
   const onClose = vi.fn()
   render(
     <RightPanel
-      open
       hidden={false}
       showing="block-topposts"
       sheet={
@@ -180,14 +179,14 @@ describe('Add', () => {
 })
 
 describe('the right panel', () => {
-  it('is closed and out of reach with nothing picked and no sheet', () => {
+  it('stays open at its own width with nothing picked, so the canvas never re-lays out for it', () => {
     render(
-      <RightPanel open={false} hidden={false} showing="nothing" sheet={null}>
+      <RightPanel hidden={false} showing="nothing" sheet={null}>
         <p>Nothing</p>
       </RightPanel>
     )
-    const aside = screen.getByRole('complementary', { hidden: true })
-    expect(aside.hasAttribute('inert')).toBe(true)
-    expect(aside.hasAttribute('data-open')).toBe(false)
+    const aside = screen.getByRole('complementary')
+    expect(aside.hasAttribute('inert')).toBe(false)
+    expect(aside.style.width).toBe(`${RIGHT_PANEL_WIDTH}px`)
   })
 })

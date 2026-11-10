@@ -155,14 +155,14 @@ describe('TreePane', () => {
     show('roadmap')
     const divider = screen.getByRole('separator', { name: 'Resize On this page' })
     expect(divider.getAttribute('aria-orientation')).toBe('horizontal')
-    expect(divider.getAttribute('aria-valuenow')).toBe(String(TREE_PANE.height))
     expect(divider.tabIndex).toBe(0)
+    fireEvent.keyDown(divider, { key: 'Home' })
     fireEvent.keyDown(divider, { key: 'ArrowDown' })
-    expect(divider.getAttribute('aria-valuenow')).toBe(String(TREE_PANE.height + 16))
+    expect(divider.getAttribute('aria-valuenow')).toBe(String(TREE_PANE.min + 16))
     fireEvent.pointerDown(divider, { clientY: 100, pointerId: 1 })
     fireEvent.pointerMove(divider, { clientY: 160, pointerId: 1 })
     fireEvent.pointerUp(divider, { clientY: 160, pointerId: 1 })
-    const height = TREE_PANE.height + 16 + 60
+    const height = TREE_PANE.min + 16 + 60
     expect(divider.getAttribute('aria-valuenow')).toBe(String(height))
     expect(readTreePane(localStorage.getItem(KEY)).height).toBe(height)
     fireEvent.keyDown(divider, { key: 'End' })
@@ -170,6 +170,27 @@ describe('TreePane', () => {
     cleanup()
     show('roadmap')
     expect(screen.getByRole('separator').getAttribute('aria-valuenow')).toBe(String(TREE_PANE.max))
+  })
+
+  it('fits its rows up to a cap until the divider moves, never a fixed short box', () => {
+    show('roadmap')
+    const body = document.getElementById('designer-tree-pane')!
+    expect(body.style.height).toBe('')
+    expect(body.style.maxHeight).toBe(`min(40vh, ${TREE_PANE.fit}px)`)
+  })
+
+  it('shows a shadow cue while rows are hidden below, and above once scrolled', () => {
+    show('roadmap')
+    const body = document.getElementById('designer-tree-pane')!
+    Object.defineProperty(body, 'clientHeight', { configurable: true, value: 100 })
+    Object.defineProperty(body, 'scrollHeight', { configurable: true, value: 300 })
+    fireEvent.scroll(body)
+    expect(body.hasAttribute('data-more-below')).toBe(true)
+    expect(body.hasAttribute('data-more-above')).toBe(false)
+    body.scrollTop = 200
+    fireEvent.scroll(body)
+    expect(body.hasAttribute('data-more-above')).toBe(true)
+    expect(body.hasAttribute('data-more-below')).toBe(false)
   })
 
   it('opens as usual when storage is closed', () => {
@@ -192,7 +213,7 @@ describe('TreePane', () => {
   })
 
   it('reads anything unreadable as the usual pane, and clamps the height', () => {
-    expect(readTreePane('{nope')).toEqual({ collapsed: false, height: TREE_PANE.height })
+    expect(readTreePane('{nope')).toEqual({ collapsed: false, height: null })
     expect(readTreePane(JSON.stringify({ height: 5 })).height).toBe(TREE_PANE.min)
     expect(readTreePane(JSON.stringify({ height: 9999 })).height).toBe(TREE_PANE.max)
   })
@@ -205,7 +226,6 @@ describe('BuilderSettings', () => {
     render(
       <BuilderSettings
         hidden={false}
-        open
         shown={{ sheet: null } as never}
         route={panelFor(selection, false, page)}
         panel={{ state: { sheet: null } as never, dispatch: vi.fn(), close: vi.fn() }}
