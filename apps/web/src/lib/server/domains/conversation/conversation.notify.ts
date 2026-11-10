@@ -27,6 +27,7 @@ import {
   desc,
   and,
   isNull,
+  ne,
   principal,
   user,
   conversations,
@@ -187,7 +188,9 @@ async function loadQuotedPreviousMessage(
       and(
         eq(conversationMessages.conversationId, conversationId),
         isNull(conversationMessages.deletedAt),
-        eq(conversationMessages.isInternal, false)
+        eq(conversationMessages.isInternal, false),
+        // System events are thread notices, not correspondence: never quote one.
+        ne(conversationMessages.senderType, 'system')
       )
     )
     .orderBy(desc(conversationMessages.createdAt))
