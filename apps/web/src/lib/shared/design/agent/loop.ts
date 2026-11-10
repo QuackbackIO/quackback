@@ -548,12 +548,27 @@ export async function runEditLoop(input: {
   }
 
   const applied = mergeChanges(input.design, design, lists)
+  // What a later step restated is said once, as it ended, as Show changes says it.
+  const labelsOf = (changes: readonly AppliedDesignChange[]) =>
+    changes.flatMap((change) => (change.label ?? '').split('; ').filter(Boolean))
+  const labelled = new Set(labelsOf(lists.flat()))
+  const kept = new Set(labelsOf(applied))
+  const stood = done.filter((label) => !labelled.has(label) || kept.has(label))
   const scope = input.pick?.scope ?? 'site'
   const reach = reachClause(design, applied, {
     scope,
     ...(input.pick?.page ? { page: input.pick.page } : {}),
   })
-  const said = loopReply({ answer, applied, done, refused, unmet, stopped, leftAlone, reach })
+  const said = loopReply({
+    answer,
+    applied,
+    done: stood,
+    refused,
+    unmet,
+    stopped,
+    leftAlone,
+    reach,
+  })
   return {
     ok: true,
     // A match says what it did; what the steps added is under Show changes.

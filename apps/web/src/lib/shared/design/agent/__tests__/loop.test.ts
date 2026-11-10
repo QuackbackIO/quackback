@@ -291,6 +291,31 @@ describe('the edit loop', () => {
     expect(result.notes).toContain('Some of it did not come out as asked, so ask again to finish.')
   })
 
+  it('says only the last value a field was set to, in the reply and under Show changes', async () => {
+    const original = start()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({ plan: 'Try', styles: [hoverStyle('#c7d2fe')] }),
+        answer({ plan: 'Deeper', styles: [hoverStyle('#312e81')] }),
+      ],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+      budget: { steps: 2, ms: 60_000 },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.reply).not.toMatch(/periwinkle/)
+    expect(result.reply).toMatch(/^I changed main buttons on hover: background [a-z ]+\.$/)
+    expect(result.applied.map((c) => c.label)).toEqual([
+      'Main buttons on hover: background #312e81',
+    ])
+  })
+
   it('starts no step the time budget cannot fit', async () => {
     const original = start()
     const design = { current: original }

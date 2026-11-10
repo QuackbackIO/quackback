@@ -301,11 +301,37 @@ describe('merging changes across steps', () => {
         path: 'layout.cards',
         before: a.layout.cards,
         after: 'filled',
-        label: 'Cards to raised; Cards to filled',
+        // The last label for the field: Show changes never says a value it no longer has.
+        label: 'Cards to filled',
       },
       { path: 'layout.density', before: a.layout.density, after: 'compact', label: 'Density' },
     ])
     // Changed and changed back: nothing to undo.
     expect(mergeChanges(a, a, [[{ path: 'layout.cards', before: 'x', after: 'y' }]])).toEqual([])
+  })
+
+  it('keeps the last label for each style a sheet holds, and the others it set', () => {
+    const a = design()
+    const c = structuredClone(a) as unknown as { style: Record<string, unknown> }
+    c.style = { button: { base: { background: '#312e81', radius: 4 } } }
+    const merged = mergeChanges(a, c as never, [
+      [
+        {
+          path: 'style.button',
+          before: null,
+          after: { base: { background: 'accent', radius: 4 } },
+          label: 'Main buttons: background accent; Main buttons: radius 4px',
+        },
+      ],
+      [
+        {
+          path: 'style.button',
+          before: { base: { background: 'accent', radius: 4 } },
+          after: { base: { background: '#312e81', radius: 4 } },
+          label: 'Main buttons: background #312e81',
+        },
+      ],
+    ])
+    expect(merged[0]!.label).toBe('Main buttons: radius 4px; Main buttons: background #312e81')
   })
 })
