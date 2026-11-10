@@ -122,6 +122,9 @@ export function framedWords(
     : null
 }
 
+/** No structural draft: the canvas draws everything, the welcome message too, from the design. */
+export const NO_STRUCTURE: PortalPreviewDraft = {}
+
 /**
  * The page being designed, in a same-origin frame laid out at a true width
  * and scaled down to fit. The draft travels in by message; clicks, the
