@@ -841,6 +841,16 @@ export function marksRefusal(name: string, value: unknown): string | null {
   return `The ${name} is plain words: only a headline or a page title sets a phrase apart, and only Welcome words take bold, italics and links`
 }
 
+/** Words as compared for a mark over all of them: case, spacing and closing stops aside. */
+const bareWords = (text: string) =>
+  norm(text)
+    .replace(/[\s.!?…,;:]+$/u, '')
+    .trim()
+
+/** Why a highlight or a lighter look over a whole title is left alone. */
+const WHOLE_TITLE_MARK =
+  'A phrase set apart is part of a headline, never all of it; a whole headline takes the headlines’ colour'
+
 /**
  * Sets a page's headline or title from its markup: plain words, or one
  * phrase set apart as [words]{accent}, {highlight} or {lighter}. Plain words
@@ -855,6 +865,24 @@ function setTitle(
 ): OpResult {
   const read = readHeadlineMarkup(text)
   if (!read.ok) return refuse(read.refusal)
+  const mark = read.words.accent
+  // A mark over the whole title sets nothing apart: in the brand colour it is the
+  // headlines' own colour, which the drawn headline then shows and checks can read.
+  if (mark && bareWords(mark.text) === bareWords(read.words.title)) {
+    if (mark.style !== 'colour' || (mark.colour && mark.colour !== 'accent'))
+      return refuse(WHOLE_TITLE_MARK)
+    const plain = setTitle(design, world, page, read.words.title, wordsLabel)
+    if (!plain.ok) return plain
+    const coloured = setTheme(plain.design, world, 'headlineColour', 'accent')
+    if (!coloured.ok) return coloured
+    const labels = [plain, coloured].filter((each) => each.changed).map((each) => each.label)
+    return {
+      ok: true,
+      design: coloured.design,
+      label: labels.join('; ') || coloured.label,
+      changed: labels.length > 0,
+    }
+  }
   const locale = world.locale ?? 'en'
   const field: WordsField = { kind: 'page', page, part: 'title' }
   const draft = structuredClone(design)
