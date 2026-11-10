@@ -625,7 +625,7 @@ describe('designDirections', () => {
     expect(result.looks[0].preset).toBe('calm')
     expect(result.looks[0].design.pages.feedback.headline).toEqual({
       title: { en: 'Help us grow' },
-      subtitle: { en: 'Share ideas and vote.' },
+      subtitle: { en: 'Share posts and vote.' },
     })
     for (const look of result.looks) {
       const doc = portalDesign.parse(look.design)
