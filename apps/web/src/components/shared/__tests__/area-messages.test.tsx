@@ -27,7 +27,7 @@ describe('AreaMessages', () => {
         </AreaMessages>
       </IntlProvider>
     )
-    expect(screen.getByText('Search articles...')).toBeTruthy()
+    expect(screen.getByText('Search articles…')).toBeTruthy()
   })
 
   it('shows the strings a route loader read without waiting', () => {
@@ -64,7 +64,7 @@ describe('AreaMessages', () => {
         </AreaMessages>
       </IntlProvider>
     )
-    expect(screen.getByText('Search articles...')).toBeTruthy()
+    expect(screen.getByText('Search articles…')).toBeTruthy()
     expect(screen.queryByText('loading')).toBeNull()
   })
 
