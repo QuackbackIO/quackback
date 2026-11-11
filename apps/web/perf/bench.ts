@@ -70,6 +70,19 @@ const baseURL = BENCH_URL
 
 type Metrics = Record<string, number>
 
+// The report goes through the stdout stream rather than console.log. When
+// stdout is a pipe its reader drains more slowly than the report is printed
+// (as in CI), and Bun's console.log can drop lines once the pipe is full;
+// the stream queues them instead. `written` settles once everything queued so
+// far has reached stdout, so the run waits for it before exiting.
+let written: Promise<void> = Promise.resolve()
+function write(text: string) {
+  written = new Promise((resolve) => process.stdout.write(text, () => resolve()))
+}
+function print(line = '') {
+  write(`${line}\n`)
+}
+
 interface ServerLine {
   msg: string
   request_id?: string
@@ -490,6 +503,7 @@ function compare(budgets: Budgets, name: string, metrics: Metrics) {
     metric: string
     value: number
     ceiling?: number
+    allowed?: number
     verdict: 'over' | 'under' | 'at' | 'new'
   }[] = []
   for (const [metric, value] of Object.entries(metrics)) {
@@ -500,7 +514,7 @@ function compare(budgets: Budgets, name: string, metrics: Metrics) {
     }
     const allowed = ceiling * (1 + (budgets.tolerance[metric] ?? 0))
     const verdict = value > allowed ? 'over' : value < ceiling ? 'under' : 'at'
-    rows.push({ metric, value, ceiling, verdict })
+    rows.push({ metric, value, ceiling, allowed, verdict })
   }
   return rows
 }
@@ -542,7 +556,7 @@ function printStatements(list: { sql: string }[], indent: string) {
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
   const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
-  for (const [sql, n] of sorted) console.log(`${indent}${String(n).padStart(3)}x  ${sql}`)
+  for (const [sql, n] of sorted) print(`${indent}${String(n).padStart(3)}x  ${sql}`)
 }
 
 function printTrace(id: string) {
@@ -550,12 +564,12 @@ function printTrace(id: string) {
   printStatements(list, '    ')
   const requests = finished.get(id) ?? []
   if (requests.length === 0) return
-  console.log(`\n    by server request:`)
+  print(`\n    by server request:`)
   const byRoute = new Map<string, { sql: string }[]>()
   for (const s of list) append(byRoute, s.route ?? '', s)
   const printed = new Set<string>()
   for (const r of requests) {
-    console.log(
+    print(
       `    - ${routeLabel(r.route)}  db=${r.db_queries ?? 0}  ${r.duration_ms ?? 0}ms  (${r.status ?? '?'})`
     )
     if (r.route && !printed.has(r.route)) {
@@ -563,6 +577,10 @@ function printTrace(id: string) {
       printStatements(byRoute.get(r.route) ?? [], '          ')
     }
   }
+}
+
+function round(value: number) {
+  return Math.round(value * 100) / 100
 }
 
 function percentile(values: number[], p: number) {
@@ -583,7 +601,9 @@ async function main() {
     onLine: readServerLine,
   })
   const browser = await chromium.launch({ headless: !args.headed })
-  let failed = false
+  // One line per failing journey, repeated at the end of the report so the
+  // cause is the last thing a reader (or a CI log) shows.
+  const failures: string[] = []
 
   try {
     const adminContext = await signedInContext(browser, baseURL)
@@ -612,13 +632,13 @@ async function main() {
     // from-nothing count. For that, hit the route directly against a
     // freshly started server before the bench (or anything else) runs.
     const coldMetrics: Record<string, Metrics> = {}
-    process.stdout.write('warming up')
+    write('warming up')
     for (const journey of selected) {
       const result = await measure(journey, false).catch(() => null)
       if (result) coldMetrics[journey.name] = result.metrics
-      process.stdout.write('.')
+      write('.')
     }
-    process.stdout.write('\n')
+    write('\n')
 
     const runs: Record<string, Metrics[]> = {}
     const timings: Record<string, Record<string, number>[]> = {}
@@ -630,15 +650,15 @@ async function main() {
           ;(runs[journey.name] ??= []).push(result.metrics)
           if ('quiet' in result && !result.quiet) errors[journey.name] = 'network never went quiet'
           if (args.trace && r === 0) {
-            console.log(`\n  ${journey.name}: ${result.metrics.dbQueries} queries`)
+            print(`\n  ${journey.name}: ${result.metrics.dbQueries} queries`)
             printTrace(result.id)
           }
           if (args.renders && r === 0 && 'byComponent' in result) {
-            console.log(`\n  ${journey.name}: ${result.metrics.componentRenders} component renders`)
+            print(`\n  ${journey.name}: ${result.metrics.componentRenders} component renders`)
             const top = Object.entries(result.byComponent)
               .sort((a, b) => b[1] - a[1])
               .slice(0, 20)
-            for (const [name, n] of top) console.log(`    ${String(n).padStart(5)}x  ${name}`)
+            for (const [name, n] of top) print(`    ${String(n).padStart(5)}x  ${name}`)
           }
         } catch (err) {
           errors[journey.name] = err instanceof Error ? err.message.split('\n')[0]! : String(err)
@@ -662,12 +682,12 @@ async function main() {
         timing?: Record<string, number>
       }
     > = {}
-    console.log('')
+    print('')
     for (const journey of selected) {
       const name = journey.name
       if (errors[name] && !runs[name]) {
-        console.log(`✗ ${name}: ${errors[name]}`)
-        failed = true
+        print(`✗ ${name}: ${errors[name]}`)
+        failures.push(`${name}: ${errors[name]}`)
         continue
       }
       const measured = runs[name]!
@@ -690,7 +710,14 @@ async function main() {
       const over = rows.filter((row) => row.verdict === 'over')
       // A run that never settled (or failed on a repeat) counted a partial
       // journey, so its numbers cannot pass.
-      if (over.length || errors[name]) failed = true
+      if (errors[name]) failures.push(`${name}: ${errors[name]}`)
+      for (const row of over) {
+        const tolerance =
+          row.allowed !== row.ceiling ? ` (${round(row.allowed!)} with tolerance)` : ''
+        failures.push(
+          `${name}: ${row.metric}=${row.value} is over its ceiling of ${row.ceiling}${tolerance}`
+        )
+      }
       const mark = over.length || errors[name] ? '✗' : '✓'
       const cells = rows.map((row) => {
         const flag =
@@ -704,27 +731,27 @@ async function main() {
           : ''
         return `${row.metric}=${row.value}${flag}${shaky}`
       })
-      console.log(`${mark} ${name}${errors[name] ? `  (${errors[name]})` : ''}`)
-      console.log(`    ${cells.join('  ')}`)
+      print(`${mark} ${name}${errors[name] ? `  (${errors[name]})` : ''}`)
+      print(`    ${cells.join('  ')}`)
       const coldQueries = coldMetrics[name]?.dbQueries
       if (coldQueries !== undefined && coldQueries !== metrics.dbQueries) {
-        console.log(`    cold: dbQueries=${coldQueries}`)
+        print(`    cold: dbQueries=${coldQueries}`)
       }
       if (process.env.GITHUB_ACTIONS === 'true') {
         for (const row of rows) {
           if (row.verdict === 'over') {
-            console.log(
+            print(
               `::error title=Performance budget::${name} ${row.metric}=${row.value} is over its ceiling of ${row.ceiling}`
             )
           } else if (row.verdict === 'under') {
-            console.log(
+            print(
               `::notice title=Performance ratchet::${name} ${row.metric}=${row.value} is under its ceiling of ${row.ceiling}; lower it with \`bun run --cwd apps/web perf --update\``
             )
           }
         }
       }
       if (timingRuns) {
-        console.log(
+        print(
           `    timing: ${Object.entries(timing)
             .map(([k, v]) => `${k}=${v}ms`)
             .join('  ')}`
@@ -754,13 +781,21 @@ async function main() {
         'Ceilings for bun perf/bench.ts. Lowered with --update whenever a journey comes in under; ' +
         'raised only with --update --allow-increase, which a reviewer should question.'
       writeFileSync(budgetsPath, JSON.stringify(budgets, null, 2) + '\n')
-      console.log(`\nUpdated ${budgetsPath}`)
+      print(`\nUpdated ${budgetsPath}`)
+    }
+
+    if (failures.length) {
+      print(`\n${failures.length} failure${failures.length === 1 ? '' : 's'}:`)
+      for (const failure of failures) print(`  ✗ ${failure}`)
     }
   } finally {
     await browser.close()
     server.kill()
   }
-  process.exit(failed && !args.update ? 1 : 0)
+  // process.exit discards whatever stdout has not taken yet, so it waits for
+  // the report to be written in full first.
+  await written
+  process.exit(failures.length && !args.update ? 1 : 0)
 }
 
 await main()

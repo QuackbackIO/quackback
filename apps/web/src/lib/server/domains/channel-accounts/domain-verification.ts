@@ -104,8 +104,10 @@ const readTxt: ZoneReader = (host) => systemResolver.resolveTxt(host)
  * - `unknown`: no record was found missing, but a lookup went unanswered
  *   (timeout, server failure, refusal), so the zone has not said either way.
  *
- * Only `absent` is evidence that ownership was lost. A caller holding an
- * earlier proof keeps it through `unknown` and lets the next check decide.
+ * Only `absent` is evidence that ownership was lost, and a verified row that
+ * reads it is warned and kept for a grace period before it is demoted. A
+ * caller holding an earlier proof keeps it through `unknown` and lets the next
+ * check decide.
  */
 export type OwnershipAnswer = 'proven' | 'absent' | 'unknown'
 

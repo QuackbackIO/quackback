@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { widgetGetMessengerUnreadFn } from '@/lib/server/functions/widget/conversation'
 
 /**
@@ -13,7 +14,7 @@ import { widgetGetMessengerUnreadFn } from '@/lib/server/functions/widget/conver
 export function useMessengerUnread(enabled: boolean): number {
   const { sessionVersion } = useWidgetAuth()
   const { data } = useQuery({
-    queryKey: ['widget', 'messenger-unread', sessionVersion],
+    queryKey: conversationKeys.widgetMessengerUnread(sessionVersion),
     queryFn: () => widgetGetMessengerUnreadFn({ headers: getWidgetAuthHeaders() }),
     enabled,
     staleTime: 15_000,
