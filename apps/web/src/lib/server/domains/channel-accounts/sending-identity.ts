@@ -91,7 +91,9 @@ export {
   withPreviousChecks,
 } from './sending-domain-records'
 import { notifySendingDomainLive, notifySendingDomainNeedsAttention } from './sending-domain-notify'
+import { deliverOwnershipWarning, ownershipGrace, startOwnershipGrace } from './ownership-grace'
 import { enqueueSesTenantReconcile } from './ses-tenant-queue'
+import { saveSendingDomainCheck } from './sending-domain-check-write'
 import { rekeyToHeldSigningKey, sealSigningKey, shouldHoldSigningKey } from './pending-signing-key'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
@@ -501,11 +503,14 @@ export async function refreshSendingDomain(
     checkSendingDomainOwnership(stored.domain, proofRecords, readZone),
   ])
   // Proven only on a read that found the proof: the owner-only writes below
-  // need it. A verified row whose lookup went unanswered keeps the proof it
-  // already has for its status, so only the zone saying the record is gone, or
-  // the provider changing its answer, can demote it.
+  // need it. The ownership record has to stay published (see
+  // `ownership-grace.ts`). A verified row whose lookup went unanswered keeps
+  // the proof it already has; one whose record the zone says is gone keeps it
+  // for the grace period from the first miss, and is demoted after it.
+  const now = new Date()
   const ownershipProven = ownership === 'proven'
   const ownershipKept = wasVerified && ownership === 'unknown'
+  const grace = ownershipGrace(stored, ownership, now)
   if (ownershipKept) {
     log.warn(
       { sending_domain_id: id, domain: stored.domain },
@@ -515,7 +520,9 @@ export async function refreshSendingDomain(
 
   let identity = found
   // A row holding its own key re-keys the identity once, after it proves
-  // ownership; until then the identity's key is not one anybody can publish.
+  // ownership on this read; until then the identity's key is not one anybody
+  // can publish. A row kept verified through an unanswered lookup or the grace
+  // period has not proved anything on this read, so it writes nothing.
   const rekey = await rekeyToHeldSigningKey(stored, identity, ownershipProven)
   const row = rekey.row
   if (rekey.rekeyed) identity = (await getSesDomainIdentity(row.domain)) ?? identity
@@ -533,11 +540,10 @@ export async function refreshSendingDomain(
   // that key failing is not this row's verdict.
   const verdict = sendingDomainStatusFrom({
     identity,
-    ownershipProven: ownershipProven || ownershipKept,
+    ownershipProven: ownershipProven || ownershipKept || grace.inGrace,
   })
   const status = verdict === 'failed' && row.pendingSigningKey ? 'pending' : verdict
 
-  const now = new Date()
   // Each record's own state, for the person publishing them. Recorded beside
   // the status and never feeding it: the provider's scan is what decides.
   const composed = withPreviousChecks(
@@ -559,20 +565,49 @@ export async function refreshSendingDomain(
     checkRecords(row.domain, composed, resolver, now),
     readDmarc(row.domain, resolver),
   ])
-  // Every field but the move to verified, which is made below on its own.
+  // Every field but the move to verified, which is made below on its own. A
+  // demotion is reported by the one check that made it (see the module).
   const promoted = status === 'verified'
-  const [written] = await db
-    .update(emailSendingDomains)
-    .set({
-      ...(promoted ? {} : { status }),
+  const { demoted, written } = await saveSendingDomainCheck(id, {
+    status,
+    wasVerified,
+    now,
+    fields: {
       dnsRecords,
       ...(dmarc ? { preflight: { ...row.preflight, dmarc } } : {}),
+      // Found again: the clock for a missing record starts over.
+      ...(ownershipProven
+        ? {
+            ownershipMissingSince: null,
+            ownershipWarningClaimedAt: null,
+            ownershipWarningSentAt: null,
+          }
+        : {}),
       lastCheckedAt: now,
       updatedAt: now,
-    })
-    .where(eq(emailSendingDomains.id, id))
-    .returning()
+    },
+  })
   let updated = written
+
+  if (written && demoted) {
+    // Named at warn because it is a live deliverability change for a
+    // customer: replies for this domain go out as the platform sender from
+    // now on. The domain is configuration, not a person.
+    log.warn(
+      { sending_domain_id: id, domain: row.domain, status },
+      'sending domain is no longer verified; falling back to the platform sender'
+    )
+    // Told after the write, so the notice names the records as this check found them.
+    await notifySendingDomainNeedsAttention(written)
+  }
+
+  // A verified row inside its grace period: the first miss starts the period,
+  // and every check that finds the record still gone warns the managers unless
+  // the warning for this period was already delivered.
+  if (written && grace.since && status === 'verified') {
+    const started = row.ownershipMissingSince ? null : await startOwnershipGrace(id, grace.since)
+    updated = await deliverOwnershipWarning(started ?? written)
+  }
 
   // The one place a domain goes live, whether the watch job, the daily sweep or
   // a person's click got it there. Conditional, so when two checks find it
@@ -634,19 +669,25 @@ export async function restartSendingDomainChecks(
  * make about the past. Three things can stop being true after a row is marked
  * verified, and none of them announces itself:
  *
- * - the ownership TXT is deleted, so the workspace no longer demonstrably
- *   controls the zone it is sending as;
+ * - the ownership record is deleted, so the workspace no longer demonstrably
+ *   controls the zone it is sending as. The provider's identity is shared by
+ *   every workspace that adds the domain, so its verdict cannot answer this;
+ *   only the row's own record can;
  * - the MAIL FROM MX is removed or moved, so the envelope sender falls back to
  *   the provider's own domain and SPF stops aligning, leaving DMARC resting on
  *   DKIM alone — the arrangement that fails as soon as a message is forwarded;
  * - the provider stops signing, so mail leaves unsigned as a domain whose DMARC
  *   policy tells receivers to reject exactly that.
  *
- * Each demotes the row here, and a row that is not verified is not an identity
- * the send guard will hand out, so the workspace drops back to the platform
- * sender. That is a visible, honest degradation instead of three silent ones,
- * and it is the reason the provider's MAIL FROM failure behaviour can be the
- * lenient one.
+ * The last two demote the row on the check that finds them. A missing
+ * ownership record is warned about on the first check that finds it gone, and
+ * demotes the row only when it is still gone after the grace period
+ * (`ownership-grace.ts`), because a record removed by mistake is common and a
+ * domain is worth a week's notice. A row that is not verified is not an
+ * identity the send guard will hand out, so the workspace drops back to the
+ * platform sender. That is a visible, honest degradation instead of three
+ * silent ones, and it is the reason the provider's MAIL FROM failure behaviour
+ * can be the lenient one.
  *
  * ## Why it does nothing when identity provisioning is not configured
  *
@@ -664,17 +705,8 @@ export async function sweepSendingDomains(): Promise<{ checked: number; demoted:
     try {
       const updated = await refreshSendingDomain(row.id)
       checked += 1
-      if (row.status === 'verified' && updated && updated.status !== 'verified') {
-        demoted += 1
-        // Named at warn because it is a live deliverability change for a
-        // customer: replies for this domain go out as the platform sender from
-        // now on. The domain is configuration, not a person.
-        log.warn(
-          { sending_domain_id: row.id, domain: row.domain, status: updated.status },
-          'sending domain is no longer verified; falling back to the platform sender'
-        )
-        await notifySendingDomainNeedsAttention(updated)
-      }
+      // The check that demotes a row tells its managers (`refreshSendingDomain`).
+      if (row.status === 'verified' && updated && updated.status !== 'verified') demoted += 1
     } catch (err) {
       // One domain's provider or DNS failure must not stop the rest being
       // checked: the whole value of the sweep is that it runs on every row.

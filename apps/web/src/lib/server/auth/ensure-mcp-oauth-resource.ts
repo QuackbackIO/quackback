@@ -12,15 +12,21 @@
  *
  * Upstream: https://github.com/better-auth/better-auth/issues/11034
  * (fix in https://github.com/better-auth/better-auth/pull/11087, unreleased).
- * Their documented workaround until that ships: insert the row with
- * `ON CONFLICT DO NOTHING` so `findOne` hits and `create` is never attempted.
+ * Their documented workaround until that ships: insert the row ahead of the
+ * seed, ignoring a conflict, so `findOne` hits and `create` is never attempted.
  * There is no config flag that disables the seed.
  *
  * A static migration cannot do this for us: the identifier is the workspace
  * origin (`https://<slug>.quackback.io/api/mcp`), not a fleet-wide constant.
+ *
+ * An existing row has its `allowedScopes` brought up to date. Better Auth
+ * intersects every token's scopes with that column, so a row left as it was
+ * first seeded silently strips any scope added to the vocabulary since, and
+ * the tools behind it are refused whatever the person consented to.
  */
+import { sql } from 'drizzle-orm'
 
-type OauthResourceTable = { identifier: unknown }
+type OauthResourceTable = { identifier: unknown; allowedScopes: unknown }
 
 export function mcpOauthResourceSeedRow(identifier: string, allowedScopes: readonly string[]) {
   const now = new Date()
@@ -40,12 +46,16 @@ export function mcpOauthResourceSeedRow(identifier: string, allowedScopes: reado
 export async function ensureMcpOauthResource(opts: {
   /**
    * Drizzle's insert builder is invariant in the row type, so this is the
-   * insert → values → onConflictDoNothing chain rather than `typeof db`.
+   * insert → values → onConflictDoUpdate chain rather than `typeof db`.
    */
   db: {
     insert: (table: OauthResourceTable) => {
       values: (row: ReturnType<typeof mcpOauthResourceSeedRow>) => {
-        onConflictDoNothing: (args: { target: unknown }) => Promise<unknown>
+        onConflictDoUpdate: (args: {
+          target: unknown
+          set: { allowedScopes: string[]; updatedAt: Date }
+          setWhere: unknown
+        }) => Promise<unknown>
       }
     }
   }
@@ -53,8 +63,14 @@ export async function ensureMcpOauthResource(opts: {
   identifier: string
   allowedScopes: readonly string[]
 }): Promise<void> {
+  const row = mcpOauthResourceSeedRow(opts.identifier, opts.allowedScopes)
   await opts.db
     .insert(opts.table)
-    .values(mcpOauthResourceSeedRow(opts.identifier, opts.allowedScopes))
-    .onConflictDoNothing({ target: opts.table.identifier })
+    .values(row)
+    .onConflictDoUpdate({
+      target: opts.table.identifier,
+      set: { allowedScopes: row.allowedScopes, updatedAt: row.updatedAt },
+      // Leave a row that already matches untouched: this runs on every boot.
+      setWhere: sql`${opts.table.allowedScopes} is distinct from excluded.allowed_scopes`,
+    })
 }
