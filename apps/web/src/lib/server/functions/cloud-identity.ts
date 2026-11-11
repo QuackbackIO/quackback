@@ -71,9 +71,9 @@ const customDomainInputSchema = z
 const log = logger.child({ component: 'web-addresses' })
 
 /**
- * A web address as the Domains page shows it. `provenBy` is set when a zone
- * this workspace already proved stands in for the challenge record, named only
- * when the viewer may see what proved it.
+ * A web address as the Domains page shows it. `provenBy` is set when the
+ * operator accepted a zone this workspace already proved in place of the
+ * challenge record, named only when the viewer may see what proved it.
  */
 export type WebAddress = CustomDomainInstruction & { provenBy: ShownProofSource | null }
 
@@ -84,13 +84,8 @@ export const getCloudCustomDomainsFn = createServerFn({ method: 'GET' }).handler
     if (!identity) throw new Error('Cloud workspace identity is not enabled')
     const { fetchWorkspaceCustomDomains } = await import('@/lib/server/control-plane/client')
     const domains = await fetchWorkspaceCustomDomains()
-    // Read only while the operator accepts proofs: otherwise it still needs
-    // the challenge record, and the page must keep asking for it.
-    const proofFor = provenZoneProofsAccepted() ? await hostnameProofReader() : () => null
     return domains.map((domain) => {
-      const source =
-        proofFor(domain.hostname)?.source ??
-        (domain.ownership === 'proven-zone' ? domain.ownershipSource : undefined)
+      const source = domain.ownership === 'proven-zone' ? domain.ownershipSource : undefined
       return { ...domain, provenBy: source ? shownProofSource(source, auth.permissions) : null }
     })
   }

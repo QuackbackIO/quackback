@@ -959,6 +959,8 @@ interface SendSendingDomainAttentionParams {
   to: SecureRecipient
   domain: string
   record?: SendingDomainAttentionProblem | null
+  /** Set for a warning: the formatted date sending from the domain stops. */
+  deadline?: string | null
   settingsUrl?: string | null
   workspaceName?: string
   logoUrl?: string
@@ -966,17 +968,25 @@ interface SendSendingDomainAttentionParams {
 
 /**
  * To a person who manages email channels, when a verified sending domain stops
- * verifying and replies fall back to the default address.
+ * verifying and replies fall back to the default address, or, with a deadline,
+ * when its ownership record goes missing and it stops on that date.
  */
 export async function sendSendingDomainAttentionEmail(
   params: SendSendingDomainAttentionParams
 ): Promise<EmailResult> {
-  const { to, domain, record, settingsUrl, workspaceName, logoUrl } = params
+  const { to, domain, record, deadline, settingsUrl, workspaceName, logoUrl } = params
   log.debug('sending sending-domain attention alert')
   return sendEmail({
     to,
     subject: `Sending from ${domain} needs attention`,
-    react: SendingDomainAttentionEmail({ domain, record, settingsUrl, workspaceName, logoUrl }),
+    react: SendingDomainAttentionEmail({
+      domain,
+      record,
+      deadline,
+      settingsUrl,
+      workspaceName,
+      logoUrl,
+    }),
     emailType: 'SendingDomainAttentionEmail',
     preview: { domain },
   })
@@ -1915,6 +1925,7 @@ export { PasswordResetEmail } from './templates/password-reset'
 export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 export {
   SendingDomainAttentionEmail,
+  sendingDomainDeadline,
   sendingDomainProblem,
 } from './templates/sending-domain-attention'
 export type {
