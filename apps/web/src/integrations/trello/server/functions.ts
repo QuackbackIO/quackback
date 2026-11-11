@@ -80,7 +80,7 @@ export const fetchTrelloBoardsFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration || integration.status !== 'active') {
-      throw new Error('Trello not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Trello not connected')
     }
 
     if (!integration.secrets) {
@@ -122,7 +122,7 @@ export const fetchTrelloListsFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration || integration.status !== 'active') {
-      throw new Error('Trello not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Trello not connected')
     }
 
     const auth = await getIntegrationAuth(integration.id)

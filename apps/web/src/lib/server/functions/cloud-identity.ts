@@ -1,3 +1,4 @@
+import { ConflictError, ValidationError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
@@ -43,7 +44,10 @@ export const markCloudWorkspaceDetailsSeenFn = createServerFn({ method: 'POST' }
     const identity = await currentCloudIdentity()
     if (!identity) throw new Error('Cloud workspace identity is not enabled')
     if (!friendlyPlatformLabel(identity.platformHostname)) {
-      throw new Error('Choose a Workspace URL before continuing')
+      throw new ValidationError(
+        'WORKSPACE_URL_REQUIRED',
+        'Choose a Workspace URL before continuing'
+      )
     }
     const { state } = await mutateSetupStateAtomic(async (current, row, tx) => {
       // Finishing here stamps the starting point, so Home's own pass never
@@ -138,7 +142,10 @@ export const mutateCloudCustomDomainFn = createServerFn({ method: 'POST' })
 
     const originChanged = verified.projection.canonicalOrigin !== current.canonicalOrigin
     if (originChanged && !transferToken) {
-      throw new Error('Workspace URL changed concurrently. Reload and try again.')
+      throw new ConflictError(
+        'WORKSPACE_URL_CHANGED',
+        'Workspace URL changed concurrently. Reload and try again.'
+      )
     }
     return {
       projection: verified.projection,
@@ -178,7 +185,10 @@ export const updateCloudIdentityFn = createServerFn({ method: 'POST' })
     if (originChanged && !transferToken) {
       // This can only happen if another writer moved the origin between our
       // read and mutation. Refuse to strand the browser without a session.
-      throw new Error('Workspace URL changed concurrently. Reload and try again.')
+      throw new ConflictError(
+        'WORKSPACE_URL_CHANGED',
+        'Workspace URL changed concurrently. Reload and try again.'
+      )
     }
     return {
       projection: verified.projection,

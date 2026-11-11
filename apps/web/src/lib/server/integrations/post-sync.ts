@@ -7,6 +7,7 @@ import type { PostCreatedEvent } from '@/lib/server/events/types'
 import { queueHookSync } from './sync/hooks'
 import { queueSyncOperation } from './sync/ledger'
 import { getIntegration } from './index'
+import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import {
   installationIdentity,
   syncHash,
@@ -19,10 +20,11 @@ export async function syncPostIntegrations(
   requestedBy?: PrincipalId
 ): Promise<{ queued: boolean; needsAttention: boolean; operationIds: string[] }> {
   const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
-  if (!post || post.deletedAt) throw new Error('Post not found')
-  if (post.moderationState !== 'published') throw new Error('Only published posts can be synced')
+  if (!post || post.deletedAt) throw new NotFoundError('POST_NOT_FOUND', 'Post not found')
+  if (post.moderationState !== 'published')
+    throw new ValidationError('POST_NOT_PUBLISHED', 'Only published posts can be synced')
   const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-  if (!board) throw new Error('Board not found')
+  if (!board) throw new NotFoundError('BOARD_NOT_FOUND', 'Board not found')
   const eventId = createId('event')
   const event: PostCreatedEvent = {
     id: eventId,
@@ -125,7 +127,8 @@ export async function syncPostIntegrations(
     }
   }
   if (failed)
-    throw new Error(
+    throw new ConflictError(
+      'INTEGRATION_SYNC_PARTIALLY_QUEUED',
       'Some integrations could not be queued. Open Sync history to review completed requests.'
     )
   const recorded = results.filter(

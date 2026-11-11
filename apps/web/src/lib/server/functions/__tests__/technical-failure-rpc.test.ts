@@ -9,7 +9,7 @@
 import './_server-fn-rpc'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { DrizzleQueryError } from 'drizzle-orm/errors'
-import { ConflictError } from '@/lib/shared/errors'
+import { ConflictError, ServiceUnavailableError } from '@/lib/shared/errors'
 import { UNEXPECTED_ERROR_MESSAGE, errorReferenceOf } from '@/lib/shared/error-reference'
 
 const { createServerFnRpc } = await import('./_server-fn-rpc')
@@ -54,6 +54,12 @@ beforeAll(async () => {
   define('plain', () => {
     throw new Error('Pick a board first')
   })
+  define('outage', () => {
+    throw new ServiceUnavailableError(
+      'MAIL_PROVIDER_UNREACHABLE',
+      "Couldn't reach the mail provider. Try again in a minute."
+    )
+  })
 })
 
 describe('a failing server function, as the browser sees it in production', () => {
@@ -73,7 +79,16 @@ describe('a failing server function, as the browser sees it in production', () =
   it('delivers a message written for a person as written', async () => {
     vi.stubEnv('NODE_ENV', 'production')
     expect((await failure('refusal'))?.message).toBe('A board with this slug already exists')
-    expect((await failure('plain'))?.message).toBe('Pick a board first')
+    expect((await failure('outage'))?.message).toBe(
+      "Couldn't reach the mail provider. Try again in a minute."
+    )
+  })
+
+  it('hides a plain error even when its message reads as written for a person', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const error = await failure('plain')
+    expect(error?.message).toBe(UNEXPECTED_ERROR_MESSAGE)
+    expect(errorReferenceOf(error)).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)
   })
 
   it('keeps the full message outside production', async () => {
