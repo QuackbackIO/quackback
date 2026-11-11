@@ -16,6 +16,14 @@ import { treeRowSelector } from './settings-focus'
 /** Rows that start closed: the menu can be long, and is edited in the header's panel too. */
 const CLOSED = new Set(['header'])
 
+// The rows' icons, made once: an element React has drawn before, unchanged, is not drawn again.
+const OPEN_CHEVRON = <ChevronRightIcon className="size-3.5 rotate-90 transition-transform" />
+const CLOSED_CHEVRON = <ChevronRightIcon className="size-3.5 transition-transform" />
+const UP_ARROW = <ArrowUpIcon className="size-3.5" aria-hidden="true" />
+const DOWN_ARROW = <ArrowDownIcon className="size-3.5" aria-hidden="true" />
+const EYE = <EyeIcon className="size-3.5" aria-hidden="true" />
+const EYE_SLASH = <EyeSlashIcon className="size-3.5" aria-hidden="true" />
+
 const ring = 'outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground'
 const iconButton = cn(
   'grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40',
@@ -175,9 +183,7 @@ export function PageTree({
               onClick={() => toggle(row, !isOpen)}
               className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground"
             >
-              <ChevronRightIcon
-                className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')}
-              />
+              {isOpen ? OPEN_CHEVRON : CLOSED_CHEVRON}
             </button>
           ) : (
             <span className="size-5 shrink-0" />
@@ -212,7 +218,7 @@ export function PageTree({
                 onClick={() => move(row, -1)}
                 className={iconButton}
               >
-                <ArrowUpIcon className="size-3.5" aria-hidden="true" />
+                {UP_ARROW}
               </button>
               <button
                 type="button"
@@ -222,7 +228,7 @@ export function PageTree({
                 onClick={() => move(row, 1)}
                 className={iconButton}
               >
-                <ArrowDownIcon className="size-3.5" aria-hidden="true" />
+                {DOWN_ARROW}
               </button>
             </span>
           )}
@@ -240,11 +246,7 @@ export function PageTree({
                   'opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100'
               )}
             >
-              {row.hide.shown ? (
-                <EyeIcon className="size-3.5" aria-hidden="true" />
-              ) : (
-                <EyeSlashIcon className="size-3.5" aria-hidden="true" />
-              )}
+              {row.hide.shown ? EYE : EYE_SLASH}
             </button>
           )}
         </div>

@@ -11,7 +11,7 @@
  * from on hover; a row set at this scope shows a dot and a Reset that names
  * what it goes back to.
  */
-import { Fragment, useId, useState, type ReactElement, type ReactNode } from 'react'
+import { Fragment, memo, useId, useState, type ReactElement, type ReactNode } from 'react'
 import {
   ArrowUturnLeftIcon,
   ChevronRightIcon,
@@ -447,7 +447,8 @@ export function PropertyRow({
  * Advice kept out of the way: an ⓘ that says it on hover and on focus, and
  * to a screen reader as the ⓘ's name.
  */
-export function Help({ text }: { text: string }) {
+export const Help = memo(function Help({ text }: { text: string }) {
+  // Drawn again only when its words change: a row's tip is a tooltip's whole tree.
   return (
     <Tip text={text}>
       <button
@@ -460,7 +461,7 @@ export function Help({ text }: { text: string }) {
       </button>
     </Tip>
   )
-}
+})
 
 /** A tip on a control that takes focus, shown on hover and on focus; none without text. */
 export function Tip({ text, children }: { text?: string | null; children: ReactElement }) {
