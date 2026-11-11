@@ -31,7 +31,9 @@ async function renderConsent(locale?: SupportedLocale) {
     routeTree: rootRoute.addChildren([consentRoute]),
     context: { queryClient: new QueryClient(), acceptLanguageLocale: locale },
     history: createMemoryHistory({
-      initialEntries: ['/oauth/consent?client_id=test-client&scope=openid%20read:feedback'],
+      initialEntries: [
+        '/oauth/consent?client_id=test-client&scope=openid%20read:feedback%20read:article%20read:chat',
+      ],
     }),
     defaultErrorComponent: ({ error }) => (
       <div role="alert">{error instanceof Error ? error.message : String(error)}</div>
@@ -66,40 +68,102 @@ function mockRequests() {
   return request
 }
 
+async function authorizedScopes(request: ReturnType<typeof mockRequests>): Promise<string[]> {
+  fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
+  await waitFor(() => {
+    expect(request).toHaveBeenCalledWith('/api/auth/oauth2/consent', expect.any(Object))
+  })
+  const consent = request.mock.calls.find(([input]) => input === '/api/auth/oauth2/consent')
+  const body = JSON.parse((consent?.[1] as RequestInit).body as string)
+  expect(body.accept).toBe(true)
+  return body.scope.split(' ')
+}
+
+function openDetail() {
+  fireEvent.click(screen.getByRole('button', { name: /Choose what .* can access/ }))
+}
+
 describe('standalone MCP consent intl', () => {
-  it('renders the real capability picker without an ancestor provider', async () => {
+  it('opens on full access with the per-area picker tucked away', async () => {
     mockRequests()
     await renderConsent()
 
-    expect(screen.getByRole('button', { name: 'Settings: Read' })).toHaveAttribute(
+    expect(screen.getByRole('radio', { name: /Full access/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /Read only/ })).not.toBeChecked()
+    expect(screen.queryByRole('radio', { name: /Custom/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Settings: Read' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Authorize' })).toBeEnabled()
+  })
+
+  it('renders the real capability picker without an ancestor provider', async () => {
+    mockRequests()
+    await renderConsent()
+    openDetail()
+
+    expect(screen.getByRole('button', { name: 'Settings: Read and write' })).toHaveAttribute(
       'aria-pressed',
       'true'
     )
-    expect(screen.getByRole('button', { name: 'Authorize' })).toBeEnabled()
   })
 
   it('keeps the English picker copy consistent with the standalone page for other locales', async () => {
     mockRequests()
     await renderConsent('de')
+    openDetail()
 
     expect(screen.getByRole('button', { name: 'Settings: Read' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Authorize' })).toBeEnabled()
   })
 
-  it('can select write access and authorize after client information loads', async () => {
+  it('grants every capability when authorized as it opens', async () => {
     const request = mockRequests()
     await renderConsent('en')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Settings: Read and write' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
+    const scopes = await authorizedScopes(request)
+    for (const scope of ['write:feedback', 'write:changelog', 'write:chat', 'write:settings']) {
+      expect(scopes).toContain(scope)
+    }
+  })
 
-    await waitFor(() => {
-      expect(request).toHaveBeenCalledWith('/api/auth/oauth2/consent', expect.any(Object))
-    })
-    const consent = request.mock.calls.find(([input]) => input === '/api/auth/oauth2/consent')
-    const body = JSON.parse((consent?.[1] as RequestInit).body as string)
-    expect(body.accept).toBe(true)
-    expect(body.scope.split(' ')).toContain('write:settings')
+  it('grants no writes once read only is chosen', async () => {
+    const request = mockRequests()
+    await renderConsent('en')
+
+    fireEvent.click(screen.getByRole('radio', { name: /Read only/ }))
+    const scopes = await authorizedScopes(request)
+    expect(scopes).toContain('read:feedback')
+    expect(scopes.filter((scope) => scope.startsWith('write:'))).toEqual([])
+  })
+
+  it('shows a custom choice when one area is changed, and grants exactly that', async () => {
+    const request = mockRequests()
+    await renderConsent('en')
+    openDetail()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings: Read' }))
+    expect(screen.getByRole('radio', { name: /Custom/ })).toBeChecked()
+
+    const scopes = await authorizedScopes(request)
+    expect(scopes).toContain('read:settings')
+    expect(scopes).not.toContain('write:settings')
+    expect(scopes).toContain('write:feedback')
+  })
+
+  it('cannot authorize with nothing selected', async () => {
+    mockRequests()
+    await renderConsent('en')
+    openDetail()
+
+    for (const name of [
+      'Feedback: Read and write',
+      'Changelog: Write',
+      'Help Center: Read and write',
+      'Conversations: Read and write',
+      'Settings: Read and write',
+    ]) {
+      fireEvent.click(screen.getByRole('button', { name }))
+    }
+    expect(screen.getByRole('button', { name: 'Authorize' })).toBeDisabled()
   })
 
   it('can deny access after client information loads', async () => {
@@ -113,6 +177,9 @@ describe('standalone MCP consent intl', () => {
     })
     const consent = request.mock.calls.find(([input]) => input === '/api/auth/oauth2/consent')
     const body = JSON.parse((consent?.[1] as RequestInit).body as string)
-    expect(body).toMatchObject({ accept: false, scope: 'openid read:feedback' })
+    expect(body).toMatchObject({
+      accept: false,
+      scope: 'openid read:feedback read:article read:chat',
+    })
   })
 })

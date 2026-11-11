@@ -1,6 +1,6 @@
 /**
  * The web address server functions: when a proven zone travels with a
- * hostname to the operator, and when the page is told a hostname is covered.
+ * hostname to the operator, and when the page is told the operator accepted it.
  *
  * `createServerFn` is mocked so each `.handler()` is captured in export order.
  * The operator double records every request it is sent, and the proof double
@@ -155,26 +155,29 @@ describe('getCloudCustomDomainsFn', () => {
     ...extra,
   })
 
-  it('marks a covered hostname with its source, named only to who may see it', async () => {
+  it('marks a hostname proven only when the operator accepted the proof', async () => {
     process.env[FLAG] = 'true'
-    h.instructions = [pending('feedback.acme.com'), pending('feedback.example.com')]
+    // feedback.acme.com sits under a zone this workspace proved, but the
+    // operator has not accepted that proof yet.
+    h.instructions = [
+      pending('feedback.acme.com'),
+      pending('help.acme.com', {
+        ownershipProof: null,
+        ownership: 'proven-zone',
+        ownershipSource: 'email-sending',
+      }),
+    ]
 
     h.permissions = [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE]
     const named = (await getCustomDomains({})) as { hostname: string; provenBy: unknown }[]
     expect(named.map((d) => [d.hostname, d.provenBy])).toEqual([
-      ['feedback.acme.com', 'email-sending'],
-      ['feedback.example.com', null],
+      ['feedback.acme.com', null],
+      ['help.acme.com', 'email-sending'],
     ])
 
     h.permissions = [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]
     const generic = (await getCustomDomains({})) as { hostname: string; provenBy: unknown }[]
-    expect(generic.map((d) => d.provenBy)).toEqual(['workspace', null])
-  })
-
-  it('marks nothing from its own read while the operator does not accept proofs', async () => {
-    h.instructions = [pending('feedback.acme.com')]
-    const rows = (await getCustomDomains({})) as { provenBy: unknown }[]
-    expect(rows.map((d) => d.provenBy)).toEqual([null])
+    expect(generic.map((d) => d.provenBy)).toEqual([null, 'workspace'])
     expect(h.proofReads).toBe(0)
   })
 

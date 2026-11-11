@@ -4,10 +4,9 @@ This directory contains deployment configurations for Quackback.
 
 ## Deployment Options
 
-| Option                                     | For                          | Infrastructure       |
-| ------------------------------------------ | ---------------------------- | -------------------- |
-| **[Self-Hosted](./self-hosted/README.md)** | Community & Enterprise users | Docker, Bun, any VPS |
-| **[Cloud](./cloud/README.md)**             | Quackback team only          | Cloudflare Workers   |
+| Option                                     | For                                    | Infrastructure       |
+| ------------------------------------------ | -------------------------------------- | -------------------- |
+| **[Self-Hosted](./self-hosted/README.md)** | Teams running their own infrastructure | Docker, Bun, any VPS |
 
 ---
 
@@ -43,13 +42,9 @@ See the [Self-Hosted Guide](./self-hosted/README.md) for complete documentation.
 
 ---
 
-## Quackback Cloud (Internal)
+## Quackback Cloud
 
-The `cloud/` directory contains Cloudflare Workers deployment configuration for Quackback Cloud (app.quackback.io).
-
-> **Note**: This is used internally by the Quackback team. Self-hosted users should ignore this directory.
-
-See the [Cloud Deployment Guide](./cloud/README.md) for internal documentation.
+Quackback Cloud runs the same open-source image as self-hosted installs. Its hosting configuration is not part of this repository.
 
 ---
 
@@ -58,42 +53,20 @@ See the [Cloud Deployment Guide](./cloud/README.md) for internal documentation.
 ```
 deploy/
 ├── README.md              # This file
-├── cloud/                 # Quackback Cloud (Cloudflare Workers)
-│   ├── README.md          # Cloud deployment guide
-│   ├── wrangler.jsonc     # Base wrangler config
-│   ├── wrangler.dev.jsonc # Development environment
-│   ├── wrangler.production.jsonc  # Production environment
-│   ├── .dev.vars.example  # Secrets template
-│   └── .gitignore         # Ignores .dev.vars
+├── railway-template.yml   # One-click Railway template
+├── edge/                  # Cloudflare edge-retry worker (not deployed)
 └── self-hosted/           # Self-hosting documentation
     └── README.md          # Self-hosted deployment guide
 ```
 
 ---
 
-## Build Variants
+## Building from source
 
-Quackback supports different build configurations:
-
-| Command                           | Edition     | EE Features | Target     |
-| --------------------------------- | ----------- | ----------- | ---------- |
-| `bun run build`                   | Self-hosted | No          | Bun        |
-| `bun run build:community`         | Self-hosted | No          | Bun        |
-| `bun run build:enterprise`        | Self-hosted | Yes         | Bun        |
-| `bun run build:cloud`             | Cloud       | Yes         | Cloudflare |
-| `bun run deploy:cloud:dev`        | Cloud       | Yes         | Cloudflare |
-| `bun run deploy:cloud:production` | Cloud       | Yes         | Cloudflare |
-
-The build target is controlled by `EDITION` environment variable:
-
-- `self-hosted` (default): Standard Vite build for self-hosted deployments
-- `cloud`: Uses `@cloudflare/vite-plugin` for Cloudflare Workers
+`bun run build` builds the app. There is one edition: the same build runs self-hosted and on Cloud.
 
 ---
 
 ## License
 
-- **Core**: AGPL-3.0 (open source)
-- **Enterprise Features**: Proprietary (requires license key)
-
-Enterprise features include SSO/SAML, SCIM, and Audit Logs. Contact sales@quackback.io for licensing.
+The app is licensed under AGPL-3.0 (the `@quackback/widget` package is MIT). There is no closed enterprise edition and no license key: a self-hosted install is entitled to every feature, including OIDC SSO and the audit log.
