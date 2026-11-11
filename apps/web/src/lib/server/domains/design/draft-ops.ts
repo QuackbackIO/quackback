@@ -8,7 +8,8 @@
  * offered. Publishing stays with a person.
  */
 import { z } from 'zod'
-import { applyDesignOp, type DesignOp } from '@/lib/shared/design/dispatch'
+import { applyDesignOp, BRAND_COLOUR_ROLES, type DesignOp } from '@/lib/shared/design/dispatch'
+import { BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
 import { blockOf, SECTION_TYPES } from '@/lib/shared/design/blocks'
 import { HOME_LAYOUTS } from '@/lib/shared/design/home-layouts'
 import { PAGE_CHOICE_DEFAULTS } from '@/lib/shared/design/page-choices'
@@ -27,6 +28,8 @@ const id = z.string().min(1).max(40)
 const blockRef = z.union([id, z.number().int().min(0)])
 const key = z.string().min(1).max(60)
 const locale = z.string().min(2).max(20).optional()
+/** A menu item: home, a page type, or link:<id>. */
+const menuItem = z.string().min(1).max(60)
 const nonEmpty = (keys: readonly string[]) => keys as [string, ...string[]]
 
 /** One operation as the API takes it. */
@@ -104,6 +107,36 @@ export const apiDesignOp = z.discriminatedUnion('op', [
     doc: z.unknown(),
   }),
   z.object({ op: z.literal('hero.set'), key, value: z.unknown(), locale }),
+  z.object({
+    op: z.literal('brand.colour'),
+    role: z.enum(BRAND_COLOUR_ROLES),
+    value: z.string().max(80).nullable(),
+    mode: z.enum(['light', 'dark']).optional(),
+  }),
+  z.object({
+    op: z.literal('brand.font'),
+    slot: z.enum(['heading', 'body']),
+    font: z.enum(BUNDLED_FONT_IDS),
+  }),
+  z.object({ op: z.literal('logo.title'), title: z.string().max(60) }),
+  z.object({
+    op: z.literal('style.set'),
+    element: z.enum(nonEmpty(STYLE_ELEMENT_NAMES)),
+    state: z.string().max(20).optional(),
+    prop: z.string().min(1).max(40),
+    value: z.unknown(),
+    scope: z.string().max(120).optional(),
+    layer: z.enum(['all', 'phone', 'dark']).optional(),
+  }),
+  z.object({ op: z.literal('menu.rename'), item: menuItem, name: z.string().max(40) }),
+  z.object({ op: z.literal('menu.shown'), item: menuItem, shown: z.boolean() }),
+  z.object({ op: z.literal('menu.move'), item: menuItem, place: z.number().int().min(0) }),
+  z.object({
+    op: z.literal('menu.addLink'),
+    label: z.string().min(1).max(40),
+    url: z.string().min(1).max(2048),
+  }),
+  z.object({ op: z.literal('menu.removeLink'), item: menuItem }),
 ])
 export type ApiDesignOp = z.infer<typeof apiDesignOp>
 
@@ -121,6 +154,9 @@ function toDesignOp(op: ApiDesignOp, gates: PortalPageGates): DesignOp | string 
         ...(op.turnOnHome ? { turnOnHome: { gates } } : {}),
       }
     case 'block.grid':
+    case 'menu.rename':
+    case 'menu.shown':
+    case 'menu.move':
       return { ...op, gates }
     case 'home.layout':
       return { op: 'home.layout', layout: HOME_LAYOUTS.find((l) => l.id === op.layout)!, gates }
