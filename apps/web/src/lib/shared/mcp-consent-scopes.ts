@@ -1,8 +1,11 @@
 import {
+  ACCESS_DOMAINS,
   API_KEY_SCOPES,
   MCP_AS_SCOPES,
   MCP_FIRST_CONNECT_SCOPES,
+  domainAccessLevels,
   expandWriteGrants,
+  type DomainAccessLevels,
 } from '@/lib/shared/api-key-scopes'
 
 /**
@@ -32,10 +35,10 @@ export function expandAuthorizeScopes(): string {
 }
 
 /**
- * What the client asked for, used only to prefill toggles.
+ * What the client asked for, used only to prefill the page.
  * After authorize rewrite, that lives on `qb_requested_scope`. If the
- * consent URL was expanded but the param is missing, ignore the full
- * catalogue `scope=` so writes do not default on.
+ * consent URL was expanded but the param is missing, the full catalogue
+ * `scope=` is our own rewrite, not a request, so it reads as a plain connect.
  */
 export function clientRequestedFromConsentSearch(params: {
   requested?: string
@@ -47,16 +50,15 @@ export function clientRequestedFromConsentSearch(params: {
 }
 
 /**
- * MCP clients follow the spec and first-request only PRM / 401 scopes (the
- * three reads). Better Auth then refuses any consent grant that was not on
- * that authorize request. Expand `scope` to the full allow-list so the user
- * can opt into writes now; keep the original request for defaults.
+ * Better Auth refuses any consent grant that was not on the authorize
+ * request, and a client may have asked for less than the person wants to
+ * give (an older client that cached a reads-only challenge, or one that reads
+ * RFC 9728 `scopes_supported`). Expand `scope` to the full allow-list so the
+ * consent page can grant any of it; keep the original request for defaults.
  *
  * A client-supplied `qb_requested_scope` is ignored on the first hop — only
  * `scope=` is the request. The second pass is identified by `scope` already
  * being the catalogue, not by the param being present.
- *
- * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices#scope-minimization
  */
 export function rewriteMcpAuthorizeRequest(request: Request): Request {
   const url = new URL(request.url)
@@ -72,19 +74,52 @@ export function rewriteMcpAuthorizeRequest(request: Request): Request {
   return new Request(url, request)
 }
 
+/** The reads every MCP challenge has asked for since scoped OAuth shipped. */
+const MCP_CONNECT_READS = ['read:feedback', 'read:article', 'read:chat'] as const
+
 /**
- * Prefill: PRM / 401 first-connect reads, plus anything this authorize
- * actually asked for (step-up unions in writes). `offline_access` is on
- * when the client asked — MCP clients add it themselves; we do not force it.
+ * Prefill. A plain MCP connect defaults to full access: most people connecting
+ * an assistant want it to act, and a reads-only grant fails on the first write
+ * in every client that cannot step up. A plain connect is a request for every
+ * capability (today's 401 challenge), for the connect reads (a client holding
+ * the older reads-only challenge), or for no capability at all.
+ *
+ * Anything narrower is a deliberate ask and is not widened to writes: a
+ * request that names some writes (a step-up) prefills the reads plus exactly
+ * those, and one that names only some reads prefills the reads.
+ * `offline_access` is on when the client asked — MCP clients add it
+ * themselves; we do not force it.
  */
 export function defaultSelectedScopes(clientRequested: readonly string[]): string[] {
   const requested = new Set(clientRequested)
-  const selected = new Set<string>(MCP_FIRST_CONNECT_SCOPES)
-  for (const scope of API_KEY_SCOPES) {
-    if (requested.has(scope)) selected.add(scope)
-  }
+  const capabilities = API_KEY_SCOPES.filter((scope) => requested.has(scope))
+  const namesWrite = capabilities.some((scope) => scope.startsWith('write:'))
+  const plainConnect =
+    !namesWrite &&
+    (capabilities.length === 0 || MCP_CONNECT_READS.every((scope) => requested.has(scope)))
+  const selected = new Set<string>(plainConnect ? API_KEY_SCOPES : MCP_FIRST_CONNECT_SCOPES)
+  for (const scope of capabilities) selected.add(scope)
   if (requested.has('offline_access')) selected.add('offline_access')
   return [...selected]
+}
+
+/** The one-click choices on the consent page; `custom` is any other selection. */
+export type ConsentPreset = 'full' | 'read' | 'custom'
+
+/** Picker levels for a one-click choice. */
+export function consentPresetLevels(preset: Exclude<ConsentPreset, 'custom'>): DomainAccessLevels {
+  return domainAccessLevels(
+    preset === 'full' ? API_KEY_SCOPES : API_KEY_SCOPES.filter((s) => s.startsWith('read:'))
+  )
+}
+
+/** Which choice a selection amounts to. */
+export function consentPreset(levels: DomainAccessLevels): ConsentPreset {
+  for (const preset of ['full', 'read'] as const) {
+    const target = consentPresetLevels(preset)
+    if (ACCESS_DOMAINS.every((d) => levels[d.domain] === target[d.domain])) return preset
+  }
+  return 'custom'
 }
 
 /** Space-separated grant: identity + the user's toggles, in AS catalogue order. */
