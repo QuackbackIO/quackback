@@ -27,6 +27,7 @@ import {
   SendingDomainRefusedError,
   restartSendingDomainChecks,
 } from '@/lib/server/domains/channel-accounts/sending-identity'
+import { ownershipGraceEnds } from '@/lib/server/domains/channel-accounts/ownership-grace'
 import {
   addSendingAddress,
   removeSendingAddress,
@@ -113,6 +114,11 @@ export interface SendingDomainDTO {
   status: string
   dnsRecords: DnsRecordDTO[]
   verifiedAt: string | null
+  /**
+   * Set on a verified domain whose ownership record has gone missing: when it
+   * stops sending as itself unless the record is added back.
+   */
+  ownershipDeadline?: string | null
   /** The MAIL FROM subdomain label the records are composed under. */
   mailFromLabel: string
   /**
@@ -204,6 +210,10 @@ const toDomain = (d: EmailSendingDomain): SendingDomainDTO => ({
   // and the wire shape says the same thing with an optional field.
   dnsRecords: (d.dnsRecords ?? []).map((r) => ({ ...r })),
   verifiedAt: d.verifiedAt ? d.verifiedAt.toISOString() : null,
+  ownershipDeadline:
+    d.status === 'verified' && d.ownershipMissingSince
+      ? ownershipGraceEnds(d.ownershipMissingSince).toISOString()
+      : null,
   mailFromLabel: d.mailFromLabel,
   dkimMode: d.dkimMode,
   signingKeyPending: d.pendingSigningKey != null,
