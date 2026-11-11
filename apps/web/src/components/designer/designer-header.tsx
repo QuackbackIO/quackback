@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 import {
   ArrowLeftIcon,
   ArrowUturnLeftIcon,
@@ -24,6 +24,13 @@ import {
 import { cn } from '@/lib/shared/utils'
 import type { PortalAddress } from '@/lib/shared/design/portal-address'
 import { PublishedPopover } from './published-popover'
+
+// The bar's icons, made once: unchanged, React does not draw them again with the bar.
+const UNDO_ICON = <ArrowUturnLeftIcon className="size-4" aria-hidden="true" />
+const REDO_ICON = <ArrowUturnRightIcon className="size-4" aria-hidden="true" />
+const ADD_ICON = <PlusIcon className="size-4" aria-hidden="true" />
+const THEME_ICON = <SwatchIcon className="size-4" aria-hidden="true" />
+const PREVIEW_ICON = <EyeIcon className="size-4" aria-hidden="true" />
 
 const DEVICE_ICONS: Record<Device, typeof ComputerDesktopIcon> = {
   desktop: ComputerDesktopIcon,
@@ -67,7 +74,7 @@ function IconButton({
 }
 
 /** Desktop, tablet and phone: one radio group, one Tab stop, the arrows pick. */
-export function DeviceToggle({
+export const DeviceToggle = memo(function DeviceToggle({
   size,
   onSize,
   labelled = false,
@@ -115,7 +122,35 @@ export function DeviceToggle({
       })}
     </div>
   )
-}
+})
+
+/** The way back to settings, drawn again only if where it goes changes. */
+const BackLink = memo(function BackLink({
+  returnPath,
+  onExit,
+}: {
+  returnPath: string
+  onExit: () => void
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <a
+          href={returnPath}
+          aria-label="Back to Customer portal settings"
+          className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+          onClick={(event) => {
+            event.preventDefault()
+            onExit()
+          }}
+        >
+          <ArrowLeftIcon className="size-4" aria-hidden="true" />
+        </a>
+      </TooltipTrigger>
+      <TooltipContent>Back to settings. Your draft is kept.</TooltipContent>
+    </Tooltip>
+  )
+})
 
 /** Add or Theme: filled while its sheet is open. */
 function SheetButton({
@@ -218,22 +253,7 @@ export function DesignerHeader({
     >
       <h1 className="sr-only">Customer portal design for {workspaceName}</h1>
       <div className="flex min-w-0 items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <a
-              href={returnPath}
-              aria-label="Back to Customer portal settings"
-              className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
-              onClick={(event) => {
-                event.preventDefault()
-                onExit()
-              }}
-            >
-              <ArrowLeftIcon className="size-4" aria-hidden="true" />
-            </a>
-          </TooltipTrigger>
-          <TooltipContent>Back to settings. Your draft is kept.</TooltipContent>
-        </Tooltip>
+        <BackLink returnPath={returnPath} onExit={onExit} />
         {/* Where you are gives way first as the window narrows. */}
         <nav
           aria-label="Breadcrumb"
@@ -255,10 +275,10 @@ export function DesignerHeader({
       </div>
       <div className="flex min-w-0 items-center justify-end gap-1.5">
         <IconButton tip={undoTip(undoLabel)} label="Undo" disabled={!undoLabel} onClick={onUndo}>
-          <ArrowUturnLeftIcon className="size-4" aria-hidden="true" />
+          {UNDO_ICON}
         </IconButton>
         <IconButton tip={redoTip(redoLabel)} label="Redo" disabled={!redoLabel} onClick={onRedo}>
-          <ArrowUturnRightIcon className="size-4" aria-hidden="true" />
+          {REDO_ICON}
         </IconButton>
         {/* One width whatever it says, so nothing beside it moves as the draft's state changes. */}
         <div
@@ -270,11 +290,11 @@ export function DesignerHeader({
         </div>
         <span className="mx-1 h-6 w-px shrink-0 bg-border" aria-hidden="true" />
         <SheetButton sheet="add" open={sheet === 'add'} onClick={() => onSheet('add')}>
-          <PlusIcon className="size-4" aria-hidden="true" />
+          {ADD_ICON}
           <Label>Add</Label>
         </SheetButton>
         <SheetButton sheet="theme" open={sheet === 'theme'} onClick={() => onSheet('theme')}>
-          <SwatchIcon className="size-4" aria-hidden="true" />
+          {THEME_ICON}
           <Label>Theme</Label>
         </SheetButton>
         <Button
@@ -284,7 +304,7 @@ export function DesignerHeader({
           data-preview=""
           onClick={onPreview}
         >
-          <EyeIcon className="size-4" aria-hidden="true" />
+          {PREVIEW_ICON}
           <Label>Preview</Label>
         </Button>
         <PublishedPopover address={published} onClose={onPublishedClose}>

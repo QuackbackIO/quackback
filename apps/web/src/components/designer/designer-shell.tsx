@@ -7,7 +7,12 @@ import { DraftNotices } from '@/components/admin/settings/appearance/draft-notic
 import { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
 import { trackBuilder } from '@/lib/client/builder-events'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
-import { deviceCaption, escapeStep, panelView } from '@/lib/shared/design/builder-chrome'
+import {
+  deviceCaption,
+  escapeStep,
+  panelView,
+  type Sheet,
+} from '@/lib/shared/design/builder-chrome'
 import { panelFor, upOf } from '@/lib/shared/design/panel-routes'
 import { designChecks } from '@/lib/shared/design/checks'
 import type { HomeBlockType } from '@/lib/shared/design/home'
@@ -84,6 +89,8 @@ import {
   type RefusalValue,
 } from './properties/change-refusal'
 import { SaidRegion, useSaid } from './use-said'
+import { useSteadyChecks } from './use-steady-checks'
+import { useSteadyHandlers } from './use-steady-handlers'
 
 /** Escape inside these belongs to them. */
 const OWNS_ESCAPE =
@@ -141,7 +148,8 @@ export function DesignerShell({
   // The frame takes the design whole and builds its view there, as the server does. It is
   // sent once a frame (see usePreviewPosting), so the builder draws each change only once.
   const canvasDesign = useCanvasDesign(design)
-  const checks = useMemo(() => designChecks(design), [design])
+  // The same list while the checks say the same, which most changes leave them.
+  const checks = useSteadyChecks(useMemo(() => designChecks(design), [design]))
 
   const { said, say, undo, redo } = useSaid(draft)
   const picking = useCanvasSelection({
@@ -418,6 +426,50 @@ export function DesignerShell({
   const menuHot = picking.hovered === 'header' || selection === 'header'
   const pickedBlock = selection?.startsWith('block-') ? (nameOf(selection) ?? null) : null
   const caption = deviceCaption(size)
+  // The top bar's handlers, each one function for the builder's life that runs the latest.
+  const topBar = useSteadyHandlers({
+    exit: () => void exit(),
+    pick: pickAndFocus,
+    fixCheck: (check: (typeof checks)[number]) =>
+      check.fix && update(check.fix.apply, check.fix.label),
+    turnOn: () => menu.setAdding(true),
+    sheet: (next: Sheet) => {
+      panel.dispatch({ type: 'toggle', sheet: next })
+      setPane('settings')
+    },
+    preview: startPreview,
+    publish: () => void publishing.start(),
+    closePublished: publishing.closePublished,
+    discard,
+    dialog: dialogs.show,
+    undo,
+    redo,
+  })
+  // The top bar reads the menu and the draft's state, each the same while it is the same.
+  const navOnly = useMemo(() => ({ nav: design.nav }), [design.nav])
+  const changeCount = draft.changes.length
+  const topBarDraft = useMemo(
+    () => ({
+      undoLabel: draft.undoLabel,
+      redoLabel: draft.redoLabel,
+      changes: changeCount,
+      saving: draft.saving,
+      failed: draft.failed,
+      conflict: draft.conflict,
+      published: !!draft.published,
+      canPublish: draft.canPublish,
+    }),
+    [
+      draft.undoLabel,
+      draft.redoLabel,
+      changeCount,
+      draft.saving,
+      draft.failed,
+      draft.conflict,
+      draft.published,
+      draft.canPublish,
+    ]
+  )
   // What the canvas draws while the page loads: its parts, as shapes.
   const skeleton = <CanvasSkeleton parts={skeletonOf(nodes, design.pages.home.blocks)} />
 
@@ -465,27 +517,34 @@ export function DesignerShell({
             <BuilderTopBar
               returnPath={returnPath}
               workspaceName={workspaceName}
-              onExit={() => void exit()}
-              draft={draft}
-              view={view}
+              onExit={topBar.exit}
+              draft={topBarDraft}
+              nav={navOnly}
+              mode={design.mode}
+              gates={gates}
+              here={view.here}
+              sample={view.sample}
+              widget={view.widget}
+              visitor={view.visitor}
+              setPage={setPage}
+              showSample={view.showSample}
+              showWidget={view.showWidget}
+              setVisitor={view.setVisitor}
               canvas={canvas}
-              onPick={pickAndFocus}
+              onPick={topBar.pick}
               checks={checks}
-              onFixCheck={(check) => check.fix && update(check.fix.apply, check.fix.label)}
-              onUndo={undo}
-              onRedo={redo}
-              onTurnOn={() => menu.setAdding(true)}
+              onFixCheck={topBar.fixCheck}
+              onUndo={topBar.undo}
+              onRedo={topBar.redo}
+              onTurnOn={topBar.turnOn}
               sheet={panel.state.sheet}
-              onSheet={(next) => {
-                panel.dispatch({ type: 'toggle', sheet: next })
-                setPane('settings')
-              }}
-              onPreview={startPreview}
-              onPublish={() => void publishing.start()}
+              onSheet={topBar.sheet}
+              onPreview={topBar.preview}
+              onPublish={topBar.publish}
               published={publishing.published}
-              onPublishedClose={publishing.closePublished}
-              onDiscard={discard}
-              onDialog={dialogs.show}
+              onPublishedClose={topBar.closePublished}
+              onDiscard={topBar.discard}
+              onDialog={topBar.dialog}
             />
           )}
 
