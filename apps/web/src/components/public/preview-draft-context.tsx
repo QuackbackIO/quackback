@@ -191,6 +191,13 @@ export interface DesignerPreviewState {
 /** The builder's message with the theme to draw in, light or dark, in place of a reload. */
 export const PREVIEW_THEME = 'quackback:preview-theme'
 
+/**
+ * The builder's message with another page of the portal to show, by its
+ * address, gone to inside the frame in place of a reload; the frame answers
+ * `quackback:preview-navigated` with that address once it shows it.
+ */
+export const PREVIEW_NAVIGATE = 'quackback:preview-navigate'
+
 /** The message the builder sends the frame with what it asks for. */
 export const PREVIEW_STATE_MESSAGE = 'quackback:preview-state'
 /** The frame's ask for it, once it listens: the builder answers with PREVIEW_STATE_MESSAGE. */

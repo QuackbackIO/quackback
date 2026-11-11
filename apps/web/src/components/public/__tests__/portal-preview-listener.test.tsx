@@ -171,6 +171,30 @@ describe('PortalPreviewProvider', () => {
     window.history.replaceState(null, '', '/')
   })
 
+  it('goes to another page in place when the builder asks, and says once it is there', async () => {
+    const navigate = vi.fn(async () => {})
+    router.navigate = navigate
+    const navigated = () =>
+      vi
+        .mocked(framer.postMessage)
+        .mock.calls.filter(
+          ([message]) => (message as { type?: string }).type === 'quackback:preview-navigated'
+        )
+        .map(([message]) => message)
+    // Only a path of this portal, never another site's.
+    for (const href of ['https://elsewhere.example.com/', '//elsewhere.example.com/', 42])
+      post({ type: 'quackback:preview-navigate', href })
+    expect(navigate).not.toHaveBeenCalled()
+    const href = '/changelog?theme=light&preview=true&lang=en&designer=1'
+    post({ type: 'quackback:preview-navigate', href })
+    expect(navigate).toHaveBeenCalledExactlyOnceWith({ href, replace: true, resetScroll: true })
+    expect(navigated()).toEqual([])
+    await act(async () => {
+      await new Promise((done) => requestAnimationFrame(() => done(null)))
+    })
+    expect(navigated()).toEqual([{ type: 'quackback:preview-navigated', href }])
+  })
+
   it('draws nothing anew in the page for a change that is style alone', async () => {
     await postDesign({ type: 'quackback:preview-design', design: draftDesign() })
     const pages = renders.pages

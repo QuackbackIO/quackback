@@ -4,6 +4,7 @@ import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/
 import { BrandStatusColours } from './brand-status-colours'
 import {
   FeedCopyContext,
+  PREVIEW_NAVIGATE,
   PREVIEW_THEME,
   PreviewDraftProvider,
   PreviewDesignContext,
@@ -142,6 +143,20 @@ export function PortalPreviewProvider({
             replace: true,
             resetScroll: false,
           })
+      } else if (msg?.type === PREVIEW_NAVIGATE) {
+        // Another page of the portal, gone to in place: the frame's code and the draft stay.
+        const href = (msg as { href?: unknown }).href
+        if (typeof href !== 'string' || !/^\/(?!\/)/.test(href) || href.length > 2048) return
+        void routerRef.current
+          .navigate({ href, replace: true, resetScroll: true })
+          .then(() =>
+            requestAnimationFrame(() =>
+              window.parent.postMessage(
+                { type: 'quackback:preview-navigated', href },
+                window.location.origin
+              )
+            )
+          )
       } else if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
         setCss(msg.css)
       } else if (msg?.type === 'quackback:preview-draft' && msg.draft) {

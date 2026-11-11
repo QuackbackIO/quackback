@@ -682,6 +682,7 @@ export function DesignerShell({
                     }}
                     onLoad={picking.reload}
                     skeleton={skeleton}
+                    inPlace
                     layer={(frame) =>
                       previewing ? null : (
                         <>

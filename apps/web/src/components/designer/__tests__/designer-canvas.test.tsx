@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
-import { canvasScale, canvasSrc, DesignerCanvas, frameBox } from '../designer-canvas'
+import { canvasScale, canvasSrc, DesignerCanvas, frameBox, frameDocument } from '../designer-canvas'
 
 afterEach(cleanup)
 
@@ -79,6 +79,7 @@ describe('canvasSrc', () => {
 })
 
 describe('DesignerCanvas', () => {
+  let rerenderCanvas: (props: Record<string, unknown>) => void = () => {}
   function show(trying = false, more: Record<string, unknown> = {}) {
     const handlers = {
       ...more,
@@ -89,7 +90,7 @@ describe('DesignerCanvas', () => {
       onLocation: vi.fn(),
       onHover: vi.fn(),
     }
-    render(
+    const canvas = (props: Record<string, unknown> = {}) => (
       <DesignerCanvas
         page="feedback"
         size="phone"
@@ -101,8 +102,11 @@ describe('DesignerCanvas', () => {
         structural={{}}
         trying={trying}
         {...handlers}
+        {...props}
       />
     )
+    const view = render(canvas())
+    rerenderCanvas = (props) => view.rerender(canvas(props))
     const iframe = screen.getByTitle(
       trying ? 'Feedback, phone, light, preview, links work' : 'Feedback, phone, light'
     ) as HTMLIFrameElement
@@ -247,6 +251,94 @@ describe('DesignerCanvas', () => {
     view.rerender(<DesignerCanvas {...props} theme="dark" page="roadmap" />)
     expect(view.container.querySelector('iframe')).not.toBe(shown)
     expect(view.container.querySelector('iframe')!.getAttribute('src')).toContain('theme=dark')
+  })
+
+  it('in place, loads afresh only for another document, such as another language', () => {
+    const props = {
+      page: 'feedback' as const,
+      size: 'phone' as const,
+      theme: 'dark' as const,
+      sort: 'trending' as const,
+      design: null,
+      structural: {},
+      onSelect: vi.fn(),
+      onWords: vi.fn(),
+      onKey: vi.fn(),
+      inPlace: true,
+    }
+    const view = render(<DesignerCanvas {...props} locale="en" />)
+    const shown = view.container.querySelector('iframe')
+    view.rerender(<DesignerCanvas {...props} locale="en" page="roadmap" />)
+    expect(view.container.querySelector('iframe')).toBe(shown)
+    view.rerender(<DesignerCanvas {...props} locale="fr" page="roadmap" />)
+    expect(view.container.querySelector('iframe')).not.toBe(shown)
+    expect(view.container.querySelector('iframe')!.getAttribute('src')).toContain('lang=fr')
+  })
+
+  it('goes to another page inside the frame it has, ready once the frame says it is there', () => {
+    const { frame, send } = show(false, { skeleton: <p>Loading shapes</p>, inPlace: true })
+    send({ type: 'quackback:preview-ready' })
+    const before = screen.getByTitle('Feedback, phone, light') as HTMLIFrameElement
+    const src = before.getAttribute('src')
+    const box = document.querySelector('[data-canvas-box]')!
+    expect(box.getAttribute('aria-busy')).toBe('false')
+    vi.mocked(frame.postMessage).mockClear()
+    rerenderCanvas({ page: 'roadmap' })
+    const after = screen.getByTitle('Roadmap, phone, light') as HTMLIFrameElement
+    // The same frame, at the address it loaded, told where to go.
+    expect(after).toBe(before)
+    expect(after.getAttribute('src')).toBe(src)
+    const href = canvasSrc({ page: 'roadmap', theme: 'light', locale: 'en', sort: 'trending' })
+    expect(frame.postMessage).toHaveBeenCalledExactlyOnceWith(
+      { type: 'quackback:preview-navigate', href },
+      window.location.origin
+    )
+    expect(box.getAttribute('aria-busy')).toBe('true')
+    // Only its own frame, there, makes it ready.
+    send({ type: 'quackback:preview-navigated', href: src })
+    send({ type: 'quackback:preview-navigated', href }, {} as Window)
+    expect(box.getAttribute('aria-busy')).toBe('true')
+    send({ type: 'quackback:preview-navigated', href })
+    expect(box.getAttribute('aria-busy')).toBe('false') // Light or dark is no other page: it is told in place, and nothing navigates.
+    vi.mocked(frame.postMessage).mockClear()
+    rerenderCanvas({ page: 'roadmap', theme: 'dark' })
+    expect(frame.postMessage).toHaveBeenCalledExactlyOnceWith(
+      { type: 'quackback:preview-theme', theme: 'dark' },
+      window.location.origin
+    )
+    expect(box.getAttribute('aria-busy')).toBe('false')
+  })
+
+  it('sends a page that loaded afresh where the builder went meanwhile', () => {
+    const { frame, send } = show(false, { skeleton: <p>Loading shapes</p>, inPlace: true })
+    rerenderCanvas({ page: 'roadmap' })
+    vi.mocked(frame.postMessage).mockClear()
+    // Ready at the address it loaded with, which is no longer the page shown.
+    send({ type: 'quackback:preview-ready' })
+    const href = canvasSrc({ page: 'roadmap', theme: 'light', locale: 'en', sort: 'trending' })
+    expect(frame.postMessage).toHaveBeenCalledWith(
+      { type: 'quackback:preview-navigate', href },
+      window.location.origin
+    )
+    expect(document.querySelector('[data-canvas-box]')!.getAttribute('aria-busy')).toBe('true')
+  })
+
+  it('loads a sample, or Preview, afresh', () => {
+    expect(frameDocument({ page: 'home', locale: 'en', sort: 'top' })).toBe(
+      frameDocument({ page: 'roadmap', locale: 'en', sort: 'new', postPath: '/roadmap?x=1' })
+    )
+    expect(frameDocument({ page: 'home', locale: 'en', sort: 'top' })).not.toBe(
+      frameDocument({ page: 'home', locale: 'fr', sort: 'top' })
+    )
+    expect(frameDocument({ page: 'home', locale: 'en', sort: 'top' })).not.toBe(
+      frameDocument({ page: 'home', locale: 'en', sort: 'top', visitor: 'out' })
+    )
+    expect(frameDocument({ page: 'feedback', locale: 'en', sort: 'top' })).not.toBe(
+      frameDocument({ page: 'feedback', locale: 'en', sort: 'top', sample: 'feedback' })
+    )
+    expect(frameDocument({ page: 'feedback', locale: 'en', sort: 'top', trying: true })).not.toBe(
+      frameDocument({ page: 'roadmap', locale: 'en', sort: 'top', trying: true })
+    )
   })
 
   it('in Preview, tells the frame to act as a visitor’s and takes Tab', () => {
