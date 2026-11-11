@@ -39,7 +39,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { logger } from '@/lib/server/logger'
-import { ConflictError } from '@/lib/shared/errors'
+import { NotFoundError, ConflictError } from '@/lib/shared/errors'
 import { chooseInboxForSupportIfUnset } from './email-senders'
 
 const log = logger.child({ component: 'channel-accounts' })
