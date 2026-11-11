@@ -384,6 +384,8 @@ export function ElementPanel({
         to: 'support',
         angle: 135,
       } satisfies StylePaint),
+    screen: (next: Screen) => onScreen?.(next),
+    state: onState,
     tile: (prop: StyleProp, value: string) => {
       setCustomOpen((open) => {
         const next = new Set(open)
@@ -562,9 +564,14 @@ export function ElementPanel({
           />
           {(onScreen || el.states.length > 1) && (
             <div className="flex flex-wrap items-center gap-1.5">
-              {onScreen && <ScreenChip value={screen} onChange={onScreen} />}
+              {onScreen && <ScreenChip value={screen} onChange={handlers.screen} />}
               {el.states.length > 1 && (
-                <StateChip states={el.states} value={state} onChange={onState} isSet={statesSet} />
+                <StateChip
+                  states={el.states}
+                  value={state}
+                  onChange={handlers.state}
+                  set={el.states.filter(statesSet)}
+                />
               )}
             </div>
           )}
@@ -809,7 +816,13 @@ function countAt(design: PortalDesign, ctx: ElementContext, at: ScopeName, scree
  * Which screens a change goes to, always in view under the scope line: all
  * screens, or phones, which shows the canvas as a phone. Phone is tinted.
  */
-function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Screen) => void }) {
+const ScreenChip = memo(function ScreenChip({
+  value,
+  onChange,
+}: {
+  value: Screen
+  onChange: (screen: Screen) => void
+}) {
   const options: Array<[Screen, string]> = [
     ['all', PHONE_WORDS.allScreens],
     ['phone', PHONE_WORDS.phone],
@@ -848,24 +861,26 @@ function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Scr
       })}
     </div>
   )
-}
+})
 
 /**
  * The state shown, as one quiet chip, "State: Normal", with a menu of the
  * element's states; a dot marks each that holds values, and the chip has one
  * when a state other than the one shown does.
  */
-function StateChip({
+const StateChip = memo(function StateChip({
   states,
   value,
   onChange,
-  isSet,
+  set,
 }: {
   states: readonly StyleState[]
   value: StyleState
   onChange: (state: StyleState) => void
-  isSet: (state: StyleState) => boolean
+  /** The states that hold values. */
+  set: readonly StyleState[]
 }) {
+  const isSet = (state: StyleState) => set.includes(state)
   const others = states.some((s) => s !== value && isSet(s))
   return (
     <DropdownMenu>
@@ -912,4 +927,4 @@ function StateChip({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
+}, sameProps)

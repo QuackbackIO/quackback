@@ -36,6 +36,8 @@ import { keepOpen, rememberedOpen } from '../advanced'
 import { RefusalText, useRowRefusal } from './change-refusal'
 import { PHONE_TINT, PHONE_WORDS } from './phone-mode'
 import { WORDS, setDifferentlyIn } from './words'
+import { sameProps } from '../same-props'
+import { useSteadyHandlers } from '../use-steady-handlers'
 
 /** The label column of a property row. A label wraps between words, never inside one. */
 export const ROW_LABEL = 'w-[96px]'
@@ -94,6 +96,15 @@ export interface OverridePlace {
   onGo?: () => void
 }
 
+// Drawn once: the same element each time is never drawn again.
+const CRUMB_CHEVRON = <ChevronRightIcon className="size-3" aria-hidden="true" />
+const MORE_CHEVRON = (
+  <ChevronRightIcon
+    className="size-3.5 transition-transform group-open:rotate-90"
+    aria-hidden="true"
+  />
+)
+
 export function PropertiesPanel({
   crumbs,
   title,
@@ -121,70 +132,23 @@ export function PropertiesPanel({
   children: ReactNode
   className?: string
 } & { [data: `data-${string}`]: string | undefined }) {
+  // The trail's and the ⋯ menu's handlers run the latest, so the title draws only when it changes.
+  const steady = useSteadyHandlers({
+    crumb: (at: number) => crumbs[at]?.onSelect?.(),
+    action: (at: number) => actions?.[at]?.onSelect(),
+  })
   return (
     <div className={cn('flex min-h-full flex-col text-ui', className)} {...rest}>
       <header className="space-y-1.5 border-b border-border px-4 pt-3 pb-3">
-        {crumbs.length > 0 && (
-          <nav aria-label="Where it is" className="text-xs text-muted-foreground">
-            <ol className="flex flex-wrap items-center gap-1">
-              {crumbs.map((crumb, i) => {
-                const last = i === crumbs.length - 1
-                return (
-                  <li key={`${i}:${crumb.label}`} className="flex items-center gap-1">
-                    {i > 0 && <ChevronRightIcon className="size-3" aria-hidden="true" />}
-                    {last ? (
-                      <span aria-current="location" className="text-foreground">
-                        {crumb.label}
-                      </span>
-                    ) : crumb.onSelect ? (
-                      <button
-                        type="button"
-                        onClick={crumb.onSelect}
-                        className="rounded hover:text-foreground focus-ring"
-                      >
-                        {crumb.label}
-                      </button>
-                    ) : (
-                      <span>{crumb.label}</span>
-                    )}
-                  </li>
-                )
-              })}
-            </ol>
-          </nav>
-        )}
-        <div className="flex items-center gap-2">
-          {icon}
-          <h2 className="min-w-0 truncate rounded-sm text-sm font-semibold outline-none focus-ring">
-            {title}
-          </h2>
-          {about && <Help text={about} />}
-          <span className="flex-1" />
-          {actions && actions.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" aria-label={`${title}: more actions`}>
-                  <EllipsisHorizontalIcon className="size-4" aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60">
-                {actions.map((action) => (
-                  <DropdownMenuItem
-                    key={action.label}
-                    disabled={action.disabled}
-                    className="text-ui"
-                    onClick={action.onSelect}
-                  >
-                    {action.label}
-                    {action.keys && (
-                      <span className="ms-auto text-2xs text-muted-foreground">{action.keys}</span>
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
+        <PanelTitle
+          crumbs={crumbs.map((crumb) => ({ label: crumb.label, link: !!crumb.onSelect }))}
+          title={title}
+          icon={icon}
+          about={about}
+          actions={actions?.map(({ label, disabled, keys }) => ({ label, disabled, keys }))}
+          onCrumb={steady.crumb}
+          onAction={steady.action}
+        />
         {scope}
       </header>
       <div className="flex-1">{children}</div>
@@ -220,6 +184,94 @@ export function PropertiesPanel({
     </div>
   )
 }
+
+/**
+ * A panel's trail, title and ⋯ menu, drawn again only when they change: its
+ * handlers take the crumb's or the action's place in the list.
+ */
+const PanelTitle = memo(function PanelTitle({
+  crumbs,
+  title,
+  icon,
+  about,
+  actions,
+  onCrumb,
+  onAction,
+}: {
+  crumbs: ReadonlyArray<{ label: string; link: boolean }>
+  title: string
+  icon?: ReactNode
+  about?: string
+  actions?: ReadonlyArray<Omit<PanelAction, 'onSelect'>>
+  onCrumb: (at: number) => void
+  onAction: (at: number) => void
+}) {
+  return (
+    <>
+      {crumbs.length > 0 && (
+        <nav aria-label="Where it is" className="text-xs text-muted-foreground">
+          <ol className="flex flex-wrap items-center gap-1">
+            {crumbs.map((crumb, i) => {
+              const last = i === crumbs.length - 1
+              return (
+                <li key={`${i}:${crumb.label}`} className="flex items-center gap-1">
+                  {i > 0 && CRUMB_CHEVRON}
+                  {last ? (
+                    <span aria-current="location" className="text-foreground">
+                      {crumb.label}
+                    </span>
+                  ) : crumb.link ? (
+                    <button
+                      type="button"
+                      onClick={() => onCrumb(i)}
+                      className="rounded hover:text-foreground focus-ring"
+                    >
+                      {crumb.label}
+                    </button>
+                  ) : (
+                    <span>{crumb.label}</span>
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+        </nav>
+      )}
+      <div className="flex items-center gap-2">
+        {icon}
+        <h2 className="min-w-0 truncate rounded-sm text-sm font-semibold outline-none focus-ring">
+          {title}
+        </h2>
+        {about && <Help text={about} />}
+        <span className="flex-1" />
+        {actions && actions.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label={`${title}: more actions`}>
+                <EllipsisHorizontalIcon className="size-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              {actions.map((action, at) => (
+                <DropdownMenuItem
+                  key={action.label}
+                  disabled={action.disabled}
+                  className="text-ui"
+                  onClick={() => onAction(at)}
+                >
+                  {action.label}
+                  {action.keys && (
+                    <span className="ms-auto text-2xs text-muted-foreground">{action.keys}</span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+    </>
+  )
+}, sameProps)
 
 /**
  * A titled group of rows. An optional section shows only its title and "+"
@@ -322,10 +374,7 @@ export function PropertyMore({
       }}
     >
       <summary className="flex min-h-7 cursor-pointer list-none items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-ring [&::-webkit-details-marker]:hidden">
-        <ChevronRightIcon
-          className="size-3.5 transition-transform group-open:rotate-90"
-          aria-hidden="true"
-        />
+        {MORE_CHEVRON}
         {WORDS.more}
       </summary>
       <div className="space-y-0.5 pt-0.5">{children}</div>
