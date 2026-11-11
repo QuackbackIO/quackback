@@ -126,7 +126,7 @@ export function ColourValue({
           <span
             className={cn(
               'ms-auto text-muted-foreground',
-              value && 'font-mono text-[11px] uppercase'
+              value && 'font-mono text-2xs uppercase'
             )}
           >
             {label ?? (auto !== undefined ? WORDS.auto : WORDS.none)}
@@ -239,7 +239,7 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
     <PropertySection
       title={THEME.sections.colours}
       aside={
-        <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title={status}>
+        <span className="flex items-center gap-1 text-2xs text-muted-foreground" title={status}>
           {failing === 0 ? (
             <CheckCircleIcon className="size-3.5 text-success" aria-hidden="true" />
           ) : (
@@ -448,7 +448,7 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
             type="button"
             onClick={() => update((draft) => void delete draft.brand.dark)}
             className={cn(
-              'inline-flex min-h-6 items-center rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'inline-flex min-h-6 items-center rounded text-2xs text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
               ROW_INDENT_MARGIN
             )}
           >

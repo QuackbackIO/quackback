@@ -118,7 +118,7 @@ export function TokenField({
             ) : isHex(shown) ? (
               <>
                 <Swatch colour={shown} dark={darkShown} />
-                <span className="font-mono text-[11px] uppercase">{shown}</span>
+                <span className="font-mono text-2xs uppercase">{shown}</span>
                 <LinkSlashIcon
                   className="size-3 shrink-0 text-muted-foreground"
                   aria-hidden="true"
@@ -194,7 +194,7 @@ export function TokenField({
           <button
             type="button"
             onClick={() => onChange(back.id)}
-            className="min-h-6 truncate rounded py-1 text-[11px] leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="min-h-6 truncate rounded py-1 text-2xs leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
           >
             {linkTo(back.name)}
           </button>
@@ -250,7 +250,7 @@ export function FontField({
           >
             <span
               aria-hidden="true"
-              className="text-[13px] leading-none"
+              className="text-ui leading-none"
               style={slot ? { fontFamily: slot.stack } : undefined}
             >
               Aa
@@ -297,7 +297,7 @@ export function FontField({
           <button
             type="button"
             onClick={() => onChange(linkBack.id)}
-            className="min-h-6 truncate rounded py-1 text-[11px] leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="min-h-6 truncate rounded py-1 text-2xs leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
           >
             {linkTo(linkBack.name)}
           </button>
@@ -350,7 +350,7 @@ export function FontFaces({
     >
       <span
         aria-hidden="true"
-        className="w-6 text-[14px]"
+        className="w-6 text-sm"
         style={font ? { fontFamily: fontStack(font) } : undefined}
       >
         Aa

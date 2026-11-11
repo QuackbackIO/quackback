@@ -108,7 +108,7 @@ export function FontSelect({
   const current = !value ? SAME : value.kind === 'bundled' ? value.id : `${UPLOADED}${value.family}`
   return (
     <div className="flex items-center gap-2">
-      <label htmlFor={id} className="w-32 shrink-0 text-[13px]">
+      <label htmlFor={id} className="w-32 shrink-0 text-ui">
         {label}
       </label>
       <Select
@@ -286,10 +286,10 @@ export function OwnFont({ update }: { update: Update }) {
       className="rounded-lg border border-border/60"
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary className="cursor-pointer list-none px-3 py-2 text-[13px] font-medium [&::-webkit-details-marker]:hidden">
+      <summary className="cursor-pointer list-none px-3 py-2 text-ui font-medium [&::-webkit-details-marker]:hidden">
         Upload a font
       </summary>
-      <div className="space-y-3 border-t border-border/60 p-3 text-[13px]">
+      <div className="space-y-3 border-t border-border/60 p-3 text-ui">
         {storage.data && !storage.data.configured ? (
           <p className="text-muted-foreground">Uploading fonts needs file storage.</p>
         ) : (
@@ -410,7 +410,7 @@ export function FontsSection({ design, update }: { design: PortalDesign; update:
   return (
     <>
       <section className="space-y-2">
-        <p className="text-[13px] font-medium">Fonts</p>
+        <p className="text-ui font-medium">Fonts</p>
         <FontSelect
           id="font-heading"
           label="Section headings"

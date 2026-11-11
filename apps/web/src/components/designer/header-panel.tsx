@@ -328,7 +328,7 @@ function MenuRow({
             <DropdownMenuItem
               key={action}
               disabled={disabled}
-              className="py-1.5 text-[13px]"
+              className="py-1.5 text-ui"
               onClick={() => onAct(action)}
             >
               <Icon className="size-4" aria-hidden="true" />

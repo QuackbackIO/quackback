@@ -201,10 +201,10 @@ export function PageTree({
           >
             {row.blockType && <BlockIcon type={row.blockType} />}
             <span className="truncate">{row.label}</span>
-            {row.note && <span className="shrink-0 text-[11px]">· {row.note}</span>}
+            {row.note && <span className="shrink-0 text-2xs">· {row.note}</span>}
           </span>
           {row.hide?.shown && row.hide.locked && (
-            <span id={`${labelId}-locked`} className="shrink-0 text-[11px] text-muted-foreground">
+            <span id={`${labelId}-locked`} className="shrink-0 text-2xs text-muted-foreground">
               {MENU_COPY.landsHere}
             </span>
           )}

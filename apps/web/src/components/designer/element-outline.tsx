@@ -33,7 +33,7 @@ function spoken({ kind, editable, count = 1 }: OutlinedElement): string {
 }
 
 const TAG =
-  'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-white'
+  'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium whitespace-nowrap text-white'
 
 /** How far below its block's top an element's tag would meet the block's chip. */
 const UNDER_CHIP = 34

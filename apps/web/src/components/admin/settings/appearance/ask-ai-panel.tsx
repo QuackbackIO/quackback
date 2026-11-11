@@ -329,7 +329,7 @@ export function AskAiPanel({
   }
   if (!available) {
     return (
-      <p className="text-[13px] text-muted-foreground">
+      <p className="text-ui text-muted-foreground">
         Quackback AI is not set up. Everything else works.
       </p>
     )
@@ -429,7 +429,7 @@ export function AskAiPanel({
                   </div>
                 )}
                 {turn.asks?.map((question) => (
-                  <p key={question} className="text-[13px] text-muted-foreground">
+                  <p key={question} className="text-ui text-muted-foreground">
                     {plainWords(question)}
                   </p>
                 ))}
@@ -470,7 +470,7 @@ export function AskAiPanel({
         {busy &&
           (steps.length > 0 ? (
             <li>
-              <ol aria-label="Progress" className="space-y-1 text-[13px] text-muted-foreground">
+              <ol aria-label="Progress" className="space-y-1 text-ui text-muted-foreground">
                 {steps.map((step, at) => (
                   <li key={step} className="flex items-center gap-1.5">
                     <span aria-hidden="true" className="w-3 text-center">
@@ -482,7 +482,7 @@ export function AskAiPanel({
               </ol>
             </li>
           ) : (
-            <li className="text-[13px] text-muted-foreground">{stage ?? 'Working on it…'}</li>
+            <li className="text-ui text-muted-foreground">{stage ?? 'Working on it…'}</li>
           ))}
       </ol>
     </div>

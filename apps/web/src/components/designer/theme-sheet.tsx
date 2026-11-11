@@ -42,7 +42,7 @@ function SubView({
   children: ReactNode
 }) {
   return (
-    <div className="text-[13px]" data-theme-view={title}>
+    <div className="text-ui" data-theme-view={title}>
       <nav aria-label="Where it is" className="border-b border-border px-4 py-2 text-xs">
         <button
           type="button"

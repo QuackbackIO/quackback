@@ -81,7 +81,7 @@ export function PagePanel({
           <button
             type="button"
             onClick={() => onTheme(true)}
-            className="inline-flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-[11px] hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="inline-flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-2xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
           >
             <span className="truncate">
               {WORDS.theme}: {THEME.widths[design.layout.width]}

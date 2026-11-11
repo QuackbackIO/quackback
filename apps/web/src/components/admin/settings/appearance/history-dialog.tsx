@@ -135,11 +135,11 @@ export function HistoryDialog({
             </DialogDescription>
           </DialogHeader>
           {versions.data?.length === 0 && (
-            <p className="text-[13px] text-muted-foreground">Nothing published yet.</p>
+            <p className="text-ui text-muted-foreground">Nothing published yet.</p>
           )}
           <ul className="max-h-96 divide-y divide-border overflow-y-auto rounded-lg border border-border">
             {versions.data?.map((version) => (
-              <li key={version.id} className="flex items-center gap-3 px-3 py-2 text-[13px]">
+              <li key={version.id} className="flex items-center gap-3 px-3 py-2 text-ui">
                 <span className="w-10 shrink-0 font-medium tabular-nums">v{version.number}</span>
                 <Named
                   name={version.message ?? SOURCE[version.source] ?? version.source}
@@ -190,12 +190,12 @@ export function HistoryDialog({
           </ul>
           {drafts.length > 0 && (
             <section aria-labelledby="draft-saves-heading" className="space-y-2">
-              <h3 id="draft-saves-heading" className="text-[13px] font-medium">
+              <h3 id="draft-saves-heading" className="text-ui font-medium">
                 Draft saves
               </h3>
               <ul className="max-h-60 divide-y divide-border overflow-y-auto rounded-lg border border-border">
                 {drafts.map((each) => (
-                  <li key={each.id} className="flex items-center gap-3 px-3 py-2 text-[13px]">
+                  <li key={each.id} className="flex items-center gap-3 px-3 py-2 text-ui">
                     <Named name={each.name} by={each.createdBy} at={each.createdAt} />
                     <Button
                       variant="outline"
@@ -217,12 +217,12 @@ export function HistoryDialog({
             </section>
           )}
           {switched.data && !canPublish && (
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-ui text-muted-foreground">
               Restoring a version needs permission to publish the design.
             </p>
           )}
           {switched.data?.canSwitchBack && canPublish && (
-            <div className="flex items-center gap-3 text-[13px]">
+            <div className="flex items-center gap-3 text-ui">
               <span className="flex-1 text-muted-foreground">Switched from the old theme.</span>
               <Button variant="outline" size="sm" onClick={() => setConfirmingBack(true)}>
                 Switch back
@@ -230,7 +230,7 @@ export function HistoryDialog({
             </div>
           )}
           {refusal && (
-            <p role="alert" className="text-[13px] text-destructive">
+            <p role="alert" className="text-ui text-destructive">
               {refusal}
             </p>
           )}

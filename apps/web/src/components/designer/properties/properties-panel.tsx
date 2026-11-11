@@ -61,7 +61,7 @@ export function PropertyRowNote({
   id?: string
 }) {
   return (
-    <p id={id} className={cn(ROW_INDENT, 'text-[11px] text-muted-foreground', className)}>
+    <p id={id} className={cn(ROW_INDENT, 'text-2xs text-muted-foreground', className)}>
       {children}
     </p>
   )
@@ -122,7 +122,7 @@ export function PropertiesPanel({
   className?: string
 } & { [data: `data-${string}`]: string | undefined }) {
   return (
-    <div className={cn('flex min-h-full flex-col text-[13px]', className)} {...rest}>
+    <div className={cn('flex min-h-full flex-col text-ui', className)} {...rest}>
       <header className="space-y-1.5 border-b border-border px-4 pt-3 pb-3">
         {crumbs.length > 0 && (
           <nav aria-label="Where it is" className="text-xs text-muted-foreground">
@@ -155,7 +155,7 @@ export function PropertiesPanel({
         )}
         <div className="flex items-center gap-2">
           {icon}
-          <h2 className="min-w-0 truncate rounded-sm text-[15px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground">
+          <h2 className="min-w-0 truncate rounded-sm text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground">
             {title}
           </h2>
           {about && <Help text={about} />}
@@ -172,12 +172,12 @@ export function PropertiesPanel({
                   <DropdownMenuItem
                     key={action.label}
                     disabled={action.disabled}
-                    className="text-[13px]"
+                    className="text-ui"
                     onClick={action.onSelect}
                   >
                     {action.label}
                     {action.keys && (
-                      <span className="ms-auto text-[11px] text-muted-foreground">
+                      <span className="ms-auto text-2xs text-muted-foreground">
                         {action.keys}
                       </span>
                     )}
@@ -590,7 +590,7 @@ export function PropertyTiles<T extends string>({
             tabIndex={index === stop ? 0 : -1}
             onClick={() => onChange(option)}
             className={cn(
-              'min-h-6 min-w-0 rounded-md border px-1 py-0.5 text-[11px] leading-tight focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'min-h-6 min-w-0 rounded-md border px-1 py-0.5 text-2xs leading-tight focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
               on
                 ? PICKED_TILE
                 : from
@@ -662,7 +662,7 @@ export function PropertyDrawnTiles<T extends string>({
             >
               {drawing}
             </span>
-            <span className="text-[11px] leading-tight break-words">{name}</span>
+            <span className="text-2xs leading-tight break-words">{name}</span>
           </button>
         )
       })}

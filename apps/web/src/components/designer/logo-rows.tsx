@@ -239,7 +239,7 @@ export function LogoColourRow({
           <button
             type="button"
             onClick={() => update((draft) => void delete draft.brand.logoColours)}
-            className="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="rounded px-1 text-2xs text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
           >
             {THEME.clear}
           </button>

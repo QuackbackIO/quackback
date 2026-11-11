@@ -68,7 +68,7 @@ const TILE_FIND: Partial<Record<HeroKey, FindRow>> = {
 }
 
 const quiet =
-  'rounded text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
+  'rounded text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
 
 /** A look as a small drawing: its colour, with its art or its panel where it has one. */
 function LookDrawing({ look, colours }: { look: BandLook; colours: CSSProperties }) {
@@ -607,7 +607,7 @@ function HeroImage({
                     )
                   }
                 />
-                <label htmlFor={`${id}-decorative`} className="text-[11px]">
+                <label htmlFor={`${id}-decorative`} className="text-2xs">
                   {HERO_WORDS.decorative}
                 </label>
               </span>
@@ -660,7 +660,7 @@ function FromScreenshot({
         <Button
           variant="outline"
           size="sm"
-          className="h-6 px-2 text-[11px]"
+          className="h-6 px-2 text-2xs"
           onClick={() => setCropping(true)}
         >
           {MATCH_BRAND.adjustCrop}

@@ -92,7 +92,7 @@ export function BuilderSheet({
           ref={heading}
           id={`${id}-title`}
           tabIndex={-1}
-          className="text-base font-semibold outline-none"
+          className="text-sm font-semibold outline-none"
         >
           {title}
         </h2>

@@ -281,7 +281,7 @@ export function AddDragCard({ drag }: { drag: AddDrag }) {
         <span className="grid h-10 w-14 shrink-0 place-items-center rounded-md bg-muted">
           <BlockIcon type={view.type} className="size-4" />
         </span>
-        <span className="text-[13px] font-medium">{view.name}</span>
+        <span className="text-ui font-medium">{view.name}</span>
       </div>
       {view.over && view.note && (
         <p className="w-fit rounded-md bg-foreground px-2 py-1 text-xs text-background shadow">

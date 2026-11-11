@@ -215,7 +215,7 @@ export function WordsLayer({
       {(near || elsewhere.length > 0) && (
         <p
           aria-live="polite"
-          className="absolute flex max-w-[28rem] items-center gap-2 rounded-md border border-border bg-popover px-2 py-1 text-[12px] text-muted-foreground shadow-sm"
+          className="absolute flex max-w-[28rem] items-center gap-2 rounded-md border border-border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-sm"
           style={{
             left: Math.max(4, box.left),
             top: Math.min(box.top + box.height + GAP, canvas.room.height - 32),

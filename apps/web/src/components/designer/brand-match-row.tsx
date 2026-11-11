@@ -191,7 +191,7 @@ function ShotDrop({
                   className="size-12 rounded-md border border-border object-cover"
                 />
               ) : (
-                <span className="grid size-12 place-items-center rounded-md border border-border text-[11px] text-muted-foreground">
+                <span className="grid size-12 place-items-center rounded-md border border-border text-2xs text-muted-foreground">
                   {shot.file.name}
                 </span>
               )}
@@ -245,7 +245,7 @@ function ShotDrop({
         }}
       />
       {note && (
-        <p role="status" className="text-[11px] text-muted-foreground">
+        <p role="status" className="text-2xs text-muted-foreground">
           {note}
         </p>
       )}
@@ -539,7 +539,7 @@ function SiteUseForm({
         </div>
       )}
       {said && (
-        <p role="status" className="text-[11px] text-muted-foreground">
+        <p role="status" className="text-2xs text-muted-foreground">
           {said}
         </p>
       )}

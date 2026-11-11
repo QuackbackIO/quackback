@@ -230,7 +230,7 @@ export function DesignComposer({
   }
   if (limited)
     return (
-      <p className="rounded-2xl border border-border bg-card p-3 text-[13px] text-muted-foreground">
+      <p className="rounded-2xl border border-border bg-card p-3 text-ui text-muted-foreground">
         {limited}
       </p>
     )

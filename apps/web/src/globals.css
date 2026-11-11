@@ -255,6 +255,10 @@
   --z-index-drag: 60;
   --z-index-toast: 70;
 
+  /* Compact chrome type: 13px for builder rows and buttons, 11px for hints. No line-height companion, so heights stay as they were. */
+  --text-ui: 13px;
+  --text-2xs: 11px;
+
   /* Colors */
   --color-background: var(--background);
   --color-foreground: var(--foreground);

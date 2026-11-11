@@ -125,12 +125,12 @@ function PairPicker({ design, update }: { design: PortalDesign; update: Update }
                     Aa
                   </span>
                   <span
-                    className="text-[11px] text-muted-foreground"
+                    className="text-2xs text-muted-foreground"
                     style={{ fontFamily: body.stack }}
                   >
                     Aa
                   </span>
-                  <span className="text-[11px] font-medium">{pair.label}</span>
+                  <span className="text-2xs font-medium">{pair.label}</span>
                 </button>
               </Tip>
             )
@@ -179,7 +179,7 @@ function FaceValue({
         >
           <span
             aria-hidden="true"
-            className="text-[13px] leading-none"
+            className="text-ui leading-none"
             style={{ fontFamily: fontStack(shown) }}
           >
             Aa

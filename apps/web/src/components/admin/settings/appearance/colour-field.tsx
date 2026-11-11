@@ -74,7 +74,7 @@ export function ColourField({
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <label htmlFor={id} className="w-32 shrink-0 text-[13px]">
+        <label htmlFor={id} className="w-32 shrink-0 text-ui">
           {label}
         </label>
         <span className="relative shrink-0">

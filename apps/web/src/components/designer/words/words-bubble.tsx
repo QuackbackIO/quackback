@@ -315,7 +315,7 @@ function RichMarks({
             disabled={inList}
             onPress={() => onCommand({ type: 'heading', level: 0 })}
           >
-            <span className="text-[12px]">Aa</span>
+            <span className="text-xs">Aa</span>
           </BarButton>
           {([2, 3] as const).map((level) => (
             <BarButton
@@ -406,10 +406,10 @@ function LinkField({
           if (href) onDone(href)
           else setWrong(true)
         }}
-        className="h-7 w-56 rounded-md border border-border bg-background px-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="h-7 w-56 rounded-md border border-border bg-background px-2 text-ui outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       />
       {wrong && (
-        <span id={`${id}-wrong`} className="text-[12px] text-destructive">
+        <span id={`${id}-wrong`} className="text-xs text-destructive">
           A web or email address
         </span>
       )}
@@ -447,7 +447,7 @@ function BarButton({
           onMouseDown={(event) => event.preventDefault()}
           onClick={onPress}
           className={cn(
-            'inline-flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 text-[13px] font-medium',
+            'inline-flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 text-ui font-medium',
             'hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
             'disabled:pointer-events-none disabled:opacity-40',
             (pressed || expanded) && 'bg-accent text-accent-foreground'

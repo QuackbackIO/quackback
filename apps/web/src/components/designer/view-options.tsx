@@ -87,7 +87,7 @@ export function ViewOptions({
 }) {
   const id = useId()
   return (
-    <section aria-labelledby={`${id}-view`} className="space-y-1 text-[13px]">
+    <section aria-labelledby={`${id}-view`} className="space-y-1 text-ui">
       <div className="flex items-center gap-0.5">
         <h3 id={`${id}-view`} className="text-xs font-semibold">
           Viewing the page

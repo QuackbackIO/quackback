@@ -128,7 +128,7 @@ export function ElementStyleEditor({
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"
+          className="flex items-center gap-1 text-ui text-muted-foreground hover:text-foreground"
         >
           <ChevronLeftIcon className="size-4" aria-hidden="true" />
           Element styles
@@ -187,7 +187,7 @@ function Row({
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <label htmlFor={id} className="text-[13px]">
+        <label htmlFor={id} className="text-ui">
           {label}
         </label>
         {set && (
@@ -241,7 +241,7 @@ function ColourInput({
           }
         }}
       >
-        <SelectTrigger id={id} aria-label={label} className="h-8 text-[13px]">
+        <SelectTrigger id={id} aria-label={label} className="h-8 text-ui">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -340,7 +340,7 @@ export function StyleField({
                 max={360}
                 value={paint.angle ?? 180}
                 onChange={(e) => onChange({ ...paint, angle: Number(e.target.value) })}
-                className="h-8 text-[13px]"
+                className="h-8 text-ui"
               />
             </div>
           ) : (
@@ -370,7 +370,7 @@ export function StyleField({
             placeholder="As the theme"
             value={typeof value === 'number' ? value : undefined}
             onChange={onChange}
-            className="h-8 text-[13px]"
+            className="h-8 text-ui"
           />
         </Row>
       )
@@ -381,7 +381,7 @@ export function StyleField({
             value={(value as string | undefined) ?? AS_THEME}
             onValueChange={(next) => onChange(next === AS_THEME ? undefined : next)}
           >
-            <SelectTrigger id={id} aria-label={info.label} className="h-8 text-[13px]">
+            <SelectTrigger id={id} aria-label={info.label} className="h-8 text-ui">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -645,12 +645,12 @@ export function StylePreview({
       <div className="flex flex-wrap items-center gap-6 rounded-lg border border-border bg-background p-4 text-foreground">
         <figure className="space-y-2">
           {inBlock(sample())}
-          <figcaption className="text-[11px] text-muted-foreground">Normal</figcaption>
+          <figcaption className="text-2xs text-muted-foreground">Normal</figcaption>
         </figure>
         {state !== 'base' && (
           <figure className="space-y-2">
             {inBlock(sample(state))}
-            <figcaption className="text-[11px] text-muted-foreground">
+            <figcaption className="text-2xs text-muted-foreground">
               {STATE_INFO[state].label}
             </figcaption>
           </figure>

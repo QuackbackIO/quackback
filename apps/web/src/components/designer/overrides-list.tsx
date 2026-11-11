@@ -93,7 +93,7 @@ export function OverridesList({
                               `${p.name}: reset`
                             )
                           }
-                          className="inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded px-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                          className="inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded px-1 text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
                         >
                           {action}
                         </button>

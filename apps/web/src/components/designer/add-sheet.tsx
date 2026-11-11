@@ -93,7 +93,7 @@ export function AddCard({
       <div data-add-card="" className={CARD}>
         <CardIcon type={row.type} dim />
         <span className="min-w-0 flex-1 leading-tight">
-          <span className="block text-[13px] font-medium text-muted-foreground">
+          <span className="block text-ui font-medium text-muted-foreground">
             {row.def.name}
           </span>
           <span className="block text-xs text-muted-foreground">{row.def.purpose}</span>
@@ -136,13 +136,13 @@ export function AddCard({
       >
         <CardIcon type={row.type} />
         <span className="min-w-0 flex-1 leading-tight">
-          <span className="block text-[13px] font-medium">{row.def.name}</span>
+          <span className="block text-ui font-medium">{row.def.name}</span>
           <span className="block text-xs text-muted-foreground">{note ?? row.def.purpose}</span>
         </span>
         {tag && (
           <span
             data-card-tag=""
-            className="shrink-0 pt-px text-[11px] whitespace-nowrap text-muted-foreground"
+            className="shrink-0 pt-px text-2xs whitespace-nowrap text-muted-foreground"
           >
             {tag}
           </span>
