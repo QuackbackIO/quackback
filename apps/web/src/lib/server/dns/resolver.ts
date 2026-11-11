@@ -6,8 +6,13 @@
  * A module of its own so a test can replace the whole zone in one place: every
  * lookup the checks make goes through this object, so a fake zone sees every
  * name that was asked for.
+ *
+ * TXT is read off the wire by `queryTxt` rather than the runtime's resolver,
+ * because Bun loses the boundaries between a long record's strings (see
+ * `txt-query.ts`). The other record types go through the runtime as before.
  */
 import { Resolver } from 'node:dns/promises'
+import { queryTxt } from './txt-query'
 
 export interface DnsResolver {
   resolveTxt(host: string): Promise<string[][]>
@@ -24,12 +29,13 @@ export interface DnsResolver {
  * try count, created on first use; each holds configuration only, nothing per
  * workspace.
  */
+const TIMEOUT_MS = 2000
 const resolvers = new Map<number, Resolver>()
 
 function shared(tries: number): Resolver {
   let resolver = resolvers.get(tries)
   if (!resolver) {
-    resolver = new Resolver({ timeout: 2000, tries })
+    resolver = new Resolver({ timeout: TIMEOUT_MS, tries })
     resolvers.set(tries, resolver)
   }
   return resolver
@@ -37,7 +43,7 @@ function shared(tries: number): Resolver {
 
 /** One try: for checks that run in the background or on a page load. */
 export const systemResolver: DnsResolver = {
-  resolveTxt: (host) => shared(1).resolveTxt(host),
+  resolveTxt: (host) => queryTxt(host, { timeoutMs: TIMEOUT_MS, tries: 1 }),
   resolveCname: (host) => shared(1).resolveCname(host),
   resolveMx: (host) => shared(1).resolveMx(host),
   resolve4: (host) => shared(1).resolve4(host),
@@ -50,7 +56,7 @@ export const systemResolver: DnsResolver = {
  * a single dropped packet would read as a missing record.
  */
 export const interactiveResolver: DnsResolver = {
-  resolveTxt: (host) => shared(2).resolveTxt(host),
+  resolveTxt: (host) => queryTxt(host, { timeoutMs: TIMEOUT_MS, tries: 2 }),
   resolveCname: (host) => shared(2).resolveCname(host),
   resolveMx: (host) => shared(2).resolveMx(host),
   resolve4: (host) => shared(2).resolve4(host),

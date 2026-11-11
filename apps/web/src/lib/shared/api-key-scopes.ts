@@ -32,8 +32,8 @@ export const API_KEY_SCOPES = [
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]
 
 /**
- * MCP first-connect grant (RFC 9728 `scopes_supported` + 401 `scope=`).
- * Write scopes stay on the authorization server so a client can step up.
+ * The minimal set for basic use, published as RFC 9728 `scopes_supported`.
+ * The 401 challenge asks for more (`MCP_CHALLENGE_SCOPES`).
  */
 export const MCP_FIRST_CONNECT_SCOPES = [
   'read:feedback',
@@ -41,6 +41,15 @@ export const MCP_FIRST_CONNECT_SCOPES = [
   'read:chat',
   'read:settings',
 ] as const satisfies readonly ApiKeyScope[]
+
+/**
+ * What the 401 challenge asks a client to request: every capability. MCP
+ * clients treat the challenge `scope` as authoritative, and many never act on
+ * a later step-up, so a connection that should be able to write has to ask for
+ * writes on its first authorize. The person narrows the grant on the consent
+ * page. `offline_access` stays out, as the MCP spec asks.
+ */
+export const MCP_CHALLENGE_SCOPES = API_KEY_SCOPES
 
 /** Identity + refresh + the full capability catalogue — AS allow-list. */
 export const MCP_AS_SCOPES = [

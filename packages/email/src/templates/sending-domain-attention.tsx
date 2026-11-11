@@ -13,6 +13,8 @@ export interface SendingDomainAttentionRecord {
   seen?: string
   /** A value the DNS host cut short or saved with its quote marks. */
   reason?: 'truncated' | 'quoted'
+  /** The value to publish, for a record the owner has to add back. */
+  value?: string
 }
 
 /**
@@ -26,6 +28,11 @@ export interface SendingDomainAttentionEmailProps {
   domain: string
   /** What failed; absent when nothing more specific is known. */
   record?: SendingDomainAttentionProblem | null
+  /**
+   * When set, a warning: the domain still sends as itself, and stops on this
+   * date (already formatted) unless the record is fixed.
+   */
+  deadline?: string | null
   settingsUrl?: string | null
   workspaceName?: string
   logoUrl?: string
@@ -56,14 +63,22 @@ export function sendingDomainProblem(
   return `${named} is missing.`
 }
 
+/** The sentence giving the date a record has to be fixed by. */
+export function sendingDomainDeadline(domain: string, deadline: string): string {
+  return `Add it back by ${deadline} to keep sending from ${domain}.`
+}
+
 /**
  * Sent to the people who manage email channels when a verified sending domain
  * stops verifying, because from that moment replies leave from the default
- * address instead of the domain.
+ * address instead of the domain; or, with a deadline, when its ownership record
+ * goes missing and it will stop verifying on that date unless the record is
+ * added back.
  */
 export function SendingDomainAttentionEmail({
   domain,
   record,
+  deadline,
   settingsUrl,
   workspaceName,
   logoUrl,
@@ -73,7 +88,14 @@ export function SendingDomainAttentionEmail({
     <EmailLayout preview={title} logoUrl={logoUrl}>
       <Heading style={typography.h1}>{title}</Heading>
       <Text style={typography.text}>{sendingDomainProblem(domain, record)}</Text>
-      <Text style={typography.text}>Replies send from the default address until it is fixed.</Text>
+      {record && record !== 'signing-key' && record.value ? (
+        <Text style={typography.text}>Value: {record.value}</Text>
+      ) : null}
+      <Text style={typography.text}>
+        {deadline
+          ? sendingDomainDeadline(domain, deadline)
+          : 'Replies send from the default address until it is fixed.'}
+      </Text>
       {settingsUrl ? (
         <Text style={typography.text}>
           <Link href={settingsUrl} style={utils.link}>
