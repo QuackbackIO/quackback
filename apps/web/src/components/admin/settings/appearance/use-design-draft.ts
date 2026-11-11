@@ -22,6 +22,7 @@ import {
 } from '@/lib/shared/design/history'
 import { releaseOverrides } from '@/lib/shared/design/overrides'
 import { rebaseOnto } from '@/lib/shared/design/rebase'
+import { shareUnchanged } from '@/lib/shared/design/share-unchanged'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalDesignRevisionId } from '@quackback/ids'
 import type { DraftLastChange } from '@/lib/server/domains/design/draft-last-change'
@@ -48,8 +49,7 @@ export type ChangeOutcome = { ok: true } | { ok: false; reason: string }
  * `changed` when another version went live after the draft started.
  */
 type PublishOutcome =
-  | { ok: true; address?: PortalAddress }
-  | { ok: false; message: string; changed?: true }
+  { ok: true; address?: PortalAddress } | { ok: false; message: string; changed?: true }
 
 /**
  * The Appearance draft: the design being edited, saved to the server shortly
@@ -207,10 +207,13 @@ export function useDesignDraft() {
       if (frozen.current) return { ok: false, reason: NEWER_FORMAT_LINE }
       // A plain copy, not a proxy: the builder's changes may copy parts of what they are handed.
       const before = latest.current
-      const next = structuredClone(before)
-      change(next)
+      const changed = structuredClone(before)
+      change(changed)
       // A choice picked again counts: the exact value it competes with goes, in the same step.
-      releaseOverrides(before, next)
+      releaseOverrides(before, changed)
+      // The parts the change did not touch stay the objects they were, so what reads only
+      // them (the menu, say, for a change to a colour) has nothing to draw again.
+      const next = shareUnchanged(before, changed)
       // What the server would refuse is never committed, unless the draft already fails without it.
       const checked = checkDesign(next)
       if (checked.ok) passed.current = next
@@ -238,7 +241,7 @@ export function useDesignDraft() {
       if (!patches.length) return
       const name = label ?? nameOfChange(latest.current, next)
       history.getState().push(name, patches, inverse, undefined, by)
-      commit(next)
+      commit(shareUnchanged(latest.current, next))
     },
     [commit, history]
   )
