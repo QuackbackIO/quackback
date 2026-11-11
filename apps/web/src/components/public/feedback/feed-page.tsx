@@ -15,7 +15,7 @@ import { portalQueries, useSeedPortalStatusesCache } from '@/lib/client/queries/
 import type { PortalWelcomeCard as PortalWelcomeCardData } from '@/lib/shared/types/settings'
 import { portalDefaultSort, savedWelcomeCard } from '@/lib/shared/design/view'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import type { FeedSearch } from '@/components/public/feedback/feed-route'
+import { preloadPageGraph, type FeedSearch } from '@/components/public/feedback/feed-route'
 import { portalDataParams, postsFetchedFor } from '@/components/public/feedback/portal-data-params'
 
 /** The feed's search, wherever the feed shows. */
@@ -23,6 +23,7 @@ const useFeedSearch = () => useSearch({ strict: false }) as FeedSearch
 
 /** The feed page: the band, the welcome card and the feed. */
 export function FeedPage() {
+  preloadPageGraph('feed')
   const settings = useWorkspaceSettings()
   // Input typed while the feed loads is carried only within this visit's feed.
   const [feedHandoff] = useState(createFeedHandoff)

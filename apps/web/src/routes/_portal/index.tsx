@@ -9,6 +9,7 @@ import {
   hasFeedSearch,
   loadFeed,
   portalPathsOf,
+  preloadPageGraph,
 } from '@/components/public/feedback/feed-route'
 
 /** The feed page, from its own chunk, as the feed route loads it. */
@@ -105,11 +106,14 @@ export const Route = createFileRoute('/_portal/')({
 
 function PortalLanding() {
   const data = Route.useLoaderData()
-  if (data.landing === 'home')
+  if (data.landing === 'home') {
+    // The feed starts its own chunk (feed-page.tsx).
+    preloadPageGraph('home')
     return (
       <Suspense fallback={null}>
         <PortalHome messages={data.messages} gates={data.gates} />
       </Suspense>
     )
+  }
   return <FeedComponent />
 }

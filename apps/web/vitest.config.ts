@@ -3,9 +3,16 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import { serverWorkers } from './src/lib/build/server-workers'
 import { fontManifest } from './src/lib/build/font-manifest'
+import { lazyGraphs } from './src/lib/build/lazy-graphs'
 
 export default defineConfig({
-  plugins: [react(), serverWorkers(), fontManifest(path.resolve(__dirname, 'src'))],
+  plugins: [
+    react(),
+    serverWorkers(),
+    fontManifest(path.resolve(__dirname, 'src')),
+    // No build in tests, so no graphs: the module is empty.
+    lazyGraphs(path.resolve(__dirname, 'src'), {}),
+  ],
   test: {
     globals: true,
     environment: 'happy-dom',

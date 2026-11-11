@@ -10,6 +10,7 @@ import { CLIENT_PROTECTED_SPECIFIERS } from './src/lib/server/policy/client-impo
 import { routeChunksImportTheirParent } from './src/lib/build/route-chunk-parents'
 import { serverWorkers } from './src/lib/build/server-workers'
 import { fontManifest } from './src/lib/build/font-manifest'
+import { lazyGraphs } from './src/lib/build/lazy-graphs'
 import { brandFonts } from './src/lib/build/brand-fonts'
 
 /**
@@ -217,6 +218,12 @@ export default defineConfig(({ mode }) => {
       serverWorkers(),
       // Each bundled font's files, for the portal's head during SSR.
       fontManifest(path.resolve(__dirname, 'src')),
+      // Home's and the feed's chunks, which their server render starts so a
+      // slow phone fetches their graphs with the entry rather than after it.
+      lazyGraphs(path.resolve(__dirname, 'src'), {
+        home: 'components/public/home/portal-home.tsx',
+        feed: 'components/public/feedback/feed-page.tsx',
+      }),
       // The font matcher's faces, beside the server output.
       brandFonts(path.resolve(__dirname, 'node_modules/@fontsource')),
       letNitroServeStorageAssets(),
