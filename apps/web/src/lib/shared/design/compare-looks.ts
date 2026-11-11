@@ -1,13 +1,10 @@
 /**
  * Compare looks: the brand's three looks side by side or one at a time, of
- * which one is taken into the draft. A look is taken whole (its colours,
- * fonts, shape, layout and exact values, as the match measured them), while
- * the draft keeps its own pages, menu, words and logo, so a headline or a
- * menu edited since the match stays.
+ * which one is taken into the draft. Taking one writes only its treatment
+ * (look-variants.ts applyLookVariant): the draft's colours, fonts, words,
+ * pages and menu stay, edited since the match or not.
  */
-import { lookOf, withLook } from './looks'
-import type { LookVariant, LookVariantId } from './look-variants'
-import type { PortalDesign } from './schema'
+import type { LookVariantId } from './look-variants'
 
 export const LOOK_ORDER: readonly LookVariantId[] = ['matched', 'soft', 'vivid']
 
@@ -32,11 +29,6 @@ export type LooksView = 'side' | 'one'
 
 /** Below this window width only one look fits: Side by side is not offered. */
 export const SIDE_BY_SIDE_MIN = 960
-
-/** The draft with a look taken: the look's treatment, the draft's own pages, menu and words. */
-export function withVariant(draft: PortalDesign, variant: LookVariant): PortalDesign {
-  return withLook(draft, lookOf(variant.design), { itsColours: true })
-}
 
 /** The step's name in undo, and what the toast says once it is taken. */
 export const lookStep = (id: LookVariantId) => `${LOOK_NAMES[id]} look`

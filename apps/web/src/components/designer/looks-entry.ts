@@ -17,13 +17,16 @@ import { toast } from 'sonner'
 import type { DesignAiTurn } from '@/components/admin/settings/appearance/use-design-ai'
 import { designerLookChosen, trackBuilder } from '@/lib/client/builder-events'
 import type { DesignValue } from '@/lib/shared/design/apply-changes'
-import type { LookVariant, LookVariantId } from '@/lib/shared/design/look-variants'
+import {
+  applyLookVariant,
+  type LookVariant,
+  type LookVariantId,
+} from '@/lib/shared/design/look-variants'
 import {
   LOOK_NAMES,
   lookApplied,
   lookStep,
   switchedReply,
-  withVariant,
   type LooksView,
 } from '@/lib/shared/design/compare-looks'
 import { designChanges } from '@/lib/shared/design/diff'
@@ -204,7 +207,7 @@ export function takeLook({
   const made: { after?: PortalDesign } = {}
   designerLookChosen('compare')
   update((draft) => {
-    replaceDesign(draft, withVariant(draft, variant))
+    replaceDesign(draft, applyLookVariant(draft, variant))
     made.after = structuredClone(draft)
   }, label)
   const { after } = made

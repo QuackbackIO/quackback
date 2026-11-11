@@ -6,7 +6,9 @@
  * which every first open of the builder would then request (rolldown groups
  * a module by the chunks that load it). Handed over here, the chooser's
  * chunk imports nothing of the builder, and opening the builder loads what
- * it loaded before.
+ * it loaded before. The look variants engine is here too: its own imports
+ * (colour, contrast, fonts) live in the builder's chunks, so it costs a few
+ * KB in the builder's chunk rather than four more requests.
  */
 import { onRadioKeys } from '@/components/admin/settings/appearance/radio-keys'
 import { usePreviewPosting } from '@/components/admin/settings/branding/use-preview-posting'
@@ -19,8 +21,8 @@ import {
   LOOK_WIDTHS,
   lookFrameSize,
   shownView,
-  withVariant,
 } from '@/lib/shared/design/compare-looks'
+import { applyLookVariant, currentVariant, lookVariants } from '@/lib/shared/design/look-variants'
 import { useViewportWidth } from './ai-pane'
 import { DeviceToggle } from './designer-header'
 import { lookBase, looksViewChanged, takeLook } from './looks-entry'
@@ -40,7 +42,9 @@ export const LOOKS_KIT = {
   LOOK_WIDTHS,
   lookFrameSize,
   shownView,
-  withVariant,
+  lookVariants,
+  currentVariant,
+  applyLookVariant,
   lookBase,
   takeLook,
   looksViewChanged,

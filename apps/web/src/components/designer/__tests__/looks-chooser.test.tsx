@@ -11,8 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
-import { lookVariants } from '@/lib/shared/design/look-variants'
-import { lookFrameSize, withVariant } from '@/lib/shared/design/compare-looks'
+import { applyLookVariant, lookVariants } from '@/lib/shared/design/look-variants'
+import { lookFrameSize } from '@/lib/shared/design/compare-looks'
 import { canvasScale } from '../designer-canvas'
 import { installInMemoryLocalStorage } from '@/test/local-storage'
 
@@ -93,7 +93,7 @@ describe('LooksChooser', () => {
   it('takes the picked look as one step, keeps the menu, says so in a toast with Undo, and closes', () => {
     draft.nav.home.on = !draft.nav.home.on
     const menu = draft.nav.home.on
-    const expected = withVariant(draft, lookVariants(draft)[1]!)
+    const expected = applyLookVariant(draft, lookVariants(draft)[1]!)
     mount()
     fireEvent.click(radio('Soft'))
     // Picking only shows it.
@@ -146,10 +146,13 @@ describe('LooksChooser', () => {
     draft = structuredClone(matched)
     // Edited since the match: Matched puts the match's look back.
     draft.shape.corners = draft.shape.corners === 'sharp' ? 'pill' : 'sharp'
+    // A colour edited since stays: only the treatment is taken.
+    draft.brand.light.accent = '#123456'
     mount()
     expect(screen.getByRole('button', { name: 'Use Matched' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Use Matched' }))
     expect(draft.shape.corners).toBe(matched.shape.corners)
+    expect(draft.brand.light.accent).toBe('#123456')
   })
 
   it('View larger shows that look one at a time, where the arrows switch looks and zoom applies', () => {

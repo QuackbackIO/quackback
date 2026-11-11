@@ -10,12 +10,7 @@ import { RectangleGroupIcon, ViewColumnsIcon } from '@heroicons/react/24/outline
 import type { DesignAiTurn } from '@/components/admin/settings/appearance/use-design-ai'
 import { Button } from '@/components/ui/button'
 import type { LookDevice, LookZoom, LooksView } from '@/lib/shared/design/compare-looks'
-import {
-  currentVariant,
-  lookVariants,
-  type LookVariant,
-  type LookVariantId,
-} from '@/lib/shared/design/look-variants'
+import type { LookVariant, LookVariantId } from '@/lib/shared/design/look-variants'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 import { LookFrame } from './look-frame'
@@ -80,8 +75,8 @@ export function LooksChooser({
   } = kit
   // The design the looks are made from, as the chooser opens: the last brand match, else the draft.
   const [base] = useState(() => kit.lookBase(design))
-  const variants = useMemo(() => lookVariants(base), [base])
-  const inUse = useMemo(() => currentVariant(design, base), [design, base])
+  const variants = useMemo(() => kit.lookVariants(base), [kit, base])
+  const inUse = useMemo(() => kit.currentVariant(design, base), [kit, design, base])
   const [picked, setPicked] = useState<LookVariantId>(inUse ?? 'matched')
   const [asked, setAsked] = useState<LooksView>('side')
   const viewport = kit.useViewportWidth()
@@ -95,7 +90,8 @@ export function LooksChooser({
 
   // Each look as the draft would have it: its own pages, menu and words.
   const shown = useMemo(
-    () => variants.map((variant) => ({ ...variant, design: kit.withVariant(design, variant) })),
+    () =>
+      variants.map((variant) => ({ ...variant, design: kit.applyLookVariant(design, variant) })),
     [variants, design, kit]
   )
 
@@ -188,7 +184,16 @@ export function LooksChooser({
   const apply = () => {
     const variant = variants.find((each) => each.id === picked)
     if (!variant || picked === inUse) return
-    if (kit.takeLook({ variant, design, from, update, undoStep, ...(record && { record }) }))
+    if (
+      kit.takeLook({
+        variant,
+        design,
+        from,
+        update,
+        undoStep,
+        ...(record && { record }),
+      })
+    )
       onClose()
   }
 
