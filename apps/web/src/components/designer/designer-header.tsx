@@ -103,7 +103,7 @@ export const DeviceToggle = memo(function DeviceToggle({
             tabIndex={size === key ? 0 : -1}
             onClick={() => onSize(key)}
             className={cn(
-              'flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground',
+              'flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground outline-none hover:text-foreground focus-ring',
               size === key &&
                 'bg-background text-foreground shadow-sm forced-colors:outline forced-colors:outline-1'
             )}

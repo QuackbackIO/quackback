@@ -153,7 +153,7 @@ export function HeaderPanel({
             type="button"
             aria-label={`${HEADER_COPY.logo}: ${LOGO_SHOWS[design.brand.logo.display]}`}
             onClick={onLogo}
-            className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-ring"
           >
             <span className="min-w-0 flex-1 truncate">{LOGO_SHOWS[design.brand.logo.display]}</span>
             <ChevronRightIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
@@ -280,7 +280,7 @@ function MenuRow({
       <button
         type="button"
         className={cn(
-          'flex min-w-0 flex-1 items-center rounded text-start text-xs focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+          'flex min-w-0 flex-1 items-center rounded text-start text-xs focus-ring',
           !part.shown && 'text-muted-foreground'
         )}
         // A link opens its own settings; a double-click renames where the menu draws it.

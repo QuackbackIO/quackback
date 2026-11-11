@@ -93,9 +93,7 @@ export function AddCard({
       <div data-add-card="" className={CARD}>
         <CardIcon type={row.type} dim />
         <span className="min-w-0 flex-1 leading-tight">
-          <span className="block text-ui font-medium text-muted-foreground">
-            {row.def.name}
-          </span>
+          <span className="block text-ui font-medium text-muted-foreground">{row.def.name}</span>
           <span className="block text-xs text-muted-foreground">{row.def.purpose}</span>
           <span className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
             <span className="text-muted-foreground">Needs {PAGE_NAMES[row.needs]}</span>
@@ -104,7 +102,7 @@ export function AddCard({
                 href={turnOn}
                 target="_blank"
                 rel="noopener"
-                className="inline-flex min-h-6 items-center gap-1 rounded font-medium underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                className="inline-flex min-h-6 items-center gap-1 rounded font-medium underline underline-offset-2 focus-ring"
               >
                 Turn on
                 <span className="sr-only">
@@ -131,7 +129,7 @@ export function AddCard({
         }}
         className={cn(
           CARD,
-          'touch-none outline-none select-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-muted-foreground enabled:cursor-grab disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent'
+          'touch-none outline-none select-none hover:bg-muted/40 focus-ring enabled:cursor-grab disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent'
         )}
       >
         <CardIcon type={row.type} />

@@ -62,7 +62,7 @@ type DesignFont = PortalDesign['brand']['fonts']['body']
 type HeadingWeight = PortalDesign['brand']['fonts']['headingWeight']
 
 const trigger =
-  'flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-start text-xs hover:border-border hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
+  'flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-start text-xs hover:border-border hover:bg-muted focus-ring'
 
 /** The pair as tiles, each "Aa" in its heading face over its body face. */
 function PairPicker({ design, update }: { design: PortalDesign; update: Update }) {
@@ -117,7 +117,7 @@ function PairPicker({ design, update }: { design: PortalDesign; update: Update }
                     if (!arrowing.current) setOpen(false)
                   }}
                   className={cn(
-                    'flex flex-col items-start gap-0.5 rounded-md border p-2 text-start focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+                    'flex flex-col items-start gap-0.5 rounded-md border p-2 text-start focus-ring',
                     on ? PICKED_TILE : 'border-border hover:bg-muted/60'
                   )}
                 >

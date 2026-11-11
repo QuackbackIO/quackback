@@ -47,7 +47,7 @@ function SubView({
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1 rounded text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex items-center gap-1 rounded text-muted-foreground hover:text-foreground focus-ring"
         >
           <ChevronLeftIcon className="size-3.5" aria-hidden="true" />
           {WORDS.theme}
@@ -85,7 +85,7 @@ function AdvancedSection({
             if (!open) designerAdvancedOpened('site:styles')
             setOpen(!open)
           }}
-          className="flex min-h-6 w-full items-center gap-1 rounded text-start focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex min-h-6 w-full items-center gap-1 rounded text-start focus-ring"
         >
           {THEME.sections.advanced}
           <span className="flex-1" />

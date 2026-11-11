@@ -120,7 +120,7 @@ export function ColourValue({
           type="button"
           aria-label={`${name}: ${label ?? (auto !== undefined ? WORDS.auto : WORDS.none)}`}
           data-colour-state={value ? 'set' : 'auto'}
-          className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-xs hover:border-border hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-xs hover:border-border hover:bg-muted focus-ring"
         >
           <Swatch colour={hexOrNone(shown)} />
           <span
@@ -292,7 +292,7 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-ring"
         >
           <PlusIcon className="size-3.5" aria-hidden="true" />
           {THEME.addColour}
@@ -335,7 +335,7 @@ function FromLogo({
               type="button"
               aria-label={THEME.useAsBrand(colour)}
               onClick={() => onPick(colour)}
-              className="grid size-6 place-items-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+              className="grid size-6 place-items-center rounded-md hover:bg-muted focus-ring"
             >
               <Swatch colour={hexOrNone(colour)} className="size-4" />
             </button>
@@ -401,7 +401,7 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
     })
   return (
     <details className="group/dark" data-dark-values="" data-find={FIND.darkMode.id}>
-      <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 rounded focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 rounded focus-ring [&::-webkit-details-marker]:hidden">
         <span className={cn(ROW_LABEL, 'shrink-0 text-xs leading-tight text-muted-foreground')}>
           {THEME.darkMode}
         </span>
@@ -444,7 +444,7 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
             type="button"
             onClick={() => update((draft) => void delete draft.brand.dark)}
             className={cn(
-              'inline-flex min-h-6 items-center rounded text-2xs text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'inline-flex min-h-6 items-center rounded text-2xs text-muted-foreground underline underline-offset-2 hover:text-foreground focus-ring',
               ROW_INDENT_MARGIN
             )}
           >

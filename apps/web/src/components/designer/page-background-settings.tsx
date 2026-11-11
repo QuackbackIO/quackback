@@ -392,7 +392,7 @@ function FillSettings({
             <button
               type="button"
               onClick={() => onChange({ ...fill, stops: [...fill.stops, 'page'] }, 'Colours')}
-              className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+              className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-ring"
             >
               <PlusIcon className="size-3.5" aria-hidden="true" />
               {THEME.addStop}

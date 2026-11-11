@@ -622,6 +622,11 @@ a svg,
   }
 }
 
+/* The builder's neutral focus ring: a 2px grey ring with no offset. */
+@utility focus-ring {
+  @apply focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none;
+}
+
 /* The neutral focus ring a portal control draws. */
 @utility qb-focus-ring {
   &:focus-visible {

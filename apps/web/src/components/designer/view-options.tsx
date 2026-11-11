@@ -48,7 +48,7 @@ export function ZoomControl({
           tabIndex={zoom === value ? 0 : -1}
           onClick={() => onZoom(value)}
           className={cn(
-            'h-7 rounded-md px-1.5 text-xs tabular-nums text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground',
+            'h-7 rounded-md px-1.5 text-xs tabular-nums text-muted-foreground outline-none hover:text-foreground focus-ring',
             zoom === value &&
               'bg-background text-foreground shadow-sm forced-colors:outline forced-colors:outline-1'
           )}
@@ -135,7 +135,7 @@ export function ViewOptions({
       <button
         type="button"
         onClick={onKeys}
-        className="mt-1 inline-flex min-h-6 items-center rounded-sm text-xs text-muted-foreground underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground"
+        className="mt-1 inline-flex min-h-6 items-center rounded-sm text-xs text-muted-foreground underline underline-offset-2 outline-none hover:text-foreground focus-ring"
       >
         {THEME.keyboardShortcuts}
       </button>

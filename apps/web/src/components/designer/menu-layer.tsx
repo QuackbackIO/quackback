@@ -167,7 +167,7 @@ export function MenuLayer({
                 aria-label={HEADER_COPY.add}
                 onPointerEnter={() => setOnPlus(true)}
                 onPointerLeave={() => setOnPlus(false)}
-                className="pointer-events-auto absolute grid size-6 place-items-center rounded-full border border-dashed bg-background text-[#2563eb] shadow-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                className="pointer-events-auto absolute grid size-6 place-items-center rounded-full border border-dashed bg-background text-[#2563eb] shadow-sm hover:bg-muted focus-ring"
                 style={{ left: plus.left, top: plus.top, borderColor: BLUE }}
               >
                 <PlusIcon className="size-3.5" aria-hidden="true" />

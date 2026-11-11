@@ -81,7 +81,7 @@ export function PagePanel({
           <button
             type="button"
             onClick={() => onTheme(true)}
-            className="inline-flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-2xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="inline-flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-2xs hover:bg-muted focus-ring"
           >
             <span className="truncate">
               {WORDS.theme}: {THEME.widths[design.layout.width]}
@@ -93,7 +93,7 @@ export function PagePanel({
         <button
           type="button"
           onClick={() => onTheme(false)}
-          className="flex min-h-7 w-full items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex min-h-7 w-full items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-ring"
         >
           <span className="min-w-0 flex-1 truncate">{WORDS.theme}</span>
           <ChevronRightIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
@@ -127,7 +127,7 @@ export function BackgroundRow({
           aria-expanded={open}
           aria-controls={`${id}-settings`}
           onClick={() => setOpen(!open)}
-          className="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-md px-1 text-start text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-md px-1 text-start text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-ring"
         >
           <span className="min-w-0 flex-1 truncate">
             {ownBg ? WORDS.thisPage : WORDS.everyPage}: {BACKGROUND_NAMES[shown.kind]}

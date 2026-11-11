@@ -57,7 +57,7 @@ export function BuilderSheet({
                   <button
                     type="button"
                     onClick={onBack}
-                    className="rounded hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                    className="rounded hover:text-foreground focus-ring"
                   >
                     {back}
                   </button>

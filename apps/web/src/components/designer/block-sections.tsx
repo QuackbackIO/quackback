@@ -55,7 +55,7 @@ import { editOnCanvas } from './words/edit-on-canvas'
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
 
 const quiet =
-  'shrink-0 rounded text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
+  'shrink-0 rounded text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-ring'
 
 /** The words fields a block draws: its heading, and the words it keeps where they sit. */
 export const wordsFieldsOf = (type: string): SettingField[] =>
@@ -606,7 +606,7 @@ export function ElementRows({
         >
           <button
             type="button"
-            className="min-w-0 flex-1 truncate rounded text-start text-xs hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="min-w-0 flex-1 truncate rounded text-start text-xs hover:underline focus-ring"
             onClick={() => onElement(el)}
           >
             {`${count?.(el) ?? 0} set`}

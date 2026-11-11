@@ -89,7 +89,7 @@ export function PublishedPopover({
               <Link
                 to="/admin/settings/domains"
                 onClick={() => trackBuilder('designer_live_link_used', { action: 'domain' })}
-                className="inline-block rounded-sm text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                className="inline-block rounded-sm text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-ring"
               >
                 Use your own domain
               </Link>

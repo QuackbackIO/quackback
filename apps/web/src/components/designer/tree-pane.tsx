@@ -184,7 +184,7 @@ export function TreePane({
           aria-expanded={!state.collapsed}
           aria-controls={bodyId}
           onClick={() => remember({ ...state, collapsed: !state.collapsed })}
-          className="flex min-h-7 w-full items-center gap-1 rounded-md px-1 text-start text-xs font-medium hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex min-h-7 w-full items-center gap-1 rounded-md px-1 text-start text-xs font-medium hover:bg-muted focus-ring"
         >
           <ChevronRightIcon
             className={cn('size-3.5 transition-transform', !state.collapsed && 'rotate-90')}

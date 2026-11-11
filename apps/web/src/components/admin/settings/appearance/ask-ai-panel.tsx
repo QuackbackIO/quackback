@@ -65,7 +65,7 @@ function ShowButton({ row, onShow }: { row: ChangeRow; onShow: ShowChange['go'] 
       type="button"
       aria-label={`Show ${words} on the page`}
       onClick={() => onShow(row.at, words)}
-      className="ms-auto rounded px-1 text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground"
+      className="ms-auto rounded px-1 text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-ring"
     >
       Show
     </button>
@@ -145,7 +145,7 @@ function StepResult({
             type="button"
             aria-expanded={open}
             onClick={() => setOpen((was) => !was)}
-            className="inline-flex items-center gap-0.5 rounded outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground"
+            className="inline-flex items-center gap-0.5 rounded outline-none hover:text-foreground focus-ring"
           >
             {open ? 'Hide changes' : 'Show changes'}
             <ChevronDownIcon
@@ -203,7 +203,7 @@ function StepResult({
                   key={part}
                   type="button"
                   onClick={() => undo(rows, MATCH_PART_LABEL[part])}
-                  className="rounded text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                  className="rounded text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-ring"
                 >
                   {MATCH_PART_LABEL[part]}
                 </button>
@@ -422,7 +422,7 @@ export function AskAiPanel({
                     <button
                       type="button"
                       onClick={onFonts}
-                      className="rounded text-xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                      className="rounded text-xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-ring"
                     >
                       Fonts in Theme
                     </button>
@@ -454,7 +454,7 @@ export function AskAiPanel({
                               const change = chipChange(chip)
                               if (!change || !direct(chip, 'Done.', change)) onChip(chip)
                             }}
-                            className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground disabled:opacity-50"
+                            className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-ring disabled:opacity-50"
                           >
                             {chip}
                           </button>
@@ -518,10 +518,7 @@ export function SiteCapture({
           (later ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span
-                  tabIndex={0}
-                  className="rounded outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
-                >
+                <span tabIndex={0} className="rounded outline-none focus-ring">
                   <Button type="button" variant="ghost" size="xs" className="text-ui" disabled>
                     {MATCH_BRAND.captureAgain}
                   </Button>

@@ -55,7 +55,7 @@ export function BrandKit({
             type="button"
             onClick={onLogo}
             className={cn(
-              'flex min-h-7 w-full items-center gap-1 rounded-md text-start text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'flex min-h-7 w-full items-center gap-1 rounded-md text-start text-xs text-muted-foreground hover:text-foreground focus-ring',
               ROW_INDENT
             )}
           >

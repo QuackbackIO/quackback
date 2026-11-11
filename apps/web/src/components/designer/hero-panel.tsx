@@ -68,7 +68,7 @@ const TILE_FIND: Partial<Record<HeroKey, FindRow>> = {
 }
 
 const quiet =
-  'rounded text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
+  'rounded text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-ring'
 
 /** A look as a small drawing: its colour, with its art or its panel where it has one. */
 function LookDrawing({ look, colours }: { look: BandLook; colours: CSSProperties }) {
@@ -446,7 +446,7 @@ function FillRow({ design, update }: { design: PortalDesign; update: NamedUpdate
           aria-expanded={open}
           aria-controls={`${id}-settings`}
           onClick={() => setOpen(!open)}
-          className="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-md px-1 text-start text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-md px-1 text-start text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-ring"
         >
           <span className="min-w-0 flex-1 truncate">
             {set ? HERO_WORDS.set : HERO_WORDS.asBrand}

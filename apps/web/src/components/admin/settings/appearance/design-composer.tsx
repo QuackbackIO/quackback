@@ -273,7 +273,7 @@ export function DesignComposer({
                   <button
                     type="button"
                     aria-label={`Remove ${item.name}`}
-                    className="absolute -end-2 -top-2 inline-flex size-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                    className="absolute -end-2 -top-2 inline-flex size-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground focus-ring"
                     onClick={() =>
                       setImages((current) => current.filter((it) => it.id !== item.id))
                     }
@@ -371,14 +371,14 @@ export function DesignComposer({
             <TooltipTrigger asChild>
               <span
                 tabIndex={0}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground outline-none focus-ring"
               >
                 {label ?? SCOPE_LABEL[scope]}
                 {scope !== 'site' && (
                   <button
                     type="button"
                     aria-label="Widen to the whole site"
-                    className="-me-1 inline-flex size-6 items-center justify-center rounded-full hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                    className="-me-1 inline-flex size-6 items-center justify-center rounded-full hover:bg-muted hover:text-foreground focus-ring"
                     onClick={onClearScope}
                   >
                     <XMarkIcon className="size-3.5" aria-hidden="true" />
@@ -482,7 +482,7 @@ export function ContextChip({ context, onClear }: { context: ChatContext; onClea
               <button
                 type="button"
                 aria-label={`How far a request reaches: ${line}`}
-                className="block max-w-full truncate rounded text-start text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                className="block max-w-full truncate rounded text-start text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground focus-ring"
                 onClick={next}
               >
                 {line}
@@ -499,7 +499,7 @@ export function ContextChip({ context, onClear }: { context: ChatContext; onClea
           <button
             type="button"
             aria-label={`Remove ${context.name} from the chat and deselect it`}
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-ring"
             onClick={onClear}
           >
             <XMarkIcon className="size-3.5" aria-hidden="true" />

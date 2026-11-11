@@ -85,7 +85,7 @@ export function AiPane({
             aria-controls="designer-ai"
             onClick={collapsed ? pane.expand : pane.collapse}
             className={cn(
-              'grid size-9 place-items-center rounded-lg text-chrome-active-icon outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground',
+              'grid size-9 place-items-center rounded-lg text-chrome-active-icon outline-none hover:bg-muted focus-ring',
               !collapsed && 'bg-muted'
             )}
           >

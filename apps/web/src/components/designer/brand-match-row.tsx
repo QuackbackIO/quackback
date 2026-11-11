@@ -199,7 +199,7 @@ function ShotDrop({
                 type="button"
                 aria-label={`Remove ${shot.file.name}`}
                 onClick={() => onRemove(shot.id)}
-                className="absolute -end-1.5 -top-1.5 grid size-5 place-items-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                className="absolute -end-1.5 -top-1.5 grid size-5 place-items-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground focus-ring"
               >
                 <XMarkIcon className="size-3" aria-hidden="true" />
               </button>
@@ -224,7 +224,7 @@ function ShotDrop({
             onAdd(filesOf(event.dataTransfer))
           }}
           className={cn(
-            'flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+            'flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-ring',
             over ? 'border-muted-foreground bg-muted' : 'border-border'
           )}
         >
@@ -390,7 +390,7 @@ function PickChip({
       aria-pressed={checked}
       onClick={onToggle}
       className={cn(
-        'flex h-7 items-center gap-1.5 rounded-full border px-2 text-xs focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+        'flex h-7 items-center gap-1.5 rounded-full border px-2 text-xs focus-ring',
         checked
           ? 'border-foreground/40 bg-muted text-foreground'
           : 'border-border text-muted-foreground hover:bg-muted'

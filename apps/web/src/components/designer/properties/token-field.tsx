@@ -106,7 +106,7 @@ export function TokenField({
             aria-label={`${label}: ${token?.name ?? shown ?? 'none'}`}
             data-token-state={token ? 'linked' : isHex(shown) ? 'detached' : 'none'}
             className={cn(
-              'flex h-7 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'flex h-7 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-xs hover:bg-muted focus-ring',
               value === undefined && 'text-muted-foreground'
             )}
           >
@@ -166,7 +166,7 @@ export function TokenField({
                     aria-pressed={editing.value === t.id}
                     onClick={() => pick(t.id)}
                     className={cn(
-                      'flex size-8 items-center justify-center rounded-md border focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+                      'flex size-8 items-center justify-center rounded-md border focus-ring',
                       editing.value === t.id
                         ? 'border-foreground'
                         : 'border-transparent hover:border-border'
@@ -194,7 +194,7 @@ export function TokenField({
           <button
             type="button"
             onClick={() => onChange(back.id)}
-            className="min-h-6 truncate rounded py-1 text-2xs leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="min-h-6 truncate rounded py-1 text-2xs leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-ring"
           >
             {linkTo(back.name)}
           </button>
@@ -244,7 +244,7 @@ export function FontField({
             aria-label={`${label}: ${slot ? `${slot.name}, ${slot.face}` : (shown ?? 'none')}`}
             data-token-state={slot ? 'linked' : shown ? 'detached' : 'none'}
             className={cn(
-              'flex h-7 min-w-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'flex h-7 min-w-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-xs hover:bg-muted focus-ring',
               value === undefined && 'text-muted-foreground'
             )}
           >
@@ -276,7 +276,7 @@ export function FontField({
                     setOpen(false)
                   }}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+                    'flex w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs hover:bg-muted focus-ring',
                     value === s.id && 'bg-muted font-medium'
                   )}
                 >
@@ -297,7 +297,7 @@ export function FontField({
           <button
             type="button"
             onClick={() => onChange(linkBack.id)}
-            className="min-h-6 truncate rounded py-1 text-2xs leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="min-h-6 truncate rounded py-1 text-2xs leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-ring"
           >
             {linkTo(linkBack.name)}
           </button>
@@ -344,7 +344,7 @@ export function FontFaces({
       aria-pressed={key(font) === key(value)}
       onClick={() => onChange(font)}
       className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+        'flex w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs hover:bg-muted focus-ring',
         key(font) === key(value) && 'bg-muted font-medium'
       )}
     >

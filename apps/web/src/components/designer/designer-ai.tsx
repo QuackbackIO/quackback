@@ -96,7 +96,7 @@ function AiEmpty({
               <button
                 type="button"
                 onClick={() => onStarter(starter)}
-                className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-ring"
               >
                 {starter}
               </button>

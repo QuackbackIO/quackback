@@ -356,7 +356,7 @@ export function PickedBlock({
                       )
                       if (!done.ok) say(done.refusal)
                     }}
-                    className="inline-flex h-6 items-center rounded-md border border-border px-2 text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                    className="inline-flex h-6 items-center rounded-md border border-border px-2 text-xs hover:bg-muted focus-ring"
                   >
                     {SHOW_SHIPPED}
                   </button>

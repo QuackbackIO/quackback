@@ -24,7 +24,7 @@ const DOWN_ARROW = <ArrowDownIcon className="size-3.5" aria-hidden="true" />
 const EYE = <EyeIcon className="size-3.5" aria-hidden="true" />
 const EYE_SLASH = <EyeSlashIcon className="size-3.5" aria-hidden="true" />
 
-const ring = 'outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground'
+const ring = 'outline-none focus-ring'
 const iconButton = cn(
   'grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40',
   ring
