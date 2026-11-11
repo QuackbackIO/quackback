@@ -16,7 +16,7 @@ import { isNotFound, isRedirect } from '@tanstack/react-router'
 import type { AppLogger } from '@quackback/logger'
 import { logger } from '@/lib/server/logger'
 import { getLogContext } from '@/lib/server/log-context'
-import { DomainException } from '@/lib/shared/errors'
+import { DomainException, isSafeToShow } from '@/lib/shared/errors'
 import { UNEXPECTED_ERROR_MESSAGE, withErrorReference } from '@/lib/shared/error-reference'
 import { isAuthDenialError } from '@/lib/server/functions/auth-errors'
 import { isTechnicalFailure, newErrorReference } from './technical-failure'
@@ -107,10 +107,14 @@ export function classifyServerFnError(error: unknown): 'warn' | 'error' | null {
  * logger. Mirrors `handleRequestWithContext` in request-context.ts.
  *
  * A thrown error crosses to the browser with its message intact, and the
- * interface prints it. In production a technical failure (a failed query with
- * its values, an internal address, a bug) is therefore swapped here for a plain
- * sentence carrying a reference code, and the code is logged as `error_ref`
- * beside the real error. Everything else is rethrown unchanged.
+ * interface prints it. In production only a planned failure keeps its message:
+ * one logged at warn (a typed 4xx, an auth denial, a rejected payload), or a
+ * failure on our side whose class says its message was written for people
+ * (`ServiceUnavailableError`). Anything else, which is every plain
+ * `throw new Error(...)`, is swapped here for a plain sentence carrying a
+ * reference code, and the code is logged as `error_ref` beside the real error.
+ * A warn-level error that still looks technical (a provider's reply carrying a
+ * 4xx status) is hidden the same way.
  *
  * `start.ts` imports this file, so in development the browser loads it too
  * (only the `.server()` body is stripped). Its imports must stay safe to
@@ -133,10 +137,11 @@ export async function runWithServerFnLogging<T>({
     return await next()
   } catch (error) {
     const severity = classifyServerFnError(error)
-    const reference =
-      production && severity === 'error' && isTechnicalFailure(error)
-        ? newErrorReference(getLogContext()?.request_id)
-        : null
+    const hidden =
+      production &&
+      severity !== null &&
+      (severity === 'error' ? !isSafeToShow(error) : isTechnicalFailure(error))
+    const reference = hidden ? newErrorReference(getLogContext()?.request_id) : null
     if (severity) {
       log[severity](
         {

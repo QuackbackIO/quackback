@@ -1,11 +1,11 @@
 /**
  * Recognises failures whose message was never written for a person: a database
- * error, a network fault, a provider's reply, a bug. In production their
- * message stays in the log and the browser gets a plain sentence instead
- * (`server-fn-log.ts`).
+ * error, a network fault, a provider's reply, a bug.
  *
- * This is a list of what to hide, not of what to let through, so a plain
- * `throw new Error('Pick a board first')` still reaches the person as written.
+ * In production the browser only gets the message of a planned failure
+ * (`server-fn-log.ts`). This list is the second check on those: an error that
+ * carries a 4xx status, and so passes for planned, but has the shape of
+ * something technical is hidden all the same.
  */
 import { DomainException } from '@/lib/shared/errors'
 
