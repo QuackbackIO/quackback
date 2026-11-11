@@ -12,8 +12,10 @@
  * what it goes back to.
  */
 import { Fragment, memo, useId, useState, type ReactElement, type ReactNode } from 'react'
+// Reset's arrow is the top bar's Undo arrow, which the builder loads already; the 16px
+// solid one would be a script of its own on every open.
+import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline'
 import {
-  ArrowUturnLeftIcon,
   ChevronRightIcon,
   EllipsisHorizontalIcon,
   InformationCircleIcon,
