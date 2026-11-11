@@ -28,17 +28,12 @@ export function ChangelogPage() {
   // Subscribe by email leads; a visitor not signed in signs in to subscribe. RSS follows, quietly.
   // The RSS button stands as tall as Subscribe, a primary button, however tall a brand's buttons are.
   const actions = (
-    <div data-changelog-actions="" className="flex items-center gap-2">
+    <div className="flex items-center gap-2">
       <ChangelogSubscribeButton
         enabled={isIdentified}
         onSignIn={authPopover ? () => authPopover.openAuthPopover({ mode: 'login' }) : undefined}
       />
-      <Button
-        variant="outline"
-        size="icon-sm"
-        asChild
-        className="min-h-[var(--qb-button-height,2rem)] min-w-[var(--qb-button-height,2rem)] shrink-0"
-      >
+      <Button variant="outline" size="icon-sm" asChild className="qb-square-button shrink-0">
         <a
           href="/changelog/feed"
           target="_blank"

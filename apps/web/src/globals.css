@@ -455,6 +455,18 @@
   html:not(.dark) .caret-primary {
     caret-color: var(--accent-ink);
   }
+  /* Disabled in dark mode, a primary button takes a muted fill: a dimmed brand
+     fill still reads as a button to press. A rule here, not classes every
+     primary button carries in every page's HTML. */
+  .dark [data-slot='button'][data-variant='default']:disabled {
+    background-color: var(--muted);
+    color: var(--muted-foreground);
+  }
+  /* A square icon button as tall as the brand's buttons (--qb-button-height). */
+  .qb-square-button {
+    min-height: var(--qb-button-height, 2rem);
+    min-width: var(--qb-button-height, 2rem);
+  }
 }
 
 /* Feed post card: the title link's ::after covers the whole card so the card
