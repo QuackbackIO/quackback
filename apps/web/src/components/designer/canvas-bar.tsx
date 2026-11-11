@@ -102,7 +102,9 @@ export function CanvasBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="xs" className="max-w-80 gap-1">
-              <span className="truncate">Showing: {locationName(here, posts)}</span>
+              <span className="truncate" title={locationName(here, posts)}>
+                Showing: {locationName(here, posts)}
+              </span>
               <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
@@ -115,7 +117,9 @@ export function CanvasBar({
             >
               {posts.map((post) => (
                 <DropdownMenuRadioItem key={post.id} value={post.path}>
-                  <span className="truncate">{post.title}</span>
+                  <span className="truncate" title={post.title}>
+                    {post.title}
+                  </span>
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>

@@ -308,7 +308,9 @@ export function OwnFont({ update }: { update: Update }) {
             />
             {files.map((entry, index) => (
               <div key={entry.file.name} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
+                <span className="min-w-0 flex-1 truncate" title={entry.file.name}>
+                  {entry.file.name}
+                </span>
                 <Select
                   value={String(entry.weight)}
                   onValueChange={(weight) =>

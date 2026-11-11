@@ -145,7 +145,9 @@ export function AppearanceView() {
                 className="size-6 shrink-0 rounded object-contain"
               />
             )}
-            <span className="truncate">{name}</span>
+            <span className="truncate" title={name}>
+              {name}
+            </span>
           </dd>
           <dt className="text-muted-foreground">Colours</dt>
           <dd>
@@ -162,7 +164,9 @@ export function AppearanceView() {
             </ul>
           </dd>
           <dt className="text-muted-foreground">Fonts</dt>
-          <dd className="truncate">{fonts.join(', ')}</dd>
+          <dd className="truncate" title={fonts.join(', ')}>
+            {fonts.join(', ')}
+          </dd>
         </dl>
       </div>
       <dl className="mt-5 grid grid-cols-[8rem_1fr] gap-x-4 gap-y-3 border-t border-border pt-4 text-sm">

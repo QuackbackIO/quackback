@@ -70,4 +70,11 @@ describe('ElementOutlines', () => {
     expect(container.querySelector('[data-content-glyph]')).toBeTruthy()
     expect(screen.getByRole('button', { name: /^Post title · Top posts, your data/ })).toBeTruthy()
   })
+
+  it('shows a long element name in full on hover, since the tag cuts it short', () => {
+    const { container } = render(
+      <ElementOutlines room={room} hovered={item} picked={null} block={null} onStep={vi.fn()} />
+    )
+    expect(container.querySelector('[title="Heading · Top posts"]')).toHaveClass('truncate')
+  })
 })

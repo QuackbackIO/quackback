@@ -476,7 +476,9 @@ export function ContextChip({ context, onClear }: { context: ChatContext; onClea
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 rounded-lg bg-muted py-0.5 ps-2 pe-0.5 text-xs">
       <span className="min-w-0 leading-tight">
-        <span className="block truncate font-medium text-foreground">{context.name}</span>
+        <span className="block truncate font-medium text-foreground" title={context.name}>
+          {context.name}
+        </span>
         {choices.length > 1 ? (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -492,7 +494,9 @@ export function ContextChip({ context, onClear }: { context: ChatContext; onClea
             <TooltipContent>How far a request reaches</TooltipContent>
           </Tooltip>
         ) : (
-          <span className="block truncate text-muted-foreground">{line}</span>
+          <span className="block truncate text-muted-foreground" title={line}>
+            {line}
+          </span>
         )}
       </span>
       <Tooltip>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { HomeBlock } from '@/lib/shared/design/home'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 /**
  * The section's small icons, drawn here: an icon module this page shared with
@@ -94,16 +95,20 @@ export function LinksOptions({
                   commit(links.map((l, i) => (i === index ? { ...l, url: event.target.value } : l)))
                 }
               />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Remove link ${index + 1}`}
-                title={`Remove link ${index + 1}`}
-                disabled={links.length === 1}
-                onClick={() => commit(links.filter((_, i) => i !== index))}
-              >
-                <Icon path={CROSS} className="size-4" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Remove link ${index + 1}`}
+                    disabled={links.length === 1}
+                    onClick={() => commit(links.filter((_, i) => i !== index))}
+                  >
+                    <Icon path={CROSS} className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{`Remove link ${index + 1}`}</TooltipContent>
+              </Tooltip>
             </div>
             {wrong && (
               <p id={`link-${index}-wrong`} role="alert" className="text-xs text-destructive">

@@ -23,6 +23,7 @@ import {
 } from '@/lib/shared/design/builder-chrome'
 import { cn } from '@/lib/shared/utils'
 import type { PortalAddress } from '@/lib/shared/design/portal-address'
+import { IconButton } from './icon-button'
 import { PublishedPopover } from './published-popover'
 
 // The bar's icons, made once: unchanged, React does not draw them again with the bar.
@@ -36,41 +37,6 @@ const DEVICE_ICONS: Record<Device, typeof ComputerDesktopIcon> = {
   desktop: ComputerDesktopIcon,
   tablet: DeviceTabletIcon,
   phone: DevicePhoneMobileIcon,
-}
-
-/** An icon button with a real tooltip naming what it does; disabled, it still says why. */
-function IconButton({
-  tip,
-  label = tip,
-  disabled = false,
-  onClick,
-  children,
-}: {
-  tip: string
-  label?: string
-  disabled?: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={label}
-          aria-disabled={disabled || undefined}
-          className="aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-transparent"
-          onClick={() => {
-            if (!disabled) onClick()
-          }}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{tip}</TooltipContent>
-    </Tooltip>
-  )
 }
 
 /** Desktop, tablet and phone: one radio group, one Tab stop, the arrows pick. */
@@ -259,7 +225,9 @@ export function DesignerHeader({
           aria-label="Breadcrumb"
           className="me-2 hidden min-w-0 items-center gap-1.5 text-sm min-[1400px]:flex"
         >
-          <span className="truncate text-muted-foreground">{workspaceName}</span>
+          <span className="truncate text-muted-foreground" title={workspaceName}>
+            {workspaceName}
+          </span>
           <span aria-hidden="true" className="text-muted-foreground/60">
             /
           </span>

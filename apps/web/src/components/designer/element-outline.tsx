@@ -13,6 +13,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { ArrowTopRightOnSquareIcon, CircleStackIcon } from '@heroicons/react/16/solid'
 import { KIND_LOOK, type ContentKind } from '@/lib/shared/design/content-kinds'
 import { outlineBox, type Rect } from '@/lib/shared/design/layer-geometry'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 /** An element as the layer draws it: where it is, its name and its kind of content. */
 export interface OutlinedElement {
@@ -68,7 +69,9 @@ function TagWords({ name, kind }: Pick<OutlinedElement, 'name' | 'kind'>) {
       {kind === 'dynamic' && (
         <CircleStackIcon data-content-glyph="" className="size-3 shrink-0" aria-hidden="true" />
       )}
-      <span className="max-w-48 truncate">{name}</span>
+      <span className="max-w-48 truncate" title={name}>
+        {name}
+      </span>
     </>
   )
 }
@@ -191,19 +194,25 @@ export function ElementOutlines({
               <TagWords name={picked.name} kind={picked.kind} />
             </button>
             {open && (
-              <button
-                type="button"
-                data-element-open=""
-                title="Ctrl or Cmd and click follows a link on the canvas too"
-                aria-keyshortcuts="ArrowLeft ArrowUp Escape"
-                onKeyDown={onOpenKey}
-                onClick={open.onOpen}
-                className={`pointer-events-auto ${TAG} hover:brightness-110 focus-visible:ring-2 focus-visible:ring-zinc-300 focus-visible:outline-none`}
-                style={{ background: KIND_LOOK[picked.kind].chip }}
-              >
-                <ArrowTopRightOnSquareIcon className="size-3" aria-hidden="true" />
-                {open.label}
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    data-element-open=""
+                    aria-keyshortcuts="ArrowLeft ArrowUp Escape"
+                    onKeyDown={onOpenKey}
+                    onClick={open.onOpen}
+                    className={`pointer-events-auto ${TAG} hover:brightness-110 focus-visible:ring-2 focus-visible:ring-zinc-300 focus-visible:outline-none`}
+                    style={{ background: KIND_LOOK[picked.kind].chip }}
+                  >
+                    <ArrowTopRightOnSquareIcon className="size-3" aria-hidden="true" />
+                    {open.label}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  Ctrl or Cmd and click follows a link on the canvas too
+                </TooltipContent>
+              </Tooltip>
             )}
           </Tag>
         </>

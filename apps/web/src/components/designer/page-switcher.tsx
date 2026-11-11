@@ -49,8 +49,7 @@ export function switcherFilter(value: string, search: string, keywords: string[]
   return score > 0 && search && name.startsWith(search.trim().toLowerCase()) ? score + 1 : score
 }
 
-const ROW =
-  'min-h-8 py-1.5 text-ui data-[current=true]:bg-muted data-[current=true]:font-medium'
+const ROW = 'min-h-8 py-1.5 text-ui data-[current=true]:bg-muted data-[current=true]:font-medium'
 
 /** What the switcher lists, read when it first opens. */
 function usePlaces(enabled: boolean) {
@@ -243,7 +242,9 @@ export function SwitcherMenu({
                   className={cn(ROW, row.indent && 'ps-5')}
                 >
                   {row.go.kind === 'turn-on' && <PlusIcon aria-hidden="true" />}
-                  <span className="truncate">{row.label}</span>
+                  <span className="truncate" title={row.label}>
+                    {row.label}
+                  </span>
                   {row.hint && (
                     <span
                       className={cn(
@@ -313,7 +314,9 @@ function ChooseOne({
             onSelect={() => onChoose(item.path)}
             className={ROW}
           >
-            <span className="truncate">{item.title}</span>
+            <span className="truncate" title={item.title}>
+              {item.title}
+            </span>
           </CommandItem>
         ))}
       </CommandList>

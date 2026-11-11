@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input'
 import { normaliseColor } from '@/lib/shared/design/color'
 import { oklchToHex } from '@/lib/shared/theme/colors'
 import type { BrandSwatch } from '@/lib/shared/design/colour-roles'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export const toHex = (value: string | undefined) =>
   value ? (value.startsWith('#') ? value : oklchToHex(value)) : '#ffffff'
@@ -121,19 +122,22 @@ export function ColourField({
       {swatches && swatches.length > 0 && (
         <div role="group" aria-label={`${label}: brand colours`} className="ms-34 flex gap-1">
           {named(swatches).map(({ colour: swatch, name }) => (
-            <button
-              key={swatch}
-              type="button"
-              aria-label={name ? `Use ${name}, ${swatch}` : `Use ${swatch}`}
-              title={name ? `${name} ${swatch}` : swatch}
-              onClick={() => {
-                setText(swatch)
-                setWrong(false)
-                onChange(swatch)
-              }}
-              className="size-5 rounded border border-border focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              style={{ background: swatch }}
-            />
+            <Tooltip key={swatch}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={name ? `Use ${name}, ${swatch}` : `Use ${swatch}`}
+                  onClick={() => {
+                    setText(swatch)
+                    setWrong(false)
+                    onChange(swatch)
+                  }}
+                  className="size-5 rounded border border-border focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  style={{ background: swatch }}
+                />
+              </TooltipTrigger>
+              <TooltipContent>{name ? `${name} ${swatch}` : swatch}</TooltipContent>
+            </Tooltip>
           ))}
         </div>
       )}

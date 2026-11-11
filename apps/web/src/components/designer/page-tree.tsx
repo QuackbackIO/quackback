@@ -200,7 +200,9 @@ export function PageTree({
             )}
           >
             {row.blockType && <BlockIcon type={row.blockType} />}
-            <span className="truncate">{row.label}</span>
+            <span className="truncate" title={row.label}>
+              {row.label}
+            </span>
             {row.note && <span className="shrink-0 text-2xs">· {row.note}</span>}
           </span>
           {row.hide?.shown && row.hide.locked && (
