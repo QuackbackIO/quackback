@@ -24,12 +24,12 @@ const dialog = (canPublish: boolean) =>
 describe('the publish permission in the review', () => {
   it('lets someone who may publish publish', () => {
     dialog(true)
-    expect(screen.getByRole('button', { name: 'Publish' }).hasAttribute('disabled')).toBe(false)
+    expect(screen.getByRole('button', { name: /^Publish/ }).hasAttribute('disabled')).toBe(false)
   })
 
   it('shows the review without publishing, and says why', () => {
     dialog(false)
-    expect(screen.getByRole('button', { name: 'Publish' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: /^Publish/ }).hasAttribute('disabled')).toBe(true)
     expect(screen.getByText('Publishing needs permission to publish the design.')).toBeTruthy()
   })
 })

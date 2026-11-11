@@ -30,12 +30,23 @@ afterEach(() => {
 sample.card.mockResolvedValue({ ok: false, message: 'x' })
 
 describe('VisitorsAlsoSee', () => {
-  it('shows the sign-in email sample in a sandboxed frame', async () => {
+  it('shows the sign-in email sample whole, in a frame that runs nothing and never scrolls', async () => {
     sample.fn.mockResolvedValue({ ok: true, html: '<p>Sign in to Acme</p>' })
     render(<VisitorsAlsoSee />)
     const frame = await screen.findByTitle('Sign-in email')
     expect(frame.getAttribute('srcdoc')).toContain('Sign in to Acme')
-    expect(frame.getAttribute('sandbox')).toBe('')
+    // Read for its height only: no scripts, forms or navigation.
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin')
+    expect(frame.getAttribute('scrolling')).toBe('no')
+    expect(frame.parentElement!.hasAttribute('inert')).toBe(true)
+  })
+
+  it('says it shows what visitors get after publishing', () => {
+    sample.fn.mockResolvedValue({ ok: false, message: 'x' })
+    render(<VisitorsAlsoSee />)
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Visitors also get, after you publish' })
+    ).toBeTruthy()
   })
 
   it('says so quietly when the sample cannot be drawn', async () => {

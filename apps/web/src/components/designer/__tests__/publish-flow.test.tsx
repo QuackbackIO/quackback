@@ -145,7 +145,12 @@ describe('Publish', () => {
     expect(draft.changes.length).toBeGreaterThan(12)
     render(<Harness draft={draft} failing={failing} />)
     await clickPublish()
-    expect(screen.getByRole('dialog', { name: 'Review and publish' })).toBeTruthy()
+    // Titled by its count, with no reason to give: a long draft needs none.
+    const review = screen.getByRole('dialog', { name: `Review ${draft.changes.length} changes` })
+    expect(review.textContent).not.toContain('a lot to sum up')
+    expect(
+      within(review).getByRole('button', { name: `Publish ${draft.changes.length} changes` })
+    ).toBeTruthy()
     expect(screen.queryByRole('dialog', { name: /^Publish/ })).toBeNull()
   })
 
@@ -153,7 +158,8 @@ describe('Publish', () => {
     const { draft } = draftOf(hideRoadmap)
     render(<Harness draft={draft} failing={1} />)
     await clickPublish()
-    expect(screen.getByRole('dialog', { name: 'Review and publish' })).toBeTruthy()
+    const review = screen.getByRole('dialog', { name: 'Review and publish' })
+    expect(review.textContent).toContain('A check needs a look before you publish.')
   })
 
   it('leaves the workspace logo choice unticked, and publishes without it', async () => {
@@ -186,11 +192,9 @@ describe('Publish', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'See everything' }))
     })
-    const review = screen.getByRole('dialog', { name: 'Review and publish' })
+    const review = screen.getByRole('dialog', { name: 'Review 1 change' })
     await act(async () => {
-      fireEvent.click(
-        [...review.querySelectorAll('button')].find((each) => each.textContent === 'Publish')!
-      )
+      fireEvent.click(within(review).getByRole('button', { name: 'Publish 1 change' }))
     })
     expect(published).toHaveBeenCalledWith(draft, expect.objectContaining({ fullReview: true }))
   })

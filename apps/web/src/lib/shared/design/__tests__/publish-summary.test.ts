@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { designChanges } from '../diff'
 import { defaultDesign, type PortalDesign } from '../schema'
-import { FULL_REVIEW_OVER, opensFullReview, publishSummary } from '../publish-summary'
+import {
+  FULL_REVIEW_OVER,
+  fullReviewReason,
+  opensFullReview,
+  publishSummary,
+  reachesVisitorExtras,
+} from '../publish-summary'
 
 const gates = {
   feedback: true,
@@ -169,5 +175,35 @@ describe('overrides in the publish summary', () => {
         detail: 'Its part is gone',
       },
     ])
+  })
+})
+
+describe('why the full review opened', () => {
+  it('names a check that needs a look, and gives no reason for a long draft', () => {
+    expect(fullReviewReason(1)).toBe('A check needs a look before you publish.')
+    expect(fullReviewReason(3)).toBe('3 checks need a look before you publish.')
+    expect(fullReviewReason(0)).toBeUndefined()
+  })
+})
+
+describe('what else visitors get', () => {
+  const change = (path: string) => ({ path, before: 'a', after: 'b' })
+
+  it('changes with the brand colours, logo, title, fonts or share image', () => {
+    for (const path of [
+      'brand.light.accent',
+      'brand.dark.background',
+      'brand.logo.name',
+      'brand.logo.mark.light',
+      'brand.fonts.heading.id',
+      'brand.shareImage',
+      'brand',
+    ])
+      expect(reachesVisitorExtras([change(path)]), path).toBe(true)
+  })
+
+  it('stays as it is for the layout, the pages or a hero image', () => {
+    for (const path of ['layout.width', 'pages.home.blocks', 'brand.heroImage', 'shape.corners'])
+      expect(reachesVisitorExtras([change(path)]), path).toBe(false)
   })
 })

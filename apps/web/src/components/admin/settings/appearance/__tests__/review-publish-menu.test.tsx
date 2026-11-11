@@ -27,9 +27,13 @@ describe('the full review', () => {
         canPublish
       />
     )
-    const headings = screen.getAllByRole('heading', { level: 3 }).map((each) => each.textContent)
-    expect(headings[0]).toBe('Menu and landing')
-    expect(headings).not.toContain('Header and menu')
+    // Summed up first, then in the full list, where the menu's raw changes are not listed again.
+    const summary = screen.getByRole('region', { name: 'What changes' })
+    expect(summary.querySelector('li')?.textContent).toContain('Roadmap out of the menu')
+    const every = screen.getByRole('region', { name: 'Every change' })
+    const parts = [...every.querySelectorAll('h4')].map((each) => each.textContent)
+    expect(parts[0]).toBe('Menu and landing')
+    expect(parts).not.toContain('Header and menu')
     expect(document.body.textContent).toContain('Roadmap out of the menu')
     expect(document.body.textContent).toContain('Still open at /roadmap')
   })
