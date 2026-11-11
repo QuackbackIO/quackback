@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/16/solid'
 import { CssFields, type CssWarning } from '@/components/admin/settings/appearance/css-section'
+import { Button } from '@/components/ui/button'
 import { designerAdvancedOpened } from '@/lib/client/builder-events'
 import type { ThemeAt } from '@/lib/shared/design/builder-chrome'
 import { hoverTileOf, writeHoverTile, type HoverTile } from '@/lib/shared/design/hover-lift'
@@ -22,9 +23,15 @@ import { revealFontSlot } from './brand-kit-fonts'
 import { ADVANCED_OPEN, FIND } from './find-rows'
 import { ElementPanel } from './element-panel'
 import { currentLookName, LookPicker, useSavedLooks } from './look-picker'
+import { appliedLookName, openLooks } from './looks-entry'
 import { PageBackgroundEntry, PageBackgroundSection } from './page-background-settings'
 import { OverridesList } from './overrides-list'
-import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
+import {
+  PropertyRow,
+  PropertySection,
+  PropertyTiles,
+  ROW_INDENT,
+} from './properties/properties-panel'
 import { CORNER_NAMES, THEME, WORDS } from './properties/words'
 import { ThemeElements, elementName } from './styles-panel'
 import { SummaryRow } from './properties/summary-row'
@@ -220,9 +227,19 @@ export function ThemeContent({
               <SummaryRow
                 label={FIND.look.label}
                 find={FIND.look.id}
-                value={currentLookName(design, saved) ?? THEME.custom}
+                value={currentLookName(design, saved) ?? appliedLookName(design) ?? THEME.custom}
                 onOpen={() => setView({ kind: 'looks' })}
               />
+              <div className={ROW_INDENT}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="2xs"
+                  onClick={() => openLooks('theme')}
+                >
+                  Compare looks
+                </Button>
+              </div>
               <PropertyRow label={FIND.corners.label} find={FIND.corners.id}>
                 <PropertyTiles
                   label={FIND.corners.label}
