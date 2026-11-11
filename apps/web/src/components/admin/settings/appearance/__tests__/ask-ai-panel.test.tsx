@@ -466,7 +466,7 @@ describe('a brand match after it lands', () => {
   it('makes a one-change follow-up directly, as its own step, and asks AI for the rest', () => {
     const onChip = vi.fn()
     const onDirect = vi.fn()
-    const turn = matchTurn({ chips: ['Calmer hero', 'Use more blue'] })
+    const turn = matchTurn({ chips: ['Calmer hero', 'Use more blue', 'Use green for links'] })
     draft = matched()
     mount({ turns: [turn], onChip, onDirect })
     fireEvent.click(screen.getByRole('button', { name: 'Calmer hero' }))
@@ -477,8 +477,12 @@ describe('a brand match after it lands', () => {
       reply: 'Done.',
       changes: [expect.objectContaining({ path: 'layout.hero', before: 'brand', after: 'tint' })],
     })
+    // More of the brand colour is known too: the hero in it again, made directly.
     fireEvent.click(screen.getByRole('button', { name: 'Use more blue' }))
-    expect(onChip).toHaveBeenCalledWith('Use more blue')
+    expect(draft.layout.hero).toBe('brand')
+    expect(onChip).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Use green for links' }))
+    expect(onChip).toHaveBeenCalledWith('Use green for links')
   })
 
   it('offers the other looks already written, each as a new step', () => {

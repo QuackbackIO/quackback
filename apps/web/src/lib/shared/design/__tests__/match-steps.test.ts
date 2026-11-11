@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { defaultDesign } from '../schema'
 import { chipChange, lookChanges, matchParts } from '../match-steps'
 
 const change = (path: string, before: unknown = 'a', after: unknown = 'b') =>
@@ -29,6 +30,31 @@ describe('matchParts', () => {
 })
 
 describe('chipChange', () => {
+  const branded = () => {
+    const design = defaultDesign()
+    design.brand.light.accent = '#0058a3'
+    design.brand.light.support = '#f2a900'
+    return design
+  }
+  it('gives the hero to the second colour when asked for more of it', () => {
+    expect(chipChange('Use more yellow', branded())).toEqual([
+      { path: 'layout.hero', value: 'support' },
+    ])
+  })
+  it('fills the hero and buttons with the brand colour when asked for more of it', () => {
+    expect(chipChange('Use more blue', branded())).toEqual([
+      { path: 'layout.hero', value: 'brand' },
+      { path: 'shape.fill', value: 'accent' },
+    ])
+  })
+  it('names a second colour of the same hue as the match did', () => {
+    const design = branded()
+    design.brand.light.support = '#8fb8ff'
+    expect(chipChange('Use more lighter blue', design)).toEqual([
+      { path: 'layout.hero', value: 'support' },
+    ])
+  })
+
   it('makes the one-field follow-ups directly', () => {
     expect(chipChange('Black buttons')).toEqual([{ path: 'shape.fill', value: 'ink' }])
     expect(chipChange('White buttons')).toEqual([{ path: 'shape.fill', value: 'ink' }])
@@ -39,6 +65,7 @@ describe('chipChange', () => {
 
   it('leaves open-ended follow-ups as requests', () => {
     expect(chipChange('Use more blue')).toBeNull()
+    expect(chipChange('Use more blue', defaultDesign())).toBeNull()
     expect(chipChange('Use blue for links')).toBeNull()
     expect(chipChange('Add a hero photo')).toBeNull()
   })

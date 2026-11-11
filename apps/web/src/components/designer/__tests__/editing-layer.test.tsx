@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
-import { EditingLayer, useGlide } from '../editing-layer'
+import { EditingLayer, menuPoint, useGlide } from '../editing-layer'
 import { openChipMenu } from '../settings-focus'
 
 afterEach(cleanup)
@@ -93,6 +93,31 @@ describe('EditingLayer', () => {
     fireEvent.contextMenu(screen.getByRole('button', { name: 'Top posts: settings' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: /Remove/ }))
     expect(onRemove).toHaveBeenCalledOnce()
+  })
+
+  it('focuses the first action, and gives focus back to the chip on Escape', async () => {
+    show()
+    const settings = screen.getByRole('button', { name: 'Top posts: settings' })
+    settings.focus()
+    fireEvent.contextMenu(settings)
+    const menu = await screen.findByRole('menu', { name: 'Top posts: more' })
+    const duplicate = screen.getByRole('menuitem', { name: /Duplicate/ })
+    await vi.waitFor(() => expect(document.activeElement).toBe(duplicate))
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: /Remove/ }))
+    )
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    await vi.waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    await vi.waitFor(() => expect(document.activeElement).toBe(settings))
+  })
+
+  it('opens the menu at the pointer, or under the focused button from the keyboard', () => {
+    const button = document.createElement('button')
+    button.getBoundingClientRect = () => DOMRect.fromRect({ x: 30, y: 40, width: 50, height: 20 })
+    expect(menuPoint({ clientX: 310, clientY: 205, target: button })).toEqual({ x: 310, y: 205 })
+    // Shift+F10 or the menu key: a right-click with no pointer.
+    expect(menuPoint({ clientX: 0, clientY: 0, target: button })).toEqual({ x: 30, y: 60 })
   })
 
   it('opens the actions of the block right-clicked on the page, once its chip is drawn', async () => {
@@ -197,7 +222,7 @@ describe('useGlide', () => {
     vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (
       this: HTMLElement
     ) {
-      if (this.hasAttribute('data-chip-for')) reads++
+      if (this.hasAttribute('data-chip-place')) reads++
       return width.get!.call(this)
     })
     const layer = (top: number) => (

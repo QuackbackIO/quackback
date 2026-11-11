@@ -46,6 +46,7 @@ import type { ThemeConfig } from '@/lib/shared/theme'
 import { primaryPresetIds, themePresets } from '@/lib/shared/theme/presets'
 import { useUpdatePortalConfig } from '@/lib/client/mutations/settings'
 import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { useStableCallback } from '@/lib/client/hooks/use-stable-callback'
 import { UpgradeModal } from '@/components/admin/upgrade'
 import {
@@ -326,7 +327,12 @@ function PortalPage() {
             title="Welcome message"
             description="Shown above the post list on your portal home. Leave empty to show nothing."
           >
-            <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
+            {/* Shown on open, so the editor loads with the page, as the rest of its admin does. */}
+            <WelcomeBodyEditor
+              value={welcomeBody}
+              onChange={setWelcomeBody}
+              editor={RichTextEditor}
+            />
           </SettingsCard>
         </div>
 

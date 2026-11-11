@@ -446,7 +446,7 @@ export function AskAiPanel({
                             type="button"
                             disabled={busy}
                             onClick={() => {
-                              const change = chipChange(chip)
+                              const change = chipChange(chip, design)
                               if (!change || !direct(chip, 'Done.', change)) onChip(chip)
                             }}
                             className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-ring disabled:opacity-50"

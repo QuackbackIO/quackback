@@ -1,6 +1,8 @@
 import {
+  memo,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -15,13 +17,12 @@ import {
   TrashIcon,
 } from '@heroicons/react/16/solid'
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuShortcut,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+} from '@/components/ui/dropdown-menu'
 import { BLOCK_ACTIONS } from './properties/words'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { chipPlacement, outlineBox, type Rect } from '@/lib/shared/design/layer-geometry'
@@ -215,62 +216,128 @@ export function EditingLayer({
       ))}
       {children}
       {place && name && (
-        <ChipMenu name={name} onDuplicate={onDuplicate} onRemove={onRemove} onMove={onMove}>
-          <Toolbar.Root
-            ref={chip}
-            aria-label={`${name}, picked`}
-            data-chip-for={pickedKey ?? undefined}
-            data-chip-inside={place.inside ? '' : undefined}
-            // Words edited on the page take the chip's place for their format bar.
-            className="pointer-events-auto absolute flex items-center gap-px rounded-lg p-0.5 shadow-md [[data-words-editing]_&]:hidden"
-            style={{ left: place.left, top: place.top, background: PICKED, transition: glide }}
-          >
-            {grip && (
-              <ChipButton
-                label={`Move ${name}`}
-                tip="Drag to move. Arrow keys move it, Shift and arrow keys resize it"
-                data-drag-handle=""
-                aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
-                className={`${BUTTON} cursor-grab touch-none active:cursor-grabbing`}
-                onPointerDown={grip.onPointerDown}
-                onKeyDown={grip.onKeyDown}
-              >
-                <GripIcon />
-              </ChipButton>
-            )}
-            <ChipButton
-              label={`${name}: settings`}
-              tip={
-                onDown
-                  ? 'Its settings are on the right. Down arrow picks what is in it'
-                  : 'Its settings are on the right'
-              }
-              onClick={onSettings}
-              data-chip-name=""
-              onKeyDown={
-                onDown
-                  ? (event) => {
-                      if (event.key !== 'ArrowDown') return
-                      event.preventDefault()
-                      onDown()
-                    }
-                  : undefined
-              }
-            >
-              <span className="max-w-48 truncate">{name}</span>
-            </ChipButton>
-            {onRemove && (
-              <>
-                <Toolbar.Separator className="mx-0.5 h-3.5 w-px bg-white/40" />
-                <ChipButton label={`Remove ${name}`} tip="Remove" onClick={onRemove}>
-                  <TrashIcon className="size-3.5" aria-hidden="true" />
-                </ChipButton>
-              </>
-            )}
-          </Toolbar.Root>
-        </ChipMenu>
+        <div
+          ref={chip}
+          data-chip-place=""
+          // Words edited on the page take the chip's place for their format bar.
+          className="pointer-events-auto absolute [[data-words-editing]_&]:hidden"
+          style={{ left: place.left, top: place.top, transition: glide }}
+        >
+          <PickedChip
+            name={name}
+            pickedKey={pickedKey ?? undefined}
+            inside={place.inside}
+            onDuplicate={onDuplicate}
+            onRemove={onRemove}
+            onMove={onMove}
+            onSettings={onSettings}
+            onDown={onDown}
+            grip={grip}
+          />
+        </div>
       )}
     </div>
+  )
+}
+
+/** What the picked block's chip offers. */
+type ChipProps = {
+  name: string
+  pickedKey?: string
+  inside: boolean
+  onDuplicate?: () => void
+  onRemove?: () => void
+  onMove?: { up: (() => void) | null; down: (() => void) | null }
+  onSettings: () => void
+  onDown?: () => void
+  grip?: {
+    onPointerDown: (event: ReactPointerEvent) => void
+    onKeyDown: (event: ReactKeyboardEvent) => void
+  }
+}
+
+/**
+ * The picked block's chip: its grip, its name and Remove, with its actions on
+ * a right-click. Drawn again only when what it offers changes, not as the
+ * block moves under it: hand it handlers that keep their identity.
+ */
+const PickedChip = memo(function PickedChip({
+  name,
+  pickedKey,
+  inside,
+  onDuplicate,
+  onRemove,
+  onMove,
+  onSettings,
+  onDown,
+  grip,
+}: ChipProps) {
+  return (
+    <ChipMenu name={name} onDuplicate={onDuplicate} onRemove={onRemove} onMove={onMove}>
+      <Toolbar.Root
+        aria-label={`${name}, picked`}
+        data-chip-for={pickedKey}
+        data-chip-inside={inside ? '' : undefined}
+        className="flex items-center gap-px rounded-lg p-0.5 shadow-md"
+        style={{ background: PICKED }}
+      >
+        {grip && (
+          <ChipButton
+            label={`Move ${name}`}
+            tip="Drag to move. Arrow keys move it, Shift and arrow keys resize it"
+            data-drag-handle=""
+            aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
+            className={`${BUTTON} cursor-grab touch-none active:cursor-grabbing`}
+            onPointerDown={grip.onPointerDown}
+            onKeyDown={grip.onKeyDown}
+          >
+            <GripIcon />
+          </ChipButton>
+        )}
+        <ChipButton
+          label={`${name}: settings`}
+          tip={
+            onDown
+              ? 'Its settings are on the right. Down arrow picks what is in it'
+              : 'Its settings are on the right'
+          }
+          onClick={onSettings}
+          data-chip-name=""
+          onKeyDown={
+            onDown
+              ? (event) => {
+                  if (event.key !== 'ArrowDown') return
+                  event.preventDefault()
+                  onDown()
+                }
+              : undefined
+          }
+        >
+          <span className="max-w-48 truncate">{name}</span>
+        </ChipButton>
+        {onRemove && (
+          <>
+            <Toolbar.Separator className="mx-0.5 h-3.5 w-px bg-white/40" />
+            <ChipButton label={`Remove ${name}`} tip="Remove" onClick={onRemove}>
+              <TrashIcon className="size-3.5" aria-hidden="true" />
+            </ChipButton>
+          </>
+        )}
+      </Toolbar.Root>
+    </ChipMenu>
+  )
+}, sameChip)
+
+/** Whether the chip offers the same: its handlers by identity, whether it can move up or down. */
+function sameChip(before: ChipProps, after: ChipProps): boolean {
+  const { onMove: a, grip: g, ...rest } = before
+  const { onMove: b, grip: h, ...next } = after
+  if ((Object.keys(rest) as Array<keyof typeof rest>).some((key) => rest[key] !== next[key]))
+    return false
+  if (Object.keys(rest).length !== Object.keys(next).length) return false
+  if (!a !== !b || (a && b && (a.up !== b.up || a.down !== b.down))) return false
+  return (
+    !g === !h && (!g || !h || (g.onPointerDown === h.onPointerDown && g.onKeyDown === h.onKeyDown))
   )
 }
 
@@ -299,7 +366,32 @@ function ChangeOutline({ rect, room }: { rect: Rect; room: { width: number; heig
   )
 }
 
-/** The picked block chip's right-click menu: the block's actions, as its ⋯ offers them. */
+/** Where a right-click opened the chip's menu, in the builder's window. */
+type Point = { x: number; y: number }
+
+/**
+ * Where a right-click opens the menu: at the pointer, or, opened from the
+ * keyboard (Shift+F10 or the menu key, which carry no pointer), under the
+ * focused button.
+ */
+export function menuPoint(event: {
+  clientX: number
+  clientY: number
+  target: EventTarget | null
+}): Point {
+  if (event.clientX || event.clientY) return { x: event.clientX, y: event.clientY }
+  const element = event.target instanceof Element ? event.target : null
+  const box = element?.getBoundingClientRect()
+  return box ? { x: box.left, y: box.bottom } : { x: 0, y: 0 }
+}
+
+/**
+ * The picked block chip's right-click menu: the block's actions, as its ⋯
+ * offers them. Opened at the pointer (or under the focused button from the
+ * keyboard) on the menu the builder already draws, so it costs nothing until
+ * it opens; the arrow keys move through it and Escape closes it, back to
+ * where focus was.
+ */
 function ChipMenu({
   name,
   onDuplicate,
@@ -313,39 +405,85 @@ function ChipMenu({
   onMove?: { up: (() => void) | null; down: (() => void) | null }
   children: ReactNode
 }) {
+  const [at, setAt] = useState<Point | null>(null)
+  const [open, setOpen] = useState(false)
+  const opener = useRef<HTMLElement | null>(null)
+  const first = useRef<HTMLDivElement>(null)
+  const anchor = useMemo(
+    () =>
+      at && {
+        getBoundingClientRect: () => DOMRect.fromRect({ x: at.x, y: at.y, width: 0, height: 0 }),
+      },
+    [at]
+  )
+  // Opened by a right-click, not by a trigger: the first action is focused by hand.
+  useEffect(() => {
+    if (!open) return
+    let tries = 0
+    let frame = 0
+    const focus = () => {
+      if (first.current) return first.current.focus()
+      if (tries++ < 10) frame = requestAnimationFrame(focus)
+    }
+    focus()
+    return () => cancelAnimationFrame(frame)
+  }, [open, at])
   if (!onDuplicate) return children
   return (
-    <ContextMenu>
-      <ContextMenuTrigger className="contents">{children}</ContextMenuTrigger>
-      <ContextMenuContent aria-label={`${name}: more`}>
-        <ContextMenuItem onClick={onDuplicate}>
-          <DocumentDuplicateIcon aria-hidden="true" />
-          {BLOCK_ACTIONS.duplicate}
-          <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
-        </ContextMenuItem>
-        {onMove && (
-          <>
-            <ContextMenuItem disabled={!onMove.up} onClick={() => onMove.up?.()}>
-              <ArrowUpIcon aria-hidden="true" />
-              {BLOCK_ACTIONS.moveUp}
-            </ContextMenuItem>
-            <ContextMenuItem disabled={!onMove.down} onClick={() => onMove.down?.()}>
-              <ArrowDownIcon aria-hidden="true" />
-              {BLOCK_ACTIONS.moveDown}
-            </ContextMenuItem>
-          </>
-        )}
-        {onRemove && (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem onClick={onRemove}>
-              <TrashIcon aria-hidden="true" />
-              {BLOCK_ACTIONS.remove}
-              <ContextMenuShortcut>Delete</ContextMenuShortcut>
-            </ContextMenuItem>
-          </>
-        )}
-      </ContextMenuContent>
-    </ContextMenu>
+    <>
+      <div
+        className="contents"
+        onContextMenu={(event) => {
+          event.preventDefault()
+          const focused = document.activeElement
+          opener.current =
+            focused instanceof HTMLElement && event.currentTarget.contains(focused) ? focused : null
+          setAt(menuPoint(event))
+          setOpen(true)
+        }}
+      >
+        {children}
+      </div>
+      {at && (
+        <DropdownMenu open={open} modal={false} onOpenChange={setOpen}>
+          <DropdownMenuContent
+            anchor={anchor}
+            side="bottom"
+            align="start"
+            sideOffset={2}
+            aria-label={`${name}: more`}
+            finalFocus={() => (opener.current?.isConnected ? opener.current : false)}
+          >
+            <DropdownMenuItem ref={first} onClick={onDuplicate}>
+              <DocumentDuplicateIcon aria-hidden="true" />
+              {BLOCK_ACTIONS.duplicate}
+              <DropdownMenuShortcut>Ctrl+D</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            {onMove && (
+              <>
+                <DropdownMenuItem disabled={!onMove.up} onClick={() => onMove.up?.()}>
+                  <ArrowUpIcon aria-hidden="true" />
+                  {BLOCK_ACTIONS.moveUp}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!onMove.down} onClick={() => onMove.down?.()}>
+                  <ArrowDownIcon aria-hidden="true" />
+                  {BLOCK_ACTIONS.moveDown}
+                </DropdownMenuItem>
+              </>
+            )}
+            {onRemove && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onRemove}>
+                  <TrashIcon aria-hidden="true" />
+                  {BLOCK_ACTIONS.remove}
+                  <DropdownMenuShortcut>Delete</DropdownMenuShortcut>
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </>
   )
 }

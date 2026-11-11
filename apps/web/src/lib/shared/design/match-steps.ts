@@ -4,6 +4,8 @@
  * change rather than a new request, and another look from the same match.
  */
 import type { AppliedDesignChange, DesignChangeRequest } from './apply-changes'
+import { colourName, secondName } from './colour-names'
+import type { PortalDesign } from './schema'
 import { partsChanged } from './step-summary'
 
 export type MatchPart = 'brand' | 'hero' | 'words'
@@ -44,15 +46,34 @@ export function matchParts(
 
 /**
  * A follow-up that is one known change, made directly with no new request:
- * the buttons' fill, or the hero calmer or bolder. Null for the rest, which
- * stay requests to Ask AI.
+ * the buttons' fill, the hero calmer or bolder, or more of a brand colour
+ * (named as the match named it, from the design's own colours). Null for the
+ * rest, which stay requests to Ask AI.
  */
-export function chipChange(chip: string): DesignChangeRequest[] | null {
+export function chipChange(chip: string, design?: PortalDesign): DesignChangeRequest[] | null {
+  const more = /^Use more (.+)$/.exec(chip)?.[1]
+  if (more) return design ? moreOf(more, design) : null
   if (chip === 'Black buttons' || chip === 'White buttons')
     return [{ path: 'shape.fill', value: 'ink' }]
   if (/^[A-Z][\w -]* buttons$/.test(chip)) return [{ path: 'shape.fill', value: 'accent' }]
   if (chip === 'Calmer hero') return [{ path: 'layout.hero', value: 'tint' }]
   if (chip === 'Bolder hero') return [{ path: 'layout.hero', value: 'brand' }]
+  return null
+}
+
+/**
+ * More of a brand colour: the second colour takes the hero; the brand colour
+ * fills the hero and the buttons. Null when the name is neither.
+ */
+function moreOf(name: string, design: PortalDesign): DesignChangeRequest[] | null {
+  const { accent, support } = design.brand.light
+  if (support && (name === secondName(accent, support) || name === colourName(support)))
+    return [{ path: 'layout.hero', value: 'support' }]
+  if (name === colourName(accent))
+    return [
+      { path: 'layout.hero', value: 'brand' },
+      { path: 'shape.fill', value: 'accent' },
+    ]
   return null
 }
 
