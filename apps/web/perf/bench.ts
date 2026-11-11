@@ -346,7 +346,7 @@ async function measureBrowser(
   const inflight = trackInflight(page)
   const cdp = await context.newCDPSession(page)
   await cdp.send('Performance.enable')
-  if (args.throttle) {
+  if (args.throttle || journey.throttle) {
     // A home broadband link. Localhost has no bandwidth limit, so without this
     // the bytes a change saves never show up as time.
     await cdp.send('Network.enable')

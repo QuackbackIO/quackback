@@ -9,7 +9,12 @@
 import { createHash, randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { readStoredDesign } from '../src/lib/shared/design/stored-design'
-import { BENCH_DESIGNS, benchDesignDocument, benchDesignToken } from './designs'
+import {
+  BENCH_DESIGNS,
+  PREVIEW_ONLY_DESIGNS,
+  benchDesignDocument,
+  benchDesignToken,
+} from './designs'
 
 const sql = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} })
 try {
@@ -20,7 +25,7 @@ try {
   await sql`INSERT INTO portal_designs (id) VALUES (${randomUUID()}) ON CONFLICT DO NOTHING`
   const [design] = await sql<{ id: string }[]>`
     SELECT id FROM portal_designs WHERE site_id IS NULL`
-  for (const name of BENCH_DESIGNS) {
+  for (const name of [...BENCH_DESIGNS, ...PREVIEW_ONLY_DESIGNS]) {
     const document = benchDesignDocument(name)
     const read = readStoredDesign(document)
     if (!read || read.dropped.length) throw new Error(`${name} does not read as a design`)
@@ -31,7 +36,7 @@ try {
               '2100-01-01T00:00:00Z')
       ON CONFLICT (token_hash) DO UPDATE SET document = EXCLUDED.document`
   }
-  console.log(`Preview links for ${BENCH_DESIGNS.join(', ')}`)
+  console.log(`Preview links for ${[...BENCH_DESIGNS, ...PREVIEW_ONLY_DESIGNS].join(', ')}`)
 } finally {
   await sql.end()
 }

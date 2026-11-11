@@ -20,7 +20,10 @@ import type { Page, Route } from '@playwright/test'
  * (orbit), and a hero photo behind the words (plume).
  */
 export const BENCH_DESIGNS = ['juniper', 'kiln', 'orbit', 'plume'] as const
-export type BenchDesign = (typeof BENCH_DESIGNS)[number]
+
+/** Designs with a preview link but no load journeys of their own: a feed that opens on Top (tandem). */
+export const PREVIEW_ONLY_DESIGNS = ['tandem'] as const
+export type BenchDesign = (typeof BENCH_DESIGNS)[number] | (typeof PREVIEW_ONLY_DESIGNS)[number]
 
 const FIXTURES = new URL('../src/lib/shared/design/__tests__/fixtures/', import.meta.url)
 
