@@ -139,7 +139,7 @@ function AccessChoice({
       className={cn(
         'flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors',
         'has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring',
-        selected ? 'border-primary/60 bg-primary/10' : 'border-border/60 hover:border-border',
+        selected ? 'border-primary bg-primary/10' : 'border-border/60 hover:border-border',
         disabled && 'cursor-not-allowed opacity-60'
       )}
     >
