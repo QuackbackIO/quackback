@@ -1069,17 +1069,17 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 180,
+      "componentRenders": 178,
       "canvasPosts": 0
     },
     "ui:builder-open": {
       "dbQueries": 61,
       "serverRequests": 6,
-      "requests": 277,
-      "jsRequests": 265,
-      "jsKB": 1460.5,
+      "requests": 263,
+      "jsRequests": 252,
+      "jsKB": 1361.3,
       "htmlTransferKB": 15.3,
-      "componentRenders": 770,
+      "componentRenders": 764,
       "canvasPosts": 12
     },
     "ui:builder-open-theme": {
@@ -1099,7 +1099,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 799,
+      "componentRenders": 646,
       "canvasPosts": 0
     },
     "ui:builder-publish": {
@@ -1109,7 +1109,7 @@
       "jsRequests": 1,
       "jsKB": 0.3,
       "htmlTransferKB": 0,
-      "componentRenders": 1223,
+      "componentRenders": 809,
       "canvasPosts": 0
     },
     "ui:builder-scrub-size": {
@@ -1119,7 +1119,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 3561,
+      "componentRenders": 1744,
       "canvasPosts": 20
     },
     "ui:builder-switch-page-device": {
@@ -1129,7 +1129,7 @@
       "jsRequests": 12,
       "jsKB": 9.9,
       "htmlTransferKB": 0,
-      "componentRenders": 863,
+      "componentRenders": 862,
       "canvasPosts": 1
     },
     "ui:builder-switch-theme": {
@@ -1149,7 +1149,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 844,
+      "componentRenders": 509,
       "canvasPosts": 1
     },
     "ui:builder-undo-redo": {
@@ -1159,7 +1159,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 3919,
+      "componentRenders": 2357,
       "canvasPosts": 20
     },
     "doc:designed:juniper": {

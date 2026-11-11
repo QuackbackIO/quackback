@@ -19,7 +19,7 @@
  * set for phones has a tinted dot and "Use all-screens value"; on all screens
  * a row whose phones differ has a tinted dot.
  */
-import { Fragment, useMemo, useState, type ReactNode } from 'react'
+import { memo, useMemo, useState, type ReactNode } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
 import {
   DropdownMenu,
@@ -107,6 +107,8 @@ import { ScrubNumber } from './properties/scrub-number'
 import { FontField, TokenField } from './properties/token-field'
 import { colourTokens, fontTokens, hexOf } from './properties/tokens'
 import type { Drawn } from './use-pick-reach'
+import { useSteadyHandlers } from './use-steady-handlers'
+import { sameProps, useSame } from './same-props'
 import { CHOICE_TILES, WORDS, everyOf, fromScope, resetTo } from './properties/words'
 
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -319,7 +321,7 @@ export function ElementPanel({
     return hexOf(css) ?? cssColourHex(css)
   }
   /** The second line, where what the canvas draws is not what the row has. */
-  const inUse = (prop: StyleProp, label: string, shown: unknown): ReactNode => {
+  const inUse = (prop: StyleProp, shown: unknown): RowNote | null => {
     if (!drawn) return null
     const kind = STYLE_PROPS[prop].kind
     const colour = kind === 'colour' || kind === 'paint'
@@ -348,193 +350,100 @@ export function ElementPanel({
           }
         : colourHex,
     })
-    if (!note) return null
-    // Used in dark mode, the colour drawn is dark mode's own.
-    const use = dark ? () => dark.onChange(String(note.value)) : () => write(prop, note.value)
-    return (
-      <p
-        data-in-use={label}
-        className={cn(
-          '-mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground',
-          ROW_INDENT
-        )}
-      >
-        <span className="min-w-0 truncate">{note.text}</span>
-        <button
-          type="button"
-          onClick={use}
-          className="shrink-0 rounded hover:text-foreground hover:underline focus-ring"
-        >
-          {WORDS.useThis}
-        </button>
-      </p>
-    )
+    return note && { ...note, dark: !!dark }
   }
+
+  /** The brand choice a row's tiles are, for every one. */
+  const choiceOf = (prop: StyleProp) =>
+    widest && state === 'base' ? rowChoiceOf(design, pick.element, prop) : undefined
+  const pickChoice = (prop: StyleProp, option: string) => {
+    const choice = choiceOf(prop)
+    if (choice)
+      update(
+        (draft) => applyChoice(draft, pick.element, choice, option),
+        undoName(elementRowLabel(prop).toLowerCase())
+      )
+  }
+  // The rows' handlers: one function each for the panel's life, so a row draws only when what it shows changes.
+  const handlers = useSteadyHandlers({
+    write,
+    // A choice whose options are values of the row's own control is that control, as on every element.
+    writeRow: (prop: StyleProp, value: unknown) => {
+      const option = sameOption(choiceOf(prop), value)
+      if (option) pickChoice(prop, option)
+      else write(prop, value)
+    },
+    writeDark: (prop: StyleProp, value: string | undefined) => darkOf(prop)?.onChange(value),
+    useNote: (prop: StyleProp, value: number | string, dark: boolean) => {
+      if (dark) darkOf(prop)?.onChange(String(value))
+      else write(prop, value)
+    },
+    gradient: (prop: StyleProp) =>
+      write(prop, {
+        from: (readHere(prop) as Extract<StylePaint, string> | undefined) ?? 'accent',
+        to: 'support',
+        angle: 135,
+      } satisfies StylePaint),
+    screen: (next: Screen) => onScreen?.(next),
+    state: onState,
+    tile: (prop: StyleProp, value: string) => {
+      setCustomOpen((open) => {
+        const next = new Set(open)
+        if (value === CUSTOM) next.add(prop)
+        else next.delete(prop)
+        return next
+      })
+      if (value !== CUSTOM) pickChoice(prop, value)
+    },
+  })
+  const steadyTokens = useSame(tokens)
+  const steadyFonts = useSame(fonts)
 
   const row = (prop: StyleProp): ReactNode => {
     if (!allowed(prop)) return null
     const info: StylePropInfo = STYLE_PROPS[prop]
-    const id = `style-${pick.element}-${state}-${prop}`
     const label = elementRowLabel(prop)
     const here = readHere(prop)
     const from = inherited(prop)
-    const resetLabel = from
-      ? resetTo(valueText(prop, from.value), from.from)
-      : `${WORDS.reset} ${label.toLowerCase()}`
-    // For every one, a brand choice that sets this property is its row's tiles, with Custom for the exact field.
-    const choice = widest && state === 'base' ? rowChoiceOf(design, pick.element, prop) : undefined
-    // A choice whose options are values of the row's own control is that control, as on every element.
-    const pickChoice = (option: string) =>
-      choice &&
-      update(
-        (draft) => applyChoice(draft, pick.element, choice, option),
-        undoName(label.toLowerCase())
-      )
-    const writeRow = (value: unknown) => {
-      const option = sameOption(choice, value)
-      if (option) pickChoice(option)
-      else write(prop, value)
-    }
-    const tiled = choice && !choice.same
-    const fieldLabel = tiled ? `${WORDS.custom} ${label.toLowerCase()}` : label
-    const control = (() => {
-      switch (info.kind) {
-        case 'paint':
-        case 'colour': {
-          if (typeof here === 'object' && here)
-            return <StyleField id={id} prop={prop} value={here} onChange={(v) => write(prop, v)} />
-          return (
-            <>
-              <TokenField
-                id={id}
-                label={fieldLabel}
-                value={here as string | undefined}
-                inherited={typeof from?.value === 'string' ? from.value : undefined}
-                tokens={tokens}
-                onChange={writeRow}
-                dark={darkOf(prop)}
-              />
-              {info.kind === 'paint' && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    write(prop, {
-                      from: (here as Extract<StylePaint, string> | undefined) ?? 'accent',
-                      to: 'support',
-                      angle: 135,
-                    } satisfies StylePaint)
-                  }
-                  className="min-w-0 truncate rounded text-2xs text-muted-foreground hover:text-foreground hover:underline focus-ring"
-                >
-                  Gradient
-                </button>
-              )}
-            </>
-          )
-        }
-        case 'number':
-          return (
-            <ScrubNumber
-              id={id}
-              label={fieldLabel}
-              value={typeof here === 'number' ? here : undefined}
-              inherited={typeof from?.value === 'number' ? from.value : undefined}
-              min={info.min}
-              max={info.max}
-              step={info.step}
-              unit={info.unit || undefined}
-              onChange={(v) => write(prop, v)}
-            />
-          )
-        case 'choice': {
-          if (prop === 'font')
-            return (
-              <FontField
-                id={id}
-                label={fieldLabel}
-                value={here === 'display' ? 'headline' : (here as string | undefined)}
-                inherited={
-                  from?.value === 'display' ? 'headline' : (from?.value as string | undefined)
-                }
-                slots={fonts}
-                onChange={(slot) => write(prop, slot === 'headline' ? 'display' : slot)}
-              />
-            )
-          const tiles = (CHOICE_TILES as Record<string, Record<string, string>>)[prop] ?? info.looks
-          return (
-            <PropertyTiles
-              id={id}
-              label={fieldLabel}
-              value={here as string | undefined}
-              inherited={from?.value as string | undefined}
-              options={Object.entries(tiles) as Array<[string, string]>}
-              onChange={writeRow}
-            />
-          )
-        }
-      }
-    })()
-    const second = inUse(prop, label, here ?? from?.value)
-    // Phones' own value: on a phone it can go back to all screens'; elsewhere a dot says it is there.
-    const phoneRow = {
-      phoneSet:
-        !phone &&
-        (PHONE_PROPS as readonly string[]).includes(prop) &&
-        readAt(design, ctx, at, 'phone', state, prop) !== undefined,
-      onUseAllScreens: phone ? () => write(prop, undefined) : undefined,
-    }
-    if (choice && tiled) {
-      const custom = here !== undefined || customOpen.has(prop)
-      return (
-        <Fragment key={`${state}-${prop}`}>
-          <PropertyRow
-            label={label}
-            find={elementRowFind(pick.element, prop)}
-            set={here !== undefined}
-            source={choice.reach ?? from?.from}
-            resetLabel={resetLabel}
-            onReset={() => write(prop, undefined)}
-            {...phoneRow}
-          >
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <PropertyTiles
-                id={`${id}-choice`}
-                label={label}
-                value={custom ? CUSTOM : choice.value || undefined}
-                options={[...choice.options, [CUSTOM, WORDS.custom]]}
-                onChange={(value) => {
-                  setCustomOpen((open) => {
-                    const next = new Set(open)
-                    if (value === CUSTOM) next.add(prop)
-                    else next.delete(prop)
-                    return next
-                  })
-                  if (value !== CUSTOM) pickChoice(value)
-                }}
-              />
-              {custom && <div className="flex min-w-0 items-center gap-1.5">{control}</div>}
-            </div>
-          </PropertyRow>
-          {second}
-        </Fragment>
-      )
-    }
+    const choice = choiceOf(prop)
+    const tiled = !!choice && !choice.same
+    const dark = info.kind === 'paint' || info.kind === 'colour' ? darkOf(prop) : undefined
     return (
-      <Fragment key={`${state}-${prop}`}>
-        <PropertyRow
-          label={label}
-          find={elementRowFind(pick.element, prop)}
-          htmlFor={info.kind === 'number' ? id : undefined}
-          set={here !== undefined}
-          source={from?.from}
-          resetLabel={resetLabel}
-          onReset={() => write(prop, undefined)}
-          {...phoneRow}
-        >
-          {control}
-        </PropertyRow>
-        {second}
-      </Fragment>
+      <ElementRow
+        key={`${state}-${prop}`}
+        prop={prop}
+        id={`style-${pick.element}-${state}-${prop}`}
+        label={label}
+        find={elementRowFind(pick.element, prop)}
+        here={here}
+        from={from}
+        resetLabel={
+          from
+            ? resetTo(valueText(prop, from.value), from.from)
+            : `${WORDS.reset} ${label.toLowerCase()}`
+        }
+        tiles={
+          tiled
+            ? {
+                value: here !== undefined || customOpen.has(prop) ? CUSTOM : choice.value || '',
+                options: choice.options,
+                reach: choice.reach,
+              }
+            : null
+        }
+        tokens={steadyTokens}
+        fonts={steadyFonts}
+        dark={dark ? { value: dark.value } : null}
+        note={inUse(prop, here ?? from?.value)}
+        // Phones' own value: on a phone it can go back to all screens'; elsewhere a dot says it is there.
+        phoneSet={
+          !phone &&
+          (PHONE_PROPS as readonly string[]).includes(prop) &&
+          readAt(design, ctx, at, 'phone', state, prop) !== undefined
+        }
+        phone={phone}
+        handlers={handlers}
+      />
     )
   }
 
@@ -655,9 +564,14 @@ export function ElementPanel({
           />
           {(onScreen || el.states.length > 1) && (
             <div className="flex flex-wrap items-center gap-1.5">
-              {onScreen && <ScreenChip value={screen} onChange={onScreen} />}
+              {onScreen && <ScreenChip value={screen} onChange={handlers.screen} />}
               {el.states.length > 1 && (
-                <StateChip states={el.states} value={state} onChange={onState} isSet={statesSet} />
+                <StateChip
+                  states={el.states}
+                  value={state}
+                  onChange={handlers.state}
+                  set={el.states.filter(statesSet)}
+                />
               )}
             </div>
           )}
@@ -690,6 +604,204 @@ export function ElementPanel({
   )
 }
 
+/** A row's second line: what the canvas draws, where it is not what the row has. */
+type RowNote = { text: string; value: number | string; dark: boolean }
+
+type RowHandlers = {
+  write: (prop: StyleProp, value: unknown) => void
+  writeRow: (prop: StyleProp, value: unknown) => void
+  writeDark: (prop: StyleProp, value: string | undefined) => void
+  useNote: (prop: StyleProp, value: number | string, dark: boolean) => void
+  gradient: (prop: StyleProp) => void
+  tile: (prop: StyleProp, value: string) => void
+}
+
+/**
+ * One property's row of the element panel: its control, its dot and Reset,
+ * and the second line where the canvas draws something else. Drawn again
+ * only when what it shows changes, not on every change to the design.
+ */
+const ElementRow = memo(function ElementRow({
+  prop,
+  id,
+  label,
+  find,
+  here,
+  from,
+  resetLabel,
+  tiles,
+  tokens,
+  fonts,
+  dark,
+  note,
+  phoneSet,
+  phone,
+  handlers,
+}: {
+  prop: StyleProp
+  id: string
+  label: string
+  find: string
+  /** The value set at this scope. */
+  here: unknown
+  /** What it has while nothing is set here, and where that comes from. */
+  from: { value: unknown; from: string } | null
+  resetLabel: string
+  /** For every one, the brand choice that sets it, as tiles with Custom for the exact field. */
+  tiles: {
+    value: string
+    options: ReadonlyArray<readonly [string, string]>
+    reach?: string
+  } | null
+  tokens: ReturnType<typeof colourTokens>
+  fonts: ReturnType<typeof fontTokens>
+  /** Its dark mode colour, where the row has one. */
+  dark: { value: string | undefined } | null
+  note: RowNote | null
+  phoneSet: boolean
+  phone: boolean
+  handlers: RowHandlers
+}) {
+  const info: StylePropInfo = STYLE_PROPS[prop]
+  const fieldLabel = tiles ? `${WORDS.custom} ${label.toLowerCase()}` : label
+  const write = (value: unknown) => handlers.write(prop, value)
+  const writeRow = (value: unknown) => handlers.writeRow(prop, value)
+  const control = (() => {
+    switch (info.kind) {
+      case 'paint':
+      case 'colour': {
+        if (typeof here === 'object' && here)
+          return <StyleField id={id} prop={prop} value={here} onChange={write} />
+        return (
+          <>
+            <TokenField
+              id={id}
+              label={fieldLabel}
+              value={here as string | undefined}
+              inherited={typeof from?.value === 'string' ? from.value : undefined}
+              tokens={tokens}
+              onChange={writeRow}
+              dark={
+                dark
+                  ? { value: dark.value, onChange: (value) => handlers.writeDark(prop, value) }
+                  : undefined
+              }
+            />
+            {info.kind === 'paint' && (
+              <button
+                type="button"
+                onClick={() => handlers.gradient(prop)}
+                className="min-w-0 truncate rounded text-2xs text-muted-foreground hover:text-foreground hover:underline focus-ring"
+              >
+                Gradient
+              </button>
+            )}
+          </>
+        )
+      }
+      case 'number':
+        return (
+          <ScrubNumber
+            id={id}
+            label={fieldLabel}
+            value={typeof here === 'number' ? here : undefined}
+            inherited={typeof from?.value === 'number' ? from.value : undefined}
+            min={info.min}
+            max={info.max}
+            step={info.step}
+            unit={info.unit || undefined}
+            onChange={write}
+          />
+        )
+      case 'choice': {
+        if (prop === 'font')
+          return (
+            <FontField
+              id={id}
+              label={fieldLabel}
+              value={here === 'display' ? 'headline' : (here as string | undefined)}
+              inherited={
+                from?.value === 'display' ? 'headline' : (from?.value as string | undefined)
+              }
+              slots={fonts}
+              onChange={(slot) => write(slot === 'headline' ? 'display' : slot)}
+            />
+          )
+        const options = (CHOICE_TILES as Record<string, Record<string, string>>)[prop] ?? info.looks
+        return (
+          <PropertyTiles
+            id={id}
+            label={fieldLabel}
+            value={here as string | undefined}
+            inherited={from?.value as string | undefined}
+            options={Object.entries(options) as Array<[string, string]>}
+            onChange={writeRow}
+          />
+        )
+      }
+    }
+  })()
+  const second = note && (
+    <p
+      data-in-use={label}
+      className={cn(
+        '-mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground',
+        ROW_INDENT
+      )}
+    >
+      <span className="min-w-0 truncate">{note.text}</span>
+      <button
+        type="button"
+        onClick={() => handlers.useNote(prop, note.value, note.dark)}
+        className="shrink-0 rounded hover:text-foreground hover:underline focus-ring"
+      >
+        {WORDS.useThis}
+      </button>
+    </p>
+  )
+  const rowProps = {
+    label,
+    find,
+    set: here !== undefined,
+    resetLabel,
+    onReset: () => write(undefined),
+    phoneSet,
+    onUseAllScreens: phone ? () => write(undefined) : undefined,
+  }
+  if (tiles) {
+    const custom = tiles.value === CUSTOM
+    return (
+      <>
+        <PropertyRow {...rowProps} source={tiles.reach ?? from?.from}>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <PropertyTiles
+              id={`${id}-choice`}
+              label={label}
+              value={tiles.value || undefined}
+              options={[...tiles.options, [CUSTOM, WORDS.custom]]}
+              onChange={(value) => handlers.tile(prop, value)}
+            />
+            {custom && <div className="flex min-w-0 items-center gap-1.5">{control}</div>}
+          </div>
+        </PropertyRow>
+        {second}
+      </>
+    )
+  }
+  return (
+    <>
+      <PropertyRow
+        {...rowProps}
+        htmlFor={info.kind === 'number' ? id : undefined}
+        source={from?.from}
+      >
+        {control}
+      </PropertyRow>
+      {second}
+    </>
+  )
+}, sameProps)
+
 /** How many values an element sets at a scope and screen, across its states. */
 function countAt(design: PortalDesign, ctx: ElementContext, at: ScopeName, screen: Screen) {
   if (!setsAt(design, ctx, at, screen)) return 0
@@ -704,7 +816,13 @@ function countAt(design: PortalDesign, ctx: ElementContext, at: ScopeName, scree
  * Which screens a change goes to, always in view under the scope line: all
  * screens, or phones, which shows the canvas as a phone. Phone is tinted.
  */
-function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Screen) => void }) {
+const ScreenChip = memo(function ScreenChip({
+  value,
+  onChange,
+}: {
+  value: Screen
+  onChange: (screen: Screen) => void
+}) {
   const options: Array<[Screen, string]> = [
     ['all', PHONE_WORDS.allScreens],
     ['phone', PHONE_WORDS.phone],
@@ -743,24 +861,26 @@ function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Scr
       })}
     </div>
   )
-}
+})
 
 /**
  * The state shown, as one quiet chip, "State: Normal", with a menu of the
  * element's states; a dot marks each that holds values, and the chip has one
  * when a state other than the one shown does.
  */
-function StateChip({
+const StateChip = memo(function StateChip({
   states,
   value,
   onChange,
-  isSet,
+  set,
 }: {
   states: readonly StyleState[]
   value: StyleState
   onChange: (state: StyleState) => void
-  isSet: (state: StyleState) => boolean
+  /** The states that hold values. */
+  set: readonly StyleState[]
 }) {
+  const isSet = (state: StyleState) => set.includes(state)
   const others = states.some((s) => s !== value && isSet(s))
   return (
     <DropdownMenu>
@@ -807,4 +927,4 @@ function StateChip({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
+}, sameProps)

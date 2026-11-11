@@ -50,7 +50,7 @@ import { TokenField } from './properties/token-field'
 import { colourTokens } from './properties/tokens'
 import { BLOCK_SECTIONS, BLOCK_TONES, BLOCK_WORDS, WORDS, resetTo } from './properties/words'
 import { editOnCanvas } from './words/edit-on-canvas'
-import { TextButton } from './text-button'
+import { TextButton, textButton } from './text-button'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -206,18 +206,24 @@ export function WordsRow({
         {shown ?? BLOCK_WORDS.none}
       </span>
       {onAdd && !shown ? (
-        <TextButton
-          className="flex items-center gap-0.5"
+        <button
+          type="button"
+          className={textButton({ className: 'flex items-center gap-0.5' })}
           aria-label={`${BLOCK_WORDS.add} ${label.toLowerCase()}`}
           onClick={onAdd}
         >
           <PlusIcon className="size-3" aria-hidden="true" />
           {BLOCK_WORDS.add}
-        </TextButton>
+        </button>
       ) : (
-        <TextButton aria-label={`${BLOCK_WORDS.edit} ${label.toLowerCase()}`} onClick={onEdit}>
+        <button
+          type="button"
+          className={textButton()}
+          aria-label={`${BLOCK_WORDS.edit} ${label.toLowerCase()}`}
+          onClick={onEdit}
+        >
           {BLOCK_WORDS.edit}
-        </TextButton>
+        </button>
       )}
     </PropertyRow>
   )
