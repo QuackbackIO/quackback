@@ -46,6 +46,7 @@ export const TREATMENT_PATHS = [
   'brand.fonts.scale',
   'tune.headline.size',
   'tune.headline.weight',
+  'tune.headline.tracking',
   'tune.button.radius',
   'tune.card.radius',
   'tune.card.shadow',
@@ -242,16 +243,17 @@ const bestInk = (fill: string) =>
 
 /** A colour this grey has no hue to tint with. */
 const GREY = 0.03
+/** The tightest a headline set heavier than the brand's is tracked, in em. */
+const LOOSEST_HEAVY = -0.015
 /** Text on a band reads clearly from here (APCA Lc), comfortably above the AA ratio. */
 const CLEAR = 60
 
-/** Writes the hero's look: its kind, shape and colour, its art and glow kept only where asked. */
+/** Writes the hero's look: its kind, shape and colour, with no art or glow. */
 function setHero(
   doc: PortalDesign,
   hero: 'tint' | 'brand' | 'support',
   shape: 'full' | 'inset',
-  role: ColourRole,
-  keepArt: boolean
+  role: ColourRole
 ): void {
   const layout = doc.layout as Tree
   layout.hero = hero
@@ -260,11 +262,9 @@ function setHero(
   else layout.heroShape = shape
   if (role === 'accent' || hero === 'support') delete layout.heroColour
   else layout.heroColour = role
-  if (!keepArt) {
-    delete layout.heroArt
-    delete layout.heroGlow
-    delete layout.heroGlowColour
-  }
+  delete layout.heroArt
+  delete layout.heroGlow
+  delete layout.heroGlowColour
 }
 
 /**
@@ -281,7 +281,7 @@ function soft(base: PortalDesign): PortalDesign {
     const coloured = designRoles(base).find((r) => lchOf(roleColour(base, r)).c >= GREY * 2)
     if (coloured) role = coloured
   }
-  setHero(doc, 'tint', 'inset', role, false)
+  setHero(doc, 'tint', 'inset', role)
   delete doc.layout.headerOnHero
   doc.layout.density = 'spacious'
   doc.shape.corners = 'pill'
@@ -308,7 +308,8 @@ function soft(base: PortalDesign): PortalDesign {
  * Vivid: the hero filled with the brand colour (or the hero's own colour, or
  * the second colour where the brand colour reads poorly under text and the
  * second reads clearly), full width; the header on it where its text is
- * light; a bigger, heavier headline; small corners; flat cards; vote boxes
+ * light, as a flat fill (no glow or art); a bigger, heavier headline, a
+ * little looser where the brand sets it tight; small corners; flat cards; vote boxes
  * filled with the brand colour. Where Matched already fills the hero, Vivid
  * goes further so the three stay apart: the header always on the hero, a
  * taller hero and a bigger headline still.
@@ -324,7 +325,8 @@ function vivid(base: PortalDesign): PortalDesign {
     )
     if (clearer) role = clearer
   }
-  setHero(doc, base.layout.hero === 'support' ? 'support' : 'brand', 'full', role, filled)
+  // A flat fill: a glow or art lightens part of it, where large words would lose their contrast.
+  setHero(doc, base.layout.hero === 'support' ? 'support' : 'brand', 'full', role)
   const fill = roleColour(base, role)
   const photo = !!base.brand.heroImage
   if (already || (!isLight(fill) && !photo)) doc.layout.headerOnHero = true
@@ -340,11 +342,12 @@ function vivid(base: PortalDesign): PortalDesign {
   setCorners(doc, button, field, card)
   const size = headlineSize(base)
   const grow = already ? 1.3 : 1.18
-  setHeadline(
-    doc,
-    Math.max(size, Math.min(Math.round(size * grow), 96)),
-    headlineWeightNear(base, Math.min(800, Math.max(headlineWeight(base) + 200, 700)))
-  )
+  const weight = headlineWeightNear(base, Math.min(800, Math.max(headlineWeight(base) + 200, 700)))
+  setHeadline(doc, Math.max(size, Math.min(Math.round(size * grow), 96)), weight)
+  // Heavier letters set as tight touch; they get a little more room.
+  const tracking = base.tune?.headline?.tracking
+  if (tracking !== undefined && tracking < LOOSEST_HEAVY && weight > headlineWeight(base))
+    doc.tune!.headline!.tracking = LOOSEST_HEAVY
   ;(doc.tune ??= {}).card = { ...doc.tune.card, shadow: 'none' }
   // The cast vote turns to the text colour; where that is the brand colour too, an edge marks it.
   const inkIsBrand = oklabDistance(base.brand.light.accent, base.brand.light.ink) < 0.12

@@ -180,6 +180,26 @@ describe('lookVariants', () => {
     expect(byId(lookVariants(base), 'soft').layout.heroColour).toBeUndefined()
   })
 
+  it('draws Vivid’s hero as a flat fill, without the glow or art that would lighten part of it', () => {
+    const base = filledBrand()
+    base.layout.heroGlow = 'bottom'
+    base.layout.heroArt = 'waves'
+    const vivid = byId(lookVariants(base), 'vivid')
+    expect(vivid.layout.heroGlow).toBeUndefined()
+    expect(vivid.layout.heroArt).toBeUndefined()
+  })
+
+  it('gives Vivid’s heavier headline a little more room where the brand tracks it tight', () => {
+    const base = matchedBrand()
+    base.tune!.headline!.tracking = -0.04
+    expect(byId(lookVariants(base), 'vivid').tune!.headline!.tracking).toBe(-0.015)
+    base.tune!.headline!.tracking = -0.01
+    expect(byId(lookVariants(base), 'vivid').tune!.headline!.tracking).toBe(-0.01)
+    // Soft is lighter, so it keeps the brand's tracking.
+    base.tune!.headline!.tracking = -0.04
+    expect(byId(lookVariants(base), 'soft').tune!.headline!.tracking).toBe(-0.04)
+  })
+
   it('takes a headline’s face’s own weights, never a faked one', () => {
     const base = matchedBrand()
     // Oswald has no 300, so Soft's lighter headline is the lightest it has near 300.
