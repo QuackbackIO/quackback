@@ -200,7 +200,7 @@ export function RoadmapBoard({
                 id: 'portal.roadmap.columns.scrollLeft',
                 defaultMessage: 'Scroll columns left',
               })}
-              className="absolute start-0 top-0 bottom-4 flex items-center ps-1 pe-10 bg-gradient-to-r from-background/70 to-transparent z-10"
+              className="absolute start-0 top-0 bottom-4 flex items-start pt-6 ps-1 pe-10 bg-gradient-to-r from-background/70 to-transparent z-10"
             >
               <ChevronLeftIcon className="w-5 h-5 text-muted-foreground" />
             </button>
@@ -213,7 +213,7 @@ export function RoadmapBoard({
                 id: 'portal.roadmap.columns.scrollRight',
                 defaultMessage: 'Scroll columns right',
               })}
-              className="absolute end-0 top-0 bottom-4 flex items-center pe-1 ps-10 bg-gradient-to-l from-background/70 to-transparent z-10"
+              className="absolute end-0 top-0 bottom-4 flex items-start pt-6 pe-1 ps-10 bg-gradient-to-l from-background/70 to-transparent z-10"
             >
               <ChevronRightIcon className="w-5 h-5 text-muted-foreground" />
             </button>
