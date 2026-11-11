@@ -18,11 +18,11 @@ describe('mcpOauthResourceSeedRow', () => {
 })
 
 describe('ensureMcpOauthResource', () => {
-  it('inserts with ON CONFLICT DO NOTHING on identifier', async () => {
-    const onConflictDoNothing = vi.fn(async () => undefined)
-    const values = vi.fn(() => ({ onConflictDoNothing }))
+  it('inserts the row, and brings the scopes of an existing one up to date', async () => {
+    const onConflictDoUpdate = vi.fn(async (_args: Record<string, unknown>) => undefined)
+    const values = vi.fn(() => ({ onConflictDoUpdate }))
     const insert = vi.fn(() => ({ values }))
-    const table = { identifier: { name: 'identifier' } }
+    const table = { identifier: { name: 'identifier' }, allowedScopes: { name: 'allowed_scopes' } }
 
     await ensureMcpOauthResource({
       db: { insert } as never,
@@ -38,6 +38,10 @@ describe('ensureMcpOauthResource', () => {
         allowedScopes: [...SCOPES],
       })
     )
-    expect(onConflictDoNothing).toHaveBeenCalledWith({ target: table.identifier })
+    const conflict = onConflictDoUpdate.mock.calls[0][0]
+    expect(conflict.target).toBe(table.identifier)
+    expect(conflict.set).toEqual({ allowedScopes: [...SCOPES], updatedAt: expect.any(Date) })
+    // Only a row whose scopes differ is written.
+    expect(conflict.setWhere).toBeDefined()
   })
 })
