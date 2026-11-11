@@ -1,7 +1,7 @@
 {
   "name": "@quackback/widget",
   "version": "0.1.6",
-  "license": "AGPL-3.0",
+  "license": "MIT",
   "description": "Official SDK for the Quackback feedback widget. Embed Quackback in your app.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -31,7 +31,8 @@
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsup && tsc --emitDeclarationOnly",
