@@ -19,6 +19,7 @@
  * | `unknown_host` — no record claims this hostname | 404, "no workspace here" page | none |
  * | `redirect` — obsolete friendly platform hostname | 308 for GET/HEAD, 409 otherwise | none |
  * | `suspended` because deleted — in its restore window | 404, "isn't available" page | none |
+ * | `suspended` as a takedown — fraud, spam, prohibited content, a legal request | 404, "isn't available" page | none |
  * | `suspended` for any other reason — paused | 503 + `Retry-After`, "paused" page; the reason is never shown | none |
  * | `deleting` — teardown in flight | 410, "isn't available" page | none |
  * | `invalid` — a record exists but fails the contract | 503, alert | none |
@@ -43,6 +44,23 @@ import { isIdentityFailureCode, isKeyCustodyFailureCode } from './fingerprint'
 import { acquireScopeForHost } from './resolver'
 import { requestWorkspaceHost } from './saas-edge-host'
 import { runWithWorkspaceScope } from './workspace-context'
+
+/**
+ * Suspension reasons a visitor reads as "gone", not "paused".
+ *
+ * `deleted` is a workspace in its restore window. The rest are the control
+ * plane's takedown reasons (its lib/suspension-reasons.ts, `portal:
+ * 'unavailable'`): a page posing as another company's sign-in must not tell its
+ * visitors to come back in an hour. A reason this build does not know falls
+ * through to "paused", which is the safe reading of an unknown code.
+ */
+const GONE_REASONS: ReadonlySet<string> = new Set([
+  'deleted',
+  'fraud',
+  'spam',
+  'prohibited_content',
+  'legal',
+])
 
 /** Cache-Control on every refusal: a routing decision must never be cached. */
 const NO_STORE = { 'cache-control': 'no-store' } as const
@@ -146,9 +164,9 @@ export async function resolveWorkspaceAndContinue<T>({
       )
       // The reason goes to the log, never to the visitor: they are the
       // workspace's customers, and a billing or moderation reason is not theirs
-      // to read. A deleted workspace is gone as far as they can tell; any other
-      // suspension is a pause the team can lift.
-      if (acquisition.reason === 'deleted') {
+      // to read. A deleted workspace is gone as far as they can tell, and so is
+      // one taken down; any other suspension is a pause the team can lift.
+      if (GONE_REASONS.has(acquisition.reason)) {
         return unavailableResponse(request, 'deleted', { status: 404, host: acquisition.hostname })
       }
       return unavailableResponse(request, 'paused', {
