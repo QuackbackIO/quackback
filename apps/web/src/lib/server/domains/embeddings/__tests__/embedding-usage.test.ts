@@ -52,6 +52,9 @@ async function embeddingRows(step: string) {
   return []
 }
 
+/** The column width: narrower vectors are refused without AI_EMBEDDING_ZERO_PAD. */
+const VECTOR = new Array(1536).fill(0.1)
+
 describe.skipIf(!fixture.available)('embedding usage accounting', () => {
   // One server for the file: the provider client is cached per process, so
   // it keeps the first base URL it saw.
@@ -65,7 +68,7 @@ describe.skipIf(!fixture.available)('embedding usage accounting', () => {
         res.end(
           JSON.stringify({
             object: 'list',
-            data: [{ object: 'embedding', index: 0, embedding: [0.1, 0.2] }],
+            data: [{ object: 'embedding', index: 0, embedding: VECTOR }],
             model: 'test-embedding-model',
             ...(provider.usage ? { usage: provider.usage } : {}),
           })
@@ -90,7 +93,7 @@ describe.skipIf(!fixture.available)('embedding usage accounting', () => {
   })
 
   it('records a call made without a log context under its own step', async () => {
-    expect(await generateEmbedding('dark mode please')).toEqual([0.1, 0.2])
+    expect(await generateEmbedding('dark mode please')).toEqual(VECTOR)
     const rows = await embeddingRows('embedding_query')
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ callType: 'embedding', totalTokens: 7, status: 'success' })
