@@ -16,7 +16,7 @@ import type { PortalWelcomeCard as PortalWelcomeCardData } from '@/lib/shared/ty
 import { portalDefaultSort, savedWelcomeCard } from '@/lib/shared/design/view'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import type { FeedSearch } from '@/components/public/feedback/feed-route'
-import { portalDataParams } from '@/components/public/feedback/portal-data-params'
+import { portalDataParams, postsFetchedFor } from '@/components/public/feedback/portal-data-params'
 
 /** The feed's search, wherever the feed shows. */
 const useFeedSearch = () => useSearch({ strict: false }) as FeedSearch
@@ -138,7 +138,7 @@ function PortalFeed() {
       boardPermissions={portalData.boardPermissions}
       facets={portalData.facets}
       searchMode={'searchMode' in portalData.posts ? portalData.posts.searchMode : undefined}
-      postsFilters={search}
+      postsFilters={postsFetchedFor(search, defaultSort)}
     />
   )
 }
