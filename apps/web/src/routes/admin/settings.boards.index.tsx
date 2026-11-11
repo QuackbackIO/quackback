@@ -10,7 +10,6 @@ import { BoardsList } from '@/components/admin/settings/boards/boards-list'
 import { boardTabSearch } from '@/components/admin/settings/boards/board-tabs'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { FeedbackEmailCard } from '@/components/admin/settings/boards/feedback-email-card'
-import { surfaceSenderQuery } from '@/lib/client/queries/channel-accounts'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
@@ -39,6 +38,8 @@ export const Route = createFileRoute('/admin/settings/boards/')({
   },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.BOARD_MANAGE)
+    // Loaded here, not imported above, so it stays out of every page's script.
+    const { surfaceSenderQuery } = await import('@/lib/client/queries/channel-accounts')
     await Promise.all([
       context.queryClient.ensureQueryData(adminQueries.boardsWithCounts()),
       // The Email card's "Sent from" line, so it renders from the document.
