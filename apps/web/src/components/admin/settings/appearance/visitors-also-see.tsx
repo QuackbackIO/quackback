@@ -22,7 +22,7 @@ export function VisitorsAlsoSee({ design }: { design?: PortalDesign }) {
       <h3 id="visitors-also-see" className="text-sm font-semibold">
         Visitors also get, after you publish
       </h3>
-      <div className="grid max-w-3xl gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-[repeat(2,minmax(0,23.5rem))]">
         <SignInEmailSample />
         {design && (
           <div className="flex min-w-0 flex-col gap-1.5">
