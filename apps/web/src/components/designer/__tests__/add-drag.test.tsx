@@ -207,13 +207,14 @@ describe('dragging a block from Add', () => {
   it('shows a block Home holds once and has as used, and it does not drag', () => {
     const { card, say } = show()
     const updates = card(/^Latest updates/)
-    expect(updates.textContent).toContain('Already on Home')
+    // One status word for every block on Home; a block it holds once is greyed.
+    expect(updates.querySelector('[data-card-tag]')?.textContent).toBe('On Home')
     expect(updates.hasAttribute('disabled')).toBe(true)
     drag(updates, [1250, 120])
     expect(dragged()).toBeNull()
     expect(say).not.toHaveBeenCalled()
     // Top posts can repeat: on Home, and it still drags.
-    expect(card(/^Top posts/).textContent).toContain('on Home')
+    expect(card(/^Top posts/).textContent).toContain('On Home')
     expect(card(/^Top posts/).hasAttribute('disabled')).toBe(false)
   })
 })

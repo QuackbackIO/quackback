@@ -58,6 +58,9 @@ const ALL_PAGES: PortalPageGates = {
  * Look; a section's has its Content and the elements it draws. An element
  * picked from Look opens the element panel in place, with the block in its trail.
  */
+/** What the Recently shipped row's button does, as a verb. */
+export const SHOW_SHIPPED = 'Show shipped posts'
+
 export function PickedBlock({
   selection,
   crumbs,
@@ -334,26 +337,30 @@ export function PickedBlock({
                 onChange={(value) => set('statusIds', value)}
               />
               <PropertyRow label={FIND.recentlyShipped.label} find={FIND.recentlyShipped.id}>
-                <button
-                  type="button"
-                  disabled={shipped.length === 0}
-                  title={shipped.length ? undefined : 'No statuses in the Complete category yet'}
-                  onClick={() => {
-                    // The shipped statuses, newest first, as one step.
-                    const done = dispatch(
-                      {
-                        op: 'block.setEach',
-                        block: index,
-                        settings: { statusIds: shipped.slice(0, 12), sort: 'new' },
-                      },
-                      `${name}: ${FIND.recentlyShipped.label.toLowerCase()}`
-                    )
-                    if (!done.ok) say(done.refusal)
-                  }}
-                  className="rounded text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none disabled:opacity-50"
-                >
-                  Use
-                </button>
+                {shipped.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">
+                    No statuses in the Complete category yet
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // The shipped statuses, newest first, as one step.
+                      const done = dispatch(
+                        {
+                          op: 'block.setEach',
+                          block: index,
+                          settings: { statusIds: shipped.slice(0, 12), sort: 'new' },
+                        },
+                        `${name}: ${FIND.recentlyShipped.label.toLowerCase()}`
+                      )
+                      if (!done.ok) say(done.refusal)
+                    }}
+                    className="inline-flex h-6 items-center rounded-md border border-border px-2 text-xs hover:bg-muted focus-ring"
+                  >
+                    {SHOW_SHIPPED}
+                  </button>
+                )}
               </PropertyRow>
             </>
           )

@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { WORDS } from './properties/words'
 import type { DesignCheck } from '@/lib/shared/design/checks'
 import type { Selection } from '@/lib/shared/design/outline'
 import type { PublishSummary, SummaryRow } from '@/lib/shared/design/publish-summary'
@@ -24,19 +25,19 @@ function Checks({
 }) {
   if (!checks.length)
     return (
-      <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-ui text-muted-foreground">
         <CheckIcon className="size-4 text-success" aria-hidden="true" />
         Every check passes
       </p>
     )
   return (
     <section aria-labelledby="summary-checks" className="space-y-1">
-      <h3 id="summary-checks" className="text-[13px] font-medium">
+      <h3 id="summary-checks" className="text-ui font-medium">
         {checks.length === 1 ? '1 thing to check' : `${checks.length} things to check`}
       </h3>
       <ul className="divide-y divide-border border-t border-border">
         {checks.map((check) => (
-          <li key={check.id} className="flex items-start gap-2 py-2 text-[13px]">
+          <li key={check.id} className="flex items-start gap-2 py-2 text-ui">
             <ExclamationTriangleIcon
               className="mt-0.5 size-3.5 shrink-0 text-warning"
               aria-hidden="true"
@@ -63,10 +64,10 @@ function Rows({ title, rows }: { title: string; rows: SummaryRow[] }) {
   if (!rows.length) return null
   return (
     <section className="space-y-1">
-      <h3 className="text-[13px] font-medium">{title}</h3>
+      <h3 className="text-ui font-medium">{title}</h3>
       <dl className="divide-y divide-border border-t border-border">
         {rows.map((row, at) => (
-          <div key={at} className="grid grid-cols-[6rem_1fr] gap-3 py-2 text-[13px]">
+          <div key={at} className="grid grid-cols-[6rem_1fr] gap-3 py-2 text-ui">
             <dt className="text-muted-foreground">{row.kind}</dt>
             <dd>
               <span className="block font-medium">{row.title}</span>
@@ -113,6 +114,15 @@ export function PublishSummaryDialog({
   const [workspaceLogo, setWorkspaceLogo] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
+  // Published, it closes as it was, still publishing; opened again, it starts afresh.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setPublishing(false)
+      setWorkspaceLogo(false)
+    }
+  }
   const publish = async () => {
     setPublishing(true)
     setRefusal(null)
@@ -120,9 +130,10 @@ export function PublishSummaryDialog({
       ok: false as const,
       message: 'Publishing did not reach the server. Try again.',
     }))
-    setPublishing(false)
-    if (!outcome.ok) return setRefusal(outcome.message)
-    setWorkspaceLogo(false)
+    if (!outcome.ok) {
+      setPublishing(false)
+      return setRefusal(outcome.message)
+    }
     onOpenChange(false)
   }
   return (
@@ -137,7 +148,7 @@ export function PublishSummaryDialog({
         <div className="-mx-1 min-h-0 space-y-4 overflow-y-auto px-1">
           <Rows title="Menu and landing" rows={summary.menu} />
           <Rows title="Look and words" rows={summary.look} />
-          <Rows title="Overrides" rows={summary.overrides} />
+          <Rows title={WORDS.setDifferently} rows={summary.overrides} />
           {newLogo && (
             <div className="flex items-start gap-2 rounded-lg border border-border p-3">
               <Checkbox
@@ -146,7 +157,7 @@ export function PublishSummaryDialog({
                 onCheckedChange={(checked) => setWorkspaceLogo(checked === true)}
                 className="mt-0.5"
               />
-              <label htmlFor="summary-workspace-logo" className="text-[13px]">
+              <label htmlFor="summary-workspace-logo" className="text-ui">
                 <span className="block font-medium">
                   Also use the new logo in the admin and emails
                 </span>
@@ -158,7 +169,7 @@ export function PublishSummaryDialog({
           )}
           <Checks checks={checks} onShow={onShowCheck} />
           {refusal && (
-            <p role="alert" className="text-[13px] text-destructive">
+            <p role="alert" className="text-ui text-destructive">
               {refusal}
             </p>
           )}
@@ -179,13 +190,4 @@ export function PublishSummaryDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-/** Why the full review opened in place of the summary, read out as it opens. */
-export function fullReviewReason(count: number, failing: number): string {
-  if (failing > 0)
-    return failing === 1
-      ? 'A check needs a look before you publish, so here is everything.'
-      : `${failing} checks need a look before you publish, so here is everything.`
-  return `${count} changes is a lot to sum up, so here is everything.`
 }

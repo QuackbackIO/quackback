@@ -281,6 +281,13 @@ describe('the hero’s panel shows', () => {
     expect(heroSettingShown('glow', design, 'home')).toBe(false)
   })
 
+  it('a height on Home only, and not for a plain hero, whose room under the header is fixed', () => {
+    const coloured = set(defaultDesign(), 'look', 'brand')
+    expect(heroSettingShown('height', coloured, 'home')).toBe(true)
+    expect(heroSettingShown('height', coloured, 'feedback')).toBe(false)
+    expect(heroSettingShown('height', set(coloured, 'look', 'plain'), 'home')).toBe(false)
+  })
+
   it('the main action on Home only', () => {
     const design = defaultDesign()
     expect(heroSettingShown('mainAction', design, 'home')).toBe(true)

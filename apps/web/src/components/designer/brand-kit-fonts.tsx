@@ -4,7 +4,7 @@
  * weight as tiles, and an upload of the brand's own. Fonts no pair makes,
  * such as a website's, show as Custom and stay until a pair is picked.
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
@@ -19,7 +19,14 @@ import { FONT_PAIRS, fontPairOf, takeFontPair } from '@/lib/shared/design/curate
 import { BUNDLED_FONTS, closestWeight, fontStack } from '@/lib/shared/design/fonts'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
-import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
+import {
+  PICKED_TILE,
+  PropertyRow,
+  PropertySection,
+  PropertyTiles,
+  Tip,
+} from './properties/properties-panel'
+import { onRadioKeys, radioTabIndex } from '@/components/admin/settings/appearance/radio-keys'
 import { FIND, headingWeightsOf } from './find-rows'
 import { FIND_ROOTS, revealRow } from './find-reveal'
 import { FontFaces } from './properties/token-field'
@@ -55,13 +62,15 @@ type DesignFont = PortalDesign['brand']['fonts']['body']
 type HeadingWeight = PortalDesign['brand']['fonts']['headingWeight']
 
 const trigger =
-  'flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-start text-xs hover:border-border hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
+  'flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-start text-xs hover:border-border hover:bg-muted focus-ring'
 
 /** The pair as tiles, each "Aa" in its heading face over its body face. */
 function PairPicker({ design, update }: { design: PortalDesign; update: Update }) {
   const [open, setOpen] = useState(false)
   const current = fontPairOf(design)
   const name = FONT_PAIRS.find((pair) => pair.id === current)?.label ?? THEME.custom
+  const none = !FONT_PAIRS.some((pair) => pair.id === current)
+  const arrowing = useRef(false)
   return (
     <Popover
       open={open}
@@ -72,47 +81,58 @@ function PairPicker({ design, update }: { design: PortalDesign; update: Update }
     >
       <PopoverTrigger asChild>
         <button id="kit-font-pair" type="button" className={trigger}>
-          <span className="truncate">{name}</span>
+          <span className="truncate" title={name}>
+            {name}
+          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-2" aria-label={THEME.pair}>
-        <div role="radiogroup" aria-label={THEME.pair} className="grid grid-cols-3 gap-1.5">
-          {FONT_PAIRS.map((pair) => {
+        <div
+          role="radiogroup"
+          aria-label={THEME.pair}
+          onKeyDown={(event) => {
+            arrowing.current = true
+            onRadioKeys(event)
+            arrowing.current = false
+          }}
+          className="grid grid-cols-3 gap-1.5"
+        >
+          {FONT_PAIRS.map((pair, index) => {
             const heading = BUNDLED_FONTS[pair.heading]
             const body = BUNDLED_FONTS[pair.body]
             const on = pair.id === current
+            const faces =
+              heading.label === body.label ? heading.label : `${heading.label} and ${body.label}`
             return (
-              <button
-                key={pair.id}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                aria-label={pair.label}
-                title={
-                  heading.label === body.label
-                    ? heading.label
-                    : `${heading.label} and ${body.label}`
-                }
-                onClick={() => {
-                  if (!on) update((draft) => takeFontPair(draft, pair.id))
-                  setOpen(false)
-                }}
-                className={cn(
-                  'flex flex-col items-start gap-0.5 rounded-md border p-2 text-start focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
-                  on ? 'border-foreground bg-muted' : 'border-border hover:bg-muted/60'
-                )}
-              >
-                <span className="text-lg leading-none" style={{ fontFamily: heading.stack }}>
-                  Aa
-                </span>
-                <span
-                  className="text-[11px] text-muted-foreground"
-                  style={{ fontFamily: body.stack }}
+              <Tip key={pair.id} text={faces}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  aria-label={pair.label}
+                  tabIndex={radioTabIndex(on, none, index)}
+                  onClick={() => {
+                    if (!on) update((draft) => takeFontPair(draft, pair.id))
+                    // Arrows pick and stay open, so the pairs can be tried one after another.
+                    if (!arrowing.current) setOpen(false)
+                  }}
+                  className={cn(
+                    'flex flex-col items-start gap-0.5 rounded-md border p-2 text-start focus-ring',
+                    on ? PICKED_TILE : 'border-border hover:bg-muted/60'
+                  )}
                 >
-                  Aa
-                </span>
-                <span className="text-[11px] font-medium">{pair.label}</span>
-              </button>
+                  <span className="text-lg leading-none" style={{ fontFamily: heading.stack }}>
+                    Aa
+                  </span>
+                  <span
+                    className="text-2xs text-muted-foreground"
+                    style={{ fontFamily: body.stack }}
+                  >
+                    Aa
+                  </span>
+                  <span className="text-2xs font-medium">{pair.label}</span>
+                </button>
+              </Tip>
             )
           })}
         </div>
@@ -159,7 +179,7 @@ function FaceValue({
         >
           <span
             aria-hidden="true"
-            className="text-[13px] leading-none"
+            className="text-ui leading-none"
             style={{ fontFamily: fontStack(shown) }}
           >
             Aa

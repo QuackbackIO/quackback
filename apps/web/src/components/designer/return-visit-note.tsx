@@ -22,7 +22,7 @@ export function ReturnVisitNote({
   if (!since || kept) return null
   const sameYear = since.getFullYear() === now.getFullYear()
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-muted px-3 py-2 text-[13px]">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-muted px-3 py-2 text-ui">
       <p className="me-auto">
         Your draft is from{' '}
         <LocalDate

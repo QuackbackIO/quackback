@@ -99,11 +99,20 @@ describe('the hero’s frame', () => {
     expect(screen.queryByText('This page')).toBeNull()
   })
 
-  it('narrows to just this page on Home alone, saying why elsewhere', () => {
+  it('narrows to just this page on Home alone, saying why elsewhere', async () => {
     show(defaultDesign(), 'roadmap')
     const narrow = screen.getByRole('button', { name: 'Just this page' }) as HTMLButtonElement
-    expect(narrow.disabled).toBe(true)
-    expect(narrow.title).toBe('Only Home can keep an image of its own')
+    // Not pickable, yet still focusable, so its tip says why from the keyboard too.
+    expect(narrow.getAttribute('aria-disabled')).toBe('true')
+    expect(narrow.disabled).toBe(false)
+    expect(narrow.hasAttribute('title')).toBe(false)
+    const before = line()
+    fireEvent.click(narrow)
+    expect(line()).toBe(before)
+    fireEvent.focus(narrow)
+    expect(
+      (await screen.findAllByText('Only Home can keep an image of its own')).length
+    ).toBeGreaterThan(0)
   })
 
   it('has no words fields: the headline and subtitle are edited on the page', () => {
@@ -193,6 +202,7 @@ describe('Layout', () => {
   it('sets height, alignment and shape as tiles, each its own step, with a dot and Reset', () => {
     const start = defaultDesign()
     start.nav.home.on = true
+    start.layout.hero = 'brand'
     const { seen } = show(start, 'home')
     expect(names('Height')).toEqual(['Short', 'Roomy', 'Tall'])
     expect(names('Alignment')).toEqual(['Start', 'Centre'])
@@ -333,11 +343,11 @@ describe('Main action', () => {
     start.pages.home.mainAction = 'button'
     show(start, 'home', { ...ALL_ON, help: false, roadmap: false })
     expect(names('Main action')).toEqual(['Composer', 'Button', 'None'])
-    expect(screen.getByRole('button', { name: 'Search needs the help centre on.' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Search needs the Help Center on.' })).toBeTruthy()
     expect(names('Goes to')).toEqual(['Composer', 'Support'])
     expect(
       screen.getByRole('button', {
-        name: 'The roadmap needs to be on for a button to go there. The help centre needs to be on for a button to go there.',
+        name: 'The roadmap needs to be on for a button to go there. The Help Center needs to be on for a button to go there.',
       })
     ).toBeTruthy()
   })
@@ -385,10 +395,30 @@ describe('Home first', () => {
   it('leads Home’s hero with its main action, then its look, image and height', () => {
     const start = defaultDesign()
     start.nav.home.on = true
+    start.layout.hero = 'brand'
     show(start, 'home')
     expect(sections()).toEqual(['Main action', 'Look', 'Image', 'Layout'])
     expect(names('Height')).toEqual(['Short', 'Roomy', 'Tall'])
     expect(within(group('Height')).getByRole('radio', { name: 'Roomy' })).toBeTruthy()
+  })
+
+  it('draws the Look tiles in the design’s own colours, not the builder’s', () => {
+    const start = defaultDesign()
+    start.nav.home.on = true
+    start.brand.light.accent = '#c6ff00'
+    start.brand.light.ink = '#0b1b3a'
+    show(start, 'home')
+    const drawing = document.querySelector<HTMLElement>('[data-look-drawing]')!
+    expect(drawing.style.getPropertyValue('--primary')).toBe('#c6ff00')
+    expect(drawing.style.getPropertyValue('--foreground')).toBe('#0b1b3a')
+  })
+
+  it('offers no height for a plain hero, where it would change nothing', () => {
+    const start = defaultDesign()
+    start.nav.home.on = true
+    start.layout.hero = 'none'
+    show(start, 'home')
+    expect(screen.queryByRole('radiogroup', { name: 'Height' })).toBeNull()
   })
 
   it('gives the list pages Home’s look at a fixed height, with no height to set', () => {

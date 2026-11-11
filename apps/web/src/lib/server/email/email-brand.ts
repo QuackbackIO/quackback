@@ -15,6 +15,7 @@ import {
   type FeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
 import { getEmailSafeUrl } from '@/lib/server/storage/s3'
+import { contrastRatio } from '@/lib/shared/design/contrast'
 import { emailIconKey, emailPalette } from '@/lib/shared/design/email-palette'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -100,12 +101,25 @@ export function designEmailBranding(
   const icon = emailIconKey(doc)
   const drawn = drawnBrandUrl(doc, workspaceName)
   const title = doc.brand.logo.name?.trim() || workspaceName || undefined
+  const header = headerImage(icon, drawn, logoKey)
+  const palette = emailPalette(doc)
   return {
     ...(title && { title }),
-    ...headerImage(icon, drawn, logoKey),
-    brand: emailPalette(doc),
+    ...header,
+    brand:
+      designLogo(header.logoUrl, [drawn.tile, workspaceLogo(logoKey)]) &&
+      doc.brand.logo.tone === 'light'
+        ? { ...palette, logoPlate: plateFor(palette.accent) }
+        : palette,
   }
 }
+
+/** Whether the header shows the design's own logo or icon: not the tile, the workspace logo or none. */
+const designLogo = (url: string | undefined, others: (string | undefined)[]) =>
+  !!url && !others.includes(url)
+
+/** Light ink reads on the brand colour where it is dark enough, else on near black. */
+const plateFor = (accent: string) => (contrastRatio('#ffffff', accent) >= 3 ? accent : '#18181b')
 
 export async function emailBranding(workspace: {
   /** The workspace's name, for the initial tile when the design has no title. */

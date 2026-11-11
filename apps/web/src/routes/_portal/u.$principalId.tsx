@@ -53,7 +53,7 @@ export const Route = createFileRoute('/_portal/u/$principalId')({
 
 function ProfileNotFound() {
   return (
-    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-16 text-center">
+    <div className="qb-page py-16 text-center">
       <p className="text-lg font-medium">
         <FormattedMessage id="portal.profile.notFound" defaultMessage="Profile not found" />
       </p>
@@ -87,7 +87,7 @@ function PublicProfilePage() {
   })
 
   return (
-    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-8 space-y-4">
+    <div className="qb-page py-8 space-y-4">
       {/* Profile header card */}
       <div className="rounded-xl border border-border/60 bg-card p-6 animate-in fade-in duration-200 fill-mode-backwards">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
@@ -153,9 +153,9 @@ function PublicProfilePage() {
       {/* Team-only context strip — renders only when the people.view query
           returned data. Never part of the public payload. */}
       {teamContext && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+        <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-            <span className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
+            <span className="text-xs font-medium uppercase tracking-wide text-warning">
               <FormattedMessage id="portal.profile.teamStrip.label" defaultMessage="Team only" />
             </span>
             {teamContext.email && <span className="text-foreground">{teamContext.email}</span>}

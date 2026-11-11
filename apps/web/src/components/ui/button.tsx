@@ -20,6 +20,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // Disabled in dark mode, a muted fill (globals.css, one rule rather than classes on every button).
         default:
           'bg-primary text-primary-foreground hover:bg-primary/90 hover:brightness-94 active:bg-primary/85',
         destructive:
@@ -35,11 +36,17 @@ const buttonVariants = cva(
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',
-        sm: 'h-8 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5 gap-1.5 px-3 text-[13px] has-[>svg]:px-2.5',
+        sm: 'h-8 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5 gap-1.5 px-3 text-ui has-[>svg]:px-2.5',
+        // Compact builder sizes. Same padding and gap as sm, so swapping an h-7 or h-6 override changes nothing.
+        xs: 'h-7 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5 gap-1.5 px-2 text-xs has-[>svg]:px-2.5',
+        '2xs':
+          'h-6 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5 gap-1.5 px-2 text-xs has-[>svg]:px-2.5',
         lg: 'h-11 px-6 has-[>svg]:px-5',
         icon: 'size-9',
         'icon-sm':
           'size-8 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5',
+        'icon-xs':
+          'size-6 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5',
         'icon-lg': 'size-11',
       },
     },

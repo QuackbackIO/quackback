@@ -50,12 +50,10 @@ import { TokenField } from './properties/token-field'
 import { colourTokens } from './properties/tokens'
 import { BLOCK_SECTIONS, BLOCK_TONES, BLOCK_WORDS, WORDS, resetTo } from './properties/words'
 import { editOnCanvas } from './words/edit-on-canvas'
+import { TextButton } from './text-button'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
-
-const quiet =
-  'shrink-0 rounded text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
 
 /** The words fields a block draws: its heading, and the words it keeps where they sit. */
 export const wordsFieldsOf = (type: string): SettingField[] =>
@@ -104,9 +102,7 @@ export function BlockWords({
             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
               {BLOCK_WORDS.holdsMore}
             </span>
-            <button type="button" className={quiet} onClick={() => setFull(true)}>
-              {BLOCK_WORDS.editHere}
-            </button>
+            <TextButton onClick={() => setFull(true)}>{BLOCK_WORDS.editHere}</TextButton>
           </PropertyRow>
         )
       const text = docText(body)
@@ -210,24 +206,18 @@ export function WordsRow({
         {shown ?? BLOCK_WORDS.none}
       </span>
       {onAdd && !shown ? (
-        <button
-          type="button"
-          className={cn(quiet, 'flex items-center gap-0.5')}
+        <TextButton
+          className="flex items-center gap-0.5"
           aria-label={`${BLOCK_WORDS.add} ${label.toLowerCase()}`}
           onClick={onAdd}
         >
           <PlusIcon className="size-3" aria-hidden="true" />
           {BLOCK_WORDS.add}
-        </button>
+        </TextButton>
       ) : (
-        <button
-          type="button"
-          className={quiet}
-          aria-label={`${BLOCK_WORDS.edit} ${label.toLowerCase()}`}
-          onClick={onEdit}
-        >
+        <TextButton aria-label={`${BLOCK_WORDS.edit} ${label.toLowerCase()}`} onClick={onEdit}>
           {BLOCK_WORDS.edit}
-        </button>
+        </TextButton>
       )}
     </PropertyRow>
   )
@@ -606,7 +596,7 @@ export function ElementRows({
         >
           <button
             type="button"
-            className="min-w-0 flex-1 truncate rounded text-start text-xs hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="min-w-0 flex-1 truncate rounded text-start text-xs hover:underline focus-ring"
             onClick={() => onElement(el)}
           >
             {`${count?.(el) ?? 0} set`}
@@ -616,18 +606,14 @@ export function ElementRows({
       {offered.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="-ms-2 h-7 gap-1 px-2 text-xs text-muted-foreground"
-            >
+            <Button variant="ghost" size="xs" className="-ms-2 gap-1 text-muted-foreground">
               <PlusIcon className="size-3.5" aria-hidden="true" />
               {BLOCK_WORDS.element}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-52">
             {offered.map((el) => (
-              <DropdownMenuItem key={el} className="text-[13px]" onClick={() => onElement(el)}>
+              <DropdownMenuItem key={el} className="text-ui" onClick={() => onElement(el)}>
                 {STYLE_ELEMENTS[el].label}
               </DropdownMenuItem>
             ))}

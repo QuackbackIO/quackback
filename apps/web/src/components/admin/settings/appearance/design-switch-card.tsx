@@ -115,12 +115,12 @@ export function DesignSwitchCard({
         </Button>
       </div>
       {!canPublish && (
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           Switching needs permission to publish the design.
         </p>
       )}
       {refusal && (
-        <p role="alert" className="text-[13px] text-destructive">
+        <p role="alert" className="text-ui text-destructive">
           {refusal}
         </p>
       )}

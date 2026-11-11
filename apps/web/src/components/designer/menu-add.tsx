@@ -55,7 +55,7 @@ export function MenuAdd({
       <ul className="space-y-2">
         {hidden.map((part) => (
           <li key={part.id} className="flex items-center gap-3 rounded-lg border border-border p-3">
-            <p className="text-[13px] font-medium">{part.label}</p>
+            <p className="text-ui font-medium">{part.label}</p>
             <Tag>{HEADER_COPY.hidden}</Tag>
             <span className="me-auto" />
             <Button
@@ -73,14 +73,14 @@ export function MenuAdd({
         ))}
         {off.map((part) => (
           <li key={part.type} className="space-y-1 rounded-lg border border-border p-3">
-            <p className="text-[13px] font-medium">{part.name}</p>
+            <p className="text-ui font-medium">{part.name}</p>
             <p className="text-xs text-muted-foreground">{part.does}</p>
             <div className="flex flex-wrap items-center gap-3 pt-1">
               {onSample && isSamplePage(part.type) && (
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
+                  size="xs"
+                  className="px-3"
                   aria-label={`Preview ${part.name} with sample content`}
                   onClick={() => {
                     onSample(part.type as SamplePage)

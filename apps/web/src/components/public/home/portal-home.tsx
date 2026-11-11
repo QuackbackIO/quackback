@@ -1,4 +1,4 @@
-import { Suspense, type ReactNode } from 'react'
+import { memo, Suspense, type ReactNode } from 'react'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { PortalBand } from '@/components/public/portal-band'
 import { usePortalDesign, usePreviewSamples } from '@/components/public/preview-draft-context'
@@ -46,7 +46,7 @@ function WithAreas({ messages, children }: { messages: AreaStrings; children: Re
  * Tablets lay them out on two columns; phones stack them in reading order.
  */
 export function PortalHome({
-  messages = {},
+  messages = NO_MESSAGES,
   gates,
 }: {
   messages?: AreaStrings
@@ -57,8 +57,31 @@ export function PortalHome({
   // In the builder a block with nothing to show draws samples, so none is left out.
   const samples = usePreviewSamples()
   if (design?.engine !== 'v2') return null
+  return <HomeView stored={design.home} messages={messages} gates={gates} samples={samples} />
+}
+
+const NO_MESSAGES: AreaStrings = {}
+
+type StoredHome = Extract<ReturnType<typeof usePortalDesign>, { engine: 'v2' }>['home']
+
+/**
+ * Home drawn from its own part of the design, so a change elsewhere, such as
+ * a colour or a font the stylesheet repaints, draws none of it again: in the
+ * builder's canvas, that is most changes.
+ */
+const HomeView = memo(function HomeView({
+  stored,
+  messages,
+  gates,
+  samples,
+}: {
+  stored: StoredHome
+  messages: AreaStrings
+  gates: PortalPageGates
+  samples: boolean
+}) {
   // A Home stored before the grid, at widths, takes its places as it is drawn.
-  const home = withGridPlaces(design.home) as typeof design.home
+  const home = withGridPlaces(stored) as StoredHome
   // The hero's main action: the composer moves into the band, the grid keeping every other
   // block's place; the help search or a call to action sit there with the composer on the grid.
   const action = drawnMainAction(home, gates)
@@ -104,7 +127,7 @@ export function PortalHome({
         data-qb-section="home"
         data-qb-grid=""
         style={HOME_GRID_STYLE}
-        className={`mx-auto w-full max-w-[var(--qb-page-max,72rem)] gap-[var(--qb-feed-gap,1rem)] px-4 py-6 sm:px-6 [[data-qb-cards=list]_&]:gap-4 ${HOME_GRID_CLASS}`}
+        className={`qb-page gap-[var(--qb-feed-gap,1rem)] py-6 [[data-qb-cards=list]_&]:gap-4 ${HOME_GRID_CLASS}`}
       >
         <WithAreas messages={messages}>
           <Suspense fallback={blocks(emptyBlocks(home.blocks, {}, { samples }))}>
@@ -116,4 +139,4 @@ export function PortalHome({
       </div>
     </>
   )
-}
+})

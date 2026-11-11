@@ -81,7 +81,10 @@ export function blockKey(block: HomeBlock, index: number): Selection {
 }
 
 /** The pages the designer offers: Home while it is on, then each page the workspace has. */
-export function designerPages(design: PortalDesign, gates: PortalPageGates): DesignerPage[] {
+export function designerPages(
+  design: Pick<PortalDesign, 'nav'>,
+  gates: PortalPageGates
+): DesignerPage[] {
   const pages: DesignerPage[] = (Object.keys(PAGE_PATHS) as PortalPageType[]).filter(
     (page) => gates[page]
   )

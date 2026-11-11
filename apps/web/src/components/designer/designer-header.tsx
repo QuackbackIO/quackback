@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 import {
   ArrowLeftIcon,
   ArrowUturnLeftIcon,
@@ -23,7 +23,15 @@ import {
 } from '@/lib/shared/design/builder-chrome'
 import { cn } from '@/lib/shared/utils'
 import type { PortalAddress } from '@/lib/shared/design/portal-address'
+import { IconButton } from './icon-button'
 import { PublishedPopover } from './published-popover'
+
+// The bar's icons, made once: unchanged, React does not draw them again with the bar.
+const UNDO_ICON = <ArrowUturnLeftIcon className="size-4" aria-hidden="true" />
+const REDO_ICON = <ArrowUturnRightIcon className="size-4" aria-hidden="true" />
+const ADD_ICON = <PlusIcon className="size-4" aria-hidden="true" />
+const THEME_ICON = <SwatchIcon className="size-4" aria-hidden="true" />
+const PREVIEW_ICON = <EyeIcon className="size-4" aria-hidden="true" />
 
 const DEVICE_ICONS: Record<Device, typeof ComputerDesktopIcon> = {
   desktop: ComputerDesktopIcon,
@@ -31,43 +39,8 @@ const DEVICE_ICONS: Record<Device, typeof ComputerDesktopIcon> = {
   phone: DevicePhoneMobileIcon,
 }
 
-/** An icon button with a real tooltip naming what it does; disabled, it still says why. */
-function IconButton({
-  tip,
-  label = tip,
-  disabled = false,
-  onClick,
-  children,
-}: {
-  tip: string
-  label?: string
-  disabled?: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={label}
-          aria-disabled={disabled || undefined}
-          className="aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-transparent"
-          onClick={() => {
-            if (!disabled) onClick()
-          }}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{tip}</TooltipContent>
-    </Tooltip>
-  )
-}
-
 /** Desktop, tablet and phone: one radio group, one Tab stop, the arrows pick. */
-export function DeviceToggle({
+export const DeviceToggle = memo(function DeviceToggle({
   size,
   onSize,
   labelled = false,
@@ -96,7 +69,7 @@ export function DeviceToggle({
             tabIndex={size === key ? 0 : -1}
             onClick={() => onSize(key)}
             className={cn(
-              'flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground',
+              'flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground outline-none hover:text-foreground focus-ring',
               size === key &&
                 'bg-background text-foreground shadow-sm forced-colors:outline forced-colors:outline-1'
             )}
@@ -115,7 +88,35 @@ export function DeviceToggle({
       })}
     </div>
   )
-}
+})
+
+/** The way back to settings, drawn again only if where it goes changes. */
+const BackLink = memo(function BackLink({
+  returnPath,
+  onExit,
+}: {
+  returnPath: string
+  onExit: () => void
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <a
+          href={returnPath}
+          aria-label="Back to Customer portal settings"
+          className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+          onClick={(event) => {
+            event.preventDefault()
+            onExit()
+          }}
+        >
+          <ArrowLeftIcon className="size-4" aria-hidden="true" />
+        </a>
+      </TooltipTrigger>
+      <TooltipContent>Back to settings. Your draft is kept.</TooltipContent>
+    </Tooltip>
+  )
+})
 
 /** Add or Theme: filled while its sheet is open. */
 function SheetButton({
@@ -137,7 +138,7 @@ function SheetButton({
       data-sheet-button={sheet}
       onClick={onClick}
       className={cn(
-        'border-border',
+        'shrink-0 border-border',
         open && 'border-foreground bg-foreground text-background hover:bg-foreground/90'
       )}
     >
@@ -146,10 +147,19 @@ function SheetButton({
   )
 }
 
+/** The draft state's fixed slot, wide enough for its longest words. */
+export const STATUS_SLOT_WIDTH = 184
+
+/** A button's words, which give way to its icon in a narrower window; the name stays for screen readers. */
+function Label({ children }: { children: string }) {
+  return <span className="max-[1279px]:sr-only">{children}</span>
+}
+
 /**
  * The builder's top bar: the way back, where you are, the page shown and the
  * device it is shown on, undo and redo, the draft's state, Add, Theme,
- * Preview and Publish. It wraps onto more rows in a narrow window.
+ * Preview and Publish. It never wraps: as the window narrows, the
+ * breadcrumb goes and the buttons keep only their icons.
  */
 export function DesignerHeader({
   returnPath,
@@ -205,68 +215,73 @@ export function DesignerHeader({
       data-designer-region=""
       tabIndex={-1}
       aria-label="Top bar"
-      className="flex min-h-15 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-background px-3 py-2 outline-none"
+      className="grid min-h-15 shrink-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-border bg-background px-3 py-2 outline-none"
     >
       <h1 className="sr-only">Customer portal design for {workspaceName}</h1>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <a
-            href={returnPath}
-            aria-label="Back to Customer portal settings"
-            className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
-            onClick={(event) => {
-              event.preventDefault()
-              onExit()
-            }}
-          >
-            <ArrowLeftIcon className="size-4" aria-hidden="true" />
-          </a>
-        </TooltipTrigger>
-        <TooltipContent>Back to settings. Your draft is kept.</TooltipContent>
-      </Tooltip>
-      <nav aria-label="Breadcrumb" className="me-2 flex min-w-0 items-center gap-1.5 text-sm">
-        <span className="truncate text-muted-foreground">{workspaceName}</span>
-        <span aria-hidden="true" className="text-muted-foreground/60">
-          /
-        </span>
-        <span aria-current="page" className="truncate font-semibold">
-          Customer portal
-        </span>
-      </nav>
-      {pagePicker}
-      <div className="mx-auto flex items-center gap-1">
+      <div className="flex min-w-0 items-center gap-2">
+        <BackLink returnPath={returnPath} onExit={onExit} />
+        {/* Where you are gives way first as the window narrows. */}
+        <nav
+          aria-label="Breadcrumb"
+          className="me-2 hidden min-w-0 items-center gap-1.5 text-sm min-[1400px]:flex"
+        >
+          <span className="truncate text-muted-foreground" title={workspaceName}>
+            {workspaceName}
+          </span>
+          <span aria-hidden="true" className="text-muted-foreground/60">
+            /
+          </span>
+          <span aria-current="page" className="truncate font-semibold">
+            Customer portal
+          </span>
+        </nav>
+        <div className="min-w-0">{pagePicker}</div>
+      </div>
+      <div className="mx-2 flex items-center gap-1">
         <DeviceToggle size={size} onSize={onSize} />
         {view}
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex min-w-0 items-center justify-end gap-1.5">
         <IconButton tip={undoTip(undoLabel)} label="Undo" disabled={!undoLabel} onClick={onUndo}>
-          <ArrowUturnLeftIcon className="size-4" aria-hidden="true" />
+          {UNDO_ICON}
         </IconButton>
         <IconButton tip={redoTip(redoLabel)} label="Redo" disabled={!redoLabel} onClick={onRedo}>
-          <ArrowUturnRightIcon className="size-4" aria-hidden="true" />
+          {REDO_ICON}
         </IconButton>
-        {draftStatus}
-        <span className="mx-1 h-6 w-px bg-border" aria-hidden="true" />
+        {/* One width whatever it says, so nothing beside it moves as the draft's state changes. */}
+        <div
+          data-status-slot=""
+          style={{ width: STATUS_SLOT_WIDTH }}
+          className="flex min-w-0 shrink-0 justify-end"
+        >
+          {draftStatus}
+        </div>
+        <span className="mx-1 h-6 w-px shrink-0 bg-border" aria-hidden="true" />
         <SheetButton sheet="add" open={sheet === 'add'} onClick={() => onSheet('add')}>
-          <PlusIcon className="size-4" aria-hidden="true" />
-          Add
+          {ADD_ICON}
+          <Label>Add</Label>
         </SheetButton>
         <SheetButton sheet="theme" open={sheet === 'theme'} onClick={() => onSheet('theme')}>
-          <SwatchIcon className="size-4" aria-hidden="true" />
-          Theme
+          {THEME_ICON}
+          <Label>Theme</Label>
         </SheetButton>
         <Button
           variant="outline"
           size="sm"
-          className="border-border"
+          className="shrink-0 border-border"
           data-preview=""
           onClick={onPreview}
         >
-          <EyeIcon className="size-4" aria-hidden="true" />
-          Preview
+          {PREVIEW_ICON}
+          <Label>Preview</Label>
         </Button>
         <PublishedPopover address={published} onClose={onPublishedClose}>
-          <Button size="sm" className="px-4 font-semibold" disabled={!changes} onClick={onPublish}>
+          <Button
+            size="sm"
+            className="shrink-0 px-4 font-semibold"
+            disabled={!changes}
+            onClick={onPublish}
+          >
             {canPublish ? 'Publish' : 'Review'}
           </Button>
         </PublishedPopover>

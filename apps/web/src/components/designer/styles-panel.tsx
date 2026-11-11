@@ -144,7 +144,7 @@ export function ThemeElements({
               <button
                 type="button"
                 onClick={() => onOpen(element)}
-                className="flex min-h-7 w-full items-center gap-2 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                className="flex min-h-7 w-full items-center gap-2 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-ring"
               >
                 <span className="shrink-0">{elementName(element)}</span>
                 <span className="ms-auto flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">

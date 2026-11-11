@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const css = readFileSync(join(__dirname, '../../../../globals.css'), 'utf8')
+// Quote style is the formatter's choice, not the rule's: read every quote as one.
+const css = readFileSync(join(__dirname, '../../../../globals.css'), 'utf8').replace(/'/g, '"')
 
 /** Declarations of the rule whose selector is exactly `selector`. */
 function declarations(selector: string): string | undefined {

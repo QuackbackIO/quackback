@@ -190,4 +190,31 @@ describe('useGlide', () => {
     )
     expect(outline().style.transition).toContain('top')
   })
+
+  it('reads the chip’s size as it shows, not again on each render', () => {
+    let reads = 0
+    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')!
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (
+      this: HTMLElement
+    ) {
+      if (this.hasAttribute('data-chip-for')) reads++
+      return width.get!.call(this)
+    })
+    const layer = (top: number) => (
+      <EditingLayer
+        room={room}
+        hovered={{ ...block, top }}
+        picked={block}
+        pickedKey="block-a"
+        name="Top posts"
+        onSettings={vi.fn()}
+      />
+    )
+    const { rerender } = render(layer(10))
+    const first = reads
+    expect(first).toBeGreaterThan(0)
+    // The pointer moves over the page: the layer renders, the chip is as it was.
+    for (let top = 20; top < 100; top += 10) rerender(layer(top))
+    expect(reads).toBe(first)
+  })
 })

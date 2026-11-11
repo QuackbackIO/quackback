@@ -11,6 +11,9 @@ import {
   deviceCaption,
   draftWords,
   escapeStep,
+  aiPaneFit,
+  CANVAS_FLOOR,
+  SETTINGS_WIDTH,
   paneWidthOnKey,
   panelBaseOf,
   panelReducer,
@@ -141,11 +144,27 @@ describe('panelView', () => {
 })
 
 describe('escapeStep', () => {
-  it('closes a sheet first, then goes up from the pick, and closes only from the page', () => {
+  it('closes a sheet first, then goes up from the pick, and does nothing on the page', () => {
     expect(escapeStep({ sheet: 'add', more: false }, 'block-a')).toBe('close-sheet')
-    expect(escapeStep(NO_SHEET, 'block-a', true)).toBe('up')
-    expect(escapeStep(NO_SHEET, null, true)).toBe('close-page')
-    expect(escapeStep(NO_SHEET, null, false)).toBeNull()
+    expect(escapeStep(NO_SHEET, 'block-a')).toBe('up')
+    expect(escapeStep(NO_SHEET, null)).toBeNull()
+  })
+})
+
+describe('aiPaneFit', () => {
+  it('docks the pane as asked in a wide window', () => {
+    expect(aiPaneFit(400, 1440)).toEqual({ mode: 'docked', width: 400 })
+  })
+  it('narrows the docked pane so the canvas keeps its floor', () => {
+    const fit = aiPaneFit(480, 1320)
+    expect(fit.mode).toBe('docked')
+    expect(1320 - SETTINGS_WIDTH - fit.width).toBeGreaterThanOrEqual(CANVAS_FLOOR)
+    expect(fit.width).toBeGreaterThanOrEqual(AI_PANE.min)
+  })
+  it('lies over the canvas when even its narrowest would squeeze it', () => {
+    for (const viewport of [1100, 1200, 1024]) {
+      expect(aiPaneFit(360, viewport)).toEqual({ mode: 'overlay', width: 360 })
+    }
   })
 })
 

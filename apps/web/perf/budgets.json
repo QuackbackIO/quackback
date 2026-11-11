@@ -3,7 +3,9 @@
     "htmlKB": 0.05,
     "htmlTransferKB": 0.05,
     "jsKB": 0.02,
-    "componentRenders": 0.1
+    "componentRenders": 0.1,
+    "canvasPosts": 0.25,
+    "cls": 1
   },
   "journeys": {
     "doc:portal-home": {
@@ -73,7 +75,8 @@
       "jsRequests": 141,
       "jsKB": 496.4,
       "htmlTransferKB": 22,
-      "componentRenders": 465
+      "componentRenders": 465,
+      "cls": 0
     },
     "ui:portal-open-post": {
       "dbQueries": 14,
@@ -82,7 +85,8 @@
       "jsRequests": 39,
       "jsKB": 70.5,
       "htmlTransferKB": 0,
-      "componentRenders": 96
+      "componentRenders": 96,
+      "cls": 0
     },
     "ui:portal-post-load": {
       "dbQueries": 22,
@@ -91,7 +95,8 @@
       "jsRequests": 130,
       "jsKB": 470.2,
       "htmlTransferKB": 18,
-      "componentRenders": 203
+      "componentRenders": 203,
+      "cls": 0
     },
     "ui:portal-open-post-with-comments": {
       "dbQueries": 15,
@@ -100,7 +105,8 @@
       "jsRequests": 39,
       "jsKB": 70.5,
       "htmlTransferKB": 0,
-      "componentRenders": 116
+      "componentRenders": 116,
+      "cls": 0
     },
     "ui:widget-load": {
       "dbQueries": 20,
@@ -172,7 +178,8 @@
       "jsRequests": 39,
       "jsKB": 70.5,
       "htmlTransferKB": 0,
-      "componentRenders": 95
+      "componentRenders": 95,
+      "cls": 0
     },
     "ui:admin-hover-nav-feedback-to-roadmap": {
       "dbQueries": 18,
@@ -1054,6 +1061,232 @@
       "jsKB": 403.1,
       "htmlTransferKB": 30.5,
       "componentRenders": 321
+    },
+    "ui:builder-fold-ai": {
+      "dbQueries": 0,
+      "serverRequests": 0,
+      "requests": 0,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 180,
+      "canvasPosts": 0
+    },
+    "ui:builder-open": {
+      "dbQueries": 61,
+      "serverRequests": 6,
+      "requests": 277,
+      "jsRequests": 265,
+      "jsKB": 1460.5,
+      "htmlTransferKB": 15.3,
+      "componentRenders": 770,
+      "canvasPosts": 12
+    },
+    "ui:builder-open-theme": {
+      "dbQueries": 6,
+      "serverRequests": 1,
+      "requests": 1,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 722,
+      "canvasPosts": 0
+    },
+    "ui:builder-pick-block": {
+      "dbQueries": 22,
+      "serverRequests": 4,
+      "requests": 4,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 799,
+      "canvasPosts": 0
+    },
+    "ui:builder-publish": {
+      "dbQueries": 39,
+      "serverRequests": 4,
+      "requests": 5,
+      "jsRequests": 1,
+      "jsKB": 0.3,
+      "htmlTransferKB": 0,
+      "componentRenders": 1223,
+      "canvasPosts": 0
+    },
+    "ui:builder-scrub-size": {
+      "dbQueries": 11,
+      "serverRequests": 1,
+      "requests": 1,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 3561,
+      "canvasPosts": 20
+    },
+    "ui:builder-switch-page-device": {
+      "dbQueries": 16,
+      "serverRequests": 2,
+      "requests": 14,
+      "jsRequests": 12,
+      "jsKB": 9.9,
+      "htmlTransferKB": 0,
+      "componentRenders": 863,
+      "canvasPosts": 1
+    },
+    "ui:builder-switch-theme": {
+      "dbQueries": 0,
+      "serverRequests": 0,
+      "requests": 0,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 532,
+      "canvasPosts": 2
+    },
+    "ui:builder-type-headline": {
+      "dbQueries": 11,
+      "serverRequests": 1,
+      "requests": 1,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 844,
+      "canvasPosts": 1
+    },
+    "ui:builder-undo-redo": {
+      "dbQueries": 10,
+      "serverRequests": 1,
+      "requests": 1,
+      "jsRequests": 0,
+      "jsKB": 0,
+      "htmlTransferKB": 0,
+      "componentRenders": 3919,
+      "canvasPosts": 20
+    },
+    "doc:designed:juniper": {
+      "dbQueries": 11,
+      "htmlKB": 96.6
+    },
+    "ui:designed:juniper-load": {
+      "dbQueries": 11,
+      "serverRequests": 2,
+      "requests": 144,
+      "jsRequests": 134,
+      "jsKB": 558.5,
+      "htmlTransferKB": 18,
+      "componentRenders": 206,
+      "cls": 0
+    },
+    "ui:designed:juniper-load:phone": {
+      "dbQueries": 11,
+      "serverRequests": 2,
+      "requests": 144,
+      "jsRequests": 134,
+      "jsKB": 558.5,
+      "htmlTransferKB": 18,
+      "componentRenders": 206,
+      "cls": 0
+    },
+    "doc:designed:kiln": {
+      "dbQueries": 8,
+      "htmlKB": 165.9
+    },
+    "ui:designed:kiln-load": {
+      "dbQueries": 8,
+      "serverRequests": 1,
+      "requests": 149,
+      "jsRequests": 141,
+      "jsKB": 505.3,
+      "htmlTransferKB": 19.8,
+      "componentRenders": 461,
+      "cls": 0.0001
+    },
+    "ui:designed:kiln-load:phone": {
+      "dbQueries": 8,
+      "serverRequests": 1,
+      "requests": 149,
+      "jsRequests": 141,
+      "jsKB": 505.3,
+      "htmlTransferKB": 19.8,
+      "componentRenders": 461,
+      "cls": 0
+    },
+    "doc:designed:orbit": {
+      "dbQueries": 10,
+      "htmlKB": 100.4
+    },
+    "ui:designed:orbit-load": {
+      "dbQueries": 17,
+      "serverRequests": 3,
+      "requests": 144,
+      "jsRequests": 134,
+      "jsKB": 558.5,
+      "htmlTransferKB": 17.4,
+      "componentRenders": 232,
+      "cls": 0.0001
+    },
+    "ui:designed:orbit-load:phone": {
+      "dbQueries": 17,
+      "serverRequests": 3,
+      "requests": 144,
+      "jsRequests": 134,
+      "jsKB": 558.5,
+      "htmlTransferKB": 17.4,
+      "componentRenders": 232,
+      "cls": 0
+    },
+    "doc:designed:plume": {
+      "dbQueries": 8,
+      "htmlKB": 162
+    },
+    "ui:designed:plume-load": {
+      "dbQueries": 8,
+      "serverRequests": 1,
+      "requests": 153,
+      "jsRequests": 141,
+      "jsKB": 505.3,
+      "htmlTransferKB": 19.3,
+      "componentRenders": 457,
+      "cls": 0.0001
+    },
+    "ui:designed:plume-load:phone": {
+      "dbQueries": 8,
+      "serverRequests": 1,
+      "requests": 153,
+      "jsRequests": 141,
+      "jsKB": 505.3,
+      "htmlTransferKB": 19.3,
+      "componentRenders": 457,
+      "cls": 0
+    },
+    "ui:designed:kiln-roadmap:phone": {
+      "dbQueries": 13,
+      "serverRequests": 4,
+      "requests": 119,
+      "jsRequests": 108,
+      "jsKB": 421.8,
+      "htmlTransferKB": 13.5,
+      "componentRenders": 1117,
+      "cls": 0
+    },
+    "ui:designed:juniper-roadmap:phone": {
+      "dbQueries": 13,
+      "serverRequests": 4,
+      "requests": 119,
+      "jsRequests": 108,
+      "jsKB": 421.8,
+      "htmlTransferKB": 14.7,
+      "componentRenders": 1305,
+      "cls": 0
+    },
+    "ui:designed:juniper-changelog:phone": {
+      "dbQueries": 6,
+      "serverRequests": 3,
+      "requests": 100,
+      "jsRequests": 90,
+      "jsKB": 404.1,
+      "htmlTransferKB": 12.3,
+      "componentRenders": 195,
+      "cls": 0
     }
   },
   "$comment": "Ceilings for bun perf/bench.ts. Lowered with --update whenever a journey comes in under; raised only with --update --allow-increase, which a reviewer should question."

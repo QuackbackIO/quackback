@@ -55,6 +55,59 @@ export function readDraftView(value: unknown): DraftDesignView | null {
   return storedFilesOnly(designView(parsed.data, null))
 }
 
+/**
+ * The view `next`, keeping each part equal to `prev`'s as the very object it
+ * was, and `prev` itself when nothing in it changed: a draft sent again, or a
+ * change the frame's page draws no differently, then draws nothing anew.
+ */
+export function sharedView(
+  prev: DraftDesignView | null,
+  next: DraftDesignView | null
+): DraftDesignView | null {
+  if (!prev || !next) return next
+  const keys = Object.keys(next) as (keyof DraftDesignView)[]
+  let changed = keys.length !== Object.keys(prev).length
+  const shared: Record<string, unknown> = {}
+  for (const key of keys) {
+    const kept = prev[key] === next[key] || JSON.stringify(prev[key]) === JSON.stringify(next[key])
+    shared[key] = kept ? prev[key] : next[key]
+    if (!kept) changed = true
+  }
+  return changed ? (shared as DraftDesignView) : prev
+}
+
+/**
+ * The parts of a view no page reads from it: the frame draws the design's
+ * stylesheet itself, and the head keeps the published icons and fonts.
+ */
+const UNREAD_BY_PAGES = new Set<string>([
+  'themeStyles',
+  'customCss',
+  'icons',
+  'launcher',
+  'fontLinks',
+  'revision',
+])
+
+/**
+ * The view the frame's pages read: `prev` itself while `next` differs from it
+ * only in what no page reads, such as a colour or a size, which reach the page
+ * as its stylesheet alone, so the page draws nothing anew for them. Parts are
+ * compared as objects, as sharedView keeps each unchanged part.
+ */
+export function pageView(
+  prev: DraftDesignView | null,
+  next: DraftDesignView | null
+): DraftDesignView | null {
+  if (!prev || !next) return next
+  const keys = new Set([...Object.keys(prev), ...Object.keys(next)])
+  for (const key of keys) {
+    if (UNREAD_BY_PAGES.has(key)) continue
+    if (prev[key as keyof DraftDesignView] !== next[key as keyof DraftDesignView]) return next
+  }
+  return prev
+}
+
 /** The stylesheet the frame draws a view with (the builder waits for this very text). */
 export const draftStylesheet = previewStylesheet
 

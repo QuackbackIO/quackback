@@ -171,11 +171,11 @@ export function PortalModerationSection({
       {/* Banner. The count is announced politely so a screen-reader user hears
           the backlog change as posts are approved/rejected. */}
       <div
-        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm"
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-warning/30 bg-warning/10 px-4 py-2.5 text-sm"
         aria-live="polite"
       >
-        <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
-        <span className="font-medium text-amber-800 dark:text-amber-200">
+        <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-warning" />
+        <span className="font-medium text-warning">
           <FormattedMessage
             id="portal.moderation.banner.count"
             defaultMessage={
@@ -188,14 +188,14 @@ export function PortalModerationSection({
           <button
             type="button"
             onClick={scrollToCards}
-            className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-300"
+            className="font-medium text-warning underline-offset-2 hover:underline"
           >
             <FormattedMessage id="portal.moderation.banner.review" defaultMessage="Review here" />
           </button>
           <Link
             to="/admin/feedback/moderation"
             search={{}}
-            className="inline-flex items-center gap-1 font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-300"
+            className="inline-flex items-center gap-1 font-medium text-warning underline-offset-2 hover:underline"
           >
             <FormattedMessage
               id="portal.moderation.banner.openQueue"
@@ -315,13 +315,13 @@ function PendingPostCard({
   return (
     <div
       className={cn(
-        'rounded-lg border border-amber-500/30 bg-amber-500/[0.04] p-4 dark:bg-amber-950/20',
+        'rounded-lg border border-warning/30 bg-warning/5 p-4',
         'animate-in fade-in duration-200 fill-mode-backwards'
       )}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-warning">
             <EyeSlashIcon className="h-3.5 w-3.5" />
             <FormattedMessage
               id="portal.moderation.card.pendingLabel"
@@ -357,7 +357,7 @@ function PendingPostCard({
           </Button>
         </div>
       </div>
-      <p className="mt-2.5 text-xs text-amber-700/80 dark:text-amber-500/70">
+      <p className="mt-2.5 text-xs text-muted-foreground">
         <FormattedMessage
           id="portal.moderation.card.hiddenNote"
           defaultMessage={'Customers cannot see this post yet.'}

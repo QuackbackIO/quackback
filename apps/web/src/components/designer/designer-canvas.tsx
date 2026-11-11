@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { usePreviewPosting } from '@/components/admin/settings/branding/use-preview-posting'
 import type { PortalPreviewProps } from '@/components/admin/settings/branding/portal-preview'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
 import { PAGE_NAMES, type DesignerPage } from '@/lib/shared/design/outline'
 import { canvasSrc } from '@/lib/shared/design/canvas-src'
+import { PREVIEW_NAVIGATE, PREVIEW_THEME } from '@/components/public/preview-draft-context'
 
 export { canvasSrc }
 import type { CanvasVisitor } from '@/lib/shared/design/designer-frame'
@@ -89,6 +90,34 @@ export function framedWords(
     : null
 }
 
+/**
+ * Which document the canvas's frame holds for a view: one per language,
+ * visitor, sample and Preview. A sample has an address of its own, and
+ * Preview's links act, so each loads afresh; any other page or item is gone
+ * to inside the document already loaded.
+ */
+export function frameDocument({
+  page,
+  locale,
+  sort,
+  postPath = null,
+  visitor = 'in',
+  sample = null,
+  trying = false,
+}: {
+  page: DesignerPage
+  locale: string
+  sort: 'trending' | 'top' | 'new'
+  postPath?: string | null
+  visitor?: CanvasVisitor
+  sample?: SamplePage | null
+  trying?: boolean
+}): string {
+  if (sample || trying)
+    return `${canvasSrc({ page, theme: 'light', locale, sort, postPath, visitor, sample })}|${trying}`
+  return `portal|${locale}|${visitor}`
+}
+
 /** No structural draft: the canvas draws everything, the welcome message too, from the design. */
 export const NO_STRUCTURE: PortalPreviewDraft = {}
 
@@ -107,7 +136,7 @@ export function DesignerCanvas({
   theme,
   locale,
   sort,
-  refreshKey,
+  refreshKey = '',
   design,
   structural,
   zoom = 'fit',
@@ -127,6 +156,7 @@ export function DesignerCanvas({
   layer,
   skeleton,
   untilDrawn = false,
+  inPlace = false,
 }: {
   page: DesignerPage
   /** The item the page shows, such as the post on the post page. */
@@ -139,8 +169,11 @@ export function DesignerCanvas({
   theme: 'light' | 'dark'
   locale: string
   sort: 'trending' | 'top' | 'new'
-  /** Changes when a publish lands, to load the page afresh. */
-  refreshKey: string
+  /**
+   * A new key loads the page afresh. The builder's own canvas keeps its page
+   * when a publish lands: it already draws the design just published.
+   */
+  refreshKey?: string
   design: PortalPreviewProps['design']
   structural: PortalPreviewDraft
   /** Scaled to fit the room, or at a set scale that scrolls, so zooming the browser can enlarge it. */
@@ -180,6 +213,11 @@ export function DesignerCanvas({
   skeleton?: ReactNode
   /** Keeps the skeleton until the frame says it drew the design given, not the published one. */
   untilDrawn?: boolean
+  /**
+   * Goes to another page or item inside the page the frame holds, rather than
+   * loading the frame afresh, so its code and the draft drawn in it stay warm.
+   */
+  inPlace?: boolean
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   // The frame element itself, for the layer: a new one each time the page loads afresh.
@@ -190,11 +228,18 @@ export function DesignerCanvas({
   }, [])
   const box = useRef<HTMLDivElement>(null)
   const [room, setRoom] = useState({ width: 0, height: 0 })
-  useEffect(() => {
+  // Measured before the first paint, so the frame starts at the room's size rather than growing into it.
+  useLayoutEffect(() => {
     const element = box.current
     if (!element) return
+    const { width, height } = element.getBoundingClientRect()
+    if (width) setRoom({ width, height })
     const observer = new ResizeObserver(([entry]) =>
-      setRoom({ width: entry.contentRect.width, height: entry.contentRect.height })
+      setRoom((before) =>
+        before.width === entry.contentRect.width && before.height === entry.contentRect.height
+          ? before
+          : { width: entry.contentRect.width, height: entry.contentRect.height }
+      )
     )
     observer.observe(element)
     return () => observer.disconnect()
@@ -202,11 +247,14 @@ export function DesignerCanvas({
 
   const told = useRef(trying)
   told.current = trying
+  const shownTheme = useRef(theme)
+  shownTheme.current = theme
   const tellDesigner = useCallback((target: Window | null | undefined) => {
     target?.postMessage(
       { type: 'quackback:preview-designer', trying: told.current },
       window.location.origin
     )
+    target?.postMessage({ type: PREVIEW_THEME, theme: shownTheme.current }, window.location.origin)
   }, [])
   usePreviewPosting(iframeRef, {
     draftCss: '',
@@ -215,8 +263,17 @@ export function DesignerCanvas({
     draftDirty: true,
     design,
     onReady: tellDesigner,
+    // The page says when it drew each design, so it follows a change on the next frame.
+    paced: true,
   })
   useEffect(() => tellDesigner(iframeRef.current?.contentWindow), [trying, tellDesigner])
+  // Light or dark changes in place: the page keeps its scroll and what it drew.
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: PREVIEW_THEME, theme },
+      window.location.origin
+    )
+  }, [theme])
 
   // The frame that said its page is ready, by its key: a new page loads, and is not, until it says so.
   const [readyKey, setReadyKey] = useState<string | null>(null)
@@ -234,6 +291,7 @@ export function DesignerCanvas({
     onKey,
     onEscape,
     onLocation,
+    onLoad,
     trying,
   })
   handlers.current = {
@@ -247,8 +305,20 @@ export function DesignerCanvas({
     onKey,
     onEscape,
     onLocation,
+    onLoad,
     trying,
   }
+  /** Tells the frame's page to go to `src` in place: the frame and its page's code stay warm. */
+  const navigateFrame = useCallback((src: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: PREVIEW_NAVIGATE, href: src },
+      window.location.origin
+    )
+  }, [])
+
+  // What the frame's document loaded with, by its key, and what it was last asked to show.
+  const docKey = useRef('')
+  const shown = useRef({ doc: '', key: '', src: '' })
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (
@@ -257,7 +327,16 @@ export function DesignerCanvas({
       )
         return
       const message = event.data as Record<string, unknown> | null
-      if (message?.type === 'quackback:preview-ready') setReadyKey(frameKey.current)
+      if (message?.type === 'quackback:preview-ready') {
+        // A page that went elsewhere since its document loaded is sent there; it is ready once there.
+        if (shown.current.key !== docKey.current) navigateFrame(shown.current.src)
+        else setReadyKey(frameKey.current)
+      }
+      if (message?.type === 'quackback:preview-navigated' && message.href === shown.current.src) {
+        setReadyKey(frameKey.current)
+        setDrawnKey(frameKey.current)
+        handlers.current.onLoad?.()
+      }
       if (message?.type === 'quackback:preview-drawn') setDrawnKey(frameKey.current)
       const menu = isMenuTarget(message?.menu) ? message.menu : null
       // The element at the point the frame names, read from its own page.
@@ -324,8 +403,32 @@ export function DesignerCanvas({
   const phoneMode = size === 'phone' && !trying
   const { scale, height, outer, room: drawn } = frameBox(room, width, zoom)
   const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample })
-  const key = `${src}:${refreshKey}:${trying}`
+  // What the frame shows, by its address in light: its page is ready once it says so.
+  const key = `${canvasSrc({ page, theme: 'light', locale, sort, postPath, visitor, sample })}:${refreshKey}:${trying}`
+  // The document it shows that in. In place, another language or visitor, a sample, Preview or
+  // a new refresh key loads the frame afresh, and another page or item is gone to in the page
+  // itself; else every page loads afresh. Light or dark is sent to the page, which keeps the
+  // address it loaded with.
+  const doc = inPlace
+    ? `${frameDocument({ page, locale, sort, postPath, visitor, sample, trying })}:${refreshKey}`
+    : key
+  const [loaded, setLoaded] = useState({ doc, key, src })
+  if (loaded.doc !== doc) setLoaded({ doc, key, src })
+  const frameSrc = loaded.doc === doc ? loaded.src : src
   frameKey.current = key
+  docKey.current = loaded.doc === doc ? loaded.key : key
+  // Another page in the same document: the frame is told to go there.
+  useEffect(() => {
+    // Light or dark alone is no other page: the frame is told that in place, as it is.
+    if (shown.current.doc !== doc) {
+      shown.current = { doc, key, src }
+      return
+    }
+    if (shown.current.key === key) return
+    shown.current = { doc, key, src }
+    navigateFrame(src)
+    // Only another page navigates; the address it goes to is in the theme shown then.
+  }, [doc, key, navigateFrame])
   const ready = readyKey === key && (!untilDrawn || drawnKey === key)
   // A page that never says it is ready (an error, say) is shown once it has loaded a while.
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
@@ -355,13 +458,13 @@ export function DesignerCanvas({
       >
         <iframe
           // Leaving Preview loads the page afresh, back where the builder is.
-          key={key}
+          key={doc}
           ref={frameRef}
           onLoad={() => {
             setLoadedKey(key)
             onLoad?.()
           }}
-          src={src}
+          src={frameSrc}
           title={[
             name,
             PAGE_NAMES[page],
@@ -385,9 +488,15 @@ export function DesignerCanvas({
             transformOrigin: 'top left',
           }}
         />
-        {skeleton && !ready && (
+        {skeleton && (
+          // The whole frame, in the page's light or dark, until the page is ready; then it fades.
           <div
-            className="pointer-events-none absolute top-0 left-0 overflow-hidden"
+            data-canvas-cover=""
+            className={cn(
+              'pointer-events-none absolute top-0 left-0 overflow-hidden bg-background transition-[opacity,visibility] duration-150 ease-out motion-reduce:transition-none',
+              theme === 'dark' && 'dark',
+              ready && 'invisible opacity-0'
+            )}
             style={{
               width,
               height,

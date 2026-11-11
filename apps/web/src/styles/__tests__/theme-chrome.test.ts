@@ -11,16 +11,20 @@ const adminSource = readFileSync(
   'utf8'
 )
 
-/** The declaration block that follows the first occurrence of a selector. */
+/**
+ * The declaration block that follows the first line starting with
+ * `selector`, at any indentation (globals.css may nest rules in layers).
+ */
 function block(selector: string): string {
-  const start = css.indexOf(`\n${selector}`)
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const start = css.search(new RegExp(`^[ \\t]*${escaped}`, 'm'))
   expect(start, `selector not found: ${selector}`).toBeGreaterThanOrEqual(0)
   const open = css.indexOf('{', start)
   return css.slice(open + 1, css.indexOf('}', open))
 }
 
-const lightTokens = block('  :root {')
-const darkTokens = block('  .dark {')
+const lightTokens = block(':root {')
+const darkTokens = block('.dark {')
 
 describe('theme chrome tokens', () => {
   it.each([

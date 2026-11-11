@@ -17,6 +17,12 @@ const LIST_CLASS = {
   compact: 'divide-y divide-border/40',
 } as const
 const ROW_CLASS = { timeline: 'py-10 first:pt-0', cards: '', compact: 'py-5 first:pt-0' } as const
+/** The room a loading list keeps, by layout. */
+const LOADING_ROOM = {
+  timeline: 'min-h-screen',
+  cards: 'min-h-screen',
+  compact: 'min-h-[50vh]',
+} as const
 
 /**
  * The public changelog: its label filters and its entries, laid out as the
@@ -52,12 +58,18 @@ export function ChangelogListPublic({
     ? allEntries.filter((e) => e.categories.some((c) => c.id === activeCategoryId))
     : allEntries
 
+  // While the entries load, the page keeps room for them, so it does not grow
+  // under the visitor (and move the footer) when they arrive: the first
+  // entry's placeholder in ui/Skeleton's look (qb-skeleton), and about the
+  // height a page of entries takes, a screen of full entries or half of one
+  // of compact rows. Kept to a few bytes, as every changelog page carries it.
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-muted-foreground">
-          <FormattedMessage id="portal.changelog.loading" defaultMessage="Loading changelog..." />
-        </div>
+      <div aria-busy="true" className={LOADING_ROOM[layout]}>
+        <div className="qb-skeleton h-40" />
+        <span className="sr-only">
+          <FormattedMessage id="portal.changelog.loading" defaultMessage="Loading changelog…" />
+        </span>
       </div>
     )
   }
@@ -149,7 +161,7 @@ export function ChangelogListPublic({
         <div className="flex justify-center pt-8">
           <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
             {isFetchingNextPage ? (
-              <FormattedMessage id="portal.changelog.loadingMore" defaultMessage="Loading..." />
+              <FormattedMessage id="portal.changelog.loadingMore" defaultMessage="Loading…" />
             ) : (
               <FormattedMessage id="portal.changelog.loadMore" defaultMessage="Load more" />
             )}

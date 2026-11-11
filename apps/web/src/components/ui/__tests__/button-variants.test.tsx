@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { Button } from '../button'
@@ -34,5 +36,21 @@ describe('Button touch targets', () => {
   it('leaves the default size alone', () => {
     render(<Button>Save</Button>)
     expect(screen.getByRole('button', { name: 'Save' }).className).not.toContain('pointer-coarse')
+  })
+})
+
+describe('Button default, disabled', () => {
+  it('drops the brand fill in dark mode, so a disabled Publish does not read as one to press', () => {
+    render(<Button disabled>Publish</Button>)
+    const button = screen.getByRole('button', { name: 'Publish' })
+    // One stylesheet rule styles it, keyed on what every primary button carries.
+    expect(button.dataset.slot).toBe('button')
+    expect(button.dataset.variant).toBe('default')
+    const css = readFileSync(join(__dirname, '../../../globals.css'), 'utf8')
+    const start = css.indexOf(".dark [data-slot='button'][data-variant='default']:disabled {")
+    expect(start).toBeGreaterThan(-1)
+    const rule = css.slice(start, css.indexOf('}', start))
+    expect(rule).toContain('background-color: var(--muted)')
+    expect(rule).toContain('color: var(--muted-foreground)')
   })
 })

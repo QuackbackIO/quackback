@@ -3,7 +3,7 @@ import type { Rect } from '@/lib/shared/design/layer-geometry'
 import { MENU_COPY, MENU_NAME_MAX } from '@/lib/shared/design/menu-actions'
 import { WORDS } from './properties/words'
 
-const KEY = 'rounded border border-border bg-background px-1.5 text-[11px] leading-4'
+const KEY = 'rounded border border-border bg-background px-1.5 text-2xs leading-4'
 
 /**
  * Renames a menu item where it sits: a field laid exactly over its words, in

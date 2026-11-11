@@ -48,7 +48,7 @@ export function ScrubNumber({
         aria-valuemax={max}
         aria-valuenow={value ?? inherited}
         title="Drag to change"
-        className="flex h-full w-5 shrink-0 cursor-ew-resize touch-none items-center justify-center text-[11px] text-muted-foreground select-none"
+        className="flex h-full w-5 shrink-0 cursor-ew-resize touch-none items-center justify-center text-2xs text-muted-foreground select-none"
         onPointerDown={(event) => {
           event.preventDefault()
           event.currentTarget.setPointerCapture?.(event.pointerId)
@@ -88,7 +88,7 @@ export function ScrubNumber({
         className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none placeholder:text-muted-foreground dark:bg-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
       />
       {unit && (
-        <span className="pe-2 text-[11px] text-muted-foreground" aria-hidden="true">
+        <span className="pe-2 text-2xs text-muted-foreground" aria-hidden="true">
           {unit}
         </span>
       )}

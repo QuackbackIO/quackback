@@ -26,11 +26,14 @@ export function PortalFooter({
           rel="noopener"
           className="group inline-flex items-center gap-1.5 rounded-full border border-transparent bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-border/50 hover:bg-muted hover:text-foreground"
         >
+          {/* The duck at its drawn size, not the 640px logo: it sits at the foot of
+              every page, so it waits until the page scrolls near it. */}
           <img
-            src="/logo.png"
+            src="/logo-64.png"
             alt=""
             width={14}
             height={14}
+            loading="lazy"
             className="-mt-px opacity-70 transition-opacity group-hover:opacity-100"
           />
           <span>

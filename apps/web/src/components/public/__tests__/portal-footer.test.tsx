@@ -5,6 +5,8 @@
  * text and saying it opens a new tab. Where the credit is hidden there is no
  * footer.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
@@ -36,7 +38,17 @@ describe('PortalFooter', () => {
     expect(credit.getAttribute('href')).toContain('utm_campaign=acme')
     expect(credit.className).toContain('text-muted-foreground')
     expect(credit.parentElement!.className).toContain('justify-center')
-    expect(container.querySelector('img[src="/logo.png"]')).toBeTruthy()
+    expect(container.querySelector('img[src="/logo-64.png"]')).toBeTruthy()
+  })
+
+  it('draws the duck from a file its size, fetched once the page nears it', () => {
+    const { container } = mount({})
+    const duck = container.querySelector('img')!
+    expect(duck.getAttribute('loading')).toBe('lazy')
+    expect([duck.getAttribute('width'), duck.getAttribute('height')]).toEqual(['14', '14'])
+    // The full logo is over half a megabyte; every visitor paid for it at 14px.
+    const file = readFileSync(join(import.meta.dirname, '../../../../public/logo-64.png'))
+    expect(file.byteLength).toBeLessThan(8 * 1024)
   })
 
   it('is left out where the workspace may hide the credit', () => {

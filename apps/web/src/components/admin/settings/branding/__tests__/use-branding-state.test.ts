@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { generateWorkspaceThemeCSS, replaceCssVar, type ThemeConfig } from '@/lib/shared/theme'
+import { renderedFontSans } from '@/lib/shared/theme/generator'
 
 const { saveBrandingTheme } = vi.hoisted(() => ({
   saveBrandingTheme: vi.fn(
@@ -275,14 +276,29 @@ describe('useBrandingState initial cssText', () => {
 const SRC = join(__dirname, '../../../../..')
 const globalsCss = readFileSync(join(SRC, 'globals.css'), 'utf8')
 
+/** A value as CSS reads it: quote style, line breaks and trailing zeros do not change it. */
+const asCss = (value: string) =>
+  value
+    .replace(/'/g, '"')
+    .replace(/\s+/g, ' ')
+    .replace(/(\d\.\d*?)0+(?!\d)/g, '$1')
+    .replace(/(\d)\.(?!\d)/g, '$1')
+    .trim()
+
+/** A rule's custom properties, wherever the formatter indents or wraps it. */
 function cssBlock(css: string, selector: string): Record<string, string> {
-  const start = css.indexOf(`${selector} {`)
-  if (start < 0) throw new Error(`no ${selector} block`)
-  const body = css.slice(start + selector.length + 2, css.indexOf('}', start))
+  const at = css.search(new RegExp(`^[ \\t]*${selector.replace('.', '\\.')} \\{`, 'm'))
+  if (at < 0) throw new Error(`no ${selector} block`)
+  const start = css.indexOf('{', at) + 1
+  const body = css.slice(start, css.indexOf('}', start))
   return Object.fromEntries(
-    [...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()])
+    [...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], asCss(m[2])])
   )
 }
+
+/** What a page draws for a stored value: a stored font renders with its stand-in face. */
+const rendered = (key: string, value: string | undefined) =>
+  value === undefined ? value : asCss(key === 'fontSans' ? renderedFontSans(value) : value)
 
 const STYLESHEETS = {
   globalsLight: cssBlock(globalsCss, ':root'),
@@ -350,14 +366,14 @@ describe('useBrandingState on an uncustomised workspace', () => {
       const stored = saved[mode] as Record<string, string>
       for (const [key, cssVar] of Object.entries(STORED_AS)) {
         const expected = key === 'primary' ? primary : unbranded(mode, cssVar)
-        expect(stored[key], `${mode} ${key}`).toBe(expected)
+        expect(rendered(key, stored[key]), `${mode} ${key}`).toBe(expected)
       }
     }
   })
 
   it('shows the font and radius visitors see, with Default as the preset', () => {
     const { result } = renderUntouched()
-    expect(result.current.font).toBe(unbranded('light', '--font-sans'))
+    expect(rendered('fontSans', result.current.font)).toBe(unbranded('light', '--font-sans'))
     expect(result.current.currentFontId).toBe('inter')
     expect(`${result.current.radius}rem`).toBe(unbranded('light', '--radius'))
     expect(result.current.activePresetId).toBe('default')

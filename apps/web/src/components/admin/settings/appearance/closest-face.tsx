@@ -27,7 +27,7 @@ export function ClosestFace({ update }: { update: Update }) {
     }
   }
   return (
-    <div className="space-y-2 text-[13px]">
+    <div className="space-y-2 text-ui">
       <div className="flex items-center gap-2">
         <label htmlFor="brand-font-name" className="w-32 shrink-0">
           Your brand’s font

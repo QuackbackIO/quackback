@@ -27,7 +27,7 @@ export function DesignTiles<T extends string>({
 }) {
   return (
     <div className="@container space-y-2">
-      <p id={`${name}-label`} className="text-[13px] font-medium">
+      <p id={`${name}-label`} className="text-ui font-medium">
         {label}
       </p>
       <RadioGroup
@@ -63,7 +63,7 @@ export function DesignTiles<T extends string>({
               >
                 {option.drawing}
               </span>
-              <span className="flex items-center gap-2 text-[13px] font-medium">
+              <span className="flex items-center gap-2 text-ui font-medium">
                 <RadioGroupItem value={option.value} className={RADIO_TILE_DOT} />
                 {option.label}
               </span>

@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { Button } from '@/components/ui/button'
 import { lazyWithPreload } from '@/lib/client/lazy-with-preload'
-import { PORTAL_PARTS } from '@/lib/shared/design/parts'
+import { PORTAL_PARTS, shownPartName } from '@/lib/shared/design/parts'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 
 type Update = (change: (draft: PortalDesign) => void) => void
@@ -62,7 +62,7 @@ export function CssFields({
       <p className="text-xs text-muted-foreground">
         Style the portal&apos;s parts by name, such as{' '}
         <code className="font-mono">[data-qb-part=&quot;post-card&quot;]</code>. Parts:{' '}
-        {PORTAL_PARTS.map((part) => part.name).join(', ')}.
+        {PORTAL_PARTS.map((part) => shownPartName(part.name)).join(', ')}.
       </p>
       <Suspense
         fallback={

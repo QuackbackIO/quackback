@@ -478,10 +478,12 @@ export function WidgetShell({
               className="group inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-all"
             >
               <img
-                src="/logo.png"
+                src="/logo-64.png"
                 alt=""
                 width={11}
                 height={11}
+                loading="lazy"
+                decoding="async"
                 className="opacity-60 group-hover:opacity-100 transition-opacity"
               />
               <span>

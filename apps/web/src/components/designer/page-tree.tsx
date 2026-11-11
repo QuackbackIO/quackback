@@ -16,7 +16,15 @@ import { treeRowSelector } from './settings-focus'
 /** Rows that start closed: the menu can be long, and is edited in the header's panel too. */
 const CLOSED = new Set(['header'])
 
-const ring = 'outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground'
+// The rows' icons, made once: an element React has drawn before, unchanged, is not drawn again.
+const OPEN_CHEVRON = <ChevronRightIcon className="size-3.5 rotate-90 transition-transform" />
+const CLOSED_CHEVRON = <ChevronRightIcon className="size-3.5 transition-transform" />
+const UP_ARROW = <ArrowUpIcon className="size-3.5" aria-hidden="true" />
+const DOWN_ARROW = <ArrowDownIcon className="size-3.5" aria-hidden="true" />
+const EYE = <EyeIcon className="size-3.5" aria-hidden="true" />
+const EYE_SLASH = <EyeSlashIcon className="size-3.5" aria-hidden="true" />
+
+const ring = 'outline-none focus-ring'
 const iconButton = cn(
   'grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40',
   ring
@@ -175,9 +183,7 @@ export function PageTree({
               onClick={() => toggle(row, !isOpen)}
               className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground"
             >
-              <ChevronRightIcon
-                className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')}
-              />
+              {isOpen ? OPEN_CHEVRON : CLOSED_CHEVRON}
             </button>
           ) : (
             <span className="size-5 shrink-0" />
@@ -190,14 +196,17 @@ export function PageTree({
             }}
             className={cn(
               'flex min-h-7 min-w-0 flex-1 cursor-default items-center gap-1.5 text-xs',
-              hidden && 'text-muted-foreground'
+              (hidden || row.note) && 'text-muted-foreground'
             )}
           >
             {row.blockType && <BlockIcon type={row.blockType} />}
-            <span className="truncate">{row.label}</span>
+            <span className="truncate" title={row.label}>
+              {row.label}
+            </span>
+            {row.note && <span className="shrink-0 text-2xs">· {row.note}</span>}
           </span>
           {row.hide?.shown && row.hide.locked && (
-            <span id={`${labelId}-locked`} className="shrink-0 text-[11px] text-muted-foreground">
+            <span id={`${labelId}-locked`} className="shrink-0 text-2xs text-muted-foreground">
               {MENU_COPY.landsHere}
             </span>
           )}
@@ -211,7 +220,7 @@ export function PageTree({
                 onClick={() => move(row, -1)}
                 className={iconButton}
               >
-                <ArrowUpIcon className="size-3.5" aria-hidden="true" />
+                {UP_ARROW}
               </button>
               <button
                 type="button"
@@ -221,7 +230,7 @@ export function PageTree({
                 onClick={() => move(row, 1)}
                 className={iconButton}
               >
-                <ArrowDownIcon className="size-3.5" aria-hidden="true" />
+                {DOWN_ARROW}
               </button>
             </span>
           )}
@@ -239,11 +248,7 @@ export function PageTree({
                   'opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100'
               )}
             >
-              {row.hide.shown ? (
-                <EyeIcon className="size-3.5" aria-hidden="true" />
-              ) : (
-                <EyeSlashIcon className="size-3.5" aria-hidden="true" />
-              )}
+              {row.hide.shown ? EYE : EYE_SLASH}
             </button>
           )}
         </div>

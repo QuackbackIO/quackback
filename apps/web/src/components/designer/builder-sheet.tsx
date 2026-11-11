@@ -1,7 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { motion, useIsPresent } from 'framer-motion'
-import { ChevronRightIcon } from '@heroicons/react/16/solid'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { ChevronRightIcon, XMarkIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
@@ -46,7 +45,7 @@ export function BuilderSheet({
       id={id}
       aria-labelledby={`${id}-title`}
       data-designer-sheet=""
-      className="absolute inset-2 z-10 flex flex-col overflow-hidden rounded-xl border border-border bg-background shadow-lg max-[1100px]:inset-0 max-[1100px]:rounded-none"
+      className="absolute inset-0 z-raised flex flex-col overflow-hidden bg-background"
     >
       <header className="space-y-1 border-b border-border px-4 pt-3 pb-3">
         <div className="flex items-center gap-2">
@@ -57,7 +56,7 @@ export function BuilderSheet({
                   <button
                     type="button"
                     onClick={onBack}
-                    className="rounded hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                    className="rounded hover:text-foreground focus-ring"
                   >
                     {back}
                   </button>
@@ -92,7 +91,7 @@ export function BuilderSheet({
           ref={heading}
           id={`${id}-title`}
           tabIndex={-1}
-          className="text-base font-semibold outline-none"
+          className="text-sm font-semibold outline-none"
         >
           {title}
         </h2>

@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react'
+import { cn } from '@/lib/shared/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
@@ -16,6 +17,7 @@ import {
   PropertyRow,
   PropertySection,
   PropertyTiles,
+  ROW_INDENT,
   Tip,
   type Crumb,
   type OverridePlace,
@@ -358,7 +360,7 @@ export function SourceList({
           {picked.length ? `${picked.length} of ${max}` : `${field.any}, or pick up to ${max}`}
         </span>
       </PropertyRow>
-      <div className="space-y-1 ps-[100px] pb-1">
+      <div className={cn('space-y-1 pb-1', ROW_INDENT)}>
         {items.map(([itemId, name]) => {
           const on = picked.includes(itemId)
           const boxId = `${id}-${itemId}`

@@ -13,4 +13,11 @@ describe('isPortalPath', () => {
     expect(isPortalPath('/onboarding')).toBe(false)
     expect(isPortalPath('/design')).toBe(false)
   })
+
+  it('is the builder’s sample pages, which are portal pages that only share the prefix', () => {
+    expect(isPortalPath('/design-sample/help-center')).toBe(true)
+    expect(isPortalPath('/design-sample/not-found')).toBe(true)
+    expect(isPortalPath('/design/pages')).toBe(false)
+    expect(isPortalPath('/admin')).toBe(false)
+  })
 })

@@ -391,7 +391,12 @@ export function FeedbackContainer({
   function handlePostCreated(postId: string): void {
     setTimeout(() => {
       const postElement = document.querySelector(`[data-post-id="${postId}"]`)
-      postElement?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      postElement?.scrollIntoView({
+        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+          ? 'auto'
+          : 'smooth',
+        block: 'center',
+      })
     }, 100)
   }
 

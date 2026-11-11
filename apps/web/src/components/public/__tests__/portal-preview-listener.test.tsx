@@ -13,9 +13,15 @@ import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 
 /** The published design, as the route context carries it. */
 const root = vi.hoisted(() => ({ portalDesign: undefined as unknown }))
+/** The frame's router: where the page loads ahead for a link, and how it moves. */
+const router = vi.hoisted(() => ({
+  preloadRoute: async (_options: unknown): Promise<unknown> => [],
+  navigate: async (_options: unknown): Promise<void> => {},
+}))
 vi.mock('@tanstack/react-router', () => ({
   useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
     select({ settings: { portalDesign: root.portalDesign } }),
+  useRouter: () => router,
 }))
 
 import { PortalPreviewProvider } from '../portal-preview-listener'
@@ -27,7 +33,7 @@ import {
   usePreviewWelcomeCard,
 } from '../preview-draft-context'
 
-const renders = { nav: 0, welcomeCard: 0, css: 0 }
+const renders = { nav: 0, welcomeCard: 0, css: 0, pages: 0 }
 
 function NavReader() {
   renders.nav++
@@ -46,6 +52,7 @@ function DraftReader() {
   return <p data-testid="draft">{usePreviewDraft() ? 'draft' : 'none'}</p>
 }
 function PagesReader() {
+  renders.pages++
   const design = usePortalDesign()
   const v2 = design?.engine === 'v2' ? design : undefined
   return (
@@ -90,6 +97,7 @@ beforeEach(() => {
   renders.nav = 0
   renders.welcomeCard = 0
   renders.css = 0
+  renders.pages = 0
   // The provider listens only inside a frame.
   vi.spyOn(window, 'top', 'get').mockReturnValue(framer)
   vi.spyOn(window, 'parent', 'get').mockReturnValue(framer)
@@ -131,6 +139,80 @@ describe('PortalPreviewProvider', () => {
     header.remove()
   })
 
+  it('fetches nothing ahead for a link while designing, and does while trying', async () => {
+    const preload = vi.fn(async () => [])
+    router.preloadRoute = preload
+    await postDesign({ type: 'quackback:preview-designer', state: null })
+    await router.preloadRoute({ to: '/b/ideas/posts/p1' })
+    expect(preload).not.toHaveBeenCalled()
+    await postDesign({ type: 'quackback:preview-designer', trying: true })
+    await router.preloadRoute({ to: '/b/ideas/posts/p1' })
+    expect(preload).toHaveBeenCalledOnce()
+  })
+
+  it('draws in light or dark in place, as asked, keeping its page', () => {
+    const navigate = vi.fn(async () => {})
+    router.navigate = navigate
+    post({ type: 'quackback:preview-theme', theme: 'dark' })
+    expect(navigate).toHaveBeenCalledOnce()
+    const [options] = navigate.mock.calls[0] as unknown as [
+      { search: (prev: object) => object; replace: boolean; resetScroll: boolean },
+    ]
+    expect(options.search({ preview: true, theme: 'light' })).toEqual({
+      preview: true,
+      theme: 'dark',
+    })
+    expect(options).toMatchObject({ replace: true, resetScroll: false })
+    // Already drawn in it, or asked for something else: nothing moves.
+    window.history.replaceState(null, '', '/?theme=dark')
+    post({ type: 'quackback:preview-theme', theme: 'dark' })
+    post({ type: 'quackback:preview-theme', theme: 'sepia' })
+    expect(navigate).toHaveBeenCalledOnce()
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('goes to another page in place when the builder asks, and says once it is there', async () => {
+    const navigate = vi.fn(async () => {})
+    router.navigate = navigate
+    const navigated = () =>
+      vi
+        .mocked(framer.postMessage)
+        .mock.calls.filter(
+          ([message]) => (message as { type?: string }).type === 'quackback:preview-navigated'
+        )
+        .map(([message]) => message)
+    // Only a path of this portal, never another site's.
+    for (const href of ['https://elsewhere.example.com/', '//elsewhere.example.com/', 42])
+      post({ type: 'quackback:preview-navigate', href })
+    expect(navigate).not.toHaveBeenCalled()
+    const href = '/changelog?theme=light&preview=true&lang=en&designer=1'
+    post({ type: 'quackback:preview-navigate', href })
+    expect(navigate).toHaveBeenCalledExactlyOnceWith({ href, replace: true, resetScroll: true })
+    expect(navigated()).toEqual([])
+    await act(async () => {
+      await new Promise((done) => requestAnimationFrame(() => done(null)))
+    })
+    expect(navigated()).toEqual([{ type: 'quackback:preview-navigated', href }])
+  })
+
+  it('draws nothing anew in the page for a change that is style alone', async () => {
+    await postDesign({ type: 'quackback:preview-design', design: draftDesign() })
+    const pages = renders.pages
+    const sheet = document.querySelector('style[data-preview-design]')?.textContent
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: draftDesign((d) => void (d.brand.light.accent = '#225544')),
+    })
+    expect(document.querySelector('style[data-preview-design]')?.textContent).not.toBe(sheet)
+    expect(renders.pages).toBe(pages)
+    // A part the page reads still reaches it.
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: draftDesign((d) => d.nav.items.reverse()),
+    })
+    expect(renders.pages).toBe(pages + 1)
+  })
+
   it('picks on a click while designing, and lets clicks act while trying', async () => {
     const button = document.createElement('button')
     button.setAttribute('data-qb-section', 'header')
@@ -168,7 +250,7 @@ describe('PortalPreviewProvider', () => {
     post({ type: 'quackback:preview-css', css: ':root { --font-sans: Inter }' })
 
     expect(screen.getByTestId('css').textContent).toBe(':root { --font-sans: Inter }')
-    expect(renders).toEqual({ nav: 1, welcomeCard: 1, css: 2 })
+    expect(renders).toMatchObject({ nav: 1, welcomeCard: 1, css: 2 })
   })
 
   it('keeps the navigation as it was when only the welcome card changes', () => {
@@ -180,7 +262,7 @@ describe('PortalPreviewProvider', () => {
 
     expect(screen.getByTestId('welcome').textContent).toBe('Hello')
     expect(screen.getByTestId('nav').textContent).toBe(JSON.stringify(nav))
-    expect(renders).toEqual({ nav: 2, welcomeCard: 3, css: 1 })
+    expect(renders).toMatchObject({ nav: 2, welcomeCard: 3, css: 1 })
   })
 
   // The saved theme sets the font and radius on body (and the font family with
@@ -226,6 +308,22 @@ describe('a design draft in the preview', () => {
     expect(drawn()).toEqual([])
     await postDesign({ type: 'quackback:preview-design', design: draftDesign() })
     expect(drawn()).toEqual([[{ type: 'quackback:preview-drawn' }, window.location.origin]])
+  })
+
+  it('says at once that it drew a design sent again, drawing nothing anew', async () => {
+    const drawn = () =>
+      vi
+        .mocked(framer.postMessage)
+        .mock.calls.filter(
+          ([message]) => (message as { type?: string }).type === 'quackback:preview-drawn'
+        ).length
+    await postDesign({ type: 'quackback:preview-design', design: draftDesign() })
+    const pages = renders.pages
+    expect(drawn()).toBe(1)
+    // The same design afresh, as the builder reads it back after a publish.
+    await postDesign({ type: 'quackback:preview-design', design: draftDesign() })
+    expect(drawn()).toBe(2)
+    expect(renders.pages).toBe(pages)
   })
 
   it('draws the draft with the view the server builds for it, then puts the saved one back', async () => {

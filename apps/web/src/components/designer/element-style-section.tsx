@@ -34,6 +34,23 @@ export interface TileChoice {
   masks?: readonly StyleProp[]
   /** Where else the choice reaches, on hover. */
   reach?: string
+  /**
+   * The value of the property's own control each option is, where every
+   * option is one: then the row is that control, as on every other element,
+   * and picking one of these values picks the choice.
+   */
+  same?: Readonly<Record<string, string>>
+}
+
+/** The Capitals choices as the Capitals control's values. */
+const CAPITALS_SAME = { sentence: 'none', upper: 'upper' } as const
+/** The fill choices as colour roles. */
+const FILL_SAME = { accent: 'accent', ink: 'ink' } as const
+
+/** The choice whose option a value of the property's own control is, if one is. */
+export function sameOption(choice: TileChoice | undefined, value: unknown): string | undefined {
+  if (!choice?.same) return undefined
+  return Object.entries(choice.same).find(([, to]) => to === value)?.[0]
 }
 
 const tiles = <T extends Record<string, string>>(names: T) =>
@@ -61,6 +78,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
     apply: capitals(),
     prop: 'case',
     masks: ['case'],
+    same: CAPITALS_SAME,
     reach: 'Menu items and main buttons',
   }
   switch (element) {
@@ -173,7 +191,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
           value: fontValue(fonts, 'scale'),
           options: tiles(STYLE_CHOICES.scale),
           apply: (draft, v) => void (draft.brand.fonts.scale = v as Fonts['scale']),
-          prop: 'size',
+          // Text size is a number on every text element; the scale is a Style choice.
           masks: ['size'],
         },
         {
@@ -181,7 +199,6 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
           value: fontValue(fonts, 'tracking'),
           options: tiles(STYLE_CHOICES.spacing),
           apply: (draft, v) => void (draft.brand.fonts.tracking = v as Fonts['tracking']),
-          prop: 'tracking',
           masks: ['tracking'],
         },
         {
@@ -191,6 +208,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
           apply: (draft, v) => void (draft.brand.fonts.headlineCase = v as Fonts['headlineCase']),
           prop: 'case',
           masks: ['case'],
+          same: CAPITALS_SAME,
         },
         {
           label: 'Colour',
@@ -200,6 +218,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
             void (draft.brand.fonts.headlineColour = v as Fonts['headlineColour']),
           prop: 'color',
           masks: ['color'],
+          same: FILL_SAME,
         },
       ]
     default:

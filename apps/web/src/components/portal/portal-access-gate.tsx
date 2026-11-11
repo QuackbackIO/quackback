@@ -481,7 +481,7 @@ function GateCard({
             aria-live="polite"
           >
             <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
-            <FormattedMessage id="portal.auth.signingIn" defaultMessage="Signing in..." />
+            <FormattedMessage id="portal.auth.signingIn" defaultMessage="Signing in…" />
           </div>
         ) : (
           <>

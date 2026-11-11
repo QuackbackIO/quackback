@@ -81,7 +81,7 @@ function AiEmpty({
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-3 py-8 text-center">
       <span className="grid size-10 place-items-center rounded-full border border-border">
-        <SparklesIcon className="size-5 text-amber-700" aria-hidden="true" />
+        <SparklesIcon className="size-5 text-chrome-active-icon" aria-hidden="true" />
       </span>
       <p className="max-w-60 text-sm font-medium">Ask for a change</p>
       {!hasMatched(design) && (
@@ -96,7 +96,7 @@ function AiEmpty({
               <button
                 type="button"
                 onClick={() => onStarter(starter)}
-                className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-ring"
               >
                 {starter}
               </button>
@@ -223,8 +223,8 @@ export function DesignerAi({
       className="flex h-full min-h-0 w-full flex-col"
     >
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border ps-4 pe-2">
-        <h2 id="designer-ai-title" className="flex items-center gap-1.5 text-[13px] font-semibold">
-          <SparklesIcon className="size-4 text-amber-700" aria-hidden="true" />
+        <h2 id="designer-ai-title" className="flex items-center gap-1.5 text-sm font-semibold">
+          <SparklesIcon className="size-4 text-chrome-active-icon" aria-hidden="true" />
           Ask AI
         </h2>
         <Tooltip>

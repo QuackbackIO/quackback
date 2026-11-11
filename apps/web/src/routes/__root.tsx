@@ -213,7 +213,10 @@ const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup'
 
 /** Whether a path is one of the portal's own pages, which wear the portal's theme. */
 export function isPortalPath(pathname: string): boolean {
-  return !NON_PORTAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  // Match whole path segments: `/design` is the builder, `/design-sample/*` is a portal page.
+  return !NON_PORTAL_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  )
 }
 
 /**
@@ -363,7 +366,11 @@ function RootDocument({
           key={themeStorageKey}
           storageKey={themeStorageKey}
           attribute="class"
-          defaultTheme={defaultTheme}
+          // Under a forced theme the provider starts from the device's: when it
+          // reads the device after hydrating it learns nothing new, so it does not
+          // change its context while parts of the page still hydrate, which made
+          // React draw those parts again from nothing (Home's blocks blinked out).
+          defaultTheme={forcedTheme ? 'system' : defaultTheme}
           enableSystem={!forcedTheme}
           forcedTheme={forcedTheme}
           disableTransitionOnChange

@@ -65,6 +65,22 @@ describe('pageTree', () => {
     expect(find(rows, 'page:roadmap')!.hide).toEqual({ shown: false, locked: false })
   })
 
+  it('notes the composer block as shown in the hero while the hero has it', () => {
+    const composerRow = (place: 'band' | undefined) => {
+      const { rows } = tree('home', (draft) => {
+        draft.nav.home.on = true
+        draft.pages.home.blocks = [
+          { type: 'composer', id: 'compose1', grid: { x: 0, y: 0, w: 12, h: 1 } } as never,
+        ]
+        draft.pages.home.composer = place
+        delete draft.pages.home.mainAction
+      })
+      return treeRows(rows).find((row) => row.blockType === 'composer')!
+    }
+    expect(composerRow('band').note).toBe('Shown in the hero')
+    expect(composerRow(undefined).note).toBeUndefined()
+  })
+
   it('lists the hero’s elements under it, the image only when it has one', () => {
     const { rows } = tree('roadmap')
     const hero = rows.find((row) => row.id === 'hero')!

@@ -223,8 +223,28 @@ export const PORTAL_PARTS = [
 
 export type PortalPartName = (typeof PORTAL_PARTS)[number]['name']
 
-/** Old part names, each with the name it became. */
-export const PART_ALIASES: Readonly<Record<string, PortalPartName>> = {}
+/**
+ * The hero's parts by the name admins see: users see Hero, never Band. The
+ * page keeps the older names on its elements, so CSS written with either works.
+ */
+export const HERO_PART_NAMES: Readonly<Partial<Record<PortalPartName, string>>> = {
+  band: 'hero',
+  'band-image': 'hero-image',
+  'band-foot-image': 'hero-foot-image',
+  'post-band': 'post-hero',
+}
+
+/** A part's name as admins see it: its hero name, else its own. */
+export const shownPartName = (name: PortalPartName): string => HERO_PART_NAMES[name] ?? name
+
+/** Whether a name is one of the hero names admins see, which is no old name to warn about. */
+export const isHeroPartName = (name: string): boolean =>
+  Object.values(HERO_PART_NAMES).includes(name)
+
+/** Other names for parts, each with the name the page draws: the hero names, and old names. */
+export const PART_ALIASES: Readonly<Record<string, PortalPartName>> = Object.fromEntries(
+  Object.entries(HERO_PART_NAMES).map(([part, hero]) => [hero, part as PortalPartName])
+)
 
 /** Whether a name is a part's, today's or an alias. */
 export function isPartName(name: string): boolean {

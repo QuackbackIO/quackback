@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { defaultDesign, portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleElement } from '@/lib/shared/design/style-tokens'
-import { ElementStyleSection, applyChoice, rowChoiceOf } from '../element-style-section'
+import { ElementStyleSection, applyChoice, choicesOf, rowChoiceOf } from '../element-style-section'
 
 afterEach(cleanup)
 
@@ -43,8 +43,13 @@ describe('an element’s Style section', () => {
     expect(screen.queryByRole('radiogroup', { name: 'Text' })).toBeNull()
     cleanup()
     mount('headline')
-    expect(screen.queryByRole('radiogroup', { name: 'Scale' })).toBeNull()
-    expect(rowChoiceOf(defaultDesign(), 'headline', 'size')?.label).toBe('Scale')
+    // Text size is a number on every text element, so a headline's scale is a Style choice.
+    expect(screen.getByRole('radiogroup', { name: 'Scale' })).toBeTruthy()
+    expect(rowChoiceOf(defaultDesign(), 'headline', 'size')).toBeUndefined()
+    expect(rowChoiceOf(defaultDesign(), 'headline', 'case')?.same).toEqual({
+      sentence: 'none',
+      upper: 'upper',
+    })
     expect(rowChoiceOf(defaultDesign(), 'button', 'radius')?.label).toBe('Shape')
   })
 
@@ -52,7 +57,8 @@ describe('an element’s Style section', () => {
     const design = defaultDesign()
     design.tune = { headline: { size: 60, weight: 600 } }
     design.style = { headline: { base: { size: 64 } } }
-    applyChoice(design, 'headline', rowChoiceOf(design, 'headline', 'size')!, 'large')
+    const scale = choicesOf(design, 'headline').find((choice) => choice.label === 'Scale')!
+    applyChoice(design, 'headline', scale, 'large')
     expect(design.brand.fonts.scale).toBe('large')
     // Only what took the scale's place is cleared.
     expect(design.tune).toEqual({ headline: { weight: 600 } })

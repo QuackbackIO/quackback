@@ -40,7 +40,7 @@ export function RoadmapPageView({
           a usable height instead of clipping. */}
       <div
         className={cn(
-          'mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6',
+          'qb-page',
           !listed &&
             'min-h-[calc(100dvh-7rem-var(--portal-footer-height,0px))] sm:h-[calc(100dvh-7rem-var(--portal-footer-height,0px))] flex flex-col sm:min-h-0',
           designTitles ? 'pt-6 pb-8' : 'py-8'

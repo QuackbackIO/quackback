@@ -7,8 +7,7 @@
  * with a way back. Each change is one undo step named for it.
  */
 import { useId, useMemo, useState, type ReactNode } from 'react'
-import { ChevronRightIcon, MinusIcon, PlusIcon } from '@heroicons/react/16/solid'
-import { DesignTiles } from '@/components/admin/settings/appearance/design-tiles'
+import { MinusIcon, PlusIcon } from '@heroicons/react/16/solid'
 import { presignBandImage } from '@/components/admin/settings/appearance/design-update'
 import { Button } from '@/components/ui/button'
 import { prepareBackgroundImage, type PreparedBackground } from '@/lib/client/background-image'
@@ -41,12 +40,15 @@ import {
   PropertyRow,
   PropertySection,
   PropertyTiles,
+  PropertyDrawnTiles,
+  type DrawnOption,
 } from './properties/properties-panel'
 import { ScopeLine } from './properties/scope-line'
 import { ScrubNumber } from './properties/scrub-number'
 import { TokenField } from './properties/token-field'
 import { colourTokens } from './properties/tokens'
 import { THEME } from './properties/words'
+import { SummaryRow } from './properties/summary-row'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -191,17 +193,11 @@ function BackgroundImageSlot({
         )}
         <span className="ms-auto flex gap-0.5">
           {url && onRemove && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={onRemove}
-              disabled={busy}
-            >
+            <Button variant="ghost" size="2xs" onClick={onRemove} disabled={busy}>
               Remove
             </Button>
           )}
-          <Button variant="outline" size="sm" className="h-6 px-2 text-xs" asChild disabled={busy}>
+          <Button variant="outline" size="2xs" asChild disabled={busy}>
             <label className="cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-muted-foreground">
               {busy ? THEME.uploading : url ? THEME.replace : THEME.upload}
               <input
@@ -382,8 +378,8 @@ function FillSettings({
               {index === 2 && (
                 <Button
                   variant="ghost"
-                  size="icon-sm"
-                  className="size-6 shrink-0"
+                  size="icon-xs"
+                  className="shrink-0"
                   aria-label={THEME.removeStop}
                   onClick={() => onChange({ ...fill, stops: fill.stops.slice(0, 2) }, 'Colours')}
                 >
@@ -396,7 +392,7 @@ function FillSettings({
             <button
               type="button"
               onClick={() => onChange({ ...fill, stops: [...fill.stops, 'page'] }, 'Colours')}
-              className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+              className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-ring"
             >
               <PlusIcon className="size-3.5" aria-hidden="true" />
               {THEME.addStop}
@@ -414,16 +410,19 @@ function FillSettings({
     case 'pattern':
       return (
         <>
-          <DesignTiles
-            name={`${idPrefix}-pattern`}
+          <LabelledDrawnTiles
+            id={`${idPrefix}-pattern`}
             label="Pattern"
             value={fill.pattern}
             columns={4}
-            options={options('pattern').map(([value, label]) => ({
-              value: value as typeof fill.pattern,
-              label,
-              drawing: <PatternDrawing pattern={value} />,
-            }))}
+            options={options('pattern').map(
+              ([value, label]) =>
+                [
+                  value as NonNullable<typeof fill.pattern>,
+                  label,
+                  <PatternDrawing key={value} pattern={value} />,
+                ] as const
+            )}
             onChange={(pattern) => onChange({ ...fill, pattern }, 'Pattern')}
           />
           <BackgroundColourField
@@ -498,6 +497,29 @@ function FillSettings({
   }
 }
 
+/** Drawn tiles under their name, the builder's one control for a drawn choice. */
+function LabelledDrawnTiles<T extends string>({
+  id,
+  label,
+  ...tiles
+}: {
+  id: string
+  label: string
+  value: T | undefined
+  options: ReadonlyArray<DrawnOption<T>>
+  onChange: (value: T) => void
+  columns: 3 | 4
+}) {
+  return (
+    <div className="space-y-1">
+      <p id={`${id}-label`} className="text-xs text-muted-foreground">
+        {label}
+      </p>
+      <PropertyDrawnTiles id={id} label={label} {...tiles} />
+    </div>
+  )
+}
+
 /** The kinds, each a drawn tile. */
 function KindTiles({
   name,
@@ -513,18 +535,21 @@ function KindTiles({
   kinds?: readonly BackgroundKind[]
 }) {
   return (
-    <DesignTiles
-      name={name}
+    <LabelledDrawnTiles
+      id={name}
       label={label}
       value={value}
       columns={3}
       options={options('kind')
         .filter(([kind]) => kinds.includes(kind as BackgroundKind))
-        .map(([kind, label]) => ({
-          value: kind as BackgroundKind,
-          label,
-          drawing: <KindDrawing kind={kind as BackgroundKind} />,
-        }))}
+        .map(
+          ([kind, label]) =>
+            [
+              kind as BackgroundKind,
+              label,
+              <KindDrawing key={kind} kind={kind as BackgroundKind} />,
+            ] as const
+        )}
       onChange={onChange}
     />
   )
@@ -750,27 +775,18 @@ export function PageBackgroundEntry({
   const whose = own && ownShown ? THEME.pageOnly(BACKGROUND_PAGE_NAMES[own]) : THEME.everyPage
   return (
     <div className="space-y-2" data-find={find}>
-      <button
-        type="button"
-        aria-label={`${THEME.sections.pageBackground}: ${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
-        aria-expanded={onOpen ? undefined : open}
-        aria-controls={onOpen ? undefined : regionId}
-        onClick={() => (onOpen ? onOpen() : setOpen(!open))}
-        className="flex min-h-7 w-full items-center gap-2 rounded-md text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-      >
-        <span className="w-[92px] shrink-0 truncate text-muted-foreground">
-          {label ?? (onOpen ? whose : THEME.sections.pageBackground)}
-        </span>
-        <span className="min-w-0 flex-1 truncate px-1.5">
-          {onOpen && !label
+      <SummaryRow
+        label={label ?? (onOpen ? whose : THEME.sections.pageBackground)}
+        value={
+          onOpen && !label
             ? BACKGROUND_NAMES[shown.kind]
-            : `${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
-        </span>
-        <ChevronRightIcon
-          className={cn('size-3.5 text-muted-foreground', !onOpen && open && 'rotate-90')}
-          aria-hidden="true"
-        />
-      </button>
+            : `${whose}: ${BACKGROUND_NAMES[shown.kind]}`
+        }
+        name={`${THEME.sections.pageBackground}: ${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
+        expanded={onOpen ? undefined : open}
+        controls={onOpen ? undefined : regionId}
+        onOpen={() => (onOpen ? onOpen() : setOpen(!open))}
+      />
       {!onOpen && (
         <div id={regionId} hidden={!open}>
           {open && (

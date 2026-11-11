@@ -10,6 +10,7 @@ import type { NamedUpdate } from './menu-link-form'
 import {
   PropertiesPanel,
   PropertyRow,
+  PropertyRowNote,
   PropertySection,
   type Crumb,
 } from './properties/properties-panel'
@@ -92,9 +93,9 @@ export function MenuPartSettings({
           />
         </PropertyRow>
         {bad && (
-          <p id={`${fieldId}-error`} className="ps-[100px] text-xs text-destructive">
+          <PropertyRowNote id={`${fieldId}-error`} className="text-xs text-destructive">
             Use a full address starting with https://
-          </p>
+          </PropertyRowNote>
         )}
         <PropertyRow label={WORDS.newTab} htmlFor={`${fieldId}-tab`}>
           <Switch
@@ -107,8 +108,8 @@ export function MenuPartSettings({
       <div className="flex justify-end px-4 py-2.5">
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 text-xs text-destructive hover:text-destructive"
+          size="xs"
+          className="px-3 text-destructive hover:text-destructive"
           onClick={remove}
         >
           <TrashIcon className="size-3.5" aria-hidden="true" />

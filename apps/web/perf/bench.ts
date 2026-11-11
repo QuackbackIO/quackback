@@ -20,6 +20,9 @@
  *   bun perf/bench.ts --renders ...    list the components that rendered most (build with
  *                                      PERF_UNMINIFIED=1 for readable names)
  *   PERF_APP_DIR=../other/apps/web bun perf/bench.ts   bench another build
+ *   PERF_SUITE=designed bun perf/bench.ts
+ *                                      the designed portals, on their own database
+ *                                      (PERF_SUITE=designed bun perf/setup-db.ts)
  *   bun perf/bench.ts --trace --only ui:portal-load
  *                                      list the SQL behind the journey, most repeated first,
  *                                      then each server request (server functions by name)
@@ -44,7 +47,9 @@ import {
 import { parseArgs } from 'node:util'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { journeys, type Actor, type BrowserJourney, type DocumentJourney } from './journeys'
-import { BENCH_URL, signedInContext, startBenchServer } from './config'
+import { BENCH_SUITE, BENCH_URL, signedInContext, startBenchServer } from './config'
+import { INTERACTION_SCRIPT, readInteraction, startInteraction } from './interaction'
+import { LAYOUT_SHIFT_SCRIPT, layoutShiftScore, type Shift } from './layout-shift'
 
 const { values: args } = parseArgs({
   options: {
@@ -193,6 +198,8 @@ const INIT_SCRIPT = `
 
 interface FrameSnapshot {
   at: number
+  /** When the document's clock started, which tells one document from the next. */
+  origin: number
   commits: number
   renders: number
   byComponent: Record<string, number>
@@ -212,6 +219,7 @@ function frameSnapshot(frame: Frame, withNavigation: boolean): Promise<FrameSnap
   return frame.evaluate(
     (navigation) => ({
       at: performance.now(),
+      origin: performance.timeOrigin,
       commits: (window as unknown as { __perfCommits: number }).__perfCommits,
       renders: (window as unknown as { __perfRenders: number }).__perfRenders,
       byComponent: {
@@ -328,9 +336,12 @@ async function measureBrowser(
   const context = await browser.newContext({
     baseURL,
     viewport: { width: 1440, height: 900 },
+    ...deviceOptions(journey),
     storageState: storage[journey.as],
   })
   await context.addInitScript(INIT_SCRIPT)
+  if (journey.interaction) await context.addInitScript(INTERACTION_SCRIPT)
+  if (journey.layoutShifts) await context.addInitScript(LAYOUT_SHIFT_SCRIPT)
   const page = await context.newPage()
   const inflight = trackInflight(page)
   const cdp = await context.newCDPSession(page)
@@ -364,13 +375,16 @@ async function measureBrowser(
     const id = nextId(journey.name)
     await context.setExtraHTTPHeaders({ 'x-request-id': id })
     const before = journey.setup ? await snapshot(page) : null
+    const shiftsFrom = journey.layoutShifts ? await shiftMark(page) : null
     const cdpBefore = await cdpMetrics(cdp)
     if (opts.instrument) await cdp.send('Profiler.takePreciseCoverage')
+    if (journey.interaction) await startInteraction(page, cdp)
 
     const started = performance.now()
     await journey.run(page)
     const doneMs = performance.now() - started
     const quiet = await settle(page, inflight)
+    const felt = journey.interaction ? await readInteraction(page, cdp) : null
 
     let jsCalls = 0
     if (opts.instrument) {
@@ -382,13 +396,15 @@ async function measureBrowser(
     }
     const after = await snapshot(page)
     const cdpAfter = await cdpMetrics(cdp)
-    const since = before?.at ?? 0
+    // A run that loads a new document counts all of it: its clock and counters start afresh.
+    const start = before?.origin === after.origin ? before : null
+    const since = start?.at ?? 0
     const loaded = after.resources.filter((r) => r.start >= since)
     let childCommits = 0
     let childRenders = 0
-    const byComponent = diffCounts(after.byComponent, before?.byComponent)
+    const byComponent = diffCounts(after.byComponent, start?.byComponent)
     for (const [frame, child] of after.frames) {
-      const earlier = before?.frames.get(frame)
+      const earlier = start?.frames.get(frame)
       loaded.push(...child.resources.filter((r) => r.start >= (earlier?.at ?? 0)))
       childCommits += child.commits - (earlier?.commits ?? 0)
       childRenders += child.renders - (earlier?.renders ?? 0)
@@ -411,13 +427,17 @@ async function measureBrowser(
       jsRequests: scripts.length,
       jsKB: kb(scripts.reduce((sum, r) => sum + r.bytes, 0)),
       htmlTransferKB: kb(navigation?.bytes ?? 0),
-      reactCommits: after.commits - (before?.commits ?? 0) + childCommits,
-      componentRenders: after.renders - (before?.renders ?? 0) + childRenders,
+      reactCommits: after.commits - (start?.commits ?? 0) + childCommits,
+      componentRenders: after.renders - (start?.renders ?? 0) + childRenders,
       layouts: cdpAfter.LayoutCount - cdpBefore.LayoutCount,
       styleRecalcs: cdpAfter.RecalcStyleCount - cdpBefore.RecalcStyleCount,
       domElements: after.elements,
     }
     if (opts.instrument) metrics.jsCalls = jsCalls
+    // What the journey felt like, and how long its run took, wall clock; the renders in child frames too.
+    if (felt)
+      Object.assign(metrics, felt, { frameRenders: childRenders, runMs: Math.round(doneMs) })
+    if (shiftsFrom) metrics.cls = await shiftScoreSince(page, shiftsFrom)
     return {
       id,
       quiet,
@@ -436,6 +456,41 @@ async function measureBrowser(
 }
 
 const kb = (bytes: number) => Math.round((bytes / 1024) * 10) / 10
+
+// ---------------------------------------------------------------------------
+// Layout shifts and devices
+// ---------------------------------------------------------------------------
+
+/** A phone: its screen, pixel density and touch, for journeys that ask for one. */
+const PHONE = {
+  viewport: { width: 390, height: 844 },
+  deviceScaleFactor: 3,
+  isMobile: true,
+  hasTouch: true,
+}
+
+function deviceOptions(journey: BrowserJourney) {
+  return journey.device === 'phone' ? PHONE : {}
+}
+
+/** Where the measured part starts on the page's own clock, which a new document resets. */
+async function shiftMark(page: Page): Promise<{ origin: number; at: number }> {
+  return page.evaluate(() => ({ origin: performance.timeOrigin, at: performance.now() }))
+}
+
+/**
+ * The journey's layout shift score (perf/layout-shift.ts): every shift on
+ * the document the journey ends on, from where its measured part started, or
+ * from the first paint when that part loaded a new document.
+ */
+async function shiftScoreSince(page: Page, from: { origin: number; at: number }) {
+  const { origin, shifts } = await page.evaluate(() => ({
+    origin: performance.timeOrigin,
+    shifts: (window as unknown as { __perfShifts?: Shift[] }).__perfShifts ?? [],
+  }))
+  const since = origin === from.origin ? from.at : 0
+  return layoutShiftScore(shifts.filter((shift) => shift.t >= since))
+}
 
 /** Per-name counts that grew between two snapshots. */
 function diffCounts(after: Record<string, number>, before: Record<string, number> = {}) {
@@ -471,7 +526,8 @@ function loadBudgets(): Budgets {
  * sizes and component renders can move a little, so they carry a tolerance
  * and are budgeted at their peak across repeats. React commits, layout and
  * style-recalc counts and JS call counts move more than that between runs of
- * the admin journeys, so they are reported, never gated.
+ * the admin journeys, so they are reported, never gated. A journey that asks
+ * for it is also gated on how far its content moves (cls).
  */
 const GATED = [
   'dbQueries',
@@ -482,6 +538,10 @@ const GATED = [
   'htmlKB',
   'htmlTransferKB',
   'componentRenders',
+  // The messages a builder journey sends its canvas: never more than its changes, and
+  // fewer on a slower machine, which runs several changes into one.
+  'canvasPosts',
+  'cls',
 ]
 
 function compare(budgets: Budgets, name: string, metrics: Metrics) {
@@ -573,6 +633,7 @@ function percentile(values: number[], p: number) {
 async function main() {
   const selected = journeys.filter(
     (j) =>
+      (j.suite ?? 'core') === BENCH_SUITE &&
       (!args.core || !j.sweep) &&
       (!args.only?.length || args.only.some((o) => j.name === o || j.name.startsWith(o)))
   )
@@ -732,7 +793,8 @@ async function main() {
       }
     }
 
-    writeFileSync(`${perfDir}.results/latest.json`, JSON.stringify(results, null, 2))
+    const latest = BENCH_SUITE === 'designed' ? 'latest-designed.json' : 'latest.json'
+    writeFileSync(`${perfDir}.results/${latest}`, JSON.stringify(results, null, 2))
 
     if (args.update) {
       for (const [name, { metrics, unstable, peaks }] of Object.entries(results)) {

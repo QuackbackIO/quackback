@@ -28,6 +28,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { onRadioKeys, radioTabIndex } from '@/components/admin/settings/appearance/radio-keys'
 import { cn } from '@/lib/shared/utils'
 import {
   pickName,
@@ -84,6 +85,7 @@ import {
   ElementStyleSection,
   applyChoice,
   rowChoiceOf,
+  sameOption,
   type FontSlot,
 } from './element-style-section'
 import { StyleField } from './element-styles'
@@ -94,6 +96,7 @@ import {
   PropertyRow,
   PropertySection,
   PropertyTiles,
+  ROW_INDENT,
   type Crumb,
   type OverridePlace,
   type PanelAction,
@@ -351,13 +354,16 @@ export function ElementPanel({
     return (
       <p
         data-in-use={label}
-        className="-mt-0.5 flex min-w-0 items-center gap-1.5 ps-[100px] text-[11px] text-muted-foreground"
+        className={cn(
+          '-mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground',
+          ROW_INDENT
+        )}
       >
         <span className="min-w-0 truncate">{note.text}</span>
         <button
           type="button"
           onClick={use}
-          className="shrink-0 rounded hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="shrink-0 rounded hover:text-foreground hover:underline focus-ring"
         >
           {WORDS.useThis}
         </button>
@@ -377,7 +383,20 @@ export function ElementPanel({
       : `${WORDS.reset} ${label.toLowerCase()}`
     // For every one, a brand choice that sets this property is its row's tiles, with Custom for the exact field.
     const choice = widest && state === 'base' ? rowChoiceOf(design, pick.element, prop) : undefined
-    const fieldLabel = choice ? `${WORDS.custom} ${label.toLowerCase()}` : label
+    // A choice whose options are values of the row's own control is that control, as on every element.
+    const pickChoice = (option: string) =>
+      choice &&
+      update(
+        (draft) => applyChoice(draft, pick.element, choice, option),
+        undoName(label.toLowerCase())
+      )
+    const writeRow = (value: unknown) => {
+      const option = sameOption(choice, value)
+      if (option) pickChoice(option)
+      else write(prop, value)
+    }
+    const tiled = choice && !choice.same
+    const fieldLabel = tiled ? `${WORDS.custom} ${label.toLowerCase()}` : label
     const control = (() => {
       switch (info.kind) {
         case 'paint':
@@ -392,7 +411,7 @@ export function ElementPanel({
                 value={here as string | undefined}
                 inherited={typeof from?.value === 'string' ? from.value : undefined}
                 tokens={tokens}
-                onChange={(v) => write(prop, v)}
+                onChange={writeRow}
                 dark={darkOf(prop)}
               />
               {info.kind === 'paint' && (
@@ -405,7 +424,7 @@ export function ElementPanel({
                       angle: 135,
                     } satisfies StylePaint)
                   }
-                  className="min-w-0 truncate rounded text-[11px] text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                  className="min-w-0 truncate rounded text-2xs text-muted-foreground hover:text-foreground hover:underline focus-ring"
                 >
                   Gradient
                 </button>
@@ -449,7 +468,7 @@ export function ElementPanel({
               value={here as string | undefined}
               inherited={from?.value as string | undefined}
               options={Object.entries(tiles) as Array<[string, string]>}
-              onChange={(v) => write(prop, v)}
+              onChange={writeRow}
             />
           )
         }
@@ -464,7 +483,7 @@ export function ElementPanel({
         readAt(design, ctx, at, 'phone', state, prop) !== undefined,
       onUseAllScreens: phone ? () => write(prop, undefined) : undefined,
     }
-    if (choice) {
+    if (choice && tiled) {
       const custom = here !== undefined || customOpen.has(prop)
       return (
         <Fragment key={`${state}-${prop}`}>
@@ -490,11 +509,7 @@ export function ElementPanel({
                     else next.delete(prop)
                     return next
                   })
-                  if (value !== CUSTOM)
-                    update(
-                      (draft) => applyChoice(draft, pick.element, choice, value),
-                      undoName(label.toLowerCase())
-                    )
+                  if (value !== CUSTOM) pickChoice(value)
                 }}
               />
               {custom && <div className="flex min-w-0 items-center gap-1.5">{control}</div>}
@@ -694,14 +709,16 @@ function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Scr
     ['all', PHONE_WORDS.allScreens],
     ['phone', PHONE_WORDS.phone],
   ]
+  const none = !options.some(([screen]) => screen === value)
   return (
     <div
       role="radiogroup"
       aria-label={PHONE_WORDS.editing}
       data-screen-chip=""
+      onKeyDown={onRadioKeys}
       className="inline-flex h-6 items-center rounded-md border border-border p-0.5"
     >
-      {options.map(([screen, label]) => {
+      {options.map(([screen, label], index) => {
         const on = value === screen
         return (
           <button
@@ -709,13 +726,14 @@ function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Scr
             type="button"
             role="radio"
             aria-checked={on}
+            tabIndex={radioTabIndex(on, none, index)}
             onClick={() => onChange(screen)}
             className={cn(
-              'h-full rounded px-1.5 text-[11px] focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'h-full rounded px-1.5 text-2xs focus-ring',
               on
                 ? screen === 'phone'
                   ? PHONE_TINT.chip
-                  : 'bg-foreground text-background'
+                  : 'bg-muted font-medium text-foreground ring-1 ring-foreground forced-colors:outline forced-colors:outline-2'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
@@ -750,7 +768,7 @@ function StateChip({
         <button
           type="button"
           data-state-chip=""
-          className="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-2xs text-muted-foreground hover:text-foreground focus-ring"
         >
           {WORDS.state}: <span className="text-foreground">{STATE_INFO[value].label}</span>
           {others && (
@@ -762,7 +780,7 @@ function StateChip({
               <span className="sr-only">, other states set</span>
             </>
           )}
-          <ChevronDownIcon className="size-3" aria-hidden="true" />
+          <ChevronDownIcon className="size-3.5" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
@@ -771,7 +789,7 @@ function StateChip({
           onValueChange={(next) => onChange(next as StyleState)}
         >
           {states.map((s) => (
-            <DropdownMenuRadioItem key={s} value={s} className="text-[13px]">
+            <DropdownMenuRadioItem key={s} value={s} className="text-ui">
               {STATE_INFO[s].label}
               {isSet(s) && (
                 <>

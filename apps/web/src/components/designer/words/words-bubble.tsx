@@ -24,6 +24,7 @@ import {
 } from '@/lib/shared/words-editor/extensions'
 import { cn } from '@/lib/shared/utils'
 import { WORDS } from '../properties/words'
+import { Swatch } from '../swatch'
 
 const MOD =
   typeof navigator !== 'undefined' && /Mac|iP(hone|ad)/.test(navigator.platform) ? '⌘' : 'Ctrl+'
@@ -168,15 +169,6 @@ function MoreButton({ open, onPress }: { open: boolean; onPress: () => void }) {
   )
 }
 
-/** A brand colour as a round swatch. */
-const Swatch = ({ colour }: { colour: string }) => (
-  <span
-    aria-hidden="true"
-    className="size-3.5 rounded-full border border-foreground/15"
-    style={{ background: colour }}
-  />
-)
-
 /** Accent, Highlight and Lighter: one phrase per headline, so a new one moves it. */
 function HeadlineMarks({
   state,
@@ -231,7 +223,7 @@ function HeadlineMarks({
               pressed={(state.accentColour ?? 'accent') === role}
               onPress={() => onCommand({ type: 'accentColour', role })}
             >
-              <Swatch colour={colour} />
+              <Swatch colour={colour} className="rounded-full" />
             </BarButton>
           ))}
         </Row>
@@ -323,7 +315,7 @@ function RichMarks({
             disabled={inList}
             onPress={() => onCommand({ type: 'heading', level: 0 })}
           >
-            <span className="text-[12px]">Aa</span>
+            <span className="text-xs">Aa</span>
           </BarButton>
           {([2, 3] as const).map((level) => (
             <BarButton
@@ -359,7 +351,7 @@ function RichMarks({
                 pressed={state.colour === null}
                 onPress={() => onCommand({ type: 'colour', role: null })}
               >
-                <Swatch colour="currentColor" />
+                <Swatch colour="currentColor" className="rounded-full" />
               </BarButton>
               {roles.map(({ role, name, colour }) => (
                 <BarButton
@@ -369,7 +361,7 @@ function RichMarks({
                   pressed={state.colour === role}
                   onPress={() => onCommand({ type: 'colour', role })}
                 >
-                  <Swatch colour={colour} />
+                  <Swatch colour={colour} className="rounded-full" />
                 </BarButton>
               ))}
             </>
@@ -414,10 +406,10 @@ function LinkField({
           if (href) onDone(href)
           else setWrong(true)
         }}
-        className="h-7 w-56 rounded-md border border-border bg-background px-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="h-7 w-56 rounded-md border border-border bg-background px-2 text-ui outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       />
       {wrong && (
-        <span id={`${id}-wrong`} className="text-[12px] text-destructive">
+        <span id={`${id}-wrong`} className="text-xs text-destructive">
           A web or email address
         </span>
       )}
@@ -455,7 +447,7 @@ function BarButton({
           onMouseDown={(event) => event.preventDefault()}
           onClick={onPress}
           className={cn(
-            'inline-flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 text-[13px] font-medium',
+            'inline-flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 text-ui font-medium',
             'hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
             'disabled:pointer-events-none disabled:opacity-40',
             (pressed || expanded) && 'bg-accent text-accent-foreground'

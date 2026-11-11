@@ -71,4 +71,22 @@ describe('PublishedPopover', () => {
     )
     expect(screen.queryByRole('status')).toBeNull()
   })
+
+  it('closes on a click outside it, including one on the canvas frame', () => {
+    const onClose = vi.fn()
+    renderPopover(false, onClose)
+    const frame = document.createElement('iframe')
+    document.body.appendChild(frame)
+    frame.focus()
+    act(() => void window.dispatchEvent(new Event('blur')))
+    expect(onClose).toHaveBeenCalledOnce()
+    frame.remove()
+  })
+
+  it('stays open when the window loses focus to another app', () => {
+    const onClose = vi.fn()
+    renderPopover(false, onClose)
+    act(() => void window.dispatchEvent(new Event('blur')))
+    expect(onClose).not.toHaveBeenCalled()
+  })
 })

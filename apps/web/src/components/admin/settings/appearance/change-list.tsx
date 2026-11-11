@@ -190,7 +190,7 @@ function ChangeRows({ changes, shown }: { changes: DesignChange[]; shown: Design
         const side = (which: 'before' | 'after') =>
           (slot && fontName(changes, slot, which)) ?? shownValue(change.path, change[which])
         return (
-          <li key={change.path} className="flex items-center gap-3 px-3 py-2 text-[13px]">
+          <li key={change.path} className="flex items-center gap-3 px-3 py-2 text-ui">
             <span className="w-36 shrink-0 font-medium">{changeLabel(change.path)}</span>
             <ChangeValue value={side('before')} />
             <span aria-hidden="true" className="text-muted-foreground">

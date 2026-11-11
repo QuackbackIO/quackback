@@ -35,11 +35,11 @@ export function Advanced({
         if (now && part) designerAdvancedOpened(part)
       }}
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-[13px] hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-ui hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden">
         <span className="font-medium">{title}</span>
         <span className="ms-auto truncate text-xs text-muted-foreground">{hint}</span>
         <ChevronRightIcon
-          className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+          className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
           aria-hidden="true"
         />
       </summary>

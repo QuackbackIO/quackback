@@ -256,8 +256,10 @@ export function heroSettingShown(key: HeroKey, design: PortalDesign, page: Desig
       return designRoles(design).length > 1 && ['brand', 'tint', 'fade', 'blend'].includes(band)
     case 'headerBlend':
       return band !== 'none'
-    case 'mainAction':
     case 'height':
+      // A plain hero keeps a fixed room under the header, whatever its height, so none is offered.
+      return page === 'home' && band !== 'none'
+    case 'mainAction':
       // The list pages follow Home's look at a compact height of their own.
       return page === 'home'
     case 'composerWidth':

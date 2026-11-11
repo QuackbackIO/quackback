@@ -20,10 +20,10 @@ export function PortalMergeBanner({
 }: PortalMergeBannerProps) {
   return (
     <div
-      className="mb-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+      className="mb-4 p-4 rounded-lg bg-warning/10 border border-warning/30 animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
       style={{ animationDelay: '75ms' }}
     >
-      <p className="text-sm text-amber-800 dark:text-amber-200">
+      <p className="text-sm text-warning">
         <FormattedMessage
           id="portal.postDetail.mergeBanner.mergedInto"
           defaultMessage={'This post has been merged into'}
@@ -31,7 +31,7 @@ export function PortalMergeBanner({
         <Link
           to="/b/$slug/posts/$postId"
           params={{ slug: canonicalPostBoardSlug, postId: canonicalPostId }}
-          className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
+          className="font-medium underline underline-offset-2"
         >
           {canonicalPostTitle}
         </Link>

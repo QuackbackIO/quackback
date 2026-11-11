@@ -5,6 +5,7 @@
  * `validatePostCustomFieldValues` rules the server enforces apply here, so
  * client and server never drift.
  */
+import type { KeyboardEvent } from 'react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -24,6 +25,23 @@ import { cn } from '@/lib/shared/utils'
  * choices; longer lists stay a closed dropdown to keep the form compact.
  */
 export const PILL_SELECT_MAX_OPTIONS = 6
+
+/**
+ * Arrow keys in the choice chips move to the next one and pick it, as a
+ * radio group does. Kept here rather than shared with the admin's helper, so
+ * the portal form loads no extra module.
+ */
+function onChipKeys(event: KeyboardEvent<HTMLElement>) {
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
+  if (!step) return
+  const radios = [...event.currentTarget.querySelectorAll<HTMLElement>('[role=radio]')]
+  const at = radios.findIndex((radio) => radio === document.activeElement)
+  if (at < 0) return
+  event.preventDefault()
+  const next = radios[(at + step + radios.length) % radios.length]!
+  next.focus()
+  next.click()
+}
 
 export interface BoardCustomFieldsProps {
   fields: BoardCustomField[]
@@ -141,18 +159,26 @@ function SelectControl({ field, id, value, onChange }: SelectControlProps) {
   }
 
   return (
-    <div role="radiogroup" aria-label={field.label} className="flex flex-wrap gap-1.5">
-      {options.map((option) => {
+    <div
+      role="radiogroup"
+      aria-label={field.label}
+      onKeyDown={onChipKeys}
+      className="flex flex-wrap gap-1.5"
+    >
+      {options.map((option, index) => {
         const isSelected = option === selected
+        // One Tab stop: the picked chip, else the first.
+        const stop = isSelected || (!options.includes(selected ?? '') && index === 0)
         return (
           <button
             key={option}
             type="button"
             role="radio"
             aria-checked={isSelected}
+            tabIndex={stop ? 0 : -1}
             onClick={() => onChange(field.key, option)}
             className={cn(
-              'inline-flex items-center rounded-full border px-2.5 py-1 text-xs transition-colors',
+              'inline-flex items-center rounded-full border px-2.5 py-1 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
               isSelected
                 ? 'border-primary bg-primary/10 font-medium text-primary'
                 : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'

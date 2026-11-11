@@ -7,7 +7,12 @@ import { DraftNotices } from '@/components/admin/settings/appearance/draft-notic
 import { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
 import { trackBuilder } from '@/lib/client/builder-events'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
-import { deviceCaption, escapeStep, panelView } from '@/lib/shared/design/builder-chrome'
+import {
+  deviceCaption,
+  escapeStep,
+  panelView,
+  type Sheet,
+} from '@/lib/shared/design/builder-chrome'
 import { panelFor, upOf } from '@/lib/shared/design/panel-routes'
 import { designChecks } from '@/lib/shared/design/checks'
 import type { HomeBlockType } from '@/lib/shared/design/home'
@@ -51,7 +56,6 @@ import { ReviewCompare } from './review-compare'
 import { AddDragCard, AddDropLayer, useAddDrag } from './use-add-drag'
 import {
   focusAfterStepUp,
-  focusCanvas,
   focusHeading,
   focusSettings,
   inSettings,
@@ -84,7 +88,9 @@ import {
   useRefusalLines,
   type RefusalValue,
 } from './properties/change-refusal'
-import { useSaid } from './use-said'
+import { SaidRegion, useSaid } from './use-said'
+import { useSteadyChecks } from './use-steady-checks'
+import { useSteadyHandlers } from './use-steady-handlers'
 
 /** Escape inside these belongs to them. */
 const OWNS_ESCAPE =
@@ -139,8 +145,11 @@ export function DesignerShell({
   // Quackback AI's conversation.
   const { ai } = useDesignerAi(draft, { page, locale }, workspaceName, onAiApplied)
   const [now] = useState(() => new Date())
-  const canvasDesign = useCanvasDesign(draft.preview)
-  const checks = useMemo(() => designChecks(design), [design])
+  // The frame takes the design whole and builds its view there, as the server does. It is
+  // sent once a frame (see usePreviewPosting), so the builder draws each change only once.
+  const canvasDesign = useCanvasDesign(design)
+  // The same list while the checks say the same, which most changes leave them.
+  const checks = useSteadyChecks(useMemo(() => designChecks(design), [design]))
 
   const { said, say, undo, redo } = useSaid(draft)
   const picking = useCanvasSelection({
@@ -153,11 +162,6 @@ export function DesignerShell({
     say,
   })
   const { selection, setSelection, pick, nameOf, stepBack } = picking
-  // The page's own panel shows with nothing picked, until Escape closes it; any pick opens it again.
-  const [pageClosed, setPageClosed] = useState(false)
-  useEffect(() => {
-    if (selection || picking.elementKey) setPageClosed(false)
-  }, [selection, picking.elementKey])
   // The picked element's state, which the canvas draws it in; a new pick starts at rest.
   const [elementState, setElementState] = useState<StyleState>('base')
   useEffect(() => setElementState('base'), [picking.elementKey])
@@ -232,7 +236,6 @@ export function DesignerShell({
     setSelection,
     open: () => {
       setPane('settings')
-      setPageClosed(false)
     },
   })
   const dialogs = useBuilderDialogs({
@@ -262,9 +265,7 @@ export function DesignerShell({
   )
   // The element's own panel shows in place of its block's, though not under a sheet.
   const route = panelFor(selection, !!pickedElement && !shown.sheet, page, nameOf)
-  const settingsOpen = !pageClosed || !!selection || !!shown.sheet || !!pickedElement
-  // A narrow window shows the page when there are no settings to show.
-  const column: Pane = pane === 'settings' && !settingsOpen ? 'page' : pane
+  const column: Pane = pane
 
   // Each change is named for the part it changes, so undo says what it takes back.
   // A change the server would refuse is not made; why shows under the row that made it.
@@ -342,7 +343,7 @@ export function DesignerShell({
         locale={locale}
         sort={design.pages.feedback.defaultSort}
         live={draft.live}
-        draft={draft.preview}
+        draft={design}
       />
     ),
   })
@@ -383,7 +384,6 @@ export function DesignerShell({
   const treeOrigin = useRef<TreeOrigin | null>(null)
   const pickFromTree = (row: TreeRow) => {
     menu.dismiss()
-    setPageClosed(false)
     treeOrigin.current = { row: row.id, selection: row.key }
     const node = row.part ? partNode(row.part) : null
     if (node) picking.select(row.key, null, node)
@@ -426,6 +426,50 @@ export function DesignerShell({
   const menuHot = picking.hovered === 'header' || selection === 'header'
   const pickedBlock = selection?.startsWith('block-') ? (nameOf(selection) ?? null) : null
   const caption = deviceCaption(size)
+  // The top bar's handlers, each one function for the builder's life that runs the latest.
+  const topBar = useSteadyHandlers({
+    exit: () => void exit(),
+    pick: pickAndFocus,
+    fixCheck: (check: (typeof checks)[number]) =>
+      check.fix && update(check.fix.apply, check.fix.label),
+    turnOn: () => menu.setAdding(true),
+    sheet: (next: Sheet) => {
+      panel.dispatch({ type: 'toggle', sheet: next })
+      setPane('settings')
+    },
+    preview: startPreview,
+    publish: () => void publishing.start(),
+    closePublished: publishing.closePublished,
+    discard,
+    dialog: dialogs.show,
+    undo,
+    redo,
+  })
+  // The top bar reads the menu and the draft's state, each the same while it is the same.
+  const navOnly = useMemo(() => ({ nav: design.nav }), [design.nav])
+  const changeCount = draft.changes.length
+  const topBarDraft = useMemo(
+    () => ({
+      undoLabel: draft.undoLabel,
+      redoLabel: draft.redoLabel,
+      changes: changeCount,
+      saving: draft.saving,
+      failed: draft.failed,
+      conflict: draft.conflict,
+      published: !!draft.published,
+      canPublish: draft.canPublish,
+    }),
+    [
+      draft.undoLabel,
+      draft.redoLabel,
+      changeCount,
+      draft.saving,
+      draft.failed,
+      draft.conflict,
+      draft.published,
+      draft.canPublish,
+    ]
+  )
   // What the canvas draws while the page loads: its parts, as shapes.
   const skeleton = <CanvasSkeleton parts={skeletonOf(nodes, design.pages.home.blocks)} />
 
@@ -442,7 +486,7 @@ export function DesignerShell({
             blocks.blockKeys(event, () => dialogs.show('keys'))
             if (event.key !== 'Escape' || event.defaultPrevented) return
             if ((event.target as Element).closest(OWNS_ESCAPE)) return
-            const step = escapeStep(panel.state, selection ?? picking.elementKey, settingsOpen)
+            const step = escapeStep(panel.state, selection ?? picking.elementKey)
             if (step === 'close-sheet') panel.close()
             else if (step === 'up') {
               // The panel stays, a level up: focus in it stays in it, back on the
@@ -452,21 +496,15 @@ export function DesignerShell({
               const row = treeReturnRow(treeOrigin.current, selection)
               stepBack()
               if (kept) focusAfterStepUp({ toPage, row })
-            } else if (step === 'close-page') {
-              const lost = inSettings()
-              setPageClosed(true)
-              if (lost) focusCanvas()
             }
           }}
         >
-          {settingsOpen && (
-            <a
-              href="#designer-settings"
-              className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-muted-foreground"
-            >
-              Skip to properties
-            </a>
-          )}
+          <a
+            href="#designer-settings"
+            className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-overlay focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-muted-foreground"
+          >
+            Skip to properties
+          </a>
           {previewing ? (
             <PreviewBar
               page={page}
@@ -479,39 +517,38 @@ export function DesignerShell({
             <BuilderTopBar
               returnPath={returnPath}
               workspaceName={workspaceName}
-              onExit={() => void exit()}
-              draft={draft}
-              view={view}
+              onExit={topBar.exit}
+              draft={topBarDraft}
+              nav={navOnly}
+              mode={design.mode}
+              gates={gates}
+              here={view.here}
+              sample={view.sample}
+              widget={view.widget}
+              visitor={view.visitor}
+              setPage={setPage}
+              showSample={view.showSample}
+              showWidget={view.showWidget}
+              setVisitor={view.setVisitor}
               canvas={canvas}
-              onPick={pickAndFocus}
+              onPick={topBar.pick}
               checks={checks}
-              onFixCheck={(check) => check.fix && update(check.fix.apply, check.fix.label)}
-              onUndo={undo}
-              onRedo={redo}
-              onTurnOn={() => menu.setAdding(true)}
+              onFixCheck={topBar.fixCheck}
+              onUndo={topBar.undo}
+              onRedo={topBar.redo}
+              onTurnOn={topBar.turnOn}
               sheet={panel.state.sheet}
-              onSheet={(next) => {
-                panel.dispatch({ type: 'toggle', sheet: next })
-                setPane('settings')
-              }}
-              onPreview={startPreview}
-              onPublish={() => void publishing.start()}
+              onSheet={topBar.sheet}
+              onPreview={topBar.preview}
+              onPublish={topBar.publish}
               published={publishing.published}
-              onPublishedClose={publishing.closePublished}
-              onDiscard={discard}
-              onDialog={dialogs.show}
+              onPublishedClose={topBar.closePublished}
+              onDiscard={topBar.discard}
+              onDialog={topBar.dialog}
             />
           )}
 
-          {!previewing && (
-            <BuilderColumns
-              pane={column}
-              onPane={(next) => {
-                if (next === 'settings') setPageClosed(false)
-                setPane(next)
-              }}
-            />
-          )}
+          {!previewing && <BuilderColumns pane={column} onPane={setPane} />}
           <div className="flex min-h-0 flex-1">
             {!previewing && (
               <AiPane pane={aiPane} hidden={column !== 'ai'}>
@@ -550,12 +587,10 @@ export function DesignerShell({
               tabIndex={-1}
               className={cn(
                 'flex min-h-0 min-w-0 flex-1 flex-col p-4 pb-3 outline-none',
-                !previewing && column !== 'page' && 'max-[1100px]:hidden'
+                !previewing && column !== 'page' && 'max-builder:hidden'
               )}
             >
-              <p role="status" className="sr-only">
-                {said}
-              </p>
+              <SaidRegion said={said} />
               {!previewing && (
                 <div className="mb-2 space-y-2 empty:hidden">
                   <DraftNotices draft={draft} />
@@ -597,7 +632,7 @@ export function DesignerShell({
                     title="Widget"
                   />
                 ) : page === 'post' && !postPath ? (
-                  <p className="p-6 text-[13px] text-muted-foreground">
+                  <p className="p-6 text-ui text-muted-foreground">
                     {noPost ? 'There are no posts to show yet.' : 'Finding a post…'}
                   </p>
                 ) : (
@@ -611,14 +646,12 @@ export function DesignerShell({
                     theme={design.mode === 'auto' ? theme : design.mode}
                     locale={locale}
                     sort={design.pages.feedback.defaultSort}
-                    refreshKey={`${draft.published?.number ?? 0}`}
                     design={canvasDesign}
                     structural={structural}
                     zoom={previewing ? 'fit' : canvas.zoom}
                     trying={previewing}
                     onSelect={(section, link, target) => {
                       menu.dismiss()
-                      setPageClosed(false)
                       picking.select(section, link, target)
                     }}
                     onFollow={(link) => {
@@ -635,7 +668,6 @@ export function DesignerShell({
                     onMenuHover={menu.setHovered}
                     onContext={(section, target, at) => {
                       menu.dismiss()
-                      setPageClosed(false)
                       picking.select(section, null, target)
                       // A block's actions open where it was right-clicked, as its ⋯ offers them.
                       if (section?.startsWith('block-')) openChipMenu(section, at)
@@ -650,6 +682,7 @@ export function DesignerShell({
                     }}
                     onLoad={picking.reload}
                     skeleton={skeleton}
+                    inPlace
                     layer={(frame) =>
                       previewing ? null : (
                         <>
@@ -708,7 +741,6 @@ export function DesignerShell({
               <BrandMatchProvider value={brandMatch}>
                 <BuilderSettings
                   hidden={column !== 'settings'}
-                  open={settingsOpen}
                   shown={shown}
                   route={route}
                   panel={panel}

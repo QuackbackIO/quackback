@@ -24,6 +24,7 @@ import { KitImageTile } from './kit-image-tile'
 import { PropertyRow } from './properties/properties-panel'
 import { ScrubNumber } from './properties/scrub-number'
 import { THEME, WORDS, resetToValue } from './properties/words'
+import { Swatch } from './swatch'
 
 /** Changes the draft as one step, named for its undo where a name is given. */
 type Update = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -173,16 +174,6 @@ export function LogoHeightRow({ design, update }: { design: PortalDesign; update
   )
 }
 
-function Swatch({ colour }: { colour: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="size-3.5 shrink-0 rounded-[4px] border border-border"
-      style={{ background: colour }}
-    />
-  )
-}
-
 /**
  * The logo's own colours, taken from the logo, for status markers drawn in
  * the brand's colours: swatches, a pick from the logo, and Clear.
@@ -235,8 +226,7 @@ export function LogoColourRow({
         {logoUrl && (
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="size-6"
+            size="icon-xs"
             disabled={busy}
             aria-label={busy ? THEME.reading : THEME.pickFromLogo}
             onClick={() => void take()}
@@ -248,7 +238,7 @@ export function LogoColourRow({
           <button
             type="button"
             onClick={() => update((draft) => void delete draft.brand.logoColours)}
-            className="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="rounded px-1 text-2xs text-muted-foreground hover:text-foreground hover:underline focus-ring"
           >
             {THEME.clear}
           </button>

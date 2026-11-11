@@ -31,7 +31,9 @@ export interface PickablePost {
 export function useDesignerPage(returnPath: string, design: PortalDesign) {
   const workspace = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const gates = useMemo(() => portalPageGates(workspace, true), [workspace])
-  const pages = designerPages(design, gates)
+  // The same list while the menu says the same: a change elsewhere leaves it be.
+  const { nav } = design
+  const pages = useMemo(() => designerPages({ nav }, gates), [nav, gates])
   const [start] = useState(() => locationOfPath(returnPath, design.nav.home.on))
   const [chosen, setChosen] = useState<DesignerPage>(() => start?.page ?? pages[0] ?? 'feedback')
   const [items, setItems] = useState<Partial<Record<DesignerPage, string>>>(() =>
@@ -82,7 +84,7 @@ export function useDesignerPage(returnPath: string, design: PortalDesign) {
 
   const postPath = items.post ?? posts?.[0]?.path ?? null
   const item = sample ? null : page === 'post' ? postPath : (items[page] ?? null)
-  const here: CanvasLocation = { page, item }
+  const here: CanvasLocation = useMemo(() => ({ page, item }), [page, item])
   return {
     gates,
     /** What the page gates read, for where a part that is off is turned on. */

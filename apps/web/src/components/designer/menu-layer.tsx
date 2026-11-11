@@ -17,9 +17,7 @@ import { MenuRename } from './menu-rename'
 import { menuItemFont, menuKey, MENU_ROW_KEY, useFrameRects } from './use-frame-rects'
 import { useMenuDrag } from './use-menu-drag'
 import { isMenuPart, type MenuEditing } from './use-menu-editing'
-
-/** The layer's own blue, as the picked block's outline uses it. */
-const BLUE = '#2563eb'
+import { CANVAS_HALO, CANVAS_PICKED } from './canvas-colours'
 
 /** Keeps a true value a moment longer, so the pointer can cross from the page to "+". */
 function useLinger(value: boolean, ms = 400): boolean {
@@ -113,7 +111,7 @@ export function MenuLayer({
         <div
           aria-hidden="true"
           className="absolute rounded-lg"
-          style={{ ...outline(row, 4), outline: `1px dashed ${BLUE}99` }}
+          style={{ ...outline(row, 4), outline: `1px dashed ${CANVAS_PICKED}99` }}
         />
       )}
       {hoveredBox && (
@@ -121,7 +119,7 @@ export function MenuLayer({
           aria-hidden="true"
           data-menu-hover=""
           className="absolute rounded-md"
-          style={{ ...outline(hoveredBox, 1), outline: `1px solid ${BLUE}66` }}
+          style={{ ...outline(hoveredBox, 1), outline: `1px solid ${CANVAS_PICKED}66` }}
         />
       )}
       {openBox && (
@@ -132,8 +130,8 @@ export function MenuLayer({
           className="absolute rounded-md"
           style={{
             ...outline(openBox, 2),
-            outline: `2px solid ${BLUE}`,
-            boxShadow: '0 0 0 1px #fff, inset 0 0 0 1px #fff',
+            outline: `2px solid ${CANVAS_PICKED}`,
+            boxShadow: CANVAS_HALO,
           }}
         />
       )}
@@ -142,7 +140,7 @@ export function MenuLayer({
           aria-hidden="true"
           data-menu-drop-bar=""
           className="absolute rounded-full"
-          style={{ ...drag.bar, background: BLUE, boxShadow: '0 0 0 1px #fff' }}
+          style={{ ...drag.bar, background: CANVAS_PICKED, boxShadow: '0 0 0 1px #fff' }}
         />
       )}
       {drag && (
@@ -153,7 +151,7 @@ export function MenuLayer({
           style={{
             left: drag.pointer.left + 8,
             top: drag.pointer.top + 8,
-            borderColor: BLUE,
+            borderColor: CANVAS_PICKED,
           }}
         >
           {drag.label}
@@ -167,8 +165,13 @@ export function MenuLayer({
                 aria-label={HEADER_COPY.add}
                 onPointerEnter={() => setOnPlus(true)}
                 onPointerLeave={() => setOnPlus(false)}
-                className="pointer-events-auto absolute grid size-6 place-items-center rounded-full border border-dashed bg-background text-[#2563eb] shadow-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
-                style={{ left: plus.left, top: plus.top, borderColor: BLUE }}
+                className="pointer-events-auto absolute grid size-6 place-items-center rounded-full border border-dashed bg-background shadow-sm hover:bg-muted focus-ring"
+                style={{
+                  left: plus.left,
+                  top: plus.top,
+                  borderColor: CANVAS_PICKED,
+                  color: CANVAS_PICKED,
+                }}
               >
                 <PlusIcon className="size-3.5" aria-hidden="true" />
               </PopoverTrigger>

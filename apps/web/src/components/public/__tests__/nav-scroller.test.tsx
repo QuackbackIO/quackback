@@ -70,4 +70,30 @@ describe('a menu row', () => {
     fireEvent.click(more)
     expect(by).toBeGreaterThan(0)
   })
+
+  it('scrolls the menu along at once, not smoothly, where the visitor asks for less motion', () => {
+    const matchMedia = window.matchMedia
+    const behaviours: Array<ScrollBehavior | undefined> = []
+    try {
+      for (const reduce of [false, true]) {
+        window.matchMedia = ((query: string) => ({
+          matches: reduce && query === '(prefers-reduced-motion: reduce)',
+        })) as never
+        const { container, unmount } = render(
+          <NavScroller>
+            <a href="/">Home</a>
+          </NavScroller>
+        )
+        const row = container.querySelector<HTMLElement>('[data-qb-nav-row]')!
+        sized(row, { width: 390, content: 700, left: 0 })
+        row.scrollBy = ((options: ScrollToOptions) =>
+          void behaviours.push(options.behavior)) as never
+        fireEvent.click(container.querySelector<HTMLElement>('[data-qb-nav-more]')!)
+        unmount()
+      }
+    } finally {
+      window.matchMedia = matchMedia
+    }
+    expect(behaviours).toEqual(['smooth', 'auto'])
+  })
 })

@@ -245,7 +245,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
                   <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
                   <FormattedMessage
                     id="portal.settings.profile.avatar.uploading"
-                    defaultMessage="Uploading..."
+                    defaultMessage="Uploading…"
                   />
                 </>
               ) : (
@@ -324,7 +324,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
                     <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
                     <FormattedMessage
                       id="portal.settings.profile.personal.saving"
-                      defaultMessage="Saving..."
+                      defaultMessage="Saving…"
                     />
                   </>
                 ) : (

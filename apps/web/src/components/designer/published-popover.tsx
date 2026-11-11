@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
@@ -22,6 +22,20 @@ export function PublishedPopover({
   children: ReactElement
 }) {
   const [copied, setCopied] = useState(false)
+  const close = useRef(onClose)
+  close.current = onClose
+  // A click on the canvas lands in its frame, which the page never hears: the
+  // window losing focus to it closes the popover, as a click elsewhere does.
+  useEffect(() => {
+    if (!address) return
+    const onBlur = () => {
+      if (document.activeElement?.tagName !== 'IFRAME') return
+      setCopied(false)
+      close.current()
+    }
+    window.addEventListener('blur', onBlur)
+    return () => window.removeEventListener('blur', onBlur)
+  }, [address])
   const copy = async () => {
     if (!address) return
     try {
@@ -75,7 +89,7 @@ export function PublishedPopover({
               <Link
                 to="/admin/settings/domains"
                 onClick={() => trackBuilder('designer_live_link_used', { action: 'domain' })}
-                className="inline-block rounded-sm text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                className="inline-block rounded-sm text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-ring"
               >
                 Use your own domain
               </Link>

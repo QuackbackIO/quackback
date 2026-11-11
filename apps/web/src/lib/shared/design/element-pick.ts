@@ -72,12 +72,26 @@ function scopeOf(doc: Document | Element, section: string | null): ParentNode | 
  * The elements a selector names in a section (or the page), read from the
  * whole page, since a selector can name what the section sits in.
  */
+/** The copy words are edited in, in place of their element: never an element of its own. */
+const isWordsEditor = (node: Element) => !!node.closest('[data-qb-words-editing]')
+
+/**
+ * Where an element is drawn: the copy its words are edited in while that
+ * stands in for it (the element itself is hidden), else the element.
+ */
+export function drawnNode(node: Element): Element {
+  const next = node.nextElementSibling
+  return node.hasAttribute('data-qb-words-hidden') && next?.hasAttribute('data-qb-words-editing')
+    ? next
+    : node
+}
+
 function within(doc: Document, section: string | null, selector: string): Element[] {
   const scope = scopeOf(doc, section)
   if (!scope) return []
   try {
     return [...doc.querySelectorAll(selector)].filter(
-      (node) => node !== scope && scope.contains(node)
+      (node) => node !== scope && scope.contains(node) && !isWordsEditor(node)
     )
   } catch {
     return []
@@ -151,7 +165,8 @@ export function locatePick(
 ): Element | null {
   const parts = page ? partsOnPage(design, page) : []
   const all = within(doc, pick.section, selectorOf(pick, parts))
-  return all[pick.index] ?? all[0] ?? null
+  const node = all[pick.index] ?? all[0]
+  return node ? drawnNode(node) : null
 }
 
 /** Every element a block (or section) holds that can be picked, in reading order. */
@@ -207,7 +222,7 @@ export function reachOf(
     if (!root) return 0
     let n = 0
     for (const node of root.querySelectorAll(selector))
-      if (!node.closest('[hidden], [aria-hidden=true]')) n++
+      if (!node.closest('[hidden], [aria-hidden=true]') && !isWordsEditor(node)) n++
     return n
   }
   const inBlock = pick.section?.startsWith('block-') ? scopeOf(doc, pick.section) : null

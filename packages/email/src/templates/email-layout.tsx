@@ -2,6 +2,7 @@ import { Body, Container, Head, Html, Img, Preview, Section, Text } from '@react
 import { layout, branding, typography, colors, DEFAULT_LOGO_URL } from './shared-styles'
 import { useEmailShowPoweredBy } from '../powered-by'
 import { BrandLink } from './brand-parts'
+import { useEmailBrand } from '../brand'
 
 interface EmailLayoutProps {
   preview: string
@@ -38,6 +39,11 @@ export function EmailLayout({
 }: EmailLayoutProps) {
   const fromContext = useEmailShowPoweredBy()
   const showPoweredBy = showPoweredByOverride ?? fromContext
+  const { logoPlate } = useEmailBrand()
+  // A light-ink logo sits on a plate, so it reads on the white card.
+  const logoStyle = logoPlate
+    ? { ...branding.logo, backgroundColor: logoPlate, padding: '6px', borderRadius: '8px' }
+    : branding.logo
   return (
     <Html lang={lang ?? 'en'} dir={dir ?? 'ltr'}>
       <Head />
@@ -54,7 +60,7 @@ export function EmailLayout({
                 alt={logoAlt}
                 width={branding.logo.width}
                 height={branding.logo.height}
-                style={branding.logo}
+                style={logoStyle}
               />
             </Section>
 

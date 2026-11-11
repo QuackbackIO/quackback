@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useState, memo } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
 import {
   ArrowUturnLeftIcon,
@@ -46,7 +46,7 @@ function notLive(count: number, published: boolean): string {
  * saving. Its menu sees every change or discards the draft (after asking),
  * and holds versions, a preview link to share and find.
  */
-export function DraftStatus({
+export const DraftStatus = memo(function DraftStatus({
   count,
   saving,
   failed,
@@ -87,25 +87,26 @@ export function DraftStatus({
           <Button
             variant="outline"
             size="sm"
-            className="gap-2 border-border font-normal data-popup-open:border-foreground"
+            title={text}
+            className="max-w-full min-w-0 gap-2 border-border font-normal data-popup-open:border-foreground"
           >
             <span
               aria-hidden="true"
               className={cn(
-                'size-2 rounded-full',
+                'size-2 shrink-0 rounded-full',
                 tone === 'draft' && 'bg-amber-600',
                 tone === 'warning' && 'bg-destructive',
                 tone === 'quiet' && 'bg-muted-foreground/50'
               )}
             />
-            {text}
-            <ChevronDownIcon className="size-3.5" aria-hidden="true" />
+            <span className="min-w-0 truncate">{text}</span>
+            <ChevronDownIcon className="size-3.5 shrink-0" aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-72">
           {count > 0 && (
             <div className="space-y-0.5 px-2 pt-1.5 pb-2">
-              <p className="text-[13px] font-semibold">Not live yet</p>
+              <p className="text-ui font-semibold">Not live yet</p>
               <p className="text-xs text-muted-foreground">{notLive(count, published)}</p>
             </div>
           )}
@@ -180,4 +181,4 @@ export function DraftStatus({
       </AlertDialog>
     </>
   )
-}
+})

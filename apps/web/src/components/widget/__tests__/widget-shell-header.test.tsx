@@ -104,6 +104,13 @@ describe('WidgetShell footer', () => {
     expect(footer.contains(screen.getByRole('button', { name: /Feedback/ }))).toBe(true)
   })
 
+  it('draws the duck from the small logo, not the 640px one, and only once it shows', () => {
+    renderHome()
+    const duck = screen.getByRole('contentinfo').querySelector('img')!
+    expect(duck.getAttribute('src')).toBe('/logo-64.png')
+    expect(duck.getAttribute('loading')).toBe('lazy')
+  })
+
   it('draws inactive tab labels in solid muted text, never faded below 4.5:1', () => {
     renderHome()
     const inactive = screen.getByRole('button', { name: /Feedback/ })

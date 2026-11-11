@@ -27,6 +27,7 @@ import { OverridesList } from './overrides-list'
 import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
 import { CORNER_NAMES, THEME, WORDS } from './properties/words'
 import { ThemeElements, elementName } from './styles-panel'
+import { SummaryRow } from './properties/summary-row'
 
 type Update = (change: (draft: PortalDesign) => void, label?: string) => void
 
@@ -41,12 +42,12 @@ function SubView({
   children: ReactNode
 }) {
   return (
-    <div className="text-[13px]" data-theme-view={title}>
+    <div className="text-ui" data-theme-view={title}>
       <nav aria-label="Where it is" className="border-b border-border px-4 py-2 text-xs">
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1 rounded text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex items-center gap-1 rounded text-muted-foreground hover:text-foreground focus-ring"
         >
           <ChevronLeftIcon className="size-3.5" aria-hidden="true" />
           {WORDS.theme}
@@ -54,33 +55,6 @@ function SubView({
       </nav>
       <PropertySection title={title}>{children}</PropertySection>
     </div>
-  )
-}
-
-/** A row that opens a sub-view: its value, and a chevron. */
-function OpenRow({
-  label,
-  find,
-  value,
-  onOpen,
-}: {
-  label: string
-  find?: string
-  value: string
-  onOpen: () => void
-}) {
-  return (
-    <PropertyRow label={label} find={find}>
-      <button
-        type="button"
-        aria-label={`${label}: ${value}`}
-        onClick={onOpen}
-        className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-      >
-        <span className="min-w-0 flex-1 truncate">{value}</span>
-        <ChevronRightIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
-      </button>
-    </PropertyRow>
   )
 }
 
@@ -111,7 +85,7 @@ function AdvancedSection({
             if (!open) designerAdvancedOpened('site:styles')
             setOpen(!open)
           }}
-          className="flex min-h-6 w-full items-center gap-1 rounded text-start focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex min-h-6 w-full items-center gap-1 rounded text-start focus-ring"
         >
           {THEME.sections.advanced}
           <span className="flex-1" />
@@ -243,7 +217,7 @@ export function ThemeContent({
           <BrandKit design={design} update={update} logoUrl={logoUrl} onLogo={onLogo} />
           <div ref={style} className="contents">
             <PropertySection title={THEME.sections.style}>
-              <OpenRow
+              <SummaryRow
                 label={FIND.look.label}
                 find={FIND.look.id}
                 value={currentLookName(design, saved) ?? THEME.custom}

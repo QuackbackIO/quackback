@@ -25,12 +25,11 @@ import {
 import { BLOCK_ACTIONS } from './properties/words'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { chipPlacement, outlineBox, type Rect } from '@/lib/shared/design/layer-geometry'
+import { CANVAS_CHANGED, CANVAS_HALO, CANVAS_PICKED } from './canvas-colours'
 
 /** The picked block's outline and chip: blue, edged in white, so it reads on any brand colour. */
-const PICKED = '#2563eb'
-
-/** What changed, outlined: neutral grey, never the brand's colour or the pick's blue. */
-const CHANGED = '#71717a'
+const PICKED = CANVAS_PICKED
+const CHANGED = CANVAS_CHANGED
 
 /** A chip size to place it by until it has been measured. */
 const CHIP_GUESS = { width: 220, height: 28 }
@@ -167,13 +166,26 @@ export function EditingLayer({
 }) {
   const chip = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState(CHIP_GUESS)
+  const place = picked && name ? chipPlacement(picked, size, room, avoid) : null
+  // The chip's size, read as it shows and whenever it changes, never on every render:
+  // reading it forces the builder to lay out, and the layer renders on every change.
+  const chipShown = !!place
   useLayoutEffect(() => {
     const element = chip.current
     if (!element) return
-    const next = { width: element.offsetWidth, height: element.offsetHeight }
-    if (next.width && (next.width !== size.width || next.height !== size.height)) setSize(next)
-  })
-  const place = picked && name ? chipPlacement(picked, size, room, avoid) : null
+    const read = () => {
+      const next = { width: element.offsetWidth, height: element.offsetHeight }
+      if (!next.width) return
+      setSize((before) =>
+        next.width === before.width && next.height === before.height ? before : next
+      )
+    }
+    read()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(read)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [chipShown, name, pickedKey])
   const glide = useGlide(pickedKey) ? GLIDE : undefined
   return (
     <div data-editing-layer="" className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -193,7 +205,7 @@ export function EditingLayer({
           style={{
             ...outlineBox(picked, 2, room),
             outline: `2px solid ${PICKED}`,
-            boxShadow: '0 0 0 1px #fff, inset 0 0 0 1px #fff',
+            boxShadow: CANVAS_HALO,
             transition: glide,
           }}
         />
@@ -281,7 +293,7 @@ function ChangeOutline({ rect, room }: { rect: Rect; room: { width: number; heig
       style={{
         ...outlineBox(rect, 2, room),
         outline: `2px solid ${CHANGED}`,
-        boxShadow: '0 0 0 1px #fff, inset 0 0 0 1px #fff',
+        boxShadow: CANVAS_HALO,
       }}
     />
   )

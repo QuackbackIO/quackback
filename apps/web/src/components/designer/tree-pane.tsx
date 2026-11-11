@@ -19,14 +19,18 @@ type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => vo
 /** Where the builder remembers "On this page", folded or not and how tall, per person. */
 export const treePaneKey = (userId: string) => `quackback:designer-tree-pane:${userId}`
 
-/** The tree's shortest, tallest and usual heights, in pixels. */
-export const TREE_PANE = { min: 72, max: 560, height: 220 } as const
+/**
+ * The tree's shortest and tallest heights, in pixels. Until its divider is
+ * moved it fits its rows, up to `fit` (or 40% of the window, if less).
+ */
+export const TREE_PANE = { min: 72, max: 560, fit: 360 } as const
 /** How far one arrow key moves the divider. */
 const STEP = 16
 
 export interface TreePaneState {
   collapsed: boolean
-  height: number
+  /** The height its divider was moved to; null fits the rows. */
+  height: number | null
 }
 
 const clamp = (height: number) =>
@@ -34,7 +38,7 @@ const clamp = (height: number) =>
 
 /** What was remembered, or the usual pane for anything unreadable. */
 export function readTreePane(raw: string | null): TreePaneState {
-  const usual = { collapsed: false, height: TREE_PANE.height }
+  const usual = { collapsed: false, height: null }
   if (!raw) return usual
   try {
     const parsed = JSON.parse(raw) as Partial<TreePaneState>
@@ -45,6 +49,33 @@ export function readTreePane(raw: string | null): TreePaneState {
   } catch {
     return usual
   }
+}
+
+/**
+ * Whether a scroll area has more above or below what shows, kept current as it
+ * scrolls, resizes or its rows change: the cue that there is more to see.
+ */
+export function useScrollEdges<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  const [edges, setEdges] = useState({ above: false, below: false })
+  const measure = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    const above = el.scrollTop > 0
+    const below = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+    setEdges((was) => (was.above === above && was.below === below ? was : { above, below }))
+  }, [])
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const watch = new ResizeObserver(measure)
+    watch.observe(el)
+    if (el.firstElementChild) watch.observe(el.firstElementChild)
+    return () => watch.disconnect()
+  })
+  return { ref, edges, measure }
 }
 
 /** The tree pane's state, remembered on this device for the person signed in. */
@@ -78,7 +109,8 @@ function useTreePane() {
 /**
  * "On this page", pinned above the picked part's settings so the page's
  * structure stays in view whatever is picked: the current pick highlighted,
- * folded from its heading, and as tall as its divider is dragged.
+ * folded from its heading. It fits its rows up to a cap, with a shadow at
+ * an edge that has more past it, until its divider is dragged.
  */
 export function TreePane({
   page,
@@ -119,11 +151,14 @@ export function TreePane({
   })
   const { state, setState, remember } = useTreePane()
   const drag = useRef<{ y: number; height: number } | null>(null)
+  const scroll = useScrollEdges<HTMLDivElement>()
   const bodyId = 'designer-tree-pane'
   if (!tree.length) return null
+  // Fitting its rows, the divider starts from the height it shows.
+  const height = state.height ?? clamp(scroll.ref.current?.clientHeight ?? TREE_PANE.min)
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    drag.current = { y: event.clientY, height: state.height }
+    drag.current = { y: event.clientY, height }
     event.currentTarget.setPointerCapture?.(event.pointerId)
   }
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -149,7 +184,7 @@ export function TreePane({
           aria-expanded={!state.collapsed}
           aria-controls={bodyId}
           onClick={() => remember({ ...state, collapsed: !state.collapsed })}
-          className="flex min-h-7 w-full items-center gap-1 rounded-md px-1 text-start text-xs font-medium hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex min-h-7 w-full items-center gap-1 rounded-md px-1 text-start text-xs font-medium hover:bg-muted focus-ring"
         >
           <ChevronRightIcon
             className={cn('size-3.5 transition-transform', !state.collapsed && 'rotate-90')}
@@ -158,27 +193,51 @@ export function TreePane({
           {WORDS.onThisPage}
         </button>
       </h2>
-      <div
-        id={bodyId}
-        hidden={state.collapsed}
-        style={{ height: state.height }}
-        className="max-h-[60vh] overflow-y-auto px-3 pb-2"
-      >
-        <PageTree
-          label={WORDS.onThisPage}
-          rows={tree}
-          picked={picked}
-          onPick={onPick}
-          onShown={(row, shown) => {
-            if (row.menu) return act?.(row.menu, shown ? 'show' : 'hide', 'panel')
-            const name = `${shown ? WORDS.show : WORDS.hide} ${row.label}`
-            dispatch({ op: 'part.shown', key: row.key, shown }, name)
-            say?.(`${name}. Undo takes it back.`)
-          }}
-          onMove={(row, by) => {
-            if (row.menu) return act?.(row.menu, by < 0 ? 'up' : 'down', 'panel')
-            if (row.key.startsWith('block-')) blocks.moveBlock(row.key, by)
-          }}
+      <div hidden={state.collapsed} className="relative min-h-0">
+        <div
+          id={bodyId}
+          ref={scroll.ref}
+          onScroll={scroll.measure}
+          data-more-above={scroll.edges.above ? '' : undefined}
+          data-more-below={scroll.edges.below ? '' : undefined}
+          style={
+            state.height === null
+              ? { maxHeight: `min(40vh, ${TREE_PANE.fit}px)` }
+              : { height: state.height }
+          }
+          className="max-h-[60vh] overflow-y-auto px-3 pb-2"
+        >
+          <PageTree
+            label={WORDS.onThisPage}
+            rows={tree}
+            picked={picked}
+            onPick={onPick}
+            onShown={(row, shown) => {
+              if (row.menu) return act?.(row.menu, shown ? 'show' : 'hide', 'panel')
+              const name = `${shown ? WORDS.show : WORDS.hide} ${row.label}`
+              dispatch({ op: 'part.shown', key: row.key, shown }, name)
+              say?.(`${name}. Undo takes it back.`)
+            }}
+            onMove={(row, by) => {
+              if (row.menu) return act?.(row.menu, by < 0 ? 'up' : 'down', 'panel')
+              if (row.key.startsWith('block-')) blocks.moveBlock(row.key, by)
+            }}
+          />
+        </div>
+        {/* Shadows at an edge with more rows past it. */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-foreground/10 to-transparent transition-opacity motion-reduce:transition-none',
+            scroll.edges.above ? 'opacity-100' : 'opacity-0'
+          )}
+        />
+        <span
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none absolute inset-x-0 bottom-0 h-3 bg-gradient-to-t from-foreground/10 to-transparent transition-opacity motion-reduce:transition-none',
+            scroll.edges.below ? 'opacity-100' : 'opacity-0'
+          )}
         />
       </div>
       {state.collapsed ? (
@@ -191,7 +250,7 @@ export function TreePane({
           aria-controls={bodyId}
           aria-valuemin={TREE_PANE.min}
           aria-valuemax={TREE_PANE.max}
-          aria-valuenow={state.height}
+          aria-valuenow={height}
           tabIndex={0}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -200,9 +259,9 @@ export function TreePane({
           onKeyDown={(event) => {
             const to =
               event.key === 'ArrowUp'
-                ? state.height - STEP
+                ? height - STEP
                 : event.key === 'ArrowDown'
-                  ? state.height + STEP
+                  ? height + STEP
                   : event.key === 'Home'
                     ? TREE_PANE.min
                     : event.key === 'End'

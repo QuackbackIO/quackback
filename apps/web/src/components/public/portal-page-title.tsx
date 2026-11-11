@@ -61,7 +61,7 @@ export function PortalPageTitle({
   return (
     <div
       data-qb-section="hero"
-      className="mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 pt-8 sm:px-6 [--qb-band-accent:var(--qb-page-accent)] [--qb-band-highlight:var(--qb-page-highlight)]"
+      className="qb-page pt-8 [--qb-band-accent:var(--qb-page-accent)] [--qb-band-highlight:var(--qb-page-highlight)]"
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">

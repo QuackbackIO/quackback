@@ -46,6 +46,7 @@ import { STYLE_CHOICES, WORDS } from './properties/words'
 import { Tag } from './tag'
 import { useNewParts } from './use-new-parts'
 import { layoutValue } from '@/lib/shared/design/defaults'
+import { IconButton } from './icon-button'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -152,7 +153,7 @@ export function HeaderPanel({
             type="button"
             aria-label={`${HEADER_COPY.logo}: ${LOGO_SHOWS[design.brand.logo.display]}`}
             onClick={onLogo}
-            className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-ring"
           >
             <span className="min-w-0 flex-1 truncate">{LOGO_SHOWS[design.brand.logo.display]}</span>
             <ChevronRightIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
@@ -226,7 +227,7 @@ export function HeaderPanel({
             />
           ))}
         </ul>
-        <Button variant="ghost" size="sm" className="-ms-1.5 h-7 px-1.5 text-xs" onClick={onAdd}>
+        <Button variant="ghost" size="xs" className="-ms-1.5 px-1.5" onClick={onAdd}>
           <PlusIcon className="size-3.5" aria-hidden="true" />
           {HEADER_COPY.add}
         </Button>
@@ -279,7 +280,7 @@ function MenuRow({
       <button
         type="button"
         className={cn(
-          'flex min-w-0 flex-1 items-center rounded text-start text-xs focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+          'flex min-w-0 flex-1 items-center rounded text-start text-xs focus-ring',
           !part.shown && 'text-muted-foreground'
         )}
         // A link opens its own settings; a double-click renames where the menu draws it.
@@ -296,24 +297,27 @@ function MenuRow({
         )}
       </button>
       {!link && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
+        <IconButton
           className="size-6 shrink-0"
           disabled={part.shown && stays}
-          title={part.shown && stays ? MENU_COPY.landsHere : undefined}
-          aria-label={`${part.shown ? WORDS.hide : WORDS.show} ${part.label}`}
+          // Hiding the page the menu lands on is not offered: it says why.
+          tip={
+            part.shown && stays
+              ? MENU_COPY.landsHere
+              : `${part.shown ? WORDS.hide : WORDS.show} ${part.label}`
+          }
+          label={`${part.shown ? WORDS.hide : WORDS.show} ${part.label}`}
           onClick={() => onAct(part.shown ? 'hide' : 'show')}
         >
           <Eye className="size-3.5" aria-hidden="true" />
-        </Button>
+        </IconButton>
       )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="size-6 shrink-0"
+            size="icon-xs"
+            className="shrink-0"
             aria-label={`Actions for ${part.label}`}
           >
             <EllipsisHorizontalIcon className="size-3.5" aria-hidden="true" />
@@ -324,7 +328,7 @@ function MenuRow({
             <DropdownMenuItem
               key={action}
               disabled={disabled}
-              className="py-1.5 text-[13px]"
+              className="py-1.5 text-ui"
               onClick={() => onAct(action)}
             >
               <Icon className="size-4" aria-hidden="true" />

@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { ChevronRightIcon, XMarkIcon } from '@heroicons/react/16/solid'
 import {
   BandArtDrawing,
@@ -49,6 +49,7 @@ import { ScopeLine } from './properties/scope-line'
 import { colourTokens } from './properties/tokens'
 import { TokenField } from './properties/token-field'
 import { COLOUR_NAMES, HERO_LOOKS, HERO_TILES, HERO_WORDS, WORDS } from './properties/words'
+import { TextButton } from './text-button'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -67,14 +68,18 @@ const TILE_FIND: Partial<Record<HeroKey, FindRow>> = {
   fadeFrom: FIND.fadeFrom,
 }
 
-const quiet =
-  'rounded text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
-
 /** A look as a small drawing: its colour, with its art or its panel where it has one. */
-function LookDrawing({ look }: { look: BandLook }) {
+function LookDrawing({ look, colours }: { look: BandLook; colours: CSSProperties }) {
   const { hero: band, heroArt, heroShape } = look.fields
   return (
-    <span className={cn('relative block h-full w-full', heroShape === 'inset' && 'px-1 pt-0.5')}>
+    <span
+      data-look-drawing=""
+      style={colours}
+      className={cn(
+        'relative block h-full w-full bg-background',
+        heroShape === 'inset' && 'px-1 pt-0.5'
+      )}
+    >
       <span className={cn('block h-full overflow-hidden', heroShape === 'inset' && 'rounded-sm')}>
         <BandDrawing band={band} />
       </span>
@@ -208,6 +213,14 @@ export function HeroPanel({
     plainHere && HERO_WORDS.plainHere,
   ].filter(Boolean) as string[]
 
+  // The looks are drawn in the design's own colours, not the builder's.
+  const palette = design.brand.light
+  const lookColours = {
+    '--primary':
+      design.layout.heroColour === 'support' && palette.support ? palette.support : palette.accent,
+    '--foreground': palette.ink,
+    '--background': palette.background,
+  } as CSSProperties
   const look = (
     <PropertySection title={HERO_WORDS.look} help={lookHelp.join(' ') || undefined}>
       <div data-find={FIND.heroLook.id}>
@@ -221,7 +234,7 @@ export function HeroPanel({
               [
                 each.id,
                 HERO_LOOKS[each.id] ?? each.label,
-                <LookDrawing key={each.id} look={each} />,
+                <LookDrawing key={each.id} look={each} colours={lookColours} />,
               ] as const
           )}
           onChange={(value) => change('look', value)}
@@ -431,7 +444,7 @@ function FillRow({ design, update }: { design: PortalDesign; update: NamedUpdate
           aria-expanded={open}
           aria-controls={`${id}-settings`}
           onClick={() => setOpen(!open)}
-          className="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-md px-1 text-start text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-md px-1 text-start text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-ring"
         >
           <span className="min-w-0 flex-1 truncate">
             {set ? HERO_WORDS.set : HERO_WORDS.asBrand}
@@ -529,27 +542,18 @@ function HeroImage({
                 alt=""
                 className="h-6 max-w-[4.5rem] rounded border border-border bg-background object-cover"
               />
-              <button
-                type="button"
-                className={quiet}
-                disabled={busy}
-                onClick={() => file.current?.click()}
-              >
+              <TextButton disabled={busy} onClick={() => file.current?.click()}>
                 {busy ? HERO_WORDS.uploading : HERO_WORDS.replace}
-              </button>
+              </TextButton>
               {narrowed && !image.homeOnly && (
-                <button
-                  type="button"
-                  className={quiet}
-                  onClick={() => onChange({ ...image, homeOnly: true })}
-                >
+                <TextButton onClick={() => onChange({ ...image, homeOnly: true })}>
                   {HERO_WORDS.justThisPage}
-                </button>
+                </TextButton>
               )}
               <Button
                 variant="ghost"
-                size="icon-sm"
-                className="ms-auto size-6"
+                size="icon-xs"
+                className="ms-auto"
                 aria-label={HERO_WORDS.remove}
                 disabled={busy}
                 onClick={() => onChange(null)}
@@ -592,7 +596,7 @@ function HeroImage({
                     )
                   }
                 />
-                <label htmlFor={`${id}-decorative`} className="text-[11px]">
+                <label htmlFor={`${id}-decorative`} className="text-2xs">
                   {HERO_WORDS.decorative}
                 </label>
               </span>
@@ -642,12 +646,7 @@ function FromScreenshot({
   return (
     <>
       <PropertyRow label={HERO_WORDS.screenshot} help={MATCH_BRAND.fromScreenshot}>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-6 px-2 text-[11px]"
-          onClick={() => setCropping(true)}
-        >
+        <Button variant="outline" size="2xs" className="text-2xs" onClick={() => setCropping(true)}>
           {MATCH_BRAND.adjustCrop}
         </Button>
       </PropertyRow>

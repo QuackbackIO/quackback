@@ -75,7 +75,7 @@ export function pageOfSelection(selection: Selection | null): DesignerPage | nul
  * parts that are off left out, and pages the stored menu leaves out added
  * last, as the portal adds them.
  */
-function entries(design: PortalDesign, gates: PortalPageGates): NavItem[] {
+function entries(design: Pick<PortalDesign, 'nav'>, gates: PortalPageGates): NavItem[] {
   const listed = design.nav.items.filter((item) => item.type === 'link' || gates[item.type])
   const missing = PAGE_ORDER.filter(
     (type) => gates[type] && !design.nav.items.some((item) => item.type === type)
@@ -93,7 +93,10 @@ function fillIn(design: PortalDesign): void {
 const idOf = (item: NavItem): MenuPartId => (item.type === 'link' ? `link:${item.id}` : item.type)
 
 /** Where `/` takes visitors: Home, or the first page the menu shows. */
-export function landingOf(design: PortalDesign, gates: PortalPageGates): 'home' | PortalPageType {
+export function landingOf(
+  design: Pick<PortalDesign, 'nav'>,
+  gates: PortalPageGates
+): 'home' | PortalPageType {
   if (design.nav.home.on) return 'home'
   const first = entries(design, gates).find(
     (item): item is PageItem => item.type !== 'link' && item.shown
@@ -111,7 +114,7 @@ export function leadingPart(design: PortalDesign, gates: PortalPageGates): Porta
 }
 
 /** The parts of the menu, Home first while it is on. */
-export function menuParts(design: PortalDesign, gates: PortalPageGates): MenuPart[] {
+export function menuParts(design: Pick<PortalDesign, 'nav'>, gates: PortalPageGates): MenuPart[] {
   const landing = landingOf(design, gates)
   const { home } = design.nav
   const parts: MenuPart[] = home.on

@@ -1,9 +1,10 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import type { Rect } from '@/lib/shared/design/layer-geometry'
 import type { GridDragView, GridEdge } from './use-grid-edit'
+import { CANVAS_PICKED } from './canvas-colours'
 
 /** The picked block's colour, as the editing layer draws it. */
-export const PICKED = '#2563eb'
+export const PICKED = CANVAS_PICKED
 
 /** A resize handle's look, shared with the hero composer's. */
 export const HANDLE =

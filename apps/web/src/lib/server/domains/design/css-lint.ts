@@ -19,7 +19,7 @@ import * as csstree from 'css-tree/dist/csstree.esm'
 import type { CssNode, Declaration } from 'css-tree'
 import { contrastRatio } from '@/lib/shared/design/contrast'
 import { normaliseColor } from '@/lib/shared/design/color'
-import { PART_ALIASES, PORTAL_PARTS, isPartName } from '@/lib/shared/design/parts'
+import { PART_ALIASES, PORTAL_PARTS, isHeroPartName, isPartName } from '@/lib/shared/design/parts'
 
 export interface CssIssue {
   message: string
@@ -199,7 +199,8 @@ export function lintDesignCss(css: string): CssLintReport {
       }
       if (node.type === 'AttributeSelector' && node.name.name === 'data-qb-part' && node.value) {
         const name = node.value.type === 'String' ? node.value.value : node.value.name
-        const renamed = PART_ALIASES[name]
+        // A hero name is the one admins are shown: it works as it is.
+        const renamed = isHeroPartName(name) ? undefined : PART_ALIASES[name]
         if (renamed) {
           warnings.push({
             message: `The ${name} part is now ${renamed}.`,

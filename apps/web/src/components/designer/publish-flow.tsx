@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { ReviewPublishDialog } from '@/components/admin/settings/appearance/review-publish-dialog'
 import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
@@ -7,9 +7,17 @@ import type { DesignCheck } from '@/lib/shared/design/checks'
 import type { Selection } from '@/lib/shared/design/outline'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalAddress } from '@/lib/shared/design/portal-address'
-import { opensFullReview, publishSummary } from '@/lib/shared/design/publish-summary'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import {
+  fullReviewReason,
+  opensFullReview,
+  publishSummary,
+} from '@/lib/shared/design/publish-summary'
 import { newWorkspaceLogo } from '@/lib/shared/design/workspace-logo'
-import { fullReviewReason, PublishSummaryDialog } from './publish-summary-dialog'
+import { PublishSummaryDialog } from './publish-summary-dialog'
+
+/** A summary with nothing in it, until there is one to show. */
+const NO_SUMMARY = { menu: [], look: [], overrides: [] }
 
 /** What publishing reads from the draft. */
 export type PublishDraft = Pick<
@@ -85,35 +93,58 @@ export function usePublishFlow({
     () => (step ? publishSummary(draft.live, draft.design, draft.changes, gates) : null),
     [step, draft.live, draft.design, draft.changes, gates]
   )
+  // What the dialogs show while open, kept as it was while one closes: publishing empties
+  // the draft's changes, and a dialog fading out with its content gone collapses to a stub.
+  const current = {
+    count,
+    summary: summary ?? NO_SUMMARY,
+    changes: draft.changes,
+    report: draft.report,
+    newLogo,
+    design: draft.design,
+    compare: step === 'full' ? compare() : null,
+  }
+  const kept = useRef(current)
+  useLayoutEffect(() => {
+    if (step) kept.current = current
+  })
+  const shown = step ? current : kept.current
+  const summaryOpened = useOpenedOnce(step === 'summary')
+  const fullOpened = useOpenedOnce(step === 'full')
+  // Neither is drawn until Publish first opens it; after that it stays, so closing can animate.
   const dialogs = (
     <>
-      <PublishSummaryDialog
-        open={step === 'summary'}
-        onOpenChange={(open) => !open && setStep((now) => (now === 'summary' ? null : now))}
-        count={count}
-        summary={summary ?? { menu: [], look: [], overrides: [] }}
-        newLogo={newLogo}
-        checks={checks}
-        onShowCheck={(part) => {
-          setStep(null)
-          onShowCheck(part)
-        }}
-        onSeeEverything={() => void openFull()}
-        onPublish={(options) => publish(false, undefined, options)}
-      />
-      <ReviewPublishDialog
-        open={step === 'full'}
-        onOpenChange={(open) => !open && setStep(null)}
-        changes={draft.changes}
-        menu={summary?.menu ?? []}
-        report={draft.report}
-        newLogo={newLogo}
-        reason={reason}
-        onPublish={(message, options) => publish(true, message, options)}
-        canPublish={draft.canPublish}
-        compare={step === 'full' ? compare() : null}
-        design={draft.design}
-      />
+      {summaryOpened && (
+        <PublishSummaryDialog
+          open={step === 'summary'}
+          onOpenChange={(open) => !open && setStep((now) => (now === 'summary' ? null : now))}
+          count={shown.count}
+          summary={shown.summary}
+          newLogo={shown.newLogo}
+          checks={checks}
+          onShowCheck={(part) => {
+            setStep(null)
+            onShowCheck(part)
+          }}
+          onSeeEverything={() => void openFull()}
+          onPublish={(options) => publish(false, undefined, options)}
+        />
+      )}
+      {fullOpened && (
+        <ReviewPublishDialog
+          open={step === 'full'}
+          onOpenChange={(open) => !open && setStep(null)}
+          changes={shown.changes}
+          menu={shown.summary.menu}
+          report={shown.report}
+          newLogo={shown.newLogo}
+          reason={reason}
+          onPublish={(message, options) => publish(true, message, options)}
+          canPublish={draft.canPublish}
+          compare={shown.compare}
+          design={shown.design}
+        />
+      )}
     </>
   )
   return {

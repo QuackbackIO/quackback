@@ -4,12 +4,17 @@
  * optional scope line, titled sections of compact rows, and a footer listing
  * the places set differently, shown only when there are some.
  *
- * A row is 28px: its label on the left (92px), its control on the right.
+ * A row is 28px: its label on the left (ROW_LABEL), its control in the
+ * middle, and a slot on the right (ROW_END) that every row keeps, so the
+ * controls of set and unset rows end at one edge.
  * An unset row shows the value it inherits, muted, and says where it comes
  * from on hover; a row set at this scope shows a dot and a Reset that names
  * what it goes back to.
  */
-import { Fragment, useId, useState, type ReactElement, type ReactNode } from 'react'
+import { Fragment, memo, useId, useState, type ReactElement, type ReactNode } from 'react'
+// Reset's arrow is the top bar's Undo arrow, which the builder loads already; the 16px
+// solid one would be a script of its own on every open.
+import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline'
 import {
   ChevronRightIcon,
   EllipsisHorizontalIcon,
@@ -31,6 +36,36 @@ import { keepOpen, rememberedOpen } from '../advanced'
 import { RefusalText, useRowRefusal } from './change-refusal'
 import { PHONE_TINT, PHONE_WORDS } from './phone-mode'
 import { WORDS, setDifferentlyIn } from './words'
+
+/** The label column of a property row. A label wraps between words, never inside one. */
+export const ROW_LABEL = 'w-[96px]'
+/** Lines up under a row's control: the label column plus the row's gap. */
+export const ROW_INDENT = 'ps-[104px]'
+/** ROW_INDENT as a margin, for an inline control. */
+export const ROW_INDENT_MARGIN = 'ms-[104px]'
+/** The slot at a row's end for its set dot and Reset; kept on every row. */
+const ROW_END = 'w-6'
+
+/** The one picked style for a single-choice tile, drawn or text. */
+export const PICKED_TILE =
+  'border-foreground font-medium ring-1 ring-foreground forced-colors:outline forced-colors:outline-2'
+
+/** A note under a row's control, lined up with it. */
+export function PropertyRowNote({
+  children,
+  className,
+  id,
+}: {
+  children: ReactNode
+  className?: string
+  id?: string
+}) {
+  return (
+    <p id={id} className={cn(ROW_INDENT, 'text-2xs text-muted-foreground', className)}>
+      {children}
+    </p>
+  )
+}
 
 /** A step of the breadcrumb: the last is where you are; the others pick that parent. */
 export interface Crumb {
@@ -87,7 +122,7 @@ export function PropertiesPanel({
   className?: string
 } & { [data: `data-${string}`]: string | undefined }) {
   return (
-    <div className={cn('flex min-h-full flex-col text-[13px]', className)} {...rest}>
+    <div className={cn('flex min-h-full flex-col text-ui', className)} {...rest}>
       <header className="space-y-1.5 border-b border-border px-4 pt-3 pb-3">
         {crumbs.length > 0 && (
           <nav aria-label="Where it is" className="text-xs text-muted-foreground">
@@ -105,7 +140,7 @@ export function PropertiesPanel({
                       <button
                         type="button"
                         onClick={crumb.onSelect}
-                        className="rounded hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                        className="rounded hover:text-foreground focus-ring"
                       >
                         {crumb.label}
                       </button>
@@ -120,7 +155,7 @@ export function PropertiesPanel({
         )}
         <div className="flex items-center gap-2">
           {icon}
-          <h2 className="min-w-0 truncate rounded-sm text-[15px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground">
+          <h2 className="min-w-0 truncate rounded-sm text-sm font-semibold outline-none focus-ring">
             {title}
           </h2>
           {about && <Help text={about} />}
@@ -137,14 +172,12 @@ export function PropertiesPanel({
                   <DropdownMenuItem
                     key={action.label}
                     disabled={action.disabled}
-                    className="text-[13px]"
+                    className="text-ui"
                     onClick={action.onSelect}
                   >
                     {action.label}
                     {action.keys && (
-                      <span className="ms-auto text-[11px] text-muted-foreground">
-                        {action.keys}
-                      </span>
+                      <span className="ms-auto text-2xs text-muted-foreground">{action.keys}</span>
                     )}
                   </DropdownMenuItem>
                 ))}
@@ -169,7 +202,7 @@ export function PropertiesPanel({
                     <button
                       type="button"
                       onClick={place.onGo}
-                      className="rounded text-start hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                      className="rounded text-start hover:underline focus-ring"
                     >
                       {place.label}
                     </button>
@@ -235,8 +268,7 @@ export function PropertySection({
           {onAdd && !added && (
             <Button
               variant="ghost"
-              size="icon-sm"
-              className="size-6"
+              size="icon-xs"
               aria-label={`Add ${title.toLowerCase()}`}
               onClick={onAdd}
             >
@@ -246,8 +278,7 @@ export function PropertySection({
           {onRemove && added && (
             <Button
               variant="ghost"
-              size="icon-sm"
-              className="size-6"
+              size="icon-xs"
               aria-label={`Remove ${title.toLowerCase()}`}
               onClick={onRemove}
             >
@@ -290,7 +321,7 @@ export function PropertyMore({
         if (remember) keepOpen(remember, now)
       }}
     >
-      <summary className="flex min-h-7 cursor-pointer list-none items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-7 cursor-pointer list-none items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-ring [&::-webkit-details-marker]:hidden">
         <ChevronRightIcon
           className="size-3.5 transition-transform group-open:rotate-90"
           aria-hidden="true"
@@ -355,61 +386,56 @@ export function PropertyRow({
         data-set={set || undefined}
         {...refusal.handlers}
       >
-        <span className="flex w-[92px] shrink-0 items-center gap-0.5">
-          {/* A label longer than the column wraps, never cut off. */}
-          <label
-            htmlFor={htmlFor}
-            className="min-w-0 text-xs leading-tight break-words text-muted-foreground"
-          >
+        <span className={cn('flex shrink-0 items-center gap-0.5', ROW_LABEL)}>
+          {/* A label longer than the column wraps between words, never inside one. */}
+          <label htmlFor={htmlFor} className="text-xs leading-tight text-muted-foreground">
             {label}
           </label>
           {help && <Help text={help} />}
           {!help && !set && source && <Help text={source} />}
         </span>
         <div className="flex min-w-0 flex-1 items-center gap-1.5">{children}</div>
-        {!set && phoneSet && (
-          <span className="flex shrink-0 items-center" title={PHONE_WORDS.setForPhones}>
-            <span
-              aria-hidden="true"
-              data-phone-dot=""
-              className={cn('size-1.5 shrink-0 rounded-full', PHONE_TINT.dot)}
-            />
-            <span className="sr-only">{PHONE_WORDS.setForPhones}</span>
-          </span>
-        )}
-        {set && (
-          <span className="flex shrink-0 items-center justify-end gap-1.5">
-            <span
-              aria-hidden="true"
-              data-set-dot=""
-              className={cn(
-                'size-1.5 shrink-0 rounded-full',
-                phoneHere ? PHONE_TINT.dot : 'bg-primary'
-              )}
-            />
-            <span className="sr-only">{phoneHere ? PHONE_WORDS.setForPhones : 'Set here.'}</span>
-            {onReset && !phoneHere && (
+        <span
+          data-row-end=""
+          className={cn('flex shrink-0 items-center justify-end gap-0.5', ROW_END)}
+        >
+          {!set && phoneSet && (
+            <span className="flex items-center" title={PHONE_WORDS.setForPhones}>
+              <span
+                aria-hidden="true"
+                data-phone-dot=""
+                className={cn('size-1.5 shrink-0 rounded-full', PHONE_TINT.dot)}
+              />
+              <span className="sr-only">{PHONE_WORDS.setForPhones}</span>
+            </span>
+          )}
+          {set &&
+            (onReset && !phoneHere ? (
               <ResetButton
                 label={resetLabel ?? `${WORDS.reset} ${label.toLowerCase()}`}
                 onReset={onReset}
               />
-            )}
-          </span>
-        )}
+            ) : (
+              <SetDot phone={phoneHere} />
+            ))}
+        </span>
       </div>
       {phoneHere && (
-        <p className="-mt-0.5 ps-[100px] text-[11px]">
+        <PropertyRowNote className="-mt-0.5">
           <button
             type="button"
             onClick={onUseAllScreens}
-            className="rounded text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="rounded text-muted-foreground hover:text-foreground hover:underline focus-ring"
           >
             {PHONE_WORDS.useAllScreens}
           </button>
-        </p>
+        </PropertyRowNote>
       )}
       {refusal.message && (
-        <RefusalText message={refusal.message} className="ps-[100px] text-xs text-destructive" />
+        <RefusalText
+          message={refusal.message}
+          className={cn(ROW_INDENT, 'text-xs text-destructive')}
+        />
       )}
     </Fragment>
   )
@@ -419,20 +445,21 @@ export function PropertyRow({
  * Advice kept out of the way: an ⓘ that says it on hover and on focus, and
  * to a screen reader as the ⓘ's name.
  */
-export function Help({ text }: { text: string }) {
+export const Help = memo(function Help({ text }: { text: string }) {
+  // Drawn again only when its words change: a row's tip is a tooltip's whole tree.
   return (
     <Tip text={text}>
       <button
         type="button"
         aria-label={text}
         data-help=""
-        className="-my-1 grid size-6 shrink-0 place-items-center rounded text-muted-foreground/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        className="-my-1 grid size-6 shrink-0 place-items-center rounded text-muted-foreground/70 hover:text-foreground focus-ring"
       >
         <InformationCircleIcon className="size-3" aria-hidden="true" />
       </button>
     </Tip>
   )
-}
+})
 
 /** A tip on a control that takes focus, shown on hover and on focus; none without text. */
 export function Tip({ text, children }: { text?: string | null; children: ReactElement }) {
@@ -445,25 +472,75 @@ export function Tip({ text, children }: { text?: string | null; children: ReactE
   )
 }
 
-function ResetButton({ label, onReset }: { label: string; onReset: () => void }) {
+/** The dot of a row set here, pink for a value phones have of their own. */
+function SetDot({ phone, className }: { phone: boolean; className?: string }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onReset}
-      className="rounded text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-    >
-      {WORDS.reset}
-    </button>
+    <>
+      <span
+        aria-hidden="true"
+        data-set-dot=""
+        className={cn(
+          'size-1.5 shrink-0 rounded-full',
+          phone ? PHONE_TINT.dot : 'bg-primary',
+          className
+        )}
+      />
+      <span className="sr-only">{phone ? PHONE_WORDS.setForPhones : 'Set here.'}</span>
+    </>
   )
 }
 
+/** Reset, an icon with the set dot on its corner, in the row's end slot. */
+function ResetButton({ label, onReset }: { label: string; onReset: () => void }) {
+  return (
+    <Tip text={label}>
+      <button
+        type="button"
+        aria-label={label}
+        data-reset=""
+        onClick={onReset}
+        className="relative -my-1 grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-ring"
+      >
+        <ArrowUturnLeftIcon className="size-3.5" aria-hidden="true" />
+        <SetDot phone={false} className="absolute top-0.5 right-0.5" />
+      </button>
+    </Tip>
+  )
+}
+
+/** About how wide a tile's label is drawn, per character, at 11px. */
+const TILE_CHAR_PX = 5.2
+/** A tile's padding and border. */
+const TILE_PAD_PX = 14
+/** The room a row's control has in the panel, past the label and the end slot. */
+const TILE_ROW_PX = 168
+
 /**
- * A row of a few short choices as tiles, the picked one filled; none filled
- * when the value is inherited, which shows muted. A radio group. A label is
- * never cut off: tiles that do not fit side by side wrap to another row.
- * More than four go three to a row.
+ * How the tiles of a row lie, so none is left alone on a row: 0 when they
+ * all fit side by side, sized to their names; else how many go to a row of
+ * an even grid, two or three. A name that does not fit its tile wraps
+ * between words.
+ */
+export function tileColumns(names: ReadonlyArray<string>): number {
+  const width = (name: string) => name.length * TILE_CHAR_PX + TILE_PAD_PX
+  const n = names.length
+  if (names.reduce((sum, name) => sum + width(name), 0) <= TILE_ROW_PX) return 0
+  if (n === 3) return 3
+  const longest = Math.max(...names.map(width))
+  if (n % 3 === 0 && 3 * longest <= TILE_ROW_PX) return 3
+  if (n % 2 === 0) return 2
+  return 3 * longest <= TILE_ROW_PX ? 3 : 2
+}
+
+const GRID_COLUMNS: Record<number, string> = {
+  2: 'grid grid-cols-2',
+  3: 'grid grid-cols-3',
+}
+
+/**
+ * A row of a few short choices as tiles, the picked one outlined; none
+ * outlined when the value is inherited, which shows dashed. A radio group.
+ * The tiles make an even grid of equal widths (see tileColumns).
  */
 export function PropertyTiles<T extends string>({
   label,
@@ -486,14 +563,16 @@ export function PropertyTiles<T extends string>({
     0,
     options.findIndex(([option]) => option === (value ?? inherited))
   )
+  const columns = tileColumns(options.map(([, name]) => name))
   return (
     <div
       id={id}
       role="radiogroup"
       aria-label={label}
       data-tiles=""
+      data-columns={columns}
       onKeyDown={onRadioKeys}
-      className="flex min-w-0 flex-1 flex-wrap gap-0.5"
+      className={cn('min-w-0 flex-1 gap-0.5', GRID_COLUMNS[columns] ?? 'flex')}
     >
       {options.map(([option, name], index) => {
         const on = value === option
@@ -507,14 +586,14 @@ export function PropertyTiles<T extends string>({
             tabIndex={index === stop ? 0 : -1}
             onClick={() => onChange(option)}
             className={cn(
-              // Never narrower than its label: a tile that does not fit goes to the next row.
-              'h-6 grow rounded-md border px-1.5 text-[11px] whitespace-nowrap focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
-              options.length > 4 ? 'basis-[30%]' : 'basis-0',
+              'min-h-6 min-w-0 rounded-md border px-1 py-0.5 text-2xs leading-tight focus-ring',
               on
-                ? 'border-foreground bg-foreground text-background'
+                ? PICKED_TILE
                 : from
                   ? 'border-dashed border-muted-foreground/60 text-muted-foreground'
-                  : 'border-border text-foreground hover:bg-muted'
+                  : 'border-border text-foreground hover:bg-muted',
+              // Side by side, each is as wide as its name and they share what is left.
+              columns === 0 && 'flex-auto whitespace-nowrap'
             )}
           >
             {name}
@@ -569,8 +648,8 @@ export function PropertyDrawnTiles<T extends string>({
             aria-label={name}
             onClick={() => onChange(option)}
             className={cn(
-              'flex min-w-0 flex-col gap-1 rounded-md border p-1 text-center focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
-              on ? 'border-foreground ring-1 ring-foreground' : 'border-border hover:bg-muted'
+              'flex min-w-0 flex-col gap-1 rounded-md border p-1 text-center focus-ring',
+              on ? PICKED_TILE : 'border-border hover:bg-muted'
             )}
           >
             <span
@@ -579,7 +658,7 @@ export function PropertyDrawnTiles<T extends string>({
             >
               {drawing}
             </span>
-            <span className="text-[11px] leading-tight break-words">{name}</span>
+            <span className="text-2xs leading-tight break-words">{name}</span>
           </button>
         )
       })}

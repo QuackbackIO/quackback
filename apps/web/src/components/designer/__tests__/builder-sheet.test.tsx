@@ -14,7 +14,7 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 vi.mock('../home-layout-picker', () => ({ HomeLayoutPicker: () => null }))
 
 const { BuilderSheet } = await import('../builder-sheet')
-const { RightPanel } = await import('../right-panel')
+const { RightPanel, RIGHT_PANEL_WIDTH } = await import('../right-panel')
 const { AddContent, addHint } = await import('../add-sheet')
 
 afterEach(cleanup)
@@ -33,7 +33,6 @@ function panel(sheet: boolean, back: string | null = null) {
   const onClose = vi.fn()
   render(
     <RightPanel
-      open
       hidden={false}
       showing="block-topposts"
       sheet={
@@ -114,11 +113,20 @@ describe('Add', () => {
     expect(screen.getByRole('heading', { name: 'Feedback' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Hear from customers' })).toBeNull()
     const topPosts = screen.getByRole('button', { name: /Top posts/ })
-    expect(topPosts.textContent).toContain('on Home')
+    expect(topPosts.querySelector('[data-card-tag]')?.textContent).toBe('On Home')
     // Home holds Status once.
     expect((screen.getByRole('button', { name: /^Status/ }) as HTMLButtonElement).disabled).toBe(
       true
     )
+  })
+
+  it('keeps each card to its name and purpose, with Needs and Turn on under them', () => {
+    add()
+    const cards = [...document.querySelectorAll('[data-add-card]')]
+    // The status is one word on its own, never wrapped into the name.
+    for (const card of cards) {
+      expect(card.textContent).not.toMatch(/Already on Home|·/)
+    }
   })
 
   it('adds the block clicked', async () => {
@@ -152,6 +160,11 @@ describe('Add', () => {
     expect(screen.queryByRole('button', { name: /^Help search/ })).toBeNull()
     const card = screen.getByText('Help search', { exact: false }).closest('div')!
     expect(card.textContent).toContain('Needs Help Center')
+    // The name stands alone; Needs and Turn on sit together under the purpose.
+    expect(screen.getByText('Help search').textContent).toBe('Help search')
+    expect(within(card).getByRole('link', { name: /Turn on/ }).parentElement!.textContent).toMatch(
+      /^Needs Help Center/
+    )
     const turnOn = within(card).getByRole('link', { name: /Turn on/ })
     expect(turnOn.getAttribute('href')).toBe('/admin/settings/general')
     expect(turnOn.getAttribute('target')).toBe('_blank')
@@ -180,14 +193,14 @@ describe('Add', () => {
 })
 
 describe('the right panel', () => {
-  it('is closed and out of reach with nothing picked and no sheet', () => {
+  it('stays open at its own width with nothing picked, so the canvas never re-lays out for it', () => {
     render(
-      <RightPanel open={false} hidden={false} showing="nothing" sheet={null}>
+      <RightPanel hidden={false} showing="nothing" sheet={null}>
         <p>Nothing</p>
       </RightPanel>
     )
-    const aside = screen.getByRole('complementary', { hidden: true })
-    expect(aside.hasAttribute('inert')).toBe(true)
-    expect(aside.hasAttribute('data-open')).toBe(false)
+    const aside = screen.getByRole('complementary')
+    expect(aside.hasAttribute('inert')).toBe(false)
+    expect(aside.style.width).toBe(`${RIGHT_PANEL_WIDTH}px`)
   })
 })

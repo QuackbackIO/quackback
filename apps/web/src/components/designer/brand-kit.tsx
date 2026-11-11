@@ -1,4 +1,5 @@
 import { ChevronRightIcon } from '@heroicons/react/16/solid'
+import { cn } from '@/lib/shared/utils'
 import type { Update } from '@/components/admin/settings/appearance/design-update'
 import { getFaviconUploadUrlFn, getShareImageUploadUrlFn } from '@/lib/server/functions/uploads'
 import { designAssetUrl } from '@/lib/shared/design/design-view'
@@ -10,7 +11,7 @@ import { FIND } from './find-rows'
 import { KitImageTile } from './kit-image-tile'
 import { LinkPreview } from './link-preview'
 import { FullLogoRows, LogoIconRow, LogoTitleRow } from './logo-rows'
-import { PropertyRow, PropertySection } from './properties/properties-panel'
+import { PropertyRow, PropertySection, ROW_INDENT } from './properties/properties-panel'
 import { THEME, resetToValue } from './properties/words'
 
 type Asset = { key: string } | null
@@ -53,7 +54,10 @@ export function BrandKit({
           <button
             type="button"
             onClick={onLogo}
-            className="flex min-h-7 w-full items-center gap-1 rounded-md ps-[100px] text-start text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className={cn(
+              'flex min-h-7 w-full items-center gap-1 rounded-md text-start text-xs text-muted-foreground hover:text-foreground focus-ring',
+              ROW_INDENT
+            )}
           >
             {THEME.sizeAndPlacement}
             <ChevronRightIcon className="size-3.5" aria-hidden="true" />

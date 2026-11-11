@@ -83,5 +83,5 @@ export function RefusalText({ message, className }: { message: string; className
 /** The line for a refused change no row made, over the canvas. */
 export function RefusalFallback({ value }: { value: RefusalValue }) {
   if (!value.shown || value.shown.row !== null) return null
-  return <RefusalText message={value.shown.message} className="text-[13px] text-destructive" />
+  return <RefusalText message={value.shown.message} className="text-ui text-destructive" />
 }

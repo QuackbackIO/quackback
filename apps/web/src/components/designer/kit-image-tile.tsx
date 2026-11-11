@@ -46,7 +46,8 @@ export function KitImageTile({
         className="group/tile flex min-h-7 cursor-pointer items-center gap-2 rounded-md px-1.5 py-0.5 text-xs hover:bg-muted has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-muted-foreground"
       >
         <span
-          style={backdrop ? { background: backdrop } : undefined}
+          // An empty tile takes the builder's colours; the design's backdrop is for an image on it.
+          style={backdrop && shown ? { background: backdrop } : undefined}
           className={cn(
             'flex h-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background p-0.5',
             wide ? 'w-[61px]' : 'w-8',

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { trackBuilder } from '@/lib/client/builder-events'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
 import {
   Command,
   CommandEmpty,
@@ -197,17 +198,21 @@ export function QuickFind({
     [open, extra, actions, source]
   )
   const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
+  // Nothing is drawn until it first opens; after that it stays, so closing can animate.
+  const everOpened = useOpenedOnce(open)
   const go = (item: FindItem) => {
     toSetting.current = item.target.kind === 'row' || item.target.kind === 'part'
     setOpen(false)
     void followFind(item, navigation)
   }
+  if (!everOpened) return null
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
         showCloseButton={false}
         finalFocus={() => !toSetting.current}
-        className="max-w-lg overflow-hidden p-0"
+        data-quick-find=""
+        className="top-[15vh] max-w-lg translate-y-0 overflow-hidden p-0"
       >
         <DialogTitle className="sr-only">Find</DialogTitle>
         <Command

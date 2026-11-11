@@ -28,12 +28,26 @@ const GOLDEN: [string, string][] = [
   ['Post us your [ideas]{colour}', 'Post us your [posts]{colour}'],
   ['A parcel idea for us?', 'A parcel post for us?'],
   ['Ideas for beans', 'Posts for beans'],
+  ['Suggest post ideas…', 'Suggest posts…'],
+  ['Post ideas for the team', 'Posts for the team'],
+  ['Share a post idea', 'Share a post'],
+  ['Good idea?', 'Have feedback?'],
+  ['Got a good idea? Tell us', 'Got feedback? Tell us'],
+  ['Thanks! Great ideas?', 'Thanks! Have feedback?'],
+  ['Post your ideas', 'Share your posts'],
+  ['Post an idea', 'Write a post'],
 ]
 
 describe('posts wording', () => {
   it.each(GOLDEN)('writes %j as %j', (written, read) => {
     expect(postsWording(written, 'en')).toBe(read)
     expect(postsWording(written)).toBe(read)
+  })
+
+  it('never writes a post as "post posts"', () => {
+    for (const [written] of GOLDEN)
+      expect(postsWording(written)).not.toMatch(/\bposts?\s+posts?\b/i)
+    expect(postsWording('Post ideas, post idea, POST IDEAS')).not.toMatch(/\bposts?\s+posts?\b/i)
   })
 
   it('leaves words that only look like it, and other languages, as written', () => {
