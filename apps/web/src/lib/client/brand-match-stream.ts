@@ -68,7 +68,7 @@ export type BrandMatchOutcome =
       font?: UnmatchedFont
       /** The fonts drawn are only the nearest to the brand's, so the summary does not claim them. */
       fontsNearest?: boolean
-      /** Other looks written beside the one placed, for Try another look. */
+      /** Other looks the server writes beside the one placed; the builder offers Compare looks instead. */
       others?: OtherLook[]
       /** What was measured, for the check that follows the match. */
       target?: {
