@@ -190,6 +190,7 @@ export function DesignerHeader({
   changes,
   published = null,
   onPublishedClose = () => {},
+  canvasControls = true,
 }: {
   returnPath: string
   onExit: () => void
@@ -217,6 +218,12 @@ export function DesignerHeader({
   /** Where the portal just went live, shown on Publish until closed. */
   published?: PortalAddress | null
   onPublishedClose?: () => void
+  /**
+   * The page picker, the device switch and the view menu, which act on the
+   * canvas; hidden while something covers the canvas, such as Compare looks,
+   * which has its own.
+   */
+  canvasControls?: boolean
 }) {
   return (
     <header
@@ -243,11 +250,15 @@ export function DesignerHeader({
             Customer portal
           </span>
         </nav>
-        <div className="min-w-0">{pagePicker}</div>
+        {canvasControls && <div className="min-w-0">{pagePicker}</div>}
       </div>
       <div className="mx-2 flex items-center gap-1">
-        <DeviceToggle size={size} onSize={onSize} />
-        {view}
+        {canvasControls && (
+          <>
+            <DeviceToggle size={size} onSize={onSize} />
+            {view}
+          </>
+        )}
       </div>
       <div className="flex min-w-0 items-center justify-end gap-1.5">
         <IconButton tip={undoTip(undoLabel)} label="Undo" disabled={!undoLabel} onClick={onUndo}>

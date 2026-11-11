@@ -587,6 +587,7 @@ export function DesignerShell({
               onPublishedClose={topBar.closePublished}
               onDiscard={topBar.discard}
               onDialog={topBar.dialog}
+              canvasControls={!looksOpen}
             />
           )}
 
