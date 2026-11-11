@@ -39,7 +39,7 @@ export function Advanced({
         <span className="font-medium">{title}</span>
         <span className="ms-auto truncate text-xs text-muted-foreground">{hint}</span>
         <ChevronRightIcon
-          className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+          className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
           aria-hidden="true"
         />
       </summary>

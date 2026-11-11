@@ -1,4 +1,4 @@
-import { ChevronDownIcon } from '@heroicons/react/20/solid'
+import { ChevronDownIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -105,7 +105,7 @@ export function CanvasBar({
               <span className="truncate" title={locationName(here, posts)}>
                 Showing: {locationName(here, posts)}
               </span>
-              <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
+              <ChevronDownIcon className="size-3.5 shrink-0" aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-72">

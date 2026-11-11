@@ -1,7 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { motion, useIsPresent } from 'framer-motion'
-import { ChevronRightIcon } from '@heroicons/react/16/solid'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { ChevronRightIcon, XMarkIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 

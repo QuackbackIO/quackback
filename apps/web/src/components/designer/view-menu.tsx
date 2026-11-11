@@ -21,7 +21,7 @@ export function ViewMenu({ zoom, children }: { zoom: ReactNode; children: ReactN
             data-view-menu=""
           >
             View
-            <ChevronDownIcon className="size-4" aria-hidden="true" />
+            <ChevronDownIcon className="size-3.5" aria-hidden="true" />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="center" className="w-80" aria-label="View">

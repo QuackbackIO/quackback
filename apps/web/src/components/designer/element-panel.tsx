@@ -780,7 +780,7 @@ function StateChip({
               <span className="sr-only">, other states set</span>
             </>
           )}
-          <ChevronDownIcon className="size-3" aria-hidden="true" />
+          <ChevronDownIcon className="size-3.5" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
