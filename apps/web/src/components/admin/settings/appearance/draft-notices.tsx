@@ -55,10 +55,7 @@ export function DraftNotices({ draft }: { draft: Draft }) {
         </div>
       )}
       {draft.refusal && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-2 text-ui text-destructive"
-        >
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-ui text-destructive">
           <p>{draft.refusal}</p>
           <Button size="sm" variant="outline" onClick={() => draft.recover()}>
             Back to last saved
