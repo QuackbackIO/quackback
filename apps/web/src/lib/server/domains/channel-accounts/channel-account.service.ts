@@ -509,7 +509,7 @@ export async function updateSendingAddressName(input: {
 }): Promise<ChannelAccount> {
   const existing = await getChannelAccount(input.id)
   if (!existing || existing.role !== 'sending') {
-    throw new Error('That sending address no longer exists.')
+    throw new NotFoundError('SENDING_ADDRESS_NOT_FOUND', 'That sending address no longer exists.')
   }
   const [row] = await db
     .update(channelAccounts)
