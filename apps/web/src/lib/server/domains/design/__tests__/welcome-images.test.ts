@@ -26,8 +26,8 @@ function designWith(src: string): PortalDesign {
 }
 
 const srcOf = (design: PortalDesign) =>
-  (design.pages.feedback.welcome.body as { content: Array<{ attrs: { src: string } }> }).content[0]!
-    .attrs.src
+  (design.pages.feedback.welcome.body as unknown as { content: Array<{ attrs: { src: string } }> })
+    .content[0]!.attrs.src
 
 describe('Welcome images', () => {
   it('saves an image uploaded on this host as a storage ref', () => {
@@ -69,7 +69,7 @@ describe('Welcome images', () => {
       } as never,
     ]
     const saved = validateDesign(design)
-    const block = saved.pages.home.blocks[0] as {
+    const block = saved.pages.home.blocks[0] as unknown as {
       body: { content: Array<{ attrs: { src: string } }> }
     }
     expect(block.body.content[0]!.attrs.src).toBe('/api/storage/portal-welcome/d4.png')
