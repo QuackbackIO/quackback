@@ -126,6 +126,33 @@ describe('workspace control-plane credential', () => {
     await expect(fetchWorkspaceCustomDomains()).resolves.toEqual([row])
   })
 
+  it("keeps each hostname's routing and ownership state, dropping malformed values", async () => {
+    const row = {
+      hostname: 'feedback.acme.test',
+      readiness: 'pending',
+      isPrimary: false,
+      updatedAt: '2026-10-01T12:00:00.000Z',
+      cnameTarget: 'edge.example.net',
+      ownershipTxt: null,
+      ownershipProof: { name: '_quackback-challenge.feedback.acme.test', value: 'tok' },
+    }
+    hoisted.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          customDomains: [
+            { ...row, routing: 'ready', ownershipVerified: false },
+            { ...row, hostname: 'help.acme.test', routing: 'live', ownershipVerified: 'yes' },
+          ],
+        }),
+        { status: 200 }
+      )
+    )
+    await expect(fetchWorkspaceCustomDomains()).resolves.toEqual([
+      { ...row, routing: 'ready', ownershipVerified: false },
+      { ...row, hostname: 'help.acme.test' },
+    ])
+  })
+
   it('loads the billing catalogue over GET without a workspace id', async () => {
     hoisted.fetch.mockResolvedValue(
       new Response(JSON.stringify({ version: 1, plans: [], currency: 'usd' }), { status: 200 })

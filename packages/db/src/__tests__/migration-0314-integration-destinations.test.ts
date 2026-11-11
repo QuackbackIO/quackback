@@ -4,12 +4,12 @@ import { join } from 'node:path'
 import { sql } from 'drizzle-orm'
 import { createDb, type Database } from '../client'
 
-// 0312 gives a GitHub connection's configured repository its first
+// 0314 gives a GitHub connection's configured repository its first
 // destination row, carrying the hook id, marks it as feeding the inbox only
 // when the GitHub inbox channel is live, leaves config untouched, and replays
 // as a no-op. Runs in a rolled-back transaction against the migrated database.
 const MIGRATION = readFileSync(
-  join(__dirname, '../../drizzle/0312_integration_destinations.sql'),
+  join(__dirname, '../../drizzle/0314_integration_destinations.sql'),
   'utf8'
 ).replaceAll('--> statement-breakpoint', '')
 
@@ -21,7 +21,7 @@ afterAll(async () => {
   await db?.$client?.end?.()
 })
 
-describe.skipIf(!db)('migration 0312 integration destinations', () => {
+describe.skipIf(!db)('migration 0314 integration destinations', () => {
   it('backfills the configured GitHub repository and replays as a no-op', async () => {
     await db!
       .transaction(async (tx) => {
@@ -65,7 +65,7 @@ describe.skipIf(!db)('migration 0312 integration destinations', () => {
         // With the GitHub inbox channel live, the repository feeds it.
         await tx.execute(sql`DELETE FROM "integration_destinations"`)
         await tx.execute(sql`
-          INSERT INTO "teams" ("id", "name") VALUES ('00000000-0000-4000-8000-000000000307', 'm0312')`)
+          INSERT INTO "teams" ("id", "name") VALUES ('00000000-0000-4000-8000-000000000307', 'm0314')`)
         await tx.execute(sql`
           INSERT INTO "channel_accounts" ("id", "owning_team_id", "channel", "role", "config")
           VALUES (gen_random_uuid(), '00000000-0000-4000-8000-000000000307', 'github', 'connection', '{}'::jsonb)`)
