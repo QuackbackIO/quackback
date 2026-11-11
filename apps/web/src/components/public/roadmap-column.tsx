@@ -48,6 +48,13 @@ export function RoadmapColumn({
 
   const posts = flattenRoadmapViewPosts(data)
   const total = data?.pages[0]?.total ?? 0
+  // The count shows once known: a 0 that grew to its number moved the heading
+  // beside it as the posts arrived.
+  const count = !isLoading && (
+    <Badge variant="secondary" className="text-xs">
+      {total}
+    </Badge>
+  )
 
   const sentinelRef = useInfiniteScroll({
     hasMore: hasNextPage,
@@ -105,9 +112,7 @@ export function RoadmapColumn({
             )}
             {title}
           </h2>
-          <Badge variant="secondary" className="text-xs">
-            {total}
-          </Badge>
+          {count}
         </div>
         {isLoading ? (
           <CardSkeletons count={GROUP_LOADING_CARDS} />
@@ -137,9 +142,7 @@ export function RoadmapColumn({
               {title}
             </CardTitle>
           </div>
-          <Badge variant="secondary" className="text-xs">
-            {total}
-          </Badge>
+          {count}
         </div>
       </CardHeader>
       <CardContent className="flex-1 min-h-0 p-0">

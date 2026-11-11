@@ -54,6 +54,8 @@ describe('a roadmap column loading its posts', () => {
     // No spinner standing in for the cards, and no empty state before it knows.
     expect(container.querySelector('.animate-spin')).toBeNull()
     expect(screen.queryByText('No items yet')).toBeNull()
+    // No count until it is known.
+    expect(screen.queryByText('0')).toBeNull()
   })
 
   it('draws its placeholders in the app’s placeholder look', () => {
@@ -66,6 +68,7 @@ describe('a roadmap column loading its posts', () => {
     state.loading = false
     const { container } = mount('group')
     expect(screen.getByText('No items yet')).toBeTruthy()
+    expect(screen.getByText('0')).toBeTruthy()
     expect(container.querySelector('[data-qb-skeleton]')).toBeNull()
   })
 
