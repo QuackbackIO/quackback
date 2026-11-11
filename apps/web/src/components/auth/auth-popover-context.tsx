@@ -1,4 +1,12 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react'
 
 type AuthMode = 'login' | 'signup'
 
@@ -23,12 +31,8 @@ interface OpenAuthPopoverOptions {
   description?: string
 }
 
-interface AuthPopoverContextValue {
-  isOpen: boolean
-  mode: AuthMode
-  callbackUrl: string | undefined
-  linkConflict: LinkConflictContext | undefined
-  description: string | undefined
+/** What opens, closes and completes the sign-in dialog: the same functions for the page's life. */
+interface AuthPopoverActions {
   openAuthPopover: (options: OpenAuthPopoverOptions) => void
   closeAuthPopover: () => void
   setMode: (mode: AuthMode) => void
@@ -36,7 +40,23 @@ interface AuthPopoverContextValue {
   onAuthSuccess: () => void
 }
 
-const AuthPopoverContext = createContext<AuthPopoverContextValue | null>(null)
+/** The dialog's state, which only the dialog reads. */
+interface AuthPopoverState {
+  isOpen: boolean
+  mode: AuthMode
+  callbackUrl: string | undefined
+  linkConflict: LinkConflictContext | undefined
+  description: string | undefined
+}
+
+/**
+ * Two contexts, so opening the dialog redraws the dialog alone. Every vote
+ * button and post card on a page asks for openAuthPopover; with the state in
+ * the same context, opening the dialog redrew each of them too, and on a slow
+ * phone a visitor's first vote waited on all of it.
+ */
+const AuthPopoverContext = createContext<AuthPopoverActions | null>(null)
+const AuthPopoverStateContext = createContext<AuthPopoverState | null>(null)
 
 interface AuthPopoverProviderProps {
   children: ReactNode
@@ -74,26 +94,23 @@ export function AuthPopoverProvider({ children }: AuthPopoverProviderProps) {
     reset()
   }, [reset])
 
+  const actions = useMemo(
+    () => ({ openAuthPopover, closeAuthPopover, setMode, onAuthSuccess }),
+    [openAuthPopover, closeAuthPopover, onAuthSuccess]
+  )
+  const state = useMemo(
+    () => ({ isOpen, mode, callbackUrl, linkConflict, description }),
+    [isOpen, mode, callbackUrl, linkConflict, description]
+  )
+
   return (
-    <AuthPopoverContext.Provider
-      value={{
-        isOpen,
-        mode,
-        callbackUrl,
-        linkConflict,
-        description,
-        openAuthPopover,
-        closeAuthPopover,
-        setMode,
-        onAuthSuccess,
-      }}
-    >
-      {children}
+    <AuthPopoverContext.Provider value={actions}>
+      <AuthPopoverStateContext.Provider value={state}>{children}</AuthPopoverStateContext.Provider>
     </AuthPopoverContext.Provider>
   )
 }
 
-export function useAuthPopover(): AuthPopoverContextValue {
+export function useAuthPopover(): AuthPopoverActions {
   const context = useContext(AuthPopoverContext)
   if (!context) {
     throw new Error('useAuthPopover must be used within an AuthPopoverProvider')
@@ -101,10 +118,20 @@ export function useAuthPopover(): AuthPopoverContextValue {
   return context
 }
 
+/** The dialog's state and actions, for the dialog itself. */
+export function useAuthPopoverState(): AuthPopoverState & AuthPopoverActions {
+  const actions = useAuthPopover()
+  const state = useContext(AuthPopoverStateContext)
+  if (!state) {
+    throw new Error('useAuthPopoverState must be used within an AuthPopoverProvider')
+  }
+  return { ...state, ...actions }
+}
+
 /**
  * Safe version that returns null if not within provider.
  * Useful for components that may be rendered outside portal layout.
  */
-export function useAuthPopoverSafe(): AuthPopoverContextValue | null {
+export function useAuthPopoverSafe(): AuthPopoverActions | null {
   return useContext(AuthPopoverContext)
 }
