@@ -40,12 +40,13 @@ describe('the sweep inventory', () => {
   const jobsSource = read('cron/fleet-jobs.ts')
   const startupSource = read('startup.ts')
 
-  it('is exactly the twelve locks the fleet has, all defined in one module', () => {
+  it('is exactly the thirteen locks the fleet has, all defined in one module', () => {
     const names = sweepLockNames(jobsSource)
     // Written out rather than derived, so a sweep deleted from the module makes
     // this fail instead of quietly shrinking both sides of a comparison.
     expect([...names].sort()).toEqual([
       'audit_prune',
+      'brand_media_sweep',
       'changelog_notify',
       'daily_cycle',
       'events_prune',

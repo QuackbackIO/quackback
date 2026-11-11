@@ -9,7 +9,11 @@ import { ArrowPathIcon } from '@heroicons/react/24/solid'
  */
 export function RoutePendingComponent() {
   return (
-    <div className="flex flex-1 min-h-32 items-center justify-center">
+    // In the portal it holds the screen below the header, so the footer waits
+    // just under the screen's edge: a page arriving taller moves it unseen,
+    // and one arriving shorter brings it up by its own height. Left in view,
+    // the footer jumped down the page as most pages arrived.
+    <div className="flex flex-1 min-h-32 items-center justify-center [[data-portal]_&]:min-h-[calc(100svh-var(--portal-header-height,0px))]">
       <ArrowPathIcon
         className="size-5 animate-spin text-muted-foreground motion-reduce:animate-none"
         aria-hidden="true"

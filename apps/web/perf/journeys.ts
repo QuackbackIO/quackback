@@ -41,6 +41,12 @@ export interface BrowserJourney {
   layoutShifts?: boolean
   /** A phone's screen instead of a 1440 by 900 desktop. */
   device?: 'phone'
+  /**
+   * Always over the --throttle link (10 Mbps, 40 ms): for a page whose data
+   * arrives after it draws only on a link slower than localhost, which is
+   * where its layout shifts show.
+   */
+  throttle?: boolean
   /** The suite it belongs to (perf/config.ts BENCH_SUITE); core when left out. */
   suite?: 'designed'
   /** Part of the breadth sweep over every page (skipped by --core). */
@@ -296,6 +302,7 @@ function designedJourneys(): Journey[] {
     ]),
     // The pages whose posts arrive after the page: a roadmap's columns, by
     // groups down the page (kiln) and as a board (juniper), and the changelog.
+    // Over a link slower than localhost, so the posts do arrive after it.
     ...(
       [
         ['kiln', '/roadmap'],
@@ -309,6 +316,7 @@ function designedJourneys(): Journey[] {
       suite: 'designed',
       device: 'phone',
       layoutShifts: true,
+      throttle: true,
       run: async (page) => {
         await serveDesignFiles(page)
         await page.goto(designedPath(design, path))
@@ -320,6 +328,22 @@ function designedJourneys(): Journey[] {
         await page.waitForFunction(() => !document.querySelector('[data-qb-skeleton]'))
       },
     })),
+    {
+      // A feed that opens on Top (tandem), on a desktop with its filter panel:
+      // its posts and the panel's counts come with the page.
+      kind: 'browser',
+      name: 'ui:designed:tandem-feedback',
+      as: 'anon',
+      suite: 'designed',
+      layoutShifts: true,
+      throttle: true,
+      run: async (page) => {
+        await serveDesignFiles(page)
+        await page.goto(designedPath('tandem', '/feedback'))
+        await firstPortalPost(page).waitFor()
+        await page.waitForLoadState('load')
+      },
+    },
   ]
 }
 
@@ -414,6 +438,40 @@ export const journeys: Journey[] = [
       await firstPortalPost(page).click()
       await page.waitForURL(/\/posts\/post_/)
       await page.locator('[id^="comment-"]').first().waitFor()
+    },
+  },
+  {
+    // A sort tab: the feed keeps its cards on screen while the new order loads.
+    kind: 'browser',
+    name: 'ui:portal-sort-new',
+    as: 'anon',
+    layoutShifts: true,
+    interaction: true,
+    setup: async (page) => {
+      await page.goto('/?sort=trending')
+      await firstPortalPost(page).waitFor()
+    },
+    run: async (page) => {
+      const listed = page.waitForResponse((res) => res.url().includes('/_serverFn/'))
+      await page.locator('button[aria-pressed]', { hasText: 'New' }).first().click()
+      await page.waitForURL(/sort=new/)
+      await listed
+      await page.locator('[aria-busy="false"]').first().waitFor()
+    },
+  },
+  {
+    // A visitor's first vote asks them to sign in: the dialog opens over the feed.
+    kind: 'browser',
+    name: 'ui:portal-vote-sign-in',
+    as: 'anon',
+    interaction: true,
+    setup: async (page) => {
+      await page.goto('/?sort=trending')
+      await firstPortalPost(page).waitFor()
+    },
+    run: async (page) => {
+      await page.locator('button[aria-label*="ote" i]').first().click()
+      await page.getByRole('dialog').waitFor()
     },
   },
   {

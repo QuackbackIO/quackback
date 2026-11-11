@@ -2,6 +2,8 @@
 // route files, because importing a route file from another route skips code
 // splitting and would pull the whole feed page into the entry chunk.
 import { notFound, redirect, type ParsedLocation } from '@tanstack/react-router'
+import { preinitModule } from 'react-dom'
+import lazyGraphs from 'virtual:quackback-lazy-graphs'
 import { z } from 'zod'
 import { portalDataParams } from '@/components/public/feedback/portal-data-params'
 import { portalQueries } from '@/lib/client/queries/portal'
@@ -162,4 +164,16 @@ export function feedHead(
     ],
     links: baseUrl ? [{ rel: 'canonical', href: canonical }] : [],
   }
+}
+
+/**
+ * Starts the chunk of the landing page being drawn, Home's or the feed's, in
+ * the server's page (lib/build/lazy-graphs.ts): each is a dynamic import,
+ * whose chunk and the chunks it imports the browser would otherwise find only
+ * once the entry had run. Called while rendering; the browser's copy of the
+ * chunk names is empty, so it does nothing there.
+ */
+export function preloadPageGraph(page: 'home' | 'feed'): void {
+  const chunk = lazyGraphs[page]
+  if (chunk) preinitModule(chunk)
 }

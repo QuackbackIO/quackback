@@ -50,7 +50,20 @@ import {
   type HomeBlockType,
 } from './home'
 import type { GridPlace } from './home-grid'
-import { setLanding } from './menu'
+import { setTitle } from './logo'
+import {
+  addMenuLink,
+  isMenuLinkUrl,
+  menuParts,
+  moveMenuPart,
+  removeMenuLink,
+  renameMenuPart,
+  setLanding,
+  setMenuShown,
+  type MenuPartId,
+} from './menu'
+import { readOverrideOp, writeOverride } from './override-ops'
+import type { BundledFontId } from './fonts'
 import { takeHomeLayout, type HomeLayout } from './home-layouts'
 import type { Selection } from './outline'
 import { PAGE_CHOICE_DEFAULTS, type PageChoices } from './page-choices'
@@ -138,6 +151,48 @@ export type DesignOp =
   | { op: 'words.set'; field: WordsField; locale: string; doc: WordsDoc }
   /** One of the hero's settings, through the registry's checks; its looks reach every page. */
   | { op: 'hero.set'; key: string; value: unknown; locale?: string }
+  /** A brand colour by its role, in light or dark mode; null takes it away (dark: worked out again). */
+  | { op: 'brand.colour'; role: BrandColourRole; value: string | null; mode?: 'light' | 'dark' }
+  /** The heading or body face, one of the bundled fonts. */
+  | { op: 'brand.font'; slot: 'heading' | 'body'; font: BundledFontId }
+  /** The title beside the logo's icon; empty goes back to the workspace's name. */
+  | { op: 'logo.title'; title: string }
+  /**
+   * One element's look in a state: everywhere, or for a part, a page or a
+   * Home block (`scope` part:<id>, page:<page>, block:<id>); on all screens,
+   * phones or dark mode. Undefined or null clears it.
+   */
+  | {
+      op: 'style.set'
+      element: string
+      state?: string
+      prop: string
+      value: unknown
+      scope?: string
+      layer?: 'all' | 'phone' | 'dark'
+    }
+  /** A menu item (home, a page type, or link:<id>) renamed; empty gives it back its own name. */
+  | { op: 'menu.rename'; item: string; name: string; gates: PortalPageGates }
+  | { op: 'menu.shown'; item: string; shown: boolean; gates: PortalPageGates }
+  /** To a place among the items that move (all but Home), as the menu reads now. */
+  | { op: 'menu.move'; item: string; place: number; gates: PortalPageGates }
+  | { op: 'menu.addLink'; label: string; url: string }
+  | { op: 'menu.removeLink'; item: string }
+
+/** The roles of the brand's colours an operation can set. */
+export const BRAND_COLOUR_ROLES = [
+  'accent',
+  'background',
+  'ink',
+  'surface',
+  'raised',
+  'muted',
+  'border',
+  'support',
+] as const
+export type BrandColourRole = (typeof BRAND_COLOUR_ROLES)[number]
+/** Every brand has these in light mode; the rest are worked out when missing. */
+const REQUIRED_ROLES: ReadonlySet<BrandColourRole> = new Set(['accent', 'background', 'ink'])
 
 export type DesignOpKind = DesignOp['op']
 
@@ -200,9 +255,50 @@ export function refusalOf(design: PortalDesign, op: DesignOp): string | null {
       const next = applySetting(heroOf(design), op.key, op.value, op.locale)
       return next.ok ? null : next.refusal
     }
+    case 'brand.colour':
+      return op.value === null && (op.mode ?? 'light') === 'light' && REQUIRED_ROLES.has(op.role)
+        ? `The brand always has a ${op.role} colour; set another instead`
+        : null
+    case 'style.set': {
+      const read = readStyle(design, op)
+      return read.ok ? null : read.refusal
+    }
+    case 'menu.rename':
+    case 'menu.shown':
+    case 'menu.move':
+    case 'menu.removeLink':
+      return menuItemRefusal(design, op)
+    case 'menu.addLink':
+      if (!op.label.trim()) return 'A link needs a name'
+      return isMenuLinkUrl(op.url) ? null : 'A link’s address starts with http:// or https://'
     default:
       return null
   }
+}
+
+const LAYER_PREFIX = { all: '', phone: 'phone.', dark: 'dark.' } as const
+
+function readStyle(design: PortalDesign, op: Extract<DesignOp, { op: 'style.set' }>) {
+  const key = `${LAYER_PREFIX[op.layer ?? 'all']}${op.element}.${op.state ?? 'base'}.${op.prop}`
+  return readOverrideOp(design, op.scope ?? 'everywhere', key, op.value ?? null)
+}
+
+/** Why a menu operation names no item it can change, or null. */
+function menuItemRefusal(
+  design: PortalDesign,
+  op: Extract<DesignOp, { op: 'menu.rename' | 'menu.shown' | 'menu.move' | 'menu.removeLink' }>
+): string | null {
+  if (op.op === 'menu.removeLink') {
+    return design.nav.items.some((i) => i.type === 'link' && `link:${i.id}` === op.item)
+      ? null
+      : `There is no link ${op.item} in the menu`
+  }
+  if (!menuParts(design, op.gates).some((part) => part.id === op.item))
+    return `There is no ${op.item} in the menu`
+  if (op.op === 'menu.move' && op.item === 'home') return 'Home stays first in the menu'
+  if (op.op === 'menu.shown' && op.item.startsWith('link:'))
+    return 'A link is in the menu or not: remove it instead'
+  return null
 }
 
 /** The block with the operation's settings made, each checked in turn, or the first refusal. */
@@ -221,10 +317,23 @@ function settingsOn(
 
 /** Makes one operation on the draft, in place; a refused one leaves it as it was. */
 export function applyDesignOp(draft: PortalDesign, op: DesignOp): DispatchResult {
+  const refusal = OWN_CHECKS.has(op.op) ? refusalOf(draft, op) : null
+  if (refusal) return refuse(refusal)
   const result = run(draft, op)
   if (result.ok && SETTLES.has(op.op)) settleHome(draft)
   return result
 }
+
+/** The operations whose refusals are checked before they run, since writing them cannot refuse. */
+const OWN_CHECKS: ReadonlySet<DesignOpKind> = new Set([
+  'brand.colour',
+  'style.set',
+  'menu.rename',
+  'menu.shown',
+  'menu.move',
+  'menu.addLink',
+  'menu.removeLink',
+])
 
 function run(draft: PortalDesign, op: DesignOp): DispatchResult {
   const blocks = draft.pages.home.blocks
@@ -321,5 +430,44 @@ function run(draft: PortalDesign, op: DesignOp): DispatchResult {
       writeHero(draft, next.block, op.key as HeroKey)
       return { ok: true }
     }
+    case 'brand.colour': {
+      const mode = op.mode ?? 'light'
+      const palette = (mode === 'light' ? draft.brand.light : (draft.brand.dark ??= {})) as Record<
+        string,
+        string | undefined
+      >
+      if (op.value === null) delete palette[op.role]
+      else palette[op.role] = op.value
+      if (mode === 'dark' && !Object.keys(palette).length) delete draft.brand.dark
+      return { ok: true }
+    }
+    case 'brand.font':
+      draft.brand.fonts[op.slot] = { kind: 'bundled', id: op.font }
+      return { ok: true }
+    case 'logo.title':
+      setTitle(draft, op.title)
+      return { ok: true }
+    case 'style.set': {
+      const read = readStyle(draft, op)
+      if (!read.ok) return read
+      writeOverride(draft, read.read)
+      return { ok: true }
+    }
+    case 'menu.rename':
+      renameMenuPart(draft, op.item as MenuPartId, op.name)
+      return { ok: true }
+    case 'menu.shown':
+      return setMenuShown(draft, op.gates, op.item as MenuPartId, op.shown)
+        ? { ok: true }
+        : refuse('Visitors land on this page while Home is off, so it stays in the menu')
+    case 'menu.move':
+      moveMenuPart(draft, op.gates, op.item as MenuPartId, op.place)
+      return { ok: true }
+    case 'menu.addLink':
+      addMenuLink(draft, { label: op.label, url: op.url })
+      return { ok: true }
+    case 'menu.removeLink':
+      removeMenuLink(draft, op.item as MenuPartId)
+      return { ok: true }
   }
 }

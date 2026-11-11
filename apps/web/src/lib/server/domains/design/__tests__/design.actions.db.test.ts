@@ -569,6 +569,42 @@ describe('applyDraftOps', () => {
     expect(first.grid!.y).toBe(0)
     expect(second.grid!.y).toBe(first.grid!.h)
   })
+
+  it('changes brand, style and menu, and refuses an unreadable colour with the same gate', async () => {
+    const { who, revision } = await withTwoBlocks()
+    const before = (await actions.readDesignForEditing()).design
+    const result = await applyDraftOps(
+      [
+        { op: 'brand.colour', role: 'ink', value: before.brand.light.background },
+        { op: 'brand.colour', role: 'accent', value: '#0058a3' },
+        { op: 'brand.font', slot: 'body', font: 'lora' },
+        { op: 'logo.title', title: 'Acme Help' },
+        {
+          op: 'style.set',
+          element: 'button',
+          prop: 'background',
+          value: 'ink',
+          scope: 'page:roadmap',
+        },
+        { op: 'menu.rename', item: 'roadmap', name: 'Plans' },
+        { op: 'menu.addLink', label: 'Docs', url: 'https://acme.test/docs' },
+      ],
+      who,
+      revision,
+      gates
+    )
+    if (!result.ok) throw new Error(result.message)
+    expect(result.refused.map((r) => r.index)).toEqual([0])
+    expect(result.refused[0].reason).toMatch(/ink on background is below 4.5:1/)
+    const after = (await actions.readDesignForEditing()).design
+    expect(after.brand.light.ink).toBe(before.brand.light.ink)
+    expect(after.brand.light.accent).toBe('#0058a3')
+    expect(after.brand.fonts.body).toEqual({ kind: 'bundled', id: 'lora' })
+    expect(after.brand.logo.name).toBe('Acme Help')
+    expect(after.overrides?.length).toBe(1)
+    expect(after.nav.items.find((i) => i.type === 'roadmap')).toMatchObject({ label: 'Plans' })
+    expect(after.nav.items.some((i) => i.type === 'link' && i.label === 'Docs')).toBe(true)
+  })
 })
 
 describe('publishDesign and restoreDesign', () => {

@@ -76,10 +76,11 @@ Examples:
     name: 'apply_portal_design_ops',
     permissions: () => [PERMISSIONS.SETTINGS_BRANDING],
     description: `Change the customer portal design draft one item at a time, with the builder's own operations and checks. Name a Home block by its id from get_portal_design. Operations run in order; a refused one changes nothing and comes back with its reason, and the rest still apply. Pass the revision you read as expected_revision. Nothing goes live: a person publishes the draft in Settings › Portal.
-Operations: block.set, block.setEach, block.add, block.duplicate, block.remove, block.step, block.place, block.grid, block.look, block.lookReset, block.matchLook, block.styleReset, block.phoneHidden, home.layout, section.set, page.choice, part.shown, words.set, hero.set.
+Operations: block.set, block.setEach, block.add, block.duplicate, block.remove, block.step, block.place, block.grid, block.look, block.lookReset, block.matchLook, block.styleReset, block.phoneHidden, home.layout, section.set, page.choice, part.shown, words.set, hero.set, brand.colour, brand.font, logo.title, style.set, menu.rename, menu.shown, menu.move, menu.addLink, menu.removeLink. A menu item is home, a page type or link:<id>. A change whose text cannot be read is refused.
 Examples:
 {"ops":[{"op":"block.set","block":"ideas001","key":"count","value":5}],"expected_revision":"<revision>"}
-{"ops":[{"op":"block.add","type":"updates"},{"op":"block.remove","block":"links001"}],"expected_revision":"<revision>"}`,
+{"ops":[{"op":"block.add","type":"updates"},{"op":"block.remove","block":"links001"}],"expected_revision":"<revision>"}
+{"ops":[{"op":"brand.colour","role":"accent","value":"#0058a3"},{"op":"style.set","element":"button","state":"hover","prop":"background","value":"ink","scope":"page:roadmap"},{"op":"menu.rename","item":"roadmap","name":"Plans"}],"expected_revision":"<revision>"}`,
     schema: {
       ops: apiDesignOps,
       expected_revision: z.string().min(1).max(200),

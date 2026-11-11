@@ -4,6 +4,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { withBlockIds } from '@/lib/shared/design/home'
 import { checkedWords, holdsMoreThanWords } from '@/lib/shared/design/words-schema'
 import { lintDesignCss } from './css-lint'
+import { withWelcomeImageRefs } from './welcome-images'
 
 /**
  * A Welcome body as the design keeps it: checked against the rich words
@@ -90,5 +91,5 @@ export function validateDesign(input: unknown): PortalDesign {
       )
     }
   }
-  return withBlockIds(withCheckedWords(design))
+  return withBlockIds(withWelcomeImageRefs(withCheckedWords(design)))
 }

@@ -10,7 +10,7 @@ import {
 import { Spinner } from '@/components/shared/spinner'
 import { headerForStep, type FormContext } from './auth-step-header'
 import { hasDistinctSignup } from './oauth-buttons'
-import { useAuthPopover } from './auth-popover-context'
+import { useAuthPopoverState } from './auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useSignInFromAnotherTab } from './use-sign-in-from-another-tab'
 import { signOut } from '@/lib/client/auth-client'
@@ -53,7 +53,7 @@ export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
     closeAuthPopover,
     setMode,
     onAuthSuccess,
-  } = useAuthPopover()
+  } = useAuthPopoverState()
   const [formContext, setFormContext] = useState<FormContext>({ step: 'credentials', email: '' })
 
   // Sign-up mode only differs from login when password auth is on and signups

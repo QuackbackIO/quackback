@@ -526,7 +526,24 @@ export interface WorkspaceStorage {
     contentType?: string
   ): Promise<string>
   remove(key: string): Promise<void>
+  /**
+   * One page of this workspace's objects under a top-level upload prefix such
+   * as `logos/`, as keys (namespace stripped) with when each was written.
+   * Only a single prefix segment can be named, never the namespace root.
+   */
+  listUnder(
+    prefix: string,
+    continuationToken?: string
+  ): Promise<{ objects: StoredObject[]; nextToken?: string }>
 }
+
+/** An object a workspace listing reports: its key and when it was last written. */
+export interface StoredObject {
+  key: string
+  lastModified: Date | null
+}
+
+const LISTABLE_PREFIX = /^[a-z][a-z0-9-]*\/$/
 
 /**
  * A client bound to one workspace and to one set of connection parameters.
@@ -646,6 +663,38 @@ function workspaceStorage(selfReportedWorkspaceId: WorkspaceId): WorkspaceStorag
       const client = await getS3Client(connection)
       const { DeleteObjectCommand } = await getS3Module()
       await client.send(new DeleteObjectCommand({ Bucket: connection.bucket, Key }))
+    },
+
+    async listUnder(prefix, continuationToken) {
+      if (!LISTABLE_PREFIX.test(prefix)) {
+        throw new Error(`Refusing to list storage under ${JSON.stringify(prefix)}`)
+      }
+      const namespace = workspaceNamespace(selfReportedWorkspaceId)
+      const client = await getS3Client(connection)
+      const { ListObjectsV2Command } = await getS3Module()
+      const response = (await client.send(
+        new ListObjectsV2Command({
+          Bucket: connection.bucket,
+          Prefix: `${namespace}${prefix}`,
+          ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+        })
+      )) as {
+        Contents?: Array<{ Key?: string; LastModified?: Date }>
+        IsTruncated?: boolean
+        NextContinuationToken?: string
+      }
+      const objects: StoredObject[] = []
+      for (const entry of response.Contents ?? []) {
+        if (!entry.Key?.startsWith(namespace)) continue
+        objects.push({
+          key: entry.Key.slice(namespace.length),
+          lastModified: entry.LastModified ? new Date(entry.LastModified) : null,
+        })
+      }
+      return {
+        objects,
+        nextToken: response.IsTruncated ? response.NextContinuationToken : undefined,
+      }
     },
   }
 }

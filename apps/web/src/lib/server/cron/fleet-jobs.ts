@@ -84,6 +84,11 @@ export async function runDailyMaintenance(): Promise<void> {
       cleanupExpiredMessageTranslations(),
     ]).catch((err) => log.error({ err }, 'logs retention cleanup failed'))
   })
+  // Logos, favicons and design images no setting, design or capture names.
+  await withSweepLock('brand_media_sweep', ONE_HOUR, async () => {
+    const { sweepUnusedBrandMedia } = await import('@/lib/server/storage/brand-media-sweep')
+    await sweepUnusedBrandMedia().catch((err) => log.error({ err }, 'brand media sweep failed'))
+  })
 }
 
 /** Stale/missing post summaries. AI calls, so one replica per tick. */

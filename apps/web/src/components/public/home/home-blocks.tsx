@@ -259,17 +259,37 @@ function BlockCard({
   )
 }
 
+/**
+ * About how tall a block that waits on its data draws, so its placeholder
+ * holds that room: a list block by the rows it shows, a roadmap by its columns
+ * side by side or (on a phone) stacked. Undefined is the plain card height.
+ */
+export function blockSkeletonHeight(block: HomeBlock): string | undefined {
+  switch (block.type) {
+    case 'ideas':
+      return `calc(5.625rem + ${block.count} * 4.875rem)`
+    case 'updates':
+      return `calc(6.875rem + ${block.count} * 3.5625rem)`
+    case 'help_topics':
+      return '15.5rem'
+    default:
+      return undefined
+  }
+}
+
 /** A block waiting on its data: the card's outline, so the grid does not jump. */
 function BlockSkeleton({ block, index }: { block: HomeBlock; index: number }) {
   const area = useArea(index)
   const samples = usePreviewSamples()
+  const minHeight = blockSkeletonHeight(block)
   return (
     <div
       aria-hidden="true"
       data-qb-skeleton={`block-${block.id ?? index}`}
-      style={area}
+      style={minHeight ? { ...area, minHeight } : area}
       className={cn(
-        'min-h-32 animate-pulse rounded-lg bg-muted/40',
+        'animate-pulse rounded-lg bg-muted/40',
+        block.type === 'roadmap' ? 'min-h-96 sm:min-h-48' : 'min-h-32',
         AREA_CLASS,
         phoneHiddenClass(block, samples)
       )}

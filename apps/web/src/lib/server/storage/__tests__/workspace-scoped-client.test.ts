@@ -55,8 +55,14 @@ vi.mock('@aws-sdk/client-s3', () => ({
     clientCredentials.push(cfg.credentials)
     const via = cfg.credentials.accessKeyId
     return {
-      send: async (command: { input: { Bucket: string; Key: string } }) => {
+      send: async (command: { input: { Bucket: string; Key: string; Prefix?: string } }) => {
         sent.push({ ...command.input, via })
+        if (command.input.Prefix !== undefined) {
+          const p = command.input.Prefix
+          return {
+            Contents: [{ Key: `${p}a.png`, LastModified: new Date('2026-01-01T00:00:00Z') }],
+          }
+        }
         return {
           Body: { transformToWebStream: () => new ReadableStream() },
           ContentType: 'image/png',
@@ -72,6 +78,9 @@ vi.mock('@aws-sdk/client-s3', () => ({
     return { input }
   }),
   DeleteObjectCommand: vi.fn(function (input: unknown) {
+    return { input }
+  }),
+  ListObjectsV2Command: vi.fn(function (input: unknown) {
     return { input }
   }),
 }))
@@ -485,5 +494,30 @@ describe('token verification through the narrowed accessor', () => {
     const params = await mintFor('workspace-alpha')
 
     expect(verifyAs('workspace-bravo', params)).toBe(false)
+  })
+})
+
+describe('listing under an upload prefix', () => {
+  it('lists only inside the calling workspace namespace and returns bare keys', async () => {
+    const page = await withWorkspace('workspace-alpha', async () =>
+      (await currentWorkspaceStorage()).listUnder('logos/')
+    )
+    expect(sent.map((c) => (c as { Prefix?: string }).Prefix)).toEqual([
+      nameFor('workspace-alpha', 'logos/'),
+    ])
+    expect(page.objects).toEqual([
+      { key: 'logos/a.png', lastModified: new Date('2026-01-01T00:00:00Z') },
+    ])
+  })
+
+  it('refuses the namespace root or anything but one prefix segment', async () => {
+    for (const prefix of ['', '/', '../', 'logos', 'logos/../']) {
+      await expect(
+        withWorkspace('workspace-alpha', async () =>
+          (await currentWorkspaceStorage()).listUnder(prefix)
+        )
+      ).rejects.toThrow()
+    }
+    expect(sent).toHaveLength(0)
   })
 })

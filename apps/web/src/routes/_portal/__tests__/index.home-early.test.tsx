@@ -45,6 +45,7 @@ vi.mock('@/components/public/feedback/feed-route', () => ({
   hasFeedSearch: () => false,
   loadFeed: async () => ({}),
   portalPathsOf: () => ({}),
+  preloadPageGraph: () => {},
 }))
 
 afterEach(() => {

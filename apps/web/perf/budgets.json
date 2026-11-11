@@ -10,23 +10,23 @@
   "journeys": {
     "doc:portal-home": {
       "dbQueries": 7,
-      "htmlKB": 129.4
+      "htmlKB": 122.5
     },
     "doc:portal-roadmap": {
       "dbQueries": 4,
-      "htmlKB": 43.3
+      "htmlKB": 38.6
     },
     "doc:portal-changelog": {
       "dbQueries": 0,
-      "htmlKB": 23.4
+      "htmlKB": 22.3
     },
     "doc:portal-post": {
       "dbQueries": 15,
-      "htmlKB": 40
+      "htmlKB": 36.9
     },
     "doc:help-center": {
       "dbQueries": 3,
-      "htmlKB": 28.0
+      "htmlKB": 26.8
     },
     "doc:widget": {
       "dbQueries": 19,
@@ -34,11 +34,11 @@
     },
     "doc:portal-home+session": {
       "dbQueries": 14,
-      "htmlKB": 150.7
+      "htmlKB": 143.7
     },
     "doc:portal-changelog+session": {
       "dbQueries": 5,
-      "htmlKB": 28.8
+      "htmlKB": 26.4
     },
     "doc:admin-feedback": {
       "dbQueries": 25,
@@ -46,23 +46,23 @@
     },
     "doc:admin-inbox": {
       "dbQueries": 22,
-      "htmlKB": 96.5
+      "htmlKB": 95.5
     },
     "doc:admin-roadmap": {
       "dbQueries": 20,
-      "htmlKB": 191.2
+      "htmlKB": 189.3
     },
     "doc:admin-changelog": {
       "dbQueries": 6,
-      "htmlKB": 53.5
+      "htmlKB": 52
     },
     "doc:admin-help-center": {
       "dbQueries": 11,
-      "htmlKB": 61.5
+      "htmlKB": 59.6
     },
     "doc:admin-users": {
       "dbQueries": 21,
-      "htmlKB": 107
+      "htmlKB": 104.7
     },
     "doc:admin-settings": {
       "dbQueries": 8,
@@ -282,7 +282,7 @@
     },
     "sweep:doc:admin:/admin/analytics": {
       "dbQueries": 6,
-      "htmlKB": 53.3
+      "htmlKB": 53
     },
     "sweep:ui:admin:/admin/analytics": {
       "dbQueries": 31,
@@ -360,7 +360,7 @@
     },
     "sweep:doc:admin:/admin/changelog": {
       "dbQueries": 6,
-      "htmlKB": 53.5
+      "htmlKB": 52
     },
     "sweep:ui:admin:/admin/changelog": {
       "dbQueries": 20,
@@ -386,7 +386,7 @@
     },
     "sweep:doc:admin:/admin/help-center": {
       "dbQueries": 11,
-      "htmlKB": 61.5
+      "htmlKB": 59.6
     },
     "sweep:ui:admin:/admin/help-center": {
       "dbQueries": 11,
@@ -399,7 +399,7 @@
     },
     "sweep:doc:admin:/admin/inbox": {
       "dbQueries": 22,
-      "htmlKB": 96.5
+      "htmlKB": 95.5
     },
     "sweep:ui:admin:/admin/inbox": {
       "dbQueries": 22,
@@ -412,7 +412,7 @@
     },
     "sweep:doc:admin:/admin/notifications": {
       "dbQueries": 6,
-      "htmlKB": 43.5
+      "htmlKB": 42.7
     },
     "sweep:ui:admin:/admin/notifications": {
       "dbQueries": 14,
@@ -425,7 +425,7 @@
     },
     "sweep:doc:admin:/admin/roadmap": {
       "dbQueries": 20,
-      "htmlKB": 191.2
+      "htmlKB": 189.3
     },
     "sweep:ui:admin:/admin/roadmap": {
       "dbQueries": 20,
@@ -438,7 +438,7 @@
     },
     "sweep:doc:admin:/admin/users?sort=newest": {
       "dbQueries": 21,
-      "htmlKB": 107
+      "htmlKB": 104.7
     },
     "sweep:ui:admin:/admin/users?sort=newest": {
       "dbQueries": 21,
@@ -503,7 +503,7 @@
     },
     "sweep:doc:admin:/admin/settings/channels/email": {
       "dbQueries": 12,
-      "htmlKB": 90.5
+      "htmlKB": 88.1
     },
     "sweep:ui:admin:/admin/settings/channels/email": {
       "dbQueries": 12,
@@ -524,7 +524,7 @@
       "requests": 118,
       "jsRequests": 113,
       "jsKB": 415.6,
-      "htmlTransferKB": 30.0,
+      "htmlTransferKB": 30,
       "componentRenders": 355
     },
     "sweep:doc:admin:/admin/settings/channels/messenger": {
@@ -542,7 +542,7 @@
     },
     "sweep:doc:admin:/admin/settings/companies": {
       "dbQueries": 7,
-      "htmlKB": 78.4
+      "htmlKB": 76.5
     },
     "sweep:ui:admin:/admin/settings/companies": {
       "dbQueries": 7,
@@ -555,7 +555,7 @@
     },
     "sweep:doc:admin:/admin/settings/conversation-data": {
       "dbQueries": 7,
-      "htmlKB": 84
+      "htmlKB": 83.5
     },
     "sweep:ui:admin:/admin/settings/conversation-data": {
       "dbQueries": 7,
@@ -581,7 +581,7 @@
     },
     "sweep:doc:admin:/admin/settings/domains": {
       "dbQueries": 11,
-      "htmlKB": 67.9
+      "htmlKB": 66.5
     },
     "sweep:ui:admin:/admin/settings/domains": {
       "dbQueries": 11,
@@ -646,7 +646,7 @@
     },
     "sweep:doc:admin:/admin/settings/labs": {
       "dbQueries": 8,
-      "htmlKB": 69.5
+      "htmlKB": 69.1
     },
     "sweep:ui:admin:/admin/settings/labs": {
       "dbQueries": 8,
@@ -654,7 +654,7 @@
       "requests": 100,
       "jsRequests": 96,
       "jsKB": 396.8,
-      "htmlTransferKB": 30.0,
+      "htmlTransferKB": 30,
       "componentRenders": 352
     },
     "sweep:doc:admin:/admin/settings/macros": {
@@ -680,12 +680,12 @@
       "requests": 136,
       "jsRequests": 131,
       "jsKB": 453.4,
-      "htmlTransferKB": 33.0,
+      "htmlTransferKB": 33,
       "componentRenders": 573
     },
     "sweep:doc:admin:/admin/settings/members/roles/new": {
       "dbQueries": 10,
-      "htmlKB": 99.6
+      "htmlKB": 98.9
     },
     "sweep:ui:admin:/admin/settings/members/roles/new": {
       "dbQueries": 10,
@@ -737,7 +737,7 @@
     },
     "sweep:doc:admin:/admin/settings/people": {
       "dbQueries": 7,
-      "htmlKB": 73.2
+      "htmlKB": 72.6
     },
     "sweep:ui:admin:/admin/settings/people": {
       "dbQueries": 7,
@@ -802,7 +802,7 @@
     },
     "sweep:doc:admin:/admin/settings/statuses": {
       "dbQueries": 7,
-      "htmlKB": 94.7
+      "htmlKB": 93.6
     },
     "sweep:ui:admin:/admin/settings/statuses": {
       "dbQueries": 7,
@@ -814,7 +814,7 @@
       "componentRenders": 569
     },
     "sweep:doc:admin:/admin/settings/tags": {
-      "htmlKB": 82.6,
+      "htmlKB": 81.1,
       "dbQueries": 8
     },
     "sweep:ui:admin:/admin/settings/tags": {
@@ -828,7 +828,7 @@
     },
     "sweep:doc:admin:/admin/settings/ticket-statuses": {
       "dbQueries": 7,
-      "htmlKB": 109.2
+      "htmlKB": 107.4
     },
     "sweep:ui:admin:/admin/settings/ticket-statuses": {
       "dbQueries": 7,
@@ -841,7 +841,7 @@
     },
     "sweep:doc:admin:/admin/settings/ticket-types": {
       "dbQueries": 8,
-      "htmlKB": 77.5
+      "htmlKB": 77.4
     },
     "sweep:ui:admin:/admin/settings/ticket-types": {
       "dbQueries": 8,
@@ -854,7 +854,7 @@
     },
     "sweep:doc:admin:/admin/settings/widget": {
       "dbQueries": 16,
-      "htmlKB": 118.7
+      "htmlKB": 116.6
     },
     "sweep:ui:admin:/admin/settings/widget": {
       "dbQueries": 77,
@@ -880,7 +880,7 @@
     },
     "sweep:doc:anon:/roadmap": {
       "dbQueries": 4,
-      "htmlKB": 43.3
+      "htmlKB": 38.6
     },
     "sweep:ui:anon:/roadmap": {
       "dbQueries": 12,
@@ -893,7 +893,7 @@
     },
     "sweep:doc:anon:/changelog": {
       "dbQueries": 0,
-      "htmlKB": 23.4
+      "htmlKB": 22.3
     },
     "sweep:ui:anon:/changelog": {
       "dbQueries": 6,
@@ -906,7 +906,7 @@
     },
     "sweep:doc:anon:/hc": {
       "dbQueries": 3,
-      "htmlKB": 28
+      "htmlKB": 26.8
     },
     "sweep:ui:anon:/hc": {
       "dbQueries": 3,
@@ -919,7 +919,7 @@
     },
     "sweep:doc:anon:/support": {
       "dbQueries": 0,
-      "htmlKB": 23.7
+      "htmlKB": 21.6
     },
     "sweep:ui:anon:/support": {
       "dbQueries": 0,
@@ -932,7 +932,7 @@
     },
     "sweep:doc:anon:/notifications": {
       "dbQueries": 0,
-      "htmlKB": 26.5
+      "htmlKB": 24.8
     },
     "sweep:ui:anon:/notifications": {
       "dbQueries": 0,
@@ -945,7 +945,7 @@
     },
     "sweep:doc:admin:/settings/profile": {
       "dbQueries": 11,
-      "htmlKB": 41.2
+      "htmlKB": 37.5
     },
     "sweep:ui:admin:/settings/profile": {
       "dbQueries": 16,
@@ -958,7 +958,7 @@
     },
     "sweep:doc:admin:/settings/preferences": {
       "dbQueries": 6,
-      "htmlKB": 47.5
+      "htmlKB": 46
     },
     "sweep:ui:admin:/settings/preferences": {
       "dbQueries": 11,
@@ -971,7 +971,7 @@
     },
     "sweep:doc:admin:/notifications": {
       "dbQueries": 5,
-      "htmlKB": 30.7
+      "htmlKB": 28.9
     },
     "sweep:ui:admin:/notifications": {
       "dbQueries": 18,
@@ -984,7 +984,7 @@
     },
     "sweep:doc:admin:/support": {
       "dbQueries": 5,
-      "htmlKB": 30
+      "htmlKB": 27.9
     },
     "sweep:ui:admin:/support": {
       "dbQueries": 10,
@@ -1051,7 +1051,7 @@
     },
     "sweep:doc:admin:/admin/feedback/moderation": {
       "dbQueries": 18,
-      "htmlKB": 69.3
+      "htmlKB": 69
     },
     "sweep:ui:admin:/admin/feedback/moderation": {
       "dbQueries": 18,
@@ -1069,17 +1069,17 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 180,
+      "componentRenders": 178,
       "canvasPosts": 0
     },
     "ui:builder-open": {
       "dbQueries": 61,
       "serverRequests": 6,
-      "requests": 277,
-      "jsRequests": 265,
-      "jsKB": 1460.5,
+      "requests": 263,
+      "jsRequests": 252,
+      "jsKB": 1361.3,
       "htmlTransferKB": 15.3,
-      "componentRenders": 770,
+      "componentRenders": 764,
       "canvasPosts": 12
     },
     "ui:builder-open-theme": {
@@ -1099,7 +1099,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 799,
+      "componentRenders": 646,
       "canvasPosts": 0
     },
     "ui:builder-publish": {
@@ -1109,7 +1109,7 @@
       "jsRequests": 1,
       "jsKB": 0.3,
       "htmlTransferKB": 0,
-      "componentRenders": 1223,
+      "componentRenders": 809,
       "canvasPosts": 0
     },
     "ui:builder-scrub-size": {
@@ -1119,7 +1119,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 3561,
+      "componentRenders": 1744,
       "canvasPosts": 20
     },
     "ui:builder-switch-page-device": {
@@ -1129,7 +1129,7 @@
       "jsRequests": 12,
       "jsKB": 9.9,
       "htmlTransferKB": 0,
-      "componentRenders": 863,
+      "componentRenders": 862,
       "canvasPosts": 1
     },
     "ui:builder-switch-theme": {
@@ -1149,7 +1149,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 844,
+      "componentRenders": 509,
       "canvasPosts": 1
     },
     "ui:builder-undo-redo": {
@@ -1159,12 +1159,12 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 3919,
+      "componentRenders": 2357,
       "canvasPosts": 20
     },
     "doc:designed:juniper": {
       "dbQueries": 11,
-      "htmlKB": 96.6
+      "htmlKB": 95.8
     },
     "ui:designed:juniper-load": {
       "dbQueries": 11,
@@ -1188,7 +1188,7 @@
     },
     "doc:designed:kiln": {
       "dbQueries": 8,
-      "htmlKB": 165.9
+      "htmlKB": 163.4
     },
     "ui:designed:kiln-load": {
       "dbQueries": 8,
@@ -1212,7 +1212,7 @@
     },
     "doc:designed:orbit": {
       "dbQueries": 10,
-      "htmlKB": 100.4
+      "htmlKB": 99.5
     },
     "ui:designed:orbit-load": {
       "dbQueries": 17,
@@ -1236,7 +1236,7 @@
     },
     "doc:designed:plume": {
       "dbQueries": 8,
-      "htmlKB": 162
+      "htmlKB": 160
     },
     "ui:designed:plume-load": {
       "dbQueries": 8,
@@ -1263,9 +1263,9 @@
       "serverRequests": 4,
       "requests": 119,
       "jsRequests": 108,
-      "jsKB": 421.8,
-      "htmlTransferKB": 13.5,
-      "componentRenders": 1117,
+      "jsKB": 421.6,
+      "htmlTransferKB": 13.3,
+      "componentRenders": 1111,
       "cls": 0
     },
     "ui:designed:juniper-roadmap:phone": {
@@ -1273,9 +1273,9 @@
       "serverRequests": 4,
       "requests": 119,
       "jsRequests": 108,
-      "jsKB": 421.8,
-      "htmlTransferKB": 14.7,
-      "componentRenders": 1305,
+      "jsKB": 421.6,
+      "htmlTransferKB": 14.5,
+      "componentRenders": 1296,
       "cls": 0
     },
     "ui:designed:juniper-changelog:phone": {
@@ -1283,9 +1283,35 @@
       "serverRequests": 3,
       "requests": 100,
       "jsRequests": 90,
-      "jsKB": 404.1,
-      "htmlTransferKB": 12.3,
+      "jsKB": 403.9,
+      "htmlTransferKB": 12.2,
       "componentRenders": 195,
+      "cls": 0
+    },
+    "ui:portal-sort-new": {
+      "dbQueries": 1,
+      "serverRequests": 2,
+      "requests": 2,
+      "jsRequests": 0,
+      "componentRenders": 529,
+      "cls": 0
+    },
+    "ui:portal-vote-sign-in": {
+      "dbQueries": 0,
+      "serverRequests": 0,
+      "requests": 11,
+      "jsRequests": 11,
+      "jsKB": 21.6,
+      "componentRenders": 86
+    },
+    "ui:designed:tandem-feedback": {
+      "dbQueries": 8,
+      "serverRequests": 1,
+      "requests": 150,
+      "jsRequests": 141,
+      "jsKB": 505.4,
+      "htmlTransferKB": 18.3,
+      "componentRenders": 447,
       "cls": 0
     }
   },

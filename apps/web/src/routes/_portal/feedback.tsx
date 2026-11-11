@@ -20,6 +20,10 @@ export const Route = createFileRoute('/_portal/feedback')({
   // Client-side filter changes are handled by FeedbackContainer's usePublicPosts.
   // We access search params via location.search for initial SSR without triggering
   // loader re-execution on client-side filter changes.
+  // The loader serves the first draw. A filter or sort change, which keeps
+  // the visitor on the page, is the feed's own query: run again, the loader
+  // fetched the same page of posts a second time.
+  shouldReload: ({ cause }) => cause !== 'stay',
   loader: async ({ context, location }) => {
     const { settings, gates } = portalPathsOf(context)
     return loadFeed(context, location, portalFeedbackPath(settings, gates))

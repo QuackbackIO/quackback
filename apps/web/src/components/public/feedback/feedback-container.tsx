@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useInsertionEffect, useMemo, useRef, useState } from 'react'
 import { useIntl, type MessageDescriptor } from 'react-intl'
 import { toast } from 'sonner'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
@@ -143,6 +143,20 @@ export function postsMatchFilters(
     postsFor.owner === filters.owner &&
     (postsFor.segmentIds ?? []).join() === (filters.segmentIds ?? []).join()
   )
+}
+
+/**
+ * lib/client/hooks/use-stable-callback, repeated here: imported, that module
+ * is a chunk of its own on every portal page that shows the feed.
+ */
+function useStableCallback<Args extends unknown[], Result>(
+  fn: (...args: Args) => Result
+): (...args: Args) => Result {
+  const fnRef = useRef(fn)
+  useInsertionEffect(() => {
+    fnRef.current = fn
+  })
+  return useCallback((...args: Args) => fnRef.current(...args), [])
 }
 
 export function FeedbackContainer({
@@ -302,7 +316,7 @@ export function FeedbackContainer({
     />
   )
 
-  const posts = flattenPublicPosts(postsData)
+  const posts = useMemo(() => flattenPublicPosts(postsData), [postsData])
   // Dim the list only during an actual filter transition (placeholderData is
   // still showing the previous filter's results while the new ones load) —
   // NOT on every background refetch (e.g. the SSE-adjacent/interval refetches
@@ -311,12 +325,10 @@ export function FeedbackContainer({
   const isLoading = isFetching && isPlaceholderData && !isFetchingNextPage
 
   // Update list key only when loading completes to trigger animations
-  // This ensures we animate the new data, not stale data during loading
-  useEffect(() => {
-    if (!isLoading && filterKey !== listKey) {
-      setListKey(filterKey)
-    }
-  }, [filterKey, isLoading, listKey])
+  // This ensures we animate the new data, not stale data during loading.
+  // Set while rendering, not in an effect: from an effect, the new posts drew
+  // once under the old key and then all twenty again under the new one.
+  if (!isLoading && filterKey !== listKey) setListKey(filterKey)
 
   // Track voted posts - TanStack Query is single source of truth
   // Optimistic updates handled by useVoteMutation's onMutate
@@ -359,6 +371,72 @@ export function FeedbackContainer({
       sort: sortForSearch(activeSort, activeSearch, search, defaultSort),
     })
   }
+
+  // The cards, drawn again only when what they show changes. A sort or filter
+  // click keeps the last results on screen while the new ones load, and
+  // redrawing all twenty cards for it held the click's paint on a slow phone.
+  const toggleTag = useStableCallback((tagId: string) =>
+    setFilters({ tagIds: toggleItem(activeTagIds, tagId) })
+  )
+  const changePostStatus = useStableCallback(handleStatusChange)
+  const approve = useStableCallback((postId: PostId) => approvePost.mutate(postId))
+  const reject = useStableCallback((postId: PostId) => rejectPost.mutate({ postId }))
+  const isUpdatingStatus = changeStatus.isPending
+  const moderationBusy = approvePost.isPending || rejectPost.isPending
+  const cards = useMemo(
+    () =>
+      posts.map((post, index) => (
+        <div
+          key={post.id}
+          data-qb-surface="card"
+          data-qb-post=""
+          className="bg-card border border-border/40 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
+          style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+        >
+          <PostCard
+            id={post.id}
+            title={post.title}
+            content={post.content}
+            statusId={post.statusId}
+            statuses={statuses}
+            voteCount={post.voteCount}
+            commentCount={post.commentCount}
+            authorName={post.authorName}
+            authorPrincipalId={post.principalId}
+            createdAt={post.createdAt}
+            boardSlug={post.board?.slug || ''}
+            tags={post.tags}
+            onTagClick={toggleTag}
+            changelogEntry={post.changelogEntry}
+            isAuthenticated={isRealUser}
+            canVote={post.board ? (boardPermissions?.[post.board.id]?.canVote ?? false) : false}
+            canChangeStatus={canSetStatus}
+            onStatusChange={(statusId) => changePostStatus(post, statusId)}
+            isUpdatingStatus={isUpdatingStatus}
+            showAvatar={false}
+            moderationState={post.moderationState}
+            canModerate={canApprove}
+            moderationBusy={moderationBusy}
+            onApprove={() => approve(post.id)}
+            onReject={() => reject(post.id)}
+          />
+        </div>
+      )),
+    [
+      posts,
+      statuses,
+      isRealUser,
+      boardPermissions,
+      canSetStatus,
+      isUpdatingStatus,
+      canApprove,
+      moderationBusy,
+      toggleTag,
+      changePostStatus,
+      approve,
+      reject,
+    ]
+  )
 
   const currentBoardInfo = activeBoard ? boards.find((b) => b.slug === activeBoard) : boards[0]
   const boardIdForCreate = currentBoardInfo?.id || defaultBoardId
@@ -612,47 +690,7 @@ export function FeedbackContainer({
                   </p>
                 )}
                 <div key={listKey} className="space-y-[var(--qb-feed-gap,0.75rem)]">
-                  {posts.map((post, index) => (
-                    <div
-                      key={post.id}
-                      data-qb-surface="card"
-                      data-qb-post=""
-                      className="bg-card border border-border/40 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
-                      style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
-                    >
-                      <PostCard
-                        id={post.id}
-                        title={post.title}
-                        content={post.content}
-                        statusId={post.statusId}
-                        statuses={statuses}
-                        voteCount={post.voteCount}
-                        commentCount={post.commentCount}
-                        authorName={post.authorName}
-                        authorPrincipalId={post.principalId}
-                        createdAt={post.createdAt}
-                        boardSlug={post.board?.slug || ''}
-                        tags={post.tags}
-                        onTagClick={(tagId) =>
-                          setFilters({ tagIds: toggleItem(activeTagIds, tagId) })
-                        }
-                        changelogEntry={post.changelogEntry}
-                        isAuthenticated={isRealUser}
-                        canVote={
-                          post.board ? (boardPermissions?.[post.board.id]?.canVote ?? false) : false
-                        }
-                        canChangeStatus={canSetStatus}
-                        onStatusChange={(statusId) => handleStatusChange(post, statusId)}
-                        isUpdatingStatus={changeStatus.isPending}
-                        showAvatar={false}
-                        moderationState={post.moderationState}
-                        canModerate={canApprove}
-                        moderationBusy={approvePost.isPending || rejectPost.isPending}
-                        onApprove={() => approvePost.mutate(post.id)}
-                        onReject={() => rejectPost.mutate({ postId: post.id })}
-                      />
-                    </div>
-                  ))}
+                  {cards}
                 </div>
 
                 {/* Sentinel element for intersection observer */}

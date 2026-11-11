@@ -472,6 +472,18 @@
 /* Feed post card: the title link's ::after covers the whole card so the card
    reads as one link, and every other control in it sits above that layer.
    One rule here instead of positioning classes repeated on every card. */
+/* A button's shared look (components/ui/button.tsx): one rule instead of the
+   same thirty classes on every button in every page's HTML. In the components
+   layer, so a variant's, a size's or a caller's utility always wins over it. */
+@layer components {
+  .qb-button {
+    @apply inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-item text-sm font-medium whitespace-nowrap outline-none transition-all duration-200 ease-out;
+    @apply focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+    @apply disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98];
+    @apply [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
+  }
+}
+
 @layer components {
   .post-card__link {
     outline: none;

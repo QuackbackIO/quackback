@@ -2,10 +2,16 @@ import { defineConfig } from 'vitest/config'
 import path from 'path'
 import { serverWorkers } from './apps/web/src/lib/build/server-workers'
 import { fontManifest } from './apps/web/src/lib/build/font-manifest'
+import { lazyGraphs } from './apps/web/src/lib/build/lazy-graphs'
 
 export default defineConfig({
   // Server code imports its worker-thread scripts with `?server-worker`.
-  plugins: [serverWorkers(), fontManifest(path.resolve(__dirname, 'apps/web/src'))],
+  plugins: [
+    serverWorkers(),
+    fontManifest(path.resolve(__dirname, 'apps/web/src')),
+    // No build in tests, so no graphs: the module is empty.
+    lazyGraphs(path.resolve(__dirname, 'apps/web/src'), {}),
+  ],
   test: {
     globals: true,
     environment: 'node',

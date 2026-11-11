@@ -12,7 +12,7 @@ import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { portalQueries } from '@/lib/client/queries/portal'
 import type { PageChoices } from '@/lib/shared/design/page-choices'
-import { RoadmapColumn } from './roadmap-column'
+import { ROADMAP_GROUPS_CLASS, RoadmapColumn } from './roadmap-column'
 import {
   PublicRoadmapFiltersBar,
   PublicRoadmapToolbarFilterButton,
@@ -149,7 +149,7 @@ export function RoadmapBoard({
       />
 
       {effectiveSelectedId && layout === 'list' && (
-        <div className="space-y-8 pb-4">
+        <div className={ROADMAP_GROUPS_CLASS}>
           {columns.map((column) => (
             <RoadmapColumn
               key={column.id}
@@ -200,7 +200,7 @@ export function RoadmapBoard({
                 id: 'portal.roadmap.columns.scrollLeft',
                 defaultMessage: 'Scroll columns left',
               })}
-              className="absolute start-0 top-0 bottom-4 flex items-center ps-1 pe-10 bg-gradient-to-r from-background/70 to-transparent z-10"
+              className="absolute start-0 top-0 bottom-4 flex items-start pt-6 ps-1 pe-10 bg-gradient-to-r from-background/70 to-transparent z-10"
             >
               <ChevronLeftIcon className="w-5 h-5 text-muted-foreground" />
             </button>
@@ -213,7 +213,7 @@ export function RoadmapBoard({
                 id: 'portal.roadmap.columns.scrollRight',
                 defaultMessage: 'Scroll columns right',
               })}
-              className="absolute end-0 top-0 bottom-4 flex items-center pe-1 ps-10 bg-gradient-to-l from-background/70 to-transparent z-10"
+              className="absolute end-0 top-0 bottom-4 flex items-start pt-6 pe-1 ps-10 bg-gradient-to-l from-background/70 to-transparent z-10"
             >
               <ChevronRightIcon className="w-5 h-5 text-muted-foreground" />
             </button>

@@ -9,10 +9,11 @@
  * time, so the widest scope's count is the page's, and it says so ("on this
  * page"). A scope with no count shows none. A number is never made up.
  */
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 import { cn } from '@/lib/shared/utils'
 import { Tip } from './properties-panel'
 import { appliesTo, backToEvery, everyOf } from './words'
+import { sameProps } from '../same-props'
 
 /** A scope a change can be made at. */
 export interface ScopeOption<T extends string = string> {
@@ -29,10 +30,16 @@ export interface ScopeOption<T extends string = string> {
   countNote?: string
 }
 
+/**
+ * The scope line, drawn again only when what it says changes (its options by
+ * what they hold), so hand it an onChange that keeps its identity.
+ */
+export const ScopeLine = memo(ScopeLineBase, sameProps) as typeof ScopeLineBase
+
 const counted = (o: { count?: number; countNote?: string }) =>
   o.count === undefined ? '' : ` (${o.count}${o.countNote ? ` ${o.countNote}` : ''})`
 
-export function ScopeLine<T extends string>({
+function ScopeLineBase<T extends string>({
   one,
   widest,
   narrower,

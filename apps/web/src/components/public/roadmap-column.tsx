@@ -48,6 +48,13 @@ export function RoadmapColumn({
 
   const posts = flattenRoadmapViewPosts(data)
   const total = data?.pages[0]?.total ?? 0
+  // The count shows once known: a 0 that grew to its number moved the heading
+  // beside it as the posts arrived.
+  const count = !isLoading && (
+    <Badge variant="secondary" className="text-xs">
+      {total}
+    </Badge>
+  )
 
   const sentinelRef = useInfiniteScroll({
     hasMore: hasNextPage,
@@ -90,7 +97,11 @@ export function RoadmapColumn({
 
   if (layout === 'group')
     return (
-      <section aria-labelledby={headingId} className="space-y-3">
+      <section
+        aria-labelledby={headingId}
+        data-qb-loading={isLoading || undefined}
+        className="space-y-3"
+      >
         <div className="flex items-center gap-2">
           <StatusColourDot colour={color} className="size-3" />
           <h2 id={headingId} className="text-base font-semibold text-foreground">
@@ -101,12 +112,10 @@ export function RoadmapColumn({
             )}
             {title}
           </h2>
-          <Badge variant="secondary" className="text-xs">
-            {total}
-          </Badge>
+          {count}
         </div>
         {isLoading ? (
-          <CardSkeletons />
+          <CardSkeletons count={GROUP_LOADING_CARDS} />
         ) : posts.length === 0 ? (
           empty
         ) : (
@@ -133,15 +142,13 @@ export function RoadmapColumn({
               {title}
             </CardTitle>
           </div>
-          <Badge variant="secondary" className="text-xs">
-            {total}
-          </Badge>
+          {count}
         </div>
       </CardHeader>
       <CardContent className="flex-1 min-h-0 p-0">
         <ScrollArea className="h-full px-6 pb-6">
           {isLoading ? (
-            <CardSkeletons />
+            <CardSkeletons count={COLUMN_LOADING_CARDS} />
           ) : posts.length === 0 ? (
             <div className="h-full flex items-center justify-center py-8 animate-in fade-in duration-200">
               {empty}
@@ -160,20 +167,32 @@ export function RoadmapColumn({
 }
 
 /**
- * A column's cards while its posts load: room for the first few, so a group
- * down a list does not grow from a heading to its cards and push the rest of
- * the page down when they arrive. The look is ui/Skeleton's (qb-skeleton), as
- * importing it would add its chunk to the roadmap page.
+ * A column's cards while its posts load: room for the first few, so it does
+ * not grow from a heading to its cards when they arrive. The look is
+ * ui/Skeleton's (qb-skeleton), as importing it would add its chunk to the
+ * roadmap page.
  */
-function CardSkeletons() {
+function CardSkeletons({ count }: { count: number }) {
   return (
     <div aria-hidden="true" data-qb-skeleton="roadmap-cards" className="space-y-2">
-      {Array.from({ length: LOADING_CARDS }, (_, at) => (
+      {Array.from({ length: count }, (_, at) => (
         <div key={at} className="qb-skeleton h-20" />
       ))}
     </div>
   )
 }
 
-/** How many cards a loading column holds room for. */
-const LOADING_CARDS = 3
+/** How many cards a loading column on a board holds room for. */
+const COLUMN_LOADING_CARDS = 3
+
+/**
+ * A loading group down a list holds a screen of cards, and the list hides the
+ * groups after it until it loads (ROADMAP_GROUPS_CLASS). A group can hold
+ * twenty cards, so room for a few would still push every group below it down
+ * the page when they arrived; the next group now first appears where the
+ * cards end, below the visitor's screen or in place of a placeholder.
+ */
+const GROUP_LOADING_CARDS = 10
+
+/** The list of groups: a group after one still loading stays hidden. */
+export const ROADMAP_GROUPS_CLASS = 'space-y-8 pb-4 [&>[data-qb-loading]~section]:hidden'

@@ -1,29 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { trackBuilder } from '@/lib/client/builder-events'
 import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import type { PanelAction } from '@/lib/shared/design/builder-chrome'
 import type { DesignerPage, Selection } from '@/lib/shared/design/outline'
-import { BlockIcon } from './block-icon'
-import {
-  findIndex,
-  findScore,
-  type FindGroup,
-  type FindItem,
-  type FindPlace,
-  type FindSource,
-} from './find-index'
+import { findIndex, type FindItem, type FindPlace, type FindSource } from './find-index'
 import { FIND_ROOTS, revealRow } from './find-reveal'
 
-const GROUPS: FindGroup[] = ['Blocks', 'Settings', 'Actions', 'Pages']
+// The dialog and its list (cmdk) load the first time quick find opens.
+const QuickFindDialog = lazy(() =>
+  import('./quick-find-dialog').then((m) => ({ default: m.QuickFindDialog }))
+)
 
 /** How quick find gets to what was chosen: the builder's own steps. */
 export interface FindNavigation {
@@ -197,67 +183,26 @@ export function QuickFind({
     () => (open ? [...(extra ?? []), ...findIndex(source), ...(actions?.() ?? [])] : []),
     [open, extra, actions, source]
   )
-  const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
-  // Nothing is drawn until it first opens; after that it stays, so closing can animate.
+  // Nothing is drawn, or loaded, until it first opens; after that it stays, so closing can animate.
   const everOpened = useOpenedOnce(open)
-  const go = (item: FindItem) => {
-    toSetting.current = item.target.kind === 'row' || item.target.kind === 'part'
-    setOpen(false)
-    void followFind(item, navigation)
-  }
+  const go = useCallback(
+    (item: FindItem) => {
+      toSetting.current = item.target.kind === 'row' || item.target.kind === 'part'
+      setOpen(false)
+      void followFind(item, navigation)
+    },
+    [navigation, setOpen]
+  )
   if (!everOpened) return null
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent
-        showCloseButton={false}
-        finalFocus={() => !toSetting.current}
-        data-quick-find=""
-        className="top-[15vh] max-w-lg translate-y-0 overflow-hidden p-0"
-      >
-        <DialogTitle className="sr-only">Find</DialogTitle>
-        <Command
-          className="border-0 shadow-none"
-          filter={(value, search) => {
-            const item = byId.get(value)
-            return item ? findScore(item, search) : 0
-          }}
-        >
-          <CommandInput placeholder="Find a block, page, setting or action…" />
-          <CommandList>
-            <CommandEmpty>Nothing by that name.</CommandEmpty>
-            {GROUPS.map((group) => (
-              <CommandGroup key={group} heading={group}>
-                {items
-                  .filter((item) => item.group === group)
-                  .map((item) => (
-                    <CommandItem
-                      key={item.id}
-                      value={item.id}
-                      data-find-item={item.id}
-                      disabled={!!item.off}
-                      onSelect={() => go(item)}
-                    >
-                      {item.icon && <BlockIcon type={item.icon} />}
-                      <span className="min-w-0 truncate">
-                        {item.path.map((step, at) => (
-                          <span key={at} className="text-muted-foreground">
-                            {step} ›{' '}
-                          </span>
-                        ))}
-                        {item.label}
-                      </span>
-                      {item.off && (
-                        <span className="ms-auto shrink-0 text-xs text-muted-foreground">
-                          {item.off}
-                        </span>
-                      )}
-                    </CommandItem>
-                  ))}
-              </CommandGroup>
-            ))}
-          </CommandList>
-        </Command>
-      </DialogContent>
-    </Dialog>
+    <Suspense fallback={null}>
+      <QuickFindDialog
+        open={open}
+        onOpenChange={setOpen}
+        items={items}
+        onGo={go}
+        keepFocus={toSetting}
+      />
+    </Suspense>
   )
 }
