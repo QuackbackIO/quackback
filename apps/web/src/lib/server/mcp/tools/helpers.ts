@@ -277,7 +277,19 @@ export function registerTool<TArgs>(
   }) as unknown as ToolCallback<never>
 
   // MCP SDK still types against an older Zod shape; the runtime schema is ours.
-  server.tool(def.name, def.description, def.schema as never, def.annotations, wrapped)
+  const registered = server.tool(
+    def.name,
+    def.description,
+    def.schema as never,
+    def.annotations,
+    wrapped
+  )
+  // Declares the scope a tool needs in the listing, for clients that plan
+  // their authorization from it. A tool that picks its scope from its
+  // arguments declares none.
+  if (def.scope) {
+    registered?.update({ _meta: { securitySchemes: [{ type: 'oauth2', scopes: [def.scope] }] } })
+  }
 }
 
 /** Run a tool behind its guards, naming the outcome for the audit. */

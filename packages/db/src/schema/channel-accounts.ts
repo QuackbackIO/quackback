@@ -195,6 +195,25 @@ export const emailSendingDomains = pgTable(
      * returned, logged or sent anywhere else.
      */
     pendingSigningKey: text('pending_signing_key'),
+    /**
+     * When a verified row's ownership record was first found missing. The row
+     * stays verified for a grace period from then and is demoted after it.
+     * Null while the record is published.
+     */
+    ownershipMissingSince: timestamp('ownership_missing_since', { withTimezone: true }),
+    /**
+     * When a check took the lease to send the missing ownership record warning.
+     * Only one check holds it at a time; a lease that was never confirmed is
+     * taken again once it is old, so a check that died mid-send does not
+     * silence the warning. Cleared with `ownershipMissingSince`.
+     */
+    ownershipWarningClaimedAt: timestamp('ownership_warning_claimed_at', { withTimezone: true }),
+    /**
+     * When the warning about the missing ownership record was delivered. Null
+     * until it has been, so a failed delivery is tried again by a later check
+     * while the grace period runs. Cleared with `ownershipMissingSince`.
+     */
+    ownershipWarningSentAt: timestamp('ownership_warning_sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

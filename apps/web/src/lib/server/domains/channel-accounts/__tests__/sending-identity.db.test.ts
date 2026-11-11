@@ -957,7 +957,8 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
       // The failure a button cannot catch. The customer verified months ago and
       // has since removed the TXT record, so nothing now shows this workspace
       // controls the zone it is sending as. Nobody is going to click Re-check
-      // to find that out.
+      // to find that out. The first miss warns and starts the grace period;
+      // the check after it ends demotes.
       const teamId = await seedTeam()
       const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
       ownershipResolves.mockResolvedValue(true)
@@ -965,6 +966,13 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
       expect((await refreshSendingDomain(row.id))?.status).toBe('verified')
 
       ownershipResolves.mockResolvedValue(false)
+      expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 0 })
+      expect((await getSendingDomain(row.id))?.status).toBe('verified')
+
+      await testDb
+        .update(emailSendingDomains)
+        .set({ ownershipMissingSince: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) })
+        .where(eq(emailSendingDomains.id, row.id))
       expect(await sweepSendingDomains()).toEqual({ checked: 1, demoted: 1 })
       expect((await getSendingDomain(row.id))?.status).toBe('pending')
     })

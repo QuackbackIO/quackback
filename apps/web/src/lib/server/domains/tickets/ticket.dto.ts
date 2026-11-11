@@ -11,6 +11,7 @@ import {
   and,
   or,
   isNull,
+  ne,
   inArray,
   desc,
   ticketStatuses,
@@ -71,10 +72,13 @@ interface TicketActivity {
 /**
  * Batch-load each ticket's activity snapshot in one page: `lastMessageAt` is the
  * newest non-deleted message of ANY kind (an internal note still counts as
- * activity), while `lastMessagePreview` prefers the latest customer-visible
- * message — truncated the same way the conversation inbox derives its preview
- * (`preview()`, message-core) — and falls back to the ticket's own title when
- * only internal notes exist or the thread is empty. Two DISTINCT ON queries
+ * activity, as does a system event), while `lastMessagePreview` prefers the
+ * latest customer-visible message that someone wrote — truncated the same way
+ * the conversation inbox derives its preview (`preview()`, message-core) — and
+ * falls back to the ticket's own title when only internal notes or system
+ * events exist or the thread is empty. System events (stage changes, closes)
+ * are skipped as conversation previews skip them: the row's status chip already
+ * shows the status. Two DISTINCT ON queries
  * (one per concern) rather than one merged query, since the "latest of any
  * kind" and "latest non-internal" rows can differ; both are served by the
  * existing `(ticket_id, created_at, id)` index.
@@ -130,7 +134,8 @@ async function loadTicketActivity(rows: Ticket[]): Promise<Map<TicketId, TicketA
           and(
             parentScope,
             isNull(conversationMessages.deletedAt),
-            eq(conversationMessages.isInternal, false)
+            eq(conversationMessages.isInternal, false),
+            ne(conversationMessages.senderType, 'system')
           )
         )
         .orderBy(desc(conversationMessages.createdAt))
@@ -170,7 +175,8 @@ async function loadTicketActivity(rows: Ticket[]): Promise<Map<TicketId, TicketA
         and(
           inArray(conversationMessages.ticketId, ids),
           isNull(conversationMessages.deletedAt),
-          eq(conversationMessages.isInternal, false)
+          eq(conversationMessages.isInternal, false),
+          ne(conversationMessages.senderType, 'system')
         )
       )
       .orderBy(conversationMessages.ticketId, desc(conversationMessages.createdAt)),
@@ -204,7 +210,8 @@ async function loadTicketActivity(rows: Ticket[]): Promise<Map<TicketId, TicketA
             and(
               inArray(conversationMessages.conversationId, linkedConversationIds),
               isNull(conversationMessages.deletedAt),
-              eq(conversationMessages.isInternal, false)
+              eq(conversationMessages.isInternal, false),
+              ne(conversationMessages.senderType, 'system')
             )
           )
           .orderBy(conversationMessages.conversationId, desc(conversationMessages.createdAt))
