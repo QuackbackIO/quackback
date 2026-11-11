@@ -1045,6 +1045,24 @@ async function builderTeardown() {
 /** Home's headline on the canvas, which these journeys retype and restyle. */
 const headline = (page: Page) => canvas(page).locator('[data-qb-words="home.title"]')
 
+/** Compare looks, while it is open. */
+const chooser = (page: Page) => page.locator('[data-looks-chooser]')
+
+/** The Theme sheet, open over the properties. */
+async function openThemeSheet(page: Page) {
+  await page.locator('[data-sheet-button="theme"]').click()
+  await page.getByRole('region', { name: 'Theme' }).getByText('Brand colour').first().waitFor()
+}
+
+/** Opens Compare looks from Theme's Look row and waits until each look is drawn. */
+async function openLooks(page: Page) {
+  await page.getByRole('button', { name: 'Compare looks' }).click()
+  await chooser(page).waitFor()
+  await page.waitForFunction(
+    () => document.querySelectorAll('[data-look-cover].invisible').length === 3
+  )
+}
+
 /** Picks Home's headline on the canvas, so its own settings show. */
 async function pickHeadline(page: Page) {
   await headline(page).click()
@@ -1356,6 +1374,85 @@ journeys.push(
         .waitFor()
       await canvasReady(page)
       await untilHeadlineSize(page, publishedSize)
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // Compare looks from Theme's Look row, until all three looks are drawn.
+    kind: 'browser',
+    name: 'ui:builder-looks-open',
+    as: 'admin',
+    interaction: true,
+    setup: async (page) => {
+      await builderSetup(page)
+      await openThemeSheet(page)
+    },
+    run: (page) => openLooks(page),
+    teardown: builderTeardown,
+  },
+  {
+    // One at a time, a phone, 75% and back to side by side: the frames move in
+    // place, so nothing loads.
+    kind: 'browser',
+    name: 'ui:builder-looks-switch-view',
+    as: 'admin',
+    interaction: true,
+    setup: async (page) => {
+      await builderSetup(page)
+      await openThemeSheet(page)
+      await openLooks(page)
+    },
+    run: async (page) => {
+      const looks = chooser(page)
+      await looks.getByRole('radio', { name: 'One at a time' }).click()
+      await looks.getByRole('radiogroup', { name: 'Looks' }).waitFor()
+      await looks.getByRole('radio', { name: 'Phone' }).click()
+      await looks.getByRole('radio', { name: '75%' }).click()
+      await looks.getByRole('radio', { name: 'Side by side' }).click()
+      await looks.getByRole('button', { name: /^View larger\W+Vivid$/ }).waitFor()
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // One look at a time, along all three with the arrow keys.
+    kind: 'browser',
+    name: 'ui:builder-looks-switch-look',
+    as: 'admin',
+    interaction: true,
+    setup: async (page) => {
+      await builderSetup(page)
+      await openThemeSheet(page)
+      await openLooks(page)
+      await chooser(page).getByRole('radio', { name: 'One at a time' }).click()
+    },
+    run: async (page) => {
+      const group = chooser(page).getByRole('radiogroup', { name: 'Looks' })
+      for (const name of ['Soft', 'Vivid', 'Matched']) {
+        await page.keyboard.press('ArrowRight')
+        await group.getByRole('radio', { name, checked: true }).waitFor()
+      }
+    },
+    teardown: builderTeardown,
+  },
+  {
+    // Use Soft: one step, saved, the chooser closed and the canvas back.
+    kind: 'browser',
+    name: 'ui:builder-looks-apply',
+    as: 'admin',
+    interaction: true,
+    setup: async (page) => {
+      await builderSetup(page)
+      await openThemeSheet(page)
+      await openLooks(page)
+      await chooser(page).getByRole('radio', { name: /^Soft/ }).click()
+    },
+    run: async (page) => {
+      await untilDraftSaved(page, () =>
+        chooser(page).getByRole('button', { name: 'Use Soft' }).click()
+      )
+      await chooser(page).waitFor({ state: 'detached' })
+      await page.getByText('Soft look applied').waitFor()
+      await canvasReady(page)
     },
     teardown: builderTeardown,
   }
