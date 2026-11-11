@@ -44,7 +44,7 @@
  * classify their own column, so name the consumer and the consequence, not
  * the policy.
  */
-import { and, getTableColumns, getTableName, is, isNotNull, lte, type SQL } from 'drizzle-orm'
+import { and, eq, getTableColumns, getTableName, is, isNotNull, lte, type SQL } from 'drizzle-orm'
 import { PgTable, type PgColumn } from 'drizzle-orm/pg-core'
 import * as schema from './schema'
 
@@ -233,6 +233,19 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
     policy: 'preserve',
     reason:
       'Written only alongside a successful DNS verification, and no sweep polls on it. It is a display companion to verified_at.',
+  },
+  {
+    column: schema.emailSendingDomains.ownershipWarningSentAt,
+    policy: 'settle',
+    strategy: 'stamp-pending',
+    reason:
+      'The delivery receipt for the missing ownership record warning. Every check of a verified row in its grace period sends the warning while this is NULL, so a rewind emails the managers again about a period they were already warned about. Scoped to rows whose period had started by the restore: a row that loses its record later must still be warned.',
+    eligibleWhen: (restoredTo) =>
+      and(
+        eq(schema.emailSendingDomains.status, 'verified'),
+        isNotNull(schema.emailSendingDomains.ownershipMissingSince),
+        lte(schema.emailSendingDomains.ownershipMissingSince, restoredTo)
+      )!,
   },
   {
     column: schema.assistantPendingActions.executedAt,
