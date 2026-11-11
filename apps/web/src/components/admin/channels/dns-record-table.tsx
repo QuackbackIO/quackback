@@ -10,7 +10,14 @@ import {
   type DnsRecordState,
 } from '@/components/shared/dns-record-table'
 import type { DnsRecordDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
-import { recordLabel, recordTypeLabel, signingMode, type DomainPhase } from './sending-domain-view'
+import {
+  ownershipWarning,
+  provesOwnership,
+  recordLabel,
+  recordTypeLabel,
+  signingMode,
+  type DomainPhase,
+} from './sending-domain-view'
 
 /** A record's state and, when it needs fixing, the one sentence that says how. */
 export function recordStatus(
@@ -71,6 +78,9 @@ export function SendingRecordTable({
     <DnsRecordTable
       records={domain.dnsRecords.map((r): DnsRecordRow => {
         const status = recordStatus(r, { domain: domain.domain, phase })
+        // A live domain's missing ownership record says when it has to be back by.
+        const warning = provesOwnership(domain, r) ? ownershipWarning(domain) : null
+        if (warning && status.state === 'problem') status.fix = warning
         return {
           label: recordLabel(r, signingMode(domain)),
           type: recordTypeLabel(r),
