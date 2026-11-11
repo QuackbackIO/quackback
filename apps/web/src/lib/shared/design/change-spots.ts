@@ -269,3 +269,39 @@ export function spotsBetween(before: PortalDesign, after: PortalDesign): ChangeS
     ...overrides,
   ])
 }
+
+/** Fields the widget takes from the design: its colours, light or dark, fonts, logo and corners. */
+const WIDGET_FIELDS = /^(mode|brand\.(light|dark|fonts|logo)|shape)\b/
+
+/**
+ * Which pages a draft's changes show on, and whether the widget shows any,
+ * read from where each change is drawn rather than by drawing every page.
+ * A change the whole portal takes (the brand colour, the corners) or a part
+ * every page draws (the header) shows on all of them; a hero's on each page
+ * with one; anything else on its own page.
+ */
+export function pagesChanged(
+  design: PortalDesign,
+  changes: readonly SpotChange[],
+  pages: readonly DesignerPage[]
+): { pages: ReadonlySet<DesignerPage>; widget: boolean } {
+  const widget = changes.some((change) => WIDGET_FIELDS.test(change.path))
+  const everywhere = { pages: new Set(pages), widget }
+  const shown = new Set<DesignerPage>()
+  for (const change of changes) {
+    const spots = changeSpots(design, change)
+    // A page's own field with no one spot, such as a Home block taken out, is on that page.
+    const own = /^pages\.(\w+)\b/.exec(change.path)?.[1] as DesignerPage | undefined
+    if (spots.length === 0 && own && Object.hasOwn(PAGE_NAMES, own)) {
+      shown.add(own)
+      continue
+    }
+    if (spots.length === 0) return everywhere
+    for (const spot of spots) {
+      if (spot.page) shown.add(spot.page)
+      else if (spot.section === 'hero') for (const page of HERO_PAGES) shown.add(page)
+      else return everywhere
+    }
+  }
+  return { pages: new Set(pages.filter((page) => shown.has(page))), widget }
+}

@@ -8,7 +8,13 @@ import { describe, expect, it } from 'vitest'
 import { applyOps, type OpWorld } from '../design-ops'
 import { applyStep } from '../agent/style-ops'
 import { STYLE_REGISTRY } from '../agent/style-registry'
-import { changeSpots, pageForSpot, spotsBetween, spotsOfChanges } from '../change-spots'
+import {
+  changeSpots,
+  pageForSpot,
+  pagesChanged,
+  spotsBetween,
+  spotsOfChanges,
+} from '../change-spots'
 import { blockOf } from '../blocks'
 import { defaultDesign, type PortalDesign } from '../schema'
 
@@ -174,5 +180,43 @@ describe('spotsBetween', () => {
       { page: 'home', section: 'block-updates1', element: 'heading' },
       { page: 'home', section: 'block-statusbk' },
     ])
+  })
+})
+
+describe('pagesChanged', () => {
+  const PAGES = ['home', 'feedback', 'roadmap', 'changelog', 'post', 'status'] as const
+  const change = (path: string, before: unknown = 'a', after: unknown = 'b') => ({
+    path,
+    before,
+    after,
+  })
+  const of = (...changes: ReturnType<typeof change>[]) =>
+    pagesChanged(defaultDesign(), changes, PAGES)
+
+  it('marks every page, and the widget, for a change the whole portal takes', () => {
+    const shown = of(change('brand.light.accent', '#d9202b', '#1d4ed8'))
+    expect([...shown.pages]).toEqual([...PAGES])
+    expect(shown.widget).toBe(true)
+  })
+
+  it('marks every page but not the widget for the header', () => {
+    const shown = of(change('layout.header', 'inline', 'stacked'))
+    expect([...shown.pages]).toEqual([...PAGES])
+    expect(shown.widget).toBe(false)
+  })
+
+  it('marks only its own page for a page’s own field, a Home block taken out too', () => {
+    expect([...of(change('pages.roadmap.columns', 3, 4)).pages]).toEqual(['roadmap'])
+    expect([...of(change('pages.home.blocks', [{ id: 'b1' }], [])).pages]).toEqual(['home'])
+    expect(of(change('pages.roadmap.columns', 3, 4)).widget).toBe(false)
+  })
+
+  it('marks each page with a hero for the hero’s look', () => {
+    const shown = of(change('layout.heroAlign', 'left', 'center'))
+    expect([...shown.pages]).toEqual(['home', 'feedback', 'roadmap', 'changelog'])
+  })
+
+  it('marks nothing with no changes', () => {
+    expect(of().pages.size).toBe(0)
   })
 })
