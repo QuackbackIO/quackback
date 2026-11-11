@@ -616,11 +616,7 @@ export function ElementRows({
       {offered.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="-ms-2 h-7 gap-1 px-2 text-xs text-muted-foreground"
-            >
+            <Button variant="ghost" size="xs" className="-ms-2 gap-1 text-muted-foreground">
               <PlusIcon className="size-3.5" aria-hidden="true" />
               {BLOCK_WORDS.element}
             </Button>

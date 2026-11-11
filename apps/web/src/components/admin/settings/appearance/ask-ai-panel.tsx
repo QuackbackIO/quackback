@@ -158,8 +158,8 @@ function StepResult({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="ms-auto -my-1 h-7 px-2 focus-visible:ring-muted-foreground"
+            size="xs"
+            className="ms-auto -my-1 text-ui focus-visible:ring-muted-foreground"
             onClick={() => undo(holding)}
           >
             Undo
@@ -393,8 +393,8 @@ export function AskAiPanel({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="sm"
-                      className="-my-1 h-7 px-2 text-xs text-muted-foreground"
+                      size="xs"
+                      className="-my-1 text-muted-foreground"
                       disabled={busy}
                       onClick={() => {
                         const others = turn.others!
@@ -522,7 +522,7 @@ export function SiteCapture({
                   tabIndex={0}
                   className="rounded outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
                 >
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2" disabled>
+                  <Button type="button" variant="ghost" size="xs" className="text-ui" disabled>
                     {MATCH_BRAND.captureAgain}
                   </Button>
                 </span>
@@ -533,8 +533,8 @@ export function SiteCapture({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-7 px-2"
+              size="xs"
+              className="text-ui"
               disabled={busy}
               onClick={() => onRecapture(capture.url)}
             >

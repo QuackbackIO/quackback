@@ -79,8 +79,8 @@ export function MenuAdd({
               {onSample && isSamplePage(part.type) && (
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
+                  size="xs"
+                  className="px-3"
                   aria-label={`Preview ${part.name} with sample content`}
                   onClick={() => {
                     onSample(part.type as SamplePage)

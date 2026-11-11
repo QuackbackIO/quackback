@@ -270,7 +270,7 @@ function BrandCoach({ onDismiss }: { onDismiss: () => void }) {
         className="absolute -top-1.5 start-4 size-3 rotate-45 border-s border-t border-border bg-popover"
       />
       <p className="min-w-0 flex-1 text-xs">{MATCH_ROW.coach}</p>
-      <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2 text-xs" onClick={onDismiss}>
+      <Button variant="ghost" size="2xs" className="shrink-0" onClick={onDismiss}>
         {MATCH_ROW.coachDone}
       </Button>
     </div>
@@ -344,11 +344,11 @@ function MatchForm({
           }}
           className="h-7 min-w-0 flex-1 px-1.5 text-xs"
         />
-        <Button size="sm" className="h-7 px-2.5 text-xs" disabled={!sendable} onClick={send}>
+        <Button size="xs" className="px-2.5" disabled={!sendable} onClick={send}>
           {control.busy ? MATCH_ROW.matching : MATCH_ROW.match}
         </Button>
         {onCancel && (
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onCancel}>
+          <Button variant="ghost" size="xs" onClick={onCancel}>
             {MATCH_ROW.cancel}
           </Button>
         )}
@@ -501,16 +501,16 @@ function SiteUseForm({
           className="h-7 min-w-0 flex-1 px-1.5 text-xs"
         />
         <Button
-          size="sm"
+          size="xs"
           variant={offer ? 'outline' : 'default'}
-          className="h-7 px-2.5 text-xs"
+          className="px-2.5"
           disabled={!website.trim() || reading}
           onClick={() => void read()}
         >
           {reading ? MATCH_ROW.reading : MATCH_ROW.read}
         </Button>
         {onCancel && (
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onCancel}>
+          <Button variant="ghost" size="xs" onClick={onCancel}>
             {MATCH_ROW.cancel}
           </Button>
         )}
@@ -533,7 +533,7 @@ function SiteUseForm({
               />
             ))}
           </div>
-          <Button size="sm" className="h-7 px-2.5 text-xs" disabled={!picks.size} onClick={use}>
+          <Button size="xs" className="px-2.5" disabled={!picks.size} onClick={use}>
             {MATCH_ROW.use}
           </Button>
         </div>
@@ -607,8 +607,8 @@ function MatchRowBody({
     <PropertyRow label={withAi ? MATCH_ROW.rowLabel : MATCH_ROW.useRowLabel}>
       <Button
         variant="ghost"
-        size="sm"
-        className="h-7 px-1.5 text-xs text-muted-foreground"
+        size="xs"
+        className="px-1.5 text-muted-foreground"
         disabled={control.busy}
         onClick={() => setAgain(true)}
       >

@@ -177,9 +177,7 @@ export function PropertiesPanel({
                   >
                     {action.label}
                     {action.keys && (
-                      <span className="ms-auto text-2xs text-muted-foreground">
-                        {action.keys}
-                      </span>
+                      <span className="ms-auto text-2xs text-muted-foreground">{action.keys}</span>
                     )}
                   </DropdownMenuItem>
                 ))}
@@ -270,8 +268,7 @@ export function PropertySection({
           {onAdd && !added && (
             <Button
               variant="ghost"
-              size="icon-sm"
-              className="size-6"
+              size="icon-xs"
               aria-label={`Add ${title.toLowerCase()}`}
               onClick={onAdd}
             >
@@ -281,8 +278,7 @@ export function PropertySection({
           {onRemove && added && (
             <Button
               variant="ghost"
-              size="icon-sm"
-              className="size-6"
+              size="icon-xs"
               aria-label={`Remove ${title.toLowerCase()}`}
               onClick={onRemove}
             >

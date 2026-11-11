@@ -101,7 +101,7 @@ export function CanvasBar({
       {picking && !sample && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-7 max-w-80 gap-1 px-2 text-xs">
+            <Button variant="ghost" size="xs" className="max-w-80 gap-1">
               <span className="truncate">Showing: {locationName(here, posts)}</span>
               <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
             </Button>

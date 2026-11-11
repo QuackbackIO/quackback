@@ -194,8 +194,8 @@ function Row({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            className="ms-auto size-6"
+            size="icon-xs"
+            className="ms-auto"
             aria-label={`Clear ${label.toLowerCase()}`}
             onClick={onClear}
           >

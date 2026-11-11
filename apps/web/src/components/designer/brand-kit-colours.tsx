@@ -124,10 +124,7 @@ export function ColourValue({
         >
           <Swatch colour={hexOrNone(shown)} />
           <span
-            className={cn(
-              'ms-auto text-muted-foreground',
-              value && 'font-mono text-2xs uppercase'
-            )}
+            className={cn('ms-auto text-muted-foreground', value && 'font-mono text-2xs uppercase')}
           >
             {label ?? (auto !== undefined ? WORDS.auto : WORDS.none)}
           </span>
@@ -263,8 +260,8 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
           <ColourValue id={id} name={name} value={value} onChange={(v) => v && write(v)} />
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="size-6 shrink-0"
+            size="icon-xs"
+            className="shrink-0"
             aria-label={`Remove ${name.toLowerCase()}`}
             onClick={() => write(undefined)}
           >
@@ -368,8 +365,7 @@ function RowIssue({
       {issue.fix && (
         <Button
           variant="outline"
-          size="sm"
-          className="h-6 px-2 text-xs"
+          size="2xs"
           aria-label={`${THEME.fix} ${name}`}
           onClick={() => onFix(issue.fix!)}
         >

@@ -226,8 +226,7 @@ export function LogoColourRow({
         {logoUrl && (
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="size-6"
+            size="icon-xs"
             disabled={busy}
             aria-label={busy ? THEME.reading : THEME.pickFromLogo}
             onClick={() => void take()}

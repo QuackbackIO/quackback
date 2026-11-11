@@ -295,8 +295,7 @@ export function DesignComposer({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-7 px-2"
+            size="xs"
             onClick={() => checks.keep(images[warned]!.id)}
           >
             {MATCH_BRAND.keep}

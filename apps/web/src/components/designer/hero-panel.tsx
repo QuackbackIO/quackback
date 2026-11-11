@@ -563,8 +563,8 @@ function HeroImage({
               )}
               <Button
                 variant="ghost"
-                size="icon-sm"
-                className="ms-auto size-6"
+                size="icon-xs"
+                className="ms-auto"
                 aria-label={HERO_WORDS.remove}
                 disabled={busy}
                 onClick={() => onChange(null)}
@@ -657,12 +657,7 @@ function FromScreenshot({
   return (
     <>
       <PropertyRow label={HERO_WORDS.screenshot} help={MATCH_BRAND.fromScreenshot}>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-6 px-2 text-2xs"
-          onClick={() => setCropping(true)}
-        >
+        <Button variant="outline" size="2xs" className="text-2xs" onClick={() => setCropping(true)}>
           {MATCH_BRAND.adjustCrop}
         </Button>
       </PropertyRow>

@@ -227,7 +227,7 @@ export function HeaderPanel({
             />
           ))}
         </ul>
-        <Button variant="ghost" size="sm" className="-ms-1.5 h-7 px-1.5 text-xs" onClick={onAdd}>
+        <Button variant="ghost" size="xs" className="-ms-1.5 px-1.5" onClick={onAdd}>
           <PlusIcon className="size-3.5" aria-hidden="true" />
           {HEADER_COPY.add}
         </Button>
@@ -316,8 +316,8 @@ function MenuRow({
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="size-6 shrink-0"
+            size="icon-xs"
+            className="shrink-0"
             aria-label={`Actions for ${part.label}`}
           >
             <EllipsisHorizontalIcon className="size-3.5" aria-hidden="true" />

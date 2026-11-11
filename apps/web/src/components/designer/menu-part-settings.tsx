@@ -108,8 +108,8 @@ export function MenuPartSettings({
       <div className="flex justify-end px-4 py-2.5">
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 text-xs text-destructive hover:text-destructive"
+          size="xs"
+          className="px-3 text-destructive hover:text-destructive"
           onClick={remove}
         >
           <TrashIcon className="size-3.5" aria-hidden="true" />
