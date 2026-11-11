@@ -15,7 +15,7 @@ vi.mock('@tanstack/react-router', () => ({
   ClientOnly: ({ children }: { children: React.ReactNode }) => children,
 }))
 const media = vi.hoisted(() => ({ wide: false }))
-vi.mock('@/lib/client/hooks/use-media-query', () => ({ useMediaQuery: () => media.wide }))
+vi.mock('../ai-pane', () => ({ useViewportWidth: () => (media.wide ? 1440 : 800) }))
 
 const { ReviewCompare, openingPage } = await import('../review-compare')
 

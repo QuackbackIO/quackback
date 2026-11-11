@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
 import { ClientOnly } from '@tanstack/react-router'
 import type { PortalPreviewProps } from '@/components/admin/settings/branding/portal-preview'
-import { SegmentedControl } from '@/components/shared/segmented-control'
-import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
+import { onRadioKeys } from '@/components/admin/settings/appearance/radio-keys'
 import { pagesChanged, type SpotChange } from '@/lib/shared/design/change-spots'
 import type { DesignerPage } from '@/lib/shared/design/outline'
 import { PAGE_NAMES } from '@/lib/shared/design/outline'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
+import { useViewportWidth } from './ai-pane'
 import { CanvasSkeleton } from './canvas-skeleton'
 import { DesignerCanvas, NO_STRUCTURE } from './designer-canvas'
 import { WidgetFrame } from './widget-sample'
@@ -24,8 +24,12 @@ const AFTER_SKELETON = (
   />
 )
 
-/** Below this width the two frames take turns, so each is drawn large enough to read. */
-export const SIDE_BY_SIDE_QUERY = '(min-width: 960px)'
+/**
+ * Below this window width the two frames take turns, so each is drawn large
+ * enough to read. (The builder's own width hook and radio keys: a shared
+ * control or media-query hook would add their chunks to the builder's open.)
+ */
+export const SIDE_BY_SIDE_WIDTH = 960
 
 type View = 'side' | 'live' | 'after'
 const VIEWS: ReadonlyArray<{ value: View; label: string }> = [
@@ -96,7 +100,7 @@ export function ReviewCompare({
   // The widget, which takes the brand too, in place of a page; its frames load when first shown.
   const [widget, setWidget] = useState(false)
   const [widgetSeen, setWidgetSeen] = useState(false)
-  const wide = useMediaQuery(SIDE_BY_SIDE_QUERY)
+  const wide = useViewportWidth() >= SIDE_BY_SIDE_WIDTH
   const [chosen, setChosen] = useState<View>('side')
   // Side by side only where both fit at a size to read; else the draft first.
   const view: View = !wide && chosen === 'side' ? 'after' : chosen
@@ -208,12 +212,30 @@ export function ReviewCompare({
             setWidgetSeen(true)
           })}
         </div>
-        <SegmentedControl
-          label="Show"
-          options={wide ? VIEWS : TURNS}
-          value={view}
-          onChange={setChosen}
-        />
+        <div
+          role="radiogroup"
+          aria-label="Show"
+          onKeyDown={onRadioKeys}
+          className="flex rounded-lg bg-muted p-0.5"
+        >
+          {(wide ? VIEWS : TURNS).map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={view === value}
+              tabIndex={view === value ? 0 : -1}
+              onClick={() => setChosen(value)}
+              className={cn(
+                'h-7 rounded-md px-2.5 text-xs text-muted-foreground outline-none hover:text-foreground focus-ring',
+                view === value &&
+                  'bg-background font-medium text-foreground shadow-sm forced-colors:outline forced-colors:outline-1'
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
       {!differs && (
         <p className="text-xs text-muted-foreground" data-no-change="">
