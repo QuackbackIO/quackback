@@ -101,6 +101,7 @@ const DIRECT_WRITES: Record<string, { writes: number; why: string }> = {
   'designer/logo-rows.tsx': { writes: 8, why: 'The logo' },
   'admin/settings/appearance/logo-extras.ts': { writes: 1, why: 'The logo' },
   'designer/look-picker.tsx': { writes: 1, why: 'A theme look' },
+  'designer/looks-chooser.tsx': { writes: 1, why: 'A look from Compare looks' },
   'designer/theme-sheet.tsx': { writes: 4, why: 'Theme' },
   'admin/settings/appearance/css-section.tsx': { writes: 1, why: 'Custom CSS' },
   'designer/element-panel.tsx': { writes: 5, why: 'Element styles' },

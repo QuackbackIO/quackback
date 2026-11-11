@@ -85,7 +85,10 @@ export const MENU_CHANGES = [
   'sign_in_settings',
 ] as const
 export const MENU_FROM = ['canvas', 'panel'] as const
-export const LOOK_SOURCES = ['ai', 'saved', 'preset'] as const
+export const LOOK_SOURCES = ['ai', 'saved', 'preset', 'compare'] as const
+/** The brand's three looks in Compare looks, and where it was opened from. */
+export const LOOK_IDS = ['matched', 'soft', 'vivid'] as const
+export const LOOKS_FROM = ['onboarding', 'theme', 'ai'] as const
 /** Where a brand match started outside the chat. */
 export const MATCH_FROM = ['brand_kit', 'onboarding'] as const
 export type MatchFrom = (typeof MATCH_FROM)[number]
@@ -125,6 +128,13 @@ export const BUILDER_EVENTS = {
   designer_versions_opened: {},
   designer_version_restored: { how: ['restore', 'copy'] },
   designer_look_applied: { source: LOOK_SOURCES, fields: 'count' },
+  /** Compare looks opened: by itself after onboarding's first match, from Theme, or from Ask AI. */
+  designer_looks_opened: { from: LOOKS_FROM },
+  /** Compare looks shown side by side or one at a time. */
+  designer_looks_view_changed: { view: ['side', 'one'] },
+  /** A look taken from Compare looks, and the same look's step undone from its toast. */
+  designer_looks_applied: { look: LOOK_IDS },
+  designer_looks_undone: { look: LOOK_IDS },
   /** A screenshot in Ask AI warned of a pop-up's dimming or a cookie banner, sent anyway. */
   designer_chat_shot_kept: { warning: ['dimmed', 'banner'] },
   /** A brand match started outside the chat: from Theme's Brand kit, or handed over from onboarding. */

@@ -39,16 +39,24 @@ const DEVICE_ICONS: Record<Device, typeof ComputerDesktopIcon> = {
   phone: DevicePhoneMobileIcon,
 }
 
+const ALL_DEVICES = Object.keys(DEVICE_WIDTHS) as Device[]
+
 /** Desktop, tablet and phone: one radio group, one Tab stop, the arrows pick. */
 export const DeviceToggle = memo(function DeviceToggle({
   size,
   onSize,
   labelled = false,
+  devices = ALL_DEVICES,
+  widths = DEVICE_WIDTHS,
 }: {
   size: Device
   onSize: (size: Device) => void
   /** Shows each device's name beside its icon. */
   labelled?: boolean
+  /** The devices offered, all three unless fewer are given. */
+  devices?: readonly Device[]
+  /** The width each is drawn at, which its tip says. */
+  widths?: Partial<Record<Device, number>>
 }) {
   return (
     <div
@@ -57,7 +65,7 @@ export const DeviceToggle = memo(function DeviceToggle({
       onKeyDown={onRadioKeys}
       className="flex rounded-lg bg-muted p-0.5"
     >
-      {(Object.keys(DEVICE_WIDTHS) as Device[]).map((key) => {
+      {devices.map((key) => {
         const Icon = DEVICE_ICONS[key]
         const name = DEVICE_NAMES[key]
         const radio = (
@@ -82,7 +90,7 @@ export const DeviceToggle = memo(function DeviceToggle({
         return (
           <Tooltip key={key}>
             <TooltipTrigger asChild>{radio}</TooltipTrigger>
-            <TooltipContent>{`${name}, ${DEVICE_WIDTHS[key]} px`}</TooltipContent>
+            <TooltipContent>{`${name}, ${widths[key] ?? DEVICE_WIDTHS[key]} px`}</TooltipContent>
           </Tooltip>
         )
       })}
