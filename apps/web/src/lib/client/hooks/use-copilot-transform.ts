@@ -8,7 +8,8 @@ import {
   type TransformKind,
   type TransformFinalPayload,
 } from '@/lib/shared/assistant/copilot-contract'
-import { toastError } from '@/lib/client/error-notice'
+import { toastError, toastErrorLine } from '@/lib/client/error-notice'
+import { unplannedErrorText } from '@/lib/client/error-text'
 
 /**
  * Shared streamed rewrite runner for Copilot answers and composer drafts, over
@@ -57,7 +58,8 @@ export function useCopilotTransform(item: InboxItemRef) {
           },
           onError: (error) => {
             ok = false
-            toastError(error, GENERIC_ERROR)
+            // A transport failure: its message is not ours to show.
+            toastErrorLine(unplannedErrorText(error, GENERIC_ERROR))
           },
         })
         activeRef.current = run

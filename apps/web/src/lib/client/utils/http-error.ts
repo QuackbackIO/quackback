@@ -7,9 +7,12 @@
 
 export const GENERIC_ERROR = 'Something went wrong. Try again.'
 
-/** Pull the server's `{error:{message}}` body off a failed request, falling
- *  back to GENERIC_ERROR for a non-JSON (or empty) body. */
+/** Pull the server's `{error:{message}}` body off a refused request, falling
+ *  back to GENERIC_ERROR for a non-JSON (or empty) body and for any 5xx. */
 export async function extractHttpErrorMessage(res: Response): Promise<string> {
+  // A 5xx body was not written for the person: it can be a proxy's page or the
+  // server's own unhandled-error envelope.
+  if (res.status >= 500) return GENERIC_ERROR
   try {
     const body = await res.json()
     if (body?.error?.message) return body.error.message as string
