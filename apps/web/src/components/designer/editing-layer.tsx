@@ -1,6 +1,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -15,13 +16,12 @@ import {
   TrashIcon,
 } from '@heroicons/react/16/solid'
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuShortcut,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+} from '@/components/ui/dropdown-menu'
 import { BLOCK_ACTIONS } from './properties/words'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { chipPlacement, outlineBox, type Rect } from '@/lib/shared/design/layer-geometry'
@@ -299,7 +299,32 @@ function ChangeOutline({ rect, room }: { rect: Rect; room: { width: number; heig
   )
 }
 
-/** The picked block chip's right-click menu: the block's actions, as its ⋯ offers them. */
+/** Where a right-click opened the chip's menu, in the builder's window. */
+type Point = { x: number; y: number }
+
+/**
+ * Where a right-click opens the menu: at the pointer, or, opened from the
+ * keyboard (Shift+F10 or the menu key, which carry no pointer), under the
+ * focused button.
+ */
+export function menuPoint(event: {
+  clientX: number
+  clientY: number
+  target: EventTarget | null
+}): Point {
+  if (event.clientX || event.clientY) return { x: event.clientX, y: event.clientY }
+  const element = event.target instanceof Element ? event.target : null
+  const box = element?.getBoundingClientRect()
+  return box ? { x: box.left, y: box.bottom } : { x: 0, y: 0 }
+}
+
+/**
+ * The picked block chip's right-click menu: the block's actions, as its ⋯
+ * offers them. Opened at the pointer (or under the focused button from the
+ * keyboard) on the menu the builder already draws, so it costs nothing until
+ * it opens; the arrow keys move through it and Escape closes it, back to
+ * where focus was.
+ */
 function ChipMenu({
   name,
   onDuplicate,
@@ -313,39 +338,85 @@ function ChipMenu({
   onMove?: { up: (() => void) | null; down: (() => void) | null }
   children: ReactNode
 }) {
+  const [at, setAt] = useState<Point | null>(null)
+  const [open, setOpen] = useState(false)
+  const opener = useRef<HTMLElement | null>(null)
+  const first = useRef<HTMLDivElement>(null)
+  const anchor = useMemo(
+    () =>
+      at && {
+        getBoundingClientRect: () => DOMRect.fromRect({ x: at.x, y: at.y, width: 0, height: 0 }),
+      },
+    [at]
+  )
+  // Opened by a right-click, not by a trigger: the first action is focused by hand.
+  useEffect(() => {
+    if (!open) return
+    let tries = 0
+    let frame = 0
+    const focus = () => {
+      if (first.current) return first.current.focus()
+      if (tries++ < 10) frame = requestAnimationFrame(focus)
+    }
+    focus()
+    return () => cancelAnimationFrame(frame)
+  }, [open, at])
   if (!onDuplicate) return children
   return (
-    <ContextMenu>
-      <ContextMenuTrigger className="contents">{children}</ContextMenuTrigger>
-      <ContextMenuContent aria-label={`${name}: more`}>
-        <ContextMenuItem onClick={onDuplicate}>
-          <DocumentDuplicateIcon aria-hidden="true" />
-          {BLOCK_ACTIONS.duplicate}
-          <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
-        </ContextMenuItem>
-        {onMove && (
-          <>
-            <ContextMenuItem disabled={!onMove.up} onClick={() => onMove.up?.()}>
-              <ArrowUpIcon aria-hidden="true" />
-              {BLOCK_ACTIONS.moveUp}
-            </ContextMenuItem>
-            <ContextMenuItem disabled={!onMove.down} onClick={() => onMove.down?.()}>
-              <ArrowDownIcon aria-hidden="true" />
-              {BLOCK_ACTIONS.moveDown}
-            </ContextMenuItem>
-          </>
-        )}
-        {onRemove && (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem onClick={onRemove}>
-              <TrashIcon aria-hidden="true" />
-              {BLOCK_ACTIONS.remove}
-              <ContextMenuShortcut>Delete</ContextMenuShortcut>
-            </ContextMenuItem>
-          </>
-        )}
-      </ContextMenuContent>
-    </ContextMenu>
+    <>
+      <div
+        className="contents"
+        onContextMenu={(event) => {
+          event.preventDefault()
+          const focused = document.activeElement
+          opener.current =
+            focused instanceof HTMLElement && event.currentTarget.contains(focused) ? focused : null
+          setAt(menuPoint(event))
+          setOpen(true)
+        }}
+      >
+        {children}
+      </div>
+      {at && (
+        <DropdownMenu open={open} modal={false} onOpenChange={setOpen}>
+          <DropdownMenuContent
+            anchor={anchor}
+            side="bottom"
+            align="start"
+            sideOffset={2}
+            aria-label={`${name}: more`}
+            finalFocus={() => (opener.current?.isConnected ? opener.current : false)}
+          >
+            <DropdownMenuItem ref={first} onClick={onDuplicate}>
+              <DocumentDuplicateIcon aria-hidden="true" />
+              {BLOCK_ACTIONS.duplicate}
+              <DropdownMenuShortcut>Ctrl+D</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            {onMove && (
+              <>
+                <DropdownMenuItem disabled={!onMove.up} onClick={() => onMove.up?.()}>
+                  <ArrowUpIcon aria-hidden="true" />
+                  {BLOCK_ACTIONS.moveUp}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!onMove.down} onClick={() => onMove.down?.()}>
+                  <ArrowDownIcon aria-hidden="true" />
+                  {BLOCK_ACTIONS.moveDown}
+                </DropdownMenuItem>
+              </>
+            )}
+            {onRemove && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onRemove}>
+                  <TrashIcon aria-hidden="true" />
+                  {BLOCK_ACTIONS.remove}
+                  <DropdownMenuShortcut>Delete</DropdownMenuShortcut>
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </>
   )
 }
