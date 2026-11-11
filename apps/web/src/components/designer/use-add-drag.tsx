@@ -14,9 +14,8 @@ import { playReflow, snapshotBlocks } from './frame-reflow'
 import { BlockIcon } from './block-icon'
 import { useFrameRects } from './use-frame-rects'
 import { swallowClick } from './use-grid-edit'
+import { CANVAS_PICKED } from './canvas-colours'
 
-/** The layer's own blue, as the picked block's outline uses it. */
-const BLUE = '#2563eb'
 /** How far the pointer goes before a press on a card becomes a drag, in px. */
 const THRESHOLD = 4
 /** How near the canvas's top or bottom the pointer scrolls the page, and by how much. */
@@ -256,7 +255,7 @@ export function AddDropLayer({ canvas, drag }: { canvas: CanvasFrame; drag: AddD
         <div
           data-add-ghost=""
           className="absolute rounded-md border-2 border-dashed transition-[left,top,width,height] duration-150 ease-out motion-reduce:transition-none"
-          style={{ ...ghost, borderColor: BLUE, background: `${BLUE}14` }}
+          style={{ ...ghost, borderColor: CANVAS_PICKED, background: `${CANVAS_PICKED}14` }}
         />
       )}
     </div>
@@ -276,7 +275,7 @@ export function AddDragCard({ drag }: { drag: AddDrag }) {
     >
       <div
         className="flex items-center gap-3 rounded-lg border bg-background p-2 shadow-lg"
-        style={{ borderColor: BLUE, opacity: view.ghost ? 0.6 : 0.95 }}
+        style={{ borderColor: CANVAS_PICKED, opacity: view.ghost ? 0.6 : 0.95 }}
       >
         <span className="grid h-10 w-14 shrink-0 place-items-center rounded-md bg-muted">
           <BlockIcon type={view.type} className="size-4" />
