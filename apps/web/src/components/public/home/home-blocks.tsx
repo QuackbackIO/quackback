@@ -541,6 +541,17 @@ function RoadmapColumnPosts({
 }) {
   const intl = useIntl()
   const { data } = usePublicRoadmapPosts({ roadmapId, statusId })
+  // While the column's posts load, a row's room for each, so nothing moves when
+  // they arrive and no column says it is empty before it knows.
+  if (!data)
+    return (
+      <ul aria-hidden="true" data-qb-skeleton="roadmap-posts" className="space-y-1.5">
+        {Array.from({ length: count }, (_, at) => (
+          // ui/Skeleton's look (qb-skeleton): importing it would put its chunk on Home.
+          <li key={at} className="qb-skeleton h-6" />
+        ))}
+      </ul>
+    )
   const posts = flattenRoadmapViewPosts(data).slice(0, count)
   if (posts.length === 0)
     return (

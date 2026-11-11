@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, type ComponentProps } from 'react'
 import { createFileRoute, lazyRouteComponent, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { portalLanding, previewsHome } from '@/lib/shared/design/paths'
@@ -11,15 +11,43 @@ import {
   portalPathsOf,
 } from '@/components/public/feedback/feed-route'
 
-/** Home's module: its page, and what its loader starts. One import serves both. */
-const importHome = () => import('@/components/public/home/portal-home')
-const PortalHome = lazy(() => importHome().then((module) => ({ default: module.PortalHome })))
-
 /** The feed page, from its own chunk, as the feed route loads it. */
 const FeedComponent = lazyRouteComponent(
   () => import('@/components/public/feedback/feed-page'),
   'FeedPage'
 )
+
+/** What marks the feed in the server's page (feedback-container.tsx). */
+const FEED_DRAWN = '[data-qb-section="feed"]'
+/** What marks Home in the server's page: its grid (portal-home.tsx). */
+const HOME_DRAWN = '[data-qb-section="home"][data-qb-grid]'
+
+/** Home's module: its page, and what its loader starts. One import serves both. */
+type HomeModule = typeof import('@/components/public/home/portal-home')
+/** Home's module once it is in, so Home can be drawn without waiting for it. */
+let homeModule: HomeModule | undefined
+const importHome = () =>
+  import('@/components/public/home/portal-home').then((module) => (homeModule = module))
+const LazyHome = lazy(() => importHome().then((module) => ({ default: module.PortalHome })))
+
+/**
+ * Home, drawn at once when its module is in, else as it arrives. A lazy
+ * component waits once even for a module already loaded, and Home waiting
+ * while the page hydrates is what let an update draw it again from nothing.
+ */
+function PortalHome(props: ComponentProps<HomeModule['PortalHome']>) {
+  return homeModule ? <homeModule.PortalHome {...props} /> : <LazyHome {...props} />
+}
+
+// Where the server drew Home, its module starts loading with the page's own
+// scripts rather than when hydration reaches it. Until it hydrates, an update
+// from above (the theme, the session) makes React draw Home again from
+// nothing, and on a slow phone its blocks vanished for seconds while the
+// module and its reads arrived. The feed drawn here is the same.
+if (typeof document !== 'undefined') {
+  if (document.querySelector(HOME_DRAWN)) void importHome()
+  else if (document.querySelector(FEED_DRAWN)) void FeedComponent.preload?.()
+}
 
 /**
  * The portal's root. With Home on it is Home, and an old link to the feed

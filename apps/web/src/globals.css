@@ -19,6 +19,18 @@
    the family name matching the value FONT_OPTIONS/presets.ts store. */
 @import '@fontsource-variable/inter/index.css';
 
+/* Inter's stand-in until its file arrives: Arial (Liberation Sans on Linux)
+   sized and spaced as Inter, so the swap keeps every line where it was. The
+   numbers are FONT_FALLBACKS.inter (lib/shared/design/font-fallbacks.ts). */
+@font-face {
+  font-family: 'Inter Variable Fallback';
+  src: local('Arial'), local('Liberation Sans');
+  size-adjust: 106.39%;
+  ascent-override: 91.06%;
+  descent-override: 22.67%;
+  line-gap-override: 0%;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /* ==============================================
@@ -85,7 +97,8 @@
   --sidebar-accent-foreground: #0a0a0a;
   --sidebar-border: #e5e5e5;
   --sidebar-ring: var(--accent-ink);
-  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sans:
+    'Inter Variable', 'Inter', 'Inter Variable Fallback', ui-sans-serif, system-ui, sans-serif;
   --font-serif: ui-serif, Georgia, Cambria, serif;
   --font-mono: ui-monospace, SFMono-Regular, monospace;
   --radius: 0.5rem;
@@ -570,6 +583,28 @@ a svg,
  * nav item and header, which every portal document would otherwise carry.
  * They stay utilities, so they cascade exactly as those variants did.
  */
+
+/* A placeholder while a portal part loads: ui/Skeleton's look as one class,
+   so the loading markup a portal page carries stays small. The reduced
+   motion rule below rests its pulse. */
+@utility qb-skeleton {
+  @apply rounded-md bg-muted animate-pulse;
+}
+
+/* The portal menu on a row of its own: the page's measure at least, and the
+   menu's width with its padding when that is wider, so a phone scrolls to
+   its last page (portal-header.tsx). */
+@utility qb-menu-row {
+  margin-inline: auto;
+  width: max-content;
+  min-width: min(100%, var(--qb-page-max, 72rem));
+  max-width: var(--qb-page-max, 72rem);
+  padding-inline: 1rem;
+
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+}
 
 /* A 24px target around a small inline control, such as a tag chip. */
 @utility qb-hit-24 {
@@ -1071,5 +1106,8 @@ a svg,
   *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    /* A looping animation run once, so a spinner or pulse rests rather than flickers. */
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }

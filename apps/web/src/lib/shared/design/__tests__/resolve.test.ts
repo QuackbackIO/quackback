@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_FONT_SANS, DEFAULT_RADIUS, expandTheme } from '@/lib/shared/theme/expand'
 import { contrastRatio } from '../contrast'
 import { renderDesignCss, resolveDesign } from '../resolve'
+import { fontStack } from '../fonts'
 import { defaultDesign, type PortalDesign } from '../schema'
 import { PAIRS } from './contrast-golden'
 
@@ -15,11 +16,13 @@ const withAccent = (accent: string, mode: PortalDesign['mode'] = 'auto') => {
 describe('resolveDesign', () => {
   it('starts from today’s tokens and changes only what it reports', () => {
     const resolved = resolveDesign(defaultDesign())
-    // An unbranded theme leaves font and radius to the stylesheet; a design states the same defaults.
-    const legacy = expandTheme(
-      { fontSans: DEFAULT_FONT_SANS, radius: DEFAULT_RADIUS },
-      { mode: 'light' }
+    // An unbranded theme leaves font and radius to the stylesheet; a design states the same
+    // defaults, Inter with its stand-in, as the stylesheet's own stack has it.
+    const inter = fontStack({ kind: 'bundled', id: 'inter' })
+    expect(inter).toBe(
+      DEFAULT_FONT_SANS.replace('"Inter", ', '"Inter", "Inter Variable Fallback", ')
     )
+    const legacy = expandTheme({ fontSans: inter, radius: DEFAULT_RADIUS }, { mode: 'light' })
     const adjusted = new Set<string>(
       resolved.adjustments.filter((a) => a.mode === 'light').map((a) => a.token)
     )
@@ -108,7 +111,7 @@ describe('resolveDesign', () => {
     doc.brand.fonts.body = { kind: 'bundled', id: 'lora' }
     const { light } = resolveDesign(doc)
     expect(light?.radius).toBe('0rem')
-    expect(light?.fontSans).toBe('"Lora", ui-serif, Georgia, serif')
+    expect(light?.fontSans).toBe('"Lora", "Lora Fallback", ui-serif, Georgia, serif')
   })
 })
 
@@ -232,7 +235,9 @@ describe('renderDesignCss', () => {
     doc.brand.fonts.heading = { kind: 'bundled', id: 'fraunces' }
     doc.brand.fonts.headingWeight = 700
     const resolved = resolveDesign(doc)
-    expect(resolved.tokens.base['--qb-font-heading']).toBe('"Fraunces", ui-serif, Georgia, serif')
+    expect(resolved.tokens.base['--qb-font-heading']).toBe(
+      '"Fraunces", "Fraunces Fallback", ui-serif, Georgia, serif'
+    )
     expect(resolved.tokens.base['--qb-heading-weight']).toBe('700')
     const css = renderDesignCss(resolved)
     expect(css).toContain(

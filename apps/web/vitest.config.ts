@@ -19,7 +19,8 @@ export default defineConfig({
     // hang for long. (Heavy suites additionally hoist their SUT to a static
     // import so the transform is paid at file load — see the changelog tests.)
     testTimeout: 15_000,
-    include: ['src/**/*.test.tsx', 'src/**/*.test.ts'],
+    // The perf bench's own pure helpers are tested with the app.
+    include: ['src/**/*.test.tsx', 'src/**/*.test.ts', 'perf/**/*.test.ts'],
     setupFiles: [path.resolve(__dirname, '../../vitest.setup.ts')],
     exclude: ['**/node_modules/**', '**/.output/**', '**/e2e/**'],
     env: {

@@ -407,6 +407,29 @@ describe('PortalHeader — design layouts', () => {
     expect(narrowMenu).toBeTruthy()
   })
 
+  it('sizes a menu on its own row to the menu and its padding, so a phone scrolls to its last page', () => {
+    for (const layout of ['stacked', 'inline', 'centered'] as const) {
+      const { container, unmount } = mountWith(design(layout))
+      // The row the phone sees: the last NavScroller in the header.
+      const rows = container.querySelectorAll('header [data-qb-nav-row]')
+      const holder = rows[rows.length - 1]!.firstElementChild!
+      const classes = holder.className.split(' ')
+      // As wide as its content when that is wider than the row, so the end padding
+      // counts and the row knows there is more; never narrower than the row.
+      if (layout === 'centered') {
+        expect(classes, layout).toEqual(expect.arrayContaining(['w-max', 'min-w-full']))
+      } else {
+        expect(classes, layout).toContain('qb-menu-row')
+      }
+      expect(classes, layout).not.toContain('w-full')
+      unmount()
+    }
+    const row = portalUtility('qb-menu-row')
+    expect(row).toContain('width: max-content;')
+    expect(row).toContain('min-width: min(100%, var(--qb-page-max, 72rem));')
+    expect(row).toContain('max-width: var(--qb-page-max, 72rem);')
+  })
+
   it('follows the draft layout in the preview over the saved one', () => {
     const { container } = mountWith(design('stacked'), { 'data-qb-header': 'centered' })
     expect(container.querySelector('header .justify-center nav')).toBeTruthy()

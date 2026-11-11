@@ -23,6 +23,7 @@ import {
 const doc = vi.hoisted(() => ({
   themeRenders: 0,
   defaultTheme: '' as string | undefined,
+  forcedTheme: '' as string | undefined,
   storageKey: '' as string | undefined,
   bootstrap: null as null | Record<string, unknown>,
 }))
@@ -34,14 +35,17 @@ vi.mock('@/components/theme-provider', () => ({
   ThemeProvider: ({
     children,
     defaultTheme,
+    forcedTheme,
     storageKey,
   }: {
     children: ReactNode
     defaultTheme?: string
+    forcedTheme?: string
     storageKey?: string
   }) => {
     doc.themeRenders++
     doc.defaultTheme = defaultTheme
+    doc.forcedTheme = forcedTheme
     doc.storageKey = storageKey
     return <>{children}</>
   },
@@ -208,10 +212,15 @@ describe('the portal’s own theme', () => {
     expect(document.documentElement.hasAttribute('data-portal-theme')).toBe(false)
   })
 
-  it('forces the mode a design sets', async () => {
+  it('forces the mode a design sets, the provider starting from the device’s', async () => {
     bootstrap('light', design('dark'), 'light')
     await mount('/feedback')
-    expect(doc.defaultTheme).toBe('dark')
+    expect(doc.forcedTheme).toBe('dark')
+    // Starting from the device's, reading the device after hydrating changes nothing,
+    // so no context change reaches parts of the page still hydrating.
+    expect(doc.defaultTheme).toBe('system')
+    // The document itself is drawn dark from the first paint.
+    expect(document.documentElement.className).toContain('dark')
   })
 })
 
