@@ -620,7 +620,7 @@ export const journeys: Journey[] = [
       if (!postId) throw new Error('no post on the admin feedback page')
       await page.goto(`/admin/feedback?post=${postId}`)
       const composer = page.locator('[data-testid="comment-form-editor"] [contenteditable="true"]')
-      await clickUntil(page.getByRole('textbox', { name: 'Write a comment...' }), composer)
+      await clickUntil(page.getByRole('textbox', { name: 'Write a comment…' }), composer)
       await composer.click()
     },
     run: async (page) => {
