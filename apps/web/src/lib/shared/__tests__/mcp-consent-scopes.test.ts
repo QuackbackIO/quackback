@@ -65,6 +65,13 @@ describe('defaultSelectedScopes', () => {
     expect(domainAccessLevels(defaultSelectedScopes(['openid']))).toEqual(full)
   })
 
+  it('does not widen a request for only some reads to writes', () => {
+    // A client that asks for one area is asking for less on purpose.
+    const selected = defaultSelectedScopes(['openid', 'read:feedback'])
+    expect(selected.filter((scope) => scope.startsWith('write:'))).toEqual([])
+    expect(consentPreset(domainAccessLevels(selected))).toBe('read')
+  })
+
   it('keeps a request for some writes to the reads plus those writes', () => {
     const selected = defaultSelectedScopes([
       ...MCP_FIRST_CONNECT_SCOPES,

@@ -74,21 +74,31 @@ export function rewriteMcpAuthorizeRequest(request: Request): Request {
   return new Request(url, request)
 }
 
+/** The reads every MCP challenge has asked for since scoped OAuth shipped. */
+const MCP_CONNECT_READS = ['read:feedback', 'read:article', 'read:chat'] as const
+
 /**
- * Prefill. A plain connect defaults to full access: most people connecting an
- * assistant want it to act, and a reads-only grant fails on the first write
- * in every client that cannot step up. A request that names writes for only
- * some areas is a deliberate narrower ask (a step-up), so it prefills the
- * reads plus exactly those writes. `offline_access` is on when the client
- * asked — MCP clients add it themselves; we do not force it.
+ * Prefill. A plain MCP connect defaults to full access: most people connecting
+ * an assistant want it to act, and a reads-only grant fails on the first write
+ * in every client that cannot step up. A plain connect is a request for every
+ * capability (today's 401 challenge), for the connect reads (a client holding
+ * the older reads-only challenge), or for no capability at all.
+ *
+ * Anything narrower is a deliberate ask and is not widened to writes: a
+ * request that names some writes (a step-up) prefills the reads plus exactly
+ * those, and one that names only some reads prefills the reads.
+ * `offline_access` is on when the client asked — MCP clients add it
+ * themselves; we do not force it.
  */
 export function defaultSelectedScopes(clientRequested: readonly string[]): string[] {
   const requested = new Set(clientRequested)
-  const namesWrite = API_KEY_SCOPES.some((s) => s.startsWith('write:') && requested.has(s))
-  const selected = new Set<string>(namesWrite ? MCP_FIRST_CONNECT_SCOPES : API_KEY_SCOPES)
-  for (const scope of API_KEY_SCOPES) {
-    if (requested.has(scope)) selected.add(scope)
-  }
+  const capabilities = API_KEY_SCOPES.filter((scope) => requested.has(scope))
+  const namesWrite = capabilities.some((scope) => scope.startsWith('write:'))
+  const plainConnect =
+    !namesWrite &&
+    (capabilities.length === 0 || MCP_CONNECT_READS.every((scope) => requested.has(scope)))
+  const selected = new Set<string>(plainConnect ? API_KEY_SCOPES : MCP_FIRST_CONNECT_SCOPES)
+  for (const scope of capabilities) selected.add(scope)
   if (requested.has('offline_access')) selected.add('offline_access')
   return [...selected]
 }

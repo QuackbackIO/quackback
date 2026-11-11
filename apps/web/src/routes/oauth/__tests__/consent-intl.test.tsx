@@ -31,7 +31,9 @@ async function renderConsent(locale?: SupportedLocale) {
     routeTree: rootRoute.addChildren([consentRoute]),
     context: { queryClient: new QueryClient(), acceptLanguageLocale: locale },
     history: createMemoryHistory({
-      initialEntries: ['/oauth/consent?client_id=test-client&scope=openid%20read:feedback'],
+      initialEntries: [
+        '/oauth/consent?client_id=test-client&scope=openid%20read:feedback%20read:article%20read:chat',
+      ],
     }),
     defaultErrorComponent: ({ error }) => (
       <div role="alert">{error instanceof Error ? error.message : String(error)}</div>
@@ -175,6 +177,9 @@ describe('standalone MCP consent intl', () => {
     })
     const consent = request.mock.calls.find(([input]) => input === '/api/auth/oauth2/consent')
     const body = JSON.parse((consent?.[1] as RequestInit).body as string)
-    expect(body).toMatchObject({ accept: false, scope: 'openid read:feedback' })
+    expect(body).toMatchObject({
+      accept: false,
+      scope: 'openid read:feedback read:article read:chat',
+    })
   })
 })
