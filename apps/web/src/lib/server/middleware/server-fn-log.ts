@@ -15,8 +15,11 @@ import { createMiddleware } from '@tanstack/react-start'
 import { isNotFound, isRedirect } from '@tanstack/react-router'
 import type { AppLogger } from '@quackback/logger'
 import { logger } from '@/lib/server/logger'
+import { getLogContext } from '@/lib/server/log-context'
 import { DomainException } from '@/lib/shared/errors'
+import { UNEXPECTED_ERROR_MESSAGE, withErrorReference } from '@/lib/shared/error-reference'
 import { isAuthDenialError } from '@/lib/server/functions/auth-errors'
+import { isTechnicalFailure, newErrorReference } from './technical-failure'
 
 /**
  * Input validators run inside the middleware chain, upstream of the handler, so
@@ -102,28 +105,50 @@ export function classifyServerFnError(error: unknown): 'warn' | 'error' | null {
  * Core logging behaviour, decoupled from the framework so it can be unit
  * tested. `log` is injectable as a test seam; production passes the shared
  * logger. Mirrors `handleRequestWithContext` in request-context.ts.
+ *
+ * A thrown error crosses to the browser with its message intact, and the
+ * interface prints it. In production a technical failure (a failed query with
+ * its values, an internal address, a bug) is therefore swapped here for a plain
+ * sentence carrying a reference code, and the code is logged as `error_ref`
+ * beside the real error. Everything else is rethrown unchanged.
+ *
+ * `start.ts` imports this file, so in development the browser loads it too
+ * (only the `.server()` body is stripped). Its imports must stay safe to
+ * evaluate there, which is why production is read from the environment here
+ * and not through the server config module.
  */
 export async function runWithServerFnLogging<T>({
   next,
   name,
   log = logger,
+  production = process.env.NODE_ENV === 'production',
 }: {
   next: () => Promise<T>
   name: string
   log?: AppLogger
+  production?: boolean
 }): Promise<T> {
   const start = performance.now()
   try {
     return await next()
   } catch (error) {
     const severity = classifyServerFnError(error)
+    const reference =
+      production && severity === 'error' && isTechnicalFailure(error)
+        ? newErrorReference(getLogContext()?.request_id)
+        : null
     if (severity) {
-      // Rethrown unchanged below, so the framework's own handling is untouched.
       log[severity](
-        { err: error, duration_ms: Math.round(performance.now() - start), server_fn: name },
+        {
+          err: error,
+          duration_ms: Math.round(performance.now() - start),
+          server_fn: name,
+          ...(reference ? { error_ref: reference } : {}),
+        },
         `${name} failed`
       )
     }
+    if (reference) throw new Error(withErrorReference(UNEXPECTED_ERROR_MESSAGE, reference))
     throw error
   }
 }

@@ -161,3 +161,54 @@ describe('runWithServerFnLogging', () => {
     expect(log.error).not.toHaveBeenCalled()
   })
 })
+
+describe('runWithServerFnLogging in production', () => {
+  const failWith = (thrown: unknown, production: boolean, log = fakeLog()) => ({
+    log,
+    thrown: runWithServerFnLogging({
+      next: async () => {
+        throw thrown
+      },
+      name: 'fetchThings',
+      log: log as never,
+      production,
+    }).then(
+      () => undefined,
+      (error: unknown) => error as Error
+    ),
+  })
+
+  it('swaps a technical failure for a plain sentence and logs its reference', async () => {
+    const bug = new TypeError("Cannot read properties of undefined (reading 'settings')")
+    const { log, thrown } = failWith(bug, true)
+    const error = await thrown
+
+    expect(error).not.toBe(bug)
+    expect(error?.message).toMatch(
+      /^Something went wrong on our side\. Try again in a moment\. \(Ref [A-Z0-9]{4}-[A-Z0-9]{4}\)$/
+    )
+    const [fields] = log.error.mock.calls[0]
+    // The log keeps the real error, findable by the code the person was shown.
+    expect(fields.err).toBe(bug)
+    expect(error?.message).toContain(`(Ref ${fields.error_ref})`)
+  })
+
+  it('rethrows the same failure unchanged outside production', async () => {
+    const bug = new TypeError('boom')
+    const { log, thrown } = failWith(bug, false)
+    expect(await thrown).toBe(bug)
+    expect(log.error.mock.calls[0][0]).not.toHaveProperty('error_ref')
+  })
+
+  it('leaves messages written for a person alone', async () => {
+    const refusal = new ForbiddenError('NOPE', 'Only admins can do that')
+    expect(await failWith(refusal, true).thrown).toBe(refusal)
+    const plain = new Error('Pick a board first')
+    expect(await failWith(plain, true).thrown).toBe(plain)
+  })
+
+  it('never touches framework control flow', async () => {
+    const r = redirect({ to: '/' })
+    expect(await failWith(r, true).thrown).toBe(r)
+  })
+})

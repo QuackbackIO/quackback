@@ -1904,6 +1904,8 @@
   "common.errorPage.error.title": "حدث خطأ ما",
   "common.errorPage.error.description": "حدث خطأ غير متوقع. حاول مرة أخرى أو عد إلى الصفحة الرئيسية.",
   "common.errorPage.technicalDetails": "التفاصيل التقنية",
+  "common.errorPage.reference": "المرجع",
+  "common.errorPage.copyReference": "نسخ المرجع",
   "common.errorPage.tryAgain": "حاول مرة أخرى",
   "common.errorPage.goHome": "العودة إلى الرئيسية",
   "portal.header.auth.accountMenu": "فتح قائمة الحساب",

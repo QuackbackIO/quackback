@@ -1904,6 +1904,8 @@
   "common.errorPage.error.title": "Что-то пошло не так",
   "common.errorPage.error.description": "Произошла непредвиденная ошибка. Попробуйте ещё раз или вернитесь на главную страницу.",
   "common.errorPage.technicalDetails": "Технические сведения",
+  "common.errorPage.reference": "Код ошибки",
+  "common.errorPage.copyReference": "Скопировать код",
   "common.errorPage.tryAgain": "Попробовать снова",
   "common.errorPage.goHome": "На главную",
   "portal.header.auth.accountMenu": "Открыть меню аккаунта",
