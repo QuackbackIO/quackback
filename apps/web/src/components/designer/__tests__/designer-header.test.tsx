@@ -40,6 +40,22 @@ function show(props: Partial<Parameters<typeof DesignerHeader>[0]> = {}) {
 }
 
 describe('the top bar', () => {
+  it('hides the page picker, device switch and view menu while the canvas is covered, and shows them again after', () => {
+    const view = <button type="button">View</button>
+    show({ view, canvasControls: false })
+    expect(screen.queryByRole('radiogroup', { name: 'Device' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'View' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Page: Home' })).toBeNull()
+    // What acts on the draft stays.
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeTruthy()
+    cleanup()
+    show({ view })
+    expect(screen.getByRole('radiogroup', { name: 'Device' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'View' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Page: Home' })).toBeTruthy()
+  })
+
   it('holds the draft state in one fixed slot, so nothing beside it moves as it changes', () => {
     show({ draftStatus: <span>No changes</span> })
     const slot = screen.getByText('No changes').closest<HTMLElement>('[data-status-slot]')!

@@ -23,6 +23,7 @@ import { websiteIn, type UnmatchedFont } from '@/lib/shared/design/match-brand'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { BrandLogoCard } from './brand-logo-card'
+import { openLooks } from './looks-entry'
 
 /** The part of the design a request about each selection may change. */
 export function aiScopeOf(selection: Selection | null): {
@@ -284,6 +285,7 @@ export function DesignerAi({
               ai.record({ role: 'user', text: label })
               ai.record({ role: 'assistant', text: reply, changes })
             }}
+            onCompareLooks={() => openLooks('ai')}
             onRecapture={(url) => void ai.recapture(url)}
             {...(onFonts && {
               onUploadFont: (font: UnmatchedFont) => onFonts(font),

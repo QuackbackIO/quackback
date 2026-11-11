@@ -485,28 +485,25 @@ describe('a brand match after it lands', () => {
     expect(onChip).toHaveBeenCalledWith('Use green for links')
   })
 
-  it('offers the other looks already written, each as a new step', () => {
-    const onDirect = vi.fn()
-    const pre = structuredClone(draft)
-    const turn = matchTurn({
-      others: [
-        {
-          description: 'A calm look.',
-          changes: [
-            { path: 'brand.light.accent', before: pre.brand.light.accent, after: '#00aa00' },
-          ],
-        },
-      ],
-    })
+  it('offers Compare looks under a brand match and a look taken from it, not other replies', () => {
+    const onCompareLooks = vi.fn()
     draft = matched()
-    mount({ turns: [turn], onChip: vi.fn(), onDirect })
-    fireEvent.click(screen.getByRole('button', { name: 'Try another look' }))
-    expect(draft.brand.light.accent).toBe('#00aa00')
-    expect(draft.layout.hero).toBe(pre.layout.hero)
-    expect(onDirect).toHaveBeenCalledWith(
-      expect.objectContaining({ label: 'Try another look', reply: 'A calm look.' })
-    )
-    // Only one other look, so none is left to try.
+    mount({
+      turns: [
+        matchTurn(),
+        matchTurn({ matched: false, text: 'Done.' }),
+        matchTurn({
+          matched: false,
+          text: 'Switched to Soft. Kept your headline and menu.',
+          looks: true,
+        }),
+      ],
+      onCompareLooks,
+    })
+    const buttons = screen.getAllByRole('button', { name: 'Compare looks' })
+    expect(buttons).toHaveLength(2)
+    fireEvent.click(buttons[1]!)
+    expect(onCompareLooks).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('button', { name: 'Try another look' })).toBeNull()
   })
 })

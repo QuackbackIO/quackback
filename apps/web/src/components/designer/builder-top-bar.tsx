@@ -69,6 +69,7 @@ export const BuilderTopBar = memo(function BuilderTopBar({
   onPublishedClose,
   onDiscard,
   onDialog,
+  canvasControls = true,
 }: {
   returnPath: string
   workspaceName: string
@@ -104,6 +105,8 @@ export const BuilderTopBar = memo(function BuilderTopBar({
   published?: PortalAddress | null
   onPublishedClose?: () => void
   onDiscard: () => void
+  /** The controls that act on the canvas; hidden while something covers it. */
+  canvasControls?: boolean
   onDialog: (dialog: 'keys' | 'versions' | 'share' | 'find') => void
 }) {
   const keys = useCallback(() => onDialog('keys'), [onDialog])
@@ -210,6 +213,7 @@ export const BuilderTopBar = memo(function BuilderTopBar({
       onPublishedClose={onPublishedClose}
       canPublish={draft.canPublish}
       changes={changes}
+      canvasControls={canvasControls}
     />
   )
 })

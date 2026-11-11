@@ -2,12 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
 import { plainWords } from '@/lib/shared/design/colour-names'
 import { matchSummary } from '@/lib/shared/design/step-summary'
-import {
-  chipChange,
-  lookChanges,
-  matchParts,
-  MATCH_PART_LABEL,
-} from '@/lib/shared/design/match-steps'
+import { chipChange, matchParts, MATCH_PART_LABEL } from '@/lib/shared/design/match-steps'
 import { overrideChangeLines } from '@/lib/shared/design/override-cascade'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
 import { MATCH_BRAND, type UnmatchedFont } from '@/lib/shared/design/match-brand'
@@ -281,6 +276,7 @@ export function AskAiPanel({
   onFonts,
   show,
   onDirect,
+  onCompareLooks,
 }: {
   available: boolean
   turns: DesignAiTurn[]
@@ -309,14 +305,14 @@ export function AskAiPanel({
   /** Shows a change on the canvas, from its row's Show; without it, rows have none. */
   show?: ShowChange
   /**
-   * Records a change made here with no request (a one-change follow-up, or
-   * another look), so it shows as its own step with Undo. Without it, every
-   * follow-up is a request.
+   * Records a change made here with no request (a one-change follow-up), so
+   * it shows as its own step with Undo. Without it, every follow-up is a
+   * request.
    */
   onDirect?: (step: { label: string; reply: string; changes: AppliedDesignChange[] }) => void
+  /** Opens Compare looks, offered under a brand match's reply and a look taken from it. */
+  onCompareLooks?: () => void
 }) {
-  // How many of each match's other looks have been tried, by turn.
-  const [tried, setTried] = useState<Record<number, number>>({})
   /** Makes known changes now, as one named step, and records it; false when nothing changed. */
   const direct = (label: string, reply: string, changes: DesignChangeRequest[]) => {
     if (!onDirect) return false
@@ -385,30 +381,18 @@ export function AskAiPanel({
                     {...(show ? { show } : {})}
                   />
                 )}
-                {turn.matched &&
-                  turn.changes &&
-                  onDirect &&
-                  (turn.others?.length ?? 0) > (tried[index] ?? 0) && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      className="-my-1 text-muted-foreground"
-                      disabled={busy}
-                      onClick={() => {
-                        const others = turn.others!
-                        const look = others[tried[index] ?? 0]!
-                        direct(
-                          'Try another look',
-                          plainWords(look.description),
-                          lookChanges(turn.changes!, others, look)
-                        )
-                        setTried((was) => ({ ...was, [index]: (was[index] ?? 0) + 1 }))
-                      }}
-                    >
-                      Try another look
-                    </Button>
-                  )}
+                {(turn.matched || turn.looks) && turn.changes && onCompareLooks && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    className="rounded-full"
+                    disabled={busy}
+                    onClick={onCompareLooks}
+                  >
+                    Compare looks
+                  </Button>
+                )}
                 {turn.capture && (
                   <SiteCapture capture={turn.capture} busy={busy} onRecapture={onRecapture} />
                 )}

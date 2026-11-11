@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ClientOnly } from '@tanstack/react-router'
 import { MotionConfig } from 'framer-motion'
@@ -45,6 +54,8 @@ import { STYLE_ELEMENTS, type StyleState } from '@/lib/shared/design/style-token
 import type { DesignerPage } from '@/lib/shared/design/outline'
 import type { TreeRow } from '@/lib/shared/design/page-tree'
 import { useCanvasDesign } from './look-preview'
+import { closeLooks, useLooksAfterMatch, useLooksOpen } from './looks-entry'
+import { LOOKS_KIT } from './looks-kit'
 import { MenuLayer } from './menu-layer'
 import { WordsLayer } from './words/words-layer'
 import { useCoach, useMenuCoach } from './menu-coach-mark'
@@ -91,6 +102,11 @@ import {
 import { SaidRegion, useSaid } from './use-said'
 import { useSteadyChecks } from './use-steady-checks'
 import { useSteadyHandlers } from './use-steady-handlers'
+
+// Compare looks, loaded once it opens.
+const LooksChooser = lazy(() =>
+  import('./looks-chooser').then((module) => ({ default: module.LooksChooser }))
+)
 
 /** Escape inside these belongs to them. */
 const OWNS_ESCAPE =
@@ -144,6 +160,11 @@ export function DesignerShell({
   )
   // Quackback AI's conversation.
   const { ai } = useDesignerAi(draft, { page, locale }, workspaceName, onAiApplied)
+  // Compare looks covers Ask AI and the canvas while open; a brand match keeps its base.
+  const looksFrom = useLooksOpen()
+  const looks = useLooksAfterMatch(ai.busy, ai.turns, draft.design)
+  // Leaving the builder leaves Compare looks closed for the next visit.
+  useEffect(() => closeLooks, [])
   const [now] = useState(() => new Date())
   // The frame takes the design whole and builds its view there, as the server does. It is
   // sent once a frame (see usePreviewPosting), so the builder draws each change only once.
@@ -367,7 +388,10 @@ export function DesignerShell({
   // Onboarding's /design?match=<site>: the brand match runs into the draft; or the Brand kit
   // opens; or, with publish=open, publish does.
   useMatchOnArrival({
-    start: (site) => void startBrandMatch({ website: site, from: 'onboarding' }),
+    start: (site) => {
+      looks.fromOnboarding()
+      void startBrandMatch({ website: site, from: 'onboarding' })
+    },
     showAi: () => aiPane.reveal(true),
     openBrandKit: () => {
       openTheme()
@@ -426,6 +450,19 @@ export function DesignerShell({
   const menuHot = picking.hovered === 'header' || selection === 'header'
   const pickedBlock = selection?.startsWith('block-') ? (nameOf(selection) ?? null) : null
   const caption = deviceCaption(size)
+  const looksOpen = !!looksFrom && !previewing
+  // In a one-column window, Compare looks shows in the page's column.
+  useEffect(() => {
+    if (looksFrom) setPane('page')
+  }, [looksFrom])
+  // A look's toast Undo takes back its step only while it is still the last one.
+  const undoLatest = useRef({ undo, label: draft.undoLabel })
+  undoLatest.current = { undo, label: draft.undoLabel }
+  const undoStep = useCallback((label: string) => {
+    if (undoLatest.current.label !== label) return false
+    undoLatest.current.undo()
+    return true
+  }, [])
   // The top bar's handlers, each one function for the builder's life that runs the latest.
   const topBar = useSteadyHandlers({
     exit: () => void exit(),
@@ -437,7 +474,10 @@ export function DesignerShell({
       panel.dispatch({ type: 'toggle', sheet: next })
       setPane('settings')
     },
-    preview: startPreview,
+    preview: () => {
+      closeLooks()
+      startPreview()
+    },
     publish: () => void publishing.start(),
     closePublished: publishing.closePublished,
     discard,
@@ -486,6 +526,8 @@ export function DesignerShell({
             blocks.blockKeys(event, () => dialogs.show('keys'))
             if (event.key !== 'Escape' || event.defaultPrevented) return
             if ((event.target as Element).closest(OWNS_ESCAPE)) return
+            // While Compare looks is open, Escape anywhere in the builder closes it first.
+            if (looksOpen) return closeLooks()
             const step = escapeStep(panel.state, selection ?? picking.elementKey)
             if (step === 'close-sheet') panel.close()
             else if (step === 'up') {
@@ -545,198 +587,228 @@ export function DesignerShell({
               onPublishedClose={topBar.closePublished}
               onDiscard={topBar.discard}
               onDialog={topBar.dialog}
+              canvasControls={!looksOpen}
             />
           )}
 
           {!previewing && <BuilderColumns pane={column} onPane={setPane} />}
           <div className="flex min-h-0 flex-1">
-            {!previewing && (
-              <AiPane pane={aiPane} hidden={column !== 'ai'}>
-                <DesignerAi
-                  ai={ai}
-                  draft={draft}
-                  selection={selection}
-                  selectionName={nameOf(selection) ?? null}
-                  element={
-                    picking.element
-                      ? { element: picking.element.element, part: picking.element.part }
-                      : null
-                  }
-                  elementName={
-                    pickedElement ? pickLabel(pickedElement, design, backgroundPageOf(page)) : null
-                  }
-                  page={page}
-                  pageName={PAGE_NAMES[page]}
-                  update={update}
-                  onClearSelection={() => setSelection(null)}
-                  onCollapse={aiPane.collapse}
-                  gates={gates}
-                  onFonts={(font) => {
-                    openTheme()
-                    setPane('settings')
-                    revealThemeFonts(font)
-                  }}
-                  show={showChange}
-                />
-              </AiPane>
-            )}
-            <main
-              aria-label="Page being edited"
-              data-designer-region=""
-              data-canvas-region=""
-              tabIndex={-1}
-              className={cn(
-                'flex min-h-0 min-w-0 flex-1 flex-col p-4 pb-3 outline-none',
-                !previewing && column !== 'page' && 'max-builder:hidden'
-              )}
-            >
-              <SaidRegion said={said} />
+            {/* Hidden, not gone, while Compare looks is open: the canvas keeps its page. */}
+            <div className={looksOpen ? 'hidden' : 'contents'}>
               {!previewing && (
-                <div className="mb-2 space-y-2 empty:hidden">
-                  <DraftNotices draft={draft} />
-                  <RefusalFallback value={refusalLines.value} />
-                  {!draft.undoLabel && (
-                    <ReturnVisitNote savedAt={editor.draftSavedAt} now={now} onDiscard={discard} />
-                  )}
-                </div>
-              )}
-              {!previewing && <CanvasBar view={view} note={follow.note} onBack={follow.back} />}
-              {caption && !previewing && (
-                <p
-                  className={cn(
-                    'pb-2 text-center text-xs',
-                    size === 'phone' ? PHONE_TINT.caption : 'text-muted-foreground'
-                  )}
-                >
-                  {caption}
-                </p>
-              )}
-              <ClientOnly
-                fallback={
-                  // Before the builder runs, the page's parts as shapes at the device's width.
-                  <div aria-busy="true" className="relative min-h-0 w-full flex-1 overflow-hidden">
-                    <div
-                      className="mx-auto overflow-hidden rounded-lg border border-border bg-background shadow-sm"
-                      style={{ maxWidth: CANVAS_WIDTHS[size] }}
-                    >
-                      {skeleton}
-                    </div>
-                  </div>
-                }
-              >
-                {view.widget ? (
-                  <WidgetFrame
-                    design={canvasDesign}
-                    theme={design.mode === 'auto' ? theme : design.mode}
-                    locale={locale}
-                    title="Widget"
-                  />
-                ) : page === 'post' && !postPath ? (
-                  <p className="p-6 text-ui text-muted-foreground">
-                    {noPost ? 'There are no posts to show yet.' : 'Finding a post…'}
-                  </p>
-                ) : (
-                  <DesignerCanvas
-                    page={page}
-                    postPath={view.here.item}
-                    visitor={view.visitor}
-                    sample={view.sample}
-                    onLocation={follow.onLocation}
-                    size={size}
-                    theme={design.mode === 'auto' ? theme : design.mode}
-                    locale={locale}
-                    sort={design.pages.feedback.defaultSort}
-                    design={canvasDesign}
-                    structural={structural}
-                    zoom={previewing ? 'fit' : canvas.zoom}
-                    trying={previewing}
-                    onSelect={(section, link, target) => {
-                      menu.dismiss()
-                      picking.select(section, link, target)
-                    }}
-                    onFollow={(link) => {
-                      const at = locationOfPath(link, design.nav.home.on)
-                      if (at && pages.includes(at.page)) setPage(at.page, at.item)
-                    }}
-                    onHover={picking.hover}
-                    onMenu={(target, how, node) => {
-                      menu.onMenu(target, how)
-                      // The logo is its own element; a menu item or sign in is picked too, so its look can be set.
-                      if (how === 'click' && target === 'logo') picking.select('logo', null)
-                      else if (how === 'click' && node) picking.select('header', null, node)
-                    }}
-                    onMenuHover={menu.setHovered}
-                    onContext={(section, target, at) => {
-                      menu.dismiss()
-                      picking.select(section, null, target)
-                      // A block's actions open where it was right-clicked, as its ⋯ offers them.
-                      if (section?.startsWith('block-')) openChipMenu(section, at)
-                    }}
-                    onWords={onWords}
-                    onKey={(key) => (key === 'undo' ? undo() : redo())}
-                    onEscape={() => {
-                      if (previewing) leavePreview()
-                      // The menu's hint shows while the menu is in play; Escape there closes it first.
-                      else if (coach.show && (menuHot || !!menu.hovered)) coach.dismiss()
-                      else if (!menu.dismiss()) stepBack()
-                    }}
-                    onLoad={picking.reload}
-                    skeleton={skeleton}
-                    inPlace
-                    layer={(frame) =>
-                      previewing ? null : (
-                        <>
-                          <CanvasLayer
-                            canvas={frame}
-                            hovered={picking.hovered}
-                            picked={selection}
-                            name={nameOf(selection) ?? null}
-                            homeOn={design.nav.home.on}
-                            pages={pages}
-                            onPage={setPage}
-                            onDuplicate={blocks.duplicateBlock}
-                            onRemove={blocks.removeBlock}
-                            onMove={blocks.moveBlock}
-                            onDeselect={stepBack}
-                            flash={changeFlash.flash}
-                            grid={{
-                              design,
-                              gates,
-                              update,
-                              begin: draft.begin,
-                              end: draft.end,
-                              say,
-                            }}
-                            elements={{
-                              design,
-                              page: backgroundPageOf(page),
-                              hovered: picking.hoveredElement,
-                              picked: picking.elementKey,
-                              force: elementState,
-                              onPick: picking.pickElement,
-                              say,
-                            }}
-                          />
-                          <WordsLayer canvas={frame} design={design} locale={locale} say={say} />
-                          <MenuLayer
-                            canvas={frame}
-                            design={design}
-                            gates={gates}
-                            settings={view.settings}
-                            update={update}
-                            editing={menu}
-                            headerHot={menuHot}
-                            coach={coach}
-                            onSample={view.showSample}
-                          />
-                          <AddDropLayer canvas={frame} drag={addDrag} />
-                        </>
-                      )
+                <AiPane pane={aiPane} hidden={column !== 'ai'}>
+                  <DesignerAi
+                    ai={ai}
+                    draft={draft}
+                    selection={selection}
+                    selectionName={nameOf(selection) ?? null}
+                    element={
+                      picking.element
+                        ? { element: picking.element.element, part: picking.element.part }
+                        : null
                     }
+                    elementName={
+                      pickedElement
+                        ? pickLabel(pickedElement, design, backgroundPageOf(page))
+                        : null
+                    }
+                    page={page}
+                    pageName={PAGE_NAMES[page]}
+                    update={update}
+                    onClearSelection={() => setSelection(null)}
+                    onCollapse={aiPane.collapse}
+                    gates={gates}
+                    onFonts={(font) => {
+                      openTheme()
+                      setPane('settings')
+                      revealThemeFonts(font)
+                    }}
+                    show={showChange}
                   />
+                </AiPane>
+              )}
+              <main
+                aria-label="Page being edited"
+                data-designer-region=""
+                data-canvas-region=""
+                tabIndex={-1}
+                className={cn(
+                  'flex min-h-0 min-w-0 flex-1 flex-col p-4 pb-3 outline-none',
+                  !previewing && column !== 'page' && 'max-builder:hidden'
                 )}
-              </ClientOnly>
-            </main>
+              >
+                <SaidRegion said={said} />
+                {!previewing && (
+                  <div className="mb-2 space-y-2 empty:hidden">
+                    <DraftNotices draft={draft} />
+                    <RefusalFallback value={refusalLines.value} />
+                    {!draft.undoLabel && (
+                      <ReturnVisitNote
+                        savedAt={editor.draftSavedAt}
+                        now={now}
+                        onDiscard={discard}
+                      />
+                    )}
+                  </div>
+                )}
+                {!previewing && <CanvasBar view={view} note={follow.note} onBack={follow.back} />}
+                {caption && !previewing && (
+                  <p
+                    className={cn(
+                      'pb-2 text-center text-xs',
+                      size === 'phone' ? PHONE_TINT.caption : 'text-muted-foreground'
+                    )}
+                  >
+                    {caption}
+                  </p>
+                )}
+                <ClientOnly
+                  fallback={
+                    // Before the builder runs, the page's parts as shapes at the device's width.
+                    <div
+                      aria-busy="true"
+                      className="relative min-h-0 w-full flex-1 overflow-hidden"
+                    >
+                      <div
+                        className="mx-auto overflow-hidden rounded-lg border border-border bg-background shadow-sm"
+                        style={{ maxWidth: CANVAS_WIDTHS[size] }}
+                      >
+                        {skeleton}
+                      </div>
+                    </div>
+                  }
+                >
+                  {view.widget ? (
+                    <WidgetFrame
+                      design={canvasDesign}
+                      theme={design.mode === 'auto' ? theme : design.mode}
+                      locale={locale}
+                      title="Widget"
+                    />
+                  ) : page === 'post' && !postPath ? (
+                    <p className="p-6 text-ui text-muted-foreground">
+                      {noPost ? 'There are no posts to show yet.' : 'Finding a post…'}
+                    </p>
+                  ) : (
+                    <DesignerCanvas
+                      page={page}
+                      postPath={view.here.item}
+                      visitor={view.visitor}
+                      sample={view.sample}
+                      onLocation={follow.onLocation}
+                      size={size}
+                      theme={design.mode === 'auto' ? theme : design.mode}
+                      locale={locale}
+                      sort={design.pages.feedback.defaultSort}
+                      design={canvasDesign}
+                      structural={structural}
+                      zoom={previewing ? 'fit' : canvas.zoom}
+                      trying={previewing}
+                      onSelect={(section, link, target) => {
+                        menu.dismiss()
+                        picking.select(section, link, target)
+                      }}
+                      onFollow={(link) => {
+                        const at = locationOfPath(link, design.nav.home.on)
+                        if (at && pages.includes(at.page)) setPage(at.page, at.item)
+                      }}
+                      onHover={picking.hover}
+                      onMenu={(target, how, node) => {
+                        menu.onMenu(target, how)
+                        // The logo is its own element; a menu item or sign in is picked too, so its look can be set.
+                        if (how === 'click' && target === 'logo') picking.select('logo', null)
+                        else if (how === 'click' && node) picking.select('header', null, node)
+                      }}
+                      onMenuHover={menu.setHovered}
+                      onContext={(section, target, at) => {
+                        menu.dismiss()
+                        picking.select(section, null, target)
+                        // A block's actions open where it was right-clicked, as its ⋯ offers them.
+                        if (section?.startsWith('block-')) openChipMenu(section, at)
+                      }}
+                      onWords={onWords}
+                      onKey={(key) => (key === 'undo' ? undo() : redo())}
+                      onEscape={() => {
+                        if (previewing) leavePreview()
+                        // The menu's hint shows while the menu is in play; Escape there closes it first.
+                        else if (coach.show && (menuHot || !!menu.hovered)) coach.dismiss()
+                        else if (!menu.dismiss()) stepBack()
+                      }}
+                      onLoad={picking.reload}
+                      skeleton={skeleton}
+                      inPlace
+                      layer={(frame) =>
+                        previewing ? null : (
+                          <>
+                            <CanvasLayer
+                              canvas={frame}
+                              hovered={picking.hovered}
+                              picked={selection}
+                              name={nameOf(selection) ?? null}
+                              homeOn={design.nav.home.on}
+                              pages={pages}
+                              onPage={setPage}
+                              onDuplicate={blocks.duplicateBlock}
+                              onRemove={blocks.removeBlock}
+                              onMove={blocks.moveBlock}
+                              onDeselect={stepBack}
+                              flash={changeFlash.flash}
+                              grid={{
+                                design,
+                                gates,
+                                update,
+                                begin: draft.begin,
+                                end: draft.end,
+                                say,
+                              }}
+                              elements={{
+                                design,
+                                page: backgroundPageOf(page),
+                                hovered: picking.hoveredElement,
+                                picked: picking.elementKey,
+                                force: elementState,
+                                onPick: picking.pickElement,
+                                say,
+                              }}
+                            />
+                            <WordsLayer canvas={frame} design={design} locale={locale} say={say} />
+                            <MenuLayer
+                              canvas={frame}
+                              design={design}
+                              gates={gates}
+                              settings={view.settings}
+                              update={update}
+                              editing={menu}
+                              headerHot={menuHot}
+                              coach={coach}
+                              onSample={view.showSample}
+                            />
+                            <AddDropLayer canvas={frame} drag={addDrag} />
+                          </>
+                        )
+                      }
+                    />
+                  )}
+                </ClientOnly>
+              </main>
+            </div>
+            {looksOpen && looksFrom && (
+              <Suspense fallback={<div aria-busy="true" className="min-w-0 flex-1" />}>
+                <LooksChooser
+                  kit={LOOKS_KIT}
+                  design={design}
+                  from={looksFrom}
+                  device={size === 'phone' ? 'phone' : 'desktop'}
+                  onDevice={canvas.setSize}
+                  theme={theme}
+                  locale={locale}
+                  update={update}
+                  undoStep={undoStep}
+                  record={ai.record}
+                  onClose={closeLooks}
+                />
+              </Suspense>
+            )}
             {!previewing && (
               <BrandMatchProvider value={brandMatch}>
                 <BuilderSettings
