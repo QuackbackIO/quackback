@@ -47,6 +47,9 @@ const STATE_SELECTOR: Record<Exclude<StyleState, 'base' | 'current'>, string> = 
   disabled: ':is(:disabled, [aria-disabled=true], [data-disabled], [data-qb-force=disabled])',
 }
 
+/** A vote box's count, which sets a text colour of its own (vote-button.tsx, post-card.tsx). */
+const VOTE_COUNT = '[data-testid=vote-count]'
+
 function stateSelector(el: StyleElementInfo, state: StyleState): string {
   if (state === 'base') return ''
   if (state === 'current')
@@ -619,6 +622,9 @@ export function styleCss(
         decls.push(...dividerDecls(element, own, (p) => `var(${name(p)})`))
         const selector = `${at}${stateSelector(el, state)}`
         if (decls.length) rules[scope.layer].push(`${selector} { ${decls.join('; ')}; }`)
+        // The count's own text colour would keep it dark on a filled box, so it takes the box's.
+        if (element === 'vote' && decls.some((d) => d.startsWith('color:')))
+          rules[scope.layer].push(`${selector} ${VOTE_COUNT} { color: inherit; }`)
         if (lifts.length) motion[scope.layer].push(`${selector} { ${lifts.join('; ')}; }`)
       }
       if (transitions.size)
