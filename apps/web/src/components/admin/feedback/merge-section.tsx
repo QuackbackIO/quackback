@@ -33,6 +33,7 @@ import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import type { PostId } from '@quackback/ids'
 import type { MergedPostItem } from '@/lib/shared/types/inbox'
+import { toastError } from '@/lib/client/error-notice'
 
 // ============================================================================
 // Merged Posts List (shown on canonical posts)
@@ -68,7 +69,7 @@ export function MergedPostsList({ postId, mergedPosts: initialMergedPosts }: Mer
       queryClient.invalidateQueries({ queryKey: ['merged-posts', postId] })
       toast.success('Post unmerged successfully')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to unmerge post')
+      toastError(err, 'Failed to unmerge post')
     } finally {
       setConfirmUnmergeId(null)
     }
@@ -183,7 +184,7 @@ export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: Merge
       toast.success('Post merged successfully')
       onOpenChange(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to merge post')
+      toastError(err, 'Failed to merge post')
     } finally {
       setMergingId(null)
       setConfirmTarget(null)
@@ -408,7 +409,7 @@ export function MergeOthersDialog({
       toast.success(`Merged ${selectedIds.size} post${selectedIds.size > 1 ? 's' : ''}`)
       onOpenChange(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to merge posts')
+      toastError(err, 'Failed to merge posts')
     } finally {
       setIsMerging(false)
     }

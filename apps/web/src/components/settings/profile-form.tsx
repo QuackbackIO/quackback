@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
+import { toastError } from '@/lib/client/error-notice'
 import { CameraIcon, ArrowPathIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import type { UserId } from '@quackback/ids'
@@ -107,13 +108,12 @@ export function ProfileForm({ user }: ProfileFormProps) {
         )
       },
       onError: (error) => {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : intl.formatMessage({
-                id: 'portal.settings.profile.avatar.uploadFailed',
-                defaultMessage: 'Failed to upload avatar',
-              })
+        toastError(
+          error,
+          intl.formatMessage({
+            id: 'portal.settings.profile.avatar.uploadFailed',
+            defaultMessage: 'Failed to upload avatar',
+          })
         )
       },
     })
@@ -139,13 +139,12 @@ export function ProfileForm({ user }: ProfileFormProps) {
         )
       },
       onError: (error) => {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : intl.formatMessage({
-                id: 'portal.settings.profile.avatar.removeFailed',
-                defaultMessage: 'Failed to remove avatar',
-              })
+        toastError(
+          error,
+          intl.formatMessage({
+            id: 'portal.settings.profile.avatar.removeFailed',
+            defaultMessage: 'Failed to remove avatar',
+          })
         )
       },
     })
@@ -195,13 +194,12 @@ export function ProfileForm({ user }: ProfileFormProps) {
         })
       )
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : intl.formatMessage({
-              id: 'portal.settings.profile.updateFailed',
-              defaultMessage: 'Failed to update profile',
-            })
+      toastError(
+        error,
+        intl.formatMessage({
+          id: 'portal.settings.profile.updateFailed',
+          defaultMessage: 'Failed to update profile',
+        })
       )
     } finally {
       setIsSubmitting(false)

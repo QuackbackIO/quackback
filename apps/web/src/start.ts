@@ -18,6 +18,7 @@ import { serverFnLogMiddleware } from '@/lib/server/middleware/server-fn-log'
 import { workspaceContextMiddleware } from '@/lib/server/middleware/workspace-context'
 import { auditAttributionMiddleware } from '@/lib/server/middleware/audit-attribution'
 import { expireRouteContextOnWrite } from '@/lib/client/route-context-middleware'
+import { serverFnFetch } from '@/lib/client/server-fn-fetch'
 import { liftErrorReferenceOnFailure } from '@/lib/client/error-reference-middleware'
 
 /**
@@ -66,5 +67,8 @@ export const startInstance = createStart(() => {
       expireRouteContextOnWrite,
       liftErrorReferenceOnFailure,
     ],
+    // In the browser, a 5xx that did not come from the function itself fails
+    // the call instead of resolving as its result (see server-fn-fetch.ts).
+    serverFns: { fetch: serverFnFetch },
   }
 })

@@ -16,6 +16,7 @@ import { useState } from 'react'
 import { useIntl } from 'react-intl'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { toastError } from '@/lib/client/error-notice'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -90,13 +91,12 @@ export function NewPersonDialog({
       onViewPerson(person.principalId)
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error && error.message
-          ? error.message
-          : intl.formatMessage({
-              id: 'admin.people.new.createFailed',
-              defaultMessage: 'Failed to create user',
-            })
+      toastError(
+        error,
+        intl.formatMessage({
+          id: 'admin.people.new.createFailed',
+          defaultMessage: 'Failed to create user',
+        })
       )
     },
   })
