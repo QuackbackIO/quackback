@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 /**
  * A brand kit image tile: an empty one takes the builder's colours, so in
  * dark mode it is not a bright box in the design's page colour.

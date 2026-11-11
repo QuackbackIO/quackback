@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 /**
  * The builder's one swatch: an edge that shows on any colour in either
  * mode, a hatched fill for none, and a split for a light and dark pair.

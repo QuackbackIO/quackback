@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 /**
  * The builder's icon button: named by its tip, which shows on focus; a
  * disabled one stays focusable, says why, and does nothing.
