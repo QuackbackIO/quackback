@@ -84,6 +84,29 @@ describe('SendingDomainAttentionEmail', () => {
     )
   })
 
+  it('warns with the record to add back and the date to add it by', async () => {
+    const text = visibleText(
+      await render(
+        SendingDomainAttentionEmail({
+          domain: 'acme.com',
+          record: {
+            purpose: 'ownership',
+            type: 'TXT',
+            name: '_quackback.acme.com',
+            state: 'missing',
+            value: 'quackback-domain-verification=abc',
+          },
+          deadline: '17 November 2026',
+        })
+      )
+    )
+    expect(text).toContain('The ownership record (TXT _quackback.acme.com) is missing.')
+    expect(text).toContain('Value: quackback-domain-verification=abc')
+    expect(text).toContain('Add it back by 17 November 2026 to keep sending from acme.com.')
+    // Still sending from the domain, so it does not say replies have fallen back.
+    expect(text).not.toContain('Replies send from the default address')
+  })
+
   it('falls back to the provider when every record still looks right', async () => {
     const text = visibleText(await render(SendingDomainAttentionEmail({ domain: 'acme.com' })))
     expect(text).toContain('The mail provider stopped confirming acme.com.')

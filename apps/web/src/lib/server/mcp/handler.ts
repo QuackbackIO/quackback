@@ -254,8 +254,8 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
 
 /**
  * OAuth-only: if this JSON-RPC call needs a scope the token lacks, return
- * HTTP 403 + `insufficient_scope` so the client can step up. API keys never
- * enter this path.
+ * HTTP 403 + `insufficient_scope` so the client can step up (see
+ * `insufficientScopeChallenge`). API keys never enter this path.
  */
 async function oauthScopeStepUp(request: Request, auth: McpAuthContext): Promise<Response | null> {
   if (request.method !== 'POST') return null
@@ -267,9 +267,21 @@ async function oauthScopeStepUp(request: Request, auth: McpAuthContext): Promise
   } catch {
     return null
   }
-  const missing = requiredScopesForMcpRpc(body).find((scope) => !hasApiScope(auth.scopes, scope))
-  if (!missing) return null
-  return insufficientScopeChallenge(missing)
+  // Every scope the request lacks goes in one challenge; a batch answers for
+  // its first refused call.
+  const missing = new Set<string>()
+  let requestId: string | number | null = null
+  for (const call of Array.isArray(body) ? body : [body]) {
+    const lacking = requiredScopesForMcpRpc(call).filter((s) => !hasApiScope(auth.scopes, s))
+    if (lacking.length === 0) continue
+    if (missing.size === 0) {
+      const id = (call as { id?: unknown } | null)?.id
+      requestId = typeof id === 'string' || typeof id === 'number' ? id : null
+    }
+    for (const scope of lacking) missing.add(scope)
+  }
+  if (missing.size === 0) return null
+  return insufficientScopeChallenge({ missing: [...missing], held: auth.scopes, requestId })
 }
 
 /**
