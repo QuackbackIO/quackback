@@ -1500,17 +1500,17 @@ journeys.push(
 /** The full review, while it is open. */
 const review = (page: Page) => page.getByRole('dialog', { name: /^Review/ })
 
-/** Where each page of the review is, inside its frames. */
-const REVIEW_PATHS: Record<string, string> = {
-  Home: '/',
-  Feedback: '/feedback',
-  Roadmap: '/roadmap',
+/** Where each page of the review is, inside its frames, and what shows once its content is in. */
+const REVIEW_PAGES: Record<string, { path: string; content: string }> = {
+  Home: { path: '/', content: '[data-qb-section]' },
+  Feedback: { path: '/feedback', content: '[data-post-id]' },
+  Roadmap: { path: '/roadmap', content: '[data-qb-post]' },
 }
 
 /**
  * Until the review's After frame shows `name` drawn with the draft, its skeleton
- * gone, and both frames have drawn that page, so the Live frame's own renders
- * are counted every time rather than only when they land before the run ends.
+ * gone, and both frames show that page with its content in (the feed's posts,
+ * the roadmap's cards), so a run never ends before a list has drawn.
  */
 async function afterFrameShows(page: Page, name: string) {
   const frame = review(page).locator(`iframe[title^="After you publish, ${name},"]`)
@@ -1519,7 +1519,7 @@ async function afterFrameShows(page: Page, name: string) {
     .locator('figure[data-side="after"] [data-canvas-box][aria-busy="false"]')
     .waitFor()
   await page.waitForFunction(
-    (path) =>
+    ({ path, content }) =>
       [
         ...document.querySelectorAll<HTMLIFrameElement>(
           'figure[data-side] iframe:not([title^="Widget"])'
@@ -1527,9 +1527,9 @@ async function afterFrameShows(page: Page, name: string) {
       ].every(
         (each) =>
           each.contentWindow?.location.pathname === path &&
-          !!each.contentDocument?.querySelector('[data-qb-section]')
+          !!each.contentDocument?.querySelector(content)
       ),
-    REVIEW_PATHS[name]
+    REVIEW_PAGES[name]!
   )
 }
 
