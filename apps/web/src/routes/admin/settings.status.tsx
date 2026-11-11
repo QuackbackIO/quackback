@@ -15,7 +15,6 @@ import { statusSettingsQueries } from '@/lib/client/queries/status'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { DEFAULT_STATUS_SETTINGS, type StatusSettings } from '@/lib/shared/status-settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
-import { surfaceSenderQuery } from '@/lib/client/queries/channel-accounts'
 import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/status')({
@@ -27,6 +26,8 @@ export const Route = createFileRoute('/admin/settings/status')({
   },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.STATUS_PAGE_MANAGE)
+    // Loaded here, not imported above, so it stays out of every page's script.
+    const { surfaceSenderQuery } = await import('@/lib/client/queries/channel-accounts')
     await Promise.all([
       context.queryClient.ensureQueryData(statusSettingsQueries.get()),
       // The Notifications card's "Sent from" line, so it renders from the document.
