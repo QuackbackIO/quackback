@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { SupportedLocale } from '@/lib/shared/i18n'
 import type { CanvasSize, CanvasZoom } from './designer-canvas'
@@ -22,5 +22,9 @@ export function useCanvasView(mode: PortalDesign['mode']): CanvasView {
   const [theme, setTheme] = useState<'light' | 'dark'>(mode === 'dark' ? 'dark' : 'light')
   const [locale, setLocale] = useState<SupportedLocale>('en')
   const [zoom, setZoom] = useState<CanvasZoom>('fit')
-  return { size, setSize, theme, setTheme, locale, setLocale, zoom, setZoom }
+  // The same object until one of them changes, so what reads it draws only then.
+  return useMemo(
+    () => ({ size, setSize, theme, setTheme, locale, setLocale, zoom, setZoom }),
+    [size, theme, locale, zoom]
+  )
 }

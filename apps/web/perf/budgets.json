@@ -1069,7 +1069,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 686,
+      "componentRenders": 180,
       "canvasPosts": 0
     },
     "ui:builder-open": {
@@ -1079,7 +1079,7 @@
       "jsRequests": 265,
       "jsKB": 1460.5,
       "htmlTransferKB": 15.3,
-      "componentRenders": 1076,
+      "componentRenders": 770,
       "canvasPosts": 12
     },
     "ui:builder-open-theme": {
@@ -1089,7 +1089,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 872,
+      "componentRenders": 722,
       "canvasPosts": 0
     },
     "ui:builder-pick-block": {
@@ -1099,7 +1099,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 1613,
+      "componentRenders": 799,
       "canvasPosts": 0
     },
     "ui:builder-publish": {
@@ -1109,7 +1109,7 @@
       "jsRequests": 1,
       "jsKB": 0.3,
       "htmlTransferKB": 0,
-      "componentRenders": 2246,
+      "componentRenders": 1223,
       "canvasPosts": 0
     },
     "ui:builder-scrub-size": {
@@ -1119,18 +1119,18 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 7959,
+      "componentRenders": 3561,
       "canvasPosts": 20
     },
     "ui:builder-switch-page-device": {
-      "dbQueries": 28,
-      "serverRequests": 4,
-      "requests": 106,
-      "jsRequests": 99,
-      "jsKB": 445.9,
+      "dbQueries": 16,
+      "serverRequests": 2,
+      "requests": 14,
+      "jsRequests": 12,
+      "jsKB": 9.9,
       "htmlTransferKB": 0,
-      "componentRenders": 1153,
-      "canvasPosts": 7
+      "componentRenders": 863,
+      "canvasPosts": 1
     },
     "ui:builder-switch-theme": {
       "dbQueries": 0,
@@ -1139,7 +1139,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 947,
+      "componentRenders": 532,
       "canvasPosts": 2
     },
     "ui:builder-type-headline": {
@@ -1149,7 +1149,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 1664,
+      "componentRenders": 844,
       "canvasPosts": 1
     },
     "ui:builder-undo-redo": {
@@ -1159,7 +1159,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 8026,
+      "componentRenders": 3919,
       "canvasPosts": 20
     },
     "doc:designed:juniper": {

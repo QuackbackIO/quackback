@@ -1019,8 +1019,8 @@ async function untilHeadlineResized(page: Page, from: string) {
   if (held < 4) throw new Error(`the canvas never drew the headline at a new size`)
 }
 
-/** A tile of the picked part's settings, such as a text size, in the group named `group`. */
-const tile = (page: Page, group: 'Text size' | 'Text colour', name: string) =>
+/** A tile of the picked part's settings, such as a type scale, in the group named `group`. */
+const tile = (page: Page, group: 'Scale' | 'Spacing', name: string) =>
   properties(page)
     .getByRole('radiogroup', { name: group })
     .getByRole('radio', { name, exact: true })
@@ -1033,19 +1033,19 @@ const SCRUB_STEPS = 20
 const SCRUB_PX = 4
 
 /**
- * The ten steps the undo and redo journey walks: the headline's text size and
- * its colour by turns, so no two in a row are the same change, which undo
- * would take back as one.
+ * The ten steps the undo and redo journey walks: the headline's type scale and
+ * its letter spacing by turns, so no two in a row are the same change, which
+ * undo would take back as one.
  */
 const UNDO_STEPS = [
-  ['Large', 'Brand colour'],
-  ['Display', 'Text'],
-  ['Standard', 'Brand colour'],
-  ['Large', 'Text'],
-  ['Display', 'Brand colour'],
-].flatMap(([size, colour]) => [
-  { group: 'Text size' as const, name: size! },
-  { group: 'Text colour' as const, name: colour! },
+  ['Large', 'Tight'],
+  ['Display', 'Normal'],
+  ['Standard', 'Tight'],
+  ['Large', 'Normal'],
+  ['Display', 'Tight'],
+].flatMap(([scale, spacing]) => [
+  { group: 'Scale' as const, name: scale! },
+  { group: 'Spacing' as const, name: spacing! },
 ])
 
 /** The headline's size once the publish journey's change is drawn. */
@@ -1124,8 +1124,6 @@ journeys.push(
     setup: async (page) => {
       await builderSetup(page)
       await pickHeadline(page)
-      // Custom shows the size's own field, unset until it changes.
-      await tile(page, 'Text size', 'Custom').click()
       await properties(page)
         .getByRole('slider', { name: /text size/i })
         .waitFor()
@@ -1284,7 +1282,7 @@ journeys.push(
     setup: async (page) => {
       await builderSetup(page)
       await pickHeadline(page)
-      await untilDraftSaved(page, () => tile(page, 'Text size', 'Large').click())
+      await untilDraftSaved(page, () => tile(page, 'Scale', 'Large').click())
       await topBar(page)
         .getByRole('button', { name: /1 change/ })
         .waitFor()

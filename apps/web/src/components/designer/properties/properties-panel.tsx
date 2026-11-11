@@ -11,9 +11,11 @@
  * from on hover; a row set at this scope shows a dot and a Reset that names
  * what it goes back to.
  */
-import { Fragment, useId, useState, type ReactElement, type ReactNode } from 'react'
+import { Fragment, memo, useId, useState, type ReactElement, type ReactNode } from 'react'
+// Reset's arrow is the top bar's Undo arrow, which the builder loads already; the 16px
+// solid one would be a script of its own on every open.
+import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline'
 import {
-  ArrowUturnLeftIcon,
   ChevronRightIcon,
   EllipsisHorizontalIcon,
   InformationCircleIcon,
@@ -447,7 +449,8 @@ export function PropertyRow({
  * Advice kept out of the way: an ⓘ that says it on hover and on focus, and
  * to a screen reader as the ⓘ's name.
  */
-export function Help({ text }: { text: string }) {
+export const Help = memo(function Help({ text }: { text: string }) {
+  // Drawn again only when its words change: a row's tip is a tooltip's whole tree.
   return (
     <Tip text={text}>
       <button
@@ -460,7 +463,7 @@ export function Help({ text }: { text: string }) {
       </button>
     </Tip>
   )
-}
+})
 
 /** A tip on a control that takes focus, shown on hover and on focus; none without text. */
 export function Tip({ text, children }: { text?: string | null; children: ReactElement }) {

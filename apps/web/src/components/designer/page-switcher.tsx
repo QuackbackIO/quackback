@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { defaultFilter } from 'cmdk'
 import {
@@ -66,7 +66,11 @@ function usePlaces(enabled: boolean) {
 }
 
 /** The page's name on the switcher's button: its name in the menu where it has one. */
-function pageName(design: PortalDesign, gates: PortalPageGates, page: DesignerPage): string {
+function pageName(
+  design: Pick<PortalDesign, 'nav'>,
+  gates: PortalPageGates,
+  page: DesignerPage
+): string {
   return menuParts(design, gates).find((part) => part.id === page)?.label ?? PAGE_NAMES[page]
 }
 
@@ -75,7 +79,7 @@ function pageName(design: PortalDesign, gates: PortalPageGates, page: DesignerPa
  * opening a list to choose a single post, entry or article, and the parts
  * turned off as samples. Arrow keys move and Enter goes.
  */
-export function PageSwitcher({
+export const PageSwitcher = memo(function PageSwitcher({
   design,
   gates,
   here,
@@ -86,7 +90,8 @@ export function PageSwitcher({
   onWidget,
   onTurnOn,
 }: {
-  design: PortalDesign
+  /** The design's menu, all the switcher reads of it. */
+  design: Pick<PortalDesign, 'nav'>
   gates: PortalPageGates
   here: CanvasLocation
   sample: SamplePage | null
@@ -149,7 +154,7 @@ export function PageSwitcher({
       </PopoverContent>
     </Popover>
   )
-}
+})
 
 /** The switcher's search and columns, or the list "Choose one" opens. */
 export function SwitcherMenu({

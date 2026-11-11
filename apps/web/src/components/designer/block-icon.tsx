@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import {
   BookOpenIcon,
   ChatBubbleLeftRightIcon,
@@ -28,8 +29,14 @@ const ICONS: Record<HomeBlockType, typeof LinkIcon> = {
   boards: Squares2X2Icon,
 }
 
-/** A Home block's type as a small icon, beside its name. */
-export function BlockIcon({ type, className }: { type: HomeBlockType; className?: string }) {
+/** A Home block's type as a small icon, beside its name; drawn again only when its type changes. */
+export const BlockIcon = memo(function BlockIcon({
+  type,
+  className,
+}: {
+  type: HomeBlockType
+  className?: string
+}) {
   const Icon = ICONS[type]
   return (
     <Icon
@@ -38,4 +45,4 @@ export function BlockIcon({ type, className }: { type: HomeBlockType; className?
       className={cn('size-3.5 shrink-0 text-muted-foreground', className)}
     />
   )
-}
+})

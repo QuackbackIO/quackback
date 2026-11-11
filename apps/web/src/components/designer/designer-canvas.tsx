@@ -4,7 +4,7 @@ import type { PortalPreviewProps } from '@/components/admin/settings/branding/po
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
 import { PAGE_NAMES, type DesignerPage } from '@/lib/shared/design/outline'
 import { canvasSrc } from '@/lib/shared/design/canvas-src'
-import { PREVIEW_THEME } from '@/components/public/preview-draft-context'
+import { PREVIEW_NAVIGATE, PREVIEW_THEME } from '@/components/public/preview-draft-context'
 
 export { canvasSrc }
 import type { CanvasVisitor } from '@/lib/shared/design/designer-frame'
@@ -90,6 +90,34 @@ export function framedWords(
     : null
 }
 
+/**
+ * Which document the canvas's frame holds for a view: one per language,
+ * visitor, sample and Preview. A sample has an address of its own, and
+ * Preview's links act, so each loads afresh; any other page or item is gone
+ * to inside the document already loaded.
+ */
+export function frameDocument({
+  page,
+  locale,
+  sort,
+  postPath = null,
+  visitor = 'in',
+  sample = null,
+  trying = false,
+}: {
+  page: DesignerPage
+  locale: string
+  sort: 'trending' | 'top' | 'new'
+  postPath?: string | null
+  visitor?: CanvasVisitor
+  sample?: SamplePage | null
+  trying?: boolean
+}): string {
+  if (sample || trying)
+    return `${canvasSrc({ page, theme: 'light', locale, sort, postPath, visitor, sample })}|${trying}`
+  return `portal|${locale}|${visitor}`
+}
+
 /** No structural draft: the canvas draws everything, the welcome message too, from the design. */
 export const NO_STRUCTURE: PortalPreviewDraft = {}
 
@@ -128,6 +156,7 @@ export function DesignerCanvas({
   layer,
   skeleton,
   untilDrawn = false,
+  inPlace = false,
 }: {
   page: DesignerPage
   /** The item the page shows, such as the post on the post page. */
@@ -184,6 +213,11 @@ export function DesignerCanvas({
   skeleton?: ReactNode
   /** Keeps the skeleton until the frame says it drew the design given, not the published one. */
   untilDrawn?: boolean
+  /**
+   * Goes to another page or item inside the page the frame holds, rather than
+   * loading the frame afresh, so its code and the draft drawn in it stay warm.
+   */
+  inPlace?: boolean
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   // The frame element itself, for the layer: a new one each time the page loads afresh.
@@ -257,6 +291,7 @@ export function DesignerCanvas({
     onKey,
     onEscape,
     onLocation,
+    onLoad,
     trying,
   })
   handlers.current = {
@@ -270,8 +305,20 @@ export function DesignerCanvas({
     onKey,
     onEscape,
     onLocation,
+    onLoad,
     trying,
   }
+  /** Tells the frame's page to go to `src` in place: the frame and its page's code stay warm. */
+  const navigateFrame = useCallback((src: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: PREVIEW_NAVIGATE, href: src },
+      window.location.origin
+    )
+  }, [])
+
+  // What the frame's document loaded with, by its key, and what it was last asked to show.
+  const docKey = useRef('')
+  const shown = useRef({ doc: '', key: '', src: '' })
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (
@@ -280,7 +327,16 @@ export function DesignerCanvas({
       )
         return
       const message = event.data as Record<string, unknown> | null
-      if (message?.type === 'quackback:preview-ready') setReadyKey(frameKey.current)
+      if (message?.type === 'quackback:preview-ready') {
+        // A page that went elsewhere since its document loaded is sent there; it is ready once there.
+        if (shown.current.key !== docKey.current) navigateFrame(shown.current.src)
+        else setReadyKey(frameKey.current)
+      }
+      if (message?.type === 'quackback:preview-navigated' && message.href === shown.current.src) {
+        setReadyKey(frameKey.current)
+        setDrawnKey(frameKey.current)
+        handlers.current.onLoad?.()
+      }
       if (message?.type === 'quackback:preview-drawn') setDrawnKey(frameKey.current)
       const menu = isMenuTarget(message?.menu) ? message.menu : null
       // The element at the point the frame names, read from its own page.
@@ -347,13 +403,32 @@ export function DesignerCanvas({
   const phoneMode = size === 'phone' && !trying
   const { scale, height, outer, room: drawn } = frameBox(room, width, zoom)
   const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample })
-  // Only another page, item, language or visitor loads the frame afresh; light or dark is
-  // sent to the page it shows, which keeps the address it loaded with.
+  // What the frame shows, by its address in light: its page is ready once it says so.
   const key = `${canvasSrc({ page, theme: 'light', locale, sort, postPath, visitor, sample })}:${refreshKey}:${trying}`
-  const [loaded, setLoaded] = useState({ key, src })
-  if (loaded.key !== key) setLoaded({ key, src })
-  const frameSrc = loaded.key === key ? loaded.src : src
+  // The document it shows that in. In place, another language or visitor, a sample, Preview or
+  // a new refresh key loads the frame afresh, and another page or item is gone to in the page
+  // itself; else every page loads afresh. Light or dark is sent to the page, which keeps the
+  // address it loaded with.
+  const doc = inPlace
+    ? `${frameDocument({ page, locale, sort, postPath, visitor, sample, trying })}:${refreshKey}`
+    : key
+  const [loaded, setLoaded] = useState({ doc, key, src })
+  if (loaded.doc !== doc) setLoaded({ doc, key, src })
+  const frameSrc = loaded.doc === doc ? loaded.src : src
   frameKey.current = key
+  docKey.current = loaded.doc === doc ? loaded.key : key
+  // Another page in the same document: the frame is told to go there.
+  useEffect(() => {
+    // Light or dark alone is no other page: the frame is told that in place, as it is.
+    if (shown.current.doc !== doc) {
+      shown.current = { doc, key, src }
+      return
+    }
+    if (shown.current.key === key) return
+    shown.current = { doc, key, src }
+    navigateFrame(src)
+    // Only another page navigates; the address it goes to is in the theme shown then.
+  }, [doc, key, navigateFrame])
   const ready = readyKey === key && (!untilDrawn || drawnKey === key)
   // A page that never says it is ready (an error, say) is shown once it has loaded a while.
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
@@ -383,7 +458,7 @@ export function DesignerCanvas({
       >
         <iframe
           // Leaving Preview loads the page afresh, back where the builder is.
-          key={key}
+          key={doc}
           ref={frameRef}
           onLoad={() => {
             setLoadedKey(key)

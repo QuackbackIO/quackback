@@ -142,7 +142,7 @@ export function switcherColumns({
   sample,
   widget = false,
 }: {
-  design: PortalDesign
+  design: Pick<PortalDesign, 'nav'>
   gates: PortalPageGates
   places: DesignerPlaces
   here: CanvasLocation

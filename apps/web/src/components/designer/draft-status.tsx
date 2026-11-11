@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useState, memo } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
 import {
   ArrowUturnLeftIcon,
@@ -46,7 +46,7 @@ function notLive(count: number, published: boolean): string {
  * saving. Its menu sees every change or discards the draft (after asking),
  * and holds versions, a preview link to share and find.
  */
-export function DraftStatus({
+export const DraftStatus = memo(function DraftStatus({
   count,
   saving,
   failed,
@@ -181,4 +181,4 @@ export function DraftStatus({
       </AlertDialog>
     </>
   )
-}
+})

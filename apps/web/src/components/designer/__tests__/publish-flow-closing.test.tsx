@@ -12,7 +12,6 @@ import type { PublishDraft } from '../publish-flow'
 
 // The dialog as it is while it fades out: still drawn, whatever `open` says.
 vi.mock('../publish-summary-dialog', () => ({
-  fullReviewReason: () => '',
   PublishSummaryDialog: (props: {
     open: boolean
     count: number

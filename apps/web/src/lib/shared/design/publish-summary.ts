@@ -28,6 +28,15 @@ export function opensFullReview(changes: number, failingChecks: number): boolean
   return changes > FULL_REVIEW_OVER || failingChecks > 0
 }
 
+/** Why the full review opened in place of the summary, read out as it opens. */
+export function fullReviewReason(count: number, failing: number): string {
+  if (failing > 0)
+    return failing === 1
+      ? 'A check needs a look before you publish, so here is everything.'
+      : `${failing} checks need a look before you publish, so here is everything.`
+  return `${count} changes is a lot to sum up, so here is everything.`
+}
+
 export interface SummaryRow {
   /** What the row is about, such as Landing, Menu or a part of the portal. */
   kind: string

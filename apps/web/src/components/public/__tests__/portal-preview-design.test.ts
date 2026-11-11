@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { designView } from '@/lib/shared/design/design-view'
 import { defaultDesign } from '@/lib/shared/design/schema'
-import { readDraftView, sharedView } from '../portal-preview-design'
+import { pageView, readDraftView, sharedView } from '../portal-preview-design'
 
 /** The draft as it arrives: a structured clone of what the builder posted. */
 const posted = (value: unknown) => readDraftView(structuredClone(value))
@@ -93,5 +93,33 @@ describe('a view shared with the one drawn before it', () => {
     const next = view()
     expect(sharedView(null, next)).toBe(next)
     expect(sharedView(next, null)).toBeNull()
+  })
+})
+
+describe('the view the frame’s pages read', () => {
+  const view = () => readDraftView(defaultDesign())!
+
+  it('stays the view before for a change that reaches the page as style alone', () => {
+    const before = view()
+    const changed = defaultDesign()
+    changed.brand.light.accent = '#225544'
+    const next = sharedView(before, readDraftView(changed))!
+    expect(next.themeStyles).not.toBe(before.themeStyles)
+    expect(pageView(before, next)).toBe(before)
+  })
+
+  it('is the new view once a part a page reads changes', () => {
+    const before = view()
+    const changed = defaultDesign()
+    changed.pages.feedback.defaultSort =
+      changed.pages.feedback.defaultSort === 'top' ? 'new' : 'top'
+    const next = sharedView(before, readDraftView(changed))!
+    expect(pageView(before, next)).toBe(next)
+  })
+
+  it('is the new view when there was none before, or none now', () => {
+    const next = view()
+    expect(pageView(null, next)).toBe(next)
+    expect(pageView(next, null)).toBeNull()
   })
 })
