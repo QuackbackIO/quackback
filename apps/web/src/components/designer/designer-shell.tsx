@@ -365,6 +365,7 @@ export function DesignerShell({
         sort={design.pages.feedback.defaultSort}
         live={draft.live}
         draft={design}
+        changes={draft.changes}
       />
     ),
   })

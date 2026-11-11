@@ -170,7 +170,7 @@ export function ChangeList({ changes }: { changes: DesignChange[] }) {
     <div className="space-y-3">
       {groups.map((group) => (
         <section key={group} aria-label={group} className="space-y-1">
-          <h3 className="text-xs font-medium text-muted-foreground">{group}</h3>
+          <h4 className="text-xs font-medium text-muted-foreground">{group}</h4>
           <ChangeRows
             changes={changes}
             shown={shown.filter((change) => changeGroup(change.path) === group)}
@@ -190,8 +190,11 @@ function ChangeRows({ changes, shown }: { changes: DesignChange[]; shown: Design
         const side = (which: 'before' | 'after') =>
           (slot && fontName(changes, slot, which)) ?? shownValue(change.path, change[which])
         return (
-          <li key={change.path} className="flex items-center gap-3 px-3 py-2 text-ui">
-            <span className="w-36 shrink-0 font-medium">{changeLabel(change.path)}</span>
+          <li
+            key={change.path}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-ui"
+          >
+            <span className="w-40 shrink-0">{changeLabel(change.path)}</span>
             <ChangeValue value={side('before')} />
             <span aria-hidden="true" className="text-muted-foreground">
               →

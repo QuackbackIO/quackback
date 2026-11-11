@@ -28,13 +28,26 @@ export function opensFullReview(changes: number, failingChecks: number): boolean
   return changes > FULL_REVIEW_OVER || failingChecks > 0
 }
 
-/** Why the full review opened in place of the summary, read out as it opens. */
-export function fullReviewReason(count: number, failing: number): string {
-  if (failing > 0)
-    return failing === 1
-      ? 'A check needs a look before you publish, so here is everything.'
-      : `${failing} checks need a look before you publish, so here is everything.`
-  return `${count} changes is a lot to sum up, so here is everything.`
+/**
+ * Why the full review opened in place of the summary, said first: a check
+ * that needs a look. A long draft needs no reason; the title counts it.
+ */
+export function fullReviewReason(failing: number): string | undefined {
+  if (failing <= 0) return undefined
+  return failing === 1
+    ? 'A check needs a look before you publish.'
+    : `${failing} checks need a look before you publish.`
+}
+
+/**
+ * Whether a draft's changes reach what visitors get beyond the portal: the
+ * sign-in email and a shared link's preview, drawn from the brand's colours,
+ * logo, title, fonts and share image.
+ */
+export function reachesVisitorExtras(changes: readonly DesignChange[]): boolean {
+  return changes.some((change) =>
+    /^brand(\.(light|dark|logo|fonts|shareImage)\b|$)/.test(change.path)
+  )
 }
 
 export interface SummaryRow {

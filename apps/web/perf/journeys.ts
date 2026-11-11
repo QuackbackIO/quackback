@@ -1455,5 +1455,95 @@ journeys.push(
       await canvasReady(page)
     },
     teardown: builderTeardown,
+  },
+  {
+    // The full review from Publish's See everything, until the After frame shows the
+    // draft: drawn by the server with it, so nothing waits on the frame's code.
+    kind: 'browser',
+    name: 'ui:builder-review-open',
+    as: 'admin',
+    interaction: true,
+    setup: (page) => reviewSetup(page),
+    run: (page) => openReview(page),
+    teardown: builderTeardown,
+  },
+  {
+    // Feedback, then Roadmap, in the review: both frames go there in place, so
+    // switching pages loads no document, only what the page itself reads.
+    kind: 'browser',
+    name: 'ui:builder-review-switch-page',
+    as: 'admin',
+    interaction: true,
+    setup: async (page) => {
+      await reviewSetup(page)
+      await openReview(page)
+      // Both frames have taken the design posted in after they loaded, so its redraw
+      // is not counted in the switch.
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll<HTMLIFrameElement>('figure[data-side] iframe')].every(
+          (each) => !!each.contentDocument?.querySelector('style[data-preview-design]')
+        )
+      )
+    },
+    run: async (page) => {
+      for (const name of ['Feedback', 'Roadmap']) {
+        await review(page)
+          .getByRole('button', { name: new RegExp(`^${name}`) })
+          .click()
+        await afterFrameShows(page, name)
+      }
+    },
+    teardown: builderTeardown,
   }
 )
+
+/** The full review, while it is open. */
+const review = (page: Page) => page.getByRole('dialog', { name: /^Review/ })
+
+/** Where each page of the review is, inside its frames, and what shows once its content is in. */
+const REVIEW_PAGES: Record<string, { path: string; content: string }> = {
+  Home: { path: '/', content: '[data-qb-section]' },
+  Feedback: { path: '/feedback', content: '[data-post-id]' },
+  Roadmap: { path: '/roadmap', content: '[data-qb-post]' },
+}
+
+/**
+ * Until the review's After frame shows `name` drawn with the draft, its skeleton
+ * gone, and both frames show that page with its content in (the feed's posts,
+ * the roadmap's cards), so a run never ends before a list has drawn.
+ */
+async function afterFrameShows(page: Page, name: string) {
+  const frame = review(page).locator(`iframe[title^="After you publish, ${name},"]`)
+  await frame.waitFor()
+  await review(page)
+    .locator('figure[data-side="after"] [data-canvas-box][aria-busy="false"]')
+    .waitFor()
+  await page.waitForFunction(
+    ({ path, content }) =>
+      [
+        ...document.querySelectorAll<HTMLIFrameElement>(
+          'figure[data-side] iframe:not([title^="Widget"])'
+        ),
+      ].every(
+        (each) =>
+          each.contentWindow?.location.pathname === path &&
+          !!each.contentDocument?.querySelector(content)
+      ),
+    REVIEW_PAGES[name]!
+  )
+}
+
+/** One change saved, and Publish's summary open on it. */
+async function reviewSetup(page: Page) {
+  await builderSetup(page)
+  await pickHeadline(page)
+  await untilDraftSaved(page, () => tile(page, 'Scale', 'Large').click())
+  await topBar(page).getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.getByRole('dialog', { name: /Publish 1 change/ }).waitFor()
+}
+
+/** See everything, until the After frame shows the page being designed with the draft. */
+async function openReview(page: Page) {
+  await page.getByRole('button', { name: 'See everything' }).click()
+  await afterFrameShows(page, 'Home')
+}

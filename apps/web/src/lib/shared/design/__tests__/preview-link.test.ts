@@ -22,11 +22,16 @@ describe('what the root context asks for', () => {
     })
   })
 
-  it('asks for the switch preview, or for nothing more', () => {
+  it('asks for the switch preview, the saved draft, or for nothing more', () => {
     expect(rootContextRequest({ design: 'switch' })).toEqual({
       data: { designPreview: 'switch' },
       key: 'switch',
     })
+    expect(rootContextRequest({ design: 'draft' })).toEqual({
+      data: { designPreview: 'draft' },
+      key: 'draft',
+    })
+    expect(rootContextRequest({ design: 'published' })).toEqual({ data: undefined, key: '' })
     expect(rootContextRequest({ share: 'nonsense' })).toEqual({ data: undefined, key: '' })
     expect(rootContextRequest({})).toEqual({ data: undefined, key: '' })
   })

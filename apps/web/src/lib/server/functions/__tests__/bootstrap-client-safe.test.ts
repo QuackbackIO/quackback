@@ -12,6 +12,7 @@ const hoisted = vi.hoisted(() => ({
   getWorkspaceSettings: vi.fn(),
   getOptionalAuth: vi.fn(),
   switchPreviewView: vi.fn(),
+  draftPreviewView: vi.fn(),
   sharedPreviewView: vi.fn(),
   handlers: [] as Array<(input: { data: unknown }) => Promise<unknown>>,
   validate: (data: unknown) => data,
@@ -38,6 +39,9 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 }))
 vi.mock('@/lib/server/domains/design/switch', () => ({
   switchPreviewView: hoisted.switchPreviewView,
+}))
+vi.mock('@/lib/server/domains/design/draft-preview', () => ({
+  draftPreviewView: hoisted.draftPreviewView,
 }))
 vi.mock('@/lib/server/domains/design/preview-links', () => ({
   sharedPreviewView: hoisted.sharedPreviewView,
@@ -234,6 +238,55 @@ describe('the switch preview frame', () => {
     hoisted.switchPreviewView.mockResolvedValue(null)
     expect(
       (await getBootstrapData({ designPreview: 'switch' })).settings?.portalDesign
+    ).toBeUndefined()
+  })
+})
+
+describe('the publish review’s After frame', () => {
+  const drafted = { engine: 'v2', attributes: { 'data-qb-draft': '' } }
+  const editor = { scope: 'dashboard', permissions: ['settings.branding'] }
+  const onDesign = () => {
+    const settings = workspaceSettings(setupState())
+    return { ...settings, featureFlags: { ...settings.featureFlags, portalDesignV2: true } }
+  }
+
+  beforeEach(() => {
+    hoisted.getWorkspaceSettings.mockReset()
+    hoisted.getWorkspaceSettings.mockResolvedValue(onDesign())
+    hoisted.getOptionalAuth.mockReset()
+    hoisted.draftPreviewView.mockReset()
+    hoisted.draftPreviewView.mockResolvedValue(drafted)
+  })
+
+  it('draws the portal with the saved draft for someone who can edit its branding', async () => {
+    hoisted.getOptionalAuth.mockResolvedValue(editor)
+    const data = await getBootstrapData({ designPreview: 'draft' })
+    expect(data.settings?.portalDesign).toEqual(drafted)
+    expect(hoisted.switchPreviewView).not.toHaveBeenCalled()
+  })
+
+  it('draws it as it is for anyone else, with the design off, or with no draft', async () => {
+    hoisted.getOptionalAuth.mockResolvedValue(null)
+    expect(
+      (await getBootstrapData({ designPreview: 'draft' })).settings?.portalDesign
+    ).toBeUndefined()
+    hoisted.getOptionalAuth.mockResolvedValue({ ...editor, permissions: ['posts.read'] })
+    expect(
+      (await getBootstrapData({ designPreview: 'draft' })).settings?.portalDesign
+    ).toBeUndefined()
+    expect(hoisted.draftPreviewView).not.toHaveBeenCalled()
+
+    hoisted.getOptionalAuth.mockResolvedValue(editor)
+    hoisted.getWorkspaceSettings.mockResolvedValue(workspaceSettings(setupState()))
+    expect(
+      (await getBootstrapData({ designPreview: 'draft' })).settings?.portalDesign
+    ).toBeUndefined()
+    expect(hoisted.draftPreviewView).not.toHaveBeenCalled()
+
+    hoisted.getWorkspaceSettings.mockResolvedValue(onDesign())
+    hoisted.draftPreviewView.mockResolvedValue(null)
+    expect(
+      (await getBootstrapData({ designPreview: 'draft' })).settings?.portalDesign
     ).toBeUndefined()
   })
 })

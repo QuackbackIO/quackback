@@ -10,8 +10,16 @@ import { samplePath, type SamplePage } from './sample-pages'
 import type { PortalDesign } from './schema'
 
 /**
+ * Set on a frame's `<html>` when the server drew its page with the saved
+ * draft (`draft` below), so a review frame shows it at once rather than
+ * waiting until the draft is posted in.
+ */
+export const DRAFT_DRAWN_ATTRIBUTE = 'data-qb-draft'
+
+/**
  * The address the canvas loads: the page as a preview, in the theme and
- * language asked for, signed in or out; or the page's sample.
+ * language asked for, signed in or out; or the page's sample. With `draft`,
+ * the server draws the page with the saved draft, for the publish review.
  */
 export function canvasSrc({
   page,
@@ -21,6 +29,7 @@ export function canvasSrc({
   postPath = null,
   visitor = 'in',
   sample = null,
+  draft = false,
 }: {
   page: DesignerPage
   theme: 'light' | 'dark'
@@ -31,8 +40,11 @@ export function canvasSrc({
   visitor?: CanvasVisitor
   /** The page drawn from sample content instead. */
   sample?: SamplePage | null
+  /** Drawn by the server with the saved draft, not the published design. */
+  draft?: boolean
 }): string {
   const search = new URLSearchParams({ theme, preview: 'true', lang: locale, designer: '1' })
+  if (draft) search.set('design', 'draft')
   // A sample is served to the designer alone, so it is drawn for them as themselves.
   if (sample) return `${samplePath(sample)}?${search}`
   // The root shows Home whatever the saved design leads with.

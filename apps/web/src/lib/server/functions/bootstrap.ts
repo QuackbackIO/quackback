@@ -196,12 +196,16 @@ function clientSafeSettings(settings: WorkspaceSettings): WorkspaceSettings {
 }
 
 /**
- * The settings with the portal drawn as it would be after switching to the
- * design, for the preview frame Settings › Portal shows beside today's. Only
- * for someone who can edit the portal's branding; anyone else, or a portal
- * with nothing to switch, gets the settings unchanged.
+ * The settings with the portal drawn with another design: as it would be
+ * after switching to the design engine (the preview frame Settings › Portal
+ * shows beside today's), or with the saved draft (the publish review's After
+ * frame). Only for someone who can edit the portal's branding; anyone else,
+ * or a portal with nothing to show, gets the settings unchanged.
  */
-async function withSwitchPreview(settings: WorkspaceSettings): Promise<WorkspaceSettings> {
+async function withDesignPreview(
+  settings: WorkspaceSettings,
+  which: 'switch' | 'draft'
+): Promise<WorkspaceSettings> {
   const [{ getOptionalAuth }, { PERMISSIONS }] = await Promise.all([
     import('./auth-helpers'),
     import('@/lib/shared/permissions'),
@@ -209,6 +213,12 @@ async function withSwitchPreview(settings: WorkspaceSettings): Promise<Workspace
   const auth = await getOptionalAuth()
   if (auth?.scope !== 'dashboard' || !auth.permissions.includes(PERMISSIONS.SETTINGS_BRANDING)) {
     return settings
+  }
+  if (which === 'draft') {
+    if (!settings.featureFlags?.portalDesignV2) return settings
+    const { draftPreviewView } = await import('@/lib/server/domains/design/draft-preview')
+    const view = await draftPreviewView()
+    return view ? { ...settings, portalDesign: view } : settings
   }
   const { switchPreviewView } = await import('@/lib/server/domains/design/switch')
   const view = await switchPreviewView()
@@ -235,15 +245,20 @@ async function withSharedPreview(
 
 /** What a page asks the bootstrap for beyond the defaults. */
 export interface BootstrapOptions {
-  /** `switch`: draw the portal as it would look switched to the design. */
-  designPreview?: 'switch'
+  /**
+   * `switch`: draw the portal as it would look switched to the design.
+   * `draft`: draw it with the saved draft, so the publish review's After
+   * frame shows the draft from its first paint.
+   */
+  designPreview?: 'switch' | 'draft'
   /** A shared preview link's token: draw the portal with the design it holds. */
   previewToken?: string
 }
 
 function bootstrapOptions(data: unknown): BootstrapOptions {
   const options = (data ?? {}) as Record<string, unknown>
-  if (options.designPreview === 'switch') return { designPreview: 'switch' }
+  if (options.designPreview === 'switch' || options.designPreview === 'draft')
+    return { designPreview: options.designPreview }
   if (isPreviewToken(options.previewToken)) return { previewToken: options.previewToken }
   return {}
 }
@@ -367,8 +382,8 @@ const getBootstrapDataInternal = createServerOnlyFn(
       baseUrl,
       session,
       settings:
-        shown.settings && options.designPreview === 'switch'
-          ? await withSwitchPreview(shown.settings)
+        shown.settings && options.designPreview
+          ? await withDesignPreview(shown.settings, options.designPreview)
           : shown.settings,
       sharedPreview: shown.sharedPreview,
       onboarding: {

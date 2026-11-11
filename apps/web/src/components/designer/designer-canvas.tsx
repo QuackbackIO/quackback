@@ -3,7 +3,7 @@ import { usePreviewPosting } from '@/components/admin/settings/branding/use-prev
 import type { PortalPreviewProps } from '@/components/admin/settings/branding/portal-preview'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
 import { PAGE_NAMES, type DesignerPage } from '@/lib/shared/design/outline'
-import { canvasSrc } from '@/lib/shared/design/canvas-src'
+import { canvasSrc, DRAFT_DRAWN_ATTRIBUTE } from '@/lib/shared/design/canvas-src'
 import { PREVIEW_NAVIGATE, PREVIEW_THEME } from '@/components/public/preview-draft-context'
 
 export { canvasSrc }
@@ -157,6 +157,8 @@ export function DesignerCanvas({
   skeleton,
   untilDrawn = false,
   inPlace = false,
+  draft = false,
+  still = false,
 }: {
   page: DesignerPage
   /** The item the page shows, such as the post on the post page. */
@@ -218,6 +220,13 @@ export function DesignerCanvas({
    * loading the frame afresh, so its code and the draft drawn in it stay warm.
    */
   inPlace?: boolean
+  /**
+   * Loads the page drawn by the server with the saved draft, so it shows the
+   * draft from its first paint: the publish review's After frame.
+   */
+  draft?: boolean
+  /** A picture, not a page to use: the page inside shows no scrollbar. */
+  still?: boolean
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   // The frame element itself, for the layer: a new one each time the page loads afresh.
@@ -402,9 +411,9 @@ export function DesignerCanvas({
   const width = CANVAS_WIDTHS[size]
   const phoneMode = size === 'phone' && !trying
   const { scale, height, outer, room: drawn } = frameBox(room, width, zoom)
-  const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample })
+  const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample, draft })
   // What the frame shows, by its address in light: its page is ready once it says so.
-  const key = `${canvasSrc({ page, theme: 'light', locale, sort, postPath, visitor, sample })}:${refreshKey}:${trying}`
+  const key = `${canvasSrc({ page, theme: 'light', locale, sort, postPath, visitor, sample, draft })}:${refreshKey}:${trying}`
   // The document it shows that in. In place, another language or visitor, a sample, Preview or
   // a new refresh key loads the frame afresh, and another page or item is gone to in the page
   // itself; else every page loads afresh. Light or dark is sent to the page, which keeps the
@@ -460,8 +469,15 @@ export function DesignerCanvas({
           // Leaving Preview loads the page afresh, back where the builder is.
           key={doc}
           ref={frameRef}
-          onLoad={() => {
+          onLoad={(event) => {
             setLoadedKey(key)
+            // The server drew this page with the draft: it is ready as it is, with nothing
+            // to wait for. (A page gone to in place since says so when it gets there.)
+            const root = event.currentTarget.contentDocument?.documentElement
+            if (untilDrawn && docKey.current === key && root?.hasAttribute(DRAFT_DRAWN_ATTRIBUTE)) {
+              setReadyKey(key)
+              setDrawnKey(key)
+            }
             onLoad?.()
           }}
           src={frameSrc}
@@ -478,6 +494,8 @@ export function DesignerCanvas({
           // The page's own links and fields are not stops on the way to the settings;
           // its parts are reached from the outline. In Preview, they are the page.
           tabIndex={trying ? 0 : -1}
+          // A picture's page shows no scrollbar of its own.
+          scrolling={still ? 'no' : undefined}
           // The designer's own canvas, which its checks measure; not a review's frames.
           data-designer-canvas={name ? undefined : ''}
           className="border-0 bg-background"

@@ -63,7 +63,7 @@ export function usePublishFlow({
   }
   const start = async () => {
     if (!draft.canPublish || opensFullReview(count, failingChecks))
-      return openFull(draft.canPublish ? fullReviewReason(count, failingChecks) : undefined)
+      return openFull(draft.canPublish ? fullReviewReason(failingChecks) : undefined)
     setStep('summary')
   }
   const publish = async (
@@ -136,6 +136,7 @@ export function usePublishFlow({
           onOpenChange={(open) => !open && setStep(null)}
           changes={shown.changes}
           menu={shown.summary.menu}
+          summary={[...shown.summary.look, ...shown.summary.overrides]}
           report={shown.report}
           newLogo={shown.newLogo}
           reason={reason}

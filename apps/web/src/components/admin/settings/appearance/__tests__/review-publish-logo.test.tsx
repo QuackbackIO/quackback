@@ -31,7 +31,7 @@ describe('the workspace logo choice at publish', () => {
   it('is not offered when the portal logo is unchanged', async () => {
     const onPublish = show(false)
     expect(screen.queryByLabelText(LABEL)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Publish/ }))
     await waitFor(() => expect(onPublish).toHaveBeenCalledWith(undefined, { workspaceLogo: false }))
   })
 
@@ -40,7 +40,7 @@ describe('the workspace logo choice at publish', () => {
     const box = screen.getByLabelText(LABEL)
     expect(box.getAttribute('aria-checked')).toBe('false')
     fireEvent.click(box)
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Publish/ }))
     await waitFor(() => expect(onPublish).toHaveBeenCalledWith(undefined, { workspaceLogo: true }))
   })
 })

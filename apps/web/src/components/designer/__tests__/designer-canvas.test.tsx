@@ -5,7 +5,7 @@
  * words and undo keys from its own frame only.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { canvasScale, canvasSrc, DesignerCanvas, frameBox, frameDocument } from '../designer-canvas'
 
 afterEach(cleanup)
@@ -409,6 +409,44 @@ describe('DesignerCanvas', () => {
     expect(covered()).toBe(true)
     send({ type: 'quackback:preview-drawn' }, frame)
     expect(covered()).toBe(false)
+  })
+
+  /** Loads the frame's page, its `<html>` marked as the server drew it, or not. */
+  function load(drawnWithDraft: boolean) {
+    const iframe = screen.getByTitle(/^Feedback, phone/) as HTMLIFrameElement
+    const root = document.createElement('html')
+    if (drawnWithDraft) root.setAttribute('data-qb-draft', '')
+    Object.defineProperty(iframe, 'contentDocument', {
+      configurable: true,
+      get: () => ({ documentElement: root }),
+    })
+    act(() => {
+      fireEvent.load(iframe)
+    })
+  }
+
+  it('shows a page the server drew with the draft as soon as it loads, with nothing to wait for', () => {
+    show(false, { skeleton: <p>Loading shapes</p>, untilDrawn: true, draft: true })
+    const iframe = screen.getByTitle(/^Feedback, phone/) as HTMLIFrameElement
+    expect(new URL(iframe.src, 'http://x').searchParams.get('design')).toBe('draft')
+    expect(covered()).toBe(true)
+    load(true)
+    expect(covered()).toBe(false)
+    expect(document.querySelector('[data-canvas-box]')!.getAttribute('aria-busy')).toBe('false')
+  })
+
+  it('keeps the skeleton over a page that loaded with the published design', () => {
+    show(false, { skeleton: <p>Loading shapes</p>, untilDrawn: true, draft: true })
+    load(false)
+    expect(covered()).toBe(true)
+  })
+
+  it('shows no scrollbar inside a frame that is a picture', () => {
+    show(false, { still: true })
+    expect(screen.getByTitle(/^Feedback, phone/).getAttribute('scrolling')).toBe('no')
+    cleanup()
+    show()
+    expect(screen.getByTitle(/^Feedback, phone/).hasAttribute('scrolling')).toBe(false)
   })
 
   it('offers no Try it of its own', () => {
