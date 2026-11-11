@@ -1353,6 +1353,26 @@
       "htmlTransferKB": 0,
       "componentRenders": 1213,
       "canvasPosts": 1
+    },
+    "ui:builder-review-open": {
+      "dbQueries": 92,
+      "serverRequests": 10,
+      "requests": 298,
+      "jsRequests": 282,
+      "jsKB": 1201.3,
+      "htmlTransferKB": 0,
+      "componentRenders": 1118,
+      "canvasPosts": 18
+    },
+    "ui:builder-review-switch-page": {
+      "dbQueries": 38,
+      "serverRequests": 4,
+      "requests": 90,
+      "jsRequests": 86,
+      "jsKB": 102.6,
+      "htmlTransferKB": 0,
+      "componentRenders": 2825,
+      "canvasPosts": 4
     }
   },
   "$comment": "Ceilings for bun perf/bench.ts. Lowered with --update whenever a journey comes in under; raised only with --update --allow-increase, which a reviewer should question."

@@ -1455,5 +1455,64 @@ journeys.push(
       await canvasReady(page)
     },
     teardown: builderTeardown,
+  },
+  {
+    // The full review from Publish's See everything, until the After frame shows the
+    // draft: drawn by the server with it, so nothing waits on the frame's code.
+    kind: 'browser',
+    name: 'ui:builder-review-open',
+    as: 'admin',
+    interaction: true,
+    setup: (page) => reviewSetup(page),
+    run: (page) => openReview(page),
+    teardown: builderTeardown,
+  },
+  {
+    // Feedback, then Roadmap, in the review: both frames go there in place, so
+    // switching pages loads no document, only what the page itself reads.
+    kind: 'browser',
+    name: 'ui:builder-review-switch-page',
+    as: 'admin',
+    interaction: true,
+    setup: async (page) => {
+      await reviewSetup(page)
+      await openReview(page)
+    },
+    run: async (page) => {
+      for (const name of ['Feedback', 'Roadmap']) {
+        await review(page)
+          .getByRole('button', { name: new RegExp(`^${name}`) })
+          .click()
+        await afterFrameShows(page, name)
+      }
+    },
+    teardown: builderTeardown,
   }
 )
+
+/** The full review, while it is open. */
+const review = (page: Page) => page.getByRole('dialog', { name: /^Review/ })
+
+/** Until the review's After frame shows `name` drawn with the draft, its skeleton gone. */
+async function afterFrameShows(page: Page, name: string) {
+  const frame = review(page).locator(`iframe[title^="After you publish, ${name},"]`)
+  await frame.waitFor()
+  await review(page)
+    .locator('figure[data-side="after"] [data-canvas-box][aria-busy="false"]')
+    .waitFor()
+}
+
+/** One change saved, and Publish's summary open on it. */
+async function reviewSetup(page: Page) {
+  await builderSetup(page)
+  await pickHeadline(page)
+  await untilDraftSaved(page, () => tile(page, 'Scale', 'Large').click())
+  await topBar(page).getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.getByRole('dialog', { name: /Publish 1 change/ }).waitFor()
+}
+
+/** See everything, until the After frame shows the page being designed with the draft. */
+async function openReview(page: Page) {
+  await page.getByRole('button', { name: 'See everything' }).click()
+  await afterFrameShows(page, 'Home')
+}
