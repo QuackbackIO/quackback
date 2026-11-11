@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQueries, type QueryObserverResult } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import type { BlockSources } from './block-settings-panel'
@@ -42,16 +42,41 @@ export function blockSources({
 }
 
 /**
+ * The four lists, once every one of them has settled; until then, none. They
+ * load as four requests that land at different moments, and each landing
+ * would draw the whole picked block's panel again, so they arrive as one.
+ */
+export function settledSources(
+  results: ReadonlyArray<Pick<QueryObserverResult, 'data' | 'isPending'>>
+): { roadmaps?: unknown; boards?: unknown; categories?: unknown; statuses?: unknown } {
+  if (results.some((result) => result.isPending)) return {}
+  const [roadmaps, boards, categories, statuses] = results.map((result) => result.data)
+  return { roadmaps, boards, categories, statuses }
+}
+
+/**
  * The workspace's roadmaps, boards, help topics and statuses, for the picked
  * block's settings, and the shipped statuses, for Top posts' "Recently shipped".
  */
 export function useBlockSources(
   roadmapId: string | null = null
 ): Required<BlockSources> & { shipped?: readonly string[] } {
-  const { data: roadmaps } = useQuery(adminQueries.roadmaps())
-  const { data: boards } = useQuery(adminQueries.boardsForSettings())
-  const { data: categories } = useQuery(publicHelpCenterQueries.categories())
-  const { data: statuses } = useQuery(adminQueries.statuses())
+  // The combined value keeps its identity until it changes, and a change to
+  // it alone draws again (TanStack Query compares it deeply).
+  const { roadmaps, boards, categories, statuses } = useQueries({
+    queries: [
+      adminQueries.roadmaps(),
+      adminQueries.boardsForSettings(),
+      publicHelpCenterQueries.categories(),
+      adminQueries.statuses(),
+    ],
+    combine: settledSources,
+  }) as {
+    roadmaps?: Parameters<typeof blockSources>[0]['roadmaps']
+    boards?: Parameters<typeof blockSources>[0]['boards']
+    categories?: Parameters<typeof blockSources>[0]['categories']
+    statuses?: ReadonlyArray<Named & { category: string }>
+  }
   return useMemo(
     () => ({
       ...blockSources({ roadmaps, boards, categories, statuses, roadmapId }),
