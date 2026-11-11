@@ -10,6 +10,8 @@ import {
   CLIENT_REQUESTED_SCOPE_PARAM,
   clientRequestedFromConsentSearch,
   consentGrantScope,
+  consentPreset,
+  consentPresetLevels,
   defaultSelectedScopes,
   expandAuthorizeScopes,
   hasCapabilityGrant,
@@ -37,21 +39,40 @@ describe('ACCESS_DOMAINS', () => {
 })
 
 describe('defaultSelectedScopes', () => {
-  it('prefills the MCP first-connect reads and leaves writes off', () => {
-    const selected = defaultSelectedScopes([...MCP_FIRST_CONNECT_SCOPES])
-    expect(selected).toEqual([...MCP_FIRST_CONNECT_SCOPES])
-    expect(selected).not.toContain('write:feedback')
-    expect(selected).not.toContain('offline_access')
-    expect(domainAccessLevels(selected)).toEqual({
-      feedback: 'read',
-      changelog: 'off',
-      article: 'read',
-      chat: 'read',
-      settings: 'read',
-    })
+  const full = {
+    feedback: 'read_write',
+    changelog: 'write',
+    article: 'read_write',
+    chat: 'read_write',
+    settings: 'read_write',
+  }
+
+  it('defaults a connect that asked for every capability to full access', () => {
+    const selected = defaultSelectedScopes([...API_KEY_SCOPES, 'offline_access'])
+    expect(domainAccessLevels(selected)).toEqual(full)
+    expect(selected).toContain('offline_access')
   })
 
-  it('turns on a step-up write the client asked for without forcing the others', () => {
+  it('defaults a reads-only request to full access too', () => {
+    // A client that cached the older reads-only challenge, or reads RFC 9728
+    // `scopes_supported`, still gets a connection that can write.
+    const selected = defaultSelectedScopes([...MCP_FIRST_CONNECT_SCOPES])
+    expect(domainAccessLevels(selected)).toEqual(full)
+    expect(selected).not.toContain('offline_access')
+  })
+
+  it('defaults a request that names no capability to full access', () => {
+    expect(domainAccessLevels(defaultSelectedScopes(['openid']))).toEqual(full)
+  })
+
+  it('does not widen a request for only some reads to writes', () => {
+    // A client that asks for one area is asking for less on purpose.
+    const selected = defaultSelectedScopes(['openid', 'read:feedback'])
+    expect(selected.filter((scope) => scope.startsWith('write:'))).toEqual([])
+    expect(consentPreset(domainAccessLevels(selected))).toBe('read')
+  })
+
+  it('keeps a request for some writes to the reads plus those writes', () => {
     const selected = defaultSelectedScopes([
       ...MCP_FIRST_CONNECT_SCOPES,
       'write:feedback',
@@ -60,7 +81,27 @@ describe('defaultSelectedScopes', () => {
     expect(selected).toContain('write:feedback')
     expect(selected).toContain('offline_access')
     expect(selected).not.toContain('write:chat')
-    expect(domainAccessLevels(selected).feedback).toBe('read_write')
+    expect(domainAccessLevels(selected)).toEqual({
+      feedback: 'read_write',
+      changelog: 'off',
+      article: 'read',
+      chat: 'read',
+      settings: 'read',
+    })
+  })
+})
+
+describe('consent presets', () => {
+  it('full access is every capability and read only is every read', () => {
+    expect(consentPresetLevels('full')).toEqual(domainAccessLevels(API_KEY_SCOPES))
+    expect(consentPresetLevels('read')).toEqual(domainAccessLevels(MCP_FIRST_CONNECT_SCOPES))
+  })
+
+  it('names the choice a selection amounts to', () => {
+    expect(consentPreset(consentPresetLevels('full'))).toBe('full')
+    expect(consentPreset(consentPresetLevels('read'))).toBe('read')
+    expect(consentPreset({ ...consentPresetLevels('full'), settings: 'read' })).toBe('custom')
+    expect(consentPreset({ ...consentPresetLevels('read'), changelog: 'write' })).toBe('custom')
   })
 })
 
