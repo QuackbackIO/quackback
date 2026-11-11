@@ -13,10 +13,21 @@
  * carries none of it.
  */
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
+import { toast } from 'sonner'
 import type { DesignAiTurn } from '@/components/admin/settings/appearance/use-design-ai'
-import { trackBuilder } from '@/lib/client/builder-events'
-import type { LookVariantId } from '@/lib/shared/design/look-variants'
-import { LOOK_NAMES } from '@/lib/shared/design/compare-looks'
+import { designerLookChosen, trackBuilder } from '@/lib/client/builder-events'
+import type { DesignValue } from '@/lib/shared/design/apply-changes'
+import type { LookVariant, LookVariantId } from '@/lib/shared/design/look-variants'
+import {
+  LOOK_NAMES,
+  lookApplied,
+  lookStep,
+  switchedReply,
+  withVariant,
+  type LooksView,
+} from '@/lib/shared/design/compare-looks'
+import { designChanges } from '@/lib/shared/design/diff'
+import { replaceDesign } from '@/lib/shared/design/presets'
 import { lookOf, type DesignLook } from '@/lib/shared/design/looks'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { hasLook } from './look-picker'
@@ -158,4 +169,66 @@ export function useLooksAfterMatch(
     }),
     []
   )
+}
+
+/** Compare looks shown side by side or one at a time, counted. */
+export function looksViewChanged(view: LooksView): void {
+  trackBuilder('designer_looks_view_changed', { view })
+}
+
+/**
+ * Takes a look into the draft as one step: the step is counted as a look,
+ * kept so Theme can name it, said in a toast with Undo, and, opened from Ask
+ * AI or onboarding's match, said there too with the step's own Undo. False
+ * when the draft refused it.
+ */
+export function takeLook({
+  variant,
+  design,
+  from,
+  update,
+  undoStep,
+  record,
+}: {
+  variant: LookVariant
+  /** The draft as it is. */
+  design: PortalDesign
+  from: LooksFrom
+  update: (change: (draft: PortalDesign) => void, label?: string) => void
+  /** Undoes the step named, if it is still the last; false when it is not. */
+  undoStep: (label: string) => boolean
+  record?: (turn: DesignAiTurn) => void
+}): boolean {
+  const { id } = variant
+  const label = lookStep(id)
+  const made: { after?: PortalDesign } = {}
+  designerLookChosen('compare')
+  update((draft) => {
+    replaceDesign(draft, withVariant(draft, variant))
+    made.after = structuredClone(draft)
+  }, label)
+  const { after } = made
+  if (!after) return false
+  rememberApplied(id, after)
+  trackBuilder('designer_looks_applied', { look: id })
+  if (record && from !== 'theme')
+    record({
+      role: 'assistant',
+      text: switchedReply(id),
+      looks: true,
+      changes: designChanges(design, after).map((change) => ({
+        path: change.path,
+        before: (change.before ?? null) as DesignValue,
+        after: (change.after ?? null) as DesignValue,
+      })),
+    })
+  toast(lookApplied(id), {
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        if (undoStep(label)) trackBuilder('designer_looks_undone', { look: id })
+      },
+    },
+  })
+  return true
 }

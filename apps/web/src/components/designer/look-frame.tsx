@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { usePreviewPosting } from '@/components/admin/settings/branding/use-preview-posting'
-import { PREVIEW_THEME } from '@/components/public/preview-draft-context'
-import { canvasSrc } from '@/lib/shared/design/canvas-src'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
+import type { LooksKit } from './looks-kit'
 
 /** No structural draft: the frame draws everything from the design. */
 const NO_STRUCTURE = {}
@@ -17,6 +15,7 @@ const NO_STRUCTURE = {}
  * page. A click on the page picks the look, as a click on its card does.
  */
 export function LookFrame({
+  kit,
   name,
   design,
   width,
@@ -29,6 +28,7 @@ export function LookFrame({
   onScroll,
   frameRef,
 }: {
+  kit: Pick<LooksKit, 'usePreviewPosting' | 'PREVIEW_THEME' | 'canvasSrc'>
   /** What the frame is named, after its look. */
   name: string
   design: PortalDesign
@@ -54,6 +54,7 @@ export function LookFrame({
     },
     [frameRef]
   )
+  const { usePreviewPosting, PREVIEW_THEME, canvasSrc } = kit
   // Loaded once, in the theme it opened in: later themes are sent to the page.
   const [src] = useState(() =>
     canvasSrc({ page: 'home', theme, locale, sort: 'trending', visitor: 'out' })

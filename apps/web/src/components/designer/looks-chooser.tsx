@@ -6,47 +6,27 @@
  * pages, menu and words stay. Loaded only once it opens.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
 import { RectangleGroupIcon, ViewColumnsIcon } from '@heroicons/react/24/outline'
-import { onRadioKeys } from '@/components/admin/settings/appearance/radio-keys'
 import type { DesignAiTurn } from '@/components/admin/settings/appearance/use-design-ai'
 import { Button } from '@/components/ui/button'
-import { trackBuilder, designerLookChosen } from '@/lib/client/builder-events'
-import type { DesignValue } from '@/lib/shared/design/apply-changes'
-import {
-  LOOK_HINTS,
-  LOOK_NAMES,
-  LOOK_ORDER,
-  LOOK_WIDTHS,
-  lookApplied,
-  lookStep,
-  shownView,
-  switchedReply,
-  withVariant,
-  type LookDevice,
-  type LooksView,
-} from '@/lib/shared/design/compare-looks'
-import { designChanges } from '@/lib/shared/design/diff'
+import type { LookDevice, LookZoom, LooksView } from '@/lib/shared/design/compare-looks'
 import {
   currentVariant,
   lookVariants,
   type LookVariant,
   type LookVariantId,
 } from '@/lib/shared/design/look-variants'
-import { replaceDesign } from '@/lib/shared/design/presets'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
-import { useViewportWidth } from './ai-pane'
-import { canvasScale, type CanvasZoom } from './designer-canvas'
-import { DeviceToggle } from './designer-header'
 import { LookFrame } from './look-frame'
-import { lookBase, rememberApplied, type LooksFrom } from './looks-entry'
-import { ZoomControl } from './view-options'
+import type { LooksFrom } from './looks-entry'
+// Only types and the kit from the builder: an import of its modules would split them out.
+import type { LooksKit } from './looks-kit'
 
 type Update = (change: (draft: PortalDesign) => void, label?: string) => void
 
 /** The chooser's own zoom, kept while the builder is open, apart from the canvas's. */
-let keptZoom: CanvasZoom = 'fit'
+let keptZoom: LookZoom = 'fit'
 
 const GAP = 16
 
@@ -58,21 +38,8 @@ const VIEWS: Array<readonly [LooksView, string, typeof ViewColumnsIcon]> = [
 /** A preview box's size, measured. */
 type Box = { width: number; height: number }
 
-/**
- * The scale and laid-out height of a look's page in a box: side by side, the
- * page always fits the box's width; one at a time, the zoom asked for.
- */
-export function lookFrameSize(
-  box: Box,
-  width: number,
-  view: LooksView,
-  zoom: CanvasZoom
-): { scale: number; height: number } {
-  const scale = canvasScale(box.width, width, view === 'side' ? 'fit' : zoom)
-  return { scale, height: box.height > 0 ? box.height / scale : 800 }
-}
-
 export function LooksChooser({
+  kit,
   design,
   from,
   device,
@@ -84,6 +51,8 @@ export function LooksChooser({
   record,
   onClose,
 }: {
+  /** What it takes from the builder (see looks-kit.ts). */
+  kit: LooksKit
   /** The draft as it is. */
   design: PortalDesign
   from: LooksFrom
@@ -100,16 +69,25 @@ export function LooksChooser({
   record?: (turn: DesignAiTurn) => void
   onClose: () => void
 }) {
+  const {
+    DeviceToggle,
+    ZoomControl,
+    onRadioKeys,
+    LOOK_HINTS,
+    LOOK_NAMES,
+    LOOK_ORDER,
+    LOOK_WIDTHS,
+  } = kit
   // The design the looks are made from, as the chooser opens: the last brand match, else the draft.
-  const [base] = useState(() => lookBase(design))
+  const [base] = useState(() => kit.lookBase(design))
   const variants = useMemo(() => lookVariants(base), [base])
   const inUse = useMemo(() => currentVariant(design, base), [design, base])
   const [picked, setPicked] = useState<LookVariantId>(inUse ?? 'matched')
   const [asked, setAsked] = useState<LooksView>('side')
-  const viewport = useViewportWidth()
-  const view = shownView(asked, viewport)
-  const [zoom, setZoomState] = useState<CanvasZoom>(keptZoom)
-  const setZoom = (next: CanvasZoom) => {
+  const viewport = kit.useViewportWidth()
+  const view = kit.shownView(asked, viewport)
+  const [zoom, setZoomState] = useState<LookZoom>(keptZoom)
+  const setZoom = (next: LookZoom) => {
     keptZoom = next
     setZoomState(next)
   }
@@ -117,8 +95,8 @@ export function LooksChooser({
 
   // Each look as the draft would have it: its own pages, menu and words.
   const shown = useMemo(
-    () => variants.map((variant) => ({ ...variant, design: withVariant(design, variant) })),
-    [variants, design]
+    () => variants.map((variant) => ({ ...variant, design: kit.withVariant(design, variant) })),
+    [variants, design, kit]
   )
 
   // The preview boxes, measured; all three are one size.
@@ -200,7 +178,7 @@ export function LooksChooser({
   const showView = (next: LooksView) => {
     if (next === asked) return
     setAsked(next)
-    trackBuilder('designer_looks_view_changed', { view: next })
+    kit.looksViewChanged(next)
   }
   const viewLarger = (id: LookVariantId) => {
     setPicked(id)
@@ -210,44 +188,13 @@ export function LooksChooser({
   const apply = () => {
     const variant = variants.find((each) => each.id === picked)
     if (!variant || picked === inUse) return
-    const label = lookStep(picked)
-    const before = design
-    const made: { after?: PortalDesign } = {}
-    designerLookChosen('compare')
-    update((draft) => {
-      replaceDesign(draft, withVariant(draft, variant))
-      made.after = structuredClone(draft)
-    }, label)
-    const { after } = made
-    if (!after) return
-    const id = picked
-    rememberApplied(id, after)
-    trackBuilder('designer_looks_applied', { look: id })
-    if (record && from !== 'theme')
-      record({
-        role: 'assistant',
-        text: switchedReply(id),
-        looks: true,
-        changes: designChanges(before, after).map((change) => ({
-          path: change.path,
-          before: (change.before ?? null) as DesignValue,
-          after: (change.after ?? null) as DesignValue,
-        })),
-      })
-    toast(lookApplied(id), {
-      action: {
-        label: 'Undo',
-        onClick: () => {
-          if (undoStep(label)) trackBuilder('designer_looks_undone', { look: id })
-        },
-      },
-    })
-    onClose()
+    if (kit.takeLook({ variant, design, from, update, undoStep, ...(record && { record }) }))
+      onClose()
   }
 
   const frameTheme = (each: LookVariant) =>
     each.design.mode === 'auto' ? theme : each.design.mode === 'dark' ? 'dark' : 'light'
-  const { scale, height } = lookFrameSize(box, width, view, zoom)
+  const { scale, height } = kit.lookFrameSize(box, width, view, zoom)
   const one = view === 'one'
 
   return (
@@ -383,6 +330,7 @@ export function LooksChooser({
                   style={{ width: width * scale, height: height * scale }}
                 >
                   <LookFrame
+                    kit={kit}
                     name={LOOK_NAMES[each.id]}
                     design={each.design}
                     width={width}

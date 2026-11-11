@@ -55,6 +55,7 @@ import type { DesignerPage } from '@/lib/shared/design/outline'
 import type { TreeRow } from '@/lib/shared/design/page-tree'
 import { useCanvasDesign } from './look-preview'
 import { closeLooks, useLooksAfterMatch, useLooksOpen } from './looks-entry'
+import { LOOKS_KIT } from './looks-kit'
 import { MenuLayer } from './menu-layer'
 import { WordsLayer } from './words/words-layer'
 import { useCoach, useMenuCoach } from './menu-coach-mark'
@@ -162,6 +163,8 @@ export function DesignerShell({
   // Compare looks covers Ask AI and the canvas while open; a brand match keeps its base.
   const looksFrom = useLooksOpen()
   const looks = useLooksAfterMatch(ai.busy, ai.turns, draft.design)
+  // Leaving the builder leaves Compare looks closed for the next visit.
+  useEffect(() => closeLooks, [])
   const [now] = useState(() => new Date())
   // The frame takes the design whole and builds its view there, as the server does. It is
   // sent once a frame (see usePreviewPosting), so the builder draws each change only once.
@@ -523,6 +526,8 @@ export function DesignerShell({
             blocks.blockKeys(event, () => dialogs.show('keys'))
             if (event.key !== 'Escape' || event.defaultPrevented) return
             if ((event.target as Element).closest(OWNS_ESCAPE)) return
+            // While Compare looks is open, Escape anywhere in the builder closes it first.
+            if (looksOpen) return closeLooks()
             const step = escapeStep(panel.state, selection ?? picking.elementKey)
             if (step === 'close-sheet') panel.close()
             else if (step === 'up') {
@@ -789,6 +794,7 @@ export function DesignerShell({
             {looksOpen && looksFrom && (
               <Suspense fallback={<div aria-busy="true" className="min-w-0 flex-1" />}>
                 <LooksChooser
+                  kit={LOOKS_KIT}
                   design={design}
                   from={looksFrom}
                   device={size === 'phone' ? 'phone' : 'desktop'}

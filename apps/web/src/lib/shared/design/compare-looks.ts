@@ -51,8 +51,21 @@ export function shownView(asked: LooksView, viewport: number): LooksView {
   return viewport < SIDE_BY_SIDE_MIN ? 'one' : asked
 }
 
-/** The next look along from one, for the arrow keys: wraps at either end. */
-export function nextLook(from: LookVariantId, step: 1 | -1): LookVariantId {
-  const at = LOOK_ORDER.indexOf(from)
-  return LOOK_ORDER[(at + step + LOOK_ORDER.length) % LOOK_ORDER.length]!
+/** How a look is scaled one at a time: to fit, or at a set share of its true width. */
+export type LookZoom = 'fit' | 0.5 | 0.75 | 1
+
+/**
+ * The scale and laid-out height of a look's page in a box of a size: side by
+ * side, the page always fits the box's width, never above its true size; one
+ * at a time, the zoom asked for, as the canvas scales.
+ */
+export function lookFrameSize(
+  box: { width: number; height: number },
+  width: number,
+  view: LooksView,
+  zoom: LookZoom
+): { scale: number; height: number } {
+  const fit = view === 'side' || zoom === 'fit'
+  const scale = fit ? (box.width > 0 ? Math.min(1, box.width / width) : 1) : zoom
+  return { scale, height: box.height > 0 ? box.height / scale : 800 }
 }

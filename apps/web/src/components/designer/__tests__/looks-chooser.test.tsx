@@ -12,7 +12,8 @@ import { useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { lookVariants } from '@/lib/shared/design/look-variants'
-import { withVariant } from '@/lib/shared/design/compare-looks'
+import { lookFrameSize, withVariant } from '@/lib/shared/design/compare-looks'
+import { canvasScale } from '../designer-canvas'
 import { installInMemoryLocalStorage } from '@/test/local-storage'
 
 const toast = vi.hoisted(() => vi.fn())
@@ -22,7 +23,8 @@ vi.mock('@/lib/client/builder-events', () => events)
 
 installInMemoryLocalStorage()
 
-const { LooksChooser, lookFrameSize } = await import('../looks-chooser')
+const { LooksChooser } = await import('../looks-chooser')
+const { LOOKS_KIT } = await import('../looks-kit')
 const { rememberMatch } = await import('../looks-entry')
 
 let draft: PortalDesign
@@ -36,6 +38,7 @@ function Harness(props: Partial<Parameters<typeof LooksChooser>[0]>) {
   const [device, setDevice] = useState<'desktop' | 'phone'>('desktop')
   return (
     <LooksChooser
+      kit={LOOKS_KIT}
       design={draft}
       from="theme"
       device={device}
@@ -274,5 +277,13 @@ describe('lookFrameSize', () => {
     expect(lookFrameSize(box, 1024, 'one', 'fit')).toEqual({ scale: 0.5, height: 800 })
     // A phone narrower than its box is never drawn larger than true size.
     expect(lookFrameSize(box, 390, 'side', 'fit').scale).toBe(1)
+  })
+
+  it('scales one at a time as the canvas does', () => {
+    for (const zoom of ['fit', 0.5, 0.75, 1] as const)
+      for (const room of [0, 300, 1500])
+        expect(lookFrameSize({ width: room, height: 600 }, 1024, 'one', zoom).scale).toBe(
+          canvasScale(room, 1024, zoom)
+        )
   })
 })

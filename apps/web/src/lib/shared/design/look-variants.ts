@@ -5,8 +5,10 @@
  *
  * Three looks of one brand: Matched (the design as it is), Soft and Vivid.
  * Each keeps the brand's colours, fonts and words and changes the treatment.
+ * It imports types only: Compare looks loads it in its own chunk, where an
+ * import of a module the builder's first open also loads would split that
+ * module into a request of its own (see looks-kit.ts).
  */
-import { takeBandLook, bandLookOf } from './curated'
 import type { PortalDesign } from './schema'
 
 export type LookVariantId = 'matched' | 'soft' | 'vivid'
@@ -20,10 +22,10 @@ export interface LookVariant {
 function variantOf(design: PortalDesign, id: Exclude<LookVariantId, 'matched'>): PortalDesign {
   const next = structuredClone(design)
   if (id === 'soft') {
-    takeBandLook(next, 'tint')
+    next.layout.hero = 'tint'
     next.shape.corners = 'pill'
   } else {
-    takeBandLook(next, 'brand')
+    next.layout.hero = 'brand'
     next.shape.corners = 'subtle'
   }
   return next
@@ -42,7 +44,7 @@ export function lookVariants(design: PortalDesign): LookVariant[] {
 export function currentVariant(design: PortalDesign, base: PortalDesign): LookVariantId | null {
   for (const variant of lookVariants(base)) {
     if (
-      bandLookOf(variant.design) === bandLookOf(design) &&
+      variant.design.layout.hero === design.layout.hero &&
       variant.design.shape.corners === design.shape.corners
     )
       return variant.id
