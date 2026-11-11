@@ -16,7 +16,23 @@ describe('extractHttpErrorMessage', () => {
     ).toBe("You have used this month's AI budget")
   })
 
-  it('never shows the body of a 5xx', async () => {
+  it('reads a coded 5xx the server wrote on purpose', async () => {
+    expect(
+      await extractHttpErrorMessage(
+        json(
+          { error: { code: 'AI_NOT_CONFIGURED', message: 'The assistant is not configured' } },
+          503
+        )
+      )
+    ).toBe('The assistant is not configured')
+  })
+
+  it('never shows an unplanned 5xx', async () => {
+    expect(
+      await extractHttpErrorMessage(
+        json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } }, 500)
+      )
+    ).toBe(GENERIC_ERROR)
     // The server's own unhandled-error envelope, and a proxy's.
     expect(
       await extractHttpErrorMessage(
