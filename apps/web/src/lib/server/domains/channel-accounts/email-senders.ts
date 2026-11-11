@@ -8,6 +8,7 @@
  * default. Only the workspace scope is read or written here; the scope columns
  * are for per-team or per-site overrides later.
  */
+import { ValidationError } from '@/lib/shared/errors'
 import type { ChannelAccountId } from '@quackback/ids'
 import {
   db,
@@ -55,10 +56,9 @@ export async function getEmailSenders(): Promise<Map<EmailSenderSurface, EmailSe
 }
 
 /** Thrown for a choice the settings page should never send. Readable on purpose. */
-export class EmailSenderChoiceError extends Error {
+export class EmailSenderChoiceError extends ValidationError {
   constructor(message: string) {
-    super(message)
-    this.name = 'EmailSenderChoiceError'
+    super('EMAIL_SENDER_CHOICE_REFUSED', message)
   }
 }
 
