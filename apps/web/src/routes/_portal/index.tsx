@@ -61,6 +61,12 @@ export const Route = createFileRoute('/_portal/')({
   // The landing only chooses what to show, so it stays in the route module:
   // the page then loads one chunk, the feed's or Home's, as it did before.
   codeSplitGroupings: [['errorComponent'], ['notFoundComponent']],
+  // The loader serves the first draw. A filter or sort change, which keeps
+  // the visitor on the page, is the feed's own query: run again, the loader
+  // fetched the same page of posts a second time.
+  shouldReload: ({ cause }) => cause !== 'stay',
+  // Home asked for by the Appearance preview is another page, so it loads.
+  loaderDeps: ({ search }) => ({ page: search.page }),
   loader: async ({ context, location }) => {
     if (!context.settings) throw redirect({ to: '/onboarding' })
     const { settings, gates } = portalPathsOf(context)

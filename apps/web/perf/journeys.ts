@@ -417,6 +417,40 @@ export const journeys: Journey[] = [
     },
   },
   {
+    // A sort tab: the feed keeps its cards on screen while the new order loads.
+    kind: 'browser',
+    name: 'ui:portal-sort-new',
+    as: 'anon',
+    layoutShifts: true,
+    interaction: true,
+    setup: async (page) => {
+      await page.goto('/?sort=trending')
+      await firstPortalPost(page).waitFor()
+    },
+    run: async (page) => {
+      const listed = page.waitForResponse((res) => res.url().includes('/_serverFn/'))
+      await page.locator('button[aria-pressed]', { hasText: 'New' }).first().click()
+      await page.waitForURL(/sort=new/)
+      await listed
+      await page.locator('[aria-busy="false"]').first().waitFor()
+    },
+  },
+  {
+    // A visitor's first vote asks them to sign in: the dialog opens over the feed.
+    kind: 'browser',
+    name: 'ui:portal-vote-sign-in',
+    as: 'anon',
+    interaction: true,
+    setup: async (page) => {
+      await page.goto('/?sort=trending')
+      await firstPortalPost(page).waitFor()
+    },
+    run: async (page) => {
+      await page.locator('button[aria-label*="ote" i]').first().click()
+      await page.getByRole('dialog').waitFor()
+    },
+  },
+  {
     kind: 'browser',
     name: 'ui:widget-load',
     as: 'anon',
