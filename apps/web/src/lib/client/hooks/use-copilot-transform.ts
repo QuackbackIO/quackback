@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { toast } from 'sonner'
 import type { StreamChunk } from '@tanstack/ai'
 import { runAguiTurn, type AguiRunHandle } from '@/lib/client/utils/agui-run'
 import { GENERIC_ERROR } from '@/lib/client/utils/http-error'
@@ -9,6 +8,7 @@ import {
   type TransformKind,
   type TransformFinalPayload,
 } from '@/lib/shared/assistant/copilot-contract'
+import { toastError } from '@/lib/client/error-notice'
 
 /**
  * Shared streamed rewrite runner for Copilot answers and composer drafts, over
@@ -52,12 +52,12 @@ export function useCopilotTransform(item: InboxItemRef) {
               finalText = (c.result as TransformFinalPayload).text || null
             } else if (c.type === 'RUN_ERROR') {
               ok = false
-              toast.error((typeof c.message === 'string' && c.message) || GENERIC_ERROR)
+              toastError({ message: c.message }, GENERIC_ERROR)
             }
           },
           onError: (error) => {
             ok = false
-            toast.error(error.message || GENERIC_ERROR)
+            toastError(error, GENERIC_ERROR)
           },
         })
         activeRef.current = run

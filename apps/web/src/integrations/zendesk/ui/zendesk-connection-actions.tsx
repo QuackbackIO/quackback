@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useSearch } from '@tanstack/react-router'
-import { toast } from 'sonner'
 import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { getZendeskConnectUrl } from '@/integrations/zendesk/server/functions'
 import { useDeleteIntegration } from '@/lib/client/mutations'
+import { toastError } from '@/lib/client/error-notice'
 
 interface ZendeskConnectionActionsProps {
   integrationId?: string
@@ -60,7 +60,7 @@ export function ZendeskConnectionActions({
       window.location.href = url
     } catch (err) {
       console.error('Failed to get connect URL:', err)
-      toast.error(err instanceof Error ? err.message : "Couldn't start connection. Try again.")
+      toastError(err, "Couldn't start connection. Try again.")
       setConnecting(false)
     }
   }

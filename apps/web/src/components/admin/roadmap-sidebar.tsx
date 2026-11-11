@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import {
   MapIcon,
   EllipsisVerticalIcon,
@@ -37,6 +36,7 @@ import type { RoadmapView } from '@/lib/client/hooks/use-roadmaps-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { RoadmapBuilderForm, type RoadmapBuilderValue } from './roadmap-builder-form'
+import { toastError } from '@/lib/client/error-notice'
 
 interface RoadmapSidebarProps {
   selectedRoadmapId: string | null
@@ -81,7 +81,7 @@ export function RoadmapSidebar({
       setIsCreateDialogOpen(false)
       onSelectRoadmap(newRoadmap.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't create roadmap. Try again.")
+      toastError(error, "Couldn't create roadmap. Try again.")
     }
   }
 
@@ -96,7 +96,7 @@ export function RoadmapSidebar({
       setIsEditDialogOpen(false)
       setEditingRoadmap(null)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't update roadmap. Try again.")
+      toastError(error, "Couldn't update roadmap. Try again.")
     }
   }
 
@@ -111,7 +111,7 @@ export function RoadmapSidebar({
         onSelectRoadmap(roadmaps?.[0]?.id ?? null)
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't delete roadmap. Try again.")
+      toastError(error, "Couldn't delete roadmap. Try again.")
     }
   }
 
