@@ -1,4 +1,10 @@
-import { useEffect, useRef } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import {
   blockKey,
   locationOfPath,
@@ -30,6 +36,7 @@ import { CHIP_NAME, keepFocus } from './settings-focus'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { OverridePage } from '@/lib/shared/design/style-overrides'
 import type { StyleState } from '@/lib/shared/design/style-tokens'
+import { useSteadyHandlers } from './use-steady-handlers'
 
 /**
  * The editing layer over the canvas, drawn from where the frame's page puts
@@ -237,6 +244,34 @@ export function CanvasLayer({
   const block = picked?.startsWith('block-') ? picked : null
   const homeBlocks = (elements?.design ?? grid?.design)?.pages.home.blocks ?? []
   const placeAt = block ? homeBlocks.findIndex((each, i) => blockKey(each, i) === block) : -1
+  // The chip's and tags' handlers keep their identity, so they draw only when what they offer changes.
+  const steady = useSteadyHandlers({
+    duplicate: () => block && onDuplicate(block),
+    remove: () => block && onRemove(block),
+    up: () => block && onMove?.(block, -1),
+    down: () => block && onMove?.(block, 1),
+    settings: () => document.getElementById('designer-settings')?.focus(),
+    pickDown: down,
+    gripDown: (event: ReactPointerEvent) => gridEdit.start('move', event),
+    gripKey: (event: ReactKeyboardEvent) => {
+      if (gridEdit.step(event)) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    },
+    open: () => opens && onPage(opens.page, opens.item),
+    step,
+  })
+  const canUp = placeAt > 0
+  const canDown = placeAt >= 0 && placeAt < homeBlocks.length - 1
+  const moves = useMemo(
+    () => ({ up: canUp ? steady.up : null, down: canDown ? steady.down : null }),
+    [canUp, canDown, steady]
+  )
+  const grip = useMemo(
+    () => ({ onPointerDown: steady.gripDown, onKeyDown: steady.gripKey }),
+    [steady]
+  )
   const pickedRect = picked ? (rects[picked] ?? null) : null
   const menuRow = picked ? rects[MENU_ROW_KEY] : undefined
   const pointedRect =
@@ -261,31 +296,12 @@ export function CanvasLayer({
           : null
       }
       name={name}
-      onDuplicate={block ? () => onDuplicate(block) : undefined}
-      onRemove={block ? () => onRemove(block) : undefined}
-      onMove={
-        block && onMove && placeAt >= 0
-          ? {
-              up: placeAt > 0 ? () => onMove(block, -1) : null,
-              down: placeAt < homeBlocks.length - 1 ? () => onMove(block, 1) : null,
-            }
-          : undefined
-      }
-      onSettings={() => document.getElementById('designer-settings')?.focus()}
-      onDown={elements ? down : undefined}
-      grip={
-        gridEdit.on
-          ? {
-              onPointerDown: (event) => gridEdit.start('move', event),
-              onKeyDown: (event) => {
-                if (gridEdit.step(event)) {
-                  event.preventDefault()
-                  event.stopPropagation()
-                }
-              },
-            }
-          : undefined
-      }
+      onDuplicate={block ? steady.duplicate : undefined}
+      onRemove={block ? steady.remove : undefined}
+      onMove={block && onMove && placeAt >= 0 ? moves : undefined}
+      onSettings={steady.settings}
+      onDown={elements ? steady.pickDown : undefined}
+      grip={gridEdit.on ? grip : undefined}
     >
       {elements && (
         <ElementOutlines
@@ -297,16 +313,9 @@ export function CanvasLayer({
             elements.picked && !resizing ? (rects[elements.picked] ?? null) : null
           )}
           others={resizing ? [] : otherKeys.flatMap((key) => (rects[key] ? [rects[key]] : []))}
-          open={
-            opens
-              ? {
-                  label: `Open ${destinationName(opens)}`,
-                  onOpen: () => onPage(opens.page, opens.item),
-                }
-              : null
-          }
+          open={opens ? { label: `Open ${destinationName(opens)}`, onOpen: steady.open } : null}
           block={pickedRect}
-          onStep={step}
+          onStep={steady.step}
         />
       )}
       {composerWidth.on && composerWidth.box && (

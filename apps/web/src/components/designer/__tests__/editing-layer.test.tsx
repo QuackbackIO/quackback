@@ -222,7 +222,7 @@ describe('useGlide', () => {
     vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (
       this: HTMLElement
     ) {
-      if (this.hasAttribute('data-chip-for')) reads++
+      if (this.hasAttribute('data-chip-place')) reads++
       return width.get!.call(this)
     })
     const layer = (top: number) => (

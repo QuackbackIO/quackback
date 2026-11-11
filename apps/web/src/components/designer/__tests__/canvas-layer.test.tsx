@@ -431,9 +431,10 @@ describe('the picked logo’s chip', () => {
       />
     )
     const chip = await waitFor(() => {
+      // Placed by the box it sits in.
       const found = document.querySelector<HTMLElement>('[data-chip-for="logo"]')
       expect(found).not.toBeNull()
-      return found!
+      return found!.closest<HTMLElement>('[data-chip-place]')!
     })
     await waitFor(() => expect(Number.parseFloat(chip.style.left)).toBeGreaterThanOrEqual(275))
     // Level with the logo, and so above the menu's row.

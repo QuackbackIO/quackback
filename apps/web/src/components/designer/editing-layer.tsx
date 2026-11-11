@@ -1,4 +1,5 @@
 import {
+  memo,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -215,62 +216,128 @@ export function EditingLayer({
       ))}
       {children}
       {place && name && (
-        <ChipMenu name={name} onDuplicate={onDuplicate} onRemove={onRemove} onMove={onMove}>
-          <Toolbar.Root
-            ref={chip}
-            aria-label={`${name}, picked`}
-            data-chip-for={pickedKey ?? undefined}
-            data-chip-inside={place.inside ? '' : undefined}
-            // Words edited on the page take the chip's place for their format bar.
-            className="pointer-events-auto absolute flex items-center gap-px rounded-lg p-0.5 shadow-md [[data-words-editing]_&]:hidden"
-            style={{ left: place.left, top: place.top, background: PICKED, transition: glide }}
-          >
-            {grip && (
-              <ChipButton
-                label={`Move ${name}`}
-                tip="Drag to move. Arrow keys move it, Shift and arrow keys resize it"
-                data-drag-handle=""
-                aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
-                className={`${BUTTON} cursor-grab touch-none active:cursor-grabbing`}
-                onPointerDown={grip.onPointerDown}
-                onKeyDown={grip.onKeyDown}
-              >
-                <GripIcon />
-              </ChipButton>
-            )}
-            <ChipButton
-              label={`${name}: settings`}
-              tip={
-                onDown
-                  ? 'Its settings are on the right. Down arrow picks what is in it'
-                  : 'Its settings are on the right'
-              }
-              onClick={onSettings}
-              data-chip-name=""
-              onKeyDown={
-                onDown
-                  ? (event) => {
-                      if (event.key !== 'ArrowDown') return
-                      event.preventDefault()
-                      onDown()
-                    }
-                  : undefined
-              }
-            >
-              <span className="max-w-48 truncate">{name}</span>
-            </ChipButton>
-            {onRemove && (
-              <>
-                <Toolbar.Separator className="mx-0.5 h-3.5 w-px bg-white/40" />
-                <ChipButton label={`Remove ${name}`} tip="Remove" onClick={onRemove}>
-                  <TrashIcon className="size-3.5" aria-hidden="true" />
-                </ChipButton>
-              </>
-            )}
-          </Toolbar.Root>
-        </ChipMenu>
+        <div
+          ref={chip}
+          data-chip-place=""
+          // Words edited on the page take the chip's place for their format bar.
+          className="pointer-events-auto absolute [[data-words-editing]_&]:hidden"
+          style={{ left: place.left, top: place.top, transition: glide }}
+        >
+          <PickedChip
+            name={name}
+            pickedKey={pickedKey ?? undefined}
+            inside={place.inside}
+            onDuplicate={onDuplicate}
+            onRemove={onRemove}
+            onMove={onMove}
+            onSettings={onSettings}
+            onDown={onDown}
+            grip={grip}
+          />
+        </div>
       )}
     </div>
+  )
+}
+
+/** What the picked block's chip offers. */
+type ChipProps = {
+  name: string
+  pickedKey?: string
+  inside: boolean
+  onDuplicate?: () => void
+  onRemove?: () => void
+  onMove?: { up: (() => void) | null; down: (() => void) | null }
+  onSettings: () => void
+  onDown?: () => void
+  grip?: {
+    onPointerDown: (event: ReactPointerEvent) => void
+    onKeyDown: (event: ReactKeyboardEvent) => void
+  }
+}
+
+/**
+ * The picked block's chip: its grip, its name and Remove, with its actions on
+ * a right-click. Drawn again only when what it offers changes, not as the
+ * block moves under it: hand it handlers that keep their identity.
+ */
+const PickedChip = memo(function PickedChip({
+  name,
+  pickedKey,
+  inside,
+  onDuplicate,
+  onRemove,
+  onMove,
+  onSettings,
+  onDown,
+  grip,
+}: ChipProps) {
+  return (
+    <ChipMenu name={name} onDuplicate={onDuplicate} onRemove={onRemove} onMove={onMove}>
+      <Toolbar.Root
+        aria-label={`${name}, picked`}
+        data-chip-for={pickedKey}
+        data-chip-inside={inside ? '' : undefined}
+        className="flex items-center gap-px rounded-lg p-0.5 shadow-md"
+        style={{ background: PICKED }}
+      >
+        {grip && (
+          <ChipButton
+            label={`Move ${name}`}
+            tip="Drag to move. Arrow keys move it, Shift and arrow keys resize it"
+            data-drag-handle=""
+            aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
+            className={`${BUTTON} cursor-grab touch-none active:cursor-grabbing`}
+            onPointerDown={grip.onPointerDown}
+            onKeyDown={grip.onKeyDown}
+          >
+            <GripIcon />
+          </ChipButton>
+        )}
+        <ChipButton
+          label={`${name}: settings`}
+          tip={
+            onDown
+              ? 'Its settings are on the right. Down arrow picks what is in it'
+              : 'Its settings are on the right'
+          }
+          onClick={onSettings}
+          data-chip-name=""
+          onKeyDown={
+            onDown
+              ? (event) => {
+                  if (event.key !== 'ArrowDown') return
+                  event.preventDefault()
+                  onDown()
+                }
+              : undefined
+          }
+        >
+          <span className="max-w-48 truncate">{name}</span>
+        </ChipButton>
+        {onRemove && (
+          <>
+            <Toolbar.Separator className="mx-0.5 h-3.5 w-px bg-white/40" />
+            <ChipButton label={`Remove ${name}`} tip="Remove" onClick={onRemove}>
+              <TrashIcon className="size-3.5" aria-hidden="true" />
+            </ChipButton>
+          </>
+        )}
+      </Toolbar.Root>
+    </ChipMenu>
+  )
+}, sameChip)
+
+/** Whether the chip offers the same: its handlers by identity, whether it can move up or down. */
+function sameChip(before: ChipProps, after: ChipProps): boolean {
+  const { onMove: a, grip: g, ...rest } = before
+  const { onMove: b, grip: h, ...next } = after
+  if ((Object.keys(rest) as Array<keyof typeof rest>).some((key) => rest[key] !== next[key]))
+    return false
+  if (Object.keys(rest).length !== Object.keys(next).length) return false
+  if (!a !== !b || (a && b && (a.up !== b.up || a.down !== b.down))) return false
+  return (
+    !g === !h && (!g || !h || (g.onPointerDown === h.onPointerDown && g.onKeyDown === h.onKeyDown))
   )
 }
 

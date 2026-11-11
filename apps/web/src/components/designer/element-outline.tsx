@@ -9,11 +9,12 @@
  * the keyboard: Tab and Shift+Tab move between the block's elements, Up
  * arrow and Escape go back to the block, Right arrow reaches its Open.
  */
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
+import { memo, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { ArrowTopRightOnSquareIcon, CircleStackIcon } from '@heroicons/react/16/solid'
 import { KIND_LOOK, type ContentKind } from '@/lib/shared/design/content-kinds'
 import { outlineBox, type Rect } from '@/lib/shared/design/layer-geometry'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { sameProps } from './same-props'
 
 /** An element as the layer draws it: where it is, its name and its kind of content. */
 export interface OutlinedElement {
@@ -85,7 +86,7 @@ function outlineStyle(kind: ContentKind, width: number, quiet = false) {
   }
 }
 
-export function ElementOutlines({
+export const ElementOutlines = memo(function ElementOutlines({
   room,
   hovered,
   picked,
@@ -219,4 +220,4 @@ export function ElementOutlines({
       )}
     </>
   )
-}
+}, sameProps)
