@@ -1,8 +1,6 @@
 /**
  * A failed call as one line, for an inline error under a form. Worded through
- * `describeError`, so a raw technical message never reaches the screen. Kept
- * apart from `toastError` so surfaces without toasts (the widget) do not load
- * the toast library for it.
+ * `describeError`, so a raw technical message never reaches the screen.
  */
 import { describeError, noticeText, type ErrorAudience } from '@/lib/shared/describe-error'
 

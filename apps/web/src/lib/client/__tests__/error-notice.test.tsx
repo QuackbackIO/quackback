@@ -25,10 +25,17 @@ afterEach(() => {
 })
 
 describe('toastError', () => {
-  it('toasts a message written for people exactly as before', () => {
+  // First in the file: the toast library has not been fetched yet.
+  it('fetches the toast library on the first toast, then toasts at once', async () => {
     at('/admin/roadmap')
     toastError(new Error('A roadmap with this name already exists'), "Couldn't create roadmap")
-    expect(toast.error).toHaveBeenCalledWith('A roadmap with this name already exists')
+    expect(toast.error).not.toHaveBeenCalled()
+    await vi.waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('A roadmap with this name already exists')
+    )
+
+    toastError(new Error('That name is taken'), "Couldn't create roadmap")
+    expect(toast.error).toHaveBeenLastCalledWith('That name is taken')
   })
 
   it('uses the fallback when the thrown value is not an error', () => {
