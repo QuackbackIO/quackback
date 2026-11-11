@@ -14,6 +14,7 @@ import { clearOverride, type StyleOverride } from '@/lib/shared/design/style-ove
 import { Advanced } from './advanced'
 import { WORDS } from './properties/words'
 import { setDifferently, type SetPlace } from './set-differently'
+import { TextButton } from './text-button'
 
 export function OverridesList({
   design,
@@ -81,8 +82,7 @@ export function OverridesList({
                             </span>
                           )}
                         </div>
-                        <button
-                          type="button"
+                        <TextButton
                           aria-label={`${action} ${p.name}`}
                           onClick={() =>
                             update(
@@ -93,10 +93,10 @@ export function OverridesList({
                               `${p.name}: reset`
                             )
                           }
-                          className="inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded px-1 text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-ring"
+                          className="min-w-6 shrink-0 justify-center px-1"
                         >
                           {action}
-                        </button>
+                        </TextButton>
                       </li>
                     )
                   })}

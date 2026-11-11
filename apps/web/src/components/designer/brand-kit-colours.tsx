@@ -34,6 +34,7 @@ import {
 } from './properties/properties-panel'
 import { COLOUR_NAMES, THEME, WORDS, resetToValue } from './properties/words'
 import { Swatch } from './swatch'
+import { TextButton } from './text-button'
 
 type Palette = PortalDesign['brand']['light']
 /** Changes the draft as one step, named for its undo where a name is given. */
@@ -440,16 +441,13 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
           )
         )}
         {custom && (
-          <button
-            type="button"
+          <TextButton
+            underlined
             onClick={() => update((draft) => void delete draft.brand.dark)}
-            className={cn(
-              'inline-flex min-h-6 items-center rounded text-2xs text-muted-foreground underline underline-offset-2 hover:text-foreground focus-ring',
-              ROW_INDENT_MARGIN
-            )}
+            className={ROW_INDENT_MARGIN}
           >
             {THEME.resetAllToAuto}
-          </button>
+          </TextButton>
         )}
       </div>
     </details>

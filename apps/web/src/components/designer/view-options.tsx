@@ -15,6 +15,7 @@ import { SUPPORTED_LOCALES, type SupportedLocale } from '@/lib/shared/i18n'
 import type { CanvasZoom } from './designer-canvas'
 import { Help, PropertyRow, PropertyTiles } from './properties/properties-panel'
 import { THEME, WORDS } from './properties/words'
+import { TextButton } from './text-button'
 
 const ZOOMS: Array<readonly [CanvasZoom, string, string]> = [
   ['fit', 'Fit', 'Fit to the window'],
@@ -132,13 +133,9 @@ export function ViewOptions({
           </SelectContent>
         </Select>
       </PropertyRow>
-      <button
-        type="button"
-        onClick={onKeys}
-        className="mt-1 inline-flex min-h-6 items-center rounded-sm text-xs text-muted-foreground underline underline-offset-2 outline-none hover:text-foreground focus-ring"
-      >
+      <TextButton onClick={onKeys} underlined className="mt-1 rounded-sm text-xs">
         {THEME.keyboardShortcuts}
-      </button>
+      </TextButton>
     </section>
   )
 }

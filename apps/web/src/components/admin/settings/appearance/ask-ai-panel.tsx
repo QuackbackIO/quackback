@@ -26,6 +26,7 @@ import { HeroPhotoChip } from './hero-photo-chip'
 import type { StoredHero } from './use-image-upload'
 import type { DesignAiTurn } from './use-design-ai'
 import { Swatch } from '@/components/designer/swatch'
+import { TextButton } from '@/components/designer/text-button'
 
 /** Changes the draft, naming the change for undo when a name is given. */
 type Update = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -61,14 +62,13 @@ const rowWords = (row: ChangeRow) =>
 function ShowButton({ row, onShow }: { row: ChangeRow; onShow: ShowChange['go'] }) {
   const words = rowWords(row)
   return (
-    <button
-      type="button"
+    <TextButton
       aria-label={`Show ${words} on the page`}
       onClick={() => onShow(row.at, words)}
-      className="ms-auto rounded px-1 text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-ring"
+      className="ms-auto px-1 text-[length:inherit]"
     >
       Show
-    </button>
+    </TextButton>
   )
 }
 
@@ -199,14 +199,13 @@ function StepResult({
           {partUndos.length > 1 && (
             <div aria-label="Undo in parts" role="group" className="flex flex-wrap gap-x-3">
               {partUndos.map(({ part, changes: rows }) => (
-                <button
+                <TextButton
                   key={part}
-                  type="button"
+                  className="text-[length:inherit]"
                   onClick={() => undo(rows, MATCH_PART_LABEL[part])}
-                  className="rounded text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-ring"
                 >
                   {MATCH_PART_LABEL[part]}
-                </button>
+                </TextButton>
               ))}
             </div>
           )}
@@ -419,13 +418,9 @@ export function AskAiPanel({
                     <Button variant="outline" size="sm" onClick={() => onUploadFont(turn.font!)}>
                       Upload {turn.font.family}
                     </Button>
-                    <button
-                      type="button"
-                      onClick={onFonts}
-                      className="rounded text-xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-ring"
-                    >
+                    <TextButton onClick={onFonts} className="text-xs">
                       Fonts in Theme
-                    </button>
+                    </TextButton>
                   </div>
                 )}
                 {turn.asks?.map((question) => (

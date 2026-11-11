@@ -19,6 +19,7 @@ import type { DesignAiScope } from '@/lib/shared/design/apply-changes'
 import type { AiReach, ReachChoice } from '@/lib/shared/design/ai-reach'
 import type { BrandContext, ChatImage } from './use-design-ai'
 import { useShotChecks } from './use-shot-checks'
+import { TextButton } from '@/components/designer/text-button'
 
 /** Each scope as the composer's chip names it. */
 export const SCOPE_LABEL: Record<DesignAiScope, string> = {
@@ -479,14 +480,14 @@ export function ContextChip({ context, onClear }: { context: ChatContext; onClea
         {choices.length > 1 ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                type="button"
+              <TextButton
                 aria-label={`How far a request reaches: ${line}`}
-                className="block max-w-full truncate rounded text-start text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground focus-ring"
+                underlined
+                className="block max-w-full truncate text-start text-[length:inherit] decoration-dotted"
                 onClick={next}
               >
                 {line}
-              </button>
+              </TextButton>
             </TooltipTrigger>
             <TooltipContent>How far a request reaches</TooltipContent>
           </Tooltip>

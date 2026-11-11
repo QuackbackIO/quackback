@@ -23,6 +23,7 @@ import { faceName, hexOf, type ColourToken, type FontToken } from './tokens'
 import { PropertyTiles, Tip } from './properties-panel'
 import { WORDS, linkTo } from './words'
 import { Swatch } from '../swatch'
+import { TextButton } from '../text-button'
 
 const isHex = (value: string | undefined): value is string => !!value && value.startsWith('#')
 
@@ -191,13 +192,13 @@ export function TokenField({
       </Popover>
       {back && (
         <Tip text={linkTo(back.name)}>
-          <button
-            type="button"
+          <TextButton
             onClick={() => onChange(back.id)}
-            className="min-h-6 truncate rounded py-1 text-2xs leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-ring"
+            underlined
+            className="block truncate py-1 leading-4"
           >
             {linkTo(back.name)}
-          </button>
+          </TextButton>
         </Tip>
       )}
     </div>
@@ -294,13 +295,13 @@ export function FontField({
       </Popover>
       {linkBack && onChange && (
         <Tip text={linkTo(linkBack.name)}>
-          <button
-            type="button"
+          <TextButton
             onClick={() => onChange(linkBack.id)}
-            className="min-h-6 truncate rounded py-1 text-2xs leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-ring"
+            underlined
+            className="block truncate py-1 leading-4"
           >
             {linkTo(linkBack.name)}
-          </button>
+          </TextButton>
         </Tip>
       )}
     </div>

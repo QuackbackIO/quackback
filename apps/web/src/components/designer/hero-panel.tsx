@@ -49,6 +49,7 @@ import { ScopeLine } from './properties/scope-line'
 import { colourTokens } from './properties/tokens'
 import { TokenField } from './properties/token-field'
 import { COLOUR_NAMES, HERO_LOOKS, HERO_TILES, HERO_WORDS, WORDS } from './properties/words'
+import { TextButton } from './text-button'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -66,9 +67,6 @@ const TILE_FIND: Partial<Record<HeroKey, FindRow>> = {
   blend: FIND.blend,
   fadeFrom: FIND.fadeFrom,
 }
-
-const quiet =
-  'rounded text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-ring'
 
 /** A look as a small drawing: its colour, with its art or its panel where it has one. */
 function LookDrawing({ look, colours }: { look: BandLook; colours: CSSProperties }) {
@@ -544,22 +542,13 @@ function HeroImage({
                 alt=""
                 className="h-6 max-w-[4.5rem] rounded border border-border bg-background object-cover"
               />
-              <button
-                type="button"
-                className={quiet}
-                disabled={busy}
-                onClick={() => file.current?.click()}
-              >
+              <TextButton disabled={busy} onClick={() => file.current?.click()}>
                 {busy ? HERO_WORDS.uploading : HERO_WORDS.replace}
-              </button>
+              </TextButton>
               {narrowed && !image.homeOnly && (
-                <button
-                  type="button"
-                  className={quiet}
-                  onClick={() => onChange({ ...image, homeOnly: true })}
-                >
+                <TextButton onClick={() => onChange({ ...image, homeOnly: true })}>
                   {HERO_WORDS.justThisPage}
-                </button>
+                </TextButton>
               )}
               <Button
                 variant="ghost"
