@@ -7,16 +7,10 @@
  * off; a message written for a person must arrive as written.
  */
 import './_server-fn-rpc'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { DrizzleQueryError } from 'drizzle-orm/errors'
 import { ConflictError } from '@/lib/shared/errors'
 import { UNEXPECTED_ERROR_MESSAGE, errorReferenceOf } from '@/lib/shared/error-reference'
-
-const hoisted = vi.hoisted(() => ({ production: true }))
-vi.mock('@/lib/server/config', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/config')>()),
-  isProduction: () => hoisted.production,
-}))
 
 const { createServerFnRpc } = await import('./_server-fn-rpc')
 
@@ -63,10 +57,12 @@ beforeAll(async () => {
 })
 
 describe('a failing server function, as the browser sees it in production', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
   it.each(['database', 'network', 'bug'])(
     'hides a %s failure behind a plain sentence',
     async (name) => {
-      hoisted.production = true
+      vi.stubEnv('NODE_ENV', 'production')
       const error = await failure(name)
       expect(error).toBeInstanceOf(Error)
       expect(error?.message).toBe(UNEXPECTED_ERROR_MESSAGE)
@@ -75,13 +71,13 @@ describe('a failing server function, as the browser sees it in production', () =
   )
 
   it('delivers a message written for a person as written', async () => {
-    hoisted.production = true
+    vi.stubEnv('NODE_ENV', 'production')
     expect((await failure('refusal'))?.message).toBe('A board with this slug already exists')
     expect((await failure('plain'))?.message).toBe('Pick a board first')
   })
 
   it('keeps the full message outside production', async () => {
-    hoisted.production = false
+    vi.stubEnv('NODE_ENV', 'development')
     expect((await failure('database'))?.message).toContain('dana@acme.com')
     expect((await failure('network'))?.message).toBe('connect ECONNREFUSED 10.0.4.17:5432')
   })

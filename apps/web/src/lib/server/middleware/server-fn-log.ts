@@ -16,7 +16,6 @@ import { isNotFound, isRedirect } from '@tanstack/react-router'
 import type { AppLogger } from '@quackback/logger'
 import { logger } from '@/lib/server/logger'
 import { getLogContext } from '@/lib/server/log-context'
-import { isProduction } from '@/lib/server/config'
 import { DomainException } from '@/lib/shared/errors'
 import { UNEXPECTED_ERROR_MESSAGE, withErrorReference } from '@/lib/shared/error-reference'
 import { isAuthDenialError } from '@/lib/server/functions/auth-errors'
@@ -112,12 +111,17 @@ export function classifyServerFnError(error: unknown): 'warn' | 'error' | null {
  * its values, an internal address, a bug) is therefore swapped here for a plain
  * sentence carrying a reference code, and the code is logged as `error_ref`
  * beside the real error. Everything else is rethrown unchanged.
+ *
+ * `start.ts` imports this file, so in development the browser loads it too
+ * (only the `.server()` body is stripped). Its imports must stay safe to
+ * evaluate there, which is why production is read from the environment here
+ * and not through the server config module.
  */
 export async function runWithServerFnLogging<T>({
   next,
   name,
   log = logger,
-  production = isProduction(),
+  production = process.env.NODE_ENV === 'production',
 }: {
   next: () => Promise<T>
   name: string
