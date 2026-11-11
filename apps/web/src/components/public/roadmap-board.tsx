@@ -12,7 +12,7 @@ import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { portalQueries } from '@/lib/client/queries/portal'
 import type { PageChoices } from '@/lib/shared/design/page-choices'
-import { RoadmapColumn } from './roadmap-column'
+import { ROADMAP_GROUPS_CLASS, RoadmapColumn } from './roadmap-column'
 import {
   PublicRoadmapFiltersBar,
   PublicRoadmapToolbarFilterButton,
@@ -149,7 +149,7 @@ export function RoadmapBoard({
       />
 
       {effectiveSelectedId && layout === 'list' && (
-        <div className="space-y-8 pb-4">
+        <div className={ROADMAP_GROUPS_CLASS}>
           {columns.map((column) => (
             <RoadmapColumn
               key={column.id}
