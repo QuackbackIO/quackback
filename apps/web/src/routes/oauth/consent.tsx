@@ -6,14 +6,23 @@ import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
-import { domainAccessLevels, scopesFromDomainLevels } from '@/lib/shared/api-key-scopes'
+import {
+  ACCESS_DOMAINS,
+  domainAccessLevels,
+  scopesFromDomainLevels,
+  type DomainAccessLevels,
+} from '@/lib/shared/api-key-scopes'
 import {
   CLIENT_REQUESTED_SCOPE_PARAM,
   clientRequestedFromConsentSearch,
   consentGrantScope,
+  consentPreset,
+  consentPresetLevels,
   defaultSelectedScopes,
+  type ConsentPreset,
 } from '@/lib/shared/mcp-consent-scopes'
-import { ExternalLink, Globe, ShieldCheck } from 'lucide-react'
+import { cn } from '@/lib/shared/utils'
+import { ChevronRight, ExternalLink, Globe, ShieldCheck } from 'lucide-react'
 
 const searchSchema = z.object({
   client_id: z.string(),
@@ -76,8 +85,94 @@ function useClientInfo(clientId: string) {
   return client
 }
 
+function joinWords(words: string[]): string {
+  if (words.length <= 1) return words.join('')
+  return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
+}
+
+/** One sentence saying what the current selection lets the client do. */
+function accessSummary(
+  clientName: string,
+  preset: ConsentPreset,
+  levels: DomainAccessLevels
+): string {
+  if (preset === 'full') {
+    return `${clientName} can read and make changes across your workspace, including settings, up to what your role allows.`
+  }
+  if (preset === 'read') {
+    return `${clientName} can search and read. It cannot post, reply, publish or change settings.`
+  }
+  const writes = ACCESS_DOMAINS.filter((d) => ['read_write', 'write'].includes(levels[d.domain]))
+  const reads = ACCESS_DOMAINS.filter((d) => levels[d.domain] === 'read')
+  if (writes.length + reads.length === 0) return 'Select at least one area to continue.'
+  const parts: string[] = []
+  if (writes.length > 0) {
+    parts.push(`${clientName} can change ${joinWords(writes.map((d) => d.label))}.`)
+  }
+  if (reads.length > 0) {
+    parts.push(
+      `${writes.length > 0 ? 'It' : clientName} can only read ${joinWords(reads.map((d) => d.label))}.`
+    )
+  }
+  return parts.join(' ')
+}
+
+function AccessChoice({
+  value,
+  selected,
+  title,
+  description,
+  recommended,
+  disabled,
+  onSelect,
+}: {
+  value: ConsentPreset
+  selected: boolean
+  title: string
+  description: string
+  recommended?: boolean
+  disabled?: boolean
+  onSelect: () => void
+}) {
+  return (
+    <label
+      className={cn(
+        'flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors',
+        'has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring',
+        selected ? 'border-primary/60 bg-primary/10' : 'border-border/60 hover:border-border',
+        disabled && 'cursor-not-allowed opacity-60'
+      )}
+    >
+      <input
+        type="radio"
+        name="access-level"
+        value={value}
+        checked={selected}
+        disabled={disabled}
+        onChange={onSelect}
+        className="mt-0.5 size-4 shrink-0 appearance-none rounded-full border border-muted-foreground/60 bg-transparent outline-none checked:border-[5px] checked:border-foreground"
+      />
+      <span className="min-w-0">
+        <span className="flex items-center gap-2 text-sm font-medium">
+          {title}
+          {recommended && (
+            <span className="text-[11px] font-medium text-muted-foreground">Recommended</span>
+          )}
+        </span>
+        <span className="block text-xs text-muted-foreground">{description}</span>
+      </span>
+    </label>
+  )
+}
+
 function ConsentPage() {
   const search = Route.useSearch()
+  const context = Route.useRouteContext() as {
+    session?: { user?: { email?: string | null } | null } | null
+    settings?: { name?: string | null } | null
+  }
+  const signedInAs = context.session?.user?.email ?? null
+  const workspaceName = context.settings?.name ?? null
   const client = useClientInfo(search.client_id)
   const clientRequested = clientRequestedFromConsentSearch({
     requested: search[CLIENT_REQUESTED_SCOPE_PARAM],
@@ -85,6 +180,10 @@ function ConsentPage() {
   })
   const defaults = defaultSelectedScopes(clientRequested)
   const [levels, setLevels] = useState(() => domainAccessLevels(defaults))
+  // A narrower prefill (a step-up) opens the detail so the person sees what is being asked.
+  const [showDetail, setShowDetail] = useState(
+    () => consentPreset(domainAccessLevels(defaults)) === 'custom'
+  )
   const [offlineAccess, setOfflineAccess] = useState(() => defaults.includes('offline_access'))
   const [submitting, setSubmitting] = useState<'accept' | 'deny' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -99,6 +198,7 @@ function ConsentPage() {
     }
   })()
 
+  const preset = consentPreset(levels)
   const capabilityScopes = scopesFromDomainLevels(levels)
   const canAuthorize = capabilityScopes.length > 0
 
@@ -170,7 +270,9 @@ function ConsentPage() {
 
           <h1 className="text-xl font-semibold">{clientName}</h1>
 
-          <p className="text-sm text-muted-foreground">wants to access your account</p>
+          <p className="text-sm text-muted-foreground">
+            wants to access {workspaceName ?? 'your account'}
+          </p>
 
           {clientDomain && (
             <p className="text-xs text-muted-foreground/70">
@@ -192,30 +294,80 @@ function ConsentPage() {
         </div>
 
         <div className="space-y-3">
-          <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-            <DomainAccessPicker
-              levels={levels}
-              onChange={setLevels}
+          <div role="radiogroup" aria-label="Access level" className="space-y-2">
+            <AccessChoice
+              value="full"
+              selected={preset === 'full'}
+              title="Full access"
+              description="Read and make changes, up to what your role allows"
+              recommended
               disabled={submitting !== null}
+              onSelect={() => setLevels(consentPresetLevels('full'))}
             />
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border/30">
-              <div className="min-w-0 pr-4">
-                <p className="text-sm font-medium">Stay signed in</p>
-                <p className="text-xs text-muted-foreground">
-                  Let {clientName} refresh access without asking again
-                </p>
-              </div>
-              <Switch
-                checked={offlineAccess}
-                onCheckedChange={setOfflineAccess}
+            <AccessChoice
+              value="read"
+              selected={preset === 'read'}
+              title="Read only"
+              description="Search and look things up. No changes."
+              disabled={submitting !== null}
+              onSelect={() => setLevels(consentPresetLevels('read'))}
+            />
+            {preset === 'custom' && (
+              <AccessChoice
+                value="custom"
+                selected
+                title="Custom"
+                description="Your own selection below"
                 disabled={submitting !== null}
-                aria-label="Stay signed in"
+                onSelect={() => {}}
               />
-            </div>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground px-1">
-            Read is on so {clientName} can search and look things up. Read and write includes that
-            lookup. You can add writes now, or when a tool asks later.
+
+          <button
+            type="button"
+            aria-expanded={showDetail}
+            aria-controls="consent-access-detail"
+            onClick={() => setShowDetail((open) => !open)}
+            className="inline-flex items-center gap-1.5 rounded-sm px-1 py-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring"
+          >
+            <ChevronRight
+              className={cn('h-3.5 w-3.5 transition-transform', showDetail && 'rotate-90')}
+              aria-hidden
+            />
+            Choose what {clientName} can access
+          </button>
+
+          {showDetail && (
+            <div
+              id="consent-access-detail"
+              className="rounded-xl border border-border/50 bg-card overflow-hidden"
+            >
+              <DomainAccessPicker
+                levels={levels}
+                onChange={setLevels}
+                disabled={submitting !== null}
+                flagHighImpact
+              />
+              <div className="flex items-center justify-between px-4 py-3 border-t border-border/30">
+                <div className="min-w-0 pr-4">
+                  <p className="text-sm font-medium">Stay signed in</p>
+                  <p className="text-xs text-muted-foreground">
+                    Let {clientName} refresh access without asking again
+                  </p>
+                </div>
+                <Switch
+                  checked={offlineAccess}
+                  onCheckedChange={setOfflineAccess}
+                  disabled={submitting !== null}
+                  aria-label="Stay signed in"
+                />
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground px-1" aria-live="polite">
+            {accessSummary(clientName, preset, levels)}
           </p>
         </div>
 
@@ -248,7 +400,9 @@ function ConsentPage() {
 
           <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/60">
             <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-            <p>Revoke any time in account settings</p>
+            <p>
+              {signedInAs ? `Signed in as ${signedInAs}. ` : ''}Revoke any time in account settings
+            </p>
           </div>
 
           {(() => {

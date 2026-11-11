@@ -5,7 +5,7 @@
  * `resource_metadata` URL stays the document clients already fetch
  * (`/.well-known/oauth-protected-resource`), not the path-inserted form.
  */
-import { MCP_FIRST_CONNECT_SCOPES } from '@/lib/shared/api-key-scopes'
+import { MCP_CHALLENGE_SCOPES } from '@/lib/shared/api-key-scopes'
 import { config } from '@/lib/server/config'
 
 export const MCP_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource'
@@ -19,7 +19,7 @@ function quoteAuthParam(value: string): string {
 }
 
 export function unauthenticatedMcpChallenge(): string {
-  const scopes = MCP_FIRST_CONNECT_SCOPES.join(' ')
+  const scopes = MCP_CHALLENGE_SCOPES.join(' ')
   return `Bearer scope="${quoteAuthParam(scopes)}", resource_metadata="${quoteAuthParam(mcpResourceMetadataUrl())}"`
 }
 

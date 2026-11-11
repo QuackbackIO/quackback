@@ -28,9 +28,13 @@ describe('MCP protected resource metadata', () => {
 })
 
 describe('MCP OAuth challenges', () => {
-  it('puts first-connect scopes on the unauthenticated 401 challenge', () => {
+  it('asks for every capability on the unauthenticated 401 challenge', () => {
     const header = unauthenticatedMcpChallenge()
-    expect(header).toContain('scope="read:feedback read:article read:chat read:settings"')
+    expect(header).toContain(
+      'scope="read:feedback write:feedback write:changelog read:article write:article read:chat write:chat read:settings write:settings"'
+    )
+    expect(header).not.toContain('offline_access')
+    expect(header).not.toContain('openid')
     expect(header).toContain('resource_metadata="')
     expect(header).toContain('/.well-known/oauth-protected-resource')
     expect(header).not.toContain('/api/mcp')

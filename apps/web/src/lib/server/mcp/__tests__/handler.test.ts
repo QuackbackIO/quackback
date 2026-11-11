@@ -479,7 +479,8 @@ describe('MCP HTTP Handler', () => {
       expect(response.status).toBe(401)
       const challenge = response.headers.get('www-authenticate') ?? ''
       expect(challenge).toContain('resource_metadata=')
-      expect(challenge).toContain('scope="read:feedback read:article read:chat read:settings"')
+      expect(challenge).toContain('scope="read:feedback write:feedback ')
+      expect(challenge).toContain('write:settings"')
     })
 
     it('should return 401 when API key is invalid', async () => {
