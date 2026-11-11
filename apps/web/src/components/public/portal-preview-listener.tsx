@@ -90,6 +90,8 @@ export function PortalPreviewProvider({
   const [css, setCss] = useState('')
   const [draft, setDraft] = useState<StructuralDraft | null>(null)
   const [design, setDesign] = useState<DraftDesignView | null>(null)
+  // What the pages read of it, the same object while a change reaches them as style alone.
+  const [pageDesign, setPageDesign] = useState<DraftDesignView | null>(null)
   const designChannel = useRef<DesignChannel | null>(null)
   // The design drawn now, which an equal one sent again keeps.
   const shownDesign = useRef<DraftDesignView | null>(null)
@@ -126,6 +128,7 @@ export function PortalPreviewProvider({
           }
           shownDesign.current = next
           setDesign(next)
+          setPageDesign((shown) => channel.pageView(shown, next))
         })
       } else if (msg?.type === PREVIEW_THEME) {
         // Light or dark, in place: the address says which, as the frame was loaded with it,
@@ -232,7 +235,7 @@ export function PortalPreviewProvider({
     from: '__root__',
     select: (context) => context.settings?.portalDesign,
   })
-  const shown = design ?? (saved?.engine === 'v2' ? saved : undefined)
+  const shown = pageDesign ?? (saved?.engine === 'v2' ? saved : undefined)
   const page = (
     <FeedCopyContext.Provider value={shown?.feedback.copy}>
       <BrandStatusColours colours={shown?.statusColours}>{children}</BrandStatusColours>
@@ -243,7 +246,7 @@ export function PortalPreviewProvider({
 
   return (
     <PreviewDraftProvider draft={draft} css={css}>
-      <PreviewDesignContext.Provider value={design ?? undefined}>
+      <PreviewDesignContext.Provider value={pageDesign ?? undefined}>
         <PreviewSamplesContext.Provider value={!!designer && !trying}>
           {page}
         </PreviewSamplesContext.Provider>

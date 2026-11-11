@@ -171,6 +171,24 @@ describe('PortalPreviewProvider', () => {
     window.history.replaceState(null, '', '/')
   })
 
+  it('draws nothing anew in the page for a change that is style alone', async () => {
+    await postDesign({ type: 'quackback:preview-design', design: draftDesign() })
+    const pages = renders.pages
+    const sheet = document.querySelector('style[data-preview-design]')?.textContent
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: draftDesign((d) => void (d.brand.light.accent = '#225544')),
+    })
+    expect(document.querySelector('style[data-preview-design]')?.textContent).not.toBe(sheet)
+    expect(renders.pages).toBe(pages)
+    // A part the page reads still reaches it.
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: draftDesign((d) => d.nav.items.reverse()),
+    })
+    expect(renders.pages).toBe(pages + 1)
+  })
+
   it('picks on a click while designing, and lets clicks act while trying', async () => {
     const button = document.createElement('button')
     button.setAttribute('data-qb-section', 'header')
