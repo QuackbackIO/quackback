@@ -62,6 +62,10 @@ export interface InitOptions {
  */
 export type Identity =
   | { ssoToken: string }
+  /**
+   * @deprecated The server rejects unsigned identities with `VALIDATION_ERROR`.
+   * Sign a short-lived HS256 token on your server and pass `{ ssoToken }`.
+   */
   | ({ id: string; email: string; name?: string; avatarURL?: string } & Record<string, unknown>)
 
 /**

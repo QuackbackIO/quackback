@@ -4,14 +4,14 @@ import { join } from 'node:path'
 import { sql } from 'drizzle-orm'
 import { createDb, type Database } from '../client'
 
-// 0314 adds the table of ticket replies mirrored as comments on linked issues.
+// 0316 adds the table of ticket replies mirrored as comments on linked issues.
 // It replays as a no-op, holds one comment per reply and linked issue and one
 // message per comment and linked issue (a comment on an issue linked to two
 // tickets stands for a message on each), and goes with the reply, the link or
 // the connection it names. Runs in a rolled-back transaction against the migrated
 // database.
 const MIGRATION = readFileSync(
-  join(__dirname, '../../drizzle/0314_message_external_links.sql'),
+  join(__dirname, '../../drizzle/0316_message_external_links.sql'),
   'utf8'
 ).replaceAll('--> statement-breakpoint', '')
 
@@ -25,7 +25,7 @@ afterAll(async () => {
 
 class Rollback extends Error {}
 
-describe.skipIf(!db)('migration 0314 message external links', () => {
+describe.skipIf(!db)('migration 0316 message external links', () => {
   it('replays, enforces both uniqueness rules and follows its owners on delete', async () => {
     await db!
       .transaction(async (tx) => {
@@ -34,10 +34,10 @@ describe.skipIf(!db)('migration 0314 message external links', () => {
           ((await tx.execute(query)) as unknown as { id: string }[])[0].id
         const integration = await one(sql`
           INSERT INTO "integrations" ("id", "integration_type", "status", "config")
-          VALUES (gen_random_uuid(), 'github-0314', 'active', '{}'::jsonb) RETURNING "id"`)
+          VALUES (gen_random_uuid(), 'github-0316', 'active', '{}'::jsonb) RETURNING "id"`)
         const status = await one(sql`
           INSERT INTO "ticket_statuses" ("id", "name", "slug", "category", "position")
-          VALUES (gen_random_uuid(), 'Open', ${'open_0314_' + Date.now()}, 'open', 999) RETURNING "id"`)
+          VALUES (gen_random_uuid(), 'Open', ${'open_0316_' + Date.now()}, 'open', 999) RETURNING "id"`)
         const ticket = await one(sql`
           INSERT INTO "tickets" ("id", "type", "title", "status_id")
           VALUES (gen_random_uuid(), 'customer', 'Export fails', ${status}) RETURNING "id"`)
