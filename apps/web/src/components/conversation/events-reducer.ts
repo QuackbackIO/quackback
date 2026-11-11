@@ -36,6 +36,9 @@ export interface VisitorThreadCache {
   messages: ConversationMessageDTO[]
   hasMore: boolean
   agentLastReadAt: string | null
+  /** The visitor's own read watermark: a thread already read through its
+   *  newest agent reply needs no new read write when reopened. */
+  visitorLastReadAt: string | null
   status: ConversationStatus | null
   csatRating: number | null
 }
@@ -247,10 +250,10 @@ export function applyVisitorThreadEvent(
     case 'message':
       if (prev.messages.some((m) => m.id === evt.message.id)) return prev
       return { ...prev, messages: [...prev.messages, evt.message] }
-    case 'read':
-      return evt.side === 'agent' && prev.agentLastReadAt !== evt.at
-        ? { ...prev, agentLastReadAt: evt.at }
-        : prev
+    case 'read': {
+      const field = evt.side === 'visitor' ? 'visitorLastReadAt' : 'agentLastReadAt'
+      return prev[field] === evt.at ? prev : { ...prev, [field]: evt.at }
+    }
     case 'message_deleted':
       return { ...prev, messages: prev.messages.filter((m) => m.id !== evt.messageId) }
     case 'message_edited': {
@@ -309,6 +312,7 @@ export function appendSentVisitorMessage(
       messages: [res.message],
       hasMore: false,
       agentLastReadAt: null,
+      visitorLastReadAt: null,
       status: res.conversation.status,
       csatRating: null,
     }

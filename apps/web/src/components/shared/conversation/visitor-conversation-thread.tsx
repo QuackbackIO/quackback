@@ -64,6 +64,7 @@ import {
   prependOlderVisitorMessages,
   type VisitorThreadCache,
 } from '@/components/conversation/events-reducer'
+import { refreshVisitorUnreadCounts } from '@/lib/client/conversation/visitor-read'
 import { conversationKeys } from '@/components/conversation/query-keys'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
@@ -295,6 +296,7 @@ export function VisitorConversationThread({
   const gallery = useGalleryValue(messages)
   const hasMoreOlder = thread?.hasMore ?? false
   const agentReadAt = thread?.agentLastReadAt ?? null
+  const visitorReadAt = thread?.visitorLastReadAt ?? null
   const conversationStatus = thread?.status ?? null
   const csatRating = thread?.csatRating ?? null
 
@@ -413,6 +415,7 @@ export function VisitorConversationThread({
             messages: res.messages,
             hasMore: res.hasMore,
             agentLastReadAt: conv.agentLastReadAt ?? null,
+            visitorLastReadAt: conv.visitorLastReadAt ?? null,
             status: conv.status ?? null,
             csatRating: conv.csatRating ?? null,
           } satisfies VisitorThreadCache)
@@ -447,6 +450,7 @@ export function VisitorConversationThread({
                 messages: page.messages,
                 hasMore: page.hasMore,
                 agentLastReadAt: null,
+                visitorLastReadAt: null,
                 status: null,
                 csatRating: null,
               }
@@ -831,11 +835,13 @@ export function VisitorConversationThread({
     loading,
   })
 
-  // Clear unread on the visitor side only when the newest message is from an
-  // agent — skip the visitor's own outbound sends (avoids a write + 'read'
-  // broadcast on every send).
+  // Clear unread on the visitor side once an agent reply newer than the
+  // visitor's watermark is on screen. The visitor's own sends and system events
+  // never trigger a write. A read changes the unread counts on the lists and
+  // badges outside this thread, so they refetch.
   // A host that hid this frame says when it shows it again: catch up on any
   // reply the live stream missed meanwhile, and read the newest one.
+  const onVisitorRead = useCallback(() => refreshVisitorUnreadCounts(queryClient), [queryClient])
   const shownAgain = useHostVisibleCount()
   useEffect(() => {
     if (shownAgain > 0) void refreshMessages()
@@ -844,7 +850,9 @@ export function VisitorConversationThread({
     conversationId,
     messages,
     whenLastFrom: 'agent',
+    readThrough: visitorReadAt,
     getHeaders: getAuthHeaders,
+    onMarked: onVisitorRead,
     recheck: shownAgain,
   })
 
