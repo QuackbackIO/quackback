@@ -437,6 +437,20 @@ export function normalizeFontSans(fontSans: string): string {
   return normalized
 }
 
+const INTER_NAMES = '"Inter Variable", "Inter", '
+const INTER_STAND_IN = '"Inter Variable Fallback", '
+
+/**
+ * The fontSans a page renders: the normalised stack, and for one led by the
+ * self-hosted Inter, the stand-in face globals.css declares, so text drawn
+ * before Inter's file arrives keeps its lines when it swaps in.
+ */
+export function renderedFontSans(fontSans: string): string {
+  const normalized = normalizeFontSans(fontSans)
+  if (!normalized.startsWith(INTER_NAMES) || normalized.includes(INTER_STAND_IN)) return normalized
+  return INTER_NAMES + INTER_STAND_IN + normalized.slice(INTER_NAMES.length)
+}
+
 export function generateThemeCSS(config: ThemeConfig): string {
   if (!config) return ''
 
@@ -449,8 +463,8 @@ export function generateThemeCSS(config: ThemeConfig): string {
   // widget share one source of tokens when branding is absent.
   const lightVars = themeMode !== 'dark' ? expandTheme(light, { mode: 'light' }) : {}
   const darkVars = themeMode !== 'light' ? expandTheme(dark, { mode: 'dark' }) : {}
-  if (lightVars.fontSans) lightVars.fontSans = normalizeFontSans(lightVars.fontSans)
-  if (darkVars.fontSans) darkVars.fontSans = normalizeFontSans(darkVars.fontSans)
+  if (lightVars.fontSans) lightVars.fontSans = renderedFontSans(lightVars.fontSans)
+  if (darkVars.fontSans) darkVars.fontSans = renderedFontSans(darkVars.fontSans)
 
   const parts: string[] = []
   // The same :root / .dark selectors as globals.css. This style comes later in
