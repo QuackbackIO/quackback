@@ -10,6 +10,7 @@ import { ConflictError } from '@/lib/shared/errors'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { readStoredDesign } from '@/lib/shared/design/stored-design'
 import { logger } from '@/lib/server/logger'
+import { withWelcomeImageRefs } from './welcome-images'
 
 const log = logger.child({ module: 'design.stored' })
 
@@ -29,7 +30,7 @@ export function storedRead(
   if (read.dropped.length > 0) {
     log.warn({ which, dropped: read.dropped }, 'stored design has fields this build does not know')
   }
-  return { design: read.design, newer: read.dropped.length > 0 }
+  return { design: withWelcomeImageRefs(read.design), newer: read.dropped.length > 0 }
 }
 
 /**
