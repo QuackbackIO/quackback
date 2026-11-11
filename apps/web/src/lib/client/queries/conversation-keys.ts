@@ -59,9 +59,19 @@ export const conversationKeys = {
   visitorThread: (conversationId: ConversationId | null) =>
     ['conversation', 'visitor-thread', conversationId ?? 'none'] as const,
 
+  /** Prefix of every widget Messages tab list, across sessions. */
+  widgetConversationLists: () => ['widget', 'my-conversations'] as const,
+
   /** The widget Messages tab list, re-keyed when identify swaps the actor. */
   widgetConversationList: (sessionVersion: number | string) =>
-    ['widget', 'my-conversations', sessionVersion] as const,
+    [...conversationKeys.widgetConversationLists(), sessionVersion] as const,
+
+  /** Prefix of every widget Messages tab badge (total unread), across sessions. */
+  widgetMessengerUnreads: () => ['widget', 'messenger-unread'] as const,
+
+  /** The widget Messages tab badge, re-keyed when identify swaps the actor. */
+  widgetMessengerUnread: (sessionVersion: number | string) =>
+    [...conversationKeys.widgetMessengerUnreads(), sessionVersion] as const,
 
   /** The portal Support tab list. */
   portalConversationList: () => ['portal', 'my-conversations'] as const,

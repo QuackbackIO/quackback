@@ -1,26 +1,20 @@
 /**
  * The consent screen must surface the full capability catalogue.
- * First-connect reads are defaults; writes stay available as opt-in.
+ * A plain connect defaults to full access; the person can narrow it.
  * Identity scopes stay off the screen; offline_access is a toggle.
  */
 import { describe, expect, it } from 'vitest'
 import {
   ACCESS_DOMAINS,
   domainAccessLevels,
-  MCP_FIRST_CONNECT_SCOPES,
+  MCP_CHALLENGE_SCOPES,
 } from '@/lib/shared/api-key-scopes'
-import { defaultSelectedScopes } from '@/lib/shared/mcp-consent-scopes'
+import { consentPreset, defaultSelectedScopes } from '@/lib/shared/mcp-consent-scopes'
 
 describe('MCP consent catalogue', () => {
-  it('defaults first-connect to four Reads with changelog off', () => {
-    const selected = defaultSelectedScopes([...MCP_FIRST_CONNECT_SCOPES])
+  it('defaults a connect that follows the 401 challenge to full access', () => {
+    const selected = defaultSelectedScopes([...MCP_CHALLENGE_SCOPES])
     expect(ACCESS_DOMAINS).toHaveLength(5)
-    expect(domainAccessLevels(selected)).toEqual({
-      feedback: 'read',
-      changelog: 'off',
-      article: 'read',
-      chat: 'read',
-      settings: 'read',
-    })
+    expect(consentPreset(domainAccessLevels(selected))).toBe('full')
   })
 })

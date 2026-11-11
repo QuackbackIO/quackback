@@ -118,6 +118,7 @@ function visitorCache(overrides: Partial<VisitorThreadCache> = {}): VisitorThrea
     messages: [baseMessage('m1')],
     hasMore: false,
     agentLastReadAt: null,
+    visitorLastReadAt: null,
     status: 'open',
     csatRating: null,
     ...overrides,
@@ -470,18 +471,28 @@ describe('applyVisitorThreadEvent', () => {
     expect(applyVisitorThreadEvent(next, evt, CONV_ID)).toBe(next)
   })
 
-  it('advances the agent read watermark on agent reads only', () => {
+  it('advances the read watermark of the side that read', () => {
     const prev = visitorCache()
-    const next = applyVisitorThreadEvent(
+    const agentRead = applyVisitorThreadEvent(
       prev,
       { kind: 'read', conversationId: CONV_ID, side: 'agent', at: 't1' },
       CONV_ID
     )!
-    expect(next.agentLastReadAt).toBe('t1')
+    expect(agentRead).toMatchObject({ agentLastReadAt: 't1', visitorLastReadAt: null })
+    const visitorRead = applyVisitorThreadEvent(
+      prev,
+      { kind: 'read', conversationId: CONV_ID, side: 'visitor', at: 't2' },
+      CONV_ID
+    )!
+    expect(visitorRead).toMatchObject({ agentLastReadAt: null, visitorLastReadAt: 't2' })
+  })
+
+  it('returns prev untouched on a visitor read that does not move the watermark', () => {
+    const prev = visitorCache({ visitorLastReadAt: 't1' })
     expect(
       applyVisitorThreadEvent(
         prev,
-        { kind: 'read', conversationId: CONV_ID, side: 'visitor', at: 't2' },
+        { kind: 'read', conversationId: CONV_ID, side: 'visitor', at: 't1' },
         CONV_ID
       )
     ).toBe(prev)
@@ -615,6 +626,7 @@ describe('appendSentVisitorMessage', () => {
       messages: [expect.objectContaining({ id: 'm1' })],
       hasMore: false,
       agentLastReadAt: null,
+      visitorLastReadAt: null,
       status: 'open',
       csatRating: null,
     })
