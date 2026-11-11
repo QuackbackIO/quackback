@@ -34,7 +34,7 @@ export function ShortcutsDialog({
           <DialogTitle>Keys</DialogTitle>
           <DialogDescription>On a Mac, Cmd works in place of Ctrl.</DialogDescription>
         </DialogHeader>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[13px]">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-ui">
           {KEYS.map(([keys, what]) => (
             <div key={keys} className="contents">
               <dt className="font-mono text-xs">{keys}</dt>

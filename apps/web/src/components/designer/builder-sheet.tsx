@@ -1,7 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { motion, useIsPresent } from 'framer-motion'
-import { ChevronRightIcon } from '@heroicons/react/16/solid'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { ChevronRightIcon, XMarkIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
@@ -57,7 +56,7 @@ export function BuilderSheet({
                   <button
                     type="button"
                     onClick={onBack}
-                    className="rounded hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                    className="rounded hover:text-foreground focus-ring"
                   >
                     {back}
                   </button>
@@ -92,7 +91,7 @@ export function BuilderSheet({
           ref={heading}
           id={`${id}-title`}
           tabIndex={-1}
-          className="text-base font-semibold outline-none"
+          className="text-sm font-semibold outline-none"
         >
           {title}
         </h2>

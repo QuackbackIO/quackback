@@ -14,6 +14,7 @@ import { clearOverride, type StyleOverride } from '@/lib/shared/design/style-ove
 import { Advanced } from './advanced'
 import { WORDS } from './properties/words'
 import { setDifferently, type SetPlace } from './set-differently'
+import { TextButton } from './text-button'
 
 export function OverridesList({
   design,
@@ -60,7 +61,7 @@ export function OverridesList({
                               <button
                                 type="button"
                                 onClick={onGo}
-                                className="min-h-6 rounded py-1 text-start leading-4 font-medium hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                                className="min-h-6 rounded py-1 text-start leading-4 font-medium hover:underline focus-ring"
                               >
                                 {p.name}
                               </button>
@@ -81,8 +82,7 @@ export function OverridesList({
                             </span>
                           )}
                         </div>
-                        <button
-                          type="button"
+                        <TextButton
                           aria-label={`${action} ${p.name}`}
                           onClick={() =>
                             update(
@@ -93,10 +93,10 @@ export function OverridesList({
                               `${p.name}: reset`
                             )
                           }
-                          className="inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded px-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                          className="min-w-6 shrink-0 justify-center px-1"
                         >
                           {action}
-                        </button>
+                        </TextButton>
                       </li>
                     )
                   })}

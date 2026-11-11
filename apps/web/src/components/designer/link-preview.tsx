@@ -63,6 +63,7 @@ export function LinkPreview({
           )}
           <span
             className="truncate text-sm leading-tight"
+            title={title}
             style={{
               fontFamily: fontStack(design.brand.fonts.heading),
               fontWeight: design.brand.fonts.headingWeight,
@@ -78,8 +79,14 @@ export function LinkPreview({
         </div>
       )}
       <figcaption className="space-y-0.5 px-2 py-1.5 text-xs">
-        {host && <span className="block truncate text-muted-foreground">{host}</span>}
-        <span className="block truncate font-medium text-foreground">{title}</span>
+        {host && (
+          <span className="block truncate text-muted-foreground" title={host}>
+            {host}
+          </span>
+        )}
+        <span className="block truncate font-medium text-foreground" title={title}>
+          {title}
+        </span>
         <span className="line-clamp-2 text-muted-foreground">{description}</span>
       </figcaption>
     </figure>

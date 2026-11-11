@@ -26,6 +26,7 @@ import { HeroPhotoChip } from './hero-photo-chip'
 import type { StoredHero } from './use-image-upload'
 import type { DesignAiTurn } from './use-design-ai'
 import { Swatch } from '@/components/designer/swatch'
+import { TextButton } from '@/components/designer/text-button'
 
 /** Changes the draft, naming the change for undo when a name is given. */
 type Update = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -61,14 +62,13 @@ const rowWords = (row: ChangeRow) =>
 function ShowButton({ row, onShow }: { row: ChangeRow; onShow: ShowChange['go'] }) {
   const words = rowWords(row)
   return (
-    <button
-      type="button"
+    <TextButton
       aria-label={`Show ${words} on the page`}
       onClick={() => onShow(row.at, words)}
-      className="ms-auto rounded px-1 text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground"
+      className="ms-auto px-1 text-[length:inherit]"
     >
       Show
-    </button>
+    </TextButton>
   )
 }
 
@@ -145,7 +145,7 @@ function StepResult({
             type="button"
             aria-expanded={open}
             onClick={() => setOpen((was) => !was)}
-            className="inline-flex items-center gap-0.5 rounded outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground"
+            className="inline-flex items-center gap-0.5 rounded outline-none hover:text-foreground focus-ring"
           >
             {open ? 'Hide changes' : 'Show changes'}
             <ChevronDownIcon
@@ -158,8 +158,8 @@ function StepResult({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="ms-auto -my-1 h-7 px-2 focus-visible:ring-muted-foreground"
+            size="xs"
+            className="ms-auto -my-1 text-ui focus-visible:ring-muted-foreground"
             onClick={() => undo(holding)}
           >
             Undo
@@ -199,14 +199,13 @@ function StepResult({
           {partUndos.length > 1 && (
             <div aria-label="Undo in parts" role="group" className="flex flex-wrap gap-x-3">
               {partUndos.map(({ part, changes: rows }) => (
-                <button
+                <TextButton
                   key={part}
-                  type="button"
+                  className="text-[length:inherit]"
                   onClick={() => undo(rows, MATCH_PART_LABEL[part])}
-                  className="rounded text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground"
                 >
                   {MATCH_PART_LABEL[part]}
-                </button>
+                </TextButton>
               ))}
             </div>
           )}
@@ -329,7 +328,7 @@ export function AskAiPanel({
   }
   if (!available) {
     return (
-      <p className="text-[13px] text-muted-foreground">
+      <p className="text-ui text-muted-foreground">
         Quackback AI is not set up. Everything else works.
       </p>
     )
@@ -393,8 +392,8 @@ export function AskAiPanel({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="sm"
-                      className="-my-1 h-7 px-2 text-xs text-muted-foreground"
+                      size="xs"
+                      className="-my-1 text-muted-foreground"
                       disabled={busy}
                       onClick={() => {
                         const others = turn.others!
@@ -419,17 +418,13 @@ export function AskAiPanel({
                     <Button variant="outline" size="sm" onClick={() => onUploadFont(turn.font!)}>
                       Upload {turn.font.family}
                     </Button>
-                    <button
-                      type="button"
-                      onClick={onFonts}
-                      className="rounded text-xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground"
-                    >
+                    <TextButton onClick={onFonts} className="text-xs">
                       Fonts in Theme
-                    </button>
+                    </TextButton>
                   </div>
                 )}
                 {turn.asks?.map((question) => (
-                  <p key={question} className="text-[13px] text-muted-foreground">
+                  <p key={question} className="text-ui text-muted-foreground">
                     {plainWords(question)}
                   </p>
                 ))}
@@ -454,7 +449,7 @@ export function AskAiPanel({
                               const change = chipChange(chip)
                               if (!change || !direct(chip, 'Done.', change)) onChip(chip)
                             }}
-                            className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground disabled:opacity-50"
+                            className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-ring disabled:opacity-50"
                           >
                             {chip}
                           </button>
@@ -470,7 +465,7 @@ export function AskAiPanel({
         {busy &&
           (steps.length > 0 ? (
             <li>
-              <ol aria-label="Progress" className="space-y-1 text-[13px] text-muted-foreground">
+              <ol aria-label="Progress" className="space-y-1 text-ui text-muted-foreground">
                 {steps.map((step, at) => (
                   <li key={step} className="flex items-center gap-1.5">
                     <span aria-hidden="true" className="w-3 text-center">
@@ -482,7 +477,7 @@ export function AskAiPanel({
               </ol>
             </li>
           ) : (
-            <li className="text-[13px] text-muted-foreground">{stage ?? 'Working on it…'}</li>
+            <li className="text-ui text-muted-foreground">{stage ?? 'Working on it…'}</li>
           ))}
       </ol>
     </div>
@@ -518,11 +513,8 @@ export function SiteCapture({
           (later ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span
-                  tabIndex={0}
-                  className="rounded outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
-                >
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2" disabled>
+                <span tabIndex={0} className="rounded outline-none focus-ring">
+                  <Button type="button" variant="ghost" size="xs" className="text-ui" disabled>
                     {MATCH_BRAND.captureAgain}
                   </Button>
                 </span>
@@ -533,8 +525,8 @@ export function SiteCapture({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-7 px-2"
+              size="xs"
+              className="text-ui"
               disabled={busy}
               onClick={() => onRecapture(capture.url)}
             >

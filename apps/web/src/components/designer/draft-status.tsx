@@ -106,7 +106,7 @@ export const DraftStatus = memo(function DraftStatus({
         <DropdownMenuContent align="end" className="w-72">
           {count > 0 && (
             <div className="space-y-0.5 px-2 pt-1.5 pb-2">
-              <p className="text-[13px] font-semibold">Not live yet</p>
+              <p className="text-ui font-semibold">Not live yet</p>
               <p className="text-xs text-muted-foreground">{notLive(count, published)}</p>
             </div>
           )}

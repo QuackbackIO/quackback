@@ -73,7 +73,7 @@ function SignInEmailSample() {
           className="h-72 w-full rounded-md border bg-white"
         />
       ) : sample ? (
-        <p className="text-[13px] text-muted-foreground">{sample.message}</p>
+        <p className="text-ui text-muted-foreground">{sample.message}</p>
       ) : (
         <div className="h-72 w-full animate-pulse rounded-md bg-muted" />
       )}

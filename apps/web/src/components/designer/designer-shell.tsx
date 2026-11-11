@@ -632,7 +632,7 @@ export function DesignerShell({
                     title="Widget"
                   />
                 ) : page === 'post' && !postPath ? (
-                  <p className="p-6 text-[13px] text-muted-foreground">
+                  <p className="p-6 text-ui text-muted-foreground">
                     {noPost ? 'There are no posts to show yet.' : 'Finding a post…'}
                   </p>
                 ) : (

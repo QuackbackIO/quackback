@@ -49,8 +49,7 @@ export function switcherFilter(value: string, search: string, keywords: string[]
   return score > 0 && search && name.startsWith(search.trim().toLowerCase()) ? score + 1 : score
 }
 
-const ROW =
-  'min-h-8 py-1.5 text-[13px] data-[current=true]:bg-muted data-[current=true]:font-medium'
+const ROW = 'min-h-8 py-1.5 text-ui data-[current=true]:bg-muted data-[current=true]:font-medium'
 
 /** What the switcher lists, read when it first opens. */
 function usePlaces(enabled: boolean) {
@@ -211,7 +210,7 @@ export function SwitcherMenu({
         </span>
       </div>
       <CommandList className="max-h-[min(62vh,560px)] border-t border-border px-2 pt-2">
-        <CommandEmpty className="py-6 text-center text-[13px] text-muted-foreground">
+        <CommandEmpty className="py-6 text-center text-ui text-muted-foreground">
           {SWITCHER_COPY.empty}
         </CommandEmpty>
         <div className="grid grid-cols-1 gap-x-2 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
@@ -221,10 +220,10 @@ export function SwitcherMenu({
               className={cn(column.key === 'off' && 'rounded-lg bg-muted/50')}
               heading={
                 <span className="block normal-case">
-                  <span className="block text-[13px] font-semibold text-foreground">
+                  <span className="block text-ui font-semibold text-foreground">
                     {column.title}
                   </span>
-                  <span className="flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
+                  <span className="flex items-center gap-1 text-2xs font-normal text-muted-foreground">
                     {column.menuNote && <ListBulletIcon className="size-3.5" aria-hidden="true" />}
                     {column.note}
                   </span>
@@ -243,14 +242,16 @@ export function SwitcherMenu({
                   className={cn(ROW, row.indent && 'ps-5')}
                 >
                   {row.go.kind === 'turn-on' && <PlusIcon aria-hidden="true" />}
-                  <span className="truncate">{row.label}</span>
+                  <span className="truncate" title={row.label}>
+                    {row.label}
+                  </span>
                   {row.hint && (
                     <span
                       className={cn(
                         'ms-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground',
                         (row.go.kind === 'sample' || row.go.kind === 'widget') &&
                           !row.current &&
-                          'rounded border border-border bg-background px-1.5 text-[11px]'
+                          'rounded border border-border bg-background px-1.5 text-2xs'
                       )}
                     >
                       {row.hint === SWITCHER_COPY.lands && (
@@ -293,7 +294,7 @@ function ChooseOne({
           <ArrowLeftIcon className="size-4" aria-hidden="true" />
           {SWITCHER_COPY.back}
         </Button>
-        <h2 className="text-[13px] font-semibold">{CHOOSE_TITLES[list]}</h2>
+        <h2 className="text-sm font-semibold">{CHOOSE_TITLES[list]}</h2>
       </div>
       <div className="mx-3 rounded-md border border-border [&_[cmdk-input-wrapper]]:border-b-0">
         <CommandInput
@@ -303,7 +304,7 @@ function ChooseOne({
         />
       </div>
       <CommandList className="max-h-[min(55vh,480px)] p-2">
-        <CommandEmpty className="py-6 text-center text-[13px] text-muted-foreground">
+        <CommandEmpty className="py-6 text-center text-ui text-muted-foreground">
           {loading ? SWITCHER_COPY.loading : SWITCHER_COPY.nothing}
         </CommandEmpty>
         {items.map((item) => (
@@ -313,7 +314,9 @@ function ChooseOne({
             onSelect={() => onChoose(item.path)}
             className={ROW}
           >
-            <span className="truncate">{item.title}</span>
+            <span className="truncate" title={item.title}>
+              {item.title}
+            </span>
           </CommandItem>
         ))}
       </CommandList>

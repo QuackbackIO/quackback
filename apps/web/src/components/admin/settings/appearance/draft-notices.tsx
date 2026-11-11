@@ -29,14 +29,14 @@ export function DraftNotices({ draft }: { draft: Draft }) {
   return (
     <>
       {draft.readOnly && (
-        <p role="status" className="text-[13px] text-muted-foreground">
+        <p role="status" className="text-ui text-muted-foreground">
           {NEWER_FORMAT_LINE}
         </p>
       )}
       {draft.conflict && (
         <div
           role="alert"
-          className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-[13px] text-foreground"
+          className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-ui text-foreground"
         >
           <p>
             <span className="font-medium">
@@ -55,10 +55,7 @@ export function DraftNotices({ draft }: { draft: Draft }) {
         </div>
       )}
       {draft.refusal && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-2 text-[13px] text-destructive"
-        >
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-ui text-destructive">
           <p>{draft.refusal}</p>
           <Button size="sm" variant="outline" onClick={() => draft.recover()}>
             Back to last saved

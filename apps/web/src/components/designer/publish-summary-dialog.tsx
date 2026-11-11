@@ -25,19 +25,19 @@ function Checks({
 }) {
   if (!checks.length)
     return (
-      <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-ui text-muted-foreground">
         <CheckIcon className="size-4 text-success" aria-hidden="true" />
         Every check passes
       </p>
     )
   return (
     <section aria-labelledby="summary-checks" className="space-y-1">
-      <h3 id="summary-checks" className="text-[13px] font-medium">
+      <h3 id="summary-checks" className="text-ui font-medium">
         {checks.length === 1 ? '1 thing to check' : `${checks.length} things to check`}
       </h3>
       <ul className="divide-y divide-border border-t border-border">
         {checks.map((check) => (
-          <li key={check.id} className="flex items-start gap-2 py-2 text-[13px]">
+          <li key={check.id} className="flex items-start gap-2 py-2 text-ui">
             <ExclamationTriangleIcon
               className="mt-0.5 size-3.5 shrink-0 text-warning"
               aria-hidden="true"
@@ -64,10 +64,10 @@ function Rows({ title, rows }: { title: string; rows: SummaryRow[] }) {
   if (!rows.length) return null
   return (
     <section className="space-y-1">
-      <h3 className="text-[13px] font-medium">{title}</h3>
+      <h3 className="text-ui font-medium">{title}</h3>
       <dl className="divide-y divide-border border-t border-border">
         {rows.map((row, at) => (
-          <div key={at} className="grid grid-cols-[6rem_1fr] gap-3 py-2 text-[13px]">
+          <div key={at} className="grid grid-cols-[6rem_1fr] gap-3 py-2 text-ui">
             <dt className="text-muted-foreground">{row.kind}</dt>
             <dd>
               <span className="block font-medium">{row.title}</span>
@@ -157,7 +157,7 @@ export function PublishSummaryDialog({
                 onCheckedChange={(checked) => setWorkspaceLogo(checked === true)}
                 className="mt-0.5"
               />
-              <label htmlFor="summary-workspace-logo" className="text-[13px]">
+              <label htmlFor="summary-workspace-logo" className="text-ui">
                 <span className="block font-medium">
                   Also use the new logo in the admin and emails
                 </span>
@@ -169,7 +169,7 @@ export function PublishSummaryDialog({
           )}
           <Checks checks={checks} onShow={onShowCheck} />
           {refusal && (
-            <p role="alert" className="text-[13px] text-destructive">
+            <p role="alert" className="text-ui text-destructive">
               {refusal}
             </p>
           )}

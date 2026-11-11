@@ -39,7 +39,7 @@ export function SummaryRow({
         aria-controls={controls}
         data-summary-row=""
         onClick={onOpen}
-        className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-ring"
       >
         <span className="min-w-0 flex-1 truncate">{value}</span>
         <ChevronRightIcon

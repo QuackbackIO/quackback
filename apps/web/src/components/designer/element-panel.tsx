@@ -355,7 +355,7 @@ export function ElementPanel({
       <p
         data-in-use={label}
         className={cn(
-          '-mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground',
+          '-mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground',
           ROW_INDENT
         )}
       >
@@ -363,7 +363,7 @@ export function ElementPanel({
         <button
           type="button"
           onClick={use}
-          className="shrink-0 rounded hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="shrink-0 rounded hover:text-foreground hover:underline focus-ring"
         >
           {WORDS.useThis}
         </button>
@@ -424,7 +424,7 @@ export function ElementPanel({
                       angle: 135,
                     } satisfies StylePaint)
                   }
-                  className="min-w-0 truncate rounded text-[11px] text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                  className="min-w-0 truncate rounded text-2xs text-muted-foreground hover:text-foreground hover:underline focus-ring"
                 >
                   Gradient
                 </button>
@@ -729,7 +729,7 @@ function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Scr
             tabIndex={radioTabIndex(on, none, index)}
             onClick={() => onChange(screen)}
             className={cn(
-              'h-full rounded px-1.5 text-[11px] focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'h-full rounded px-1.5 text-2xs focus-ring',
               on
                 ? screen === 'phone'
                   ? PHONE_TINT.chip
@@ -768,7 +768,7 @@ function StateChip({
         <button
           type="button"
           data-state-chip=""
-          className="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-2xs text-muted-foreground hover:text-foreground focus-ring"
         >
           {WORDS.state}: <span className="text-foreground">{STATE_INFO[value].label}</span>
           {others && (
@@ -780,7 +780,7 @@ function StateChip({
               <span className="sr-only">, other states set</span>
             </>
           )}
-          <ChevronDownIcon className="size-3" aria-hidden="true" />
+          <ChevronDownIcon className="size-3.5" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
@@ -789,7 +789,7 @@ function StateChip({
           onValueChange={(next) => onChange(next as StyleState)}
         >
           {states.map((s) => (
-            <DropdownMenuRadioItem key={s} value={s} className="text-[13px]">
+            <DropdownMenuRadioItem key={s} value={s} className="text-ui">
               {STATE_INFO[s].label}
               {isSet(s) && (
                 <>

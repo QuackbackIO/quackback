@@ -534,8 +534,8 @@ function CommentItem({
               <div className="flex items-center gap-1 mt-2 ms-10">
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  size="icon-xs"
+                  className="text-muted-foreground hover:text-foreground"
                   onClick={() => setIsCollapsed(!isCollapsed)}
                 >
                   {isCollapsed ? (
@@ -777,8 +777,8 @@ function CommentItem({
               {editError && <p className="text-xs text-destructive mt-1">{editError}</p>}
               <div className="flex items-center gap-2 mt-2">
                 <Button
-                  size="sm"
-                  className="h-7 px-3 text-xs"
+                  size="xs"
+                  className="px-3"
                   onClick={handleSaveEdit}
                   disabled={editMutation.isPending || !editContent.trim()}
                 >
@@ -795,8 +795,8 @@ function CommentItem({
                 </Button>
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="h-7 px-3 text-xs"
+                  size="xs"
+                  className="px-3"
                   onClick={() => {
                     setIsEditing(false)
                     setEditContent(comment.content)
@@ -856,8 +856,8 @@ function CommentItem({
             {hasReplies && (
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                size="icon-xs"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={() => setIsCollapsed(!isCollapsed)}
               >
                 {isCollapsed ? (
@@ -888,8 +888,8 @@ function CommentItem({
                 <PopoverTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                    size="2xs"
+                    className="w-6 p-0 text-muted-foreground hover:text-foreground"
                     disabled={isPending}
                     data-testid="add-reaction-button"
                   >
@@ -917,8 +917,8 @@ function CommentItem({
             {!isDeleted && allowCommenting && canNest && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                size="2xs"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={() => setShowReplyForm(!showReplyForm)}
                 data-testid="reply-button"
               >
@@ -931,8 +931,8 @@ function CommentItem({
             {canPin && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                size="2xs"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={
                   isPinned ? onUnpinComment : () => onPinComment?.(comment.id as PostCommentId)
                 }
@@ -952,8 +952,8 @@ function CommentItem({
             {canRestore && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                size="2xs"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={() => onRestoreComment!(comment.id as PostCommentId)}
                 disabled={isBeingRestored}
               >
@@ -974,8 +974,8 @@ function CommentItem({
             {canEdit && !isEditing && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                size="2xs"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   setIsEditing(true)
                   setEditContent(comment.content)
@@ -990,8 +990,8 @@ function CommentItem({
             {canDelete && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                size="2xs"
+                className="text-muted-foreground hover:text-destructive"
                 onClick={() => setDeleteConfirmOpen(true)}
                 disabled={isBeingDeleted}
               >

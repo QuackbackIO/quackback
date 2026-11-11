@@ -71,7 +71,7 @@ export function MenuClickMenu({
   const [lead, ...rest] = menu.entries
   // What the item is: over the changes, or over the one entry there is.
   const title = menu.title && (
-    <DropdownMenuLabel className="max-w-72 py-1 text-[11px] font-normal text-muted-foreground">
+    <DropdownMenuLabel className="max-w-72 py-1 text-2xs font-normal text-muted-foreground">
       {menu.title}
     </DropdownMenuLabel>
   )
@@ -86,14 +86,14 @@ export function MenuClickMenu({
           onAction(each.action)
           onClose()
         }}
-        className={cn('min-w-60 py-1.5 text-[13px]', ref && 'font-medium')}
+        className={cn('min-w-60 py-1.5 text-ui', ref && 'font-medium')}
       >
         <Icon className="size-4" aria-hidden="true" />
         <span className="me-4">{each.label}</span>
         {each.hint && (
           <span
             className={cn(
-              'ms-auto text-[11px] text-muted-foreground',
+              'ms-auto text-2xs text-muted-foreground',
               KEY_HINTS.has(each.hint) && 'rounded border border-border px-1.5 leading-4'
             )}
           >

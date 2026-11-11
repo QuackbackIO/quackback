@@ -25,12 +25,11 @@ import {
 import { BLOCK_ACTIONS } from './properties/words'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { chipPlacement, outlineBox, type Rect } from '@/lib/shared/design/layer-geometry'
+import { CANVAS_CHANGED, CANVAS_HALO, CANVAS_PICKED } from './canvas-colours'
 
 /** The picked block's outline and chip: blue, edged in white, so it reads on any brand colour. */
-const PICKED = '#2563eb'
-
-/** What changed, outlined: neutral grey, never the brand's colour or the pick's blue. */
-const CHANGED = '#71717a'
+const PICKED = CANVAS_PICKED
+const CHANGED = CANVAS_CHANGED
 
 /** A chip size to place it by until it has been measured. */
 const CHIP_GUESS = { width: 220, height: 28 }
@@ -206,7 +205,7 @@ export function EditingLayer({
           style={{
             ...outlineBox(picked, 2, room),
             outline: `2px solid ${PICKED}`,
-            boxShadow: '0 0 0 1px #fff, inset 0 0 0 1px #fff',
+            boxShadow: CANVAS_HALO,
             transition: glide,
           }}
         />
@@ -294,7 +293,7 @@ function ChangeOutline({ rect, room }: { rect: Rect; room: { width: number; heig
       style={{
         ...outlineBox(rect, 2, room),
         outline: `2px solid ${CHANGED}`,
-        boxShadow: '0 0 0 1px #fff, inset 0 0 0 1px #fff',
+        boxShadow: CANVAS_HALO,
       }}
     />
   )

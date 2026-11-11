@@ -24,7 +24,7 @@ const DOWN_ARROW = <ArrowDownIcon className="size-3.5" aria-hidden="true" />
 const EYE = <EyeIcon className="size-3.5" aria-hidden="true" />
 const EYE_SLASH = <EyeSlashIcon className="size-3.5" aria-hidden="true" />
 
-const ring = 'outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground'
+const ring = 'outline-none focus-ring'
 const iconButton = cn(
   'grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40',
   ring
@@ -200,11 +200,13 @@ export function PageTree({
             )}
           >
             {row.blockType && <BlockIcon type={row.blockType} />}
-            <span className="truncate">{row.label}</span>
-            {row.note && <span className="shrink-0 text-[11px]">· {row.note}</span>}
+            <span className="truncate" title={row.label}>
+              {row.label}
+            </span>
+            {row.note && <span className="shrink-0 text-2xs">· {row.note}</span>}
           </span>
           {row.hide?.shown && row.hide.locked && (
-            <span id={`${labelId}-locked`} className="shrink-0 text-[11px] text-muted-foreground">
+            <span id={`${labelId}-locked`} className="shrink-0 text-2xs text-muted-foreground">
               {MENU_COPY.landsHere}
             </span>
           )}

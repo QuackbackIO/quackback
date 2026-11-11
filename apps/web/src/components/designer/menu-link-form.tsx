@@ -49,7 +49,7 @@ export function MenuLinkForm({
       }}
     >
       <div className="space-y-1">
-        <label htmlFor={`${id}-name`} className="text-[13px] font-medium">
+        <label htmlFor={`${id}-name`} className="text-ui font-medium">
           {WORDS.name}
         </label>
         <Input
@@ -68,7 +68,7 @@ export function MenuLinkForm({
         )}
       </div>
       <div className="space-y-1">
-        <label htmlFor={`${id}-url`} className="text-[13px] font-medium">
+        <label htmlFor={`${id}-url`} className="text-ui font-medium">
           {WORDS.address}
         </label>
         <Input

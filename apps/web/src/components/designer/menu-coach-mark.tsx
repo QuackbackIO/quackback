@@ -110,7 +110,7 @@ export function MenuCoachMark({
         style={{ left: arrow }}
       />
       <p className="min-w-0 flex-1 text-xs">{MENU_COPY.coachHint}</p>
-      <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2 text-xs" onClick={onDismiss}>
+      <Button variant="ghost" size="2xs" className="shrink-0" onClick={onDismiss}>
         {MENU_COPY.coachDone}
       </Button>
     </div>

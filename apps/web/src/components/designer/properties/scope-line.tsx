@@ -58,7 +58,7 @@ export function ScopeLine<T extends string>({
 }) {
   const picked = narrower.find((o) => o.id === value)
   const link =
-    'rounded text-foreground underline underline-offset-2 hover:text-foreground/80 focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none disabled:no-underline disabled:opacity-50'
+    'rounded text-foreground underline underline-offset-2 hover:text-foreground/80 focus-ring disabled:no-underline disabled:opacity-50'
   return (
     <div
       className={cn('space-y-0.5 text-xs leading-relaxed text-muted-foreground', className)}

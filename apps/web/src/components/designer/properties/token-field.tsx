@@ -23,6 +23,7 @@ import { faceName, hexOf, type ColourToken, type FontToken } from './tokens'
 import { PropertyTiles, Tip } from './properties-panel'
 import { WORDS, linkTo } from './words'
 import { Swatch } from '../swatch'
+import { TextButton } from '../text-button'
 
 const isHex = (value: string | undefined): value is string => !!value && value.startsWith('#')
 
@@ -106,7 +107,7 @@ export function TokenField({
             aria-label={`${label}: ${token?.name ?? shown ?? 'none'}`}
             data-token-state={token ? 'linked' : isHex(shown) ? 'detached' : 'none'}
             className={cn(
-              'flex h-7 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'flex h-7 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-xs hover:bg-muted focus-ring',
               value === undefined && 'text-muted-foreground'
             )}
           >
@@ -118,7 +119,7 @@ export function TokenField({
             ) : isHex(shown) ? (
               <>
                 <Swatch colour={shown} dark={darkShown} />
-                <span className="font-mono text-[11px] uppercase">{shown}</span>
+                <span className="font-mono text-2xs uppercase">{shown}</span>
                 <LinkSlashIcon
                   className="size-3 shrink-0 text-muted-foreground"
                   aria-hidden="true"
@@ -166,7 +167,7 @@ export function TokenField({
                     aria-pressed={editing.value === t.id}
                     onClick={() => pick(t.id)}
                     className={cn(
-                      'flex size-8 items-center justify-center rounded-md border focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+                      'flex size-8 items-center justify-center rounded-md border focus-ring',
                       editing.value === t.id
                         ? 'border-foreground'
                         : 'border-transparent hover:border-border'
@@ -191,13 +192,13 @@ export function TokenField({
       </Popover>
       {back && (
         <Tip text={linkTo(back.name)}>
-          <button
-            type="button"
+          <TextButton
             onClick={() => onChange(back.id)}
-            className="min-h-6 truncate rounded py-1 text-[11px] leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            underlined
+            className="block truncate py-1 leading-4"
           >
             {linkTo(back.name)}
-          </button>
+          </TextButton>
         </Tip>
       )}
     </div>
@@ -244,13 +245,13 @@ export function FontField({
             aria-label={`${label}: ${slot ? `${slot.name}, ${slot.face}` : (shown ?? 'none')}`}
             data-token-state={slot ? 'linked' : shown ? 'detached' : 'none'}
             className={cn(
-              'flex h-7 min-w-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'flex h-7 min-w-0 items-center gap-1.5 rounded-md border border-border px-1.5 text-xs hover:bg-muted focus-ring',
               value === undefined && 'text-muted-foreground'
             )}
           >
             <span
               aria-hidden="true"
-              className="text-[13px] leading-none"
+              className="text-ui leading-none"
               style={slot ? { fontFamily: slot.stack } : undefined}
             >
               Aa
@@ -276,7 +277,7 @@ export function FontField({
                     setOpen(false)
                   }}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+                    'flex w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs hover:bg-muted focus-ring',
                     value === s.id && 'bg-muted font-medium'
                   )}
                 >
@@ -294,13 +295,13 @@ export function FontField({
       </Popover>
       {linkBack && onChange && (
         <Tip text={linkTo(linkBack.name)}>
-          <button
-            type="button"
+          <TextButton
             onClick={() => onChange(linkBack.id)}
-            className="min-h-6 truncate rounded py-1 text-[11px] leading-4 text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            underlined
+            className="block truncate py-1 leading-4"
           >
             {linkTo(linkBack.name)}
-          </button>
+          </TextButton>
         </Tip>
       )}
     </div>
@@ -344,13 +345,13 @@ export function FontFaces({
       aria-pressed={key(font) === key(value)}
       onClick={() => onChange(font)}
       className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+        'flex w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs hover:bg-muted focus-ring',
         key(font) === key(value) && 'bg-muted font-medium'
       )}
     >
       <span
         aria-hidden="true"
-        className="w-6 text-[14px]"
+        className="w-6 text-sm"
         style={font ? { fontFamily: fontStack(font) } : undefined}
       >
         Aa

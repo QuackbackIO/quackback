@@ -15,6 +15,7 @@ import { SUPPORTED_LOCALES, type SupportedLocale } from '@/lib/shared/i18n'
 import type { CanvasZoom } from './designer-canvas'
 import { Help, PropertyRow, PropertyTiles } from './properties/properties-panel'
 import { THEME, WORDS } from './properties/words'
+import { TextButton } from './text-button'
 
 const ZOOMS: Array<readonly [CanvasZoom, string, string]> = [
   ['fit', 'Fit', 'Fit to the window'],
@@ -48,7 +49,7 @@ export function ZoomControl({
           tabIndex={zoom === value ? 0 : -1}
           onClick={() => onZoom(value)}
           className={cn(
-            'h-7 rounded-md px-1.5 text-xs tabular-nums text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground',
+            'h-7 rounded-md px-1.5 text-xs tabular-nums text-muted-foreground outline-none hover:text-foreground focus-ring',
             zoom === value &&
               'bg-background text-foreground shadow-sm forced-colors:outline forced-colors:outline-1'
           )}
@@ -87,7 +88,7 @@ export function ViewOptions({
 }) {
   const id = useId()
   return (
-    <section aria-labelledby={`${id}-view`} className="space-y-1 text-[13px]">
+    <section aria-labelledby={`${id}-view`} className="space-y-1 text-ui">
       <div className="flex items-center gap-0.5">
         <h3 id={`${id}-view`} className="text-xs font-semibold">
           Viewing the page
@@ -132,13 +133,9 @@ export function ViewOptions({
           </SelectContent>
         </Select>
       </PropertyRow>
-      <button
-        type="button"
-        onClick={onKeys}
-        className="mt-1 inline-flex min-h-6 items-center rounded-sm text-xs text-muted-foreground underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground"
-      >
+      <TextButton onClick={onKeys} underlined className="mt-1 rounded-sm text-xs">
         {THEME.keyboardShortcuts}
-      </button>
+      </TextButton>
     </section>
   )
 }

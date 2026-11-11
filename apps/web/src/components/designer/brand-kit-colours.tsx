@@ -34,6 +34,7 @@ import {
 } from './properties/properties-panel'
 import { COLOUR_NAMES, THEME, WORDS, resetToValue } from './properties/words'
 import { Swatch } from './swatch'
+import { TextButton } from './text-button'
 
 type Palette = PortalDesign['brand']['light']
 /** Changes the draft as one step, named for its undo where a name is given. */
@@ -120,14 +121,11 @@ export function ColourValue({
           type="button"
           aria-label={`${name}: ${label ?? (auto !== undefined ? WORDS.auto : WORDS.none)}`}
           data-colour-state={value ? 'set' : 'auto'}
-          className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-xs hover:border-border hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-xs hover:border-border hover:bg-muted focus-ring"
         >
           <Swatch colour={hexOrNone(shown)} />
           <span
-            className={cn(
-              'ms-auto text-muted-foreground',
-              value && 'font-mono text-[11px] uppercase'
-            )}
+            className={cn('ms-auto text-muted-foreground', value && 'font-mono text-2xs uppercase')}
           >
             {label ?? (auto !== undefined ? WORDS.auto : WORDS.none)}
           </span>
@@ -239,7 +237,7 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
     <PropertySection
       title={THEME.sections.colours}
       aside={
-        <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title={status}>
+        <span className="flex items-center gap-1 text-2xs text-muted-foreground" title={status}>
           {failing === 0 ? (
             <CheckCircleIcon className="size-3.5 text-success" aria-hidden="true" />
           ) : (
@@ -263,8 +261,8 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
           <ColourValue id={id} name={name} value={value} onChange={(v) => v && write(v)} />
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="size-6 shrink-0"
+            size="icon-xs"
+            className="shrink-0"
             aria-label={`Remove ${name.toLowerCase()}`}
             onClick={() => write(undefined)}
           >
@@ -295,7 +293,7 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-ring"
         >
           <PlusIcon className="size-3.5" aria-hidden="true" />
           {THEME.addColour}
@@ -338,7 +336,7 @@ function FromLogo({
               type="button"
               aria-label={THEME.useAsBrand(colour)}
               onClick={() => onPick(colour)}
-              className="grid size-6 place-items-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+              className="grid size-6 place-items-center rounded-md hover:bg-muted focus-ring"
             >
               <Swatch colour={hexOrNone(colour)} className="size-4" />
             </button>
@@ -368,8 +366,7 @@ function RowIssue({
       {issue.fix && (
         <Button
           variant="outline"
-          size="sm"
-          className="h-6 px-2 text-xs"
+          size="2xs"
           aria-label={`${THEME.fix} ${name}`}
           onClick={() => onFix(issue.fix!)}
         >
@@ -405,7 +402,7 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
     })
   return (
     <details className="group/dark" data-dark-values="" data-find={FIND.darkMode.id}>
-      <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 rounded focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 rounded focus-ring [&::-webkit-details-marker]:hidden">
         <span className={cn(ROW_LABEL, 'shrink-0 text-xs leading-tight text-muted-foreground')}>
           {THEME.darkMode}
         </span>
@@ -444,16 +441,13 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
           )
         )}
         {custom && (
-          <button
-            type="button"
+          <TextButton
+            underlined
             onClick={() => update((draft) => void delete draft.brand.dark)}
-            className={cn(
-              'inline-flex min-h-6 items-center rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
-              ROW_INDENT_MARGIN
-            )}
+            className={ROW_INDENT_MARGIN}
           >
             {THEME.resetAllToAuto}
-          </button>
+          </TextButton>
         )}
       </div>
     </details>

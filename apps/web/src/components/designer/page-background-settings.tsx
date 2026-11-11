@@ -193,17 +193,11 @@ function BackgroundImageSlot({
         )}
         <span className="ms-auto flex gap-0.5">
           {url && onRemove && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={onRemove}
-              disabled={busy}
-            >
+            <Button variant="ghost" size="2xs" onClick={onRemove} disabled={busy}>
               Remove
             </Button>
           )}
-          <Button variant="outline" size="sm" className="h-6 px-2 text-xs" asChild disabled={busy}>
+          <Button variant="outline" size="2xs" asChild disabled={busy}>
             <label className="cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-muted-foreground">
               {busy ? THEME.uploading : url ? THEME.replace : THEME.upload}
               <input
@@ -384,8 +378,8 @@ function FillSettings({
               {index === 2 && (
                 <Button
                   variant="ghost"
-                  size="icon-sm"
-                  className="size-6 shrink-0"
+                  size="icon-xs"
+                  className="shrink-0"
                   aria-label={THEME.removeStop}
                   onClick={() => onChange({ ...fill, stops: fill.stops.slice(0, 2) }, 'Colours')}
                 >
@@ -398,7 +392,7 @@ function FillSettings({
             <button
               type="button"
               onClick={() => onChange({ ...fill, stops: [...fill.stops, 'page'] }, 'Colours')}
-              className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+              className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-ring"
             >
               <PlusIcon className="size-3.5" aria-hidden="true" />
               {THEME.addStop}

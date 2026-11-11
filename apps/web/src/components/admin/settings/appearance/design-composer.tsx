@@ -19,6 +19,7 @@ import type { DesignAiScope } from '@/lib/shared/design/apply-changes'
 import type { AiReach, ReachChoice } from '@/lib/shared/design/ai-reach'
 import type { BrandContext, ChatImage } from './use-design-ai'
 import { useShotChecks } from './use-shot-checks'
+import { TextButton } from '@/components/designer/text-button'
 
 /** Each scope as the composer's chip names it. */
 export const SCOPE_LABEL: Record<DesignAiScope, string> = {
@@ -230,7 +231,7 @@ export function DesignComposer({
   }
   if (limited)
     return (
-      <p className="rounded-2xl border border-border bg-card p-3 text-[13px] text-muted-foreground">
+      <p className="rounded-2xl border border-border bg-card p-3 text-ui text-muted-foreground">
         {limited}
       </p>
     )
@@ -273,7 +274,7 @@ export function DesignComposer({
                   <button
                     type="button"
                     aria-label={`Remove ${item.name}`}
-                    className="absolute -end-2 -top-2 inline-flex size-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                    className="absolute -end-2 -top-2 inline-flex size-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground focus-ring"
                     onClick={() =>
                       setImages((current) => current.filter((it) => it.id !== item.id))
                     }
@@ -295,8 +296,7 @@ export function DesignComposer({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-7 px-2"
+            size="xs"
             onClick={() => checks.keep(images[warned]!.id)}
           >
             {MATCH_BRAND.keep}
@@ -372,14 +372,14 @@ export function DesignComposer({
             <TooltipTrigger asChild>
               <span
                 tabIndex={0}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground outline-none focus-ring"
               >
                 {label ?? SCOPE_LABEL[scope]}
                 {scope !== 'site' && (
                   <button
                     type="button"
                     aria-label="Widen to the whole site"
-                    className="-me-1 inline-flex size-6 items-center justify-center rounded-full hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                    className="-me-1 inline-flex size-6 items-center justify-center rounded-full hover:bg-muted hover:text-foreground focus-ring"
                     onClick={onClearScope}
                   >
                     <XMarkIcon className="size-3.5" aria-hidden="true" />
@@ -476,23 +476,27 @@ export function ContextChip({ context, onClear }: { context: ChatContext; onClea
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 rounded-lg bg-muted py-0.5 ps-2 pe-0.5 text-xs">
       <span className="min-w-0 leading-tight">
-        <span className="block truncate font-medium text-foreground">{context.name}</span>
+        <span className="block truncate font-medium text-foreground" title={context.name}>
+          {context.name}
+        </span>
         {choices.length > 1 ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                type="button"
+              <TextButton
                 aria-label={`How far a request reaches: ${line}`}
-                className="block max-w-full truncate rounded text-start text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                underlined
+                className="block max-w-full truncate text-start text-[length:inherit] decoration-dotted"
                 onClick={next}
               >
                 {line}
-              </button>
+              </TextButton>
             </TooltipTrigger>
             <TooltipContent>How far a request reaches</TooltipContent>
           </Tooltip>
         ) : (
-          <span className="block truncate text-muted-foreground">{line}</span>
+          <span className="block truncate text-muted-foreground" title={line}>
+            {line}
+          </span>
         )}
       </span>
       <Tooltip>
@@ -500,7 +504,7 @@ export function ContextChip({ context, onClear }: { context: ChatContext; onClea
           <button
             type="button"
             aria-label={`Remove ${context.name} from the chat and deselect it`}
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-ring"
             onClick={onClear}
           >
             <XMarkIcon className="size-3.5" aria-hidden="true" />

@@ -105,7 +105,7 @@ export function ReviewPublishDialog({
           {menu && menu.length > 0 && (
             <section aria-label="Menu and landing" className="space-y-1">
               <h3 className="text-xs font-medium text-muted-foreground">Menu and landing</h3>
-              <ul className="space-y-1 text-[13px]">
+              <ul className="space-y-1 text-ui">
                 {menu.map((row, at) => (
                   <li key={at}>
                     {row.title}
@@ -127,14 +127,14 @@ export function ReviewPublishDialog({
             }
           />
           {report.adjustments.length > 0 && (
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-ui text-muted-foreground">
               {report.adjustments.length === 1
                 ? 'One colour was adjusted so text stays readable.'
                 : `${report.adjustments.length} colours were adjusted so text stays readable.`}
             </p>
           )}
           {blocked && (
-            <div role="alert" className="text-[13px] text-destructive">
+            <div role="alert" className="text-ui text-destructive">
               Text can’t be read on these colours: {report.errors.join('; ')}.
             </div>
           )}
@@ -145,7 +145,7 @@ export function ReviewPublishDialog({
                 checked={workspaceLogo}
                 onCheckedChange={(checked) => setWorkspaceLogo(checked === true)}
               />
-              <label htmlFor="publish-workspace-logo" className="text-[13px]">
+              <label htmlFor="publish-workspace-logo" className="text-ui">
                 Also use the new logo in the admin and emails
               </label>
             </div>
@@ -160,12 +160,12 @@ export function ReviewPublishDialog({
             />
           )}
           {refusal && (
-            <p role="alert" className="text-[13px] text-destructive">
+            <p role="alert" className="text-ui text-destructive">
               {refusal}
             </p>
           )}
           {!canPublish && (
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-ui text-muted-foreground">
               Publishing needs permission to publish the design.
             </p>
           )}

@@ -429,10 +429,10 @@ export function CommentForm({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
+                  size="xs"
+                  className="px-3"
                   onClick={onCancel}
                   disabled={isSubmitting}
-                  className="h-7 text-xs"
                 >
                   {intl.formatMessage({
                     id: 'portal.commentForm.cancel',
@@ -442,9 +442,9 @@ export function CommentForm({
               )}
               <Button
                 type="button"
-                size="sm"
+                size="xs"
                 disabled={isSubmitting}
-                className="h-7 text-xs"
+                className="px-3"
                 onClick={submit}
               >
                 {isSubmitting

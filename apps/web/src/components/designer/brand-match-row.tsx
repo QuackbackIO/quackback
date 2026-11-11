@@ -191,7 +191,7 @@ function ShotDrop({
                   className="size-12 rounded-md border border-border object-cover"
                 />
               ) : (
-                <span className="grid size-12 place-items-center rounded-md border border-border text-[11px] text-muted-foreground">
+                <span className="grid size-12 place-items-center rounded-md border border-border text-2xs text-muted-foreground">
                   {shot.file.name}
                 </span>
               )}
@@ -199,7 +199,7 @@ function ShotDrop({
                 type="button"
                 aria-label={`Remove ${shot.file.name}`}
                 onClick={() => onRemove(shot.id)}
-                className="absolute -end-1.5 -top-1.5 grid size-5 place-items-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                className="absolute -end-1.5 -top-1.5 grid size-5 place-items-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground focus-ring"
               >
                 <XMarkIcon className="size-3" aria-hidden="true" />
               </button>
@@ -224,7 +224,7 @@ function ShotDrop({
             onAdd(filesOf(event.dataTransfer))
           }}
           className={cn(
-            'flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+            'flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-ring',
             over ? 'border-muted-foreground bg-muted' : 'border-border'
           )}
         >
@@ -245,7 +245,7 @@ function ShotDrop({
         }}
       />
       {note && (
-        <p role="status" className="text-[11px] text-muted-foreground">
+        <p role="status" className="text-2xs text-muted-foreground">
           {note}
         </p>
       )}
@@ -270,7 +270,7 @@ function BrandCoach({ onDismiss }: { onDismiss: () => void }) {
         className="absolute -top-1.5 start-4 size-3 rotate-45 border-s border-t border-border bg-popover"
       />
       <p className="min-w-0 flex-1 text-xs">{MATCH_ROW.coach}</p>
-      <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2 text-xs" onClick={onDismiss}>
+      <Button variant="ghost" size="2xs" className="shrink-0" onClick={onDismiss}>
         {MATCH_ROW.coachDone}
       </Button>
     </div>
@@ -344,11 +344,11 @@ function MatchForm({
           }}
           className="h-7 min-w-0 flex-1 px-1.5 text-xs"
         />
-        <Button size="sm" className="h-7 px-2.5 text-xs" disabled={!sendable} onClick={send}>
+        <Button size="xs" className="px-2.5" disabled={!sendable} onClick={send}>
           {control.busy ? MATCH_ROW.matching : MATCH_ROW.match}
         </Button>
         {onCancel && (
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onCancel}>
+          <Button variant="ghost" size="xs" onClick={onCancel}>
             {MATCH_ROW.cancel}
           </Button>
         )}
@@ -390,7 +390,7 @@ function PickChip({
       aria-pressed={checked}
       onClick={onToggle}
       className={cn(
-        'flex h-7 items-center gap-1.5 rounded-full border px-2 text-xs focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+        'flex h-7 items-center gap-1.5 rounded-full border px-2 text-xs focus-ring',
         checked
           ? 'border-foreground/40 bg-muted text-foreground'
           : 'border-border text-muted-foreground hover:bg-muted'
@@ -501,16 +501,16 @@ function SiteUseForm({
           className="h-7 min-w-0 flex-1 px-1.5 text-xs"
         />
         <Button
-          size="sm"
+          size="xs"
           variant={offer ? 'outline' : 'default'}
-          className="h-7 px-2.5 text-xs"
+          className="px-2.5"
           disabled={!website.trim() || reading}
           onClick={() => void read()}
         >
           {reading ? MATCH_ROW.reading : MATCH_ROW.read}
         </Button>
         {onCancel && (
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onCancel}>
+          <Button variant="ghost" size="xs" onClick={onCancel}>
             {MATCH_ROW.cancel}
           </Button>
         )}
@@ -533,13 +533,13 @@ function SiteUseForm({
               />
             ))}
           </div>
-          <Button size="sm" className="h-7 px-2.5 text-xs" disabled={!picks.size} onClick={use}>
+          <Button size="xs" className="px-2.5" disabled={!picks.size} onClick={use}>
             {MATCH_ROW.use}
           </Button>
         </div>
       )}
       {said && (
-        <p role="status" className="text-[11px] text-muted-foreground">
+        <p role="status" className="text-2xs text-muted-foreground">
           {said}
         </p>
       )}
@@ -607,8 +607,8 @@ function MatchRowBody({
     <PropertyRow label={withAi ? MATCH_ROW.rowLabel : MATCH_ROW.useRowLabel}>
       <Button
         variant="ghost"
-        size="sm"
-        className="h-7 px-1.5 text-xs text-muted-foreground"
+        size="xs"
+        className="px-1.5 text-muted-foreground"
         disabled={control.busy}
         onClick={() => setAgain(true)}
       >

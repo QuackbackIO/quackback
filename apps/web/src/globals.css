@@ -255,6 +255,10 @@
   --z-index-drag: 60;
   --z-index-toast: 70;
 
+  /* Compact chrome type: 13px for builder rows and buttons, 11px for hints. No line-height companion, so heights stay as they were. */
+  --text-ui: 13px;
+  --text-2xs: 11px;
+
   /* Colors */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -616,6 +620,11 @@ a svg,
     inset-inline: 0;
     inset-block: -0.25rem;
   }
+}
+
+/* The builder's neutral focus ring: a 2px grey ring with no offset. */
+@utility focus-ring {
+  @apply focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none;
 }
 
 /* The neutral focus ring a portal control draws. */

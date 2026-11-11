@@ -61,7 +61,7 @@ export function PropertyRowNote({
   id?: string
 }) {
   return (
-    <p id={id} className={cn(ROW_INDENT, 'text-[11px] text-muted-foreground', className)}>
+    <p id={id} className={cn(ROW_INDENT, 'text-2xs text-muted-foreground', className)}>
       {children}
     </p>
   )
@@ -122,7 +122,7 @@ export function PropertiesPanel({
   className?: string
 } & { [data: `data-${string}`]: string | undefined }) {
   return (
-    <div className={cn('flex min-h-full flex-col text-[13px]', className)} {...rest}>
+    <div className={cn('flex min-h-full flex-col text-ui', className)} {...rest}>
       <header className="space-y-1.5 border-b border-border px-4 pt-3 pb-3">
         {crumbs.length > 0 && (
           <nav aria-label="Where it is" className="text-xs text-muted-foreground">
@@ -140,7 +140,7 @@ export function PropertiesPanel({
                       <button
                         type="button"
                         onClick={crumb.onSelect}
-                        className="rounded hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                        className="rounded hover:text-foreground focus-ring"
                       >
                         {crumb.label}
                       </button>
@@ -155,7 +155,7 @@ export function PropertiesPanel({
         )}
         <div className="flex items-center gap-2">
           {icon}
-          <h2 className="min-w-0 truncate rounded-sm text-[15px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground">
+          <h2 className="min-w-0 truncate rounded-sm text-sm font-semibold outline-none focus-ring">
             {title}
           </h2>
           {about && <Help text={about} />}
@@ -172,14 +172,12 @@ export function PropertiesPanel({
                   <DropdownMenuItem
                     key={action.label}
                     disabled={action.disabled}
-                    className="text-[13px]"
+                    className="text-ui"
                     onClick={action.onSelect}
                   >
                     {action.label}
                     {action.keys && (
-                      <span className="ms-auto text-[11px] text-muted-foreground">
-                        {action.keys}
-                      </span>
+                      <span className="ms-auto text-2xs text-muted-foreground">{action.keys}</span>
                     )}
                   </DropdownMenuItem>
                 ))}
@@ -204,7 +202,7 @@ export function PropertiesPanel({
                     <button
                       type="button"
                       onClick={place.onGo}
-                      className="rounded text-start hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                      className="rounded text-start hover:underline focus-ring"
                     >
                       {place.label}
                     </button>
@@ -270,8 +268,7 @@ export function PropertySection({
           {onAdd && !added && (
             <Button
               variant="ghost"
-              size="icon-sm"
-              className="size-6"
+              size="icon-xs"
               aria-label={`Add ${title.toLowerCase()}`}
               onClick={onAdd}
             >
@@ -281,8 +278,7 @@ export function PropertySection({
           {onRemove && added && (
             <Button
               variant="ghost"
-              size="icon-sm"
-              className="size-6"
+              size="icon-xs"
               aria-label={`Remove ${title.toLowerCase()}`}
               onClick={onRemove}
             >
@@ -325,7 +321,7 @@ export function PropertyMore({
         if (remember) keepOpen(remember, now)
       }}
     >
-      <summary className="flex min-h-7 cursor-pointer list-none items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-7 cursor-pointer list-none items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-ring [&::-webkit-details-marker]:hidden">
         <ChevronRightIcon
           className="size-3.5 transition-transform group-open:rotate-90"
           aria-hidden="true"
@@ -429,7 +425,7 @@ export function PropertyRow({
           <button
             type="button"
             onClick={onUseAllScreens}
-            className="rounded text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+            className="rounded text-muted-foreground hover:text-foreground hover:underline focus-ring"
           >
             {PHONE_WORDS.useAllScreens}
           </button>
@@ -457,7 +453,7 @@ export const Help = memo(function Help({ text }: { text: string }) {
         type="button"
         aria-label={text}
         data-help=""
-        className="-my-1 grid size-6 shrink-0 place-items-center rounded text-muted-foreground/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        className="-my-1 grid size-6 shrink-0 place-items-center rounded text-muted-foreground/70 hover:text-foreground focus-ring"
       >
         <InformationCircleIcon className="size-3" aria-hidden="true" />
       </button>
@@ -503,7 +499,7 @@ function ResetButton({ label, onReset }: { label: string; onReset: () => void })
         aria-label={label}
         data-reset=""
         onClick={onReset}
-        className="relative -my-1 grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        className="relative -my-1 grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-ring"
       >
         <ArrowUturnLeftIcon className="size-3.5" aria-hidden="true" />
         <SetDot phone={false} className="absolute top-0.5 right-0.5" />
@@ -590,7 +586,7 @@ export function PropertyTiles<T extends string>({
             tabIndex={index === stop ? 0 : -1}
             onClick={() => onChange(option)}
             className={cn(
-              'min-h-6 min-w-0 rounded-md border px-1 py-0.5 text-[11px] leading-tight focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'min-h-6 min-w-0 rounded-md border px-1 py-0.5 text-2xs leading-tight focus-ring',
               on
                 ? PICKED_TILE
                 : from
@@ -652,7 +648,7 @@ export function PropertyDrawnTiles<T extends string>({
             aria-label={name}
             onClick={() => onChange(option)}
             className={cn(
-              'flex min-w-0 flex-col gap-1 rounded-md border p-1 text-center focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              'flex min-w-0 flex-col gap-1 rounded-md border p-1 text-center focus-ring',
               on ? PICKED_TILE : 'border-border hover:bg-muted'
             )}
           >
@@ -662,7 +658,7 @@ export function PropertyDrawnTiles<T extends string>({
             >
               {drawing}
             </span>
-            <span className="text-[11px] leading-tight break-words">{name}</span>
+            <span className="text-2xs leading-tight break-words">{name}</span>
           </button>
         )
       })}
