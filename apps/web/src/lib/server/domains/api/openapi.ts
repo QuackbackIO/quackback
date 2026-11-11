@@ -70,6 +70,11 @@ export const ErrorResponseSchema = z.object({
     details: z.record(z.string(), z.unknown()).optional().meta({
       description: 'Additional error details',
     }),
+    requestId: z.string().optional().meta({
+      description:
+        'Present on 5xx responses. Identifies the request in the server logs; also sent as the `x-request-id` response header. Quote it when reporting the error.',
+      example: 'd264c488-0d4e-4b0f-9a55-6a1f7f0f3f0e',
+    }),
   }),
 })
 
