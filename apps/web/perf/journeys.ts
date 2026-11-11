@@ -1477,6 +1477,13 @@ journeys.push(
     setup: async (page) => {
       await reviewSetup(page)
       await openReview(page)
+      // Both frames have taken the design posted in after they loaded, so its redraw
+      // is not counted in the switch.
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll<HTMLIFrameElement>('figure[data-side] iframe')].every(
+          (each) => !!each.contentDocument?.querySelector('style[data-preview-design]')
+        )
+      )
     },
     run: async (page) => {
       for (const name of ['Feedback', 'Roadmap']) {
@@ -1493,13 +1500,37 @@ journeys.push(
 /** The full review, while it is open. */
 const review = (page: Page) => page.getByRole('dialog', { name: /^Review/ })
 
-/** Until the review's After frame shows `name` drawn with the draft, its skeleton gone. */
+/** Where each page of the review is, inside its frames. */
+const REVIEW_PATHS: Record<string, string> = {
+  Home: '/',
+  Feedback: '/feedback',
+  Roadmap: '/roadmap',
+}
+
+/**
+ * Until the review's After frame shows `name` drawn with the draft, its skeleton
+ * gone, and both frames have drawn that page, so the Live frame's own renders
+ * are counted every time rather than only when they land before the run ends.
+ */
 async function afterFrameShows(page: Page, name: string) {
   const frame = review(page).locator(`iframe[title^="After you publish, ${name},"]`)
   await frame.waitFor()
   await review(page)
     .locator('figure[data-side="after"] [data-canvas-box][aria-busy="false"]')
     .waitFor()
+  await page.waitForFunction(
+    (path) =>
+      [
+        ...document.querySelectorAll<HTMLIFrameElement>(
+          'figure[data-side] iframe:not([title^="Widget"])'
+        ),
+      ].every(
+        (each) =>
+          each.contentWindow?.location.pathname === path &&
+          !!each.contentDocument?.querySelector('[data-qb-section]')
+      ),
+    REVIEW_PATHS[name]
+  )
 }
 
 /** One change saved, and Publish's summary open on it. */

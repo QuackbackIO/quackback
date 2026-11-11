@@ -1359,9 +1359,9 @@
       "serverRequests": 10,
       "requests": 298,
       "jsRequests": 282,
-      "jsKB": 1201.3,
+      "jsKB": 1200.9,
       "htmlTransferKB": 0,
-      "componentRenders": 1118,
+      "componentRenders": 1116,
       "canvasPosts": 18
     },
     "ui:builder-review-switch-page": {
