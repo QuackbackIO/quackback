@@ -42,7 +42,7 @@ export function isTrustedAttachmentUrl(url: string): boolean {
 }
 
 /** The key a URL under the public bucket URL (`S3_PUBLIC_URL`) names, or null. */
-function publicBucketKey(url: string): string | null {
+export function publicBucketKey(url: string): string | null {
   try {
     // Read inside the try: outside a booted process (a build, a unit test)
     // there is no configuration, and so no public bucket URL to match.
