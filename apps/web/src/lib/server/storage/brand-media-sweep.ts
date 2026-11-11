@@ -23,6 +23,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
+import { config } from '@/lib/server/config'
 import { currentWorkspaceStorage, isS3Usable, type StoredObject } from './s3'
 
 const log = logger.child({ component: 'brand-media-sweep' })
@@ -79,6 +80,7 @@ export interface BrandMediaStorage {
 }
 
 export interface BrandMediaSweepOptions {
+  /** Report without deleting. Defaults to on unless `BRAND_MEDIA_SWEEP_DELETE` is set. */
   dryRun?: boolean
   now?: Date
   /** The storage to sweep; the current workspace's by default. */
@@ -100,6 +102,9 @@ export async function sweepUnusedBrandMedia(
   opts: BrandMediaSweepOptions = {}
 ): Promise<BrandMediaSweepResult> {
   const result: BrandMediaSweepResult = { deleted: [], referenced: 0, young: 0, failed: 0 }
+  // Deleting stored files is hard to undo, and self-hosted installs upgrade
+  // unwatched, so deleting is opt-in.
+  const dryRun = opts.dryRun ?? !config.brandMediaSweepDelete
   if (!opts.storage && !isS3Usable()) return result
   const storage = opts.storage ?? (await currentWorkspaceStorage())
   const cutoff = (opts.now ?? new Date()).getTime() - BRAND_MEDIA_MIN_AGE_MS
@@ -121,7 +126,7 @@ export async function sweepUnusedBrandMedia(
   const unused = await unreferencedKeys(old)
   result.referenced = old.length - unused.length
   for (const key of unused) {
-    if (opts.dryRun) {
+    if (dryRun) {
       result.deleted.push(key)
       continue
     }
@@ -137,13 +142,14 @@ export async function sweepUnusedBrandMedia(
   log.info(
     {
       event: 'brand_media_sweep',
-      dryRun: !!opts.dryRun,
+      dryRun,
+      sample: result.deleted.slice(0, 5),
       deleted: result.deleted.length,
       referenced: result.referenced,
       young: result.young,
       failed: result.failed,
     },
-    opts.dryRun ? 'brand media sweep dry run' : 'brand media sweep done'
+    dryRun ? 'brand media sweep dry run: would delete these' : 'brand media sweep done'
   )
   return result
 }

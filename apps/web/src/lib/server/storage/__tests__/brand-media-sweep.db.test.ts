@@ -14,6 +14,10 @@ vi.mock('@/lib/server/db', async (original) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+const { config } = await import('@/lib/server/config')
+let deleteOn = true
+vi.spyOn(config, 'brandMediaSweepDelete', 'get').mockImplementation(() => deleteOn)
+
 const { sweepUnusedBrandMedia, BRAND_MEDIA_MIN_AGE_MS } = await import('../brand-media-sweep')
 
 const NOW = new Date('2026-11-11T12:00:00Z')
@@ -36,6 +40,7 @@ function bucket(objects: StoredObject[]) {
 
 const fixture = await createDbTestFixture()
 beforeEach(async () => {
+  deleteOn = true
   expect(fixture.available).toBe(true)
   await fixture.begin()
   await testDb.delete(portalDesigns)
@@ -93,5 +98,20 @@ describe('sweepUnusedBrandMedia', () => {
     const store = bucket([{ key: 'logos/removed.png', lastModified: null }])
     await sweepUnusedBrandMedia({ storage: store, now: NOW })
     expect(store.held.has('logos/removed.png')).toBe(true)
+  })
+
+  it('only reports what it would delete while BRAND_MEDIA_SWEEP_DELETE is off', async () => {
+    deleteOn = false
+    const store = bucket([{ key: 'logos/removed.png', lastModified: OLD }])
+    const result = await sweepUnusedBrandMedia({ storage: store, now: NOW })
+    expect(result.deleted).toEqual(['logos/removed.png'])
+    expect(store.held.has('logos/removed.png')).toBe(true)
+  })
+
+  it('deletes while BRAND_MEDIA_SWEEP_DELETE is on', async () => {
+    deleteOn = true
+    const store = bucket([{ key: 'logos/removed.png', lastModified: OLD }])
+    await sweepUnusedBrandMedia({ storage: store, now: NOW })
+    expect(store.held.has('logos/removed.png')).toBe(false)
   })
 })

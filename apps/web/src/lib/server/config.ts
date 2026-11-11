@@ -319,6 +319,8 @@ const configSchema = z
 
     // Telemetry (optional)
     disableTelemetry: envBoolean,
+    // Brand media sweep: deletes only when set; otherwise a dry run
+    brandMediaSweepDelete: envBoolean,
 
     // Automatic website branding for new workspaces (optional)
     disableAutomaticBranding: envBoolean,
@@ -522,6 +524,7 @@ function buildConfigFromEnv(): unknown {
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
+    brandMediaSweepDelete: env('BRAND_MEDIA_SWEEP_DELETE'),
 
     // Automatic website branding
     disableAutomaticBranding: env('DISABLE_AUTOMATIC_BRANDING'),
@@ -858,6 +861,11 @@ export const config = {
   // Telemetry
   get disableTelemetry() {
     return loadConfig().disableTelemetry
+  },
+
+  /** Whether the daily brand media sweep deletes; off, it only logs what it would delete. */
+  get brandMediaSweepDelete() {
+    return loadConfig().brandMediaSweepDelete
   },
 
   // Automatic website branding: true stops the first-run lookup of the
