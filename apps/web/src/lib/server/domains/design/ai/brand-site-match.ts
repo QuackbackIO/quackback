@@ -121,6 +121,14 @@ export async function siteOnlyMatch(
     snapped: [],
     name,
   }
+  // The other looks came with the first, at no further cost; each keeps what the site set.
+  const siteSet = new Set(applied.applied.map((c) => c.path))
+  const others = look.ok
+    ? look.others?.map((other) => ({
+        description: other.description,
+        changes: [...other.changes.filter((c) => !siteSet.has(c.path)), ...applied.applied],
+      }))
+    : undefined
   const lead = look.ok
     ? look.reply.replace(/ from your screenshots?\./, ` from ${host}.`)
     : `I read ${host}.`
@@ -144,5 +152,6 @@ export async function siteOnlyMatch(
     timings: {},
     target: null,
     site: use,
+    ...(others?.length && { others }),
   }
 }

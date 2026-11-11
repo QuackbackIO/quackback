@@ -85,3 +85,38 @@ describe('a match from the website alone', () => {
     expect(home.headline?.subtitle).toEqual({ en: 'Share a post with the team.' })
   })
 })
+
+describe('another look from a website-only match', () => {
+  it('offers the looks written with the first, keeping what the site set', async () => {
+    written.looks = [
+      { ...DIRECTIONS_EXAMPLE, headline: 'First look' },
+      { ...DIRECTIONS_EXAMPLE, headline: 'Second look' },
+    ]
+    const design = defaultDesign()
+    const result = await siteOnlyMatch(
+      {
+        design,
+        allows,
+        site: {
+          facts: {
+            url: 'https://acme.test/',
+            colours: [],
+            fonts: { heading: null, body: null, faces: [], hosted: [] },
+          },
+          favicon: null,
+          logo: null,
+          shareImage: null,
+          failed: null,
+        } as never,
+      },
+      {
+        fallback: () => matchBrand({ design, images: [], name: 'Acme', hasMark: false, allows }),
+      },
+      null
+    )
+    if (!result.ok) throw new Error('expected a match')
+    expect(result.others).toHaveLength(1)
+    const titles = result.others![0]!.changes.filter((c) => c.path.includes('headline'))
+    expect(JSON.stringify(titles)).toContain('Second look')
+  })
+})
