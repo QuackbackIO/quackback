@@ -80,7 +80,7 @@ export const Route = createFileRoute('/_portal')({
     error?: string
     theme?: 'light' | 'dark'
     preview?: boolean
-    design?: 'switch'
+    design?: 'switch' | 'draft'
     share?: string
     lang?: string
     designer?: 1
@@ -95,9 +95,9 @@ export const Route = createFileRoute('/_portal')({
     // postMessage draft bridge. Both retained across in-app navigation below.
     theme: search.theme === 'light' || search.theme === 'dark' ? search.theme : undefined,
     preview: search.preview === true || search.preview === 1 || search.preview === '1' || undefined,
-    // The switch preview: the portal drawn as it would be on the design
-    // (see __root.tsx), kept as the frame navigates.
-    design: search.design === 'switch' ? 'switch' : undefined,
+    // The switch preview: the portal drawn as it would be on the design; or the
+    // saved draft, for the publish review (see __root.tsx). Kept as the frame navigates.
+    design: search.design === 'switch' || search.design === 'draft' ? search.design : undefined,
     // A shared preview link's token (see __root.tsx), kept as the visitor navigates.
     share: isPreviewToken(search.share) ? search.share : undefined,
     // The language a preview is drawn in, so words can be written for each.

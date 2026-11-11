@@ -20,14 +20,16 @@ export type SharedPreviewState = 'shown' | 'ended'
 
 /**
  * What the root route asks the bootstrap for, from the page's search: the
- * switch preview, a preview link's design, or nothing more. The key keeps
- * each answer apart in the route context memo.
+ * switch preview, the saved draft (the publish review's After frame), a
+ * preview link's design, or nothing more. The key keeps each answer apart in
+ * the route context memo.
  */
 export function rootContextRequest(search: Record<string, unknown>): {
-  data: { designPreview: 'switch' } | { previewToken: string } | undefined
+  data: { designPreview: 'switch' | 'draft' } | { previewToken: string } | undefined
   key: string
 } {
   if (search.design === 'switch') return { data: { designPreview: 'switch' }, key: 'switch' }
+  if (search.design === 'draft') return { data: { designPreview: 'draft' }, key: 'draft' }
   const token = search[PREVIEW_LINK_PARAM]
   if (isPreviewToken(token)) return { data: { previewToken: token }, key: `share:${token}` }
   return { data: undefined, key: '' }
