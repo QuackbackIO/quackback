@@ -206,6 +206,26 @@ describe('feedback header title', () => {
     expect(composer.getAttribute('data-reduced-motion')).toBe('user')
   })
 
+  it('brings a handed-in draft into view at once where the visitor asks for less motion', async () => {
+    const scrollIntoView = Element.prototype.scrollIntoView
+    const matchMedia = window.matchMedia
+    Element.prototype.scrollIntoView = vi.fn()
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+    })) as never
+    try {
+      renderHeader({ title: 'zapier', key: 1 })
+      await screen.findByTestId('editor')
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+        behavior: 'auto',
+        block: 'center',
+      })
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView
+      window.matchMedia = matchMedia
+    }
+  })
+
   it('cuts a long draft to the title limit, so it can be submitted', async () => {
     const scrollIntoView = Element.prototype.scrollIntoView
     Element.prototype.scrollIntoView = vi.fn()

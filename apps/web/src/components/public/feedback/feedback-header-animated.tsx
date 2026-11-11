@@ -181,7 +181,10 @@ export function FeedbackHeaderAnimated({
     if (!draft) return
     title.set(draft.title.slice(0, TITLE_MAX_LENGTH))
     setExpanded(true)
-    titleInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    titleInputRef.current?.scrollIntoView({
+      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'center',
+    })
     titleInputRef.current?.focus({ preventScroll: true })
   }, [draft, title])
 

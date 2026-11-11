@@ -9,7 +9,7 @@
  */
 import { layoutAttributes, photoShade } from './components'
 import { rewritePartAliases } from './parts'
-import { designFontIds, fontStack, uploadedFontFaces } from './fonts'
+import { designFontIds, fallbackFontFaces, fontStack, uploadedFontFaces } from './fonts'
 import { renderDesignCss, resolveDesign, type ResolvedDesign } from './resolve'
 import { readableStatusColours } from './status-colours'
 import { shortHash, squareIconPath } from './share-card'
@@ -30,7 +30,9 @@ export function designView(
     engine: 'v2',
     mode: doc.mode,
     revision,
-    themeStyles: [uploadedFontFaces(doc), renderDesignCss(resolved)].filter(Boolean).join(' '),
+    themeStyles: [uploadedFontFaces(doc), fallbackFontFaces(doc), renderDesignCss(resolved)]
+      .filter(Boolean)
+      .join(' '),
     customCss: doc.css ? `@layer tenant {\n${rewritePartAliases(doc.css)}\n}` : '',
     fontSans: fontStack(doc.brand.fonts.body),
     fontIds: designFontIds(doc),
