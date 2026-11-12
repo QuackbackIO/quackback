@@ -4,6 +4,7 @@ import type { AuditActorType } from '@/lib/server/audit/log'
 import { isValidTypeId } from '@quackback/ids'
 import type { ExportRunId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { internalRouteErrorResponse } from '@/lib/server/domains/api/responses'
 
 const log = logger.child({ component: 'export-run-download' })
 
@@ -91,7 +92,7 @@ export async function handleDownloadExportRun(runId: string, request: Request): 
       return Response.json(error.toResponseBody(), { status: error.statusCode })
     }
     log.error({ err: error }, 'export download failed')
-    return Response.json({ error: 'Internal server error' }, { status: 500 })
+    return internalRouteErrorResponse()
   }
 }
 

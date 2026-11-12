@@ -6,6 +6,7 @@ import { REQUIRED_HEADERS } from '@/lib/shared/schemas/import'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
 import { contentLengthExceeds } from '@/lib/server/utils/read-body'
 import { logger } from '@/lib/server/logger'
+import { internalRouteErrorResponse } from '@/lib/server/domains/api/responses'
 
 const log = logger.child({ component: 'import' })
 
@@ -187,7 +188,7 @@ export async function handleImportPost(request: Request): Promise<Response> {
   } catch (error) {
     log.error({ err: error }, 'csv import failed')
     // The real error is in the log line above; its message can quote SQL.
-    return Response.json({ error: 'Internal server error' }, { status: 500 })
+    return internalRouteErrorResponse()
   }
 }
 
