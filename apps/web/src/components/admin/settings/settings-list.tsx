@@ -148,8 +148,10 @@ export function SettingsListRow({
       {own(grip)}
       {own(leading)}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{title}</span>
+        {/* On a phone the title is what tells rows apart, so it wraps and the
+            badges drop under it; from sm up there is room to keep one line. */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
+          <span className="min-w-0 text-sm font-medium wrap-anywhere sm:truncate">{title}</span>
           {badges}
         </div>
         {meta && (
