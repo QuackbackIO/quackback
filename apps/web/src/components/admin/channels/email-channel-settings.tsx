@@ -336,11 +336,17 @@ function InboundRouteSection({
             unverified.
           </p>
         </div>
-        <div className="inline-flex shrink-0 rounded-lg border border-border p-0.5">
+        <div
+          role="radiogroup"
+          aria-label="Unverified senders"
+          className="inline-flex shrink-0 rounded-lg border border-border p-0.5"
+        >
           {TRUST_OPTIONS.map((option) => (
             <button
               key={option.value}
               type="button"
+              role="radio"
+              aria-checked={inboundTrust === option.value}
               disabled={trust.isPending}
               onClick={() => {
                 setActionError(null)
@@ -351,7 +357,7 @@ function InboundRouteSection({
               className={cn(
                 'rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors',
                 inboundTrust === option.value
-                  ? 'bg-primary/10 text-foreground'
+                  ? 'bg-muted text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >

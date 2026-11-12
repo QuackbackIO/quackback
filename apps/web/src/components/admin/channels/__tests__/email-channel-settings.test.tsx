@@ -1072,28 +1072,37 @@ describe('the support inbox', () => {
     expect(screen.getByText('Unverified senders')).toBeTruthy()
     expect(screen.queryByText('Sender trust')).toBeNull()
     expect(screen.getByText(/fails authentication/).textContent).not.toMatch(/\u2014/)
-    expect(screen.getByRole('button', { name: 'Quarantine' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'Quarantine' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'Accept' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /strict|lenient/i })).toBeNull()
+  })
+
+  it('says which unverified senders choice is on, to a screen reader as well', () => {
+    renderSettings({ inboundRoute: route })
+    const group = screen.getByRole('radiogroup', { name: 'Unverified senders' })
+    const checked = within(group)
+      .getAllByRole('radio')
+      .filter((r) => r.getAttribute('aria-checked') === 'true')
+    expect(checked).toHaveLength(1)
   })
 
   it('stores Accept as lenient and Quarantine as strict', () => {
     renderSettings({ inboundRoute: route })
-    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Accept' }))
     expect(updateTrust).toHaveBeenLastCalledWith('lenient', expect.anything())
-    fireEvent.click(screen.getByRole('button', { name: 'Quarantine' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Quarantine' }))
     expect(updateTrust).toHaveBeenLastCalledWith('strict', expect.anything())
   })
 
   it('shows a refused change inline, not as a toast, until the next attempt', () => {
     updateTrust.mockImplementation(refused(''))
     renderSettings({ inboundRoute: route })
-    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Accept' }))
     expect(screen.getByRole('alert').textContent).toBe("Couldn't change unverified senders.")
     expect(toastError).not.toHaveBeenCalled()
 
     updateTrust.mockReset()
-    fireEvent.click(screen.getByRole('button', { name: 'Quarantine' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Quarantine' }))
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
