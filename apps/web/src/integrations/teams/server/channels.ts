@@ -1,3 +1,4 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 /**
  * Teams channel and team listing.
  */
@@ -24,7 +25,10 @@ export async function listTeams(accessToken: string): Promise<Array<{ id: string
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list Teams: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Teams: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as { value: TeamsTeam[] }
@@ -50,7 +54,10 @@ export async function listTeamsChannels(
   )
 
   if (!response.ok) {
-    throw new Error(`Failed to list Teams channels: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Teams channels: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as { value: TeamsChannel[] }

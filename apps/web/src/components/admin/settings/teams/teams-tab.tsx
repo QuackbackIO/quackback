@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TeamDialog } from '@/components/admin/settings/teams/team-dialog'
 import type { FeatureFlags } from '@/lib/shared/types'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { toastError } from '@/lib/client/error-notice'
 
 const METHOD_LABELS: Record<string, string> = {
   manual: 'Manual',
@@ -54,7 +55,7 @@ export function TeamsTab() {
       toast.success('Team deleted')
       setDeleting(null)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to delete team')
+      toastError(err, 'Failed to delete team')
     } finally {
       setDeletePending(false)
     }

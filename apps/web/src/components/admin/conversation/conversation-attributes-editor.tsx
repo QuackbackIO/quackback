@@ -9,7 +9,6 @@
 import { memo, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
-import { toast } from 'sonner'
 import type { ConversationId, TicketId } from '@quackback/ids'
 import { setConversationAttributeValueFn } from '@/lib/server/functions/conversation-attributes'
 import {
@@ -41,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { DetailRow as Row } from '@/components/shared/detail-row'
+import { toastError } from '@/lib/client/error-notice'
 
 const NONE = '__none__'
 
@@ -204,7 +204,7 @@ export const ConversationAttributesEditor = memo(function ConversationAttributes
       })
       onChanged()
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to update attribute'),
+    onError: (e) => toastError(e, 'Failed to update attribute'),
   })
 
   if (!definitions || definitions.length === 0) return null

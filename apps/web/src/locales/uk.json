@@ -2089,6 +2089,8 @@
   "common.errorPage.error.title": "Щось пішло не так",
   "common.errorPage.error.description": "Сталася неочікувана помилка. Спробуйте ще раз або поверніться на головну сторінку.",
   "common.errorPage.technicalDetails": "Технічні подробиці",
+  "common.errorPage.reference": "Код помилки",
+  "common.errorPage.copyReference": "Скопіювати код",
   "common.errorPage.tryAgain": "Спробувати ще раз",
   "common.errorPage.goHome": "На головну",
   "portal.header.auth.accountMenu": "Відкрити меню акаунта",

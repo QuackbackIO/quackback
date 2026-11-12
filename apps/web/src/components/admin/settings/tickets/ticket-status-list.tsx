@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
 import { AUTOSAVE } from '@/lib/client/autosave'
-import { toast } from 'sonner'
 import {
   DndContext,
   closestCenter,
@@ -53,6 +52,8 @@ import {
   deleteTicketStatusFn,
 } from '@/lib/server/functions/tickets'
 import { ticketStatusesQuery, ticketStageLabelsQuery } from './queries'
+import { errorText } from '@/lib/client/error-text'
+import { toastError } from '@/lib/client/error-notice'
 
 const HIDDEN = 'hidden'
 
@@ -182,7 +183,7 @@ export function TicketStatusList({
         (qc.getQueryData<TicketStatusEntity[]>(KEY) ?? statuses).filter((s) => s.id !== toDelete.id)
       )
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete status')
+      toastError(error, 'Failed to delete status')
     } finally {
       setToDelete(null)
     }
@@ -397,7 +398,7 @@ function StatusDialog({ open, onOpenChange, status, stageLabels, onSubmit }: Sta
       await onSubmit({ name: name.trim(), color, category, publicStage })
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save status')
+      setError(errorText(err, 'Failed to save status'))
     } finally {
       setSubmitting(false)
     }

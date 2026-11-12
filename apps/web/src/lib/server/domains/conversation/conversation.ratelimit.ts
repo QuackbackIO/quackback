@@ -13,6 +13,7 @@ const SEND_MAX = 20
 
 /** Thrown when a visitor exceeds the conversation send rate. Carries a retry hint. */
 export class ConversationRateLimitError extends Error {
+  readonly statusCode = 429
   readonly code = 'RATE_LIMITED'
   readonly retryAfter: number
   constructor(retryAfter: number) {

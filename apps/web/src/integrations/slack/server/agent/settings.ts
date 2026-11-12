@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireAuth } from '@/lib/server/functions/auth-helpers'
 import { actorFromAuth } from '@/lib/server/audit/log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 import { config } from '@/lib/server/config'
 import { db, integrations, eq } from '@/lib/server/db'
 import {
@@ -50,7 +51,10 @@ export const setSlackAssistantEnabledFn = createServerFn({ method: 'POST' })
         row?.status !== 'active' ||
         missingSlackScopes((row.config as { scopes?: string })?.scopes).length
       )
-        throw new Error('Reconnect Slack before enabling the assistant.')
+        throw new ValidationError(
+          'SLACK_RECONNECT_REQUIRED',
+          'Reconnect Slack before enabling the assistant.'
+        )
       if (config.isPooledTenancy) {
         const routes = await getInstallRouting('slack')
         if (
@@ -60,7 +64,10 @@ export const setSlackAssistantEnabledFn = createServerFn({ method: 'POST' })
               !route.revokedAt
           )
         )
-          throw new Error('Register Slack routing before enabling the assistant.')
+          throw new ValidationError(
+            'SLACK_ROUTING_NOT_REGISTERED',
+            'Register Slack routing before enabling the assistant.'
+          )
       }
     }
     return updateAssistantConfig(
