@@ -2,7 +2,7 @@ import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions
 import { useState } from 'react'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
-import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
+import { DOMAINS_PAGE_PERMISSIONS, domainUseLinks } from '@/lib/shared/domains-permissions'
 import { useMutation, type QueryClient } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -23,7 +23,6 @@ import {
   DomainsEmptyState,
   EMPTY_DESCRIPTION,
   domainRows,
-  domainUseLinks,
 } from '@/components/admin/settings/domains-overview'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import {

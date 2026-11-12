@@ -5,6 +5,12 @@
  * and a viewer who cannot open that page sees the row without the link.
  */
 import { Fragment } from 'react'
+import {
+  HELP_CENTER_SETTINGS,
+  type DomainUse,
+  type DomainUseLinks,
+  type UseLink,
+} from '@/lib/shared/domains-permissions'
 import { Link } from '@tanstack/react-router'
 import { EnvelopeIcon, GlobeAltIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -14,8 +20,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { domainPhase, type DomainPhase } from '@/components/admin/channels/sending-domain-view'
 import { verifiedThroughLabel } from '@/lib/shared/domain-proof'
-import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
-import { PERMISSIONS } from '@/lib/shared/permissions'
 import type {
   HelpCenterDomainSummary,
   SendingDomainSummary,
@@ -25,14 +29,7 @@ import type {
 export const WEB_ADDRESSES_TITLE = 'Custom domains'
 export const WEB_ADDRESSES_DESCRIPTION = 'Where people reach your portal and help center.'
 
-/** The Custom domains card on this page (Cloud), where the empty state's Custom domain action lands. */
-export const CUSTOM_DOMAINS_ANCHOR = 'custom-domains'
-
-const HELP_CENTER_SETTINGS = '/admin/settings/help-center'
-
 export const EMPTY_DESCRIPTION = 'Use your own domain for email, web addresses and sign-in.'
-
-type DomainUse = 'email' | 'customDomain' | 'signIn'
 
 const USE_ORDER: readonly DomainUse[] = ['email', 'customDomain', 'signIn']
 
@@ -40,49 +37,6 @@ const USE_LABEL: Record<DomainUse, string> = {
   email: 'Email',
   customDomain: 'Custom domain',
   signIn: 'Sign-in',
-}
-
-interface UseLink {
-  to: string
-  search?: Record<string, string>
-  hash?: string
-}
-
-/** Where each use is set up, for the uses this viewer may set up. */
-export type DomainUseLinks = Partial<Record<DomainUse, UseLink>>
-
-/**
- * The setup page for each use, gated by that page's own permission. Email and
- * Sign-in sit behind no product. Custom domains on Cloud are set up on this
- * page; on an install that serves its help center itself, the only domain it
- * takes is the help center's, set on Help center settings.
- */
-export function domainUseLinks({
-  permissions,
-  cloudEnabled,
-  helpCenterOn,
-}: {
-  permissions: readonly string[]
-  cloudEnabled: boolean
-  helpCenterOn: boolean
-}): DomainUseLinks {
-  const can = (permission: string) => permissions.includes(permission)
-  const links: DomainUseLinks = {}
-  if (can(EMAIL_SENDING_PERMISSION)) links.email = { to: '/admin/settings/email' }
-  if (can(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)) {
-    if (cloudEnabled) {
-      links.customDomain = { to: '/admin/settings/domains', hash: CUSTOM_DOMAINS_ANCHOR }
-    } else if (helpCenterOn && can(PERMISSIONS.HELP_CENTER_MANAGE)) {
-      links.customDomain = {
-        to: HELP_CENTER_SETTINGS,
-        search: { tab: 'domains-languages' },
-      }
-    }
-  }
-  if (can(PERMISSIONS.AUTH_MANAGE)) {
-    links.signIn = { to: '/admin/settings/security/authentication', search: { tab: 'sign-in' } }
-  }
-  return links
 }
 
 interface DomainUseStatus {

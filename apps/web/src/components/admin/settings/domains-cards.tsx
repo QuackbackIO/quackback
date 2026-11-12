@@ -1,3 +1,4 @@
+import { CUSTOM_DOMAINS_ANCHOR } from '@/lib/shared/domains-permissions'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,11 +13,7 @@ import {
 } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import { pendingProvenLabel, type ShownProofSource } from '@/lib/shared/domain-proof'
-import {
-  CUSTOM_DOMAINS_ANCHOR,
-  WEB_ADDRESSES_DESCRIPTION,
-  WEB_ADDRESSES_TITLE,
-} from './domains-overview'
+import { WEB_ADDRESSES_DESCRIPTION, WEB_ADDRESSES_TITLE } from './domains-overview'
 
 /** A hostname, with how its ownership was accepted when a proven zone covered it. */
 type HostnameRow = CustomDomainInstruction & { provenBy?: ShownProofSource | null }

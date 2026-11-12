@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 
 import { DomainsCard, hostnameRecords } from '../domains-cards'
-import { CUSTOM_DOMAINS_ANCHOR } from '../domains-overview'
+import { CUSTOM_DOMAINS_ANCHOR } from '@/lib/shared/domains-permissions'
 import { FULL_NAMES_NOTE } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import type { ShownProofSource } from '@/lib/shared/domain-proof'
