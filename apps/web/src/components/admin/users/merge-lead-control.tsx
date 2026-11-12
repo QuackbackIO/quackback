@@ -26,6 +26,7 @@ import { cn } from '@/lib/shared/utils'
 import { listPortalUsersFn } from '@/lib/server/functions/admin'
 import { useMergeLeadIntoUser } from '@/lib/client/mutations'
 import type { PrincipalId } from '@quackback/ids'
+import { toastError } from '@/lib/client/error-notice'
 
 interface MergeLeadControlProps {
   /** The lead being viewed (the merge source). */
@@ -89,7 +90,7 @@ export function MergeLeadControl({
           onMerged()
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : 'Failed to merge lead')
+          toastError(error, 'Failed to merge lead')
         },
       }
     )

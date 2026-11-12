@@ -1,3 +1,4 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 /**
  * ClickUp space and list listing via REST API.
  */
@@ -16,7 +17,10 @@ export async function listClickUpSpaces(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list ClickUp spaces: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list ClickUp spaces: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as {
@@ -41,7 +45,10 @@ export async function listClickUpLists(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list ClickUp lists: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list ClickUp lists: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as {

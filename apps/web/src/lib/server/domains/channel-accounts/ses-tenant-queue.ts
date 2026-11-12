@@ -55,7 +55,11 @@ export async function runSesTenantReconcile(job: ClaimedJob): Promise<void> {
 export async function enqueueSesTenantReconcile(reason: string): Promise<void> {
   if (!sesTenantsEnabled()) return
   try {
-    await enqueueJob({ queue: SES_TENANT_QUEUE, payload: { onDemand: true, reason }, maxAttempts: 3 })
+    await enqueueJob({
+      queue: SES_TENANT_QUEUE,
+      payload: { onDemand: true, reason },
+      maxAttempts: 3,
+    })
   } catch (err) {
     log.warn({ err, reason }, 'ses tenant reconcile could not be enqueued')
   }

@@ -2061,6 +2061,8 @@
   "common.errorPage.error.title": "Er ging iets mis",
   "common.errorPage.error.description": "Er is een onverwachte fout opgetreden. Probeer het opnieuw of ga terug naar de startpagina.",
   "common.errorPage.technicalDetails": "Technische details",
+  "common.errorPage.reference": "Referentie",
+  "common.errorPage.copyReference": "Referentie kopiëren",
   "common.errorPage.tryAgain": "Opnieuw proberen",
   "common.errorPage.goHome": "Naar de startpagina",
   "portal.header.auth.accountMenu": "Accountmenu openen",

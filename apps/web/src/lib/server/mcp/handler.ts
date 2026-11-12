@@ -142,6 +142,7 @@ async function resolveOAuthContext(
       authMethod: 'oauth',
       ...(typeof payload.azp === 'string' && payload.azp ? { credentialId: payload.azp } : {}),
       scopes,
+      offlineAccess: scopeStr.split(' ').includes('offline_access'),
       auditAttribution: oauthClientAttribution({
         clientId,
         clientName: principalRecord.clientName,
@@ -267,21 +268,29 @@ async function oauthScopeStepUp(request: Request, auth: McpAuthContext): Promise
   } catch {
     return null
   }
-  // Every scope the request lacks goes in one challenge; a batch answers for
-  // its first refused call.
+  // Every scope the request lacks goes in one challenge. Nothing in a batch
+  // runs when any call in it is refused, so every call gets the refusal.
+  const calls = Array.isArray(body) ? body : [body]
   const missing = new Set<string>()
-  let requestId: string | number | null = null
-  for (const call of Array.isArray(body) ? body : [body]) {
-    const lacking = requiredScopesForMcpRpc(call).filter((s) => !hasApiScope(auth.scopes, s))
-    if (lacking.length === 0) continue
-    if (missing.size === 0) {
-      const id = (call as { id?: unknown } | null)?.id
-      requestId = typeof id === 'string' || typeof id === 'number' ? id : null
+  for (const call of calls) {
+    for (const scope of requiredScopesForMcpRpc(call)) {
+      if (!hasApiScope(auth.scopes, scope)) missing.add(scope)
     }
-    for (const scope of lacking) missing.add(scope)
   }
   if (missing.size === 0) return null
-  return insufficientScopeChallenge({ missing: [...missing], held: auth.scopes, requestId })
+  return insufficientScopeChallenge({
+    missing: [...missing],
+    held: auth.scopes,
+    offlineAccess: auth.offlineAccess === true,
+    calls: calls.map((call) => {
+      const { id, method } = (call ?? {}) as { id?: unknown; method?: unknown }
+      return {
+        id: typeof id === 'string' || typeof id === 'number' ? id : null,
+        method: typeof method === 'string' ? method : '',
+      }
+    }),
+    batch: Array.isArray(body),
+  })
 }
 
 /**

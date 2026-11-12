@@ -1,3 +1,4 @@
+import { ConflictError, NotFoundError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
@@ -55,7 +56,7 @@ export const updateIntegrationFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration) {
-      throw new Error('Integration not found')
+      throw new NotFoundError('INTEGRATION_NOT_FOUND', 'Integration not found')
     }
 
     const updates: Partial<typeof integrations.$inferInsert> = {
@@ -129,7 +130,7 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration) {
-      throw new Error('Integration not found')
+      throw new NotFoundError('INTEGRATION_NOT_FOUND', 'Integration not found')
     }
 
     // Resolve platform credentials before acquiring the provider transaction: DB
@@ -154,7 +155,10 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
         current.secrets !== integration.secrets ||
         current.connectedAt?.getTime() !== integration.connectedAt?.getTime()
       )
-        throw new Error('Integration was reconnected. Reload before disconnecting.')
+        throw new ConflictError(
+          'INTEGRATION_RECONNECTED',
+          'Integration was reconnected. Reload before disconnecting.'
+        )
       // A provider with a webhook per destination (one per GitHub repository)
       // removes them all here, while the token can still authorize it and
       // before onDisconnect revokes that token. Their rows go with the

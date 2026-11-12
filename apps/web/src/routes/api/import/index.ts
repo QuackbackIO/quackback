@@ -186,8 +186,8 @@ export async function handleImportPost(request: Request): Promise<Response> {
     return Response.json({ runId: run.id, status: run.status, totalRows }, { status: 202 })
   } catch (error) {
     log.error({ err: error }, 'csv import failed')
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
-    return Response.json({ error: errorMessage }, { status: 500 })
+    // The real error is in the log line above; its message can quote SQL.
+    return Response.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 

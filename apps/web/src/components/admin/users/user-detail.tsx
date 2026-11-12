@@ -66,6 +66,7 @@ import { listConversationsForUserFn, getConversationFn } from '@/lib/server/func
 import type { PrincipalId } from '@quackback/ids'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import { toastError } from '@/lib/client/error-notice'
 
 // Team dialogs load the first time one opens, not with the profile.
 const AddPeopleDialog = lazy(() =>
@@ -600,7 +601,7 @@ export function UserDetail({
         toast.success('User updated')
       },
       onError: (error) => {
-        toast.error(error instanceof Error ? error.message : 'Failed to update user')
+        toastError(error, 'Failed to update user')
       },
     })
   }

@@ -1,3 +1,5 @@
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { realEmail } from '@/lib/shared/anonymous-email'
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
@@ -167,12 +169,11 @@ function AccessChoice({
 
 function ConsentPage() {
   const search = Route.useSearch()
-  const context = Route.useRouteContext() as {
-    session?: { user?: { email?: string | null } | null } | null
-    settings?: { name?: string | null } | null
-  }
-  const signedInAs = context.session?.user?.email ?? null
-  const workspaceName = context.settings?.name ?? null
+  const session = useSessionContext()
+  const settings = useWorkspaceSettings()
+  // An anonymous session's address is synthetic, never a person's.
+  const signedInAs = realEmail(session?.user?.email)
+  const workspaceName = settings?.name ?? null
   const client = useClientInfo(search.client_id)
   const clientRequested = clientRequestedFromConsentSearch({
     requested: search[CLIENT_REQUESTED_SCOPE_PARAM],

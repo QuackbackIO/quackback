@@ -20,6 +20,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { listDuplicateUsersFn, type DuplicatePrincipalMatch } from '@/lib/server/functions/admin'
 import { useMergeLeadIntoUser } from '@/lib/client/mutations'
 import type { PrincipalId } from '@quackback/ids'
+import { toastError } from '@/lib/client/error-notice'
 
 interface DuplicateUsersWarningProps {
   /** The profile being viewed (the merge target for lead matches). */
@@ -62,7 +63,7 @@ export function DuplicateUsersWarning({
           void queryClient.invalidateQueries({ queryKey: ['admin', 'user-duplicates'] })
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : 'Failed to merge')
+          toastError(error, 'Failed to merge')
         },
       }
     )

@@ -6,6 +6,7 @@
  */
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
+import { getLogContext } from '@/lib/server/log-context'
 
 const log = logger.child({ component: 'api' })
 
@@ -49,6 +50,8 @@ export interface ApiErrorResponse {
     code: string
     message: string
     details?: Record<string, unknown>
+    /** On a 5xx: the id that finds this request in the server logs. */
+    requestId?: string
   }
 }
 
@@ -97,11 +100,15 @@ export function errorResponse(
   status: number,
   details?: Record<string, unknown>
 ): Response {
+  // A 5xx says nothing about what went wrong, so it carries the request id (also
+  // sent as the `x-request-id` header) for the caller to quote.
+  const requestId = status >= 500 ? getLogContext()?.request_id : undefined
   const body: ApiErrorResponse = {
     error: {
       code,
       message,
       ...(details && { details }),
+      ...(requestId && { requestId }),
     },
   }
 

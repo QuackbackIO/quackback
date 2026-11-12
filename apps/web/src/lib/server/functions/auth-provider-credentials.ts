@@ -3,6 +3,7 @@
  * Admin-only operations for configuring OAuth provider credentials in the DB.
  */
 
+import { ValidationError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
@@ -44,7 +45,10 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
     const { getAuthProvider } = await import('@/lib/server/auth/auth-providers')
     const provider = getAuthProvider(data.credentialType)
     if (!provider) {
-      throw new Error(`Unknown auth provider: ${data.credentialType}`)
+      throw new ValidationError(
+        'UNKNOWN_AUTH_PROVIDER',
+        `Unknown auth provider: ${data.credentialType}`
+      )
     }
 
     // Built-in social providers (Google/GitHub/etc.) are operator-level
@@ -60,7 +64,7 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
     for (const key of requiredKeys) {
       if (!data.credentials[key]?.trim()) {
         const field = provider.platformCredentials.find((f) => f.key === key)
-        throw new Error(`${field?.label ?? key} is required`)
+        throw new ValidationError('CREDENTIAL_FIELD_REQUIRED', `${field?.label ?? key} is required`)
       }
     }
 
@@ -85,7 +89,10 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
       if (!value) continue
       const verdict = await checkUrlSafety(value)
       if (!verdict.safe) {
-        throw new Error(`${field.label} must be a valid public URL`)
+        throw new ValidationError(
+          'INVALID_CREDENTIAL_URL',
+          `${field.label} must be a valid public URL`
+        )
       }
     }
 
@@ -115,7 +122,10 @@ export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' }
     const { getAuthProvider } = await import('@/lib/server/auth/auth-providers')
     const provider = getAuthProvider(data.credentialType)
     if (!provider) {
-      throw new Error(`Unknown auth provider: ${data.credentialType}`)
+      throw new ValidationError(
+        'UNKNOWN_AUTH_PROVIDER',
+        `Unknown auth provider: ${data.credentialType}`
+      )
     }
 
     // Lockout guard: deleting these credentials disables the provider via the
@@ -166,7 +176,10 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
       await import('@/lib/server/auth/auth-providers')
     const provider = getAuthProvider(data.credentialType)
     if (!provider) {
-      throw new Error(`Unknown auth provider: ${data.credentialType}`)
+      throw new ValidationError(
+        'UNKNOWN_AUTH_PROVIDER',
+        `Unknown auth provider: ${data.credentialType}`
+      )
     }
 
     const { getBaseUrl } = await import('@/lib/server/config')

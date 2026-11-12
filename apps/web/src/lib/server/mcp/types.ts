@@ -52,6 +52,8 @@ export interface McpAuthContext {
    * their stored scopes, or every scope for legacy keys with none stored.
    */
   scopes: McpScope[]
+  /** OAuth only: the grant includes `offline_access` (the client can refresh). */
+  offlineAccess?: boolean
   /**
    * The credential this request's changes are attributed to: the OAuth client
    * or the API key. Set by the HTTP handler; absent for in-process callers,

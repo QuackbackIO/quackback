@@ -1,3 +1,4 @@
+import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { BoardId, KbArticleId } from '@quackback/ids'
@@ -49,7 +50,8 @@ export const getStartingPointContextFn = createServerFn({ method: 'GET' }).handl
   const { getSetupState } = await import('@/lib/shared/db-types')
   const state = getSetupState(row.setupState)
   const outcome = state?.useCase
-  if (!outcome) throw new Error('Choose a workspace goal first')
+  if (!outcome)
+    throw new ValidationError('WORKSPACE_GOAL_REQUIRED', 'Choose a workspace goal first')
   const flags = resolveFeatureFlags(row.featureFlags)
   const slug = outcome === 'internal' ? 'team-feedback' : 'feedback'
   const preferredBoard = await db.query.boards.findFirst({
@@ -114,7 +116,8 @@ export const getActivationBridgeContextFn = createServerFn({ method: 'GET' }).ha
     row = (await db.query.settings.findFirst()) ?? row
   }
   const startingPoint = state?.steps.startingPoint
-  if (!startingPoint) throw new Error('Choose a starting point first')
+  if (!startingPoint)
+    throw new ValidationError('STARTING_POINT_REQUIRED', 'Choose a starting point first')
 
   let resourceLabel: string | null = null
   let starterBoard: { id: string; slug: string; publicPath: string } | null = null
@@ -163,9 +166,12 @@ export const markPublicBoardLinkCopiedFn = createServerFn({ method: 'POST' })
         where: and(eq(boards.id, data.boardId as BoardId), isNull(boards.deletedAt)),
         columns: { id: true, access: true },
       })
-      if (!board) throw new Error('Board not found')
+      if (!board) throw new NotFoundError('BOARD_NOT_FOUND', 'Board not found')
       if (board.access.view !== 'anonymous') {
-        throw new Error('Only a publicly viewable board link can be marked as shared')
+        throw new ValidationError(
+          'BOARD_NOT_PUBLIC',
+          'Only a publicly viewable board link can be marked as shared'
+        )
       }
       const copiedAt =
         current.activationMilestones?.publicBoardLinkCopiedAt ?? new Date().toISOString()

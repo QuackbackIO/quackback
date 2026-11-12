@@ -10,6 +10,7 @@
 export const GITLAB_COM_ORIGIN = 'https://gitlab.com'
 
 export class GitLabInstanceUrlError extends Error {
+  readonly statusCode = 400
   constructor(message: string) {
     super(message)
     this.name = 'GitLabInstanceUrlError'
