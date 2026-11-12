@@ -70,7 +70,8 @@ describe('empty state', () => {
     )
 
     const custom = rowOf('Custom domain')
-    expect(custom).toHaveTextContent('Put your portal on feedback.yourcompany.com.')
+    // Off Cloud the domain is the help center's, so the line says so.
+    expect(custom).toHaveTextContent('Put your help center on help.yourcompany.com.')
     expect(within(custom as HTMLElement).getByRole('link')).toHaveAttribute(
       'href',
       '/admin/settings/help-center?tab=domains-languages'
@@ -115,6 +116,7 @@ describe('empty state', () => {
       helpCenterOn: false,
     })
     render(<DomainsEmptyState links={links} />)
+    expect(rowOf('Custom domain')).toHaveTextContent('Put your portal on feedback.yourcompany.com.')
     expect(within(rowOf('Custom domain') as HTMLElement).getByRole('link')).toHaveAttribute(
       'href',
       `/admin/settings/domains#${CUSTOM_DOMAINS_ANCHOR}`
