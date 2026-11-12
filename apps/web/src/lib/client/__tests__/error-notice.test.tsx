@@ -10,7 +10,7 @@ const toast = vi.hoisted(() => ({ error: vi.fn() }))
 vi.mock('sonner', () => ({ toast }))
 
 const { toastError } = await import('../error-notice')
-const { errorText } = await import('../error-text')
+const { errorText, unplannedErrorText } = await import('../error-text')
 
 const hidden = () =>
   liftErrorReference(new Error(withErrorReference(UNEXPECTED_ERROR_MESSAGE, 'D264-C488')))
@@ -75,5 +75,26 @@ describe('errorText', () => {
     )
     at('/')
     expect(errorText(hidden(), "Couldn't post comment")).toBe("Couldn't post comment")
+  })
+})
+
+describe('unplannedErrorText', () => {
+  it('never prints what a dropped stream or a library said', () => {
+    at('/admin/inbox')
+    expect(unplannedErrorText(new Error('HTTP error! status: 502'), 'Try again.')).toBe(
+      'Try again.'
+    )
+    expect(unplannedErrorText(new Error('Unexpected token < in JSON'), 'Try again.')).toBe(
+      'Try again.'
+    )
+  })
+
+  it('keeps the wording for a connection that dropped', () => {
+    at('/admin/inbox')
+    vi.stubGlobal('navigator', { ...navigator, onLine: false })
+    expect(unplannedErrorText(new TypeError('Failed to fetch'), 'Try again.')).toBe(
+      "You're offline. Check your connection and try again."
+    )
+    vi.unstubAllGlobals()
   })
 })
