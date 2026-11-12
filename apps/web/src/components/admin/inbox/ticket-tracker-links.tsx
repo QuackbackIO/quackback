@@ -206,16 +206,15 @@ function TrackerSection({
       )
     },
     onError: (e: unknown) =>
-      toast.error(
-        e instanceof Error
-          ? e.message
-          : intl.formatMessage(
-              {
-                id: 'admin.ticketTracker.syncFailed',
-                defaultMessage: 'Could not sync with {tracker}',
-              },
-              { tracker: name }
-            )
+      toastError(
+        e,
+        intl.formatMessage(
+          {
+            id: 'admin.ticketTracker.syncFailed',
+            defaultMessage: 'Could not sync with {tracker}',
+          },
+          { tracker: name }
+        )
       ),
   })
 
