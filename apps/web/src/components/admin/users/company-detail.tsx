@@ -45,6 +45,7 @@ import {
 import { formatMonthlySpend, SourceBadge } from '@/components/admin/users/companies-view'
 import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { toastError } from '@/lib/client/error-notice'
 
 function companyKeys(companyId: string) {
   return {
@@ -111,7 +112,7 @@ function AttachMemberButton({ companyId }: { companyId: CompanyId }) {
       setOpen(false)
       setQuery('')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to attach user')
+      toastError(error, 'Failed to attach user')
     } finally {
       setBusy(false)
     }
@@ -186,7 +187,7 @@ function MembersSection({ companyId, canManage }: { companyId: CompanyId; canMan
         queryClient.invalidateQueries({ queryKey: ['admin', 'company', 'for-principal'] }),
       ])
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to remove user')
+      toastError(error, 'Failed to remove user')
     } finally {
       setDetaching(null)
     }
@@ -442,7 +443,7 @@ function CompanyAttributesPanel({
       setDraft(null)
       toast.success('Attributes updated')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update attributes')
+      toastError(error, 'Failed to update attributes')
     } finally {
       setSaving(false)
     }
@@ -598,7 +599,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
       setIsEditing(false)
       toast.success('Company updated')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update company')
+      toastError(error, 'Failed to update company')
     } finally {
       setSaving(false)
     }
@@ -612,7 +613,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
       toast.success('Company deleted')
       onClose()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete company')
+      toastError(error, 'Failed to delete company')
     }
   }
 

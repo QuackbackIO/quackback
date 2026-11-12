@@ -9,6 +9,7 @@ import type { StatusComponentId } from '@quackback/ids'
 import { requireAuth, normalizePrincipalType } from './auth-helpers'
 import { subscribe, unsubscribe, getMySubscription } from '@/lib/server/domains/status'
 import { logger } from '@/lib/server/logger'
+import { ForbiddenError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'status-subscriptions' })
 
@@ -42,7 +43,7 @@ export const subscribeStatusFn = createServerFn({ method: 'POST' })
     log.debug({ scope: data.scope }, 'status subscribe')
     const auth = await requireAuth()
     if (normalizePrincipalType(auth.principal.type) === 'anonymous') {
-      throw new Error('Anonymous interaction is not enabled')
+      throw new ForbiddenError('ANONYMOUS_NOT_ALLOWED', 'Anonymous interaction is not enabled')
     }
     await subscribe(
       auth.principal.id,

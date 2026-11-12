@@ -1,4 +1,7 @@
 import { MutationCache } from '@tanstack/react-query'
+import { toastError, toastErrorLine } from '@/lib/client/error-notice'
+import { errorAudience } from '@/lib/client/error-text'
+import { describeError } from '@/lib/shared/describe-error'
 
 /**
  * `meta` for a mutation that saves on change, with no Save button. The save
@@ -25,11 +28,21 @@ declare module '@tanstack/react-query' {
   }
 }
 
-function toastMessage(error: unknown, showServerMessage: boolean | undefined): string {
-  if (showServerMessage && error instanceof Error && error.message.trim()) {
-    return `Couldn't save. ${error.message.trim()}`
+const TRY_AGAIN = "Couldn't save. Try again."
+
+/**
+ * One toast for a failed autosave. A failure with wording of its own (the
+ * server hid it, the connection dropped, the session ended) gets that wording;
+ * a server message written for the person saving is shown when the mutation
+ * asks for it; anything else asks them to try again.
+ */
+function toastFailedSave(error: unknown, showServerMessage: boolean | undefined): void {
+  const notice = describeError(error, '', errorAudience())
+  if (notice.description || notice.action) {
+    toastError(error, "Couldn't save")
+    return
   }
-  return "Couldn't save. Try again."
+  toastErrorLine(showServerMessage && notice.title ? `Couldn't save. ${notice.title}` : TRY_AGAIN)
 }
 
 /**
@@ -51,7 +64,8 @@ export function isRevisionConflict(error: unknown): boolean {
 
 /**
  * The mutation cache for the app's QueryClient: autosave failures are never silent.
- * The toast library loads on first failure so it stays out of the entry chunk.
+ * The toast library loads on first failure (see error-notice.tsx) so it stays
+ * out of the entry chunk.
  */
 export function createAutosaveMutationCache() {
   return new MutationCache({
@@ -59,8 +73,7 @@ export function createAutosaveMutationCache() {
       const meta = mutation.meta
       if (meta?.autosave !== true) return
       if (meta.ownsError?.(error)) return
-      const message = toastMessage(error, meta.showServerMessage)
-      void import('sonner').then(({ toast }) => toast.error(message))
+      toastFailedSave(error, meta.showServerMessage)
     },
   })
 }

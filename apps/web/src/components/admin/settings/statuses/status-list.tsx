@@ -1,7 +1,6 @@
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useMutation } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import {
   DndContext,
   closestCenter,
@@ -55,6 +54,7 @@ import {
   reorderStatusesFn,
   createStatusFn,
 } from '@/lib/server/functions/statuses'
+import { toastError } from '@/lib/client/error-notice'
 
 interface StatusListProps {
   initialStatuses: PostStatusEntity[]
@@ -167,7 +167,7 @@ export function StatusesSettingsPage({ initialStatuses }: StatusListProps) {
       setStatuses((prev) => prev.filter((s) => s.id !== deleteStatus.id))
       startTransition(() => router.invalidate())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete status')
+      toastError(error, 'Failed to delete status')
     } finally {
       setDeleteStatus(null)
     }
@@ -191,7 +191,7 @@ export function StatusesSettingsPage({ initialStatuses }: StatusListProps) {
       setCreateDialogOpen(false)
       startTransition(() => router.invalidate())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create status')
+      toastError(error, 'Failed to create status')
     }
   }
 
@@ -274,7 +274,7 @@ export function StatusesSettingsPage({ initialStatuses }: StatusListProps) {
             setEditingStatus(null)
             startTransition(() => router.invalidate())
           } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to update status')
+            toastError(error, 'Failed to update status')
           }
         }}
       />

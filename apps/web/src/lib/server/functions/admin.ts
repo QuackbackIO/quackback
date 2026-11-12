@@ -1,3 +1,4 @@
+import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
@@ -355,12 +356,15 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
       await import('@/lib/shared/launch-checklist')
     const status = await fetchOnboardingStatus()
     const task = buildLaunchTasks(status).find((candidate) => candidate.id === data.taskId)
-    if (!task) throw new Error('Unknown launch task')
+    if (!task) throw new ValidationError('UNKNOWN_LAUNCH_TASK', 'Unknown launch task')
     if (task.classification === 'first_win' && data.resolution) {
-      throw new Error('The milestone cannot be skipped')
+      throw new ValidationError('LAUNCH_MILESTONE_NOT_SKIPPABLE', 'The milestone cannot be skipped')
     }
     if (task.isCompleted && data.resolution) {
-      throw new Error('Completed tasks cannot be skipped')
+      throw new ValidationError(
+        'LAUNCH_TASK_ALREADY_COMPLETED',
+        'Completed tasks cannot be skipped'
+      )
     }
 
     const storedResolution = data.resolution === 'deferred' ? 'dismissed' : data.resolution
@@ -878,7 +882,8 @@ export const assignUserTagFn = createServerFn({ method: 'POST' })
   .validator(assignUserTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
-    if (!data.tagId && !data.name) throw new Error('tagId or name is required')
+    if (!data.tagId && !data.name)
+      throw new ValidationError('TAG_ID_OR_NAME_REQUIRED', 'tagId or name is required')
     const service = await import('@/lib/server/domains/users/user-tags.service')
     const tagId = data.tagId
       ? (data.tagId as UserTagId)
@@ -977,7 +982,7 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
     })
 
     if (!invitationRecord) {
-      throw new Error('Invitation not found')
+      throw new NotFoundError('INVITATION_NOT_FOUND', 'Invitation not found')
     }
 
     // TOCTOU pin: status='pending' in the WHERE so a concurrent
@@ -999,7 +1004,10 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
       .returning({ id: invitation.id, magicLinkTokens: invitation.magicLinkTokens })
 
     if (cancelled.length === 0) {
-      throw new Error('Invitation is no longer pending — refresh and try again')
+      throw new ConflictError(
+        'INVITATION_NOT_PENDING',
+        'Invitation is no longer pending — refresh and try again'
+      )
     }
 
     // Invalidate every link this invite ever minted, so a cancelled invite
@@ -1033,7 +1041,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
     })
 
     if (!invitationRecord) {
-      throw new Error('Invitation not found')
+      throw new NotFoundError('INVITATION_NOT_FOUND', 'Invitation not found')
     }
 
     // Claim-then-send ordering — see resendPortalInviteFn for the
@@ -1059,7 +1067,10 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
       .returning({ id: invitation.id })
 
     if (updated.length === 0) {
-      throw new Error('Invitation is no longer pending — refresh and try again')
+      throw new ConflictError(
+        'INVITATION_NOT_PENDING',
+        'Invitation is no longer pending — refresh and try again'
+      )
     }
 
     // Generate a new magic link and add it to the invite's token set. Prior
@@ -1075,7 +1086,10 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
     const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
     if (!(await appendInviteMagicLinkToken(invitationId, magicLinkToken))) {
       await revokeMagicLinkToken(magicLinkToken) // invite no longer pending; drop it
-      throw new Error('Invitation is no longer pending — refresh and try again')
+      throw new ConflictError(
+        'INVITATION_NOT_PENDING',
+        'Invitation is no longer pending — refresh and try again'
+      )
     }
 
     const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')

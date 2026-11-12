@@ -15,7 +15,6 @@ import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { toast } from 'sonner'
 import { LockClosedIcon, ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +31,7 @@ import { inferIdpKind, IDP_KIND_NAMES } from '../idp-shortcuts'
 import { RecoveryCodesSection } from '../sso/recovery-codes-section'
 import { isOnlyWorkingMethod } from './only-working-method'
 import { SsoUpgradeNotice } from './sso-upgrade-notice'
+import { toastError } from '@/lib/client/error-notice'
 
 export function IdentityProvidersSection({
   tierEnabled,
@@ -143,7 +143,7 @@ function ProviderRow({
       })
     } catch (err) {
       setEnabled(!checked)
-      toast.error(err instanceof Error ? err.message : 'Could not update the provider.')
+      toastError(err, 'Could not update the provider.')
     } finally {
       setPending(false)
     }

@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { saveShortcutTokenFn } from '@/integrations/shortcut/server/functions'
 import { useDeleteIntegration } from '@/lib/client/mutations'
 import { useQueryClient } from '@tanstack/react-query'
+import { errorText } from '@/lib/client/error-text'
 
 interface ShortcutConnectionActionsProps {
   integrationId?: string
@@ -35,7 +36,7 @@ export function ShortcutConnectionActions({
       setApiToken('')
       queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save API token')
+      setError(errorText(err, 'Failed to save API token'))
     } finally {
       setSaving(false)
     }
