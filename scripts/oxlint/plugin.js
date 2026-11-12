@@ -27,7 +27,12 @@ function walkLiterals(node, visit) {
   else if (node.type === 'JSXExpressionContainer') walkLiterals(node.expression, visit)
   else if (node.type === 'TemplateLiteral') {
     for (const quasi of node.quasis) {
-      visit({ type: 'Literal', value: quasi.value.cooked ?? '', loc: quasi.loc, range: quasi.range })
+      visit({
+        type: 'Literal',
+        value: quasi.value.cooked ?? '',
+        loc: quasi.loc,
+        range: quasi.range,
+      })
     }
   }
 }
@@ -36,8 +41,7 @@ const noSmallMenuText = {
   meta: {
     type: 'problem',
     docs: {
-      description:
-        'Menu items render at 13px via the primitive; do not override them smaller.',
+      description: 'Menu items render at 13px via the primitive; do not override them smaller.',
     },
   },
   create(context) {
@@ -132,6 +136,56 @@ const noWithErrorLog = {
   },
 }
 
+/** `error.message`, read off a plain identifier. */
+function isRawMessage(node) {
+  return (
+    node?.type === 'MemberExpression' &&
+    !node.computed &&
+    node.property?.name === 'message' &&
+    node.object?.type === 'Identifier'
+  )
+}
+
+function printsRawMessage(node) {
+  if (!node) return false
+  if (isRawMessage(node)) return true
+  if (node.type === 'ConditionalExpression') {
+    return printsRawMessage(node.consequent) || printsRawMessage(node.alternate)
+  }
+  if (node.type === 'LogicalExpression') {
+    return printsRawMessage(node.left) || printsRawMessage(node.right)
+  }
+  return false
+}
+
+const noRawErrorMessage = {
+  meta: {
+    type: 'problem',
+    docs: { description: 'A caught error is shown through toastError / errorText.' },
+  },
+  create(context) {
+    return {
+      CallExpression(node) {
+        const callee = node.callee
+        const isToastError =
+          callee.type === 'MemberExpression' &&
+          callee.object?.type === 'Identifier' &&
+          callee.object.name === 'toast' &&
+          callee.property?.name === 'error'
+        const isErrorSetter = callee.type === 'Identifier' && /^set\w*Error$/.test(callee.name)
+        if (!isToastError && !isErrorSetter) return
+        if (!printsRawMessage(node.arguments[0])) return
+        context.report({
+          node,
+          message: isToastError
+            ? "Do not toast a caught error's message: it can be a raw technical failure. Use toastError(error, fallback) from '@/lib/client/error-notice'."
+            : "Do not show a caught error's message: it can be a raw technical failure. Use errorText(error, fallback) from '@/lib/client/error-text'.",
+        })
+      },
+    }
+  },
+}
+
 export default {
   meta: { name: 'quackback' },
   rules: {
@@ -139,5 +193,6 @@ export default {
     'no-sub-11px-text': noSub11pxText,
     'no-server-fn-log-rethrow': noServerFnLogRethrow,
     'no-with-error-log': noWithErrorLog,
+    'no-raw-error-message': noRawErrorMessage,
   },
 }

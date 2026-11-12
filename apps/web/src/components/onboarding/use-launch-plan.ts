@@ -1,6 +1,6 @@
 import { useIntl } from 'react-intl'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
+import { toastError } from '@/lib/client/error-notice'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
 import { getOnboardingProgressFn } from '@/lib/server/functions/onboarding-progress'
@@ -52,13 +52,12 @@ export function useLaunchTaskResolution() {
       setLaunchTaskResolutionFn({ data }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'onboarding'] }),
     onError: (error) =>
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : intl.formatMessage({
-              id: 'onboarding.launch.error',
-              defaultMessage: 'Could not update your launch plan. Try again.',
-            })
+      toastError(
+        error,
+        intl.formatMessage({
+          id: 'onboarding.launch.error',
+          defaultMessage: 'Could not update your launch plan. Try again.',
+        })
       ),
   })
 }

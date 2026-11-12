@@ -13,6 +13,7 @@ import type { BoardId, PostId, PostStatusId, PostTagId } from '@quackback/ids'
 import { Form } from '@/components/ui/form'
 import type { AdminEditPostInput } from '@/lib/shared/types'
 import { PostFormFields } from './post-form-fields'
+import { errorText } from '@/lib/client/error-text'
 
 interface PostToEdit {
   id: PostId
@@ -147,7 +148,7 @@ export function EditPostDialog({
 
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update post')
+      setError(errorText(err, 'Failed to update post'))
     }
   })
 

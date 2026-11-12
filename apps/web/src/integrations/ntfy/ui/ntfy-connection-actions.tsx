@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useDeleteIntegration } from '@/lib/client/mutations'
 import { saveNtfyFn } from '@/integrations/ntfy/server/functions'
+import { errorText } from '@/lib/client/error-text'
 
 interface NtfyConnectionActionsProps {
   integrationId?: string
@@ -46,7 +47,7 @@ export function NtfyConnectionActions({ integrationId, isConnected }: NtfyConnec
       if (successTimer.current) clearTimeout(successTimer.current)
       successTimer.current = setTimeout(() => setShowSuccess(false), 3000)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save ntfy settings')
+      setError(errorText(err, 'Failed to save ntfy settings'))
     } finally {
       setSaving(false)
     }

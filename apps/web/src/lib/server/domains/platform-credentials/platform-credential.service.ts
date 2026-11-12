@@ -37,6 +37,7 @@ interface SavePlatformCredentialsInput {
  * "managed by the platform" state rather than an error.
  */
 export class PlatformCredentialsManagedError extends Error {
+  readonly statusCode = 403
   constructor() {
     super('Platform credentials are managed by the platform and cannot be edited here.')
     this.name = 'PlatformCredentialsManagedError'

@@ -7,7 +7,6 @@ import {
   TagIcon,
 } from '@heroicons/react/24/solid'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { EmptyState } from '@/components/shared/empty-state'
 import { FilterAddButton, FilterChip } from '@/components/shared/filter-chip'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -40,6 +39,7 @@ import { Spinner } from '@/components/shared/spinner'
 import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
 import { buildCompaniesExportUrl } from '@/lib/shared/company-filters'
 import { createCompanyFn, type CompanyWithMemberCountDTO } from '@/lib/server/functions/companies'
+import { toastError } from '@/lib/client/error-notice'
 
 /** Render mrrCents as a whole-dollar currency amount, or a dash when unset. */
 export function formatMonthlySpend(mrrCents: number | null): string {
@@ -398,7 +398,7 @@ function NewCompanyDialog({
       onCreated(company.id)
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to create company')
+      toastError(error, 'Failed to create company')
     },
   })
 

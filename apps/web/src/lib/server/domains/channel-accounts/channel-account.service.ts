@@ -45,6 +45,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { logger } from '@/lib/server/logger'
+import { NotFoundError, ConflictError } from '@/lib/shared/errors'
 import { permittedSendingIdentity, withSendingDisplayName } from './outbound-identity'
 
 const log = logger.child({ component: 'channel-accounts' })
@@ -139,10 +140,9 @@ export async function getSendingDomain(id: SendingDomainId): Promise<EmailSendin
  * RESTRICT). The person has to remove or retarget those addresses first —
  * deleting them here would silently discard configuration they typed.
  */
-export class SendingDomainInUseError extends Error {
+export class SendingDomainInUseError extends ConflictError {
   constructor() {
-    super('Remove the sending addresses that use this domain first.')
-    this.name = 'SendingDomainInUseError'
+    super('SENDING_DOMAIN_IN_USE', 'Remove the sending addresses that use this domain first.')
   }
 }
 
@@ -419,7 +419,7 @@ export async function updateSendingAddressSmtp(input: {
 }): Promise<ChannelAccount> {
   const existing = await getChannelAccount(input.id)
   if (!existing || existing.role !== 'sending') {
-    throw new Error('That sending address no longer exists.')
+    throw new NotFoundError('SENDING_ADDRESS_NOT_FOUND', 'That sending address no longer exists.')
   }
   const config: ChannelAccountConfig = { ...existing.config }
   if (input.smtp) config.smtp = input.smtp
@@ -435,10 +435,9 @@ export async function updateSendingAddressSmtp(input: {
 /** Thrown when an address a workspace already uses for something else is added
  *  as a sending identity. Readable, because the only caller is a person who
  *  typed it into a settings form. */
-export class ChannelAddressInUseError extends Error {
+export class ChannelAddressInUseError extends ConflictError {
   constructor(readonly address: string) {
-    super(`${address} is already in use by this workspace's inbound route.`)
-    this.name = 'ChannelAddressInUseError'
+    super('ADDRESS_IN_USE', `${address} is already in use by this workspace's inbound route.`)
   }
 }
 

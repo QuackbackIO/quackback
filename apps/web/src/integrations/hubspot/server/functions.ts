@@ -62,7 +62,7 @@ export const searchHubSpotContactFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('HubSpot not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'HubSpot not connected')
     }
 
     const accessToken = await getValidAccessToken(integration.id)
