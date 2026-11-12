@@ -1,3 +1,4 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 /**
  * Trello board and list listing.
  */
@@ -29,7 +30,10 @@ export async function listTrelloBoards(
   )
 
   if (!response.ok) {
-    throw new Error(`Failed to list Trello boards: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Trello boards: HTTP ${response.status}`
+    )
   }
 
   const boards = (await response.json()) as TrelloBoard[]
@@ -49,7 +53,10 @@ export async function listTrelloLists(
   )
 
   if (!response.ok) {
-    throw new Error(`Failed to list Trello lists: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Trello lists: HTTP ${response.status}`
+    )
   }
 
   const lists = (await response.json()) as TrelloList[]

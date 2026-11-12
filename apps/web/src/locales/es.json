@@ -2023,6 +2023,8 @@
   "common.errorPage.error.title": "Algo salió mal",
   "common.errorPage.error.description": "Se produjo un error inesperado. Inténtalo de nuevo o vuelve a la página de inicio.",
   "common.errorPage.technicalDetails": "Detalles técnicos",
+  "common.errorPage.reference": "Referencia",
+  "common.errorPage.copyReference": "Copiar referencia",
   "common.errorPage.tryAgain": "Inténtalo de nuevo",
   "common.errorPage.goHome": "Ir al inicio",
   "portal.header.auth.accountMenu": "Abrir menú de la cuenta",

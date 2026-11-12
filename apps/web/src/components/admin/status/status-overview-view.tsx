@@ -44,6 +44,7 @@ import {
   type StatusComponentStatus,
   type StatusIncidentLifecycle,
 } from './status-admin-colors'
+import { toastError } from '@/lib/client/error-notice'
 
 type OverviewIncident = StatusOverview['activeIncidents'][number]
 
@@ -469,8 +470,7 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
               setStartTarget(null)
               toast.success('Maintenance started')
             },
-            onError: (err) =>
-              toast.error(err instanceof Error ? err.message : 'Failed to start maintenance'),
+            onError: (err) => toastError(err, 'Failed to start maintenance'),
           })
         }}
       />

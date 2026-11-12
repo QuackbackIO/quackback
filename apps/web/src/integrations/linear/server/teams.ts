@@ -1,3 +1,4 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 /**
  * Linear team listing via GraphQL.
  */
@@ -22,7 +23,10 @@ export async function listLinearTeams(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list Linear teams: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Linear teams: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as {

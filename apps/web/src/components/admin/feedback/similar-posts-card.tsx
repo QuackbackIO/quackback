@@ -26,6 +26,7 @@ import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { acceptSuggestionFn, dismissSuggestionFn } from '@/lib/server/functions/feedback'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import type { PostId } from '@quackback/ids'
+import { toastError } from '@/lib/client/error-notice'
 
 interface SimilarPostsCardProps {
   postId: PostId
@@ -55,7 +56,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
       toast.success('Posts merged')
       invalidateAll()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to merge')
+      toastError(err, 'Failed to merge')
     } finally {
       setPendingId(null)
     }
@@ -68,7 +69,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
       toast.success('Suggestion dismissed')
       invalidateAll()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to dismiss')
+      toastError(err, 'Failed to dismiss')
     } finally {
       setPendingId(null)
     }

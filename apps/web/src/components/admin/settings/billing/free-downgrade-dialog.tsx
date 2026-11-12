@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import type { PlanDowngradeIssue } from '@/lib/shared/billing/plan-downgrade'
+import { errorText } from '@/lib/client/error-text'
 
 export type PlanDowngradeCheckout = {
   period: BillingPeriod
@@ -55,7 +56,7 @@ export function PlanDowngradeDialog(props: {
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Could not check this plan')
+        setError(errorText(err, 'Could not check this plan'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)

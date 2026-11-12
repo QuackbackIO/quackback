@@ -1,3 +1,4 @@
+import { ValidationError } from '@/lib/shared/errors'
 import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { fetchGitHubStatuses } from '@/integrations/github/server/statuses'
@@ -53,7 +54,8 @@ export const githubIntegration: IntegrationDefinition = {
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl, secret }) => {
       const ownerRepo = config.channelId as string
-      if (!ownerRepo) throw new Error('No repository configured')
+      if (!ownerRepo)
+        throw new ValidationError('INTEGRATION_TARGET_REQUIRED', 'No repository configured')
       const inboxEnabled = !!(await getLiveGitHubConnectionAccount())
       const events = githubWebhookEvents(inboxEnabled)
       try {

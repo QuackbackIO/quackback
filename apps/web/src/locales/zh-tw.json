@@ -2023,6 +2023,8 @@
   "common.errorPage.error.title": "發生錯誤",
   "common.errorPage.error.description": "發生未預期的錯誤。請再試一次，或回到首頁。",
   "common.errorPage.technicalDetails": "技術詳細資料",
+  "common.errorPage.reference": "參考編號",
+  "common.errorPage.copyReference": "複製參考編號",
   "common.errorPage.tryAgain": "再試一次",
   "common.errorPage.goHome": "回首頁",
   "portal.header.auth.accountMenu": "開啟帳戶選單",
