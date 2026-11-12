@@ -21,7 +21,6 @@
 import { useEffect, useId, useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useMutation } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import {
   endOfLocalDay,
@@ -32,6 +31,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/shared/spinner'
+import { toastError } from '@/lib/client/error-notice'
 
 /**
  * The picker's `min`/`max` (YYYY-MM-DD) for the customer window, in the
@@ -78,8 +78,7 @@ export function BlockTicketForm({
     mutationFn: (vars: { title: string; description?: string; email?: string; dueAt?: string }) =>
       rpc.createMyTicket({ data: vars, headers: getAuthHeaders() }),
     onSuccess: () => setFiled(true),
-    onError: (error) =>
-      toast.error(error instanceof Error ? error.message : 'Failed to create ticket'),
+    onError: (error) => toastError(error, 'Failed to create ticket'),
   })
 
   if (filed) {

@@ -36,6 +36,7 @@ import type { EditPostInput } from './portal-post-actions'
 import { setPostEtaFn, setPostOwnerFn } from '@/lib/server/functions/posts'
 import type { OwnerRef } from '@/lib/server/functions/post-owner-context'
 import type { PostTag } from '@/lib/shared/db-types'
+import { toastError } from '@/lib/client/error-notice'
 
 /** How long the Undo action stays available on reversible-change toasts. */
 const UNDO_TOAST_DURATION_MS = 5000
@@ -163,13 +164,12 @@ export function usePortalTeamPostActions({
                 void undo()
                   .then(() => invalidatePortal())
                   .catch((err: unknown) => {
-                    toast.error(
-                      err instanceof Error
-                        ? err.message
-                        : intl.formatMessage({
-                            id: 'portal.postDetail.team.undoFailed',
-                            defaultMessage: "Couldn't undo the change",
-                          })
+                    toastError(
+                      err,
+                      intl.formatMessage({
+                        id: 'portal.postDetail.team.undoFailed',
+                        defaultMessage: "Couldn't undo the change",
+                      })
                     )
                   })
               },
@@ -180,7 +180,7 @@ export function usePortalTeamPostActions({
       if (previous) {
         queryClient.setQueryData(detailKey, previous)
       }
-      toast.error(err instanceof Error ? err.message : genericErrorMessage())
+      toastError(err, genericErrorMessage())
     } finally {
       setIsMetaUpdating(false)
     }
@@ -334,13 +334,12 @@ export function usePortalTeamPostActions({
                       invalidatePortal()
                     })
                     .catch((err: unknown) => {
-                      toast.error(
-                        err instanceof Error
-                          ? err.message
-                          : intl.formatMessage({
-                              id: 'portal.postDetail.team.undoFailed',
-                              defaultMessage: "Couldn't undo the change",
-                            })
+                      toastError(
+                        err,
+                        intl.formatMessage({
+                          id: 'portal.postDetail.team.undoFailed',
+                          defaultMessage: "Couldn't undo the change",
+                        })
                       )
                     })
                 },
@@ -349,7 +348,7 @@ export function usePortalTeamPostActions({
           )
         } catch (err) {
           queryClient.setQueryData<OwnerRef | null>(ownerKey, previous)
-          toast.error(err instanceof Error ? err.message : genericErrorMessage())
+          toastError(err, genericErrorMessage())
         } finally {
           setIsMetaUpdating(false)
         }
@@ -364,8 +363,7 @@ export function usePortalTeamPostActions({
           { postId, locked: !post?.isCommentsLocked },
           {
             onSuccess: () => invalidatePortal(),
-            onError: (err) =>
-              toast.error(err instanceof Error ? err.message : genericErrorMessage()),
+            onError: (err) => toastError(err, genericErrorMessage()),
           }
         )
       }
@@ -389,7 +387,7 @@ export function usePortalTeamPostActions({
           )
           await navigate({ to: '/', search: { board: boardSlug } })
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : genericErrorMessage())
+          toastError(err, genericErrorMessage())
         }
       }
     : undefined
@@ -406,7 +404,7 @@ export function usePortalTeamPostActions({
             })
           )
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : genericErrorMessage())
+          toastError(err, genericErrorMessage())
         }
       }
     : undefined
@@ -431,7 +429,7 @@ export function usePortalTeamPostActions({
           )
           onEditSaved?.()
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : genericErrorMessage())
+          toastError(err, genericErrorMessage())
         }
       }
     : undefined

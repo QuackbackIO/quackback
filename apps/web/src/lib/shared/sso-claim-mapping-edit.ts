@@ -47,6 +47,7 @@ export type ClaimMappingOperation =
   | { op: 'setPeopleFlags'; overrideExisting?: boolean; syncOnSignIn?: boolean }
 
 export class ClaimMappingEditError extends Error {
+  readonly statusCode = 400
   readonly code: string
   constructor(code: string, message: string) {
     super(message)

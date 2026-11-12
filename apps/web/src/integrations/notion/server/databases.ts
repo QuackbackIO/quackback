@@ -1,3 +1,4 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 /**
  * Notion database listing.
  */
@@ -25,7 +26,10 @@ export async function listNotionDatabases(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list Notion databases: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Notion databases: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as {

@@ -2112,6 +2112,8 @@
   "common.errorPage.error.title": "Une erreur est survenue",
   "common.errorPage.error.description": "Une erreur inattendue s'est produite. Réessayez ou revenez à la page d'accueil.",
   "common.errorPage.technicalDetails": "Détails techniques",
+  "common.errorPage.reference": "Référence",
+  "common.errorPage.copyReference": "Copier la référence",
   "common.errorPage.tryAgain": "Réessayer",
   "common.errorPage.goHome": "Retour à l'accueil",
   "portal.header.auth.accountMenu": "Ouvrir le menu du compte",

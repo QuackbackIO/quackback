@@ -53,6 +53,7 @@ export type FileRejection = 'empty' | 'too_large' | 'blocked'
 
 /** A file the pipeline will not store. `message` is safe to show the sender. */
 export class FileRejectedError extends Error {
+  readonly statusCode = 400
   constructor(
     readonly reason: FileRejection,
     message: string

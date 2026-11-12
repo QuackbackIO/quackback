@@ -29,6 +29,7 @@ import {
 } from '@/lib/server/functions/admin'
 import { adminResetTwoFactorFn } from '@/lib/server/functions/admin-reset-two-factor'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { toastError } from '@/lib/client/error-notice'
 
 interface MemberActionsProps {
   principalId: string
@@ -79,7 +80,7 @@ export function MemberActions({
       await queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
       await queryClient.invalidateQueries({ queryKey: ['settings', 'roles'] })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't update role. Try again.")
+      toastError(error, "Couldn't update role. Try again.")
     } finally {
       setIsLoading(false)
       setPendingRole(null)
@@ -92,7 +93,7 @@ export function MemberActions({
       await removeTeamMemberFn({ data: { principalId } })
       await queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't remove teammate. Try again.")
+      toastError(error, "Couldn't remove teammate. Try again.")
     } finally {
       setIsLoading(false)
       setRemoveDialogOpen(false)
@@ -106,9 +107,7 @@ export function MemberActions({
       await adminResetTwoFactorFn({ data: { userId } })
       await queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Couldn't reset two-factor authentication."
-      )
+      toastError(error, "Couldn't reset two-factor authentication.")
     } finally {
       setIsLoading(false)
       setResetTfaDialogOpen(false)
@@ -127,7 +126,7 @@ export function MemberActions({
       )
       await queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to sign user out')
+      toastError(error, 'Failed to sign user out')
     } finally {
       setIsLoading(false)
       setForceSignOutDialogOpen(false)

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { PencilSquareIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { DocumentDuplicateIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
@@ -41,6 +40,7 @@ import {
 } from '@/lib/client/mutations/status'
 import { IMPACT_LABELS, type StatusIncidentImpact } from './status-admin-colors'
 import { useStatusAccess } from './status-access'
+import { toastError } from '@/lib/client/error-notice'
 
 function flattenComponents(data: StatusComponentsAdmin | undefined) {
   if (!data) return []
@@ -71,7 +71,7 @@ export function StatusTemplatesView() {
     try {
       await deleteMutation.mutateAsync(deleteTarget.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete template')
+      toastError(error, 'Failed to delete template')
     } finally {
       setDeleteTarget(null)
     }
@@ -274,7 +274,7 @@ function TemplateFormDialog({
       }
       onOpenChange(false)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save template')
+      toastError(error, 'Failed to save template')
     }
   }
 
