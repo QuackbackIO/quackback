@@ -574,7 +574,7 @@
     },
     "sweep:doc:admin:/admin/settings/domains": {
       "dbQueries": 11,
-      "htmlKB": 67.9
+      "htmlKB": 73.0
     },
     "sweep:ui:admin:/admin/settings/domains": {
       "dbQueries": 11,

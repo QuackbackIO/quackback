@@ -28,8 +28,8 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 
-const { DomainList, DomainsEmptyState, domainRows, domainUseLinks, CUSTOM_DOMAINS_ANCHOR } =
-  await import('../domains-overview')
+const { DomainList, DomainsEmptyState, domainRows } = await import('../domains-overview')
+const { domainUseLinks, CUSTOM_DOMAINS_ANCHOR } = await import('@/lib/shared/domains-permissions')
 
 afterEach(cleanup)
 
