@@ -243,6 +243,19 @@ describe('address rows', () => {
     expect(row('Acme Updates <news@acme.com>')).toBeTruthy()
   })
 
+  it('drops the row icon on a phone, leaving its width to the address', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE, domain({ id: 'dom_unused', domain: 'unused.example' })],
+    })
+    for (const title of ['Acme <help@acme.com>', 'unused.example']) {
+      const icon = row(title).querySelector('[data-slot="row-icon"]')!
+      expect(icon.parentElement!.className.split(' ')).toEqual(
+        expect.arrayContaining(['hidden', 'sm:block'])
+      )
+    }
+  })
+
   it('shows no badge and no status line on a live address', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
     const r = row('Acme <help@acme.com>')

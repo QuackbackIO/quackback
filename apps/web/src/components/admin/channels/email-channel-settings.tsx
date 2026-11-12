@@ -401,6 +401,18 @@ const ownDomains = (...addresses: Array<string | null | undefined>): string[] =>
     return domain ? [domain] : []
   })
 
+/**
+ * A row's icon from sm up. On a phone the tile is left out: every row carries
+ * the same one, and its width is what lets an address sit on one line.
+ */
+function PhoneHiddenIcon({ icon }: { icon: typeof EnvelopeIcon }) {
+  return (
+    <div className="hidden sm:block">
+      <RowIcon icon={icon} />
+    </div>
+  )
+}
+
 /** Oldest first: the order the page lists addresses and offers them in. */
 const oldestFirst = <T extends SendingAddress>(addresses: T[]): T[] =>
   [...addresses].sort((x, y) => (x.createdAt ?? '').localeCompare(y.createdAt ?? ''))
@@ -595,7 +607,7 @@ function SendingAddressesSection({
           return (
             <div key={a.id}>
               <SettingsListRow
-                leading={<RowIcon icon={EnvelopeIcon} />}
+                leading={<PhoneHiddenIcon icon={EnvelopeIcon} />}
                 title={title}
                 meta={(domain && pendingMeta(domain, phase, first, fallbackNote)) || undefined}
                 wrapMeta={phase !== 'live' || warned}
@@ -629,7 +641,7 @@ function SendingAddressesSection({
           return (
             <div key={domain.id}>
               <SettingsListRow
-                leading={<RowIcon icon={GlobeAltIcon} />}
+                leading={<PhoneHiddenIcon icon={GlobeAltIcon} />}
                 title={domain.domain}
                 meta="No address uses this domain"
                 badges={<PhaseBadge phase={phase} />}
