@@ -1,3 +1,4 @@
+import { ValidationError } from '@/lib/shared/errors'
 import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { fetchAsanaSections } from '@/integrations/asana/server/statuses'
@@ -42,7 +43,8 @@ export const asanaIntegration: IntegrationDefinition = {
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl }) => {
       const projectGid = config.channelId as string
-      if (!projectGid) throw new Error('No Asana project configured')
+      if (!projectGid)
+        throw new ValidationError('INTEGRATION_TARGET_REQUIRED', 'No Asana project configured')
       const result = await registerAsanaWebhook(accessToken, projectGid, callbackUrl)
       return { externalWebhookId: result.webhookId, webhookSecret: result.webhookSecret }
     },

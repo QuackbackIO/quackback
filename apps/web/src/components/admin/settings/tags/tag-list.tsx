@@ -1,7 +1,6 @@
 import { useState, useEffect, useTransition, type ReactNode } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useMutation } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { EyeSlashIcon, GlobeAltIcon, TagIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,6 +30,7 @@ import { AUTOSAVE } from '@/lib/client/autosave'
 import { cn } from '@/lib/shared/utils'
 import type { Board, PostTag } from '@/lib/shared/db-types'
 import { createPostTagFn, updatePostTagFn, deletePostTagFn } from '@/lib/server/functions/post-tags'
+import { toastError } from '@/lib/client/error-notice'
 
 function ColorPickerPopover({
   color,
@@ -336,7 +336,7 @@ export function TagsSettingsPage({ initialTags, boards }: TagsSettingsPageProps)
       setTags((prev) => prev.filter((t) => t.id !== deletingTag.id))
       startTransition(() => router.invalidate())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete tag')
+      toastError(error, 'Failed to delete tag')
     } finally {
       setDeletingTag(null)
     }

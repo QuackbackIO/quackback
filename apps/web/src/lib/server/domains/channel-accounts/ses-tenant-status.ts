@@ -68,7 +68,9 @@ async function notifyPausedOnce(
   const [won] = await db
     .update(emailSesTenants)
     .set({ pausedNotifiedAt: now })
-    .where(and(eq(emailSesTenants.tenantName, tenantName), isNull(emailSesTenants.pausedNotifiedAt)))
+    .where(
+      and(eq(emailSesTenants.tenantName, tenantName), isNull(emailSesTenants.pausedNotifiedAt))
+    )
     .returning({ tenantName: emailSesTenants.tenantName })
   if (!won) return
   log.warn({ tenant: tenantName, cause }, 'ses tenant paused; managers notified')
