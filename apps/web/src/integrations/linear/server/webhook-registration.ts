@@ -1,3 +1,4 @@
+import { ForbiddenError } from '@/lib/shared/errors'
 /**
  * Linear webhook registration.
  *
@@ -75,7 +76,8 @@ async function createLinearWebhook(
   if (result.errors?.length) {
     const msg = result.errors[0].message
     if (msg.toLowerCase().includes('admin')) {
-      throw new Error(
+      throw new ForbiddenError(
+        'LINEAR_ADMIN_REQUIRED',
         'The connected Linear account must have admin permissions to create webhooks. ' +
           'Please reconnect with a workspace admin account.'
       )

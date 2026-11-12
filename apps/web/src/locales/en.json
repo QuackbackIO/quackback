@@ -2124,6 +2124,8 @@
   "common.errorPage.error.title": "Something went wrong",
   "common.errorPage.error.description": "An unexpected error occurred. Try again, or return to the home page.",
   "common.errorPage.technicalDetails": "Technical details",
+  "common.errorPage.reference": "Reference",
+  "common.errorPage.copyReference": "Copy reference",
   "common.errorPage.tryAgain": "Try again",
   "common.errorPage.goHome": "Go home",
   "portal.header.auth.accountMenu": "Open account menu",

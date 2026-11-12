@@ -2,6 +2,7 @@
  * GitLab project listing.
  */
 
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 import { gitlabApiBase } from '@/integrations/gitlab/server/url'
 import { gitlabFetch } from '@/integrations/gitlab/server/fetch'
 
@@ -20,7 +21,10 @@ export async function listGitLabProjects(
   )
 
   if (!response.ok) {
-    throw new Error(`Failed to list GitLab projects: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list GitLab projects: HTTP ${response.status}`
+    )
   }
 
   const projects = (await response.json()) as Array<{
