@@ -33,11 +33,14 @@ export function DomainSetupPanel({
   phase,
   onCheckAgain,
   checking = false,
+  hideName = false,
 }: {
   domain: SendingDomainDTO
   phase: DomainPhase
   onCheckAgain: () => void
   checking?: boolean
+  /** On a page already titled with the domain: a verified panel does not name it again. */
+  hideName?: boolean
 }) {
   // Was live once and is not now: the records were there, so this is a fix.
   const broken = phase === 'attention' && domain.verifiedAt !== null
@@ -53,13 +56,15 @@ export function DomainSetupPanel({
       className="space-y-3 border-t border-border/50 bg-muted/20 px-4 py-3 sm:px-6"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="text-sm font-medium">
-          {phase === 'live'
-            ? domain.domain
-            : broken
-              ? `Fix ${domain.domain}`
-              : `Set up ${domain.domain}`}
-        </h3>
+        {!(hideName && phase === 'live') && (
+          <h3 className="text-sm font-medium">
+            {phase === 'live'
+              ? domain.domain
+              : broken
+                ? `Fix ${domain.domain}`
+                : `Set up ${domain.domain}`}
+          </h3>
+        )}
         {phase !== 'live' && total > 0 && (
           <p className="text-xs text-muted-foreground">
             {found} of {total} records found

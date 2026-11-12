@@ -132,6 +132,7 @@ function renderView(
     permissions = ALL as string[],
     addresses = [address('acct_1', 'help@acme.com')],
     onChanged = vi.fn(),
+    domain = PENDING_DOMAIN,
   } = {}
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
@@ -142,7 +143,7 @@ function renderView(
     inboundRoute: null,
     platformAddress: null,
     sendingAddresses: addresses,
-    domains: [PENDING_DOMAIN],
+    domains: [domain],
     defaultFrom: 'Acme <notifications@example.com>',
     addressMode: 'verified-domains',
     sendingPaused: null,
@@ -163,7 +164,7 @@ const cardTitles = () =>
   screen
     .getAllByRole('heading', { level: 2 })
     .map((h) => h.textContent)
-    .filter((t) => t !== 'Uses')
+    .filter((t) => t !== 'Sending addresses')
 
 const card = (title: string) =>
   screen.getByRole('heading', { level: 2, name: title }).closest('section') as HTMLElement
@@ -179,7 +180,8 @@ describe('domain view cards', () => {
     expect(cardTitles()).toEqual(['Email sending', 'Sign-in'])
     expect(card('Email sending')).toHaveTextContent('Pending')
     expect(card('Email sending')).toHaveTextContent('help@')
-    expect(card('Sign-in')).toHaveTextContent('Verified')
+    // A healthy use is quiet: no status word at all.
+    expect(card('Sign-in')).not.toHaveTextContent('Verified')
     expect(card('Sign-in')).not.toHaveTextContent('Pending')
   })
 
@@ -243,7 +245,21 @@ describe('domain view permissions', () => {
 })
 
 describe('domain view uses', () => {
-  const uses = () => card('Uses')
+  const uses = () => card('Sending addresses')
+
+  it('does not name a verified domain again inside its email card', () => {
+    renderView(rowWith({ email: true }), {
+      domain: {
+        ...PENDING_DOMAIN,
+        status: 'verified',
+        verifiedAt: '2026-10-01T00:00:00.000Z',
+        autoCheckUntil: null,
+      },
+    })
+    // The page is titled with the domain; the records need no second heading.
+    expect(within(card('Email sending')).queryByRole('heading', { level: 3 })).toBeNull()
+    expect(card('Email sending')).toHaveTextContent('_quackback')
+  })
 
   it('removes one use at a time and offers nothing that removes them all', () => {
     renderView(rowWith({ email: true, signIn: true }))
@@ -252,10 +268,13 @@ describe('domain view uses', () => {
 
     // Email is removed here, an address at a time.
     expect(within(uses()).getAllByRole('button', { name: 'Remove' })).toHaveLength(1)
-    // Sign-in is removed on the page that owns it.
-    expect(within(uses()).getByRole('link', { name: 'Sign-in settings' })).toHaveAttribute(
-      'href',
-      '/admin/settings/security/authentication?tab=sign-in'
+    // Sign-in is removed on the page that owns it, linked once, from its own card.
+    const links = screen.getAllByRole('link', { name: 'Sign-in settings' })
+    expect(links).toHaveLength(1)
+    expect(card('Sign-in')).toContainElement(links[0]!)
+    // A domain still being set up keeps its instruction heading.
+    expect(within(card('Email sending')).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Set up acme.com'
     )
   })
 
@@ -307,8 +326,8 @@ describe('domain view uses', () => {
 
   it('lists only the uses the viewer may see', () => {
     renderView(rowWith({ email: true, signIn: true }), { permissions: [PERMISSIONS.AUTH_MANAGE] })
-    expect(within(uses()).queryByRole('button', { name: 'Remove' })).toBeNull()
-    expect(uses()).not.toHaveTextContent('help@acme.com')
-    expect(uses()).toHaveTextContent('Sign-in')
+    expect(screen.queryByRole('heading', { level: 2, name: 'Sending addresses' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull()
+    expect(screen.queryByText('help@acme.com')).toBeNull()
   })
 })
