@@ -57,8 +57,8 @@ export function DomainSetupPanel({
       data-slot="domain-setup-panel"
       className="space-y-3 border-t border-border/50 bg-muted/20 px-4 py-3 sm:px-6"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        {!(hideName && phase === 'live') && (
+      {!(hideName && phase === 'live') && (
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h3 className="text-sm font-medium">
             {phase === 'live'
               ? domain.domain
@@ -66,13 +66,13 @@ export function DomainSetupPanel({
                 ? `Fix ${domain.domain}`
                 : `Set up ${domain.domain}`}
           </h3>
-        )}
-        {phase !== 'live' && total > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {found} of {total} records found
-          </p>
-        )}
-      </div>
+          {phase !== 'live' && total > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {found} of {total} records found
+            </p>
+          )}
+        </div>
+      )}
       {host && (
         <p data-slot="dns-host" className="text-[13px] text-muted-foreground">
           Your DNS is at {host.name}.{host.tip ? ` ${host.tip}` : ''}
