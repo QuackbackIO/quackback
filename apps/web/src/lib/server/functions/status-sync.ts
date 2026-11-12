@@ -16,6 +16,7 @@ import {
 import type { IntegrationId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
+import { ConflictError, NotFoundError, ValidationError, DomainException } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'status-sync' })
 
@@ -74,12 +75,17 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration || integration.integrationType !== data.integrationType)
-      throw new Error('Integration not found')
-    if (integration.status !== 'active') throw new Error('Integration must be active')
+      throw new NotFoundError('INTEGRATION_NOT_FOUND', 'Integration not found')
+    if (integration.status !== 'active')
+      throw new ConflictError('INTEGRATION_NOT_ACTIVE', 'Integration must be active')
 
     const { getIntegration } = await import('@/lib/server/integrations')
     const registration = getIntegration(data.integrationType)?.webhookRegistration
-    if (!registration) throw new Error('Status sync is not supported for this integration')
+    if (!registration)
+      throw new ValidationError(
+        'NOT_SUPPORTED',
+        'Status sync is not supported for this integration'
+      )
     let secret = generateWebhookSecret()
     const callbackUrl = buildWebhookCallbackUrl(data.integrationType)
     const credentials = await getIntegrationAuth(integration.id)
@@ -93,7 +99,11 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
     // registration capability; 'manual' providers skip (the UI shows the
     // callback URL instead).
     if (registration !== 'manual') {
-      if (!accessToken) throw new Error('Reconnect the integration before enabling status sync')
+      if (!accessToken)
+        throw new ConflictError(
+          'INTEGRATION_RECONNECT_REQUIRED',
+          'Reconnect the integration before enabling status sync'
+        )
       try {
         const result = await registration.register({
           accessToken,
@@ -114,18 +124,23 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
         await recordIntegrationLastError(integrationId, `Failed to register webhook: ${raw}`).catch(
           () => {}
         )
+        // A refusal written for the admin (pick a project first, the account
+        // needs admin rights) goes back as it is.
+        if (error instanceof DomainException && error.statusCode < 500) throw error
         // Providers reject a second webhook at the same callback URL (Linear:
         // "url not unique"; GitHub: "Hook already exists"). This means a prior
         // status-sync webhook was left registered — surface an actionable
         // message instead of the raw provider text.
         const isDuplicate = /not unique|already exists|already registered|duplicate/i.test(raw)
-        throw new Error(
-          isDuplicate
-            ? 'A status-sync webhook is already registered with this provider for this workspace. ' +
-                'Turn status sync off, then on again to replace it — or remove the existing webhook in the provider first.'
-            : `Failed to register webhook: ${raw}`,
-          { cause: error }
-        )
+        if (isDuplicate) {
+          throw new ConflictError(
+            'STATUS_SYNC_WEBHOOK_EXISTS',
+            'A status-sync webhook is already registered with this provider for this workspace. ' +
+              'Turn status sync off, then on again to replace it — or remove the existing webhook in the provider first.',
+            error
+          )
+        }
+        throw new Error(`Failed to register webhook: ${raw}`, { cause: error })
       }
     }
 
@@ -157,7 +172,7 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
     })
 
     if (!integration || integration.integrationType !== data.integrationType)
-      throw new Error('Integration not found')
+      throw new NotFoundError('INTEGRATION_NOT_FOUND', 'Integration not found')
 
     const credentials = await getIntegrationAuth(integration.id)
     const config = credentials.config
@@ -223,7 +238,7 @@ export const updateStatusMappingsFn = createServerFn({ method: 'POST' })
       columns: { config: true },
     })
 
-    if (!integration) throw new Error('Integration not found')
+    if (!integration) throw new NotFoundError('INTEGRATION_NOT_FOUND', 'Integration not found')
 
     const existingConfig = (integration.config ?? {}) as Record<string, unknown>
     await db
@@ -260,7 +275,7 @@ export const updateTicketStatusMappingsFn = createServerFn({ method: 'POST' })
       columns: { config: true },
     })
 
-    if (!integration) throw new Error('Integration not found')
+    if (!integration) throw new NotFoundError('INTEGRATION_NOT_FOUND', 'Integration not found')
 
     const existingConfig = (integration.config ?? {}) as Record<string, unknown>
     await db
@@ -294,7 +309,7 @@ export const updatePushStatusMappingsFn = createServerFn({ method: 'POST' })
       where: eq(integrations.id, integrationId),
       columns: { config: true },
     })
-    if (!integration) throw new Error('Integration not found')
+    if (!integration) throw new NotFoundError('INTEGRATION_NOT_FOUND', 'Integration not found')
 
     const key = data.target === 'ticket' ? 'ticketPushStatusMappings' : 'pushStatusMappings'
     const existingConfig = (integration.config ?? {}) as Record<string, unknown>

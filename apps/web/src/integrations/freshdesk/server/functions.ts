@@ -2,6 +2,7 @@
  * Freshdesk-specific server functions.
  * Freshdesk uses API key + subdomain (no OAuth).
  */
+import { ValidationError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -34,7 +35,10 @@ export const saveFreshdeskKeyFn = createServerFn({ method: 'POST' })
     )
 
     if (!response.ok) {
-      throw new Error(`Invalid Freshdesk credentials: HTTP ${response.status}`)
+      throw new ValidationError(
+        'CONNECTION_TEST_FAILED',
+        `Invalid Freshdesk credentials: HTTP ${response.status}`
+      )
     }
 
     const helpdesk = (await response.json()) as { name?: string }

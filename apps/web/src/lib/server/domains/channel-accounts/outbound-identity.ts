@@ -276,6 +276,7 @@ export async function permittedSendingIdentity(
 
 /** Thrown when an address is configured that this workspace could not send as. */
 export class SendingIdentityRefusedError extends Error {
+  readonly statusCode = 400
   constructor(readonly address: string) {
     super(
       `This workspace cannot send as ${address}. Add and verify its domain under sending ` +

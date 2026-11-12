@@ -21,6 +21,7 @@ import {
 } from '@/lib/server/functions/user'
 import type { NotificationMatrix } from '@/lib/server/domains/subscriptions/notification-matrix'
 import { ONBOARDING_TIPS_KEY } from '@/lib/shared/onboarding-tips'
+import { errorText } from '@/lib/client/error-text'
 
 type Message = { id: string; defaultMessage: string }
 
@@ -205,12 +206,13 @@ export function NotificationMatrixForm({
       } catch (err) {
         if (!cancelled) {
           setError(
-            err instanceof Error
-              ? err.message
-              : intl.formatMessage({
-                  id: 'portal.settings.notifications.loadFailed',
-                  defaultMessage: 'Failed to load preferences',
-                })
+            errorText(
+              err,
+              intl.formatMessage({
+                id: 'portal.settings.notifications.loadFailed',
+                defaultMessage: 'Failed to load preferences',
+              })
+            )
           )
         }
       } finally {

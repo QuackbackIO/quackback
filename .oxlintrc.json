@@ -101,6 +101,13 @@
       }
     },
     {
+      "files": ["**/src/components/**", "**/src/routes/**/*.tsx", "**/src/lib/client/**"],
+      "excludeFiles": ["**/__tests__/**"],
+      "rules": {
+        "quackback/no-raw-error-message": "error"
+      }
+    },
+    {
       "files": ["**/src/lib/server/functions/**/*.ts"],
       "excludeFiles": ["**/__tests__/**"],
       "rules": {

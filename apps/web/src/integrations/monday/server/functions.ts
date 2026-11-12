@@ -74,7 +74,7 @@ export const fetchMondayBoardsFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration || integration.status !== 'active') {
-      throw new Error('Monday.com not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Monday.com not connected')
     }
 
     if (!integration.secrets) {

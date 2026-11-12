@@ -2,7 +2,6 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { LinkIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
-import { toast } from 'sonner'
 import type { TicketId } from '@quackback/ids'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import { ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
@@ -14,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { toastError } from '@/lib/client/error-notice'
 
 /** A short reference + title, the shape both link directions render. */
 function TicketLabel({ ticket }: { ticket: Pick<TicketDTO, 'reference' | 'title'> }) {
@@ -85,8 +85,7 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
     void qc.invalidateQueries({ queryKey: ticketKeys.all() })
     onChanged()
   }
-  const onError = (e: unknown) =>
-    toast.error(e instanceof Error ? e.message : 'Could not update the link')
+  const onError = (e: unknown) => toastError(e, 'Could not update the link')
 
   const link = useMutation({
     mutationFn: (v: { trackerTicketId: TicketId; ticketId: TicketId }) =>

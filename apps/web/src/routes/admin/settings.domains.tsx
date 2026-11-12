@@ -32,6 +32,7 @@ import {
   type SignInDomainSummary,
 } from '@/lib/server/functions/domains-overview'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { toastError } from '@/lib/client/error-notice'
 
 export const Route = createFileRoute('/admin/settings/domains')({
   head: adminPageHead('Domains settings'),
@@ -157,7 +158,7 @@ function OperatorHostnames({
       await router.invalidate()
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Could not update that domain.')
+      toastError(error, 'Could not update that domain.')
     },
   })
 

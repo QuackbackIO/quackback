@@ -55,6 +55,7 @@ import {
   type StatusIncidentImpact,
   type StatusIncidentLifecycle,
 } from './status-admin-colors'
+import { toastError } from '@/lib/client/error-notice'
 
 const PINNABLE_IMPACTS = ['minor', 'major', 'critical'] as const
 
@@ -296,7 +297,7 @@ function StatusIncidentEditorContent({
       return true
     } catch (error) {
       setSaveState('idle')
-      toast.error(error instanceof Error ? error.message : 'Failed to save details')
+      toastError(error, 'Failed to save details')
       // The save may have failed on a service deleted since; the server's
       // copy says which.
       void refetch()
@@ -385,7 +386,7 @@ function StatusIncidentEditorContent({
       setTarget(nextStage(incident.kind, effectiveTarget))
       toast.success('Update posted')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to post update')
+      toastError(error, 'Failed to post update')
     } finally {
       posting.current = false
     }

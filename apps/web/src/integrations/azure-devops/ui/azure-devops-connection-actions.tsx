@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { connectAzureDevOpsFn } from '@/integrations/azure-devops/server/functions'
 import { useDeleteIntegration } from '@/lib/client/mutations'
+import { errorText } from '@/lib/client/error-text'
 
 interface AzureDevOpsConnectionActionsProps {
   integrationId?: string
@@ -39,7 +40,7 @@ export function AzureDevOpsConnectionActions({
       const timer = setTimeout(() => setShowSuccess(false), 3000)
       return () => clearTimeout(timer)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect to Azure DevOps')
+      setError(errorText(err, 'Failed to connect to Azure DevOps'))
     } finally {
       setSaving(false)
     }

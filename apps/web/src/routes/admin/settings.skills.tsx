@@ -34,6 +34,7 @@ import { skillInputSchema, type SkillDTO } from '@/lib/shared/assistant/skills'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
 import { AI_ANY_PERMISSIONS } from '@/lib/shared/ai-permissions'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { errorText } from '@/lib/client/error-text'
 
 export const Route = createFileRoute('/admin/settings/skills')({
   head: adminPageHead('Skills settings'),
@@ -106,7 +107,7 @@ function SkillsPage() {
           setEditor(null)
           toast.success('Skill added')
         },
-        onError: (err) => setError(err instanceof Error ? err.message : 'Could not save'),
+        onError: (err) => setError(errorText(err, 'Could not save')),
       })
       return
     }
@@ -118,7 +119,7 @@ function SkillsPage() {
             setEditor(null)
             toast.success('Skill saved')
           },
-          onError: (err) => setError(err instanceof Error ? err.message : 'Could not save'),
+          onError: (err) => setError(errorText(err, 'Could not save')),
         }
       )
     }

@@ -55,6 +55,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/shared/utils'
+import { toastError } from '@/lib/client/error-notice'
 
 const MODULES = ['support', 'feedback', 'changelog'] as const
 const MODULE_LABEL: Record<(typeof MODULES)[number], string> = {
@@ -72,8 +73,7 @@ const fail = (msg: string) => () => toast.error(msg)
  * domain first — and swallowing them for a fixed string turns an answerable
  * problem into a mystery.
  */
-const reason = (fallback: string) => (error: unknown) =>
-  toast.error(error instanceof Error && error.message ? error.message : fallback)
+const reason = (fallback: string) => (error: unknown) => toastError(error, fallback)
 
 export function EmailChannelSettings() {
   const { data } = useQuery(emailChannelConfigQuery())
