@@ -12,7 +12,11 @@ import {
 } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import { pendingProvenLabel, type ShownProofSource } from '@/lib/shared/domain-proof'
-import { WEB_ADDRESSES_TITLE } from './domains-overview'
+import {
+  CUSTOM_DOMAINS_ANCHOR,
+  WEB_ADDRESSES_DESCRIPTION,
+  WEB_ADDRESSES_TITLE,
+} from './domains-overview'
 
 /** A hostname, with how its ownership was accepted when a proven zone covered it. */
 type HostnameRow = CustomDomainInstruction & { provenBy?: ShownProofSource | null }
@@ -145,8 +149,9 @@ export function DomainsCard(props: {
 }) {
   return (
     <SettingsCard
+      id={CUSTOM_DOMAINS_ANCHOR}
       title={WEB_ADDRESSES_TITLE}
-      description="Where people reach your portal and help center."
+      description={WEB_ADDRESSES_DESCRIPTION}
     >
       {!props.entitled ? (
         <UpgradeNotice entitlement="customDomain" />
