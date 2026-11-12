@@ -1,10 +1,8 @@
 import { createFileRoute, Navigate, useRouter } from '@tanstack/react-router'
-import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
 import { DOMAINS_PAGE_PERMISSIONS, domainUseLinks } from '@/lib/shared/domains-permissions'
 import { visibleDomainUses } from '@/lib/shared/domain-uses'
 import { isProductEnabled } from '@/lib/shared/types/settings'
-import { loadDomainSummaries } from '@/lib/client/domain-summaries'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { DomainView } from '@/components/admin/settings/domain-view'
@@ -16,17 +14,8 @@ export const Route = createFileRoute('/admin/settings/domains_/$domain')({
   head: adminPageHead('Domain settings'),
   loader: async ({ context }) => {
     assertRouteAnyPermission(context.permissions, DOMAINS_PAGE_PERMISSIONS)
-    const [summaries] = await Promise.all([
-      loadDomainSummaries(context),
-      // The records and addresses the email card shows. The card says where
-      // the domain stands without them, so a failed read does not fail the page.
-      context.permissions?.includes(EMAIL_SENDING_PERMISSION)
-        ? import('@/lib/client/queries/channel-accounts').then(({ emailChannelConfigQuery }) =>
-            context.queryClient.ensureQueryData(emailChannelConfigQuery()).catch(() => null)
-          )
-        : null,
-    ])
-    return summaries
+    const { loadDomainPage } = await import('@/lib/client/domain-page-loader')
+    return loadDomainPage(context)
   },
   component: DomainPage,
 })

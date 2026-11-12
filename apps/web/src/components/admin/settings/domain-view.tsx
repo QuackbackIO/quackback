@@ -16,7 +16,7 @@ import {
   type UseLink,
 } from '@/lib/shared/domains-permissions'
 import { DomainSetupPanel } from '@/components/admin/channels/domain-setup-panel'
-import { errorText } from '@/components/admin/channels/sending-address-dialog'
+import { errorText } from '@/lib/client/error-text'
 import { domainPhase } from '@/components/admin/channels/sending-domain-view'
 import {
   domainOf,
