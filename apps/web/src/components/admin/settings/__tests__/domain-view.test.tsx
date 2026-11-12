@@ -297,8 +297,11 @@ describe('domain view uses', () => {
     expect(uses()).toHaveTextContent('No address uses this domain')
     fireEvent.click(within(uses()).getByRole('button', { name: 'Remove' }))
     const dialog = screen.getByRole('alertdialog')
-    expect(within(dialog).getByText('Remove acme.com?')).toBeInTheDocument()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove domain' }))
+    // Only email stops: the dialog must not read as removing the whole domain.
+    expect(within(dialog).getByText('Stop sending email from acme.com?')).toBeInTheDocument()
+    expect(dialog).toHaveTextContent('Its other uses stay as they are.')
+    expect(within(dialog).queryByRole('button', { name: 'Remove domain' })).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Stop sending email' }))
     expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything())
   })
 

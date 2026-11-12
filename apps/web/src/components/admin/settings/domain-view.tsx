@@ -238,6 +238,7 @@ function UsesCard({
         onRemoved={onChanged}
       />
       <RemoveDomainDialog
+        emailOnly
         target={domainTarget}
         onClose={() => setDomainTarget(null)}
         onStart={() => setError(null)}
