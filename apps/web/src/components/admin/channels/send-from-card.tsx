@@ -52,6 +52,12 @@ const OVERRIDES = (
 
 const ALL_ROWS: readonly Surface[] = ['default', ...OVERRIDES.map((o) => o.surface)]
 
+/**
+ * The address picker: its fixed width from sm up; on a phone, where its row
+ * stacks it under the label, whatever the row has left beside the reset button.
+ */
+const TRIGGER = 'min-w-0 flex-1 sm:w-72 sm:flex-none lg:w-96'
+
 const PLATFORM = '__platform'
 const SAME_AS_DEFAULT = '__default'
 const INBOX = '__inbox'
@@ -236,6 +242,7 @@ export function SendFromCard({
     return (
       <SettingRow
         key={surface}
+        stackOnPhone
         label={rowLabel}
         htmlFor={id}
         description={
@@ -252,7 +259,7 @@ export function SendFromCard({
               disabled={setSender.isPending}
               onValueChange={(v) => choose(surface, String(v))}
             >
-              <SelectTrigger id={id} className="w-72 lg:w-96" aria-label={rowLabel}>
+              <SelectTrigger id={id} className={TRIGGER} aria-label={rowLabel}>
                 <SelectValue placeholder="Choose an address" />
               </SelectTrigger>
               <SelectContent>
@@ -290,6 +297,7 @@ export function SendFromCard({
       <SettingRows>
         {showDefault && (
           <SettingRow
+            stackOnPhone
             label="Default"
             htmlFor="send-from-default"
             description={notLiveHint('default') ?? defaultHint}
@@ -299,7 +307,7 @@ export function SendFromCard({
                 disabled={setSender.isPending}
                 onValueChange={(v) => choose('default', String(v))}
               >
-                <SelectTrigger id="send-from-default" className="w-72 lg:w-96" aria-label="Default">
+                <SelectTrigger id="send-from-default" className={TRIGGER} aria-label="Default">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
