@@ -12,6 +12,12 @@ interface SettingRowProps {
   /** A StateBadge or similar, shown beside the label. */
   badge?: React.ReactNode
   disabled?: boolean
+  /**
+   * Put the label over the control below sm, for a control too wide to sit
+   * beside its label on a phone (an address picker). The control then takes
+   * the row's width.
+   */
+  stackOnPhone?: boolean
   className?: string
 }
 
@@ -23,13 +29,18 @@ export function SettingRow({
   htmlFor,
   badge,
   disabled,
+  stackOnPhone,
   className,
 }: SettingRowProps) {
   return (
     <div
       data-slot="setting-row"
       data-disabled={disabled ? 'true' : undefined}
-      className={cn('flex items-center justify-between gap-6 py-3.5', className)}
+      className={cn(
+        'flex justify-between py-3.5',
+        stackOnPhone ? 'flex-col gap-2 sm:flex-row sm:items-center sm:gap-6' : 'items-center gap-6',
+        className
+      )}
     >
       <div className={cn('min-w-0', disabled && 'opacity-60')}>
         <div className="flex items-center gap-2">

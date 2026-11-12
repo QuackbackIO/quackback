@@ -9,15 +9,15 @@ vi.mock('@/lib/client/mutations/channel-accounts', () => ({
   useSetEmailSender: () => ({ mutate: setSender, isPending: false }),
 }))
 
-/** The trigger's accessible name, read off the Select's children. */
-function triggerLabel(children: ReactNode): string | undefined {
-  let label: string | undefined
+/** The trigger's accessible name and classes, read off the Select's children. */
+function triggerProps(children: ReactNode): { label?: string; className?: string } {
+  let found: { label?: string; className?: string } = {}
   Children.forEach(children, (child) => {
     if (!isValidElement(child)) return
-    const props = child.props as { 'aria-label'?: string }
-    if (props['aria-label']) label = props['aria-label']
+    const props = child.props as { 'aria-label'?: string; className?: string }
+    if (props['aria-label']) found = { label: props['aria-label'], className: props.className }
   })
-  return label
+  return found
 }
 
 // The Select's popup relies on layout APIs happy-dom lacks; render it as a
@@ -33,7 +33,8 @@ vi.mock('@/components/ui/select', () => ({
     children: ReactNode
   }) => (
     <select
-      aria-label={triggerLabel(children)}
+      aria-label={triggerProps(children).label}
+      className={triggerProps(children).className}
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
     >
@@ -117,6 +118,31 @@ const rowNames = () => screen.getAllByRole('combobox').map((s) => s.getAttribute
 
 beforeEach(() => setSender.mockReset())
 afterEach(cleanup)
+
+describe('at phone width', () => {
+  const rowOf = (name: string) => select(name).closest('[data-slot="setting-row"]')!
+  const classes = (el: Element) => el.className.split(' ')
+
+  it('stacks each label over its address, so neither is squeezed by the other', () => {
+    renderCard({ senders: { changelog: { mode: 'address', id: NEWS.id } } })
+    for (const name of ['Default', 'Changelog']) {
+      expect(classes(rowOf(name))).toContain('flex-col')
+      expect(classes(rowOf(name))).toContain('sm:flex-row')
+    }
+  })
+
+  it('gives the picker the width that is left, and its fixed width only from sm up', () => {
+    renderCard({ senders: { changelog: { mode: 'address', id: NEWS.id } } })
+    for (const name of ['Default', 'Changelog']) {
+      const trigger = classes(select(name))
+      expect(trigger).not.toContain('w-72')
+      expect(trigger).toContain('sm:w-72')
+      // Shrinks with the row, so "use the default" stays inside the card.
+      expect(trigger).toContain('min-w-0')
+      expect(trigger).toContain('flex-1')
+    }
+  })
+})
 
 describe('a server with its own default address', () => {
   it('names the configured address the server default', () => {
