@@ -2,6 +2,7 @@
  * n8n-specific server functions.
  * n8n uses webhook URLs (no OAuth).
  */
+import { ValidationError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { safeFetch } from '@/lib/server/content/ssrf-guard'
@@ -30,7 +31,10 @@ export const saveN8nWebhookFn = createServerFn({ method: 'POST' })
     })
 
     if (!testResponse.ok) {
-      throw new Error(`Webhook test failed: HTTP ${testResponse.status}`)
+      throw new ValidationError(
+        'CONNECTION_TEST_FAILED',
+        `Webhook test failed: HTTP ${testResponse.status}`
+      )
     }
 
     await saveIntegration('n8n', {

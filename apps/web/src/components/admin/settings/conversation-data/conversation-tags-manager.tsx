@@ -10,7 +10,6 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { TagIcon } from '@heroicons/react/24/outline'
-import { toast } from 'sonner'
 import type { ConversationTagId } from '@quackback/ids'
 import {
   listConversationTagsForSettingsFn,
@@ -36,6 +35,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/shared/utils'
+import { toastError } from '@/lib/client/error-notice'
 
 type TagRow = Awaited<ReturnType<typeof listConversationTagsForSettingsFn>>[number]
 
@@ -107,8 +107,7 @@ export function ConversationTagsManager() {
     // The inbox nav + pickers cache tag lists under their own keys too.
     void queryClient.invalidateQueries({ queryKey: TAGS_SETTINGS_KEY })
   }
-  const onError = (fallback: string) => (e: unknown) =>
-    toast.error(e instanceof Error ? e.message : fallback)
+  const onError = (fallback: string) => (e: unknown) => toastError(e, fallback)
 
   const updateTag = useMutation({
     mutationFn: (input: { id: ConversationTagId; name: string; color: string }) =>

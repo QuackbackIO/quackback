@@ -1,3 +1,4 @@
+import { ForbiddenError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { z } from 'zod'
@@ -32,7 +33,10 @@ export const searchWorkspaceFn = createServerFn({ method: 'GET' })
       auth.scope !== 'dashboard' ||
       (auth.principal.role !== 'admin' && auth.principal.role !== 'member')
     ) {
-      throw new Error('Access denied: Requires a team dashboard session')
+      throw new ForbiddenError(
+        'DASHBOARD_SESSION_REQUIRED',
+        'Access denied: Requires a team dashboard session'
+      )
     }
     const { searchWorkspace } = await import('@/lib/server/domains/assistant/ask-search')
     const { getFeatureFlags } = await import('@/lib/server/domains/settings/settings.service')

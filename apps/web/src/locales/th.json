@@ -130,6 +130,8 @@
   "common.errorPage.error.title": "เกิดข้อผิดพลาด",
   "common.errorPage.error.description": "เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองอีกครั้ง หรือกลับไปที่หน้าหลัก",
   "common.errorPage.technicalDetails": "รายละเอียดทางเทคนิค",
+  "common.errorPage.reference": "รหัสอ้างอิง",
+  "common.errorPage.copyReference": "คัดลอกรหัสอ้างอิง",
   "common.errorPage.tryAgain": "ลองอีกครั้ง",
   "common.errorPage.goHome": "ไปหน้าหลัก",
   "files.viewer.failureUnsupported": "ไฟล์ประเภทนี้ไม่มีตัวอย่าง",

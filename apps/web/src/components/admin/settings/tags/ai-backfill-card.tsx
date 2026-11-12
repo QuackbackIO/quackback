@@ -19,6 +19,7 @@ import {
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { backfillAiTagsFn } from '@/lib/server/functions/post-tags'
 import type { Board, PostTag } from '@/lib/shared/db-types'
+import { toastError } from '@/lib/client/error-notice'
 
 interface AiBackfillCardProps {
   tags: PostTag[]
@@ -46,7 +47,7 @@ export function AiBackfillCard({ tags, boards }: AiBackfillCardProps) {
         )
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to apply AI tags')
+      toastError(err, 'Failed to apply AI tags')
     } finally {
       setIsRunning(false)
     }

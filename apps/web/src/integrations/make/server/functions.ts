@@ -6,6 +6,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { safeFetch } from '@/lib/server/content/ssrf-guard'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 /**
  * Save a Make webhook URL as the integration connection.
@@ -20,7 +21,7 @@ export const saveMakeWebhookFn = createServerFn({ method: 'POST' })
 
     const hostname = new URL(data.webhookUrl).hostname
     if (!hostname.endsWith('.make.com') && !hostname.endsWith('.integromat.com')) {
-      throw new Error('Webhook URL must be a Make (make.com) URL')
+      throw new ValidationError('INVALID_WEBHOOK_URL', 'Webhook URL must be a Make (make.com) URL')
     }
 
     // Test the webhook with a ping
@@ -35,7 +36,10 @@ export const saveMakeWebhookFn = createServerFn({ method: 'POST' })
     })
 
     if (!testResponse.ok) {
-      throw new Error(`Webhook test failed: HTTP ${testResponse.status}`)
+      throw new ValidationError(
+        'CONNECTION_TEST_FAILED',
+        `Webhook test failed: HTTP ${testResponse.status}`
+      )
     }
 
     await saveIntegration('make', {

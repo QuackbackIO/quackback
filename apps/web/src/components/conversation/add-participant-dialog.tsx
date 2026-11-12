@@ -27,6 +27,7 @@ import {
   removeConversationParticipantFn,
   listConversationParticipantsFn,
 } from '@/lib/server/functions/conversation'
+import { toastError } from '@/lib/client/error-notice'
 
 export const AddParticipantDialog = memo(function AddParticipantDialog({
   open,
@@ -57,7 +58,7 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
       setEmail('')
       void participantsQuery.refetch()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add customer')
+      toastError(err, 'Failed to add customer')
     } finally {
       setPending(false)
     }
@@ -71,7 +72,7 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
       toast.success('Customer removed — they no longer receive replies')
       void participantsQuery.refetch()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove customer')
+      toastError(err, 'Failed to remove customer')
     } finally {
       setRemovingId(null)
     }
