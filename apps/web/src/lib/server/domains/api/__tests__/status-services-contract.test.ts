@@ -21,6 +21,7 @@ describe('status services/components OpenAPI contract', () => {
     const detail = spec.paths?.['/status/services/{serviceId}'] as Record<string, unknown>
     expect(detail).toHaveProperty('get')
     expect(detail).toHaveProperty('patch')
+    expect(detail).toHaveProperty('delete')
   })
 
   it('keeps /status/components paths registered but marks them deprecated', () => {
@@ -37,6 +38,7 @@ describe('status services/components OpenAPI contract', () => {
     expect(collection.post?.deprecated).toBe(true)
     expect(detail.get?.deprecated).toBe(true)
     expect(detail.patch?.deprecated).toBe(true)
+    expect(detail.delete?.deprecated).toBe(true)
 
     // Deprecation description points readers at the replacement paths.
     expect(collection.get?.description).toContain('/status/services')
@@ -54,6 +56,7 @@ describe('status services/components OpenAPI contract', () => {
     expect(collection.post?.deprecated).toBeUndefined()
     expect(detail.get?.deprecated).toBeUndefined()
     expect(detail.patch?.deprecated).toBeUndefined()
+    expect(detail.delete?.deprecated).toBeUndefined()
   })
 
   it('components and services share the same component schema (payload keys unchanged)', () => {
@@ -65,5 +68,11 @@ describe('status services/components OpenAPI contract', () => {
       const inServices = servicesBody.includes(key)
       expect(inComponents).toBe(inServices)
     }
+  })
+
+  it('registers DELETE next to GET on /status/incidents/{incidentId}', () => {
+    const detail = spec.paths?.['/status/incidents/{incidentId}'] as Record<string, unknown>
+    expect(detail).toHaveProperty('get')
+    expect(detail).toHaveProperty('delete')
   })
 })
