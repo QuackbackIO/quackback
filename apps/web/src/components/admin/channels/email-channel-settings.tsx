@@ -6,7 +6,7 @@
  * support replies come from. An address on a domain that is not live yet
  * carries that domain's setup panel under it.
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { EnvelopeIcon, GlobeAltIcon } from '@heroicons/react/24/outline'
@@ -466,6 +466,15 @@ function SendingAddressesSection({
   loaded: boolean
 }) {
   const [dialog, setDialog] = useState<SendingAddressDialogTarget | null>(null)
+  // The Add address button on show (the card's, or the empty card's), and
+  // whether it opened the dialog: focus goes back to it when the dialog
+  // closes. A rename opens from a row's menu, which takes focus back itself.
+  const addButton = useRef<HTMLButtonElement>(null)
+  const openedByAdd = useRef(false)
+  const openAdd = () => {
+    openedByAdd.current = true
+    setDialog({ kind: 'add' })
+  }
   const [domainRemoveTarget, setDomainRemoveTarget] = useState<DomainRemoval | null>(null)
   const [removeTarget, setRemoveTarget] = useState<AddressRemoval | null>(null)
   // Records of live domains the person opened from the row menu, by domain.
@@ -528,10 +537,11 @@ function SendingAddressesSection({
       action={
         empty ? undefined : (
           <Button
+            ref={addButton}
             variant="outline"
             size="sm"
             disabled={!available}
-            onClick={() => setDialog({ kind: 'add' })}
+            onClick={openAdd}
           >
             Add address
           </Button>
@@ -553,8 +563,10 @@ function SendingAddressesSection({
           const items = [
             {
               label: 'Edit name',
-              onSelect: () =>
-                setDialog({ kind: 'rename', id: a.id, address, senderName: a.senderName ?? null }),
+              onSelect: () => {
+                openedByAdd.current = false
+                setDialog({ kind: 'rename', id: a.id, address, senderName: a.senderName ?? null })
+              },
             },
             ...(domain && first && phase === 'live'
               ? [
@@ -656,7 +668,7 @@ function SendingAddressesSection({
           }
           action={
             available ? (
-              <Button variant="outline" onClick={() => setDialog({ kind: 'add' })}>
+              <Button ref={addButton} variant="outline" onClick={openAdd}>
                 Add address
               </Button>
             ) : undefined
@@ -683,6 +695,7 @@ function SendingAddressesSection({
         setsUpDomains={setsUpDomains}
         ownDomains={platformDomains}
         onClose={() => setDialog(null)}
+        finalFocus={() => (openedByAdd.current ? addButton.current : true)}
       />
       <RemoveAddressDialog
         target={removeTarget}

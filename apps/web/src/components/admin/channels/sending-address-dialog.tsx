@@ -59,15 +59,21 @@ export function SendingAddressDialog({
   target,
   workspaceName,
   onClose,
+  finalFocus,
   ...context
 }: {
   target: SendingAddressDialogTarget | null
   workspaceName: string
   onClose: () => void
+  /**
+   * Where focus goes when the dialog closes. Needed when a plain button opened
+   * it: nothing else knows to send focus back there, and it lands on the page.
+   */
+  finalFocus?: () => HTMLElement | null | true
 } & DomainContext) {
   return (
     <Dialog open={!!target} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" finalFocus={finalFocus}>
         {target ? (
           <SendingAddressForm
             key={target.kind === 'rename' ? target.id : 'add'}

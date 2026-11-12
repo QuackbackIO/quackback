@@ -1496,3 +1496,52 @@ describe('where each part lives', () => {
     expect(screen.queryByText('An admin adds sending addresses', { exact: false })).toBeNull()
   })
 })
+
+describe('where focus goes when the Add address dialog closes', () => {
+  const addButton = () => screen.getByRole('button', { name: 'Add address' })
+  const open = async () => {
+    const user = userEvent.setup()
+    addButton().focus()
+    await user.keyboard('{Enter}')
+    await screen.findByRole('dialog')
+    return user
+  }
+  const closed = () => waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+  it('returns to the Add address button on Escape', async () => {
+    renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
+    const user = await open()
+    await user.keyboard('{Escape}')
+    await closed()
+    await waitFor(() => expect(document.activeElement).toBe(addButton()))
+  })
+
+  it('returns to the Add address button on Cancel', async () => {
+    renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
+    const user = await open()
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+    await closed()
+    await waitFor(() => expect(document.activeElement).toBe(addButton()))
+  })
+
+  it('returns to the empty card’s Add address button too', async () => {
+    renderSettings({ view: 'workspace' })
+    const user = await open()
+    await user.keyboard('{Escape}')
+    await closed()
+    await waitFor(() => expect(document.activeElement).toBe(addButton()))
+  })
+
+  it('still returns to the row menu after Edit name', async () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'dom_1', 'Acme Help')],
+      domains: [LIVE],
+    })
+    const user = await openMenu('Acme Help <help@acme.com>')
+    await user.click(screen.getByRole('menuitem', { name: 'Edit name' }))
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+    await closed()
+    await waitFor(() => expect(document.activeElement).not.toBe(addButton()))
+  })
+})
