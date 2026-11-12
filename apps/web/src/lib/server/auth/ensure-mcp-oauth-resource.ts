@@ -1,20 +1,19 @@
 /**
  * Pre-insert the MCP protected-resource row so Better Auth's boot-time seed
- * does not try to create it.
+ * finds it.
  *
  * Better Auth 1.7 `mcp()` seeds `oauth_resource` from config on every
- * `createAuth()`. The seed is supposed to treat a UNIQUE collision as a no-op
- * (another replica already inserted the identifier), but it matches
- * `/unique|duplicate/` against `err.message`. Drizzle wraps the driver error
- * as `Failed query: insert into "oauth_resource"…` and puts SQLSTATE 23505 on
- * `cause`, so the guard misses, plugin init throws, and `getAuth()` fails —
- * which is how portal sign-in started returning "Failed to send sign-in email".
+ * `createAuth()`. Before 1.7.20 a UNIQUE collision from a concurrent replica
+ * escaped that seed (Drizzle wraps the driver error, so its message guard
+ * missed), plugin init threw, and `getAuth()` failed, which is how portal
+ * sign-in once returned "Failed to send sign-in email"
+ * (https://github.com/better-auth/better-auth/issues/11034). 1.7.20 re-reads
+ * the row after a failed create, so the race is handled upstream now.
  *
- * Upstream: https://github.com/better-auth/better-auth/issues/11034
- * (fix in https://github.com/better-auth/better-auth/pull/11087, unreleased).
- * Their documented workaround until that ships: insert the row ahead of the
- * seed, ignoring a conflict, so `findOne` hits and `create` is never attempted.
- * There is no config flag that disables the seed.
+ * This stays for two things the seed does not do: it writes both spellings of
+ * the identifier (e2e rewrites `*.localhost` on the plugin `resource` only),
+ * and it keeps `allowedScopes` current on an existing row (the seed's default
+ * `insertOnly` mode never updates one).
  *
  * A static migration cannot do this for us: the identifier is the workspace
  * origin (`https://<slug>.quackback.io/api/mcp`), not a fleet-wide constant.

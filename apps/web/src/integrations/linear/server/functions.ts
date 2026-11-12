@@ -66,7 +66,7 @@ export const fetchLinearTeamsFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('Linear not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Linear not connected')
     }
 
     const accessToken = await getValidAccessToken(integration.id)

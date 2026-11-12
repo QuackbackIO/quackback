@@ -40,6 +40,7 @@ import {
   SSO_CRUMBS,
 } from './provider-shared'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
+import { toastError } from '@/lib/client/error-notice'
 
 export function ProviderCreatePage({
   registrationId: initialRegistrationId,
@@ -80,7 +81,7 @@ export function ProviderCreatePage({
         },
       })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not create the identity provider.')
+      toastError(err, 'Could not create the identity provider.')
       setSaving(false)
       return
     }
@@ -92,7 +93,7 @@ export function ProviderCreatePage({
         await setCreds({ data: { id: saved.id, clientSecret: draft.secret.trim() } })
         credentialsSaved = true
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not save the client secret.')
+        toastError(err, 'Could not save the client secret.')
       }
     }
     await queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })

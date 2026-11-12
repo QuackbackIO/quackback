@@ -1,3 +1,4 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 /**
  * GitHub repository listing via REST API.
  */
@@ -20,7 +21,10 @@ export async function listGitHubRepos(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list GitHub repos: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list GitHub repos: HTTP ${response.status}`
+    )
   }
 
   const data = (await response.json()) as Array<{

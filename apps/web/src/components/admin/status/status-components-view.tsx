@@ -89,6 +89,7 @@ import {
 } from './status-admin-colors'
 import { FormattedMessage, useIntl } from 'react-intl'
 import type { StatusUptimeDay } from '@/lib/client/queries/status'
+import { toastError } from '@/lib/client/error-notice'
 
 interface ComponentFormValues {
   name: string
@@ -377,7 +378,7 @@ export function StatusComponentsView() {
     try {
       await deleteComponentMutation.mutateAsync(deleteComponent.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete service')
+      toastError(error, 'Failed to delete service')
     } finally {
       setDeleteComponent(null)
     }
@@ -388,7 +389,7 @@ export function StatusComponentsView() {
     try {
       await deleteGroupMutation.mutateAsync(deleteGroup.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete group')
+      toastError(error, 'Failed to delete group')
     } finally {
       setDeleteGroup(null)
     }
@@ -791,7 +792,7 @@ function CreateGroupDialog({
       await createGroup.mutateAsync({ name: name.trim() })
       onOpenChange(false)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create group')
+      toastError(error, 'Failed to create group')
     }
   }
 
@@ -890,7 +891,7 @@ function ComponentFormDialog({
       }
       onOpenChange(false)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save service')
+      toastError(error, 'Failed to save service')
     }
   }
 

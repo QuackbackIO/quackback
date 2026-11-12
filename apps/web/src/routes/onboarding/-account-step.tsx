@@ -26,6 +26,7 @@ import type { WorkspaceClaim } from '@/lib/server/functions/onboarding'
 import type { AccountAuthConfig } from './-account-auth-config'
 import { cn } from '@/lib/shared/utils'
 import { track } from '@/lib/client/analytics'
+import { errorText } from '@/lib/client/error-text'
 
 export interface AccountStepProps {
   ssoEnabled: boolean
@@ -458,12 +459,13 @@ function FirstAdminStep({ offerSignIn, onSignIn }: { offerSignIn: boolean; onSig
       postAuthSuccess()
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'onboarding.account.error.create',
-              defaultMessage: 'We could not create your account. Try again.',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'onboarding.account.error.create',
+            defaultMessage: 'We could not create your account. Try again.',
+          })
+        )
       )
       setSubmitting(false)
     }
@@ -801,12 +803,13 @@ function SsoStep() {
       }
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'onboarding.account.ssoError',
-              defaultMessage: 'We couldn’t start single sign-on. Try again.',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'onboarding.account.ssoError',
+            defaultMessage: 'We couldn’t start single sign-on. Try again.',
+          })
+        )
       )
       setSsoRedirecting(false)
     }

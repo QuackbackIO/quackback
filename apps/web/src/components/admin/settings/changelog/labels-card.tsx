@@ -1,7 +1,6 @@
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import {
   DndContext,
   closestCenter,
@@ -47,6 +46,8 @@ import {
   reorderChangelogCategoriesFn,
 } from '@/lib/server/functions/changelog-categories'
 import type { ChangelogCategory } from '@/lib/server/domains/changelog/changelog-category.types'
+import { errorText } from '@/lib/client/error-text'
+import { toastError } from '@/lib/client/error-notice'
 
 const PRESET_COLORS = [
   '#ef4444',
@@ -148,7 +149,7 @@ function CategoryDialog({ open, onOpenChange, category, segments, onSaved }: Cat
       onSaved(saved)
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save label')
+      setError(errorText(err, 'Failed to save label'))
     } finally {
       setIsSaving(false)
     }
@@ -326,7 +327,7 @@ export function LabelsCard({ initialCategories }: LabelsCardProps) {
       setCategories((prev) => prev.filter((c) => c.id !== deletingCategory.id))
       startTransition(() => router.invalidate())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete label')
+      toastError(error, 'Failed to delete label')
     } finally {
       setDeletingCategory(null)
     }

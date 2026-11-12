@@ -45,6 +45,7 @@ import {
   classRestrictedNodeIssue,
   type ValidatedWorkflowGraph,
 } from '@/lib/server/domains/workflows/workflow.schemas'
+import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 
 // createServerFn constrains returns to serializable types, so the jsonb fields
 // are typed as JSON (not Record<string, unknown> — `unknown` isn't provably
@@ -134,7 +135,7 @@ export const createWorkflowFn = createServerFn({ method: 'POST' })
     // for why an update needs one.
     if (data.graph) {
       const issue = classRestrictedNodeIssue(data.graph, data.class)
-      if (issue) throw new Error(issue)
+      if (issue) throw new ValidationError('CLASS_RESTRICTED_NODE', issue)
     }
     return serializeWorkflow(
       await createWorkflow({
@@ -161,7 +162,7 @@ export const updateWorkflowFn = createServerFn({ method: 'POST' })
       const effectiveClass = data.class ?? (await getWorkflow(data.id as WorkflowId))?.class
       if (effectiveClass) {
         const issue = classRestrictedNodeIssue(data.graph, effectiveClass)
-        if (issue) throw new Error(issue)
+        if (issue) throw new ValidationError('CLASS_RESTRICTED_NODE', issue)
       }
     } else if (data.class) {
       // A class-only patch (no graph in this request) still changes the
@@ -177,7 +178,7 @@ export const updateWorkflowFn = createServerFn({ method: 'POST' })
           { nodes: storedNodes as { id: string; type: string }[] },
           data.class
         )
-        if (issue) throw new Error(issue)
+        if (issue) throw new ValidationError('CLASS_RESTRICTED_NODE', issue)
       }
     }
     return serializeWorkflow(
@@ -302,7 +303,7 @@ export const restoreWorkflowVersionFn = createServerFn({ method: 'POST' })
     const ctx = await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
     const version = await getWorkflowVersion(data.versionId as WorkflowVersionId)
     if (!version || (version.workflowId as string) !== data.workflowId) {
-      throw new Error('Workflow version not found')
+      throw new NotFoundError('WORKFLOW_VERSION_NOT_FOUND', 'Workflow version not found')
     }
     const parsed = updateSchema.parse({
       id: data.workflowId,
@@ -318,7 +319,7 @@ export const restoreWorkflowVersionFn = createServerFn({ method: 'POST' })
       const effectiveClass = (await getWorkflow(parsed.id as WorkflowId))?.class
       if (effectiveClass) {
         const issue = classRestrictedNodeIssue(parsed.graph, effectiveClass)
-        if (issue) throw new Error(issue)
+        if (issue) throw new ValidationError('CLASS_RESTRICTED_NODE', issue)
       }
     }
     return serializeWorkflow(

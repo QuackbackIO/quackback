@@ -11,6 +11,7 @@ import {
   unblockPersonFn,
   getPersonBlockStatusFn,
 } from '@/lib/server/functions/blocking'
+import { toastError } from '@/lib/client/error-notice'
 
 /** Shared query key so the badge and the button dedupe to one fetch per person. */
 function blockStatusKey(principalId: PrincipalId) {
@@ -48,7 +49,7 @@ export function usePersonBlockActions(principalId: PrincipalId | undefined) {
       await invalidate()
       toast.success('User blocked')
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to block'),
+    onError: (e) => toastError(e, 'Failed to block'),
   })
   const unblockMut = useMutation({
     mutationFn: () => unblockPersonFn({ data: { principalId: principalId as PrincipalId } }),
@@ -56,7 +57,7 @@ export function usePersonBlockActions(principalId: PrincipalId | undefined) {
       await invalidate()
       toast.success('User unblocked')
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to unblock'),
+    onError: (e) => toastError(e, 'Failed to unblock'),
   })
 
   return {

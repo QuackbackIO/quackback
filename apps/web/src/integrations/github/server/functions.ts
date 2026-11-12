@@ -184,7 +184,10 @@ export const setGitHubInboxEnabledFn = createServerFn({ method: 'POST' })
         accessToken,
       })
       if (denied || !integration) {
-        throw new Error(denied ?? 'Connect GitHub before enabling the inbox channel.')
+        throw new ValidationError(
+          'GITHUB_INBOX_UNAVAILABLE',
+          denied ?? 'Connect GitHub before enabling the inbox channel.'
+        )
       }
       await ensureGitHubConnectionAccount(integration.id)
       const { ensureDestinations } = await import('@/lib/server/integrations/destinations')
@@ -256,7 +259,7 @@ export const fetchGitHubReposFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration?.secrets || integration.status !== 'active') {
-      throw new Error('GitHub not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'GitHub not connected')
     }
 
     const secrets = { accessToken: await getValidAccessToken(integration.id) }
