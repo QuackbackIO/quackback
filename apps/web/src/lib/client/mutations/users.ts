@@ -15,7 +15,7 @@ import {
   updatePortalUserFn,
 } from '@/lib/server/functions/admin'
 import { usersKeys } from '@/lib/client/hooks/use-users-queries'
-import { toast } from 'sonner'
+import { toastError } from '@/lib/client/error-notice'
 
 // ============================================================================
 // Mutation Hooks
@@ -99,7 +99,7 @@ export function useRemovePortalUser() {
           }
         }
       }
-      toast.error(err instanceof Error ? err.message : 'Failed to remove portal user')
+      toastError(err, 'Failed to remove portal user')
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: usersKeys.lists() })

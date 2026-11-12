@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useDeleteIntegration } from '@/lib/client/mutations'
+import { errorText } from '@/lib/client/error-text'
 
 interface WebhookConnectionActionsProps {
   integrationId?: string
@@ -54,7 +55,7 @@ export function WebhookConnectionActions({
       const timer = setTimeout(() => setShowSuccess(false), 3000)
       return () => clearTimeout(timer)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save webhook URL')
+      setError(errorText(err, 'Failed to save webhook URL'))
     } finally {
       setSaving(false)
     }

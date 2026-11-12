@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import { ArrowLeftIcon, Loader2Icon } from 'lucide-react'
 import { useAppContext } from './use-app-context'
+import { errorText } from '@/lib/client/error-text'
 
 interface Board {
   id: string
@@ -91,7 +92,7 @@ export function SidebarCreateForm({ initialTitle, onBack, onCreated }: SidebarCr
 
       onCreated()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create post')
+      setError(errorText(err, 'Failed to create post'))
     } finally {
       setSubmitting(false)
     }

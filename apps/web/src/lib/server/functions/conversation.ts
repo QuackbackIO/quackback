@@ -67,7 +67,7 @@ import { isTeamMember } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { RequesterTicketDTO, ConversationTicketSummary } from '@/lib/server/domains/tickets'
 import { AI_INBOX_BUCKETS } from '@/lib/server/domains/assistant/assistant.involvement'
-import { ConflictError, ForbiddenError } from '@/lib/shared/errors'
+import { ConflictError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'conversation' })
@@ -253,7 +253,7 @@ async function assertConversationsEnabled(principalId: PrincipalId): Promise<voi
   const { isConversationsEnabledFor } =
     await import('@/lib/server/domains/settings/settings.support')
   if (!(await isConversationsEnabledFor(principalId))) {
-    throw new Error('Conversations are not enabled')
+    throw new ForbiddenError('CONVERSATIONS_NOT_ENABLED', 'Conversations are not enabled')
   }
 }
 
@@ -268,7 +268,7 @@ async function assertVisitorConversationAccess(ctx: AuthContext): Promise<void> 
   if (isTeamMember(ctx.principal.role) || ctx.scope === 'widget') return
   const { resolvePortalAccessForRequest } = await import('./portal-access')
   const access = await resolvePortalAccessForRequest()
-  if (!access.granted) throw new Error('Portal access required')
+  if (!access.granted) throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
 }
 
 // ── Visitor functions ────────────────────────────────────────────────────
@@ -1162,7 +1162,7 @@ export const startAgentConversationFn = createServerFn({ method: 'POST' })
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
     const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
     if (!(await isFeatureEnabled('supportInbox'))) {
-      throw new Error('Support inbox is not enabled')
+      throw new ForbiddenError('SUPPORT_INBOX_NOT_ENABLED', 'Support inbox is not enabled')
     }
     const actor = await policyActorFromAuth(ctx)
     const { startAgentConversation } =
@@ -1547,7 +1547,7 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
           // immediately instead of staged into a composer.
           return async (id) => {
             const macro = await macroPromise
-            if (!macro) throw new Error('Macro not found')
+            if (!macro) throw new NotFoundError('MACRO_NOT_FOUND', 'Macro not found')
             const { buildMacroContext, renderMacro, applyMacroActions } =
               await import('@/lib/server/domains/macros')
             const body = renderMacro(macro.body, await buildMacroContext(id))

@@ -41,6 +41,7 @@ import {
   useRemoveStatusSubscriber,
 } from '@/lib/client/mutations/status'
 import { exportStatusSubscribersAdminFn } from '@/lib/server/functions/status'
+import { toastError } from '@/lib/client/error-notice'
 
 /** Extract the "Email" column from a CSV file; falls back to treating every
  *  non-empty line as an email if no header row matches. (Kept local — the
@@ -157,7 +158,7 @@ export function StatusSubscribersView() {
       const { removed } = await removeMutation.mutateAsync(removing.principalId)
       toast.success(removed ? `Removed ${name}.` : `${name} had already unsubscribed.`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to remove subscriber')
+      toastError(error, 'Failed to remove subscriber')
     } finally {
       setRemoving(null)
     }
@@ -173,7 +174,7 @@ export function StatusSubscribersView() {
       }
       downloadCsv(rows)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to export subscribers')
+      toastError(error, 'Failed to export subscribers')
     } finally {
       setExporting(false)
     }
@@ -358,7 +359,7 @@ function AddByEmailTab({ onDone }: { onDone: () => void }) {
       setEmail('')
       onDone()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No matching user for that email')
+      toastError(error, 'No matching user for that email')
     }
   }
 
@@ -425,7 +426,7 @@ function CsvImportTab({ onDone }: { onDone: () => void }) {
       )
       onDone()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Import failed')
+      toastError(err, 'Import failed')
     }
   }
 

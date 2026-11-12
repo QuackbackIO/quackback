@@ -3,7 +3,7 @@
  */
 
 import { integrationFetch } from '@/lib/server/integrations/sync/transport'
-import { ValidationError } from '@/lib/shared/errors'
+import { ValidationError, ServiceUnavailableError } from '@/lib/shared/errors'
 
 const DISCORD_API = 'https://discord.com/api/v10'
 
@@ -90,7 +90,10 @@ async function discordGet<T>(path: string, botToken: string, what: string): Prom
     headers: { Authorization: `Bot ${botToken}` },
   })
   if (!response.ok) {
-    throw new Error(`Failed to load Discord ${what}: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to load Discord ${what}: HTTP ${response.status}`
+    )
   }
   return (await response.json()) as T
 }

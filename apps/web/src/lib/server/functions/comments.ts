@@ -25,7 +25,7 @@ import {
   restoreComment,
   unpinComment,
 } from '@/lib/server/domains/comments/comment.pin'
-import { NotFoundError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { getOptionalAuth, requireAuth, hasAuthCredentials } from './auth-helpers'
 import {
   createCommentSchema,
@@ -81,7 +81,7 @@ export const runCreateComment = createServerOnlyFn(async function runCreateComme
       await import('@/lib/server/domains/settings/settings.types')
     const settings = await getSettings()
     if (!workspaceAllowsAnonymous(settings?.portalConfig)) {
-      throw new Error('Anonymous interaction is not enabled')
+      throw new ForbiddenError('ANONYMOUS_NOT_ENABLED', 'Anonymous interaction is not enabled')
     }
   }
 
@@ -120,7 +120,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     return runCreateComment(await requireAuth(), data)
   })
@@ -150,7 +150,7 @@ export const addReactionFn = createServerFn({ method: 'POST' })
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     return runAddReaction(await requireAuth(), data)
   })
@@ -177,7 +177,7 @@ export const removeReactionFn = createServerFn({ method: 'POST' })
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     return runRemoveReaction(await requireAuth(), data)
   })
@@ -240,7 +240,7 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     const ctx = await requireAuth()
     const { assertCommentViewable } = await import('@/lib/server/domains/posts/post.access')
@@ -268,7 +268,7 @@ export const userDeleteCommentFn = createServerFn({ method: 'POST' })
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     const ctx = await requireAuth()
     const { assertCommentViewable } = await import('@/lib/server/domains/posts/post.access')

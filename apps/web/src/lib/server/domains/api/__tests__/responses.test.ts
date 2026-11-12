@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { runWithLogContext } from '@/lib/server/log-context'
 import { ForbiddenError, ValidationError, ConflictError, NotFoundError } from '@/lib/shared/errors'
 
 // Type for error response body
@@ -193,6 +194,40 @@ describe('API Responses', () => {
 
       const body = (await response.json()) as ErrorBody
       expect(body.error.code).toBe('INTERNAL_ERROR')
+    })
+  })
+
+  describe('request id on a 5xx', () => {
+    it('carries the id of the request it was built in', async () => {
+      const response = await runWithLogContext(
+        { request_id: 'req-123', route: '/api/v1/posts' },
+        () => Promise.resolve(internalErrorResponse())
+      )
+      expect((await response.json()).error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Internal server error',
+        requestId: 'req-123',
+      })
+    })
+
+    it('covers an error nobody planned for', async () => {
+      const response = await runWithLogContext(
+        { request_id: 'req-456', route: '/api/v1/posts' },
+        () => Promise.resolve(handleDomainError(new Error('connect ECONNREFUSED 10.0.4.17:5432')))
+      )
+      const body = await response.json()
+      expect(response.status).toBe(500)
+      expect(body.error.requestId).toBe('req-456')
+      expect(JSON.stringify(body)).not.toContain('ECONNREFUSED')
+    })
+
+    it('is left off a 4xx, and off a 5xx built outside a request', async () => {
+      const refusal = await runWithLogContext(
+        { request_id: 'req-789', route: '/api/v1/posts' },
+        () => Promise.resolve(notFoundResponse('Post'))
+      )
+      expect((await refusal.json()).error).not.toHaveProperty('requestId')
+      expect((await internalErrorResponse().json()).error).not.toHaveProperty('requestId')
     })
   })
 

@@ -49,6 +49,7 @@ import {
 } from '@/lib/server/domains/posts/post.admin-panels'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 import { logger } from '@/lib/server/logger'
+import { NotFoundError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'posts' })
 
@@ -588,7 +589,7 @@ export const retryPostIntegrationSyncFn = createServerFn({ method: 'POST' })
     const { syncSourceForActor } = await import('@/lib/server/integrations/sync/eligibility')
     const actor = await policyActorFromAuth(ctx)
     if (!(await syncSourceForActor({ sourceType: 'post', sourceId: data.id }, actor)))
-      throw new Error('Post not found')
+      throw new NotFoundError('POST_NOT_FOUND', 'Post not found')
     return syncPostIntegrations(data.id as PostId, actor.principalId ?? undefined)
   })
 
