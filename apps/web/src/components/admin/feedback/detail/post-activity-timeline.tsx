@@ -36,6 +36,7 @@ import {
 import { IconGitMerge } from '@tabler/icons-react'
 import { SOURCE_TYPE_LABELS } from '@/components/admin/feedback/source-type-icon'
 import { getLatestMergeStateByDuplicateId } from './post-activity-timeline.utils'
+import { toastError } from '@/lib/client/error-notice'
 
 // ============================================
 // Types
@@ -345,7 +346,7 @@ function MergedInCard({ activity, isUnmerged }: { activity: ActivityItem; isUnme
       queryClient.invalidateQueries({ queryKey: ['activity', 'post'] })
       toast.success('Post unmerged successfully')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to unmerge post')
+      toastError(err, 'Failed to unmerge post')
     } finally {
       setConfirmOpen(false)
     }

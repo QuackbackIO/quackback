@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { importChangelogSubscribersFn } from '@/lib/server/functions/changelog-subscriptions'
 import type { ChangelogCsvImportResult } from '@/lib/server/domains/changelog/changelog-subscription.types'
+import { errorText } from '@/lib/client/error-text'
 
 /** Extract the "Email" column from a CSV file; falls back to treating every
  *  non-empty line as an email if no header row matches. */
@@ -63,7 +64,7 @@ export function CsvImportSection() {
       const imported = await importChangelogSubscribersFn({ data: { emails } })
       setResult(imported)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import failed')
+      setError(errorText(err, 'Import failed'))
     } finally {
       setIsImporting(false)
     }

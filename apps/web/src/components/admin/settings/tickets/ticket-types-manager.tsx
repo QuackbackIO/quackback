@@ -51,6 +51,8 @@ import {
 } from '@/lib/server/functions/ticket-types'
 import { ticketTypesQuery } from './queries'
 import { FieldsEditor } from './fields-editor'
+import { errorText } from '@/lib/client/error-text'
+import { toastError } from '@/lib/client/error-notice'
 
 /** Category presentation for the registry rows (label comes from the shared
  *  ticketTypeLabel so the inbox chips can't drift). */
@@ -89,7 +91,7 @@ export function TicketTypesManager({
       toast.success(`Archived "${toArchive.name}"`)
       await refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to archive type')
+      toastError(error, 'Failed to archive type')
     } finally {
       setToArchive(null)
     }
@@ -101,7 +103,7 @@ export function TicketTypesManager({
       toast.success(`Restored "${type.name}"`)
       await refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to restore type')
+      toastError(error, 'Failed to restore type')
     }
   }
 
@@ -324,7 +326,7 @@ function TypeEditorDialog({ open, onOpenChange, type, onSaved }: TypeEditorDialo
       await onSaved()
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save type')
+      setError(errorText(err, 'Failed to save type'))
     } finally {
       setSubmitting(false)
     }

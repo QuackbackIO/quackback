@@ -56,6 +56,7 @@ import {
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { errorText } from '@/lib/client/error-text'
 
 const slaPoliciesQuery = queryOptions({
   queryKey: ['settings', 'slaPolicies'],
@@ -405,7 +406,7 @@ function PolicyEditorDialog({
       onSaved()
     },
     onError: (err) => {
-      if (err instanceof EditorError) setError(err.message)
+      if (err instanceof EditorError) setError(errorText(err, 'Failed to save policy'))
       else toast.error('Failed to save policy')
     },
   })

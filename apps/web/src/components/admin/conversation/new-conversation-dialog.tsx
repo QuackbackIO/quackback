@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
+import { toastError } from '@/lib/client/error-notice'
 
 export interface NewConversationTarget {
   principalId: string
@@ -130,7 +131,7 @@ export function NewConversationDialog({
       void navigate({ to: '/admin/inbox', search: { c: result.conversation.id } })
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to send message')
+      toastError(error, 'Failed to send message')
     },
   })
 
