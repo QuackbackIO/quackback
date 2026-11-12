@@ -480,7 +480,10 @@ describe('a domain that broke after it was live', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [DEMOTED] })
     expect(screen.getByText('Fix acme.com')).toBeTruthy()
     expect(screen.queryByText('Set up acme.com')).toBeNull()
-    expect(screen.getByText("We can't find these records any more.")).toBeTruthy()
+    // The line also says when we last looked, which is what Check now changes.
+    expect(
+      screen.getByText(/^We can't find these records any more\. Last checked .+\.$/)
+    ).toBeTruthy()
   })
 
   it('keeps the first-time wording for a domain never live', () => {
@@ -548,7 +551,7 @@ describe('domains no address uses', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     expect(deleteDomain).not.toHaveBeenCalled()
     const dialog = await screen.findByRole('alertdialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove domain' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Stop sending email' }))
     await waitFor(() => expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything()))
   })
 
@@ -926,7 +929,7 @@ describe('removing a sending address', () => {
     const user = await openMenu('Acme <help@acme.com>')
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     const dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText(/acme\.com will be removed too\./)).toBeTruthy()
+    expect(within(dialog).getByText(/acme\.com stops sending email too\./)).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
     await waitFor(() => expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything()))
     expect(screen.queryAllByRole('alertdialog')).toHaveLength(0)
@@ -943,7 +946,7 @@ describe('removing a sending address', () => {
     const user = await openMenu('Acme <help@acme.com>')
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     const dialog = await screen.findByRole('alertdialog')
-    expect(dialog.textContent).not.toContain('will be removed too')
+    expect(dialog.textContent).not.toContain('stops sending email too')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
     await waitFor(() => expect(deleteAccount).toHaveBeenCalled())
     expect(deleteDomain).not.toHaveBeenCalled()
