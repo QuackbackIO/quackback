@@ -47,6 +47,8 @@ export function DomainSetupPanel({
   const checked = lastCheckedAt(domain)
   const checkedAgo = checked ? formatDistanceToNow(checked, { addSuffix: true }) : null
   const checkedTitle = checkedAgo ? `Last checked ${checkedAgo}` : undefined
+  // Said in the line while records are wanted: it is what a press of Check now changes.
+  const lastChecked = checkedAgo ? ` Last checked ${checkedAgo}.` : ''
   const { found, total } = recordsFound(domain)
   const host = phase === 'live' ? null : dnsHostGuide(domain)
 
@@ -105,15 +107,15 @@ export function DomainSetupPanel({
             line wraps within its own space, so the actions stay side by side. */}
         <span
           className="mr-auto min-w-48 flex-1"
-          title={phase === 'setting-up' ? undefined : checkedTitle}
+          title={phase === 'live' ? checkedTitle : undefined}
         >
           {phase === 'live'
             ? 'Keep these records in place.'
             : phase === 'setting-up'
-              ? `We check automatically and will let you know when it's verified.${checkedAgo ? ` Last checked ${checkedAgo}.` : ''}`
+              ? `We check automatically and will let you know when it's verified.${lastChecked}`
               : broken
-                ? "We can't find these records any more."
-                : "We haven't found these records yet."}
+                ? `We can't find these records any more.${lastChecked}`
+                : `We haven't found these records yet.${lastChecked}`}
         </span>
         {phase !== 'live' && (
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -144,7 +146,7 @@ function DmarcAdvisory({ domain }: { domain: SendingDomainDTO }) {
           size="sm"
           aria-expanded={shown}
           onClick={() => setShown((s) => !s)}
-          className="h-auto p-0 text-xs"
+          className="h-auto p-0 text-xs font-medium text-foreground"
         >
           {shown ? 'Hide the record' : 'Show the record'}
         </Button>

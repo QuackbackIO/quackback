@@ -287,7 +287,7 @@ describe('domain view uses', () => {
     const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByText('Remove help@acme.com?')).toBeInTheDocument()
     expect(dialog).toHaveTextContent('Email can no longer be sent from this address.')
-    expect(dialog).toHaveTextContent('acme.com will be removed too.')
+    expect(dialog).toHaveTextContent('acme.com stops sending email too.')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
 
     expect(deleteAccount).toHaveBeenCalledWith('acct_1', expect.anything())
@@ -308,7 +308,7 @@ describe('domain view uses', () => {
     const buttons = within(uses()).getAllByRole('button', { name: 'Remove' })
     expect(buttons).toHaveLength(2)
     fireEvent.click(buttons[0]!)
-    expect(screen.getByRole('alertdialog')).not.toHaveTextContent('will be removed too')
+    expect(screen.getByRole('alertdialog')).not.toHaveTextContent('stops sending email too')
   })
 
   it('removes an email domain no address uses', () => {
@@ -318,7 +318,8 @@ describe('domain view uses', () => {
     const dialog = screen.getByRole('alertdialog')
     // Only email stops: the dialog must not read as removing the whole domain.
     expect(within(dialog).getByText('Stop sending email from acme.com?')).toBeInTheDocument()
-    expect(dialog).toHaveTextContent('Its other uses stay as they are.')
+    expect(dialog).toHaveTextContent('Its email DNS records can be deleted afterwards.')
+    expect(dialog).not.toHaveTextContent('other uses')
     expect(within(dialog).queryByRole('button', { name: 'Remove domain' })).toBeNull()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Stop sending email' }))
     expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything())
