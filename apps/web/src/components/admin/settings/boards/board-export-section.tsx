@@ -4,6 +4,7 @@ import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/shared/form-error'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
+import { errorText } from '@/lib/client/error-text'
 
 const errorResponseSchema = z.object({
   error: z.string().optional(),
@@ -45,7 +46,7 @@ export function BoardExportSection({ boardId }: BoardExportSectionProps) {
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Export failed')
+      setError(errorText(err, 'Export failed'))
     } finally {
       setIsExporting(false)
     }

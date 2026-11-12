@@ -19,6 +19,7 @@ import {
 import { createWebhookFn } from '@/lib/server/functions/webhooks'
 import { isPlanRefusal } from '@/lib/shared/describe-upgrade'
 import { WEBHOOK_EVENTS, WEBHOOK_EVENT_CONFIG } from '@/lib/shared/webhook-events'
+import { errorText } from '@/lib/client/error-text'
 
 interface CreateWebhookDialogProps {
   open: boolean
@@ -72,7 +73,7 @@ export function CreateWebhookDialog({
         onPlanRefusal?.()
         return
       }
-      setError(err instanceof Error ? err.message : 'Failed to create webhook')
+      setError(errorText(err, 'Failed to create webhook'))
     }
   }
 

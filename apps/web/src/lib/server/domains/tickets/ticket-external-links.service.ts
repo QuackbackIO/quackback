@@ -41,7 +41,7 @@ import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
-import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
+import { ValidationError, ForbiddenError, ConflictError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { loadTicketOr404 } from './ticket.service'
 import { emitTicketSystemMessage } from './ticket-message.service'
@@ -179,7 +179,8 @@ async function insertLinkWithNote(
       .from(integrations)
       .where(eq(integrations.id, integrationId))
       .for('share')
-    if (!integration || integration.status !== 'active') throw new Error('Integration unavailable')
+    if (!integration || integration.status !== 'active')
+      throw new ConflictError('INTEGRATION_UNAVAILABLE', 'Integration unavailable')
     const { installationIdentity, syncDestination, syncHash, syncOperationKey } =
       await import('@/lib/server/integrations/sync/identity')
     const { queueSyncOperation } = await import('@/lib/server/integrations/sync/ledger')

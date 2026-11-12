@@ -2051,6 +2051,8 @@
   "common.errorPage.error.title": "Da ist etwas schiefgelaufen",
   "common.errorPage.error.description": "Ein unerwarteter Fehler ist aufgetreten. Versuch es noch einmal oder kehr zur Startseite zurück.",
   "common.errorPage.technicalDetails": "Technische Details",
+  "common.errorPage.reference": "Referenz",
+  "common.errorPage.copyReference": "Referenz kopieren",
   "common.errorPage.tryAgain": "Erneut versuchen",
   "common.errorPage.goHome": "Zur Startseite",
   "portal.header.auth.accountMenu": "Kontomenü öffnen",

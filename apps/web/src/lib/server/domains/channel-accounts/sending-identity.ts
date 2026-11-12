@@ -37,6 +37,7 @@
  * carries no delete. See `@quackback/email/ses-identity` for what that
  * credential needs and why deletion is excluded from it.
  */
+import { ValidationError } from '@/lib/shared/errors'
 import {
   createSesDomainIdentity,
   getSesDomainIdentity,
@@ -124,10 +125,9 @@ export const LEGACY_MAIL_FROM_LABEL = 'bounce'
 export const AUTO_CHECK_WINDOW_MS = 72 * 60 * 60 * 1000
 
 /** Thrown when a domain cannot be added at all, with a reason for the operator. */
-export class SendingDomainRefusedError extends Error {
+export class SendingDomainRefusedError extends ValidationError {
   constructor(message: string) {
-    super(message)
-    this.name = 'SendingDomainRefusedError'
+    super('SENDING_DOMAIN_REFUSED', message)
   }
 }
 
