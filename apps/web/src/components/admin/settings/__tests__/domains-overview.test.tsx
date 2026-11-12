@@ -9,18 +9,20 @@ import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     to,
+    params,
     search,
     hash,
     children,
     ...rest
   }: {
     to: string
+    params?: Record<string, string>
     search?: Record<string, string>
     hash?: string
     children: ReactNode
   }) => (
     <a
-      href={`${to}${search ? `?${new URLSearchParams(search).toString()}` : ''}${hash ? `#${hash}` : ''}`}
+      href={`${to.replace(/\$(\w+)/g, (_, key: string) => params?.[key] ?? '')}${search ? `?${new URLSearchParams(search).toString()}` : ''}${hash ? `#${hash}` : ''}`}
       {...rest}
     >
       {children}
@@ -151,7 +153,7 @@ describe('domain list', () => {
     // Healthy uses show no status badge.
     expect(row).not.toHaveTextContent('Pending')
     expect(row).not.toHaveTextContent('Needs attention')
-    expect(row).toHaveAttribute('href', '/admin/settings/email')
+    expect(row).toHaveAttribute('href', '/admin/settings/domains/acme.com')
   })
 
   it('lists each domain once, in name order, with its status words', () => {
@@ -195,10 +197,7 @@ describe('domain list', () => {
     const pendingSignIn = rowOf('example.net')
     expect(pendingSignIn).toHaveTextContent('Sign-in')
     expect(pendingSignIn).toHaveTextContent('Pending')
-    expect(pendingSignIn).toHaveAttribute(
-      'href',
-      '/admin/settings/security/authentication?tab=sign-in'
-    )
+    expect(pendingSignIn).toHaveAttribute('href', '/admin/settings/domains/example.net')
     expect(rowOf('eu.acme.com')).toHaveTextContent('Already verified. Click Verify to use it.')
     expect(rowOf('example.io')).toHaveTextContent('Verified by this workspace')
     expect(rowOf('example.io')).not.toHaveTextContent('Pending')
@@ -206,10 +205,10 @@ describe('domain list', () => {
     const help = rowOf('help.acme.com')
     expect(help).toHaveTextContent('Custom domain')
     expect(help).toHaveTextContent('Pending')
-    expect(help).toHaveAttribute('href', '/admin/settings/help-center?tab=domains-languages')
+    expect(help).toHaveAttribute('href', '/admin/settings/domains/help.acme.com')
   })
 
-  it('opens the use that needs attention when a domain has more than one', () => {
+  it('opens the domain, not one of its uses, when a domain has more than one', () => {
     const rows = domainRows({
       now: NOW,
       sending: [sending({})],
@@ -219,7 +218,18 @@ describe('domain list', () => {
     render(<DomainList rows={rows} links={linksFor(ALL)} />)
     const row = rowOf('acme.com')
     expect(row).toHaveTextContent('Pending')
-    expect(row).toHaveAttribute('href', '/admin/settings/security/authentication?tab=sign-in')
+    expect(row).toHaveAttribute('href', '/admin/settings/domains/acme.com')
+  })
+
+  it('links a row for a viewer who can open one of its uses, whichever it is', () => {
+    const rows = domainRows({
+      now: NOW,
+      sending: [sending({})],
+      signIn: [{ id: 'domain_a', name: 'acme.com', verified: true, provenBy: null }],
+      helpCenterDomain: null,
+    })
+    render(<DomainList rows={rows} links={linksFor([PERMISSIONS.AUTH_MANAGE])} />)
+    expect(rowOf('acme.com')).toHaveAttribute('href', '/admin/settings/domains/acme.com')
   })
 
   it('renders a row without a link for a viewer who cannot open its page', () => {
