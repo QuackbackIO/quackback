@@ -71,7 +71,7 @@ export const fetchGitLabProjectsFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration || integration.status !== 'active') {
-      throw new Error('GitLab not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'GitLab not connected')
     }
 
     if (!integration.secrets) {

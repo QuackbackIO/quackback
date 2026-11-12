@@ -1,8 +1,10 @@
-import { lazy, Suspense, useContext } from 'react'
+import { lazy, Suspense, useContext, useState } from 'react'
 import { IntlContext, useIntl, type MessageDescriptor } from 'react-intl'
 import { DocumentLocaleContext } from '@/components/shared/document-locale-context'
+import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
+import { errorReferenceOf } from '@/lib/shared/error-reference'
 import { DEFAULT_LOCALE, messageArea, normalizeLocale } from '@/lib/shared/i18n'
 import { cn } from '@/lib/shared/utils'
 
@@ -201,7 +203,11 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
     return <EntitlementRequiredPage error={error} fullPage={fullPage} />
   }
 
-  const message = errorMessage(error)
+  // A failure the server hid behind a plain sentence carries a reference code
+  // in place of its detail. Production builds never print the raw message: it
+  // can come from anywhere, including the browser's own runtime errors.
+  const reference = errorReferenceOf(error)
+  const message = reference || import.meta.env.PROD ? '' : errorMessage(error)
   return (
     <FriendlyShell fullPage={fullPage}>
       <ErrorPageCopy>
@@ -240,10 +246,52 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
                 <a href="/">{copy({ id: 'common.errorPage.goHome', defaultMessage: 'Go home' })}</a>
               </Button>
             </div>
+
+            {reference && (
+              <ErrorReference
+                reference={reference}
+                label={copy({ id: 'common.errorPage.reference', defaultMessage: 'Reference' })}
+                copyLabel={copy({
+                  id: 'common.errorPage.copyReference',
+                  defaultMessage: 'Copy reference',
+                })}
+              />
+            )}
           </>
         )}
       </ErrorPageCopy>
     </FriendlyShell>
+  )
+}
+
+/** The code to quote to support, or to search the server logs for. */
+function ErrorReference({
+  reference,
+  label,
+  copyLabel,
+}: {
+  reference: string
+  label: string
+  copyLabel: string
+}) {
+  const [copied, setCopied] = useState(false)
+  const copyReference = () => {
+    // Clipboard access can be refused (insecure origin, embedded frame); the
+    // code stays selectable on the page either way.
+    void navigator.clipboard?.writeText(reference).then(
+      () => setCopied(true),
+      () => undefined
+    )
+  }
+  const Icon = copied ? CheckIcon : ClipboardDocumentIcon
+  return (
+    <div className="mt-6 flex items-center justify-center gap-1 text-xs text-muted-foreground">
+      <span>{label}</span>
+      <span className="font-mono text-foreground">{reference}</span>
+      <Button variant="ghost" size="icon-sm" aria-label={copyLabel} onClick={copyReference}>
+        <Icon className="size-3.5" />
+      </Button>
+    </div>
   )
 }
 

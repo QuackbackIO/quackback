@@ -17,6 +17,7 @@ import {
 } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { IDENTITY_PROVIDERS_KEY } from './provider-shared'
+import { toastError } from '@/lib/client/error-notice'
 
 export function useProviderLogo(provider: IdentityProvider) {
   const queryClient = useQueryClient()
@@ -44,7 +45,7 @@ export function useProviderLogo(provider: IdentityProvider) {
       toast.success('Logo updated.')
       return true
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not upload the logo.')
+      toastError(err, 'Could not upload the logo.')
       return false
     } finally {
       setUploading(false)
@@ -59,7 +60,7 @@ export function useProviderLogo(provider: IdentityProvider) {
       toast.success('Logo removed.')
       return true
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not remove the logo.')
+      toastError(err, 'Could not remove the logo.')
       return false
     } finally {
       setRemoving(false)

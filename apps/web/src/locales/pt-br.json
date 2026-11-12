@@ -2098,6 +2098,8 @@
   "common.errorPage.error.title": "Algo deu errado",
   "common.errorPage.error.description": "Ocorreu um erro inesperado. Tente novamente ou volte para a página inicial.",
   "common.errorPage.technicalDetails": "Detalhes técnicos",
+  "common.errorPage.reference": "Referência",
+  "common.errorPage.copyReference": "Copiar referência",
   "common.errorPage.tryAgain": "Tente novamente",
   "common.errorPage.goHome": "Ir para o início",
   "portal.header.auth.accountMenu": "Abrir menu da conta",

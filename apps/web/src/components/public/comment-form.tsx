@@ -29,6 +29,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId, PostCommentId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { shownName } from '@/lib/shared/greeting-name'
+import { errorText } from '@/lib/client/error-text'
 
 export type CreateCommentMutation = UseMutationResult<
   unknown,
@@ -198,12 +199,13 @@ export function CommentForm({
         },
         onError: (err) => {
           setError(
-            err instanceof Error
-              ? err.message
-              : intl.formatMessage({
-                  id: 'portal.commentForm.errorPost',
-                  defaultMessage: 'Failed to post comment',
-                })
+            errorText(
+              err,
+              intl.formatMessage({
+                id: 'portal.commentForm.errorPost',
+                defaultMessage: 'Failed to post comment',
+              })
+            )
           )
         },
       }
