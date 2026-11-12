@@ -28,6 +28,8 @@ export const WEB_ADDRESSES_DESCRIPTION = 'Where people reach your portal and hel
 /** The Custom domains card on this page (Cloud), where the empty state's Custom domain action lands. */
 export const CUSTOM_DOMAINS_ANCHOR = 'custom-domains'
 
+const HELP_CENTER_SETTINGS = '/admin/settings/help-center'
+
 export const EMPTY_DESCRIPTION = 'Use your own domain for email, web addresses and sign-in.'
 
 type DomainUse = 'email' | 'customDomain' | 'signIn'
@@ -72,7 +74,7 @@ export function domainUseLinks({
       links.customDomain = { to: '/admin/settings/domains', hash: CUSTOM_DOMAINS_ANCHOR }
     } else if (helpCenterOn && can(PERMISSIONS.HELP_CENTER_MANAGE)) {
       links.customDomain = {
-        to: '/admin/settings/help-center',
+        to: HELP_CENTER_SETTINGS,
         search: { tab: 'domains-languages' },
       }
     }
@@ -228,12 +230,17 @@ export function DomainsEmptyState({ links }: { links: DomainUseLinks }) {
       <SettingsList>
         {uses.map((u) => {
           const link = links[u.use]!
+          // Off Cloud the only web address an install takes is its help center's.
+          const description =
+            u.use === 'customDomain' && link.to === HELP_CENTER_SETTINGS
+              ? 'Put your help center on help.yourcompany.com.'
+              : u.description
           return (
             <SettingsListRow
               key={u.use}
               leading={<RowIcon icon={u.icon} />}
               title={u.title}
-              meta={u.description}
+              meta={description}
               trailing={
                 <Button variant="outline" size="sm" asChild>
                   <Link to={link.to} search={link.search} hash={link.hash}>
