@@ -1,6 +1,5 @@
-import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 import { useState } from 'react'
-import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
 import { DOMAINS_PAGE_PERMISSIONS, domainUseLinks } from '@/lib/shared/domains-permissions'
 import { useMutation, type QueryClient } from '@tanstack/react-query'
@@ -25,14 +24,7 @@ import {
   domainRows,
 } from '@/components/admin/settings/domains-overview'
 import { isProductEnabled } from '@/lib/shared/types/settings'
-import {
-  getHelpCenterDomainSummaryFn,
-  getSendingDomainSummariesFn,
-  getSignInDomainSummariesFn,
-  type HelpCenterDomainSummary,
-  type SendingDomainSummary,
-  type SignInDomainSummary,
-} from '@/lib/server/functions/domains-overview'
+import { loadDomainSummaries } from '@/lib/client/domain-summaries'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { toastError } from '@/lib/client/error-notice'
 
@@ -40,27 +32,16 @@ export const Route = createFileRoute('/admin/settings/domains')({
   head: adminPageHead('Domains settings'),
   loader: async ({ context }) => {
     assertRouteAnyPermission(context.permissions, DOMAINS_PAGE_PERMISSIONS)
-    const can = (permission: PermissionKey) => context.permissions?.includes(permission) ?? false
     const { cloudEnabled } = context
-    const webAddresses = can(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)
+    const webAddresses = context.permissions?.includes(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN) ?? false
 
-    const [operator, sending, signIn, helpCenterDomain] = await Promise.all([
+    const [operator, summaries] = await Promise.all([
       cloudEnabled && webAddresses ? loadOperatorHostnames(context) : null,
-      can(EMAIL_SENDING_PERMISSION)
-        ? getSendingDomainSummariesFn().catch(() => [] as SendingDomainSummary[])
-        : ([] as SendingDomainSummary[]),
-      can(PERMISSIONS.AUTH_MANAGE)
-        ? getSignInDomainSummariesFn().catch(() => [] as SignInDomainSummary[])
-        : ([] as SignInDomainSummary[]),
-      !cloudEnabled && webAddresses
-        ? getHelpCenterDomainSummaryFn().catch(() => null)
-        : (null as HelpCenterDomainSummary | null),
+      loadDomainSummaries(context),
     ])
     return {
       operator,
-      sending,
-      signIn,
-      helpCenterDomain,
+      ...summaries,
       links: domainUseLinks({
         permissions: context.permissions ?? [],
         cloudEnabled: !!cloudEnabled,
