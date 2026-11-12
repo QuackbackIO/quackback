@@ -166,8 +166,14 @@ export async function resolveWorkspaceAndContinue<T>({
       // workspace's customers, and a billing or moderation reason is not theirs
       // to read. A deleted workspace is gone as far as they can tell, and so is
       // one taken down; any other suspension is a pause the team can lift.
-      if (GONE_REASONS.has(acquisition.reason)) {
+      if (acquisition.reason === 'deleted') {
         return unavailableResponse(request, 'deleted', { status: 404, host: acquisition.hostname })
+      }
+      // A takedown is not "deleted by the team that ran it", and its owner
+      // cannot restore it, so the deleted page would say two untrue things.
+      // It reads as an address with nothing at it.
+      if (GONE_REASONS.has(acquisition.reason)) {
+        return unavailableResponse(request, 'unknown', { status: 404, host: acquisition.hostname })
       }
       return unavailableResponse(request, 'paused', {
         status: 503,

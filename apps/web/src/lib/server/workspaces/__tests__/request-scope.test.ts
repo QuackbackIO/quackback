@@ -293,7 +293,10 @@ describe('resolveWorkspaceAndContinue', () => {
       const res = (await serve('t1.localhost')) as Response
       expect(res.status).toBe(404)
       expect(res.headers.get('retry-after')).toBeNull()
-      expect(await res.text()).not.toContain(reason)
+      const body = await res.text()
+      expect(body).not.toContain(reason)
+      // Not the deleted page: the team did not delete it and cannot restore it.
+      expect(body).not.toMatch(/deleted|restore/i)
     }
   )
 
