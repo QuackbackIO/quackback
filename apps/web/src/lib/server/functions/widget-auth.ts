@@ -9,6 +9,7 @@ import { rawSessionToken } from '@/lib/server/auth/session-token'
 import { shouldRollSession, WIDGET_SESSION_TTL_MS } from './widget-session-roll'
 import { logger } from '@/lib/server/logger'
 import type { AuthContext } from './auth-helpers'
+import { UnauthorizedError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'widget-auth' })
 
@@ -129,7 +130,7 @@ function toAuthContext(w: WidgetAuthContext): AuthContext {
 /** Widget BFF entry: Bearer session required. Never use requireAuth on widget surfaces. */
 export async function requireWidgetAuth(): Promise<AuthContext> {
   const w = await getWidgetSession()
-  if (!w) throw new Error('Authentication required')
+  if (!w) throw new UnauthorizedError('Authentication required')
   return toAuthContext(w)
 }
 

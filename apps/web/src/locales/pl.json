@@ -1991,6 +1991,8 @@
   "common.errorPage.error.title": "Coś poszło nie tak",
   "common.errorPage.error.description": "Wystąpił nieoczekiwany błąd. Spróbuj ponownie lub wróć na stronę główną.",
   "common.errorPage.technicalDetails": "Szczegóły techniczne",
+  "common.errorPage.reference": "Numer referencyjny",
+  "common.errorPage.copyReference": "Kopiuj numer referencyjny",
   "common.errorPage.tryAgain": "Spróbuj ponownie",
   "common.errorPage.goHome": "Przejdź do strony głównej",
   "portal.header.auth.accountMenu": "Otwórz menu konta",

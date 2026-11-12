@@ -11,6 +11,7 @@ import { publicPostsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { portalDetailQueries } from '@/lib/client/queries/portal-detail'
 import type { PostId } from '@quackback/ids'
+import { toastError } from '@/lib/client/error-notice'
 
 const pendingPostsKey = ['portal', 'moderation', 'pending', 'posts'] as const
 
@@ -19,7 +20,7 @@ const pendingPostsKey = ['portal', 'moderation', 'pending', 'posts'] as const
  * already decided) must say so; otherwise the button looks dead.
  */
 function showModerationError(error: unknown, fallback: string) {
-  toast.error(error instanceof Error && error.message ? error.message : fallback)
+  toastError(error, fallback)
 }
 
 function invalidateModerationSurfaces(

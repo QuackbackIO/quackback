@@ -90,5 +90,48 @@ describe('MCP OAuth challenges', () => {
       // The same challenge rides the body for clients that read it there.
       expect(body.result._meta['mcp/www_authenticate']).toEqual([header])
     })
+
+    it('keeps offline_access for a token that can refresh', () => {
+      const response = insufficientScopeChallenge({
+        missing: ['write:feedback'],
+        held: ['read:feedback'],
+        offlineAccess: true,
+      })
+      expect(scopeOf(response)).toBe('offline_access read:feedback write:feedback')
+    })
+
+    it('answers every call in a batch, as an array', async () => {
+      const response = insufficientScopeChallenge({
+        missing: ['write:feedback'],
+        held: ['read:feedback'],
+        calls: [
+          { id: 1, method: 'tools/call' },
+          { id: 2, method: 'tools/call' },
+        ],
+        batch: true,
+      })
+      const body = (await response.json()) as { id: number; result: { isError: boolean } }[]
+      expect(Array.isArray(body)).toBe(true)
+      expect(body.map((answer) => answer.id)).toEqual([1, 2])
+      expect(body.every((answer) => answer.result.isError)).toBe(true)
+    })
+
+    it('refuses a resource read as a JSON-RPC error, not a tool result', async () => {
+      const response = insufficientScopeChallenge({
+        missing: ['read:settings'],
+        held: [],
+        calls: [{ id: 'r1', method: 'resources/read' }],
+      })
+      const header = response.headers.get('www-authenticate') ?? ''
+      const body = (await response.json()) as {
+        id: string
+        result?: unknown
+        error: { code: number; message: string; data: Record<string, string[]> }
+      }
+      expect(body.id).toBe('r1')
+      expect(body.result).toBeUndefined()
+      expect(body.error.message).toContain('missing scope: read:settings')
+      expect(body.error.data['mcp/www_authenticate']).toEqual([header])
+    })
   })
 })
