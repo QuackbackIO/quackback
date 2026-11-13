@@ -176,7 +176,9 @@ function OwnershipCard({
               },
             ]}
           />
-        ) : null}
+        ) : (
+          <p className="text-[13px] text-muted-foreground">Not verified yet.</p>
+        )}
         {canManage && (!verified || (domain.added && !domain.inUse)) && (
           <div className="flex flex-wrap items-center justify-end gap-2">
             {!verified &&
