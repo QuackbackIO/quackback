@@ -100,6 +100,8 @@
   "widget.tickets.new.detailsPlaceholder": "Додайте все, що допоможе нам зрозуміти проблему.",
   "widget.tickets.new.submit": "Створити звернення",
   "widget.tickets.blockCard.filed": "Звернення створено. Далі ми стежитимемо за ним.",
+  "widget.tickets.blockCard.formLoadFailed": "Не вдалося завантажити цю форму.",
+  "widget.tickets.blockCard.retry": "Спробувати ще раз",
   "widget.tickets.new.email": "Електронна пошта",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
   "widget.tickets.recent": "Нещодавні звернення",

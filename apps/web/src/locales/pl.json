@@ -100,6 +100,8 @@
   "widget.tickets.new.detailsPlaceholder": "Dodaj wszystko, co pomoże nam zrozumieć problem.",
   "widget.tickets.new.submit": "Utwórz sprawę",
   "widget.tickets.blockCard.filed": "Sprawa utworzona. Od teraz się nią zajmujemy.",
+  "widget.tickets.blockCard.formLoadFailed": "Nie udało się wczytać tego formularza.",
+  "widget.tickets.blockCard.retry": "Spróbuj ponownie",
   "widget.tickets.new.email": "E-mail",
   "widget.tickets.new.emailPlaceholder": "adres@example.com",
   "widget.tickets.recent": "Ostatnie sprawy",
