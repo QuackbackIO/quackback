@@ -327,6 +327,7 @@ describe('domain view ownership', () => {
       onChanged,
       detail: { ...DETAIL, added: false, record: null, inUse: true },
     })
+    expect(card('Ownership')).toHaveTextContent('Not verified yet.')
     fireEvent.click(within(card('Ownership')).getByRole('button', { name: 'Verify ownership' }))
     expect(addDomainByName).toHaveBeenCalledWith({ data: { name: 'acme.com' } })
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
