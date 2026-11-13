@@ -1,4 +1,5 @@
-import { createFileRoute, Navigate, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Navigate, useNavigate, useRouter } from '@tanstack/react-router'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
 import { DOMAINS_PAGE_PERMISSIONS, domainUseLinks } from '@/lib/shared/domains-permissions'
 import { visibleDomainUses } from '@/lib/shared/domain-uses'
@@ -12,23 +13,25 @@ import { domainRows } from '@/components/admin/settings/domains-overview'
 // list, which has no Outlet. The URL is still /admin/settings/domains/:domain.
 export const Route = createFileRoute('/admin/settings/domains_/$domain')({
   head: adminPageHead('Domain settings'),
-  loader: async ({ context }) => {
+  loader: async ({ context, params }) => {
     assertRouteAnyPermission(context.permissions, DOMAINS_PAGE_PERMISSIONS)
     const { loadDomainPage } = await import('@/lib/client/domain-page-loader')
-    return loadDomainPage(context)
+    return loadDomainPage(context, params.domain)
   },
   component: DomainPage,
 })
 
 function DomainPage() {
-  const { sending, signIn, helpCenterDomain } = Route.useLoaderData()
-  const { domain } = Route.useParams()
+  const { sending, signIn, helpCenterDomain, added, domain } = Route.useLoaderData()
+  const params = Route.useParams()
   const context = Route.useRouteContext()
   const permissions = context.permissions ?? []
   const router = useRouter()
-  const name = domain.trim().toLowerCase()
-  const row = domainRows({ sending, signIn, helpCenterDomain }).find((r) => r.name === name)
-  // No use left that this viewer may see: the domain is off the list, so back to it.
+  const navigate = useNavigate()
+  const name = (domain?.name ?? params.domain).trim().toLowerCase()
+  // An added domain has its page with no use at all; a name only uses hold is
+  // shown while one of them the viewer may see still holds it.
+  const row = domainRows({ sending, signIn, helpCenterDomain, added }).find((r) => r.name === name)
   if (!row) return <Navigate to="/admin/settings/domains" replace />
 
   return (
@@ -41,7 +44,10 @@ function DomainPage() {
           helpCenterOn: isProductEnabled(context.settings?.featureFlags, 'helpCenter'),
         })}
         visibleUses={visibleDomainUses(permissions)}
+        domain={domain}
+        canManage={permissions.includes(PERMISSIONS.SETTINGS_MANAGE)}
         onChanged={() => void router.invalidate()}
+        onRemoved={() => void navigate({ to: '/admin/settings/domains', replace: true })}
       />
     </SettingsPage>
   )

@@ -28,9 +28,11 @@ vi.mock('@tanstack/react-router', () => ({
       {children}
     </a>
   ),
+  useNavigate: () => vi.fn(),
 }))
 
-const { DomainList, DomainsEmptyState, domainRows } = await import('../domains-overview')
+const { DomainList, DomainsEmptyState, EMPTY_DESCRIPTION, domainRows } =
+  await import('../domains-overview')
 const { domainUseLinks, CUSTOM_DOMAINS_ANCHOR } = await import('@/lib/shared/domains-permissions')
 
 afterEach(cleanup)
@@ -60,48 +62,34 @@ const linksFor = (permissions: string[], { cloudEnabled = false, helpCenterOn = 
 
 const rowOf = (text: string) => screen.getByText(text).closest('[data-slot="settings-list-row"]')!
 
+vi.mock('@/lib/server/functions/domains', () => ({ addDomainFn: vi.fn() }))
+
 describe('empty state', () => {
-  it('offers each use with its own way to set it up', () => {
-    render(<DomainsEmptyState links={linksFor(ALL)} />)
-
-    const email = rowOf('Email sending')
-    expect(email).toHaveTextContent('Send replies and announcements from your own address.')
-    expect(within(email as HTMLElement).getByRole('link')).toHaveAttribute(
-      'href',
-      '/admin/settings/email'
-    )
-
-    const custom = rowOf('Custom domain')
-    // Off Cloud the domain is the help center's, so the line says so.
-    expect(custom).toHaveTextContent('Put your help center on help.yourcompany.com.')
-    expect(within(custom as HTMLElement).getByRole('link')).toHaveAttribute(
-      'href',
-      '/admin/settings/help-center?tab=domains-languages'
-    )
-
-    const signIn = rowOf('Sign-in')
-    expect(signIn).toHaveTextContent(
-      'Let everyone with an address at your domain sign in with SSO.'
-    )
-    expect(within(signIn as HTMLElement).getByRole('link')).toHaveAttribute(
-      'href',
-      '/admin/settings/security/authentication?tab=sign-in'
-    )
+  it('offers one Add domain action and no choice of use', () => {
+    const { container } = render(<DomainsEmptyState canAdd />)
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Add domain' })).toBeInTheDocument()
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(container).toHaveTextContent(EMPTY_DESCRIPTION)
+    for (const use of ['Email sending', 'Custom domain', 'Sign-in']) {
+      expect(container).not.toHaveTextContent(use)
+    }
   })
 
-  it('never says Security, and is no longer the dead-end line', () => {
-    const { container } = render(<DomainsEmptyState links={linksFor(ALL)} />)
+  it('never says Security, and is no dead end for a viewer who can add', () => {
+    const { container } = render(<DomainsEmptyState canAdd />)
     expect(container).not.toHaveTextContent('Security')
     expect(container).not.toHaveTextContent('No domains yet')
   })
 
-  it('shows only the uses the viewer may set up', () => {
-    render(<DomainsEmptyState links={linksFor([PERMISSIONS.AUTH_MANAGE])} />)
-    expect(screen.queryByText('Email sending')).toBeNull()
-    expect(screen.queryByText('Custom domain')).toBeNull()
-    expect(screen.getByText('Sign-in')).toBeInTheDocument()
+  it('offers no Add domain to a viewer who cannot add one', () => {
+    const { container } = render(<DomainsEmptyState canAdd={false} />)
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(container).toHaveTextContent(EMPTY_DESCRIPTION)
   })
+})
 
+describe('use links', () => {
   it('gates each use on the permission of the page it opens', () => {
     expect(Object.keys(linksFor([EMAIL_SENDING_PERMISSION]))).toEqual(['email'])
     expect(Object.keys(linksFor([PERMISSIONS.AUTH_MANAGE]))).toEqual(['signIn'])
@@ -112,17 +100,15 @@ describe('empty state', () => {
     expect(linksFor([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]).customDomain).toBeUndefined()
   })
 
-  it('on Cloud, lands Custom domain on the custom domains card of this page', () => {
+  it('on Cloud, lands Custom domain on the custom domains card of the Domains page', () => {
     const links = linksFor([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN], {
       cloudEnabled: true,
       helpCenterOn: false,
     })
-    render(<DomainsEmptyState links={links} />)
-    expect(rowOf('Custom domain')).toHaveTextContent('Put your portal on feedback.yourcompany.com.')
-    expect(within(rowOf('Custom domain') as HTMLElement).getByRole('link')).toHaveAttribute(
-      'href',
-      `/admin/settings/domains#${CUSTOM_DOMAINS_ANCHOR}`
-    )
+    expect(links.customDomain).toEqual({
+      to: '/admin/settings/domains',
+      hash: CUSTOM_DOMAINS_ANCHOR,
+    })
   })
 
   it('does not depend on Support being on: email and sign-in stay open', () => {
@@ -244,5 +230,32 @@ describe('domain list', () => {
     expect(row.tagName).not.toBe('A')
     expect(row.querySelector('[data-slot="settings-list-chevron"]')).toBeNull()
     expect(row).not.toHaveTextContent('Pending')
+  })
+
+  it('lists a domain added by name with no use, pending until verified, linked to its page', () => {
+    const rows = domainRows({
+      now: NOW,
+      sending: [sending({})],
+      signIn: [],
+      helpCenterDomain: null,
+      added: [
+        { name: 'acme.io', verified: false },
+        { name: 'acme.net', verified: true },
+        // Added and used: one row, its uses say where it stands.
+        { name: 'acme.com', verified: false },
+      ],
+    })
+    expect(rows.map((r) => [r.name, r.uses.map((u) => u.use)])).toEqual([
+      ['acme.com', ['email']],
+      ['acme.io', []],
+      ['acme.net', []],
+    ])
+    // A sign-in manager sees the domain too, and can open its page.
+    render(<DomainList rows={rows} links={linksFor([PERMISSIONS.AUTH_MANAGE])} />)
+    expect(rowOf('acme.io')).toHaveTextContent('Pending')
+    expect(rowOf('acme.io')).toHaveAttribute('href', '/admin/settings/domains/acme.io')
+    // Verified is the normal state: no badge.
+    expect(rowOf('acme.net')).not.toHaveTextContent('Pending')
+    expect(rowOf('acme.com')).not.toHaveTextContent('Pending')
   })
 })
