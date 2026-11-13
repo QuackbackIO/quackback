@@ -243,11 +243,9 @@ describe('POST /api/v1/tickets/:id/status', () => {
     expect(mockSetStatus).toHaveBeenCalledWith(TICKET_ID, STATUS_ID, expect.anything())
   })
 
-  it("404s a ticket outside the key creator's scope without changing it", async () => {
+  it("answers the service's NotFound for a ticket outside the key creator's scope", async () => {
     const { NotFoundError } = await import('@/lib/shared/errors')
-    mockAssertVisible.mockRejectedValueOnce(
-      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
-    )
+    mockSetStatus.mockRejectedValueOnce(new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found'))
     const res = await post(StatusRoute)({
       request: jsonReq(`https://x.test/api/v1/tickets/${TICKET_ID}/status`, {
         statusId: STATUS_ID,
@@ -255,7 +253,7 @@ describe('POST /api/v1/tickets/:id/status', () => {
       params: { ticketId: TICKET_ID },
     })
     expect(res.status).toBe(404)
-    expect(mockSetStatus).not.toHaveBeenCalled()
+    expect(mockSetStatus).toHaveBeenCalledTimes(1)
   })
 
   it('400s a malformed statusId without calling the service', async () => {
