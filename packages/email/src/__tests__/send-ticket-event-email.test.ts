@@ -81,6 +81,26 @@ describe('sendTicketEventEmail', () => {
     )
   })
 
+  it.each<[TicketEmailKind, string, string, string]>([
+    ['due_soon', 'Ticket #142 is due Oct 21, 21:59 UTC', 'A ticket is due soon', 'Due Oct 21'],
+    ['overdue', 'Ticket #142 is overdue', 'A ticket is overdue', 'Was due Oct 21'],
+  ])('sends due-date kind %s with its subject, heading and fact line', async (kind, ...copy) => {
+    const [subject, heading, factLine] = copy
+    const result = await sendTicketEventEmail({
+      ...baseParams,
+      kind,
+      ctaUrl: 'https://acme.example.com/admin/inbox?i=ticket_1',
+      dueLabel: 'Oct 21, 21:59 UTC',
+    })
+    expect(result.sent).toBe(true)
+    const call = sendMailMock.mock.calls[0][0]
+    expect(call.subject).toBe(subject)
+    for (const text of [heading, factLine, 'Open in inbox', 'responsible for this ticket']) {
+      expect(call.html).toContain(text)
+    }
+    expect(`${call.subject} ${call.text ?? ''}`).not.toMatch(/[!—]/)
+  })
+
   it('B22: status_resolved with closedGeneric says "closed", never "resolved"', async () => {
     const result = await sendTicketEventEmail({
       ...baseParams,
@@ -91,6 +111,30 @@ describe('sendTicketEventEmail', () => {
     expect(result.sent).toBe(true)
     const call = sendMailMock.mock.calls[0][0]
     expect(call.subject).toBe('Your ticket #142 was closed')
+  })
+
+  it('tells a customer who shared a ticket with them, and why they got the email', async () => {
+    await sendTicketEventEmail({ ...baseParams, kind: 'shared', authorName: 'Rita' })
+    const call = sendMailMock.mock.calls[0][0]
+    expect(call.subject).toBe('Rita shared ticket #142 with you')
+    expect(call.text).toContain('was shared with you')
+
+    sendMailMock.mockClear()
+    await sendTicketEventEmail({ ...baseParams, kind: 'shared' })
+    expect(sendMailMock.mock.calls[0][0].subject).toBe('The Acme team shared ticket #142 with you')
+  })
+
+  it('never calls the ticket "yours" when it was shared with the reader', async () => {
+    await sendTicketEventEmail({
+      ...baseParams,
+      kind: 'status_resolved',
+      audience: 'participant',
+      statusChange: { previousLabel: 'In progress', newLabel: 'Done' },
+    })
+    const call = sendMailMock.mock.calls[0][0]
+    expect(call.subject).toBe('The ticket #142 was resolved')
+    expect(call.text).not.toMatch(/your ticket|you opened/i)
+    expect(call.text).toContain('was shared with you')
   })
 
   it('forwards threading headers, replyTo, and the from override when provided', async () => {
