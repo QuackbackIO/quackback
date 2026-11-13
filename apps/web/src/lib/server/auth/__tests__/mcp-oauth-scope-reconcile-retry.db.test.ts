@@ -15,7 +15,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { createId, type UserId } from '@quackback/ids'
 import { sql, type SQL } from 'drizzle-orm'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { oauthClient, oauthResource, session, user } from '@/lib/server/db'
+import { oauthAccessToken, oauthClient, oauthResource, session, user } from '@/lib/server/db'
 import { ensureMcpOauthResource } from '@/lib/server/auth/ensure-mcp-oauth-resource'
 import { API_KEY_SCOPES, MCP_AS_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 
@@ -119,6 +119,33 @@ async function signedInHeaders(): Promise<Headers> {
   return new Headers({ authorization: `Bearer ${token}` })
 }
 
+/** Ask the authorize endpoint, as a signed-in person, for `scope` on behalf of `clientId`. */
+async function authorize(
+  auth: { handler: (request: Request) => Promise<Response> },
+  clientId: string,
+  scope: string,
+  headers: Headers
+): Promise<{ status: number; location: string; body: string }> {
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    redirect_uri: 'http://127.0.0.1:4000/callback',
+    scope,
+    state: 'state-1',
+    code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+    code_challenge_method: 'S256',
+    resource: `${ORIGIN}/api/mcp`,
+  })
+  const res = await auth.handler(
+    new Request(`${ORIGIN}/api/auth/oauth2/authorize?${params}`, { headers })
+  )
+  return {
+    status: res.status,
+    location: res.headers.get('location') ?? '',
+    body: await res.text(),
+  }
+}
+
 describe.skipIf(!fixture.available)('MCP client scope reconcile retry (real DB)', () => {
   beforeEach(async () => {
     await fixture.begin()
@@ -185,6 +212,45 @@ describe.skipIf(!fixture.available)('MCP client scope reconcile retry (real DB)'
     vi.spyOn(Date, 'now').mockReturnValue(later + 10 * 61_000)
     expect(await getAuth()).toBe(auth)
     expect(control.calls).toBe(2)
+  })
+
+  it('lets a client registered before the settings scopes authorize them once reconciled', async () => {
+    const { getAuth } = await import('@/lib/server/auth/index')
+    const clientId = await seedOlderClient()
+    control.failing = true
+    const auth = await getAuth()
+    const headers = await signedInHeaders()
+    request.headers = headers
+
+    // The failed reconcile left the stored list short, so authorize refuses.
+    const before = await authorize(auth, clientId, 'openid read:settings', headers)
+    expect(before.location).toContain('error=invalid_scope')
+
+    // A token issued earlier keeps exactly the scopes it was granted.
+    const tokenId = createId('app')
+    await testDb.insert(oauthAccessToken).values({
+      id: tokenId,
+      token: `at-${tokenId}`,
+      clientId,
+      scopes: ['openid', 'read:feedback'],
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      createdAt: new Date(),
+    })
+
+    control.failing = false
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000)
+    expect(await getAuth()).toBe(auth)
+    await vi.waitFor(async () => expect(await scopesOf(clientId)).toContain('read:settings'), {
+      timeout: 10_000,
+    })
+
+    const after = await authorize(auth, clientId, 'openid read:settings', headers)
+    expect(after.location).not.toContain('error=')
+    expect(after.status).toBeLessThan(400)
+    const token = (await testDb.execute(
+      sql`select scopes from oauth_access_token where id = ${tokenId}`
+    )) as unknown as Array<{ scopes: string[] }>
+    expect(token[0].scopes).toEqual(['openid', 'read:feedback'])
   })
 
   it('keeps retrying while the reconcile keeps failing', async () => {
