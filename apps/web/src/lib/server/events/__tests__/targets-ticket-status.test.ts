@@ -54,9 +54,9 @@ vi.mock('@/lib/server/domains/settings/settings.tickets', () => ({
 // auto-subscribe-at-creation steady state. The B18 opt-out case (an empty
 // watcher set) and the union cases live here and in
 // targets-ticket-watchers.test.ts respectively.
-const getTicketWatchersForEvent = vi.fn<() => Promise<string[]>>()
+const getTicketNotifiableWatchers = vi.fn<() => Promise<string[]>>()
 vi.mock('@/lib/server/domains/tickets/ticket-subscription.service', () => ({
-  getTicketWatchersForEvent: () => getTicketWatchersForEvent(),
+  getTicketNotifiableWatchers: () => getTicketNotifiableWatchers(),
   getTicketAgentWatchersForEvent: vi.fn().mockResolvedValue([]),
 }))
 
@@ -70,8 +70,8 @@ beforeEach(() => {
     awaiting_requester: 'Awaiting your reply',
     resolved: 'Resolved',
   })
-  getTicketWatchersForEvent.mockReset()
-  getTicketWatchersForEvent.mockResolvedValue(['principal_requester'])
+  getTicketNotifiableWatchers.mockReset()
+  getTicketNotifiableWatchers.mockResolvedValue(['principal_requester'])
 })
 
 const ticketRef = {
@@ -120,7 +120,7 @@ describe('getTicketStatusChangedTargets', () => {
   })
 
   it('B18: an unwatched requester (no subscription row) gets no bell — "Stop watching" is honored', async () => {
-    getTicketWatchersForEvent.mockResolvedValue([])
+    getTicketNotifiableWatchers.mockResolvedValue([])
     const target = await getTicketStatusChangedTargets(makeEvent())
     expect(target).toBeNull()
     expect(getStageLabels).not.toHaveBeenCalled()
@@ -144,7 +144,7 @@ describe('getTicketStatusChangedTargets', () => {
   })
 
   it('B22: a null-stage close still honors the unwatched requester (B18 applies to the generic close too)', async () => {
-    getTicketWatchersForEvent.mockResolvedValue([])
+    getTicketNotifiableWatchers.mockResolvedValue([])
     expect(await getTicketStatusChangedTargets(makeEvent({ stage: null }))).toBeNull()
   })
 
@@ -173,7 +173,7 @@ describe('getTicketStatusChangedTargets', () => {
   })
 
   it('is a no-op when there is no requester AND no watchers — also covers a tracker, which has none of its own', async () => {
-    getTicketWatchersForEvent.mockResolvedValue([])
+    getTicketNotifiableWatchers.mockResolvedValue([])
     const target = await getTicketStatusChangedTargets(makeEvent({ requesterPrincipalId: null }))
     expect(target).toBeNull()
     expect(getStageLabels).not.toHaveBeenCalled()
