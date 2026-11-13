@@ -79,6 +79,7 @@ import {
   settings,
   teamMembers,
   teams,
+  ticketActivity,
   ticketConversations,
   ticketExternalLinks,
   ticketLinks,
@@ -185,10 +186,7 @@ async function trackerLinks(trackerId: TicketId) {
 }
 
 async function conversationLinks(ticketId: TicketId) {
-  return testDb
-    .select()
-    .from(ticketConversations)
-    .where(eq(ticketConversations.ticketId, ticketId))
+  return testDb.select().from(ticketConversations).where(eq(ticketConversations.ticketId, ticketId))
 }
 
 describe('ticket link writes check visibility (real DB, rolled back)', () => {
@@ -241,9 +239,9 @@ describe('ticket link writes check visibility (real DB, rolled back)', () => {
       await expect(unlinkTicketFromTracker(tracker, hidden, w.actor)).rejects.toMatchObject(
         TICKET_NOT_FOUND
       )
-      await expect(
-        unlinkTicketFromTracker(hiddenTracker, visible, w.actor)
-      ).rejects.toMatchObject(TICKET_NOT_FOUND)
+      await expect(unlinkTicketFromTracker(hiddenTracker, visible, w.actor)).rejects.toMatchObject(
+        TICKET_NOT_FOUND
+      )
       expect(await trackerLinks(tracker)).toHaveLength(1)
       expect(await trackerLinks(hiddenTracker)).toHaveLength(1)
     })
@@ -286,13 +284,38 @@ describe('ticket link writes check visibility (real DB, rolled back)', () => {
       expect(await conversationLinks(created.id as TicketId)).toHaveLength(1)
     })
 
+    it('the create step is only open for ten minutes after the create', async () => {
+      const w = await seedWorld()
+      const conversationId = await w.conversation({
+        assignedTeamId: w.teamX,
+        assignedAgentPrincipalId: w.colleague,
+      })
+      const created = await createTicket(
+        {
+          type: 'customer',
+          title: 'Acme cannot sign in',
+          requesterPrincipalId: w.visitor,
+          sourceConversationId: conversationId,
+        },
+        w.actor
+      )
+      await testDb
+        .update(ticketActivity)
+        .set({ createdAt: new Date(Date.now() - 11 * 60 * 1000) })
+        .where(eq(ticketActivity.ticketId, created.id as TicketId))
+      await expect(
+        linkTicketToConversation(created.id as TicketId, conversationId, w.actor)
+      ).rejects.toMatchObject(TICKET_NOT_FOUND)
+      expect(await conversationLinks(created.id as TicketId)).toHaveLength(0)
+    })
+
     it('an existing ticket outside my scope: NotFound and no link', async () => {
       const w = await seedWorld()
       const conversationId = await w.conversation({ assignedTeamId: w.teamX })
       const hidden = await w.ticket(w.teamY)
-      await expect(
-        linkTicketToConversation(hidden, conversationId, w.actor)
-      ).rejects.toMatchObject(TICKET_NOT_FOUND)
+      await expect(linkTicketToConversation(hidden, conversationId, w.actor)).rejects.toMatchObject(
+        TICKET_NOT_FOUND
+      )
       expect(await conversationLinks(hidden)).toHaveLength(0)
     })
 
