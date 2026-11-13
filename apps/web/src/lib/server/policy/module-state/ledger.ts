@@ -1417,10 +1417,10 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/auth/index.ts',
-    name: 'clientScopeReconcileAttemptAt',
+    name: 'pendingClientScopeReconciles',
     category: 'workspace-keyed',
     reason:
-      'When this workspace last tried an MCP client scope reconcile that has not yet succeeded. ' +
+      'Whether this workspace has an MCP client scope reconcile to retry, and when it last tried. ' +
       'A cross-workspace hit would retry the update against the wrong workspace, or skip the ' +
       'retry a workspace still needs.',
   },

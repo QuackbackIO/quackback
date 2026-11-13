@@ -205,6 +205,11 @@ describe.skipIf(!fixture.available)('MCP client scope reconcile retry (real DB)'
     expect(control.calls).toBe(2)
     expect(await scopesOf(clientId)).not.toContain('read:settings')
 
+    // An attempt still running a minute later is not joined by a second one.
+    vi.spyOn(Date, 'now').mockReturnValue(later + 61_000)
+    expect(await getAuth()).toBe(auth)
+    expect(control.calls).toBe(2)
+
     release()
     await vi.waitFor(async () => expect(await scopesOf(clientId)).toContain('read:settings'), {
       timeout: 10_000,
