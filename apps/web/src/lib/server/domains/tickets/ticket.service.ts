@@ -60,7 +60,7 @@ import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
 import { recordTicketActivity, statusMovedSince } from './ticket-activity.service'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
 import { ticketFtsMatch } from './ticket-search.service'
-import { statusTransition, firstResponseStamp, resolveStage } from './ticket.lifecycle'
+import { statusTransition, resolveStage } from './ticket.lifecycle'
 import { resolvePairConversationId } from './pair-thread.service'
 import { createTicketCore, publishTicketUpdated } from './ticket-intake.service'
 import type {
@@ -413,8 +413,7 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
 
 /**
  * Set a ticket's status. Entering a closed-category status stamps `resolvedAt`;
- * leaving one clears it and increments `reopenedCount`. An agent action also
- * stamps `firstResponseAt` the first time.
+ * leaving one clears it and increments `reopenedCount`.
  */
 export async function setTicketStatus(
   id: TicketId,
@@ -457,8 +456,6 @@ export async function setTicketStatus(
   if (transition.reopenedIncrement) {
     patch.reopenedCount = sql`${tickets.reopenedCount} + 1` as unknown as number
   }
-  const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
-  if (stamp) patch.firstResponseAt = stamp
 
   // The status move and its timeline record are one write. EVERY real status
   // move is recorded, including internal churn the customer-facing stage
@@ -812,9 +809,6 @@ export async function assignTicket(
     patch.assigneeTeamId = input.assigneeTeamId
   }
 
-  const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role))
-  if (stamp) patch.firstResponseAt = stamp
-
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
 
   // Realtime signal (unified inbox §3.2, M3): unconditional, unlike the
@@ -919,8 +913,6 @@ export async function setTicketPriority(
   const existing = await loadTicketOr404(id)
   const now = new Date()
   const patch: Partial<Ticket> = { priority, updatedAt: now }
-  const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
-  if (stamp) patch.firstResponseAt = stamp
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
   // Durable timeline record (fire-and-forget); a no-op re-set records nothing.
   if (existing.priority !== priority) {

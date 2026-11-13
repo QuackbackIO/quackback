@@ -41,6 +41,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 const reactions = vi.hoisted(() => ({
   recordSlaFromEvent: vi.fn(async (_event: unknown) => {}),
   autoReopenPairTicketFromEvent: vi.fn(async (_event: unknown) => {}),
+  recomputePairTicketFirstResponseFromEvent: vi.fn(async (_event: unknown) => {}),
   confirmResolutionFromCsat: vi.fn(
     async (_conversationId: unknown, _rating: unknown, _submittedAt: unknown) => {}
   ),
@@ -55,6 +56,7 @@ vi.mock('@/lib/server/domains/sla/sla.event-hooks', () => ({
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.event-hooks', () => ({
   autoReopenPairTicketFromEvent: reactions.autoReopenPairTicketFromEvent,
+  recomputePairTicketFirstResponseFromEvent: reactions.recomputePairTicketFirstResponseFromEvent,
 }))
 vi.mock('@/lib/server/domains/assistant/assistant.involvement', async (importOriginal) => ({
   ...(await importOriginal<
@@ -502,6 +504,7 @@ describe.skipIf(!fixture.available)('event reactions (real DB, rolled back)', ()
 
     expect(reactions.recordSlaFromEvent).toHaveBeenCalledTimes(1)
     expect(reactions.autoReopenPairTicketFromEvent).toHaveBeenCalledTimes(1)
+    expect(reactions.recomputePairTicketFirstResponseFromEvent).toHaveBeenCalledTimes(1)
   })
 
   it('a job whose event row is gone is a no-op', async () => {
@@ -598,6 +601,7 @@ describe.skipIf(!fixture.available)('event reactions (real DB, rolled back)', ()
       expected: {
         recordSlaFromEvent: slaSaw('message.created'),
         autoReopenPairTicketFromEvent: slaSaw('message.created'),
+        recomputePairTicketFirstResponseFromEvent: slaSaw('message.created'),
       },
     },
   ]

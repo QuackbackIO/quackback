@@ -64,6 +64,8 @@ vi.mock('@/lib/server/db', () => {
     c.from = (t: { __name?: string }) => chain(t?.__name ?? label)
     c.set = () => c
     c.where = () => c
+    // An update's returning: the one row the delete changed.
+    c.returning = async () => (messageRow ? [{ id: messageRow.id }] : [])
     c.limit = async () =>
       label === 'conversation_messages' ? (messageRow ? [messageRow] : []) : [conversationRow]
     return c
@@ -89,6 +91,13 @@ vi.mock('@/lib/server/db', () => {
 const mockAssertTicketVisible = vi.fn()
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   assertTicketVisible: (...args: unknown[]) => mockAssertTicketVisible(...args),
+}))
+
+// The ticket branch emits no message.deleted, so it recomputes the ticket's
+// first response itself.
+const mockSyncTicketFirstResponse = vi.fn()
+vi.mock('@/lib/server/domains/tickets/ticket-first-response', () => ({
+  syncTicketFirstResponseAfterRemoval: (...args: unknown[]) => mockSyncTicketFirstResponse(...args),
 }))
 
 import { deleteConversationMessage } from '../conversation.service'
@@ -162,10 +171,26 @@ describe('deleteConversationMessage ticket branch', () => {
     messageRow = { ...ticketMessage }
     await deleteConversationMessage('conversation_msg_ticket' as ConversationMessageId, agentActor)
     expect(mockAssertTicketVisible).toHaveBeenCalledWith('ticket_1', agentActor)
+    expect(mockSyncTicketFirstResponse).toHaveBeenCalledWith(
+      'ticket_1',
+      expect.objectContaining({ id: 'conversation_msg_ticket' })
+    )
     // Deferred: no realtime fan-out and no webhook for ticket-thread messages yet.
     expect(publishAgentConversationEvent).not.toHaveBeenCalled()
     expect(publishConversationEvent).not.toHaveBeenCalled()
     expect(emit.emitMessageDeleted).not.toHaveBeenCalled()
+  })
+
+  it('still deletes when the first-response recompute fails, and logs it', async () => {
+    messageRow = { ...ticketMessage }
+    mockSyncTicketFirstResponse.mockRejectedValueOnce(new Error('connection reset'))
+    await expect(
+      deleteConversationMessage('conversation_msg_ticket' as ConversationMessageId, agentActor)
+    ).resolves.toBeUndefined()
+    expect(mockSyncTicketFirstResponse).toHaveBeenCalledWith(
+      'ticket_1',
+      expect.objectContaining({ id: 'conversation_msg_ticket' })
+    )
   })
 
   it('404s when the ticket is not visible to the actor', async () => {

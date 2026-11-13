@@ -43,16 +43,26 @@ const { reconcileSnoozePauses, reconcilePendingPauses } = vi.hoisted(() => ({
 }))
 vi.mock('../sla.pause-reconcile', () => ({ reconcileSnoozePauses, reconcilePendingPauses }))
 
+// The reply rule's database read, keyed by the message's author.
+const { isAutomatedAuthor } = vi.hoisted(() => ({
+  isAutomatedAuthor: vi.fn(async (principalId: string | null) => principalId === 'principal_bot'),
+}))
+vi.mock('@/lib/server/messages/reply-rule', () => ({ isAutomatedAuthor }))
+
 import { recordSlaFromEvent } from '../sla.event-hooks'
 
 const at = '2026-01-05T10:00:00Z'
 const writtenAt = '2026-01-05T09:59:00.000Z'
 
-function messageCreated(id: string, senderType: 'agent' | 'visitor'): EventData {
+function messageCreated(
+  id: string,
+  senderType: 'agent' | 'visitor',
+  authorPrincipalId = 'principal_teammate'
+): EventData {
   return {
     type: 'message.created',
     timestamp: at,
-    data: { message: { conversationId: id, senderType, createdAt: writtenAt } },
+    data: { message: { conversationId: id, senderType, createdAt: writtenAt, authorPrincipalId } },
   } as unknown as EventData
 }
 
@@ -108,13 +118,25 @@ describe('recordSlaFromEvent', () => {
     expect(recordNextResponse).not.toHaveBeenCalled()
   })
 
-  it('never settles on a service-authored agent message', async () => {
-    await recordSlaFromEvent({
-      ...messageCreated('conversation_1', 'agent'),
-      actor: { type: 'service' },
-    } as EventData)
+  it('never settles on an agent message from an automated author, and re-arms instead', async () => {
+    await recordSlaFromEvent(messageCreated('conversation_1', 'agent', 'principal_bot'))
+    expect(isAutomatedAuthor).toHaveBeenCalledWith('principal_bot', undefined)
     expect(recordFirstResponse).not.toHaveBeenCalled()
     expect(recordNextResponse).not.toHaveBeenCalled()
+    expect(rearmNextResponse).toHaveBeenCalledWith('conversation_1', new Date(writtenAt))
+  })
+
+  it("judges the message's author, not the event actor: a service actor whose author counts settles", async () => {
+    // A personal API key's REST reply: the event actor is a service, the
+    // author is the key's principal, which the reply rule counts as a teammate.
+    await recordSlaFromEvent({
+      ...messageCreated('conversation_1', 'agent', 'principal_personal_key'),
+      actor: { type: 'service' },
+    } as EventData)
+    expect(isAutomatedAuthor).toHaveBeenCalledWith('principal_personal_key', { type: 'service' })
+    expect(recordFirstResponse).toHaveBeenCalledWith('conversation_1', new Date(writtenAt))
+    expect(recordNextResponse).toHaveBeenCalledWith('conversation_1', new Date(writtenAt))
+    expect(rearmNextResponse).not.toHaveBeenCalled()
   })
 
   it('reconciles on every conversation status change, and settles time-to-close only on a close', async () => {
