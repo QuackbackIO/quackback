@@ -20,8 +20,10 @@
  *  - THE UNCHANGED PATHS: no-requester creates (back-office, requester-less
  *    customer) and flag-less agent creates (admin dialog / convert_to_ticket
  *    shape) stay standalone — no conversation, no link.
- *  - SLA: an intake conversation is born SLA-free, so the shared handoff
- *    no-ops (no ticket TTR clock) while the link itself exists.
+ *  - SLA: with the conversation bridge stubbed, no SLA reaches the backing
+ *    conversation, so the shared handoff starts no ticket TTR clock while the
+ *    link itself exists. The default SLA on intake runs against the real
+ *    bridge in ticket-intake-sla.db.test.ts.
  *  - `ticket.created` now dispatches with the pair link already visible
  *    (the event-trigger.ts TICKET_CREATED_LINK_POLL race's proper fix).
  *
@@ -488,7 +490,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(linkVisibleAtDispatch).toBe(true)
     })
 
-    it('leaves the intake pair SLA-free: the link exists but no TTR handoff fires', async () => {
+    it('starts no ticket TTR clock when the backing conversation has no SLA', async () => {
       await seedDefaultStatus()
       const requesterP = await seedPrincipal({})
 
@@ -498,8 +500,9 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(link).not.toBeNull()
       const conversation = await readConversation(link!.conversationId)
       const ticket = await readTicket(dto.id as TicketId)
-      // A fresh backing conversation carries no applied SLA, so the shared
-      // handoff (handoffConversationSlaToTicket) no-ops by construction.
+      // The stubbed bridge applies no default SLA, so the conversation has no
+      // stamp and the shared handoff (handoffConversationSlaToTicket) has
+      // nothing to hand to the ticket.
       expect(conversation.slaApplied).toBeNull()
       expect(ticket.slaApplied).toBeNull()
     })

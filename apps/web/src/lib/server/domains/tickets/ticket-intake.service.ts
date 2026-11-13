@@ -119,11 +119,14 @@ export async function publishTicketUpdated(row: Ticket): Promise<TicketDTO> {
  *
  * Firing `ticket.created` only after the link exists also closes the
  * ticket.created-before-link ordering race worked around in
- * workflows/event-trigger.ts's TICKET_CREATED_LINK_POLL. The SLA handoff
- * (`handoffConversationSlaToTicket`, shared with linkTicketToConversation)
- * runs for parity: a fresh backing conversation is born SLA-free, so it is a
- * no-op here by construction. Agent/back-office creates (no flag) are
- * byte-identical to before — standalone, no backing conversation.
+ * workflows/event-trigger.ts's TICKET_CREATED_LINK_POLL. The backing
+ * conversation gets the workspace default SLA inside emitConversationCreated,
+ * which intake awaits; the SLA handoff (`handoffConversationSlaToTicket`,
+ * shared with linkTicketToConversation) then reads that stamp and starts the
+ * ticket's time-to-resolve clock. An SLA that a conversation.created workflow
+ * applies runs later from the queue, after the handoff. Agent/back-office
+ * creates (no flag) are byte-identical to before — standalone, no backing
+ * conversation.
  */
 export async function createTicketCore(input: CreateTicketInput, actor: Actor): Promise<TicketDTO> {
   const title = input.title?.trim()
@@ -314,8 +317,8 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // table in the doc header. Order: the opening message first (so a
   // conversation.created handler dispatched below finds the full opening
   // context, the same guarantee the native messenger flow's ordering gives),
-  // then emitConversationCreated (workflows + webhooks FIRE), then the SLA
-  // handoff. The suppressed three (started-notify, auto-routing, Quinn) are
+  // then emitConversationCreated (default SLA, then workflows + webhooks
+  // FIRE), then the SLA handoff. The suppressed three (started-notify, auto-routing, Quinn) are
   // simply never invoked here; Quinn is additionally gated at the
   // conversation.service dispatch site for every later visitor message.
   if (created.backingConversation) {
@@ -397,7 +400,10 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     // one emission). The event author is who opened the conversation: the
     // requester on the visitor-intake paths, the filing principal on
     // agent-authored intake (the requester as last resort — every intake path
-    // has one). Fire-and-forget like every emit* call.
+    // has one). Awaited, unlike other emit* calls: it applies the workspace
+    // default SLA before it dispatches, and the handoff below must read that
+    // stamp. Both steps swallow and log their own failures, so the await
+    // never fails the intake.
     const openingPrincipalId =
       (filedByRequester ? input.requesterPrincipalId : actor.principalId) ??
       input.requesterPrincipalId!
@@ -405,11 +411,11 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
       (await loadAuthors([openingPrincipalId])).get(openingPrincipalId) ??
       fallbackAuthor(openingPrincipalId)
     const { emitConversationCreated } = await import('../conversation/conversation.webhooks')
-    void emitConversationCreated(actor, author, backingConversation)
-    // SLA handoff parity with linkTicketToConversation (shared helper): a
-    // fresh backing conversation is born SLA-free, so this no-ops by
-    // construction — it exists so the intake can never drift from the link
-    // flow's handoff rule.
+    await emitConversationCreated(actor, author, backingConversation)
+    // SLA handoff, shared with linkTicketToConversation: the conversation
+    // default SLA is on the stamp now, so the ticket starts its
+    // time-to-resolve clock from the same policy. A conversation with no SLA
+    // (no default, a test customer, or a failed apply) hands nothing over.
     const { handoffConversationSlaToTicket } = await import('./ticket-conversation-link.service')
     await handoffConversationSlaToTicket(created.ticket.id, backingConversation.id)
   }
