@@ -359,7 +359,10 @@ export const bulkUpdateTicketsFn = createServerFn({ method: 'POST' })
 
 /** The links for a ticket detail: a tracker's linked customer tickets, or the
  *  tracker a customer ticket belongs to. Reads on TICKET_VIEW; a ticket
- *  outside the caller's view is NotFound. */
+ *  outside the caller's view is NotFound. Linked tickets and a tracker the
+ *  caller cannot see are left out: a tracker reports only how many more it
+ *  tracks (`hiddenCount`), a customer ticket only that its tracker exists
+ *  (`trackerHidden`). */
 export const getTicketLinksFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ticketId: z.string() }))
   .handler(async ({ data }) => {
@@ -371,9 +374,11 @@ export const getTicketLinksFn = createServerFn({ method: 'GET' })
     const ticketId = data.ticketId as TicketId
     const ticket = await getTicketForActor(ticketId, actor)
     if (ticket.type === 'tracker') {
-      return { tracker: null, linked: await listLinkedTickets(ticketId) }
+      const { items, hiddenCount } = await listLinkedTickets(ticketId, actor)
+      return { tracker: null, trackerHidden: false, linked: items, hiddenCount }
     }
-    return { tracker: await getTrackerForTicket(ticketId), linked: [] }
+    const { tracker, hidden } = await getTrackerForTicket(ticketId, actor)
+    return { tracker, trackerHidden: hidden, linked: [], hiddenCount: 0 }
   })
 
 export const linkTicketToTrackerFn = createServerFn({ method: 'POST' })

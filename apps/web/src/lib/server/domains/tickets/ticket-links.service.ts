@@ -10,6 +10,7 @@ import { db, eq, and, isNull, inArray, ticketLinks, tickets } from '@/lib/server
 import type { TicketId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
 import { ticketFilter } from '@/lib/server/policy/tickets'
+import { boundedServiceActor } from '@/lib/server/policy/service-actor'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
@@ -22,6 +23,9 @@ import { buildTicketContext, ticketToDTO } from './ticket.dto'
 import type { TicketDTO } from './ticket.types'
 
 const log = logger.child({ component: 'ticket-links' })
+
+/** A workspace-wide reader for counting every link, hidden ones included. */
+const SYSTEM_LINK_READER: Actor = boundedServiceActor(new Set())
 
 function assertCan(actor: Actor, permission: PermissionKey, action: string): void {
   if (!can(actor, permission)) throw new ForbiddenError('FORBIDDEN', `You cannot ${action}`)
@@ -139,46 +143,59 @@ export async function listLinkedTicketIds(
   return rows.map((r) => r.id)
 }
 
-/** The customer tickets a tracker tracks, as full DTOs (for the tracker detail). */
-export async function listLinkedTickets(trackerTicketId: TicketId): Promise<TicketDTO[]> {
-  const rows = await db
-    .select()
-    .from(tickets)
-    .where(
-      and(
-        isNull(tickets.deletedAt),
-        inArray(
-          tickets.id,
-          db
-            .select({ id: ticketLinks.linkedTicketId })
-            .from(ticketLinks)
-            .where(
-              and(
-                eq(ticketLinks.trackerTicketId, trackerTicketId),
-                eq(ticketLinks.relation, 'tracks')
-              )
-            )
-        )
-      )
-    )
+/**
+ * The customer tickets a tracker tracks that the actor can see, as full DTOs,
+ * plus how many more it tracks that the actor cannot see. Nothing about a
+ * hidden ticket but that count leaves here.
+ */
+export async function listLinkedTickets(
+  trackerTicketId: TicketId,
+  actor: Actor
+): Promise<{ items: TicketDTO[]; hiddenCount: number }> {
+  const [allIds, visibleIds] = await Promise.all([
+    listLinkedTicketIds(trackerTicketId, SYSTEM_LINK_READER),
+    listLinkedTicketIds(trackerTicketId, actor),
+  ])
+  const rows =
+    visibleIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(tickets)
+          .where(and(isNull(tickets.deletedAt), inArray(tickets.id, visibleIds)))
   const ctx = await buildTicketContext(rows)
-  return rows.map((r) => ticketToDTO(r, ctx))
+  return {
+    items: rows.map((r) => ticketToDTO(r, ctx)),
+    hiddenCount: allIds.length - visibleIds.length,
+  }
 }
 
-/** The tracker a customer ticket belongs to (reverse lookup), or null. */
-export async function getTrackerForTicket(linkedTicketId: TicketId): Promise<TicketDTO | null> {
+/**
+ * The tracker a customer ticket belongs to (reverse lookup). `tracker` is null
+ * when there is none or the actor cannot see it; `hidden` says which.
+ */
+export async function getTrackerForTicket(
+  linkedTicketId: TicketId,
+  actor: Actor
+): Promise<{ tracker: TicketDTO | null; hidden: boolean }> {
   const [link] = await db
     .select({ trackerId: ticketLinks.trackerTicketId })
     .from(ticketLinks)
     .where(and(eq(ticketLinks.linkedTicketId, linkedTicketId), eq(ticketLinks.relation, 'tracks')))
     .limit(1)
-  if (!link) return null
+  if (!link) return { tracker: null, hidden: false }
   const [row] = await db
     .select()
     .from(tickets)
     .where(and(eq(tickets.id, link.trackerId), isNull(tickets.deletedAt)))
     .limit(1)
-  if (!row) return null
+  if (!row) return { tracker: null, hidden: false }
+  const [visible] = await db
+    .select({ id: tickets.id })
+    .from(tickets)
+    .where(and(eq(tickets.id, row.id), ticketFilter(actor)))
+    .limit(1)
+  if (!visible) return { tracker: null, hidden: true }
   const ctx = await buildTicketContext([row])
-  return ticketToDTO(row, ctx)
+  return { tracker: ticketToDTO(row, ctx), hidden: false }
 }

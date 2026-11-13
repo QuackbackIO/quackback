@@ -105,6 +105,7 @@ import {
   teams,
   ticketConversations,
   tickets,
+  ticketLinks,
   ticketStatuses,
   user,
   PERMISSIONS,
@@ -170,13 +171,13 @@ async function seedWorld() {
     .insert(ticketStatuses)
     .values({ id: statusId, name: 'Acme open', slug: `vr-${suffix()}` })
 
-  async function ticket(team: TeamId) {
+  async function ticket(team: TeamId, type: 'customer' | 'tracker' = 'customer') {
     const id = createId('ticket') as TicketId
     await testDb.insert(tickets).values({
       id,
       title: `T-${suffix()}`,
       statusId,
-      type: 'customer',
+      type,
       assigneeTeamId: team,
       requesterPrincipalId: visitor,
     })
@@ -328,6 +329,50 @@ describe('ticket reads check visibility (real DB, rolled back)', () => {
       expect(rows.has(hidden.conversationId)).toBe(true)
       expect(rows.get(hidden.conversationId)).toBeNull()
       expect(rows.get(visible.conversationId)).toMatchObject({ id: visible.ticketId })
+    })
+  })
+
+  describe('the links of a visible ticket', () => {
+    async function track(tracker: TicketId, linked: TicketId) {
+      await testDb
+        .insert(ticketLinks)
+        .values({ trackerTicketId: tracker, linkedTicketId: linked, relation: 'tracks' })
+    }
+
+    it('a tracker lists only the linked tickets I can see, and counts the rest', async () => {
+      const w = await seedWorld()
+      const tracker = await w.ticket(w.teamX, 'tracker')
+      const visible = await w.ticket(w.teamX)
+      const hiddenA = await w.ticket(w.teamY)
+      const hiddenB = await w.ticket(w.teamY)
+      for (const id of [visible, hiddenA, hiddenB]) await track(tracker, id)
+      const links = await getTicketLinksFn({ data: { ticketId: tracker } })
+      expect(links.linked.map((t) => t.id)).toEqual([visible])
+      expect(links.hiddenCount).toBe(2)
+      const wire = JSON.stringify(links)
+      expect(wire).not.toContain(hiddenA)
+      expect(wire).not.toContain(hiddenB)
+    })
+
+    it('a ticket whose tracker I cannot see shows no tracker, only that one exists', async () => {
+      const w = await seedWorld()
+      const hiddenTracker = await w.ticket(w.teamY, 'tracker')
+      const visible = await w.ticket(w.teamX)
+      await track(hiddenTracker, visible)
+      const links = await getTicketLinksFn({ data: { ticketId: visible } })
+      expect(links.tracker).toBeNull()
+      expect(links.trackerHidden).toBe(true)
+      expect(JSON.stringify(links)).not.toContain(hiddenTracker)
+    })
+
+    it('a visible tracker still shows', async () => {
+      const w = await seedWorld()
+      const tracker = await w.ticket(w.teamX, 'tracker')
+      const visible = await w.ticket(w.teamX)
+      await track(tracker, visible)
+      const links = await getTicketLinksFn({ data: { ticketId: visible } })
+      expect(links.tracker).toMatchObject({ id: tracker })
+      expect(links.trackerHidden).toBe(false)
     })
   })
 
