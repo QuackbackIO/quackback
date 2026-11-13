@@ -8,10 +8,11 @@
  * Today exactly one reaction lives here: a VISITOR `message.created` on a
  * conversation paired with a CUSTOMER ticket reopens that ticket
  * (`autoReopenOnRequesterReply`). Without it a Messenger reply on the
- * conversation would leave the ticket stuck in "Waiting on customer" — the
- * exact incoherence convergence exists to kill (the portal/widget reply path
- * already reopens directly; this hook covers the conversation-native channels
- * and is idempotent against the direct call).
+ * conversation would leave the ticket stuck in "Waiting on customer". The
+ * portal ticket reply path (requester.service) also reopens directly; this
+ * hook covers every reply written on the conversation and is idempotent
+ * against that direct call. A rating (a reply to a csat block) is not the
+ * requester reopening the ticket, so it never reopens it.
  *
  * LOOP SAFETY: the reopen emits `ticket.status_changed`, never
  * `message.created` (system stage notices — re-parented to the conversation or
@@ -37,6 +38,9 @@ export async function autoReopenPairTicketFromEvent(event: EventData): Promise<v
   try {
     if (event.type !== 'message.created') return
     if (event.data.message.senderType !== 'visitor') return
+    // A rating answers the ask a resolve made; the ticket stays resolved, as
+    // the conversation does (applyVisitorReopenStatus).
+    if (event.data.message.blockReplyKind === 'csat') return
     const conversationId = event.data.message.conversationId as ConversationId
     const ticketId = await resolvePairTicketIdForConversation(conversationId)
     if (!ticketId) return

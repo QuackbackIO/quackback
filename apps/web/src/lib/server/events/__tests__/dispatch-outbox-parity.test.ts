@@ -106,6 +106,7 @@ const msgData = (conversationId: string): EventMessageData => ({
   authorEmail: 'agent@example.com',
   content: 'Hello',
   createdAt: new Date('2026-01-01').toISOString(),
+  blockReplyKind: null,
 })
 
 const ticketRef = (): EventTicketRef => ({
