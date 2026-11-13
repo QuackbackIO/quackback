@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/solid'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
@@ -11,13 +12,19 @@ import { Switch } from '@/components/ui/switch'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { GitHubConnectionActions } from '@/integrations/github/ui/github-connection-actions'
 import { githubChannelStatusQuery } from '@/integrations/github/ui/github-channel-status-query'
-import { useSetGitHubInbox } from '@/integrations/github/ui/use-github-inbox'
+import {
+  useSetGitHubInbox,
+  useSetGitHubRepositoryInbox,
+} from '@/integrations/github/ui/use-github-inbox'
+import type { GitHubChannelRepository } from '@/integrations/github/server/functions'
 
 export function GitHubChannelPage() {
   const query = useQuery(githubChannelStatusQuery())
   const setInbox = useSetGitHubInbox()
+  const intl = useIntl()
   const status = query.data
   const connected = !!status?.connected
+  const repositories = status?.repositories ?? []
   const inboxEnabled = setInbox.isPending ? setInbox.variables : (status?.inboxEnabled ?? false)
   const attention =
     connected &&
@@ -111,6 +118,36 @@ export function GitHubChannelPage() {
             </SettingRows>
           </SettingsCard>
 
+          <SettingsCard
+            title={intl.formatMessage({
+              id: 'admin.githubChannel.repositoriesTitle',
+              defaultMessage: 'Repositories',
+            })}
+            description={intl.formatMessage({
+              id: 'admin.githubChannel.repositoriesDescription',
+              defaultMessage: 'Choose which repositories bring their issues into the inbox.',
+            })}
+          >
+            {repositories.length === 0 ? (
+              <p className="py-3 text-sm text-muted-foreground">
+                <FormattedMessage
+                  id="admin.githubChannel.noRepositories"
+                  defaultMessage="No repositories yet. Add one in the GitHub integration."
+                />
+              </p>
+            ) : (
+              <SettingRows>
+                {repositories.map((repository) => (
+                  <RepositoryInboxRow
+                    key={repository.id}
+                    repository={repository}
+                    inboxEnabled={inboxEnabled}
+                  />
+                ))}
+              </SettingRows>
+            )}
+          </SettingsCard>
+
           <SettingsCard title="Sync">
             <SettingRows>
               <SettingRow
@@ -126,6 +163,79 @@ export function GitHubChannelPage() {
         </>
       )}
     </SettingsPage>
+  )
+}
+
+/**
+ * One repository's inbox switch. Notes why issues may still not arrive: the
+ * repository is switched off or send-only, or its webhook does not deliver
+ * comments yet.
+ */
+function RepositoryInboxRow({
+  repository,
+  inboxEnabled,
+}: {
+  repository: GitHubChannelRepository
+  inboxEnabled: boolean
+}) {
+  const intl = useIntl()
+  const setRepositoryInbox = useSetGitHubRepositoryInbox()
+  const optedIn = setRepositoryInbox.isPending
+    ? !!setRepositoryInbox.variables?.enabled
+    : repository.inboundMode === 'conversations'
+  const note = !repository.enabled
+    ? intl.formatMessage({
+        id: 'admin.githubChannel.repositoryPaused',
+        defaultMessage: 'Sync is off for this repository.',
+      })
+    : !repository.receives
+      ? intl.formatMessage({
+          id: 'admin.githubChannel.repositorySendOnly',
+          defaultMessage: 'This repository only sends, so nothing comes in from it.',
+        })
+      : optedIn && inboxEnabled && !repository.webhookEvents.includes('issue_comment')
+        ? intl.formatMessage({
+            id: 'admin.githubChannel.repositoryNoComments',
+            defaultMessage:
+              'Its webhook does not deliver comments yet. Repair it in the GitHub integration.',
+          })
+        : null
+  return (
+    <SettingRow
+      label={repository.repo}
+      htmlFor={`github-inbox-${repository.id}`}
+      description={
+        note ??
+        (repository.lastInboundAt ? (
+          <FormattedMessage
+            id="admin.githubChannel.repositoryLastReceived"
+            defaultMessage="Last received {time}"
+            values={{ time: <TimeAgo date={repository.lastInboundAt} /> }}
+          />
+        ) : (
+          intl.formatMessage({
+            id: 'admin.githubChannel.repositoryNothingReceived',
+            defaultMessage: 'Nothing received yet',
+          })
+        ))
+      }
+      control={
+        <Switch
+          id={`github-inbox-${repository.id}`}
+          checked={optedIn}
+          onCheckedChange={(enabled) =>
+            setRepositoryInbox.mutate({ destinationId: repository.id, enabled })
+          }
+          aria-label={intl.formatMessage(
+            {
+              id: 'admin.githubChannel.repositoryInbox',
+              defaultMessage: 'Bring issues from {repository} into the inbox',
+            },
+            { repository: repository.repo }
+          )}
+        />
+      }
+    />
   )
 }
 

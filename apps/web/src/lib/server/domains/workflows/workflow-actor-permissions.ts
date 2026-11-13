@@ -3,7 +3,7 @@
  * provenance: `AUTOMATION_PERMISSIONS` is the base ceiling every workflow
  * action runs under (workflow.engine.ts's workflowActor), and
  * `TICKET_ACTION_PERMISSIONS` is a deliberate, narrow widening of that
- * ceiling for exactly the two ticket actions that need it
+ * ceiling for exactly the three ticket actions that need it
  * (action.executor.ts's ticketActionActor). Neither set changes semantics by
  * moving here — this is a least-privilege scoping decision (a shared base
  * ceiling, widened only where a specific action needs more), now readable in
@@ -29,14 +29,16 @@ export const AUTOMATION_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
 ])
 
 /**
- * Ticket action permissions (set_ticket_status / convert_to_ticket): the
- * engine's own bounded service actor (AUTOMATION_PERMISSIONS above) predates
- * ticket actions and carries no `ticket.*` keys — rather than widen that
- * shared ceiling for every other workflow action too, these two actions
- * widen ONLY their own actor, locally, to add exactly the two ticket
- * permissions they need. A human actor (a macro calling applyAction
- * directly) already carries its real permission set via role and passes
- * through unchanged — neither action is in the macro catalogue today
+ * Ticket action permissions (set_ticket_status / set_ticket_due_date /
+ * convert_to_ticket / add_ticket_watcher): the engine's own bounded service
+ * actor (AUTOMATION_PERMISSIONS above) predates ticket actions and carries no
+ * `ticket.*` keys — rather than widen that shared ceiling for every other
+ * workflow action too, these actions widen ONLY their own actor, locally, to
+ * add exactly the ticket permissions they need. set_ticket_due_date needs
+ * nothing new: setTicketDueAt is gated on the same TICKET_SET_STATUS key as
+ * set_ticket_status. A human actor (a macro calling applyAction directly)
+ * already carries its real permission set via role and passes through
+ * unchanged — none of these actions is in the macro catalogue today
  * (workflow.schemas.ts's actionSchema is workflows-only, like `reopen`
  * before it), so in practice this only ever widens the engine's own service
  * actor.
@@ -44,4 +46,6 @@ export const AUTOMATION_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
 export const TICKET_ACTION_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
   PERMISSIONS.TICKET_SET_STATUS,
   PERMISSIONS.TICKET_CREATE,
+  // add_ticket_watcher: managing a ticket's watchers, as in the inbox.
+  PERMISSIONS.TICKET_ASSIGN,
 ])
