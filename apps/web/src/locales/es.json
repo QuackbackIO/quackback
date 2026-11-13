@@ -2265,8 +2265,8 @@
   "settings.labs.empty.description": "Aquí aparecen las funciones que puedes probar antes de su lanzamiento.",
   "admin.integrations.oauthError.denied": "La conexión se rechazó en {name}. Vuelve a conectar para permitir el acceso.",
   "admin.integrations.oauthError.expired": "La solicitud de conexión caducó o no era válida. Vuelve a intentar conectar.",
-  "admin.integrations.oauthError.session": "Tu sesión cambió durante la conexión. Vuelve a iniciar sesión y conecta.",
+  "admin.integrations.oauthError.session": "No pudimos confirmar tu inicio de sesión. Vuelve a iniciar sesión y conecta.",
   "admin.integrations.oauthError.credentials": "Añade las credenciales de la app de {name} antes de conectar.",
   "admin.integrations.oauthError.elsewhere": "Esta cuenta de {name} ya está conectada a otro espacio de trabajo de Quackback.",
-  "admin.integrations.oauthError.failed": "{name} no completó la conexión. Vuelve a intentar conectar."
+  "admin.integrations.oauthError.failed": "La conexión con {name} no se completó. Vuelve a intentar conectar."
 }

@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 vi.mock('@tanstack/react-router', () => ({
   useSearch: () => ({}),
   useRouter: () => ({ invalidate: () => {}, navigate: () => {} }),
+  useNavigate: () => () => {},
   Link: ({ children }: { children: unknown }) => children,
 }))
 

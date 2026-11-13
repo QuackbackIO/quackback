@@ -2265,8 +2265,8 @@
   "settings.labs.empty.description": "Тут з’являються функції, які можна спробувати до випуску.",
   "admin.integrations.oauthError.denied": "Підключення відхилено в {name}. Підключіться знову, щоб надати доступ.",
   "admin.integrations.oauthError.expired": "Термін запиту на підключення минув, або він недійсний. Спробуйте підключитися знову.",
-  "admin.integrations.oauthError.session": "Сеанс змінився під час підключення. Увійдіть знову, а потім підключіться.",
+  "admin.integrations.oauthError.session": "Не вдалося підтвердити ваш вхід. Увійдіть знову, а потім підключіть.",
   "admin.integrations.oauthError.credentials": "Додайте облікові дані застосунку {name} перед підключенням.",
   "admin.integrations.oauthError.elsewhere": "Цей обліковий запис {name} уже підключено до іншого робочого простору Quackback.",
-  "admin.integrations.oauthError.failed": "{name} не завершив підключення. Спробуйте підключитися знову."
+  "admin.integrations.oauthError.failed": "Підключення до {name} не завершилося. Спробуйте підключити ще раз."
 }

@@ -2265,8 +2265,8 @@
   "settings.labs.empty.description": "تظهر هنا الميزات التي يمكنك تجربتها قبل إطلاقها.",
   "admin.integrations.oauthError.denied": "تم رفض الاتصال على {name}. اتصل مرة أخرى للسماح بالوصول.",
   "admin.integrations.oauthError.expired": "انتهت صلاحية طلب الاتصال أو لم يكن صالحًا. حاول الاتصال مرة أخرى.",
-  "admin.integrations.oauthError.session": "تغيرت جلستك أثناء الاتصال. سجّل الدخول مرة أخرى، ثم اتصل.",
+  "admin.integrations.oauthError.session": "تعذّر التحقق من تسجيل دخولك. سجّل الدخول مرة أخرى، ثم اربط.",
   "admin.integrations.oauthError.credentials": "أضف بيانات اعتماد تطبيق {name} قبل الاتصال.",
   "admin.integrations.oauthError.elsewhere": "حساب {name} هذا متصل بالفعل بمساحة عمل Quackback أخرى.",
-  "admin.integrations.oauthError.failed": "لم يُكمل {name} الاتصال. حاول الاتصال مرة أخرى."
+  "admin.integrations.oauthError.failed": "لم يكتمل الاتصال بـ {name}. حاول الربط مرة أخرى."
 }

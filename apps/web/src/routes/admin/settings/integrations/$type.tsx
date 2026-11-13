@@ -28,7 +28,9 @@ function oauthResultSearch(search: Record<string, unknown>): OAuthResultSearch {
       result[key] = value
     }
   }
-  if (typeof search.reason === 'string' && OAUTH_REASON.test(search.reason)) {
+  // A reason only means something next to a result key.
+  const hasResult = Object.keys(result).length > 0
+  if (hasResult && typeof search.reason === 'string' && OAUTH_REASON.test(search.reason)) {
     result.reason = search.reason
   }
   return result

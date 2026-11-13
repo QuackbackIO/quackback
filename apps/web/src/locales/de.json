@@ -2265,8 +2265,8 @@
   "settings.labs.empty.description": "Funktionen, die du vor dem Start ausprobieren kannst, erscheinen hier.",
   "admin.integrations.oauthError.denied": "Die Verbindung wurde bei {name} abgelehnt. Verbinde dich erneut, um den Zugriff zu erlauben.",
   "admin.integrations.oauthError.expired": "Die Verbindungsanfrage ist abgelaufen oder war ungültig. Versuche es erneut.",
-  "admin.integrations.oauthError.session": "Deine Sitzung hat sich während der Verbindung geändert. Melde dich erneut an und verbinde dich dann.",
+  "admin.integrations.oauthError.session": "Wir konnten deine Anmeldung nicht bestätigen. Melde dich erneut an und verbinde dich dann.",
   "admin.integrations.oauthError.credentials": "Hinterlege die App-Zugangsdaten für {name}, bevor du dich verbindest.",
   "admin.integrations.oauthError.elsewhere": "Dieses {name}-Konto ist bereits mit einem anderen Quackback-Arbeitsbereich verbunden.",
-  "admin.integrations.oauthError.failed": "{name} hat die Verbindung nicht abgeschlossen. Versuche es erneut."
+  "admin.integrations.oauthError.failed": "Die Verbindung mit {name} wurde nicht abgeschlossen. Versuche es erneut."
 }
