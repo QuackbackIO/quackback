@@ -25,6 +25,7 @@ import {
   groupsToCondition,
   defaultRuleGroup,
   createStep,
+  deriveOutline,
   defaultAction,
   draftIssues,
   draftToCondition,
@@ -49,6 +50,7 @@ import {
   STATIC_CONDITION_FIELD_GROUPS,
   toAttributeFieldDefs,
   treeToGraph,
+  TRIGGER_DESCRIPTIONS,
   TRIGGER_LABELS,
   TRIGGER_TYPES,
   validateGraph,
@@ -1441,6 +1443,87 @@ describe('snooze action: relative duration', () => {
     expect(TRIGGER_LABELS['ticket.status_changed']).toBe('Ticket status changed')
   })
 
+  it('the three ticket due-date triggers are pickable, labeled, and say they need a linked conversation', () => {
+    const types = ['ticket.due_changed', 'ticket.due_soon', 'ticket.overdue'] as const
+    for (const type of types) {
+      expect(TRIGGER_TYPES).toContain(type)
+      expect(TRIGGER_DESCRIPTIONS[type]).toMatch(/linked to a customer conversation/)
+    }
+    expect(TRIGGER_LABELS['ticket.due_changed']).toBe('Ticket due date changed')
+    expect(TRIGGER_LABELS['ticket.due_soon']).toBe('Ticket due soon')
+    expect(TRIGGER_LABELS['ticket.overdue']).toBe('Ticket overdue')
+  })
+
+  it('set_ticket_due_date: defaults to one day out relative to the step, and summarizes each mode', () => {
+    expect(defaultAction('set_ticket_due_date')).toEqual({
+      type: 'set_ticket_due_date',
+      seconds: 86400,
+    })
+    expect(actionSummary({ type: 'set_ticket_due_date', seconds: 2 * 86400 })).toBe(
+      'Set ticket due date: in 2 days'
+    )
+    expect(actionSummary({ type: 'set_ticket_due_date', dueAtIso: null })).toBe(
+      'Clear ticket due date'
+    )
+    const dueAtIso = '2026-08-01T17:00:00.000Z'
+    const formatDate = (date: unknown) => `<${String(date)}>`
+    expect(actionSummary({ type: 'set_ticket_due_date', dueAtIso }, { formatDate })).toBe(
+      `Set ticket due date: <${dueAtIso}>`
+    )
+  })
+
+  it('set_ticket_due_date: only a relative offset under a minute is an issue', () => {
+    expect(actionIssue({ type: 'set_ticket_due_date', seconds: 86400 })).toBeNull()
+    expect(actionIssue({ type: 'set_ticket_due_date', seconds: 0 })).toBe(
+      'Choose how far ahead it is due'
+    )
+    expect(actionIssue({ type: 'set_ticket_due_date', dueAtIso: null })).toBeNull()
+    expect(
+      actionIssue({ type: 'set_ticket_due_date', dueAtIso: '2026-08-01T17:00:00.000Z' })
+    ).toBeNull()
+  })
+
+  it('set_ticket_due_date: validateGraph accepts each mode and rejects a short offset or a bad date', () => {
+    const graphFor = (action: unknown) => ({
+      nodes: [{ id: 'a', type: 'action', action }],
+      edges: [],
+    })
+    for (const action of [
+      { type: 'set_ticket_due_date', seconds: 60 },
+      { type: 'set_ticket_due_date', dueAtIso: '2026-08-01T17:00:00Z' },
+      { type: 'set_ticket_due_date', dueAtIso: null },
+    ]) {
+      expect(validateGraph(graphFor(action)).ok).toBe(true)
+      expect(workflowGraphSchema.safeParse(graphFor(action)).success).toBe(true)
+    }
+
+    const short = validateGraph(graphFor({ type: 'set_ticket_due_date', seconds: 59 }))
+    expect(short.ok).toBe(false)
+    if (!short.ok) expect(short.error).toMatch(/60 or more/)
+
+    const badDate = validateGraph(graphFor({ type: 'set_ticket_due_date', dueAtIso: 'tomorrow' }))
+    expect(badDate.ok).toBe(false)
+    if (!badDate.ok) expect(badDate.error).toMatch(/UTC timestamp/)
+  })
+
+  it('set_ticket_due_date: round-trips each mode through the tree <-> graph conversion', () => {
+    const tree: WorkflowTree = {
+      triggerId: 'trigger',
+      steps: [
+        { id: 'a1', kind: 'action', action: { type: 'set_ticket_due_date', seconds: 3600 } },
+        {
+          id: 'a2',
+          kind: 'action',
+          action: { type: 'set_ticket_due_date', dueAtIso: '2026-08-01T17:00:00.000Z' },
+        },
+        { id: 'a3', kind: 'action', action: { type: 'set_ticket_due_date', dueAtIso: null } },
+      ],
+    }
+    const graph = treeToGraph(tree)
+    expect(graphToTree(graph)).toEqual({ ok: true, value: tree })
+    expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
+  })
+
   it('surfaces the zero-duration issue through collectStepIssues, same as any other action', () => {
     const tree: WorkflowTree = {
       triggerId: 'trigger',
@@ -1466,6 +1549,79 @@ describe('snooze action: relative duration', () => {
 // to the runtime become first-class in the visual builder here — round-trips
 // through the tree, server-schema parity, and the issues-gate rules.
 // ---------------------------------------------------------------------------
+
+describe('send_ticket_form: askDueDate toggle', () => {
+  const formTree = (step: Extract<TreeStep, { kind: 'send_ticket_form' }>): WorkflowTree => ({
+    triggerId: 'trigger',
+    steps: [step],
+  })
+
+  it('a fresh form step leaves the toggle off (no key)', () => {
+    const step = createStep(newTree(), 'send_ticket_form')
+    expect(step).not.toHaveProperty('askDueDate')
+  })
+
+  it('round-trips askDueDate: true through tree <-> graph, and passes the server schema', () => {
+    const tree = formTree({
+      id: 'f1',
+      kind: 'send_ticket_form',
+      body: EMPTY_BLOCK_BODY,
+      askDueDate: true,
+    })
+    const graph = treeToGraph(tree)
+    expect(graph.nodes).toContainEqual({
+      id: 'f1',
+      type: 'send_ticket_form',
+      body: EMPTY_BLOCK_BODY,
+      askDueDate: true,
+    })
+    expect(graphToTree(graph)).toEqual({ ok: true, value: tree })
+    expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
+  })
+
+  it('writes no askDueDate key when the toggle is off, and reads a stored false as off', () => {
+    const graph = treeToGraph(
+      formTree({ id: 'f1', kind: 'send_ticket_form', body: EMPTY_BLOCK_BODY, askDueDate: false })
+    )
+    expect(graph.nodes.find((n) => n.id === 'f1')).not.toHaveProperty('askDueDate')
+
+    const stored: WorkflowGraphJson = {
+      nodes: [
+        { id: 'trigger', type: 'trigger' },
+        { id: 'f1', type: 'send_ticket_form', body: EMPTY_BLOCK_BODY, askDueDate: false },
+      ],
+      edges: [{ from: 'trigger', to: 'f1' }],
+    }
+    const tree = graphToTree(stored)
+    expect(tree.ok).toBe(true)
+    if (tree.ok) expect(tree.value.steps[0]).not.toHaveProperty('askDueDate')
+  })
+
+  it('validateGraph rejects a non-boolean askDueDate', () => {
+    const graph = {
+      nodes: [{ id: 'f1', type: 'send_ticket_form', body: EMPTY_BLOCK_BODY, askDueDate: 'yes' }],
+      edges: [],
+    }
+    const result = validateGraph(graph)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toMatch(/askDueDate/)
+  })
+
+  it('notes the toggle in the outline label only when it is on', () => {
+    const on = deriveOutline(
+      formTree({ id: 'f1', kind: 'send_ticket_form', body: EMPTY_BLOCK_BODY, askDueDate: true }),
+      'New conversation',
+      new Map()
+    )
+    expect(on[1]).toMatchObject({ label: 'Send ticket form · asks for a due date' })
+    const off = deriveOutline(
+      formTree({ id: 'f1', kind: 'send_ticket_form', body: EMPTY_BLOCK_BODY }),
+      'New conversation',
+      new Map()
+    )
+    expect(off[1]).toMatchObject({ label: 'Send ticket form' })
+  })
+})
 
 describe('conversational block kinds', () => {
   const withBody = (text: string) => ({

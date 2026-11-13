@@ -154,6 +154,8 @@ export interface ConversationTicketSummary {
   reference: string
   title: string
   stage: TicketStageRef
+  /** The ticket's shared due date (ISO), null when none. */
+  dueAt: string | null
 }
 
 /**
@@ -176,6 +178,7 @@ export async function getRequesterTicketSummaries(
       number: tickets.number,
       title: tickets.title,
       statusId: tickets.statusId,
+      dueAt: tickets.dueAt,
     })
     .from(ticketConversations)
     .innerJoin(tickets, eq(ticketConversations.ticketId, tickets.id))
@@ -206,6 +209,7 @@ export async function getRequesterTicketSummaries(
         label: slot ? stageLabels[slot] : null,
         closed: status?.category === 'closed',
       },
+      dueAt: r.dueAt ? r.dueAt.toISOString() : null,
     })
   }
   return map
@@ -226,6 +230,8 @@ export interface MyTicketSummary {
    *  a legacy standalone ticket (pre-pair rows were never backfilled). */
   conversationId: ConversationId | null
   updatedAt: string
+  /** The ticket's shared due date (ISO), null when none. */
+  dueAt: string | null
 }
 
 /**
@@ -247,6 +253,7 @@ export async function listMyTicketSummaries(
       statusId: tickets.statusId,
       conversationId: ticketConversations.conversationId,
       updatedAt: tickets.updatedAt,
+      dueAt: tickets.dueAt,
     })
     .from(tickets)
     .leftJoin(
@@ -286,6 +293,7 @@ export async function listMyTicketSummaries(
       },
       conversationId: r.conversationId,
       updatedAt: r.updatedAt.toISOString(),
+      dueAt: r.dueAt ? r.dueAt.toISOString() : null,
     }
   })
 }
@@ -315,6 +323,9 @@ export async function createMyTicket(
     ticketTypeId?: TicketTypeId | null
     /** Validated intake-form answers, stored on the ticket's customAttributes. */
     customAttributes?: Record<string, unknown>
+    /** The requester's proposed "Needed by" date; createTicketCore holds it to
+     *  the customer window (the requester files for themselves). */
+    dueAt?: Date | null
   }
 ): Promise<RequesterTicketDTO> {
   const principalId = requireRequester(actor)
@@ -331,6 +342,7 @@ export async function createMyTicket(
       descriptionJson: input.descriptionJson,
       attachments: input.attachments,
       customAttributes: input.customAttributes,
+      dueAt: input.dueAt ?? null,
       requesterPrincipalId: principalId,
       withBackingConversation: true,
     },
@@ -368,8 +380,10 @@ async function appendRequesterReply(
   actor: Actor
 ): Promise<{ message: ConversationMessageDTO }> {
   // CONVERGENCE PHASE 1a: on a linked pair the insert redirects to the
-  // conversation (the full conversation write pipeline runs there); the
-  // reopen + `ticket.replied` below are ticket-side and fire either way.
+  // conversation (the full conversation write pipeline runs there). The reopen
+  // below is ticket-side and runs either way; `ticket.replied` is emitted here
+  // only for a ticket-parented reply, since the pair-reply reaction raises it
+  // off the conversation's `message.created` (ticket.event-hooks.ts).
   const { message, ticket } = await insertTicketMessage(input, requesterPrincipalId, {
     senderType: 'visitor',
     isInternal: false,
@@ -379,7 +393,7 @@ async function appendRequesterReply(
   const { safeSubscribeToTicket } = await import('./ticket-subscription.service')
   await safeSubscribeToTicket(requesterPrincipalId, ticketId, 'requester')
   await autoReopenOnRequesterReply(ticketId, requesterPrincipalId)
-  void emitTicketReplied(actor, ticket, message)
+  if (!message.conversationId) void emitTicketReplied(actor, ticket, message)
   return { message }
 }
 

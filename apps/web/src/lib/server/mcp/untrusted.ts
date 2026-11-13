@@ -302,6 +302,7 @@ export const UNTRUSTED_TOOL_FIELDS = {
   add_ticket_note: NONE,
   link_ticket: NONE,
   unlink_ticket: NONE,
+  set_ticket_due_date: NONE,
 
   upload_file: NONE,
   // Taken from the Origin or Referer of whichever page loaded the widget.
