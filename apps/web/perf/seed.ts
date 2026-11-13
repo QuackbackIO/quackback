@@ -13,7 +13,7 @@
  *        DATABASE_URL=... PERF_SCALE=large bun perf/seed.ts
  */
 import postgres from 'postgres'
-import { LARGE_PROFILE, perfScale } from './config'
+import { BENCH_DOMAIN, LARGE_PROFILE, perfScale } from './config'
 import { seedLargeWorkspace } from './seed-large'
 
 // mulberry32: small, fast, and good enough for picking demo data.
@@ -33,6 +33,21 @@ Math.random = seeded(0x5eed)
 const scale = perfScale()
 const { seedDone } = await import('../../../packages/db/src/seed.ts')
 await seedDone
+
+// One domain added by name, with no use yet, so its own page has a sweep.
+if (!process.exitCode) {
+  const url = process.env.DATABASE_URL
+  if (!url) throw new Error('DATABASE_URL is required')
+  const sql = postgres(url, { max: 1, onnotice: () => {} })
+  try {
+    await sql`
+      INSERT INTO domains (name, ownership_token)
+      VALUES (${BENCH_DOMAIN}, '0f1e2d3c4b5a69788796a5b4c3d2e1f0')
+      ON CONFLICT (name) DO NOTHING`
+  } finally {
+    await sql.end()
+  }
+}
 
 if (scale === 'large' && !process.exitCode) {
   const url = process.env.DATABASE_URL

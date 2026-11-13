@@ -10,7 +10,7 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import postgres from 'postgres'
 import { buildWidgetInstallSnippet } from '../src/lib/shared/widget/install-prompt'
-import { BENCH_DATABASE_URL, BENCH_PORT } from './config'
+import { BENCH_DATABASE_URL, BENCH_DOMAIN, BENCH_PORT } from './config'
 
 export type Actor = 'anon' | 'admin'
 
@@ -203,6 +203,7 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'copilot',
     'developers',
     'domains',
+    `domains/${BENCH_DOMAIN}`,
     'email',
     'general',
     'help-center',
