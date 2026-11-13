@@ -62,7 +62,14 @@ vi.mock('@/lib/server/logger', () => ({ logger: stubLogger }))
 
 import type { ConcurrentIndexSpec } from '@/lib/server/db'
 import { JOB_DEFINITIONS, __setJobDefinitionsForTests } from '@/lib/server/jobs/definitions'
-import { drainOnce, resetJobHandlers, runnerConfig } from '@/lib/server/jobs/runner'
+import {
+  createScheduleState,
+  drainOnce,
+  resetJobHandlers,
+  runnerConfig,
+  runScheduleTick,
+} from '@/lib/server/jobs/runner'
+import { slotKey } from '@/lib/server/jobs/cron'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { __setBackfillsForTests, walkBackfill } from '../batched'
 import {
@@ -158,6 +165,21 @@ function cronRow(): ClaimedJob {
   }
 }
 
+/**
+ * Two instants one hour apart at minute `minute` of an hour no other run uses,
+ * so a schedule adopts the first slot and enqueues the second.
+ */
+function slotPair(minute: number): [Date, Date] {
+  const hour = Date.UTC(2040, 0, 1) + Math.floor(Math.random() * 1e6) * 3_600_000
+  const first = new Date(hour + minute * 60_000 + 30_000)
+  return [first, new Date(first.getTime() + 3_600_000)]
+}
+
+/** The dedupe key the schedule writes for the slot `at` falls in. */
+function slotDedupeKey(queue: string, at: Date): string {
+  return slotKey(queue, new Date(Math.floor(at.getTime() / 60_000) * 60_000))
+}
+
 beforeEach(async () => {
   table = `t_deferred_${process.pid}_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
   await testSql().unsafe(`CREATE TABLE ${table} (id serial PRIMARY KEY, v int)`)
@@ -172,6 +194,8 @@ afterEach(async () => {
   __setJobDefinitionsForTests(null)
   resetJobHandlers()
   logLines.length = 0
+  // Rows a test left pending must not be claimed by the next test's drain.
+  await testSql()`DELETE FROM job_queue WHERE queue = ${QUEUE} AND dedupe_key LIKE ${`${QUEUE}:${table}_%`}`
   await testSql().unsafe(`DROP TABLE IF EXISTS ${table} CASCADE`)
 })
 
@@ -314,6 +338,63 @@ describe('a build that keeps failing', () => {
 })
 
 describe('the schedule gate', () => {
+  it('stays open for a stopped build until the scheduled pass has warned about it', async () => {
+    const a = spec('stop_sched', `${table}_never (v)`)
+    __setDeferredIndexSpecsForTests([a])
+    await enqueueDeferredIndexBuilds()
+    await failForGood(`${QUEUE}:${a.name}:1`)
+    for (let gen = 2; gen <= 5; gen++) {
+      await ageTerminalRows(a.name)
+      await enqueueDeferredIndexBuilds()
+      await failForGood(`${QUEUE}:${a.name}:${gen}`)
+    }
+    await ageTerminalRows(a.name)
+    onlyIndexQueue()
+
+    const [first, second] = slotPair(35)
+    const key = slotDedupeKey(QUEUE, second)
+    try {
+      expect(await deferredIndexBuildDue()).toBe(true)
+      const state = createScheduleState()
+      await runScheduleTick(state, first)
+      expect((await runScheduleTick(state, second)).enqueued).toBe(1)
+      await drainOnce(CONFIG)
+
+      const warnings = logLines.filter((l) => l.level === 'warn' && l.fields.index === a.name)
+      expect(warnings).toHaveLength(1)
+      expect(await rowsOf(a.name)).toHaveLength(5)
+      expect(await deferredIndexBuildDue()).toBe(false)
+    } finally {
+      await testSql()`DELETE FROM job_queue WHERE queue = ${QUEUE} AND dedupe_key = ${key}`
+    }
+  })
+
+  it('writes the scheduled row through the real schedule, and that row enqueues the build', async () => {
+    const a = spec('scheduled')
+    __setDeferredIndexSpecsForTests([a])
+    // Startup has made this process's first pass already.
+    await enqueueDeferredIndexBuilds()
+    await testSql()`DELETE FROM job_queue WHERE dedupe_key LIKE ${`${QUEUE}:${a.name}:%`}`
+    await testSql()`DELETE FROM kv_store WHERE key LIKE ${`${QUEUE}:${a.name}:%`}`
+    onlyIndexQueue()
+
+    const [first, second] = slotPair(35)
+    const key = slotDedupeKey(QUEUE, second)
+    try {
+      const state = createScheduleState()
+      await runScheduleTick(state, first)
+      expect((await runScheduleTick(state, second)).enqueued).toBe(1)
+      await drainOnce(CONFIG)
+      expect(await rowsOf(a.name)).toHaveLength(1)
+      await drainAll()
+      if ((await indexState(a.name)) !== 'valid') throw new Error('DEBUG ' + JSON.stringify(await rowsOf(a.name)) + JSON.stringify(logLines.filter((l) => l.level !== 'debug').map((l) => [l.msg, String(l.fields.err ?? '')])))
+      expect(await indexState(a.name)).toBe('valid')
+    } finally {
+      await testSql()`DELETE FROM job_queue WHERE queue = ${QUEUE} AND dedupe_key = ${key}`
+    }
+  })
+
+
   it('is shut with no background index, open while one is missing, and shut once built', async () => {
     __setDeferredIndexSpecsForTests([])
     expect(await deferredIndexBuildDue()).toBe(false)

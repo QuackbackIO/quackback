@@ -1477,4 +1477,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'job definitions. It is the same for every workspace in the process; it is memoised only ' +
       'so the "job paused" lines are logged once rather than on every pass.',
   },
+  {
+    file: 'apps/web/src/lib/server/backfills/deferred-indexes.ts',
+    name: 'allBuiltSeen',
+    category: 'workspace-keyed',
+    reason:
+      'Workspaces this process has seen with every background index built, keyed by the index ' +
+      'list. A cross-workspace hit would shut the deferred-index-build schedule for a workspace ' +
+      'whose indexes are still missing.',
+  },
 ]

@@ -74,10 +74,18 @@ const passedThisProcess = new WorkspaceKeyedCache<true>(10_000)
 /** Indexes this process has already warned about, per workspace, so the warning is said once. */
 const stopWarned = new WorkspaceKeyedCache<true>(10_000)
 
+/**
+ * Workspaces this process has seen with every background index built, keyed by
+ * the list it checked. The gate then stops reading the catalogue each tick; a
+ * worker restart checks again.
+ */
+const allBuiltSeen = new WorkspaceKeyedCache<true>(10_000)
+
 /** Test seam: behave as a freshly started worker process. */
 export function __resetDeferredIndexPassesForTests(): void {
   passedThisProcess.clear()
   stopWarned.clear()
+  allBuiltSeen.clear()
 }
 
 function indexKeys(index: string) {
@@ -175,16 +183,25 @@ async function finishedAtOf(key: string): Promise<Date | null> {
 
 /**
  * The `deferred-index-build` schedule gate: open while a background index is
- * missing or invalid and this process may still enqueue it. Shut, with no
- * query, when the build has no background index.
+ * missing or invalid and this process may still enqueue it or has yet to warn
+ * that it stopped. Shut, with no query, when the build has no background index
+ * or this process has seen them all built.
  */
 export async function deferredIndexBuildDue(): Promise<boolean> {
+  const specs = deferredIndexSpecs()
+  if (specs.length === 0) return false
+  const listKey = specs.map((s) => s.name).join(',')
+  if (allBuiltSeen.get(listKey)) return false
   const pending = await pendingDeferredIndexes()
-  if (pending.length === 0) return false
+  if (pending.length === 0) {
+    allBuiltSeen.set(listKey, true)
+    return false
+  }
   if (!passedThisProcess.get('passed')) return true
   for (const spec of pending) {
     const rounds = (await kvGet<number>(indexKeys(spec.name).rounds)) ?? 0
-    if (rounds < MAX_INDEX_BUILD_ROUNDS) return true
+    // A stopped index keeps the gate open until the pass has said so once.
+    if (rounds < MAX_INDEX_BUILD_ROUNDS || !stopWarned.get(spec.name)) return true
   }
   return false
 }

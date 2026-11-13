@@ -678,8 +678,12 @@ export function declaredTables(): DeclaredTable[] {
  * is what `db:check-drift` is for, and it needs the Drizzle Kit toolchain rather
  * than a query.
  */
-export async function verifySchemaPostconditions(sql: postgres.Sql): Promise<PostconditionReport> {
-  const deferredNames = new Set(DEFERRED_INDEX_SPECS.map((s) => s.name))
+export async function verifySchemaPostconditions(
+  sql: postgres.Sql,
+  opts: { deferredIndexSpecs?: readonly ConcurrentIndexSpec[] } = {}
+): Promise<PostconditionReport> {
+  const deferredSpecs = opts.deferredIndexSpecs ?? DEFERRED_INDEX_SPECS
+  const deferredNames = new Set(deferredSpecs.map((s) => s.name))
   const invalid = await listInvalidIndexes(sql)
   // An invalid background index is a build the job will heal, not a broken database.
   const invalidIndexes = invalid.filter((i) => !deferredNames.has(i.name))
@@ -696,7 +700,7 @@ export async function verifySchemaPostconditions(sql: postgres.Sql): Promise<Pos
     (s) => s.name
   )
   const invalidNames = new Set(invalid.map((i) => i.name))
-  const pendingIndexes = DEFERRED_INDEX_SPECS.filter(
+  const pendingIndexes = deferredSpecs.filter(
     (s) => !presentNames.has(s.name) || invalidNames.has(s.name)
   ).map((s) => s.name)
 

@@ -59,7 +59,14 @@ const { logLines, stubLogger } = vi.hoisted(() => {
 vi.mock('@/lib/server/logger', () => ({ logger: stubLogger }))
 
 import { JOB_DEFINITIONS, __setJobDefinitionsForTests } from '@/lib/server/jobs/definitions'
-import { drainOnce, resetJobHandlers, runnerConfig } from '@/lib/server/jobs/runner'
+import {
+  createScheduleState,
+  drainOnce,
+  resetJobHandlers,
+  runnerConfig,
+  runScheduleTick,
+} from '@/lib/server/jobs/runner'
+import { slotKey } from '@/lib/server/jobs/cron'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import {
   BackfillBusyError,
@@ -174,6 +181,21 @@ function jobFor(payload: Record<string, unknown>, queue = 'startup-backfill'): C
     lockedUntil: new Date(),
     runAt: new Date(),
   }
+}
+
+/**
+ * Two instants one hour apart at minute `minute` of an hour no other run uses,
+ * so a schedule adopts the first slot and enqueues the second.
+ */
+function slotPair(minute: number): [Date, Date] {
+  const hour = Date.UTC(2040, 0, 1) + Math.floor(Math.random() * 1e6) * 3_600_000
+  const first = new Date(hour + minute * 60_000 + 30_000)
+  return [first, new Date(first.getTime() + 3_600_000)]
+}
+
+/** The dedupe key the schedule writes for the slot `at` falls in. */
+function slotDedupeKey(queue: string, at: Date): string {
+  return slotKey(queue, new Date(Math.floor(at.getTime() / 60_000) * 60_000))
 }
 
 beforeAll(async () => {
@@ -528,6 +550,29 @@ describe('the follow-up', () => {
 })
 
 describe('the schedule gate', () => {
+  it('writes the scheduled row through the real schedule, and that row enqueues and walks', async () => {
+    const entry = backfill('through-schedule', { followUp: false })
+    __setBackfillsForTests([entry])
+    await seed(entry)
+    onlyBackfillQueues()
+    const [first, second] = slotPair(15)
+    const key = slotDedupeKey('startup-backfill', second)
+    try {
+      // A loop that wakes adopts the slot it starts in and runs the next one.
+      const state = createScheduleState()
+      expect((await runScheduleTick(state, first)).enqueued).toBe(0)
+      expect((await runScheduleTick(state, second)).enqueued).toBe(1)
+
+      await drainOnce(CONFIG)
+      expect(await backfillRows(entry)).toHaveLength(1)
+      await drainOnce(CONFIG)
+      expect(await walked(entry)).toEqual([1, 1, 1, 1, 1])
+    } finally {
+      await testSql()`DELETE FROM job_queue WHERE queue = 'startup-backfill' AND dedupe_key = ${key}`
+    }
+  })
+
+
   it('is shut with nothing registered, open while work remains, and shut once all is done', async () => {
     __setBackfillsForTests([])
     expect(await startupBackfillDue()).toBe(false)

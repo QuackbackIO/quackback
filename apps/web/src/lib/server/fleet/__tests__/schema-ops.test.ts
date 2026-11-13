@@ -161,6 +161,36 @@ describe('verifySchemaPostconditions', () => {
     )
   })
 
+  it('reports a missing or invalid background index as pending work, not a violation', async () => {
+    const deferred: ConcurrentIndexSpec[] = [
+      {
+        name: 'widgets_deferred_code_idx',
+        concurrent: true,
+        ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS widgets_deferred_code_idx ON widgets (code)',
+      },
+      {
+        name: 'widgets_deferred_never_idx',
+        concurrent: true,
+        ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS widgets_deferred_never_idx ON widgets (name)',
+      },
+    ]
+    await sql.unsafe(`CREATE INDEX widgets_deferred_code_idx ON widgets (code)`)
+    await invalidate('widgets_deferred_code_idx')
+
+    const report = await verifySchemaPostconditions(sql, { deferredIndexSpecs: deferred })
+    expect(report.observed.pendingIndexes.sort()).toEqual([
+      'widgets_deferred_code_idx',
+      'widgets_deferred_never_idx',
+    ])
+    const named = report.violations.filter((v) => v.detail.includes('widgets_deferred_'))
+    expect(named).toEqual([])
+
+    // The same invalid index, not on the background list, is a violation.
+    const plain = await verifySchemaPostconditions(sql)
+    expect(plain.violations.some((v) => v.detail.includes('widgets_deferred_code_idx'))).toBe(true)
+    await sql.unsafe(`DROP INDEX widgets_deferred_code_idx`)
+  })
+
   it('derives what must exist from the creator list, not from a second list', async () => {
     // A hand-maintained "expected indexes" list would drift the day someone
     // added a spec. This asserts the two are the same object, so they cannot.

@@ -280,7 +280,7 @@ async function walk(opts: {
 
       const cursor = (await kvGet<{ id: string }>(opts.keys.cursor, { executor: tx }))?.id ?? null
       const range = (await tx.execute(sql`
-        SELECT max(id::text) AS to_id, count(*)::int AS n FROM (
+        SELECT ((array_agg(id ORDER BY id DESC))[1])::text AS to_id, count(*)::int AS n FROM (
           SELECT id FROM ${table}
           WHERE ${cursor === null ? sql`true` : sql`id > ${cursor}::uuid`}
           ORDER BY id
