@@ -33,7 +33,20 @@ import {
 import { listTicketTypesFn } from '@/lib/server/functions/ticket-types'
 import type { TicketListFilter } from '@/lib/server/domains/tickets'
 import { asAgentMessage } from '@/lib/shared/conversation/types'
+import { isNotFoundError } from '@/lib/shared/errors'
 import type { InboxListParams } from '@/lib/client/conversation/inbox-scope'
+
+/** react-query's default retry count for a query. */
+const DEFAULT_QUERY_RETRIES = 3
+
+/**
+ * Retry rule for a single item's read: a NotFound answer (deleted, or outside
+ * the viewer's scope) is final, so the not-found pane shows at once. Any other
+ * failure keeps the default retries.
+ */
+export function retryUnlessNotFound(failureCount: number, error: unknown): boolean {
+  return !isNotFoundError(error) && failureCount < DEFAULT_QUERY_RETRIES
+}
 
 /** A deterministic string key for a ticket-list filter (so the query cache
  *  dedupes). Mirrors `inboxListParamsKey` for the unified list. */
@@ -241,6 +254,7 @@ export const inboxQueries = {
         return { ...page, messages: page.messages.map(asAgentMessage) }
       },
       staleTime: 10_000,
+      retry: retryUnlessNotFound,
     }),
 
   /** A single ticket's properties, for the unified thread's header controls
@@ -250,5 +264,6 @@ export const inboxQueries = {
       queryKey: ticketKeys.detail(id),
       queryFn: () => getTicketFn({ data: { ticketId: id } }),
       staleTime: 60_000,
+      retry: retryUnlessNotFound,
     }),
 }
