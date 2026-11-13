@@ -176,6 +176,15 @@ describe('deleteConversationMessage ticket branch', () => {
     expect(emit.emitMessageDeleted).not.toHaveBeenCalled()
   })
 
+  it('still deletes when the first-response recompute fails, and logs it', async () => {
+    messageRow = { ...ticketMessage }
+    mockSyncTicketFirstResponse.mockRejectedValueOnce(new Error('connection reset'))
+    await expect(
+      deleteConversationMessage('conversation_msg_ticket' as ConversationMessageId, agentActor)
+    ).resolves.toBeUndefined()
+    expect(mockSyncTicketFirstResponse).toHaveBeenCalledWith('ticket_1')
+  })
+
   it('404s when the ticket is not visible to the actor', async () => {
     messageRow = { ...ticketMessage }
     mockAssertTicketVisible.mockRejectedValue(
