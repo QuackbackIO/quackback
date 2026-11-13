@@ -39,7 +39,9 @@ vi.mock('@/lib/server/cache', async (importOriginal) => ({
   cacheDel: vi.fn(async () => {}),
 }))
 
-vi.mock('@/lib/server/realtime/conversation-channels', () => ({
+// The realtime ticket update carries the DTO intake returns, so the spy shows
+// what the inbox receives.
+const realtime = vi.hoisted(() => ({
   publishTicketEvent: vi.fn(),
   publishConversationEvent: vi.fn(),
   publishConversationMessage: vi.fn(),
@@ -47,10 +49,12 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationUpdate: vi.fn(),
   publishTyping: vi.fn(),
 }))
+vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
 
 // ticket.created is fired without an await after intake returns; stubbing it
-// keeps that work from touching the database after the rollback.
-vi.mock('../ticket.webhooks', () => ({
+// keeps that work from touching the database after the rollback, and the spy
+// shows which ticket row the event is built from.
+const ticketEmit = vi.hoisted(() => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
@@ -58,6 +62,7 @@ vi.mock('../ticket.webhooks', () => ({
   emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
   emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
 }))
+vi.mock('../ticket.webhooks', () => ticketEmit)
 
 vi.mock('../../conversation/conversation.notify', () => ({
   notifyVisitorMessage: vi.fn().mockResolvedValue(undefined),
@@ -213,8 +218,27 @@ async function expectDefaultSlaOnPair(ticketId: TicketId, policyId: SlaPolicyId,
   return pair
 }
 
+/** The ticket.created event and the realtime update are built from the row
+ *  after the handoff, so both carry the ticket's SLA. */
+function expectCreateSignalsCarrySla(ticketId: TicketId, stamp: TicketSlaApplied) {
+  expect(ticketEmit.emitTicketCreated).toHaveBeenCalledTimes(1)
+  const [, eventRow] = ticketEmit.emitTicketCreated.mock.calls[0]!
+  expect(eventRow).toMatchObject({ id: ticketId, slaApplied: { policyId: stamp.policyId } })
+  const updates = realtime.publishTicketEvent.mock.calls.filter(
+    ([id, event]) => id === ticketId && event.kind === 'ticket_updated'
+  )
+  expect(updates).toHaveLength(1)
+  expect(updates[0]![1].ticket.sla).toMatchObject({
+    policyName: stamp.policyName,
+    timeToResolveDueAt: stamp.timeToResolveDueAt,
+  })
+}
+
 describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
@@ -229,7 +253,10 @@ describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, roll
       description: 'The export button spins forever.',
     })
 
-    await expectDefaultSlaOnPair(dto.id as TicketId, policyId, before)
+    const pair = await expectDefaultSlaOnPair(dto.id as TicketId, policyId, before)
+    // The requester's own view never shows the SLA; the team's signals do.
+    expect(dto.sla).toBeNull()
+    expectCreateSignalsCarrySla(dto.id as TicketId, pair.ticket.slaApplied as TicketSlaApplied)
   })
 
   it('a REST or MCP ticket with a requester gets the default SLA and a running TTR clock', async () => {
@@ -250,7 +277,14 @@ describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, roll
       serviceActor(keyPrincipal)
     )
 
-    await expectDefaultSlaOnPair(dto.id as TicketId, policyId, before)
+    const pair = await expectDefaultSlaOnPair(dto.id as TicketId, policyId, before)
+    const stamp = pair.ticket.slaApplied as TicketSlaApplied
+    expect(dto.sla).toMatchObject({
+      policyName: 'Acme default',
+      timeToResolveDueAt: stamp.timeToResolveDueAt,
+      resolvedAt: null,
+    })
+    expectCreateSignalsCarrySla(dto.id as TicketId, stamp)
   })
 
   it('a teammate-created customer ticket with a requester takes the intake path and gets the clock', async () => {
@@ -265,7 +299,14 @@ describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, roll
       teammateActor(teammate)
     )
 
-    await expectDefaultSlaOnPair(dto.id as TicketId, policyId, before)
+    const pair = await expectDefaultSlaOnPair(dto.id as TicketId, policyId, before)
+    const stamp = pair.ticket.slaApplied as TicketSlaApplied
+    expect(dto.sla).toMatchObject({
+      policyName: 'Acme default',
+      timeToResolveDueAt: stamp.timeToResolveDueAt,
+      resolvedAt: null,
+    })
+    expectCreateSignalsCarrySla(dto.id as TicketId, stamp)
   })
 
   it('applies the default once and dispatches conversation.created once per intake', async () => {

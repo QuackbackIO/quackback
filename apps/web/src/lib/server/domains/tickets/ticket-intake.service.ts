@@ -321,6 +321,7 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // FIRE), then the SLA handoff. The suppressed three (started-notify, auto-routing, Quinn) are
   // simply never invoked here; Quinn is additionally gated at the
   // conversation.service dispatch site for every later visitor message.
+  let ticket: Ticket = created.ticket
   if (created.backingConversation) {
     const backingConversation = created.backingConversation
     if (openingViaRedirect) {
@@ -418,6 +419,11 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     // (no default, a test customer, or a failed apply) hands nothing over.
     const { handoffConversationSlaToTicket } = await import('./ticket-conversation-link.service')
     await handoffConversationSlaToTicket(created.ticket.id, backingConversation.id)
+    // The handoff writes the ticket's SLA stamp after the create transaction,
+    // so the event, the realtime update and the returned DTO read the row
+    // again rather than the one the transaction returned.
+    const [current] = await db.select().from(tickets).where(eq(tickets.id, created.ticket.id))
+    if (current) ticket = current
   }
 
   log.info({ ticket_id: created.ticket.id, type: created.ticket.type }, 'ticket created')
@@ -434,7 +440,7 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // the backing conversation's side effects above — a ticket.created dispatch
   // now always finds the link, closing the ordering race
   // workflows/event-trigger.ts's TICKET_CREATED_LINK_POLL worked around.
-  void emitTicketCreated(actor, created.ticket, {
+  void emitTicketCreated(actor, ticket, {
     category: defaultStatus.category,
     stage: resolveStage(defaultStatus),
   })
@@ -442,5 +448,5 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // row, so the same 'ticket_updated' kind the update paths use below also
   // covers creation, mirroring how the conversation domain's 'conversation'
   // event has no separate created/updated split.
-  return publishTicketUpdated(created.ticket)
+  return publishTicketUpdated(ticket)
 }
