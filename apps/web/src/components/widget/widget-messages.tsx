@@ -57,6 +57,8 @@ export function WidgetMessages({
   // Converged Messages: paired rows carry their ticket's stage chip +
   // reference (the row state keys off the TICKET, not the conversation).
   const linkedTickets = data?.linkedTickets ?? {}
+  // Customer tickets a colleague or the team shared with this visitor.
+  const sharedIds = new Set<string>(data?.sharedConversationIds ?? [])
   // Unassigned conversations are fronted by the assistant identity (AI-first),
   // falling back to the team label.
   const fallbackName =
@@ -133,6 +135,14 @@ export function WidgetMessages({
                           <span className="font-mono text-[11px] text-muted-foreground/60">
                             {ticket.reference}
                           </span>
+                          {sharedIds.has(c.id) && (
+                            <span className="text-[11px] text-muted-foreground/70">
+                              <FormattedMessage
+                                id="widget.messages.sharedWithYou"
+                                defaultMessage="Shared with you"
+                              />
+                            </span>
+                          )}
                         </span>
                       )}
                     </span>

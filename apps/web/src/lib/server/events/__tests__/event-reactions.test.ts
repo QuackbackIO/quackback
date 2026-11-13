@@ -3,7 +3,7 @@
  * event's own transaction, whichever path produced the event:
  *
  * - `event-reactions` runs the reactions that read earlier state (SLA clocks,
- *   pair-ticket reopen, CSAT confirm), one job at a time per worker process in
+ *   pair-ticket reopen and reply, CSAT confirm), one job at a time per worker process in
  *   enqueue order. What happens when that order breaks is covered by
  *   event-reactions-sla-order.test.ts.
  * - `event-summaries` runs the close summaries, slow AI calls that do not
@@ -16,7 +16,7 @@
  * jobs, and neither `processEvent` nor the drain runs them a second time.
  *
  * Real DB (rolled back per test), real producers, outbox, drain, job runner
- * and handlers. Only the five reaction entry points are mocked, so every call
+ * and handlers. Only the six reaction entry points are mocked, so every call
  * below is recorded with the arguments it received.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
@@ -41,6 +41,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 const reactions = vi.hoisted(() => ({
   recordSlaFromEvent: vi.fn(async (_event: unknown) => {}),
   autoReopenPairTicketFromEvent: vi.fn(async (_event: unknown) => {}),
+  emitPairTicketRepliedFromEvent: vi.fn(async (_event: unknown) => {}),
   confirmResolutionFromCsat: vi.fn(
     async (_conversationId: unknown, _rating: unknown, _submittedAt: unknown) => {}
   ),
@@ -55,6 +56,7 @@ vi.mock('@/lib/server/domains/sla/sla.event-hooks', () => ({
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.event-hooks', () => ({
   autoReopenPairTicketFromEvent: reactions.autoReopenPairTicketFromEvent,
+  emitPairTicketRepliedFromEvent: reactions.emitPairTicketRepliedFromEvent,
 }))
 vi.mock('@/lib/server/domains/assistant/assistant.involvement', async (importOriginal) => ({
   ...(await importOriginal<
@@ -502,6 +504,7 @@ describe.skipIf(!fixture.available)('event reactions (real DB, rolled back)', ()
 
     expect(reactions.recordSlaFromEvent).toHaveBeenCalledTimes(1)
     expect(reactions.autoReopenPairTicketFromEvent).toHaveBeenCalledTimes(1)
+    expect(reactions.emitPairTicketRepliedFromEvent).toHaveBeenCalledTimes(1)
   })
 
   it('a job whose event row is gone is a no-op', async () => {
@@ -598,6 +601,7 @@ describe.skipIf(!fixture.available)('event reactions (real DB, rolled back)', ()
       expected: {
         recordSlaFromEvent: slaSaw('message.created'),
         autoReopenPairTicketFromEvent: slaSaw('message.created'),
+        emitPairTicketRepliedFromEvent: slaSaw('message.created'),
       },
     },
   ]
