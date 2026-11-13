@@ -526,6 +526,30 @@ async function buildNotificationConfig(
 // Mention Targets
 // ============================================================================
 
+/**
+ * The mentioning principal's current display name, or the actor's name when
+ * the event still carries one (an in-process emission). Null when neither is
+ * known; the bell and the email then fall back to their own wording.
+ */
+async function mentionerNameOf(
+  mentioningPrincipalId: string | undefined,
+  actor: EventActor
+): Promise<string | null> {
+  if (mentioningPrincipalId) {
+    const [row] = await db
+      .select({ displayName: principal.displayName, userName: user.name })
+      .from(principal)
+      .leftJoin(user, eq(user.id, principal.userId))
+      .where(eq(principal.id, mentioningPrincipalId as PrincipalId))
+      .limit(1)
+    const name = row?.displayName?.trim() || row?.userName?.trim()
+    if (name) return name
+  }
+  // A relayed service actor's displayName is the event source ('api', 'mcp'),
+  // not a name, so only a user actor's name is used.
+  return (actor.type === 'user' && actor.displayName?.trim()) || null
+}
+
 /** Principal roles that are eligible to receive mention notifications */
 const MENTION_ELIGIBLE_ROLES = new Set(['admin', 'member', 'user'])
 
@@ -602,6 +626,11 @@ export async function getMentionTargets(
   ])
   if (allowedIds.length === 0) return []
 
+  // Who mentioned them, for the bell and the email. The event the outbox
+  // relays keeps the actor's type and id but not their name
+  // (to-legacy-event.ts), so it is read from the mentioning principal.
+  const mentionerName = await mentionerNameOf(event.data.mentioningPrincipalId, event.actor)
+
   const targets: HookTarget[] = []
 
   targets.push({
@@ -612,6 +641,7 @@ export async function getMentionTargets(
       postTitle,
       postUrl,
       eventType: 'post.mentioned',
+      mentionerName,
     },
   })
 
@@ -644,6 +674,7 @@ export async function getMentionTargets(
           logoUrl: context.logoUrl ?? undefined,
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           eventType: 'post.mentioned',
+          mentionerName,
         })
       )
     }
