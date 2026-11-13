@@ -124,6 +124,6 @@ export const getConversationTicketLinkFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(ctx)
-    const { getLinkedCustomerTicket } = await import('@/lib/server/domains/inbox/inbox.query')
-    return getLinkedCustomerTicket(data.conversationId as ConversationId, actor)
+    const { getConversationTicketLink } = await import('@/lib/server/domains/inbox/inbox.query')
+    return getConversationTicketLink(data.conversationId as ConversationId, actor)
   })

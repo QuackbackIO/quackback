@@ -39,7 +39,7 @@ import type {
 import { requireAuth, policyActorFromAuth, assertPermission } from './auth-helpers'
 import { HexColorFormatSchema, PageLimitMinOneSchema } from '@/lib/shared/schemas/taxonomy'
 import type { ConversationAttachment } from '@/lib/shared/db-types'
-import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
+import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { conversationIdSchema } from '@/lib/server/domains/assistant/conversation-id.schema'
 import {
   ticketAttachmentSchema,
@@ -183,9 +183,11 @@ export const createTicketFn = createServerFn({ method: 'POST' })
     // because the agent dialog renders the type's full field set. Without a
     // type the legacy passthrough stands.
     let customAttributes = data.customAttributes
+    let category = data.type ?? 'customer'
     if (ticketTypeId) {
       const svc = await import('@/lib/server/domains/tickets/ticket-type.service')
       const type = await svc.getTicketType(ticketTypeId)
+      category = type.category
       const result = validateTicketIntakeValues(type.fields, customAttributes ?? {}, {
         includeInternal: true,
       })
@@ -196,6 +198,20 @@ export const createTicketFn = createServerFn({ method: 'POST' })
         )
       }
       customAttributes = Object.keys(result.values).length > 0 ? result.values : undefined
+    }
+
+    // A conversation has at most one customer ticket. Refuse up front, before
+    // a ticket exists, when it already has one, also one the caller cannot
+    // open: the link step would refuse it and leave the new ticket orphaned.
+    if (
+      category === 'customer' &&
+      data.conversationId &&
+      isValidTypeId(data.conversationId, 'conversation')
+    ) {
+      const { hasCustomerTicketPair } = await import('@/lib/server/domains/inbox/inbox.query')
+      if (await hasCustomerTicketPair(data.conversationId as ConversationId)) {
+        throw new ConflictError('ALREADY_LINKED', 'This conversation already has a linked ticket')
+      }
     }
 
     const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')

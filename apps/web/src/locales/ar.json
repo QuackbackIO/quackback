@@ -188,6 +188,7 @@
   "files.upload.error.blocked": "لا يمكن إرسال هذا النوع من الملفات",
   "files.upload.error.rateLimited": "عدد كبير جدًا من التحميلات. يرجى المحاولة مرة أخرى بعد دقيقة.",
   "admin.inbox.filesSectionTitle": "الملفات",
+  "admin.inbox.linkedTicketHidden": "تذكرة مرتبطة لا يمكنك فتحها",
   "admin.inbox.translationOverAllowance": "تم استهلاك استخدام الذكاء الاصطناعي لهذه الفترة. تستمر الترجمة في العمل. قم بترقية خطتك للحصول على المزيد.",
   "admin.helpCenter.autoTranslatePaused": "متوقف مؤقتًا: تم استهلاك استخدام الذكاء الاصطناعي لهذه الفترة. قم بترقية خطتك للحصول على المزيد.",
   "admin.billing.aiResets": "يُعاد التعيين في {date}",

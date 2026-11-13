@@ -111,6 +111,7 @@ import {
   PERMISSIONS,
 } from '@/lib/server/db'
 import {
+  createTicketFn,
   exportTicketTranscriptFn,
   fetchTicketExternalLinksFn,
   getTicketFn,
@@ -229,7 +230,10 @@ describe('ticket reads check visibility (real DB, rolled back)', () => {
   const byTicket: [string, (ticketId: TicketId) => Promise<unknown>][] = [
     ['getTicketFn', (ticketId) => getTicketFn({ data: { ticketId } })],
     ['getTicketLinksFn', (ticketId) => getTicketLinksFn({ data: { ticketId } })],
-    ['fetchTicketExternalLinksFn', (ticketId) => fetchTicketExternalLinksFn({ data: { ticketId } })],
+    [
+      'fetchTicketExternalLinksFn',
+      (ticketId) => fetchTicketExternalLinksFn({ data: { ticketId } }),
+    ],
     [
       'getTicketProvenanceConversationsFn',
       (ticketId) => getTicketProvenanceConversationsFn({ data: { ticketId } }),
@@ -238,13 +242,16 @@ describe('ticket reads check visibility (real DB, rolled back)', () => {
     ['exportTicketTranscriptFn', (ticketId) => exportTicketTranscriptFn({ data: { ticketId } })],
   ]
 
-  it.each(byTicket)('%s: NotFound for a hidden ticket, a result for a visible one', async (_, read) => {
-    const w = await seedWorld()
-    const hidden = await w.ticket(w.teamY)
-    const visible = await w.ticket(w.teamX)
-    await expect(read(hidden)).rejects.toMatchObject(TICKET_NOT_FOUND)
-    await expect(read(visible)).resolves.toBeTruthy()
-  })
+  it.each(byTicket)(
+    '%s: NotFound for a hidden ticket, a result for a visible one',
+    async (_, read) => {
+      const w = await seedWorld()
+      const hidden = await w.ticket(w.teamY)
+      const visible = await w.ticket(w.teamX)
+      await expect(read(hidden)).rejects.toMatchObject(TICKET_NOT_FOUND)
+      await expect(read(visible)).resolves.toBeTruthy()
+    }
+  )
 
   it('listTicketMessagesFn returns the thread of a visible ticket', async () => {
     const w = await seedWorld()
@@ -272,25 +279,53 @@ describe('ticket reads check visibility (real DB, rolled back)', () => {
   })
 
   describe('the paired ticket summary on a conversation', () => {
-    it('is absent for a hidden paired ticket on the ticket pill read', async () => {
+    it('says only that a hidden paired ticket exists on the ticket pill read', async () => {
       const w = await seedWorld()
       const hidden = await w.pair(w.teamY)
       const visible = await w.pair(w.teamX)
       expect(
         await getConversationTicketLinkFn({ data: { conversationId: hidden.conversationId } })
-      ).toBeNull()
+      ).toEqual({ hidden: true })
       expect(
         await getConversationTicketLinkFn({ data: { conversationId: visible.conversationId } })
       ).toMatchObject({ id: visible.ticketId })
     })
 
-    it('is absent for a role without a ticket key, even for a ticket of its own team', async () => {
+    it('says only that a ticket exists to a role without a ticket key', async () => {
       const w = await seedWorld()
       const visible = await w.pair(w.teamX)
       session.actor = { ...w.actor, permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]) }
       expect(
         await getConversationTicketLinkFn({ data: { conversationId: visible.conversationId } })
-      ).toBeNull()
+      ).toEqual({ hidden: true })
+    })
+
+    it('is null for a conversation with no paired ticket', async () => {
+      const w = await seedWorld()
+      const conversationId = createId('conversation') as ConversationId
+      await testDb.insert(conversations).values({
+        id: conversationId,
+        visitorPrincipalId: w.visitor,
+        channel: 'messenger',
+        assignedTeamId: w.teamX,
+      })
+      expect(await getConversationTicketLinkFn({ data: { conversationId } })).toBeNull()
+    })
+
+    it('refuses to create a second customer ticket for a conversation whose pair is hidden', async () => {
+      const w = await seedWorld()
+      const hidden = await w.pair(w.teamY)
+      session.actor = {
+        ...w.actor,
+        permissions: new Set([...SCOPED_PERMISSIONS, PERMISSIONS.TICKET_CREATE]),
+      }
+      const before = await testDb.select({ id: tickets.id }).from(tickets)
+      await expect(
+        createTicketFn({
+          data: { type: 'customer', title: 'Acme again', conversationId: hidden.conversationId },
+        })
+      ).rejects.toMatchObject({ code: 'ALREADY_LINKED', statusCode: 409 })
+      expect(await testDb.select({ id: tickets.id }).from(tickets)).toHaveLength(before.length)
     })
 
     it('is absent from the conversation panels for a hidden paired ticket', async () => {
@@ -310,7 +345,7 @@ describe('ticket reads check visibility (real DB, rolled back)', () => {
         return loadAgentConversationPanels(conversation, ['ticketLink', 'linkedTicket'], caller)
       }
       const hiddenPanels = await load(hidden.conversationId)
-      expect(hiddenPanels.ticketLink ?? null).toBeNull()
+      expect(hiddenPanels.ticketLink).toEqual({ hidden: true })
       expect(hiddenPanels.linkedTicket ?? null).toBeNull()
       const visiblePanels = await load(visible.conversationId)
       expect(visiblePanels.ticketLink).toMatchObject({ id: visible.ticketId })
@@ -418,7 +453,7 @@ describe('ticket reads check visibility (real DB, rolled back)', () => {
   })
 
   describe('ticket embeds', () => {
-    it('is unavailable to a teammate outside the ticket\'s team, and resolves inside it', async () => {
+    it("is unavailable to a teammate outside the ticket's team, and resolves inside it", async () => {
       const w = await seedWorld()
       const hidden = await w.ticket(w.teamY)
       const visible = await w.ticket(w.teamX)
@@ -426,7 +461,7 @@ describe('ticket reads check visibility (real DB, rolled back)', () => {
       expect(await getTicketEmbedForViewer(visible, w.actor)).toMatchObject({ id: visible })
     })
 
-    it('still resolves for the ticket\'s own requester', async () => {
+    it("still resolves for the ticket's own requester", async () => {
       const w = await seedWorld()
       const hidden = await w.ticket(w.teamY)
       const requester: Actor = {

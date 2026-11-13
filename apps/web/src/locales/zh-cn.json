@@ -188,6 +188,7 @@
   "files.upload.error.blocked": "无法发送此类型的文件",
   "files.upload.error.rateLimited": "上传次数过多。请一分钟后重试。",
   "admin.inbox.filesSectionTitle": "文件",
+  "admin.inbox.linkedTicketHidden": "无法打开的关联工单",
   "admin.inbox.translationOverAllowance": "本周期的 AI 用量已用完，翻译仍可继续使用。升级套餐即可获得更多。",
   "admin.helpCenter.autoTranslatePaused": "已暂停：本周期的 AI 用量已用完。升级套餐即可获得更多。",
   "admin.billing.aiResets": "{date} 重置",
