@@ -371,11 +371,12 @@ export async function backfillWorkDone(): Promise<boolean> {
 }
 
 /**
- * Workspaces this process has seen with every backfill done, keyed by the
- * registry they were checked against. Done markers do not come back unset, so
+ * What this process knows about each workspace's backfills: the registry it
+ * last saw every backfill done for. Done markers do not come back unset, so
  * the gate stops reading kv once a workspace is done.
  */
-const backfillsDoneSeen = new WorkspaceKeyedCache<true>(10_000)
+const backfillState = new WorkspaceKeyedCache<{ doneFor?: string }>(10_000)
+const STATE_KEY = 'state'
 
 function registryKey(): string {
   return registeredBackfills()
@@ -390,8 +391,9 @@ function registryKey(): string {
 export async function startupBackfillDue(): Promise<boolean> {
   if (registeredBackfills().length === 0) return false
   const key = registryKey()
-  if (backfillsDoneSeen.get(key)) return false
+  const state = backfillState.memo(STATE_KEY, () => ({}))
+  if (state.doneFor === key) return false
   const done = await backfillWorkDone()
-  if (done) backfillsDoneSeen.set(key, true)
+  if (done) state.doneFor = key
   return !done
 }

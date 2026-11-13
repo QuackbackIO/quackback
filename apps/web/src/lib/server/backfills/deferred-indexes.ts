@@ -64,26 +64,31 @@ export function __setDeferredIndexSpecsForTests(
   overrides = specs
 }
 
-/**
- * Workspaces this worker process has made its first pass for. That pass starts
- * every failing index's round count again: it is how a restart retries.
- */
-const passedThisProcess = new WorkspaceKeyedCache<true>(10_000)
-/** Indexes this process has already warned about, per workspace, so the warning is said once. */
-const stopWarned = new WorkspaceKeyedCache<true>(10_000)
+/** What this worker process knows about one workspace's background indexes. */
+interface IndexPassState {
+  /**
+   * This process has made its first pass. That pass starts every failing
+   * index's round count again: it is how a restart retries.
+   */
+  passed: boolean
+  /** Stopped indexes already warned about, so the warning is said once. */
+  warned: Set<string>
+  /**
+   * The index list this process last saw fully built. The gate then stops
+   * reading the catalogue each tick; a worker restart checks again.
+   */
+  allBuiltFor?: string
+}
 
-/**
- * Workspaces this process has seen with every background index built, keyed by
- * the list it checked. The gate then stops reading the catalogue each tick; a
- * worker restart checks again.
- */
-const allBuiltSeen = new WorkspaceKeyedCache<true>(10_000)
+const indexPassState = new WorkspaceKeyedCache<IndexPassState>(10_000)
+
+function passState(): IndexPassState {
+  return indexPassState.memo('state', () => ({ passed: false, warned: new Set() }))
+}
 
 /** Test seam: behave as a freshly started worker process. */
 export function __resetDeferredIndexPassesForTests(): void {
-  passedThisProcess.clear()
-  stopWarned.clear()
-  allBuiltSeen.clear()
+  indexPassState.clear()
 }
 
 function indexKeys(index: string) {
@@ -129,7 +134,8 @@ async function enqueueBuild(index: string, gen: number, rounds: number): Promise
  */
 export async function enqueueDeferredIndexBuilds(now = Date.now()): Promise<number> {
   const pending = await pendingDeferredIndexes()
-  const firstPass = !passedThisProcess.get('passed')
+  const state = passState()
+  const firstPass = !state.passed
   let written = 0
   for (const spec of pending) {
     const keys = indexKeys(spec.name)
@@ -148,8 +154,8 @@ export async function enqueueDeferredIndexBuilds(now = Date.now()): Promise<numb
     }
     const rounds = (await kvGet<number>(keys.rounds)) ?? gen
     if (rounds >= MAX_INDEX_BUILD_ROUNDS) {
-      if (!stopWarned.get(spec.name)) {
-        stopWarned.set(spec.name, true)
+      if (!state.warned.has(spec.name)) {
+        state.warned.add(spec.name)
         log.warn(
           { event: 'deferred_index.stopped', index: spec.name, rounds },
           'background index build failed every round and is stopped; restart the worker to try again'
@@ -161,7 +167,7 @@ export async function enqueueDeferredIndexBuilds(now = Date.now()): Promise<numb
     if (finishedAt && now - finishedAt.getTime() < INDEX_BUILD_COOL_OFF_MS) continue
     if (await enqueueBuild(spec.name, gen + 1, rounds + 1)) written += 1
   }
-  passedThisProcess.set('passed', true)
+  state.passed = true
   if (written > 0) {
     log.info(
       { event: 'deferred_index.enqueued', rows: written },
@@ -181,17 +187,18 @@ export async function deferredIndexBuildDue(): Promise<boolean> {
   const specs = deferredIndexSpecs()
   if (specs.length === 0) return false
   const listKey = specs.map((s) => s.name).join(',')
-  if (allBuiltSeen.get(listKey)) return false
+  const state = passState()
+  if (state.allBuiltFor === listKey) return false
   const pending = await pendingDeferredIndexes()
   if (pending.length === 0) {
-    allBuiltSeen.set(listKey, true)
+    state.allBuiltFor = listKey
     return false
   }
-  if (!passedThisProcess.get('passed')) return true
+  if (!state.passed) return true
   for (const spec of pending) {
     const rounds = (await kvGet<number>(indexKeys(spec.name).rounds)) ?? 0
     // A stopped index keeps the gate open until the pass has said so once.
-    if (rounds < MAX_INDEX_BUILD_ROUNDS || !stopWarned.get(spec.name)) return true
+    if (rounds < MAX_INDEX_BUILD_ROUNDS || !state.warned.has(spec.name)) return true
   }
   return false
 }

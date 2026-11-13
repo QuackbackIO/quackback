@@ -1426,11 +1426,11 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/backfills/batched.ts',
-    name: 'backfillsDoneSeen',
+    name: 'backfillState',
     category: 'workspace-keyed',
     reason:
-      'Workspaces this process has seen with every startup backfill done, keyed by the registry. ' +
-      'A cross-workspace hit would shut the startup-backfill schedule for a workspace whose ' +
+      'The registry this process last saw every startup backfill done for, per workspace. A ' +
+      'cross-workspace hit would shut the startup-backfill schedule for a workspace whose ' +
       'backfills have not finished.',
   },
   {
@@ -1461,28 +1461,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/backfills/deferred-indexes.ts',
-    name: 'passedThisProcess',
+    name: 'indexPassState',
     category: 'workspace-keyed',
     reason:
-      'Workspaces this worker process has made its first background index pass for; that pass ' +
-      'starts every failing build again, which is how a restart retries. A cross-workspace hit ' +
-      'would skip that restart retry for a workspace that never had it.',
-  },
-  {
-    file: 'apps/web/src/lib/server/backfills/deferred-indexes.ts',
-    name: 'stopWarned',
-    category: 'workspace-keyed',
-    reason:
-      'Background indexes this process has already warned about as stopped, per workspace, so the ' +
-      'warning is logged once. A cross-workspace hit would drop the warning for another workspace.',
-  },
-  {
-    file: 'apps/web/src/lib/server/backfills/deferred-indexes.ts',
-    name: 'allBuiltSeen',
-    category: 'workspace-keyed',
-    reason:
-      'Workspaces this process has seen with every background index built, keyed by the index ' +
-      'list. A cross-workspace hit would shut the deferred-index-build schedule for a workspace ' +
-      'whose indexes are still missing.',
+      "What this worker process knows about one workspace's background indexes: whether it has " +
+      'made its first pass (which is how a restart retries a stopped build), which stopped builds ' +
+      'it has warned about, and the list it last saw fully built. A cross-workspace hit would skip ' +
+      'a restart retry, drop a warning, or shut the build schedule for a workspace whose indexes ' +
+      'are still missing.',
   },
 ]
