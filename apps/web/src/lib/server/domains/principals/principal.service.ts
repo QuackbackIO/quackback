@@ -103,10 +103,8 @@ export function teamMemberWhere() {
 /**
  * List all team members with user details
  *
- * `lastSignInAt` is computed as `max(session.created_at)` per user
- * via a left-join subquery so the admin team list can show a
- * "last sign-in" column without a second round-trip. Users with no
- * sessions show `null` (never signed in or all sessions pruned).
+ * The latest surviving session or recorded SSO sign-in, whichever is newer.
+ * Keep SSO sign-ins visible after their sessions have been pruned.
  */
 export async function listTeamMembers(): Promise<TeamMember[]> {
   try {
@@ -131,7 +129,9 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
         imageKey: user.imageKey,
         role: principal.role,
         createdAt: principal.createdAt,
-        lastSignInAt: sql<Date | string | null>`${lastSession.lastSignInAt}`,
+        lastSignInAt: sql<
+          Date | string | null
+        >`greatest(${lastSession.lastSignInAt}, ${principal.lastSsoSignInAt})`,
       })
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
