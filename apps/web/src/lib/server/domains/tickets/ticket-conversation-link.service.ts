@@ -180,7 +180,18 @@ export async function linkTicketToConversation(
   // on, and a value an older build stamped from a status change is replaced.
   // A provenance link reads only the ticket's own thread, so this changes
   // nothing on one.
-  if (isPair) await syncTicketFirstResponse(ticketId)
+  if (isPair) {
+    // Best-effort, like the announcement and the SLA handoff below: the link
+    // landed, and the next message or the follow-up pass corrects the value.
+    try {
+      await syncTicketFirstResponse(ticketId)
+    } catch (err) {
+      log.warn(
+        { err, ticket_id: ticketId, conversation_id: conversationId },
+        'ticket first response recompute after a link failed'
+      )
+    }
+  }
 
   // Best-effort announcement: the link itself already landed, so a failure
   // here (e.g. the conversation was deleted a moment later) must not surface

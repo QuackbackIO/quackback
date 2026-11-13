@@ -16,8 +16,10 @@
  * The second: any `message.created` or `message.deleted` on a conversation
  * paired with a customer ticket recomputes that ticket's first response from
  * the pair's message rows (ticket-first-response.ts). It reads the rows, not
- * the event, so it is idempotent and safe to run late, twice or out of order,
- * and it lets its errors propagate so the reaction job retries it.
+ * the event, so it is idempotent and safe to run late, twice or out of order.
+ * It swallows its own errors, so it never fails the shared reaction job: the
+ * next message on the conversation, or the follow-up pass, corrects a value it
+ * missed.
  *
  * LOOP SAFETY: the reopen emits `ticket.status_changed`, never
  * `message.created` (system stage notices — re-parented to the conversation or
@@ -67,9 +69,17 @@ export async function autoReopenPairTicketFromEvent(event: EventData): Promise<v
 /**
  * Recompute the first response of the customer ticket paired with the
  * message's conversation, if any. Does nothing for a conversation with no
- * paired ticket. Errors propagate: the reaction job retries.
+ * paired ticket. Best-effort: an error is logged, never thrown.
  */
 export async function recomputePairTicketFirstResponseFromEvent(event: EventData): Promise<void> {
   if (event.type !== 'message.created' && event.type !== 'message.deleted') return
-  await syncPairTicketFirstResponse(event.data.message.conversationId as ConversationId)
+  const conversationId = event.data.message.conversationId as ConversationId
+  try {
+    await syncPairTicketFirstResponse(conversationId)
+  } catch (err) {
+    log.warn(
+      { err, eventType: event.type, conversation_id: conversationId },
+      'ticket first response reaction failed'
+    )
+  }
 }
