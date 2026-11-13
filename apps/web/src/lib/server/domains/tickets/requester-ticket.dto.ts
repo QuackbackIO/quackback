@@ -6,6 +6,8 @@
  */
 import {
   db,
+  eq,
+  or,
   inArray,
   isNotNull,
   sql,
@@ -30,31 +32,35 @@ export interface RequesterTicketDTOContext extends TicketDTOContext {
 }
 
 /**
- * The ids of statuses that show the customer a stage (a non-null
- * `publicStage`). Archived statuses are included: a past move into one was
- * visible to the customer when it happened.
+ * The ids of statuses a customer sees a move into: any status with a customer
+ * stage (a non-null `publicStage`), and any closed-category status, which the
+ * customer sees as "Closed" even without a stage (see `stageFor`). Archived
+ * statuses are included: a past move into one was visible when it happened.
  */
-export async function loadStagedStatusIds(): Promise<TicketStatusId[]> {
+export async function loadCustomerVisibleStatusIds(): Promise<TicketStatusId[]> {
   const rows = await db
     .select({ id: ticketStatuses.id })
     .from(ticketStatuses)
-    .where(isNotNull(ticketStatuses.publicStage))
+    .where(or(isNotNull(ticketStatuses.publicStage), eq(ticketStatuses.category, 'closed')))
   return rows.map((r) => r.id)
 }
 
 /**
  * The last change a requester can see on a ticket, as one SQL expression over
- * the outer `tickets` row. First non-null of:
+ * the outer `tickets` row: the LATEST of
  *
  * 1. the newest message on the ticket's thread (the ticket's own rows and its
  *    pair conversation's rows) that is public, not deleted and not a system
  *    line. Internal notes are excluded, and so are system lines such as the
  *    pair conversation's "assigned to" notice;
  * 2. the newest status move (`status.changed` or `ticket.reopened`) into a
- *    status in `stagedStatusIds`. Activity rows hold status ids as app ids in
- *    their metadata, so the staged set is read first (`loadStagedStatusIds`)
- *    and bound here;
+ *    status in `visibleStatusIds`. Activity rows hold status ids as app ids
+ *    (TypeIDs) in their metadata, which SQL cannot compare with the uuid
+ *    column, so the set is read first (`loadCustomerVisibleStatusIds`) and
+ *    bound here;
  * 3. the ticket's `createdAt`.
+ *
+ * Postgres GREATEST skips nulls, so a missing arm never hides the others.
  *
  * `tickets.updated_at` is never read: internal notes, assignment and priority
  * changes move it. Each arm is a `LIMIT 1` subquery on an existing
@@ -62,7 +68,7 @@ export async function loadStagedStatusIds(): Promise<TicketStatusId[]> {
  * is named in full, so the expression reads the same in a single-table select
  * list (where Drizzle drops column prefixes) and in an ORDER BY.
  */
-export function requesterUpdatedAtSql(stagedStatusIds: readonly TicketStatusId[]): SQL<Date> {
+export function requesterUpdatedAtSql(visibleStatusIds: readonly TicketStatusId[]): SQL<Date> {
   const ticketId = sql.raw('"tickets"."id"')
   const customerVisible = sql.raw(
     "m.is_internal = false AND m.deleted_at IS NULL AND m.sender_type <> 'system'"
@@ -71,25 +77,23 @@ export function requesterUpdatedAtSql(stagedStatusIds: readonly TicketStatusId[]
     STATUS_MOVES.map((t) => sql`${t}`),
     sql`, `
   )
-  const intoStagedStatus =
-    stagedStatusIds.length > 0
+  const intoVisibleStatus =
+    visibleStatusIds.length > 0
       ? sql`a.metadata->>'toId' IN (${sql.join(
-          stagedStatusIds.map((id) => sql`${id}`),
+          visibleStatusIds.map((id) => sql`${id}`),
           sql`, `
         )})`
       : sql`false`
-  return sql<Date>`COALESCE(
-    GREATEST(
-      (SELECT m.created_at FROM conversation_messages m
-        WHERE m.ticket_id = ${ticketId} AND ${customerVisible}
-        ORDER BY m.created_at DESC LIMIT 1),
-      (SELECT m.created_at FROM ticket_conversations tc
-        JOIN conversation_messages m ON m.conversation_id = tc.conversation_id
-        WHERE tc.ticket_id = ${ticketId} AND tc.ticket_type = 'customer' AND ${customerVisible}
-        ORDER BY m.created_at DESC LIMIT 1)
-    ),
+  return sql<Date>`GREATEST(
+    (SELECT m.created_at FROM conversation_messages m
+      WHERE m.ticket_id = ${ticketId} AND ${customerVisible}
+      ORDER BY m.created_at DESC LIMIT 1),
+    (SELECT m.created_at FROM ticket_conversations tc
+      JOIN conversation_messages m ON m.conversation_id = tc.conversation_id
+      WHERE tc.ticket_id = ${ticketId} AND tc.ticket_type = 'customer' AND ${customerVisible}
+      ORDER BY m.created_at DESC LIMIT 1),
     (SELECT a.created_at FROM ticket_activity a
-      WHERE a.ticket_id = ${ticketId} AND a.type IN (${moveTypes}) AND ${intoStagedStatus}
+      WHERE a.ticket_id = ${ticketId} AND a.type IN (${moveTypes}) AND ${intoVisibleStatus}
       ORDER BY a.created_at DESC LIMIT 1),
     ${sql.raw('"tickets"."created_at"')}
   )`.mapWith(tickets.createdAt)
@@ -107,7 +111,7 @@ export async function buildRequesterTicketContext(
 async function readRequesterUpdatedAt(rows: Ticket[]): Promise<Map<TicketId, Date>> {
   const requesterUpdatedAt = new Map<TicketId, Date>()
   if (rows.length === 0) return requesterUpdatedAt
-  const updatedAt = requesterUpdatedAtSql(await loadStagedStatusIds())
+  const updatedAt = requesterUpdatedAtSql(await loadCustomerVisibleStatusIds())
   const times = await db
     .select({ id: tickets.id, at: updatedAt })
     .from(tickets)
@@ -127,14 +131,15 @@ async function readRequesterUpdatedAt(rows: Ticket[]): Promise<Map<TicketId, Dat
  * share the jsonb column, internal fields and keys no field defines are left
  * out. A `{ v, src, at }` envelope is an attribute write, not the customer's
  * intake answer, so it is left out too, even under a visible field's key (the
- * two share one jsonb column and their keys can collide). A typeless ticket,
- * or one whose type is archived or gone, has no customer-visible answers.
+ * two share one jsonb column and their keys can collide). An archived type
+ * still defines its fields, so its visible answers keep showing; a typeless
+ * ticket, or one whose type row is gone, has no customer-visible answers.
  */
 function customerVisibleAnswers(
   row: Ticket,
   type: TicketTypeEntity | undefined
 ): Record<string, JsonValue> {
-  if (!type || type.deletedAt) return {}
+  if (!type) return {}
   const stored = (row.customAttributes as Record<string, JsonValue> | null) ?? {}
   const answers: Record<string, JsonValue> = {}
   for (const field of type.fields) {

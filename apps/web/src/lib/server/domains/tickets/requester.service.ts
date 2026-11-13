@@ -32,7 +32,7 @@ import { loadTicketOr404, createTicketCore, autoReopenOnRequesterReply } from '.
 import { emitTicketReplied } from './ticket.webhooks'
 import {
   buildRequesterTicketContext,
-  loadStagedStatusIds,
+  loadCustomerVisibleStatusIds,
   requesterUpdatedAtSql,
   toRequesterTicketDTO,
 } from './requester-ticket.dto'
@@ -247,7 +247,7 @@ export interface MyTicketSummary {
 export async function listMyTicketSummaries(
   requesterPrincipalId: PrincipalId
 ): Promise<MyTicketSummary[]> {
-  const updatedAt = requesterUpdatedAtSql(await loadStagedStatusIds())
+  const updatedAt = requesterUpdatedAtSql(await loadCustomerVisibleStatusIds())
   const rows = await db
     .select({
       ticketId: tickets.id,
