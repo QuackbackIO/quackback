@@ -107,9 +107,8 @@ export function reactionQueuesFor(type: string): ReactionQueue[] {
  * that throws then fails the job, which retries the event's reactions on that
  * queue: they are idempotent against a repeat of the same event. The SLA
  * reaction throws on purpose, so a transient fault in a recorder is retried
- * rather than lost, and so does the ticket first-response recompute (it reads
- * the message rows, so a retry is safe). The pair-ticket reopen, the CSAT
- * confirm and the summaries are best-effort: they log and swallow their own errors, so only the events
+ * rather than lost. The pair-ticket reopen, the ticket first-response
+ * recompute, the CSAT confirm and the summaries are best-effort: they log and swallow their own errors, so only the events
  * read and the deadline below fail their jobs.
  *
  * The reactions share a deadline (REACTION_DEADLINE_MS). Past it the job fails
