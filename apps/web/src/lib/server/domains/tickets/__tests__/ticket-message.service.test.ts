@@ -2,8 +2,9 @@
  * Real-DB coverage for the ticket thread message service (support platform §4.2,
  * wave 7C.1). Runs inside the db-test-fixture rollback transaction; the global
  * `db` is mocked to the fixture transaction so the service writes land in the
- * rolled-back tx. Asserts the agent-reply vs internal-note split, the
- * first_response_at stamp semantics, and the list ordering + internal gating.
+ * rolled-back tx. Asserts the agent-reply vs internal-note split, that a reply
+ * works out first_response_at in its own transaction, and the list ordering +
+ * internal gating.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import {
@@ -35,6 +36,7 @@ import {
   conversationMessageReactions,
   conversationMessageFlags,
   principal,
+  settings,
   user,
   eq,
   PERMISSIONS,
@@ -89,6 +91,23 @@ async function seedTicketWithAgent() {
   return { ticketId, actor }
 }
 
+/** The customer's message, written an hour before the test's replies. */
+async function seedCustomerMessage(ticketId: TicketId): Promise<void> {
+  const userId = createId('user') as UserId
+  const customer = createId('principal') as PrincipalId
+  await testDb.insert(user).values({ id: userId, name: `C-${suffix()}` })
+  await testDb
+    .insert(principal)
+    .values({ id: customer, userId, role: 'user', type: 'user', createdAt: new Date() })
+  await testDb.insert(conversationMessages).values({
+    ticketId,
+    principalId: customer,
+    senderType: 'visitor',
+    content: 'help please',
+    createdAt: new Date(Date.now() - 3_600_000),
+  })
+}
+
 async function ticketFirstResponseAt(ticketId: TicketId): Promise<Date | null> {
   const [row] = await testDb
     .select({ at: tickets.firstResponseAt })
@@ -103,8 +122,11 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  it('an agent reply is a customer-visible ticket message that stamps first_response_at', async () => {
+  it("an agent reply to the customer's message is a customer-visible ticket message that sets first_response_at", async () => {
+    // The ticket_updated publish renders the ticket's stage labels.
+    await testDb.insert(settings).values({ name: 'Acme', slug: `acme_${suffix()}`, createdAt: new Date() })
     const { ticketId, actor } = await seedTicketWithAgent()
+    await seedCustomerMessage(ticketId)
     expect(await ticketFirstResponseAt(ticketId)).toBeNull()
 
     const { message } = await sendTicketMessage(actor, { ticketId, content: 'On it.' })
@@ -113,7 +135,18 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
     expect(message.conversationId).toBeNull()
     expect(message.isInternal).toBe(false)
     expect(message.senderType).toBe('agent')
-    expect(await ticketFirstResponseAt(ticketId)).not.toBeNull()
+    expect((await ticketFirstResponseAt(ticketId))?.toISOString()).toBe(message.createdAt)
+    // The change re-renders the ticket in open inboxes.
+    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+      ticketId,
+      expect.objectContaining({ kind: 'ticket_updated' })
+    )
+  })
+
+  it('an agent reply before the customer has written leaves first_response_at empty', async () => {
+    const { ticketId, actor } = await seedTicketWithAgent()
+    await sendTicketMessage(actor, { ticketId, content: 'Opening the ticket for you.' })
+    expect(await ticketFirstResponseAt(ticketId)).toBeNull()
   })
 
   it('publishes a ticket_message realtime event (unified inbox §3.2, M3)', async () => {
@@ -136,16 +169,19 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
     })
   })
 
-  it('first_response_at is stamped once, not on the second reply', async () => {
+  it('first_response_at is the first reply, not the second', async () => {
     const { ticketId, actor } = await seedTicketWithAgent()
+    await seedCustomerMessage(ticketId)
     await sendTicketMessage(actor, { ticketId, content: 'first' })
     const first = await ticketFirstResponseAt(ticketId)
+    expect(first).not.toBeNull()
     await sendTicketMessage(actor, { ticketId, content: 'second' })
     expect(await ticketFirstResponseAt(ticketId)).toEqual(first)
   })
 
-  it('an internal note is is_internal and does NOT stamp first_response_at', async () => {
+  it('an internal note is is_internal and does NOT set first_response_at', async () => {
     const { ticketId, actor } = await seedTicketWithAgent()
+    await seedCustomerMessage(ticketId)
     const { message } = await addTicketNote(actor, { ticketId, content: 'internal only' })
     expect(message.isInternal).toBe(true)
     expect(await ticketFirstResponseAt(ticketId)).toBeNull()

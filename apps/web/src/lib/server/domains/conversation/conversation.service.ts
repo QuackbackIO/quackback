@@ -1822,6 +1822,13 @@ export async function deleteConversationMessage(
       })
       .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
 
+    // This branch emits no message.deleted, so the ticket's first response is
+    // recomputed here: deleting the first reply moves it to the next one.
+    // Dynamically imported: this module imports nothing from the tickets domain.
+    const { syncTicketFirstResponse } =
+      await import('@/lib/server/domains/tickets/ticket-first-response')
+    await syncTicketFirstResponse(message.ticketId)
+
     // No realtime broadcast and no webhook here: ticket-thread update routing
     // (and its message.deleted webhook analogue) arrives with the customer
     // loop, mirroring message.actions.ts's identical deferral for ticket

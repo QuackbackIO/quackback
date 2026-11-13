@@ -29,6 +29,9 @@ import {
   boards,
   user,
   principal,
+  tickets,
+  ticketStatuses,
+  ticketConversations,
   eq,
 } from '@/lib/server/db'
 
@@ -52,6 +55,7 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
 
 import { ingestGitHubChannelEvent } from '../conversation.github-inbound'
 import { githubThreadKey } from '@/lib/server/domains/channels/github-thread'
+import { recomputeTicketFirstResponse } from '@/lib/server/domains/tickets/ticket-first-response'
 import {
   publishAgentConversationEvent,
   publishConversationMessage,
@@ -397,6 +401,72 @@ describe.skipIf(!fixture.available)('github channel ingest (real DB, rolled back
     expect(publishAgentConversationEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'message_deleted', messageId: deleted?.id })
     )
+  })
+
+  it("issue_comment.deleted of a teammate's delivered reply moves the paired ticket's first response", async () => {
+    const { integration } = await seedConnection()
+    const integrationRef = { id: integration.id as IntegrationId, config: integration.config }
+    await ingestGitHubChannelEvent({
+      body: JSON.stringify(issuePayload({})),
+      eventName: 'issues',
+      integration: integrationRef,
+    })
+    const [conversation] = await testDb.select().from(conversations)
+    // Two teammate replies delivered to GitHub, after the customer's issue.
+    const userId = createId('user') as UserId
+    const teammate = createId('principal') as PrincipalId
+    await testDb.insert(user).values({ id: userId, name: `Teammate ${suffix()}` })
+    await testDb
+      .insert(principal)
+      .values({ id: teammate, userId, role: 'member', type: 'user', createdAt: new Date() })
+    const firstAt = new Date(Date.now() + 60_000)
+    const secondAt = new Date(Date.now() + 120_000)
+    for (const [commentId, createdAt] of [
+      ['901', firstAt],
+      ['902', secondAt],
+    ] as const) {
+      await testDb.insert(conversationMessages).values({
+        conversationId: conversation.id,
+        principalId: teammate,
+        senderType: 'agent',
+        content: `reply ${commentId}`,
+        metadata: { githubCommentId: commentId },
+        createdAt,
+      })
+    }
+    // The conversation became a customer ticket.
+    const [status] = await testDb
+      .insert(ticketStatuses)
+      .values({ name: 'New', slug: `gh-${suffix()}` })
+      .returning()
+    const [ticket] = await testDb
+      .insert(tickets)
+      .values({ title: 'Widget is broken', statusId: status.id, type: 'customer' })
+      .returning()
+    await testDb
+      .insert(ticketConversations)
+      .values({ ticketId: ticket.id, conversationId: conversation.id, ticketType: 'customer' })
+    await recomputeTicketFirstResponse(ticket.id)
+    const readFirstResponse = async () =>
+      (await testDb.select().from(tickets).where(eq(tickets.id, ticket.id)))[0].firstResponseAt
+    expect(await readFirstResponse()).toEqual(firstAt)
+
+    for (const [commentId, expected] of [
+      ['901', secondAt],
+      ['902', null],
+    ] as const) {
+      await ingestGitHubChannelEvent({
+        body: JSON.stringify(
+          issuePayload({
+            action: 'deleted',
+            comment: { id: Number(commentId), login: 'acme-ops', body: 'gone' },
+          })
+        ),
+        eventName: 'issue_comment',
+        integration: integrationRef,
+      })
+      expect(await readFirstResponse()).toEqual(expected)
+    }
   })
 
   it('issue_comment.edited with no matching row does not create a conversation', async () => {

@@ -64,11 +64,9 @@ import {
   eq,
   ne,
   and,
-  asc,
   isNull,
   sql,
   conversations,
-  conversationMessages,
   ticketConversations,
   tickets,
   type Ticket,
@@ -85,6 +83,7 @@ import { logger } from '@/lib/server/logger'
 import { notTestTicket, notTestConversation } from '@/lib/server/test-data'
 import { loadSlaApplied } from '../sla/sla.service'
 import { applySlaToTicket } from '../sla/ticket-sla.service'
+import { syncTicketFirstResponse } from './ticket-first-response'
 
 const log = logger.child({ component: 'ticket-conversation-link' })
 
@@ -176,39 +175,12 @@ export async function linkTicketToConversation(
   // The pair rule keys off the ticket's own type; provenance links stay separate.
   const isPair = ticket.type === 'customer'
 
-  // CONVERGENCE PHASE 1a firstResponseAt rule (convergence-design.md,
-  // mechanics appendix "Write (Phase 1)"): when the ticket has no
-  // first_response_at yet and the conversation already carries an agent reply,
-  // backfill the ticket's column from the conversation's FIRST agent message —
-  // the response happened before the pair existed, and the ticket's timeline
-  // must not pretend otherwise. After the link, the conversation's
-  // first-response machinery owns the timeline (the Phase 1a write redirect
-  // never stamps the ticket's column). Internal notes don't count as a
-  // response, mirroring insertTicketMessage's stamp rule; senderType 'agent'
-  // includes Quinn's replies, matching the conversation SLA's own FRT settle.
-  // Pair-only: on a provenance link the conversation's replies answered the
-  // CUSTOMER, and an internal task's response clock is its own.
-  if (isPair && !ticket.firstResponseAt) {
-    const [firstAgentMessage] = await db
-      .select({ createdAt: conversationMessages.createdAt })
-      .from(conversationMessages)
-      .where(
-        and(
-          eq(conversationMessages.conversationId, conversationId),
-          eq(conversationMessages.senderType, 'agent'),
-          eq(conversationMessages.isInternal, false),
-          isNull(conversationMessages.deletedAt)
-        )
-      )
-      .orderBy(asc(conversationMessages.createdAt), asc(conversationMessages.id))
-      .limit(1)
-    if (firstAgentMessage) {
-      await db
-        .update(tickets)
-        .set({ firstResponseAt: firstAgentMessage.createdAt })
-        .where(eq(tickets.id, ticketId))
-    }
-  }
+  // The pair's first response is worked out from the messages of both
+  // threads, so a reply the conversation already holds counts from the link
+  // on, and a value an older build stamped from a status change is replaced.
+  // A provenance link reads only the ticket's own thread, so this changes
+  // nothing on one.
+  if (isPair) await syncTicketFirstResponse(ticketId)
 
   // Best-effort announcement: the link itself already landed, so a failure
   // here (e.g. the conversation was deleted a moment later) must not surface

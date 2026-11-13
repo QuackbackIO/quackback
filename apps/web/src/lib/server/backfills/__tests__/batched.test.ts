@@ -65,6 +65,12 @@ afterAll(async () => {
 describe('every registered backfill and follow-up', () => {
   it('passes its verify and keeps updated_at on the tickets it walks', async () => {
     const sample = sampleBackfill(named('sample'), { requiresMigration: NEWEST })
+    // A registered backfill keeps its own name, so a run before this one on
+    // the same database left its done marker; start each from scratch.
+    for (const entry of registeredBackfills()) {
+      names.push(entry.name)
+      await cleanupBackfill(entry.name)
+    }
     const entries: BatchedBackfill[] = [...registeredBackfills(), sample]
     __setBackfillsForTests(entries)
 

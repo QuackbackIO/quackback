@@ -261,7 +261,8 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
       // The description opens the thread. It is the requester's ask when they
       // file it themselves (senderType 'visitor'), or a teammate's summary when
       // filing on someone's behalf ('agent'). Either way it is the opening
-      // message, not a reply, so it never stamps first_response_at. PHASE 1b
+      // message, not a reply, so it is never a first response: only a reply
+      // after the customer's first message counts (ticket-first-response.ts). PHASE 1b
       // (3/3): skipped when the opening rides the redirect onto the backing
       // conversation instead (see below).
       const [opening] = await tx
@@ -344,8 +345,7 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
           {
             senderType: filedByRequester ? 'visitor' : 'agent',
             isInternal: false,
-            stampFirstResponse: false,
-            actor,
+                    actor,
           }
         )
       } catch (err) {

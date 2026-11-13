@@ -91,6 +91,13 @@ vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   assertTicketVisible: (...args: unknown[]) => mockAssertTicketVisible(...args),
 }))
 
+// The ticket branch emits no message.deleted, so it recomputes the ticket's
+// first response itself.
+const mockSyncTicketFirstResponse = vi.fn()
+vi.mock('@/lib/server/domains/tickets/ticket-first-response', () => ({
+  syncTicketFirstResponse: (...args: unknown[]) => mockSyncTicketFirstResponse(...args),
+}))
+
 import { deleteConversationMessage } from '../conversation.service'
 
 const agentActor: Actor = {
@@ -162,6 +169,7 @@ describe('deleteConversationMessage ticket branch', () => {
     messageRow = { ...ticketMessage }
     await deleteConversationMessage('conversation_msg_ticket' as ConversationMessageId, agentActor)
     expect(mockAssertTicketVisible).toHaveBeenCalledWith('ticket_1', agentActor)
+    expect(mockSyncTicketFirstResponse).toHaveBeenCalledWith('ticket_1')
     // Deferred: no realtime fan-out and no webhook for ticket-thread messages yet.
     expect(publishAgentConversationEvent).not.toHaveBeenCalled()
     expect(publishConversationEvent).not.toHaveBeenCalled()
