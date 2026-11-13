@@ -700,9 +700,9 @@ export async function verifySchemaPostconditions(
     (s) => s.name
   )
   const invalidNames = new Set(invalid.map((i) => i.name))
-  const pendingIndexes = deferredSpecs.filter(
-    (s) => !presentNames.has(s.name) || invalidNames.has(s.name)
-  ).map((s) => s.name)
+  const pendingIndexes = deferredSpecs
+    .filter((s) => !presentNames.has(s.name) || invalidNames.has(s.name))
+    .map((s) => s.name)
 
   const extRows = await sql.unsafe<{ extname: string }[]>(`SELECT extname FROM pg_extension`)
   const extensions = extRows.map((r) => r.extname).sort()

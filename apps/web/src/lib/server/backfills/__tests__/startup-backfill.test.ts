@@ -572,7 +572,6 @@ describe('the schedule gate', () => {
     }
   })
 
-
   it('is shut with nothing registered, open while work remains, and shut once all is done', async () => {
     __setBackfillsForTests([])
     expect(await startupBackfillDue()).toBe(false)

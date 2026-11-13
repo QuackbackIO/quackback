@@ -387,13 +387,21 @@ describe('the schedule gate', () => {
       await drainOnce(CONFIG)
       expect(await rowsOf(a.name)).toHaveLength(1)
       await drainAll()
-      if ((await indexState(a.name)) !== 'valid') throw new Error('DEBUG ' + JSON.stringify(await rowsOf(a.name)) + JSON.stringify(logLines.filter((l) => l.level !== 'debug').map((l) => [l.msg, String(l.fields.err ?? '')])))
+      if ((await indexState(a.name)) !== 'valid')
+        throw new Error(
+          'DEBUG ' +
+            JSON.stringify(await rowsOf(a.name)) +
+            JSON.stringify(
+              logLines
+                .filter((l) => l.level !== 'debug')
+                .map((l) => [l.msg, String(l.fields.err ?? '')])
+            )
+        )
       expect(await indexState(a.name)).toBe('valid')
     } finally {
       await testSql()`DELETE FROM job_queue WHERE queue = ${QUEUE} AND dedupe_key = ${key}`
     }
   })
-
 
   it('is shut with no background index, open while one is missing, and shut once built', async () => {
     __setDeferredIndexSpecsForTests([])
