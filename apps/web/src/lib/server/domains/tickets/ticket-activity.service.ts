@@ -63,19 +63,29 @@ export interface TicketActivityRow {
  * failed activity insert can never break the parent ticket operation.
  */
 export function recordTicketActivity(opts: RecordTicketActivityOpts): void {
-  db.insert(ticketActivity)
-    .values({
+  void recordTicketActivityAwaited(opts)
+}
+
+/**
+ * Record a ticket activity event and wait for the insert. Never throws: a
+ * failed insert is logged, exactly as in `recordTicketActivity`. For a caller
+ * whose next step reads the row back, such as the create-then-link step,
+ * which reads the creator from the `ticket.created` row.
+ */
+export async function recordTicketActivityAwaited(opts: RecordTicketActivityOpts): Promise<void> {
+  try {
+    await db.insert(ticketActivity).values({
       ticketId: opts.ticketId,
       principalId: opts.principalId,
       type: opts.type,
       metadata: opts.metadata ?? {},
     })
-    .catch((err) => {
-      log.error(
-        { activity_type: opts.type, ticket_id: opts.ticketId, err },
-        'failed to record ticket activity'
-      )
-    })
+  } catch (err) {
+    log.error(
+      { activity_type: opts.type, ticket_id: opts.ticketId, err },
+      'failed to record ticket activity'
+    )
+  }
 }
 
 // ============================================

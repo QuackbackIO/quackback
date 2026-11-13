@@ -16,7 +16,7 @@ import type { PermissionKey } from '@/lib/shared/permissions'
 import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { logger } from '@/lib/server/logger'
-import { loadTicketOr404 } from './ticket.service'
+import { assertTicketVisible } from './ticket.service'
 import { emitTicketSystemMessage } from './ticket-message.service'
 import { buildTicketContext, ticketToDTO } from './ticket.dto'
 import type { TicketDTO } from './ticket.types'
@@ -32,7 +32,8 @@ function assertCan(actor: Actor, permission: PermissionKey, action: string): voi
  * must be type 'tracker' and the linked ticket type 'customer'. Re-linking to
  * the same tracker is a no-op; linking to a different tracker while one already
  * tracks it is rejected (the partial-unique). Records a team-only 'ticket_linked'
- * note on the linked ticket's thread.
+ * note on the linked ticket's thread. Either ticket hidden from the actor is
+ * NotFound.
  */
 export async function linkTicketToTracker(
   trackerTicketId: TicketId,
@@ -45,8 +46,8 @@ export async function linkTicketToTracker(
   }
 
   const [tracker, linked] = await Promise.all([
-    loadTicketOr404(trackerTicketId),
-    loadTicketOr404(linkedTicketId),
+    assertTicketVisible(trackerTicketId, actor),
+    assertTicketVisible(linkedTicketId, actor),
   ])
   if (tracker.type !== 'tracker') {
     throw new ValidationError('INVALID_LINK', 'The tracking ticket must be a tracker')
@@ -89,13 +90,18 @@ export async function linkTicketToTracker(
   )
 }
 
-/** Remove a tracker link (team-only, TICKET_ASSIGN). No-op if the link is absent. */
+/** Remove a tracker link (team-only, TICKET_ASSIGN). No-op if the link is
+ *  absent. Either ticket hidden from the actor is NotFound. */
 export async function unlinkTicketFromTracker(
   trackerTicketId: TicketId,
   linkedTicketId: TicketId,
   actor: Actor
 ): Promise<void> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'unlink this ticket')
+  await Promise.all([
+    assertTicketVisible(trackerTicketId, actor),
+    assertTicketVisible(linkedTicketId, actor),
+  ])
   await db
     .delete(ticketLinks)
     .where(

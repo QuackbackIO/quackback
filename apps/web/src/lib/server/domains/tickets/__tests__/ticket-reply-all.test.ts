@@ -120,7 +120,7 @@ async function seedAgent(): Promise<Actor> {
     principalId,
     principalType: 'user',
     permissions: new Set<PermissionKey>([
-      PERMISSIONS.TICKET_VIEW,
+      PERMISSIONS.TICKET_VIEW_ALL,
       PERMISSIONS.TICKET_REPLY,
       PERMISSIONS.CONVERSATION_REPLY,
     ]),
