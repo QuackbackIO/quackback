@@ -166,18 +166,20 @@ describe('verifySchemaPostconditions', () => {
       {
         name: 'widgets_deferred_code_idx',
         concurrent: true,
+        phase: 'background',
         ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS widgets_deferred_code_idx ON widgets (code)',
       },
       {
         name: 'widgets_deferred_never_idx',
         concurrent: true,
+        phase: 'background',
         ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS widgets_deferred_never_idx ON widgets (name)',
       },
     ]
     await sql.unsafe(`CREATE INDEX widgets_deferred_code_idx ON widgets (code)`)
     await invalidate('widgets_deferred_code_idx')
 
-    const report = await verifySchemaPostconditions(sql, { deferredIndexSpecs: deferred })
+    const report = await verifySchemaPostconditions(sql, { indexSpecs: deferred })
     expect(report.observed.pendingIndexes.sort()).toEqual([
       'widgets_deferred_code_idx',
       'widgets_deferred_never_idx',
@@ -195,7 +197,9 @@ describe('verifySchemaPostconditions', () => {
     // A hand-maintained "expected indexes" list would drift the day someone
     // added a spec. This asserts the two are the same object, so they cannot.
     const report = await verifySchemaPostconditions(sql)
-    expect(report.observed.missingIndexes).toEqual(CONCURRENT_INDEX_SPECS.map((s) => s.name))
+    expect(report.observed.missingIndexes).toEqual(
+      CONCURRENT_INDEX_SPECS.filter((s) => s.phase === 'boot').map((s) => s.name)
+    )
   })
 })
 
@@ -203,6 +207,7 @@ describe('ensureConcurrentIndexes', () => {
   const spec: ConcurrentIndexSpec = {
     name: 'widgets_name_idx',
     concurrent: true,
+    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS widgets_name_idx ON widgets (name)',
   }
 

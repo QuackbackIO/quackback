@@ -99,6 +99,7 @@ function spec(label: string, ddlBody?: string): ConcurrentIndexSpec {
   return {
     name,
     concurrent: true,
+    phase: 'background',
     ddl: `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${name} ON ${ddlBody ?? `${table} (v)`}`,
   }
 }

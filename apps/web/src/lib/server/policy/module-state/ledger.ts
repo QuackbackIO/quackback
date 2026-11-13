@@ -1456,7 +1456,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'Test seam holding a replacement background index list, null in production so ' +
-      'deferredIndexSpecs() returns the compile-time DEFERRED_INDEX_SPECS constant. Holds no ' +
+      'deferredIndexSpecs() returns the background-phase CONCURRENT_INDEX_SPECS. Holds no ' +
       'workspace value.',
   },
   {

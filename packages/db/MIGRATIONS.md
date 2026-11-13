@@ -25,12 +25,12 @@ shrinks.
    walks the table by `id` in short transactions after the server listens, keeps
    its cursor in kv and retries until it is done. Its readers must work on rows it
    has not reached yet.
-3. **Indexes on a large table are never built in a migration.** An index a boot or
-   hot read needs goes in `CONCURRENT_INDEX_SPECS` (built before the server
-   listens). Every other index goes in `DEFERRED_INDEX_SPECS`: the
-   `deferred-index-build` job builds it after the server listens, one job per
-   index, and its readers work, slower, until then. Say so on the entry, and list
-   the index work in the release note.
+3. **Indexes on a large table are never built in a migration.** They go in
+   `CONCURRENT_INDEX_SPECS`. An index a boot or hot read needs has
+   `phase: 'boot'` and is built before the server listens. Every other index has
+   `phase: 'background'`: the `deferred-index-build` job builds it after the
+   server listens, one job per index, and its readers work, slower, until then.
+   Say so on the entry, and list the index work in the release note.
 4. **Constraints on a large table do not scan it.** A foreign key on a new column is
    written inline, which Postgres does not check for a new column with no default,
    and a replay is a no-op:
@@ -57,7 +57,8 @@ shrinks.
    `principal` makes each principal delete (the sign-in merge of an anonymous
    visitor, the daily anonymous sweep, a merge, an erase) scan the table for
    `ON DELETE`, unless an index leads with it. Add a partial index
-   `(column) WHERE column IS NOT NULL` to `DEFERRED_INDEX_SPECS`, as
+   `(column) WHERE column IS NOT NULL` to `CONCURRENT_INDEX_SPECS` with
+   `phase: 'background'`, as
    `conversation_messages_deleted_by_principal_idx` does in the schema.
 6. **On other tables, a check on a new column is written inline** on the column
    (`ADD COLUMN IF NOT EXISTS x text CHECK (...)`), and foreign keys inline in

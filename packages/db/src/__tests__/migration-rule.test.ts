@@ -6,7 +6,7 @@
  * rewrites one of them holds its lock, and every lock taken before it, for as
  * long as the scan takes. On those tables a migration may not:
  *
- * - build an index (it goes in `CONCURRENT_INDEX_SPECS` or `DEFERRED_INDEX_SPECS`);
+ * - build an index (it goes in `CONCURRENT_INDEX_SPECS`, phase `boot` or `background`);
  * - update rows (a backfill is a startup backfill, `apps/web/src/lib/server/backfills`);
  * - add a foreign key or a check that is validated at once (add it `NOT VALID`, or
  *   write the foreign key inline on a new column);
@@ -26,11 +26,7 @@ import { getTableConfig, PgTable } from 'drizzle-orm/pg-core'
 import { is } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as schema from '../schema'
-import {
-  CONCURRENT_INDEX_SPECS,
-  DEFERRED_INDEX_SPECS,
-  type ConcurrentIndexSpec,
-} from '../schema-ops'
+import { CONCURRENT_INDEX_SPECS, type ConcurrentIndexSpec } from '../schema-ops'
 
 const HOT_TABLES = ['conversations', 'tickets', 'conversation_messages', 'events'] as const
 const DRIZZLE_DIR = path.resolve(__dirname, '../../drizzle')
@@ -270,7 +266,7 @@ function key(v: Violation): string {
   return `${v.file} ${v.rule} ${v.detail}`
 }
 
-const SPECS = [...CONCURRENT_INDEX_SPECS, ...DEFERRED_INDEX_SPECS]
+const SPECS = CONCURRENT_INDEX_SPECS
 
 function check(sqlText: string, specs: readonly ConcurrentIndexSpec[] = SPECS): Violation[] {
   return migrationRuleViolations('9999_sample.sql', sqlText, indexedColumns(specs))
@@ -374,6 +370,7 @@ END $$;`)
     const deferred: ConcurrentIndexSpec = {
       name: 'tickets_x_by_principal_idx',
       concurrent: true,
+      phase: 'background',
       ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS tickets_x_by_principal_idx ON tickets (x_by_principal_id) WHERE x_by_principal_id IS NOT NULL',
     }
     expect(check(migration, [...SPECS, deferred])).toEqual([])

@@ -346,7 +346,11 @@ export async function runMigrations(
 
     if (concurrentIndexes) {
       onStep('concurrent-indexes')
-      await ensureConcurrentIndexes(sql, CONCURRENT_INDEX_SPECS, onIndexBuild)
+      await ensureConcurrentIndexes(
+        sql,
+        CONCURRENT_INDEX_SPECS.filter((s) => s.phase === 'boot'),
+        onIndexBuild
+      )
     }
 
     if (seed) {
