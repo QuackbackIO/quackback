@@ -30,7 +30,6 @@ import { fromUuid, toUuid, type ConversationId, type TicketId } from '@quackback
 import type { SQL } from 'drizzle-orm'
 import { humanReply } from '@/lib/server/messages/reply-rule'
 import { logger } from '@/lib/server/logger'
-import { resolvePairTicketIdForConversation } from './pair-thread.service'
 
 const log = logger.child({ component: 'ticket-first-response' })
 
@@ -124,19 +123,33 @@ export async function publishFirstResponseChange(ticketId: TicketId): Promise<vo
   }
 }
 
-/** Recompute one ticket outside any transaction, and publish it when it changed. */
-export async function syncTicketFirstResponse(ticketId: TicketId): Promise<void> {
-  if (await recomputeTicketFirstResponse(ticketId)) {
+/** Publish each ticket whose first response changed. */
+async function publishChanged(ticketIds: TicketId[]): Promise<void> {
+  for (const ticketId of ticketIds) {
     log.debug({ ticket_id: ticketId }, 'ticket first response changed')
     await publishFirstResponseChange(ticketId)
   }
 }
 
+/** Recompute one ticket outside any transaction, and publish it when it changed. */
+export async function syncTicketFirstResponse(ticketId: TicketId): Promise<void> {
+  await publishChanged(await recomputeFirstResponseWhere(db, sql`t.id = ${toUuid(ticketId)}::uuid`))
+}
+
 /**
- * The same for the customer ticket paired with a conversation. Does nothing
- * for a conversation with no paired ticket.
+ * The same for the customer ticket paired with a conversation, found in the
+ * same statement: one query for a conversation with no paired ticket, which
+ * is most of them. Does nothing for such a conversation.
  */
 export async function syncPairTicketFirstResponse(conversationId: ConversationId): Promise<void> {
-  const ticketId = await resolvePairTicketIdForConversation(conversationId)
-  if (ticketId) await syncTicketFirstResponse(ticketId)
+  await publishChanged(
+    await recomputeFirstResponseWhere(
+      db,
+      sql`t.id in (
+        select ${ticketConversations.ticketId} from ${ticketConversations}
+        where ${ticketConversations.conversationId} = ${toUuid(conversationId)}::uuid
+          and ${ticketConversations.ticketType} = 'customer'
+      )`
+    )
+  )
 }
