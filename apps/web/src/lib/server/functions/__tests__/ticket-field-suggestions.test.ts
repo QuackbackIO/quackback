@@ -87,7 +87,13 @@ describe('suggestTicketFieldValuesFn', () => {
     expect(result).toEqual({
       suggestions: { title: 'CSV export drops filter columns', severity: 'High' },
     })
-    expect(hoisted.suggestTicketFieldValues).toHaveBeenCalledWith(CONVERSATION_ID, TICKET_TYPE_ID)
+    // The caller's actor decides whether a paired ticket's thread is grounded on.
+    const actor = await hoisted.policyActorFromAuth.mock.results[0].value
+    expect(hoisted.suggestTicketFieldValues).toHaveBeenCalledWith(
+      CONVERSATION_ID,
+      TICKET_TYPE_ID,
+      actor
+    )
   })
 
   it('passes `unavailable` through as a result, never a throw (the quiet fallback)', async () => {
