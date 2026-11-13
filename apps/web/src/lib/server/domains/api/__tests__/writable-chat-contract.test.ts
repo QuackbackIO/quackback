@@ -15,6 +15,24 @@ describe('writable tickets/conversations/moderation OpenAPI contract', () => {
     }
   })
 
+  it('registers the ticket watcher routes', () => {
+    const watchers = paths['/tickets/{ticketId}/watchers']
+    expect(watchers).toHaveProperty('get')
+    expect(watchers).toHaveProperty('post')
+    expect(paths['/tickets/{ticketId}/watchers/{principalId}']).toHaveProperty('delete')
+    const addBody = JSON.stringify(
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      (watchers as any).post.requestBody.content['application/json'].schema
+    )
+    expect(addBody).toContain('principalId')
+    // The list's watcher filter is documented as a query parameter.
+    const listParams = JSON.stringify(
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      (paths['/tickets'] as any).get.parameters
+    )
+    expect(listParams).toContain('watcherPrincipalId')
+  })
+
   it('registers the conversation write routes; tags carries post + delete', () => {
     for (const action of ['reply', 'note', 'status', 'assign', 'priority', 'read']) {
       expect(paths[`/conversations/{conversationId}/${action}`]).toHaveProperty('post')

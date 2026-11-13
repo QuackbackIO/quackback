@@ -113,7 +113,11 @@ export async function syncSourceForActor(
     const message = await db.query.conversationMessages.findFirst({
       where: eq(conversationMessages.id, operation.sourceId as never),
     })
-    if (!message?.conversationId || message.deletedAt || message.isInternal) return null
+    if (!message || message.deletedAt || message.isInternal) return null
+    // A reply on a ticket's own thread is the ticket's to show.
+    if (message.ticketId)
+      return syncSourceForActor({ sourceType: 'ticket', sourceId: message.ticketId }, actor)
+    if (!message.conversationId) return null
     return syncSourceForActor(
       { sourceType: 'conversation', sourceId: message.conversationId },
       actor
@@ -212,13 +216,19 @@ export async function validateSyncSource(operation: SyncOperation): Promise<Sync
     const message = await db.query.conversationMessages.findFirst({
       where: eq(conversationMessages.id, operation.sourceId as never),
     })
-    if (!message?.conversationId || message.deletedAt || message.isInternal)
+    if (
+      !message ||
+      message.deletedAt ||
+      message.isInternal ||
+      (!message.conversationId && !message.ticketId)
+    )
       return { state: 'cancelled', errorCode: 'source_unavailable' }
     return validateSyncSource({
       ...operation,
       requestedBy: null,
-      sourceType: 'conversation',
-      sourceId: message.conversationId,
+      ...(message.ticketId
+        ? { sourceType: 'ticket', sourceId: message.ticketId }
+        : { sourceType: 'conversation', sourceId: message.conversationId! }),
     })
   }
   if (operation.sourceType === 'conversation') {

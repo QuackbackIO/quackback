@@ -24,6 +24,8 @@ const webhooks = vi.hoisted(() => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  emitTicketUpdated: vi.fn().mockResolvedValue(undefined),
+  emitTicketPriorityChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketReplied: vi.fn().mockResolvedValue(undefined),
   emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
   emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),

@@ -73,36 +73,6 @@ export async function clearIntegrationLastError(integrationId: IntegrationId): P
     .where(eq(integrations.id, integrationId))
 }
 
-/**
- * Persist webhook ids without flipping status-sync on. Inbox enablement
- * registers the same GitHub hook for issue comments and must not imply
- * tracker status sync is configured.
- */
-export async function storeWebhookIds(
-  integrationId: IntegrationId,
-  webhookSecret: string,
-  externalWebhookId?: string
-): Promise<void> {
-  const integration = await db.query.integrations.findFirst({
-    where: eq(integrations.id, integrationId),
-    columns: { config: true },
-  })
-  if (!integration) return
-
-  const existingConfig = (integration.config ?? {}) as Record<string, unknown>
-  await db
-    .update(integrations)
-    .set({
-      config: {
-        ...existingConfig,
-        webhookSecret,
-        ...(externalWebhookId ? { externalWebhookId } : {}),
-      },
-      updatedAt: new Date(),
-    })
-    .where(eq(integrations.id, integrationId))
-}
-
 export async function clearWebhookConfig(integrationId: IntegrationId): Promise<void> {
   const integration = await db.query.integrations.findFirst({
     where: eq(integrations.id, integrationId),

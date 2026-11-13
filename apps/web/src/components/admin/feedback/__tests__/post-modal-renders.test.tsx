@@ -115,6 +115,14 @@ function seededClient() {
   client.setQueryData(postOwnerQueries.candidates().queryKey, [])
   client.setQueryData(mergeSuggestionQueries.forPost(POST).queryKey, [])
   client.setQueryData(postExternalLinksQuery(POST).queryKey, [])
+  client.setQueryData(adminQueries.postSubscribers(POST).queryKey, [])
+  client.setQueryData(adminQueries.postSubscription(POST).queryKey, {
+    subscribed: false,
+    notifyComments: false,
+    notifyStatusChanges: false,
+    reason: null,
+    level: 'none',
+  })
   return client
 }
 
