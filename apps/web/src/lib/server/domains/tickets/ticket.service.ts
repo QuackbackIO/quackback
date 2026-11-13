@@ -127,6 +127,15 @@ export async function getTicket(id: TicketId): Promise<TicketDTO> {
   return ticketRowToDTO(await loadTicketOr404(id))
 }
 
+/**
+ * A ticket the actor may see, as its DTO, or NotFound. The read every
+ * agent-facing path uses; `getTicket` is for system callers that run with no
+ * actor.
+ */
+export async function getTicketForActor(id: TicketId, actor: Actor): Promise<TicketDTO> {
+  return ticketRowToDTO(await assertTicketVisible(id, actor))
+}
+
 const priorityRankExpr = priorityRankSql(tickets.priority)
 
 /**
