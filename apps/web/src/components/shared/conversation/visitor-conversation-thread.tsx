@@ -11,6 +11,7 @@ import {
   hasCsatBlockMessage,
   type ConversationRow,
 } from './conversation-rows'
+import { BlockTicketFormLoading } from './block-ticket-form-loading'
 import { AssistantWorkingTrace, AssistantStreamingBubble } from './assistant-turn'
 import {
   BlockButtonsRow,
@@ -18,7 +19,6 @@ import {
   BlockCsatRow,
   BlockReplyTimeCaption,
 } from './block-affordance'
-import { BlockTicketForm } from './block-ticket-form'
 import { BackAtTime, ConversationPresenceBadge, hasBackAtTime } from './conversation-presence-badge'
 import { ConversationThreadSkeleton } from './conversation-thread-skeleton'
 import { SystemEventNotice } from './system-event-notice'
@@ -93,6 +93,14 @@ const NO_HELP_RESULTS: Array<{ slug: string; title: string }> = []
 // composer's layout stable while that chunk loads.
 const LazyRichTextEditor = lazy(() =>
   import('@/components/ui/rich-text-editor').then((m) => ({ default: m.RichTextEditor }))
+)
+
+// The ticket form a workflow's send_ticket_form block posts renders only in a
+// thread that has one, and it brings the ticket field renderer, its form hook
+// and the shared validator. Deferred to its own chunk so none of that is on the
+// widget's or portal's first load; the fallback is the form's own loading row.
+const LazyBlockTicketForm = lazy(() =>
+  import('./block-ticket-form').then((m) => ({ default: m.BlockTicketForm }))
 )
 
 // Cheap plain-text extraction from a TipTap JSON doc — drives the send-gate,
@@ -1015,7 +1023,9 @@ export function VisitorConversationThread({
           return (
             <div className="flex flex-col items-start">
               {bubble}
-              <BlockTicketForm getAuthHeaders={getAuthHeaders} />
+              <Suspense fallback={<BlockTicketFormLoading />}>
+                <LazyBlockTicketForm getAuthHeaders={getAuthHeaders} />
+              </Suspense>
             </div>
           )
         }
