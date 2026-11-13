@@ -357,6 +357,7 @@ describe('the real corpus', () => {
       '0308_remove_approvals_leftovers.sql',
       '0311_sending_domain_ownership_warning_sent.sql',
       '0313_email_senders.sql',
+      '0316_personal_key_reply_cutoff.sql',
     ])
   })
 
