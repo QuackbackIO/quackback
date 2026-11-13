@@ -24,7 +24,6 @@ import {
   deleteSendingDomain,
   updateInboundTrust,
   clearInboundForwarding,
-  updateSendingAddressSmtp,
   updateSendingAddressName,
 } from '@/lib/server/domains/channel-accounts/channel-account.service'
 import {
@@ -457,30 +456,6 @@ export const clearInboundForwardingFn = createServerFn({ method: 'POST' }).handl
   return row ? toAccount(row) : null
 })
 
-const smtpOverrideSchema = z.object({
-  host: z.string().min(1).max(255),
-  port: z.number().int().min(1).max(65535),
-  secure: z.boolean(),
-  user: z.string().min(1).max(255),
-})
-
-export const updateSendingAddressSmtpFn = createServerFn({ method: 'POST' })
-  .validator(
-    z.object({
-      id: z.string(),
-      smtp: smtpOverrideSchema.nullable(),
-    })
-  )
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
-    return toAccount(
-      await updateSendingAddressSmtp({
-        id: data.id as ChannelAccountId,
-        smtp: data.smtp,
-      })
-    )
-  })
-
 export const deleteChannelAccountFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
@@ -497,8 +472,14 @@ export const sendTestEmailFn = createServerFn({ method: 'POST' })
     const { user } = await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     // To the person asking and nobody else: the recipient is their own
     // account address, never something the request names.
+    const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
+    const workspaceName = (await requireSettingsCached()).name
     return withDomainActionMessage('test', () =>
-      sendTestEmail({ addressId: data.addressId as ChannelAccountId, userId: user.id })
+      sendTestEmail({
+        addressId: data.addressId as ChannelAccountId,
+        userId: user.id,
+        workspaceName,
+      })
     )
   })
 

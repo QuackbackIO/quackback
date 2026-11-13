@@ -19,6 +19,8 @@ const restartChecks = vi.fn()
 const sendTest = vi.fn()
 const setSender = vi.fn()
 const renameAddress = vi.fn()
+const createRoute = vi.fn()
+const updateTrust = vi.fn()
 const toastError = vi.hoisted(() => vi.fn())
 const toastSuccess = vi.hoisted(() => vi.fn())
 
@@ -28,13 +30,11 @@ vi.mock('@/lib/server/functions/channel-accounts', () => ({
   getEmailChannelConfigFn: vi.fn(),
 }))
 vi.mock('@/lib/client/mutations/channel-accounts', () => {
-  const idle = () => ({ mutate: vi.fn(), isPending: false })
   return {
-    useCreateInboundRoute: idle,
+    useCreateInboundRoute: () => ({ mutate: createRoute, isPending: false }),
     useCreateSendingAddress: () => ({ mutate: createAddress, isPending: false }),
-    useUpdateInboundTrust: idle,
+    useUpdateInboundTrust: () => ({ mutate: updateTrust, isPending: false }),
     useClearInboundForwarding: () => ({ mutate: clearRoute, isPending: false }),
-    useUpdateSendingAddressSmtp: idle,
     useDeleteChannelAccount: () => ({ mutate: deleteAccount, isPending: false }),
     useDeleteSendingDomain: () => ({ mutate: deleteDomain, isPending: false }),
     useRestartSendingDomainChecks: () => ({ mutate: restartChecks, isPending: false }),
@@ -187,6 +187,8 @@ beforeEach(() => {
     sendTest,
     setSender,
     renameAddress,
+    createRoute,
+    updateTrust,
     toastError,
     toastSuccess,
   ]) {
@@ -315,6 +317,27 @@ describe('address rows', () => {
     expect(screen.queryByRole('menuitem', { name: /DNS records/ })).toBeNull()
     expect(screen.getByRole('menuitem', { name: 'Edit name' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /SMTP/ })).toBeNull()
+  })
+
+  it('offers Send test on a domain still being set up where the guard permits any address', () => {
+    // One workspace: email already sends from the address, so it can be tested.
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain()],
+      addressMode: 'any',
+    })
+    fireEvent.click(within(row('Acme <help@acme.com>')).getByRole('button', { name: 'Send test' }))
+    expect(sendTest).toHaveBeenCalledWith('a1', expect.anything())
+  })
+
+  it('says who the test went to once it is sent', () => {
+    sendTest.mockImplementation((_id, opts) =>
+      opts.onSuccess({ from: 'Acme <help@acme.com>', to: 'admin@example.com' })
+    )
+    renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
+    fireEvent.click(within(row('Acme <help@acme.com>')).getByRole('button', { name: 'Send test' }))
+    expect(toastSuccess).toHaveBeenCalledWith('Test sent to admin@example.com')
   })
 
   it('edits the sender name from the row menu', async () => {
@@ -844,25 +867,96 @@ describe('removing a sending address', () => {
   })
 })
 
-describe('removing the inbound route', () => {
+describe('the support inbox', () => {
   const route = { config: { forwardingTarget: 'support@acme.com' }, inboundTrust: 'strict' }
+  const refused = (message: string) => (_value: unknown, opts: { onError: (e: Error) => void }) =>
+    opts.onError(new Error(message))
 
-  it('asks first and clears the route only on confirm', async () => {
+  it('is titled Support inbox', () => {
+    renderSettings({ inboundRoute: route })
+    expect(screen.getByText('Support inbox')).toBeTruthy()
+    expect(screen.queryByText('Inbound route')).toBeNull()
+  })
+
+  it('offers Quarantine and Accept for unverified senders, and says what each does', () => {
+    renderSettings({ inboundRoute: route })
+    expect(screen.getByText('Unverified senders')).toBeTruthy()
+    expect(screen.queryByText('Sender trust')).toBeNull()
+    expect(screen.getByText(/fails authentication/).textContent).not.toMatch(/\u2014/)
+    expect(screen.getByRole('button', { name: 'Quarantine' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /strict|lenient/i })).toBeNull()
+  })
+
+  it('stores Accept as lenient and Quarantine as strict', () => {
+    renderSettings({ inboundRoute: route })
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    expect(updateTrust).toHaveBeenLastCalledWith('lenient', expect.anything())
+    fireEvent.click(screen.getByRole('button', { name: 'Quarantine' }))
+    expect(updateTrust).toHaveBeenLastCalledWith('strict', expect.anything())
+  })
+
+  it('shows a refused change inline, not as a toast, until the next attempt', () => {
+    updateTrust.mockImplementation(refused(''))
+    renderSettings({ inboundRoute: route })
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    expect(screen.getByRole('alert').textContent).toBe("Couldn't change unverified senders.")
+    expect(toastError).not.toHaveBeenCalled()
+
+    updateTrust.mockReset()
+    fireEvent.click(screen.getByRole('button', { name: 'Quarantine' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('shows the server reason when setting the forwarding address fails', () => {
+    createRoute.mockImplementation(refused('That address is already in use.'))
+    renderSettings()
+    fireEvent.change(screen.getByLabelText('Forwarding address'), {
+      target: { value: 'support@acme.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('alert').textContent).toBe('That address is already in use.')
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it('falls back to its own line when setting the forwarding address fails without one', () => {
+    createRoute.mockImplementation(refused(''))
+    renderSettings()
+    fireEvent.change(screen.getByLabelText('Forwarding address'), {
+      target: { value: 'support@acme.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('alert').textContent).toBe("Couldn't save the forwarding address.")
+  })
+
+  it('asks first and removes the forwarding address only on confirm', async () => {
     renderSettings({ inboundRoute: route })
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     expect(clearRoute).not.toHaveBeenCalled()
     const dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText('Delete inbound route?')).toBeTruthy()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete route' }))
+    expect(within(dialog).getByText('Remove the forwarding address?')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(clearRoute).toHaveBeenCalledTimes(1))
   })
 
-  it('cancelling keeps the route', async () => {
+  it('cancelling keeps the forwarding address', async () => {
     renderSettings({ inboundRoute: route })
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     const dialog = await screen.findByRole('alertdialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(clearRoute).not.toHaveBeenCalled()
+  })
+
+  it('shows a failed removal inline', async () => {
+    clearRoute.mockImplementation(refused(''))
+    renderSettings({ inboundRoute: route })
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe("Couldn't remove the forwarding address.")
+    )
+    expect(toastError).not.toHaveBeenCalled()
   })
 })
 
@@ -953,7 +1047,7 @@ describe('adding an address', () => {
 
   it('uses one outline button per form, and no separate domain form', () => {
     renderSettings()
-    for (const name of ['Set route', 'Add address']) {
+    for (const name of ['Save', 'Add address']) {
       const button = screen.getByRole('button', { name })
       expect(button.className).toContain('border-border/50')
       expect(button.className).not.toContain('bg-primary')

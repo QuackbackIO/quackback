@@ -81,8 +81,15 @@ const ratingUrls = ['1', '2', '3', '4', '5'].map((n) => `https://acme.test/r/${n
   string,
 ]
 
-/** How each sender is driven, given the workspace name (absent = none known). */
-type Drive = (workspaceName: string | undefined) => Promise<EmailResult>
+/**
+ * How each sender is driven, given the workspace name (absent = none known),
+ * and for the senders whose callers used to name the platform address
+ * themselves, that name.
+ */
+type Drive = (
+  workspaceName: string | undefined,
+  extra?: { fromDisplayName?: string }
+) => Promise<EmailResult>
 
 // `workspaceName!` where the sender's type requires one: the self-hosted case
 // below passes undefined on purpose, to prove a missing name never crashes.
@@ -96,13 +103,6 @@ const workspaceSenders: Record<string, Drive> = {
     }),
   sendPortalInviteEmail: (w) =>
     email.sendPortalInviteEmail({ to, workspaceName: w!, inviteLink: 'https://acme.test/i' }),
-  sendWelcomeEmail: (w) =>
-    email.sendWelcomeEmail({
-      to,
-      name: 'Sam',
-      workspaceName: w!,
-      dashboardUrl: 'https://acme.test/admin',
-    }),
   sendMessengerInstallEmail: (w) =>
     email.sendMessengerInstallEmail({
       to,
@@ -126,7 +126,7 @@ const workspaceSenders: Record<string, Drive> = {
   sendNewSignInEmail: (w) => email.sendNewSignInEmail({ to, workspaceName: w, occurredAt: 'now' }),
   sendVerifyAddressEmail: (w) =>
     email.sendVerifyAddressEmail({ to, code: '123456', workspaceName: w }),
-  sendStatusChangeEmail: (w) =>
+  sendStatusChangeEmail: (w, extra) =>
     email.sendStatusChangeEmail({
       to,
       postTitle: 'Dark mode',
@@ -134,9 +134,10 @@ const workspaceSenders: Record<string, Drive> = {
       previousStatus: 'open',
       newStatus: 'planned',
       workspaceName: w!,
+      ...extra,
       unsubscribeUrl: 'https://acme.test/u',
     }),
-  sendNewCommentEmail: (w) =>
+  sendNewCommentEmail: (w, extra) =>
     email.sendNewCommentEmail({
       to,
       postTitle: 'Dark mode',
@@ -145,6 +146,7 @@ const workspaceSenders: Record<string, Drive> = {
       commentPreview: 'Looks good',
       isTeamMember: false,
       workspaceName: w!,
+      ...extra,
       unsubscribeUrl: 'https://acme.test/u',
     }),
   sendConversationMessageEmail: (w) =>
@@ -156,20 +158,21 @@ const workspaceSenders: Record<string, Drive> = {
       ctaUrl: 'https://acme.test/admin/inbox',
       workspaceName: w!,
     }),
-  sendConversationClosedEmail: (w) =>
-    email.sendConversationClosedEmail({ to, workspaceName: w!, variant: 'closed' }),
-  sendConversationAutoAckEmail: (w) =>
-    email.sendConversationAutoAckEmail({ to, workspaceName: w! }),
-  sendTicketEventEmail: (w) =>
+  sendConversationClosedEmail: (w, extra) =>
+    email.sendConversationClosedEmail({ to, workspaceName: w!, ...extra, variant: 'closed' }),
+  sendConversationAutoAckEmail: (w, extra) =>
+    email.sendConversationAutoAckEmail({ to, workspaceName: w!, ...extra }),
+  sendTicketEventEmail: (w, extra) =>
     email.sendTicketEventEmail({
       to,
       kind: 'assigned',
       ticketLabel: '#1',
       title: 'Broken',
       workspaceName: w!,
+      ...extra,
       ctaUrl: 'https://acme.test/admin/inbox',
     }),
-  sendPostMentionEmail: (w) =>
+  sendPostMentionEmail: (w, extra) =>
     email.sendPostMentionEmail({
       to,
       mentionerName: 'Sam',
@@ -177,6 +180,7 @@ const workspaceSenders: Record<string, Drive> = {
       excerpt: '',
       postUrl: 'https://acme.test/p/1',
       workspaceName: w!,
+      ...extra,
     }),
   sendNoteMentionEmail: (w) =>
     email.sendNoteMentionEmail({
@@ -186,27 +190,21 @@ const workspaceSenders: Record<string, Drive> = {
       conversationUrl: 'https://acme.test/admin/inbox',
       workspaceName: w!,
     }),
-  sendChangelogPublishedEmail: (w) =>
+  sendChangelogPublishedEmail: (w, extra) =>
     email.sendChangelogPublishedEmail({
       to,
       changelogTitle: 'May release',
       changelogUrl: 'https://acme.test/changelog',
       contentPreview: 'New things',
       workspaceName: w!,
+      ...extra,
       unsubscribeUrl: 'https://acme.test/u',
     }),
-  sendFeedbackLinkedEmail: (w) =>
-    email.sendFeedbackLinkedEmail({
-      to,
-      postTitle: 'Dark mode',
-      postUrl: 'https://acme.test/p/1',
-      workspaceName: w!,
-      unsubscribeUrl: 'https://acme.test/u',
-    }),
-  sendStatusIncidentPublishedEmail: (w) =>
+  sendStatusIncidentPublishedEmail: (w, extra) =>
     email.sendStatusIncidentPublishedEmail({
       to,
       workspaceName: w!,
+      ...extra,
       incidentTitle: 'API errors',
       impact: 'minor',
       statusLabel: 'Investigating',
@@ -215,10 +213,11 @@ const workspaceSenders: Record<string, Drive> = {
       incidentUrl: 'https://acme.test/status/1',
       unsubscribeUrl: 'https://acme.test/u',
     }),
-  sendStatusMaintenanceScheduledEmail: (w) =>
+  sendStatusMaintenanceScheduledEmail: (w, extra) =>
     email.sendStatusMaintenanceScheduledEmail({
       to,
       workspaceName: w!,
+      ...extra,
       maintenanceTitle: 'Database upgrade',
       body: 'Short window',
       startLabel: 'start',
@@ -227,8 +226,14 @@ const workspaceSenders: Record<string, Drive> = {
       incidentUrl: 'https://acme.test/status/2',
       unsubscribeUrl: 'https://acme.test/u',
     }),
-  sendCsatRequestEmail: (w) =>
-    email.sendCsatRequestEmail({ to, promptText: 'How did we do?', ratingUrls, workspaceName: w! }),
+  sendCsatRequestEmail: (w, extra) =>
+    email.sendCsatRequestEmail({
+      to,
+      promptText: 'How did we do?',
+      ratingUrls,
+      workspaceName: w!,
+      ...extra,
+    }),
 }
 
 /** Mail about Quackback itself, named for the product rather than the workspace. */
@@ -306,6 +311,41 @@ describe('platform mail for a workspace with a name (registry From installed)', 
       workspaceName: 'Acme, Inc.',
     })
     expect(sentFrom()).toBe(`"Acme, Inc." <${PLATFORM_ADDRESS}>`)
+  })
+})
+
+/**
+ * Senders whose callers used to pass `fromDisplayName: workspaceName` whenever
+ * they had no address of their own. The shared send point names the platform
+ * address for the workspace already, so that line changed nothing, and this
+ * keeps it that way now that the callers leave it out.
+ */
+const NAMED_BY_CALLERS = [
+  'sendCsatRequestEmail',
+  'sendConversationAutoAckEmail',
+  'sendConversationClosedEmail',
+  'sendStatusChangeEmail',
+  'sendNewCommentEmail',
+  'sendPostMentionEmail',
+  'sendChangelogPublishedEmail',
+  'sendStatusIncidentPublishedEmail',
+  'sendStatusMaintenanceScheduledEmail',
+  'sendTicketEventEmail',
+] as const
+
+describe('naming the platform address for the workspace by hand', () => {
+  beforeEach(() => {
+    email.setDefaultFromResolver(() => REGISTRY_FROM)
+  })
+
+  it.each(NAMED_BY_CALLERS)('%s goes out the same with or without it', async (name) => {
+    const send = workspaceSenders[name]
+    await send('Acme Widgets')
+    const unnamed = sentFrom()
+    resendSend.mockClear()
+    await send('Acme Widgets', { fromDisplayName: 'Acme Widgets' })
+    expect(sentFrom()).toBe(unnamed)
+    expect(unnamed).toBe(`Acme Widgets <${PLATFORM_ADDRESS}>`)
   })
 })
 
