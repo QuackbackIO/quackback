@@ -38,9 +38,10 @@ export async function autoReopenPairTicketFromEvent(event: EventData): Promise<v
   try {
     if (event.type !== 'message.created') return
     if (event.data.message.senderType !== 'visitor') return
-    // A rating answers the ask a resolve made; the ticket stays resolved, as
-    // the conversation does (applyVisitorReopenStatus).
-    if (event.data.message.blockReplyKind === 'csat') return
+    // A reply to a conversation block (a rating, a button, a collected field)
+    // answers a prompt the conversation posted, not a new request: the ticket
+    // stays as it is, as the conversation does (applyVisitorReopenStatus).
+    if (event.data.message.blockReplyKind) return
     const conversationId = event.data.message.conversationId as ConversationId
     const ticketId = await resolvePairTicketIdForConversation(conversationId)
     if (!ticketId) return

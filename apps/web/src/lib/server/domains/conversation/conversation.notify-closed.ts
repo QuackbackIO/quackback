@@ -14,7 +14,7 @@ import { visitorConversationLink } from './conversation.notify'
 import { buildHookContext } from '@/lib/server/events/hook-context'
 import { logger } from '@/lib/server/logger'
 import { ensureEmailLogSink } from '@/lib/server/email/email-log.sink'
-import { isCsatAlreadyRequested } from './csat-request.service'
+import { isCsatRatedOrEmailed } from './csat-request.service'
 
 const log = logger.child({ component: 'conversation-notify-closed' })
 
@@ -77,9 +77,10 @@ export async function notifyConversationClosed(opts: {
     const fromDisplayName = ctx.workspaceName
     const from = resolvedFrom ? formatNamedSendingAddress(resolvedFrom, fromDisplayName) : undefined
 
-    // Rating links ride the close email only when the conversation was never
-    // asked or rated (csat-request.service).
-    const includeCsat = !(await isCsatAlreadyRequested(opts.conversationId))
+    // Rating links ride the close email unless the conversation is already
+    // rated or a rating email went out. An unanswered csat block in the thread
+    // does not count: the visitor may have left the widget (csat-request.service).
+    const includeCsat = !(await isCsatRatedOrEmailed(opts.conversationId))
     let ratingUrls: [string, string, string, string, string] | undefined
     if (includeCsat) {
       const { mintCsatEmailToken } = await import('./csat-email-token')

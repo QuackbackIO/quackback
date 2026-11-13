@@ -209,6 +209,7 @@ async function seedResolvedPairWithCsatBlock() {
     .returning()
   return {
     requester,
+    agent,
     ticketId,
     conversationId,
     blockMessageId: block.id as ConversationMessageId,
@@ -320,6 +321,52 @@ describe.skipIf(!fixture.available)('a rating never reopens a resolved ticket', 
     })
   })
 
+  it('leaves the ticket resolved on a matched buttons reply, as it does the conversation', async () => {
+    const { requester, ticketId, conversationId, agent } = await seedResolvedPairWithCsatBlock()
+    const [buttons] = await testDb
+      .insert(conversationMessages)
+      .values({
+        conversationId,
+        principalId: agent,
+        senderType: 'agent',
+        content: 'Anything else?',
+        metadata: {
+          block: {
+            v: 1,
+            kind: 'buttons',
+            runId: 'run_test',
+            nodeId: 'node_buttons',
+            waiting: true,
+            allowTyping: false,
+            options: [
+              { key: 'yes', label: 'Yes please' },
+              { key: 'no', label: 'No thanks' },
+            ],
+          },
+        },
+        createdAt: anHourAgo(),
+      })
+      .returning()
+
+    const { message } = await send(conversationId, requester, {
+      content: '',
+      blockReply: { kind: 'buttons', inReplyToMessageId: buttons.id, buttonKey: 'yes' },
+    })
+
+    const event = await storedMessageEvent(message.id)
+    expect(
+      (event.payload as { message: { blockReplyKind?: unknown } }).message.blockReplyKind
+    ).toBe('buttons')
+
+    await runReactionJob(event.eventId)
+
+    expect(await state(ticketId, conversationId)).toEqual({
+      ticket: 'closed',
+      reopenedCount: 0,
+      conversation: 'closed',
+    })
+  })
+
   it('reopens both on a block reply that matches no block, whose event carries no kind', async () => {
     const { requester, ticketId, conversationId } = await seedResolvedPairWithCsatBlock()
 
@@ -345,6 +392,33 @@ describe.skipIf(!fixture.available)('a rating never reopens a resolved ticket', 
       conversation: 'open',
     })
     // An unmatched block reply is a plain message: no rating is recorded.
+    expect((await storedRating(conversationId)).rating).toBeNull()
+  })
+
+  it('drops a blockReply a caller supplies in metadata, so the thread reopens', async () => {
+    const { requester, ticketId, conversationId, blockMessageId } =
+      await seedResolvedPairWithCsatBlock()
+
+    const result = await sendVisitorMessage(
+      {
+        conversationId,
+        content: 'Still broken',
+        metadata: {
+          note: 'kept',
+          blockReply: { kind: 'csat', inReplyToMessageId: blockMessageId, rating: 5 },
+        } as never,
+      },
+      { principalId: requester, displayName: 'Requester' },
+      visitorActor(requester)
+    )
+    await Promise.all(pending.emits.splice(0))
+
+    const [stored] = await testDb
+      .select({ metadata: conversationMessages.metadata })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, result.message.id as ConversationMessageId))
+    expect(stored.metadata).toEqual({ note: 'kept' })
+    expect((await state(ticketId, conversationId)).conversation).toBe('open')
     expect((await storedRating(conversationId)).rating).toBeNull()
   })
 
@@ -449,6 +523,22 @@ describe.skipIf(!fixture.available)('a rating given in the thread is recorded', 
       commentEvents: 1,
       markers: 1,
     })
+  })
+
+  it('a resumed run never overwrites the rating the thread already recorded', async () => {
+    const { requester, conversationId, blockMessageId } = await seedResolvedPairWithCsatBlock()
+
+    await send(conversationId, requester, {
+      content: '',
+      blockReply: { kind: 'csat', inReplyToMessageId: blockMessageId, rating: 5 },
+    })
+    await applyAction(
+      { type: 'record_csat', rating: 1 },
+      { conversationId, actor: visitorActor(requester), runId: 'run_test' }
+    )
+    await Promise.all(pending.emits.splice(0))
+
+    expect((await storedRating(conversationId)).rating).toBe(5)
   })
 
   it('refuses a block rating from someone who is not the requester', async () => {
