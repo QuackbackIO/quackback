@@ -50,6 +50,7 @@ import {
   isHostedBillingConfigured,
 } from '@/lib/server/domains/billing/usage-report'
 import { earliestPendingJobAt, isMissingJobQueue, nextPendingJobAt } from './job-queue'
+import { logPausedJobs } from './definitions'
 import {
   awaitPool,
   createJobPool,
@@ -708,6 +709,7 @@ export async function startJobWorker(): Promise<void> {
   })
 
   await primeJobHandlers()
+  logPausedJobs()
 
   if (!config.isPooledTenancy) {
     startSingleWorkspaceLoop(cfg)

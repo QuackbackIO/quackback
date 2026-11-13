@@ -6,8 +6,15 @@
  * different number of rows for each page to render. Pinning the generator makes
  * the counts the bench compares reproducible.
  *
+ * `PERF_SCALE=large` then adds a busy install's support data (`seed-large.ts`),
+ * for reading query and migration plans at size.
+ *
  * Usage: DATABASE_URL=... bun perf/seed.ts
+ *        DATABASE_URL=... PERF_SCALE=large bun perf/seed.ts
  */
+import postgres from 'postgres'
+import { LARGE_PROFILE, perfScale } from './config'
+import { seedLargeWorkspace } from './seed-large'
 
 // mulberry32: small, fast, and good enough for picking demo data.
 function seeded(seed: number): () => number {
@@ -23,4 +30,18 @@ function seeded(seed: number): () => number {
 
 Math.random = seeded(0x5eed)
 
-await import('../../../packages/db/src/seed.ts')
+const scale = perfScale()
+const { seedDone } = await import('../../../packages/db/src/seed.ts')
+await seedDone
+
+if (scale === 'large' && !process.exitCode) {
+  const url = process.env.DATABASE_URL
+  if (!url) throw new Error('DATABASE_URL is required')
+  process.stdout.write('Seeding the large profile...\n')
+  const sql = postgres(url, { max: 1, onnotice: () => {} })
+  try {
+    await seedLargeWorkspace(sql, LARGE_PROFILE)
+  } finally {
+    await sql.end()
+  }
+}

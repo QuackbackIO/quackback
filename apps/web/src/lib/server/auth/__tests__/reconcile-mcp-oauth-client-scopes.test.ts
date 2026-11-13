@@ -6,19 +6,29 @@ import { reconcileMcpOauthClientScopes } from '../reconcile-mcp-oauth-client-sco
 // failure path a database cannot easily be made to take.
 
 describe('reconcileMcpOauthClientScopes', () => {
-  it('logs and resolves when the update fails', async () => {
+  it('logs and resolves false when the update fails', async () => {
     const failure = new Error('connection reset')
     const execute = vi.fn(async () => {
       throw failure
     })
     const log = { warn: vi.fn() }
 
-    await expect(reconcileMcpOauthClientScopes({ db: { execute }, log })).resolves.toBeUndefined()
+    await expect(reconcileMcpOauthClientScopes({ db: { execute }, log })).resolves.toBe(false)
 
     expect(execute).toHaveBeenCalledTimes(1)
     expect(log.warn).toHaveBeenCalledWith(
       expect.objectContaining({ err: failure }),
       expect.any(String)
     )
+  })
+
+  it('resolves true when the update runs', async () => {
+    const execute = vi.fn(async () => [])
+    const log = { warn: vi.fn() }
+
+    await expect(reconcileMcpOauthClientScopes({ db: { execute }, log })).resolves.toBe(true)
+
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(log.warn).not.toHaveBeenCalled()
   })
 })

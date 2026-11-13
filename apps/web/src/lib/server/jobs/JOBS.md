@@ -298,7 +298,25 @@ has not loaded the full application config.
 | `JOB_REAP_INTERVAL_MS`     | 15000   | How often expired leases are adjudicated                                                                                                                                                |
 | `JOB_PRUNE_INTERVAL_MS`    | 1 hour  | How often terminal rows past retention are dropped (a per-workspace table scan; keep it slow)                                                                                           |
 | `JOB_RETENTION_MS`         | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key                                                                                                                     |
+| `QUACKBACK_DISABLED_JOBS`  | unset   | Comma list of job names to pause, e.g. `spam-retention,file-retention`. See below                                                                                                       |
 | `QUACKBACK_JOB_WORKER_URL` | unset   | Cloud web only: origin of the worker (`http://worker.railway.internal:3000`). Publisher also requires `QUACKBACK_FLEET_INTERNAL_TOKEN`. Unset, rejected, or token-missing = poll floor. |
+
+### Pausing a job
+
+`QUACKBACK_DISABLED_JOBS=name,name` pauses the named jobs; the names are the
+queue names in §10. A paused schedule writes no row, as a shut `cronEnabled`
+gate does. A paused queue's rows stay `pending` with no attempt spent: no claim
+path takes them (the poll or start-by-id), and they never fail because of the
+pause. Neither its rows nor its schedule's deadline keep a parked workspace
+awake or wake it. Take the name off the list and restart, and the rows run.
+
+Each worker start logs one `job paused` line per paused job, and a warning for
+a name that matches no job (which is ignored), so a forgotten pause shows up in
+the boot log.
+
+**A screen that shows a job's status shows a `pending` row as "Queued", never as
+running.** A paused job's rows are `pending` with no end time; showing them as
+active would hide the pause from the person waiting on the work.
 
 ### Worker job logs
 
@@ -423,6 +441,9 @@ went stale the moment a queue moved.
 | `sending-domain-watch`          | `7/10 * * * *` | 1           | 1        | 60s   |
 | `ses-tenant-reconcile`          | `41 * * * *`   | 1           | 3        | 60s   |
 | `analytics`                     | `0 * * * *`    | 1           | 3        | 60s   |
+| `startup-backfill`              | `15 * * * *`   | 1           | 20       | 60s   |
+| `ticket-frt-reconcile`          | —              | 1           | 20       | 60s   |
+| `deferred-index-build`          | `35 * * * *`   | 1           | 5        | 60s   |
 | `events`                        | —              | 5           | 6        | 60s   |
 | `integration-sync`              | —              | 5           | 6        | 90s   |
 | `integration-sync-sweep`        | `* * * * *`    | 1           | 1        | 60s   |
@@ -520,6 +541,15 @@ returns, so a slow database defers capped work, which is the backpressure a
 heavy queue wants. Jobs over the cap stay `pending`, unclaimed, so no lease
 runs down while they wait. The cap is per process: two worker replicas allow
 twice as many.
+
+**The fleet cap rule.** Every new heavy or fleet-wide job sets `fleetConcurrency`
+(2 to 4) and `retryBackoffMs`, as `analytics` does. Heavy means it walks or
+scans a large table or builds an index; fleet-wide means a schedule that runs in
+every workspace. Without the cap, a fleet upgrade or a database restart starts
+the same work in every workspace at once, which is how the hourly `analytics`
+refresh took the database out of memory (§6). `startup-backfill`,
+`ticket-frt-reconcile` and `deferred-index-build` follow it; a guard test
+(`__tests__/upgrade-jobs-fleet-cap.test.ts`) holds them to it.
 
 ### What the move fixed rather than preserved
 

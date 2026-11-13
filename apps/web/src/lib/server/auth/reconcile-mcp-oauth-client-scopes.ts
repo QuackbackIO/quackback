@@ -40,16 +40,19 @@ function mcpOauthClientScopesUpdate(scopes: readonly string[]): SQL {
 /**
  * Never throws: a failure is logged and the stored lists stay as they were,
  * because a throw during auth construction breaks sign-in for the workspace.
+ * Resolves to false on a failure, so the caller can try again later.
  */
 export async function reconcileMcpOauthClientScopes(opts: {
   db: { execute: (query: SQL) => Promise<unknown> }
   scopes?: readonly string[]
   log?: Pick<typeof logger, 'warn'>
-}): Promise<void> {
+}): Promise<boolean> {
   try {
     await opts.db.execute(mcpOauthClientScopesUpdate(opts.scopes ?? MCP_AS_SCOPES))
+    return true
   } catch (error) {
     const log = opts.log ?? logger
     log.warn({ err: error }, 'could not widen OAuth client scopes to the MCP scope catalogue')
+    return false
   }
 }

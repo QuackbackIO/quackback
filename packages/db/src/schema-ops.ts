@@ -184,6 +184,21 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
   },
 ]
 
+/**
+ * Indexes nothing needs at boot, built by the `deferred-index-build` job after
+ * the server listens, one job per index.
+ *
+ * `CONCURRENT_INDEX_SPECS` is for the indexes a boot-time or hot read needs:
+ * the boot builds every one of them before the server listens, so an upgrade
+ * that skips releases waits for all of them. Every other new index on a large
+ * table goes here instead, and its readers work, slower, until it exists. Say
+ * so in a comment on the entry, and list the index work in the release note.
+ *
+ * Same shape as the boot list. A missing or invalid index from this list is
+ * pending work, not a post-condition violation.
+ */
+export const DEFERRED_INDEX_SPECS: readonly ConcurrentIndexSpec[] = []
+
 /** The oldest server the lineage runs on (`CREATE OR REPLACE TRIGGER`). */
 export const MIN_SERVER_VERSION_NUM = 140000
 /** The oldest pgvector with the HNSW access method. */
@@ -583,6 +598,11 @@ export interface PostconditionReport {
   observed: {
     invalidIndexes: InvalidIndex[]
     missingIndexes: string[]
+    /**
+     * Background indexes ({@link DEFERRED_INDEX_SPECS}) that are missing or
+     * invalid. Pending work for the `deferred-index-build` job, never a violation.
+     */
+    pendingIndexes: string[]
     extensions: string[]
     /** Declared tables absent from the database, as `schema.table`. */
     missingTables: string[]
@@ -658,8 +678,15 @@ export function declaredTables(): DeclaredTable[] {
  * is what `db:check-drift` is for, and it needs the Drizzle Kit toolchain rather
  * than a query.
  */
-export async function verifySchemaPostconditions(sql: postgres.Sql): Promise<PostconditionReport> {
-  const invalidIndexes = await listInvalidIndexes(sql)
+export async function verifySchemaPostconditions(
+  sql: postgres.Sql,
+  opts: { deferredIndexSpecs?: readonly ConcurrentIndexSpec[] } = {}
+): Promise<PostconditionReport> {
+  const deferredSpecs = opts.deferredIndexSpecs ?? DEFERRED_INDEX_SPECS
+  const deferredNames = new Set(deferredSpecs.map((s) => s.name))
+  const invalid = await listInvalidIndexes(sql)
+  // An invalid background index is a build the job will heal, not a broken database.
+  const invalidIndexes = invalid.filter((i) => !deferredNames.has(i.name))
 
   const present = await sql.unsafe<{ relname: string }[]>(`
     SELECT ic.relname
@@ -672,6 +699,10 @@ export async function verifySchemaPostconditions(sql: postgres.Sql): Promise<Pos
   const missingIndexes = CONCURRENT_INDEX_SPECS.filter((s) => !presentNames.has(s.name)).map(
     (s) => s.name
   )
+  const invalidNames = new Set(invalid.map((i) => i.name))
+  const pendingIndexes = deferredSpecs
+    .filter((s) => !presentNames.has(s.name) || invalidNames.has(s.name))
+    .map((s) => s.name)
 
   const extRows = await sql.unsafe<{ extname: string }[]>(`SELECT extname FROM pg_extension`)
   const extensions = extRows.map((r) => r.extname).sort()
@@ -736,6 +767,13 @@ export async function verifySchemaPostconditions(sql: postgres.Sql): Promise<Pos
     ok: violations.length === 0,
     violations,
     covers: POSTCONDITION_CHECKS,
-    observed: { invalidIndexes, missingIndexes, extensions, missingTables, missingColumns },
+    observed: {
+      invalidIndexes,
+      missingIndexes,
+      pendingIndexes,
+      extensions,
+      missingTables,
+      missingColumns,
+    },
   }
 }

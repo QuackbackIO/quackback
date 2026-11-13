@@ -32,7 +32,7 @@
  * instant it expires, whether or not `sweep.ts` has run. The sweeper reclaims
  * space and never decides correctness.
  */
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
@@ -55,9 +55,17 @@ function ttlSeconds(seconds: number): number {
 // Single values — GET / SET / DEL
 // ============================================================================
 
+/**
+ * Where a statement runs: the workspace's `db` by default, or a caller's
+ * transaction when the read or write must commit with the caller's own work.
+ */
+export interface KvOptions {
+  executor?: { execute: (query: SQL) => Promise<unknown> }
+}
+
 /** GET. Returns null for a missing or expired key. */
-export async function kvGet<T>(key: string): Promise<T | null> {
-  const result = await db.execute(sql`
+export async function kvGet<T>(key: string, opts: KvOptions = {}): Promise<T | null> {
+  const result = await (opts.executor ?? db).execute(sql`
     SELECT value FROM kv_store
     WHERE workspace_key = ${currentWorkspaceNamespace()} AND key = ${key} AND expires_at > now()
   `)
@@ -66,8 +74,13 @@ export async function kvGet<T>(key: string): Promise<T | null> {
 }
 
 /** SET … EX. Overwrites value and TTL unconditionally, as Redis does. */
-export async function kvSet(key: string, value: unknown, seconds: number): Promise<void> {
-  await db.execute(sql`
+export async function kvSet(
+  key: string,
+  value: unknown,
+  seconds: number,
+  opts: KvOptions = {}
+): Promise<void> {
+  await (opts.executor ?? db).execute(sql`
     INSERT INTO kv_store (workspace_key, key, value, expires_at)
     VALUES (
       ${currentWorkspaceNamespace()},

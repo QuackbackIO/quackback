@@ -528,6 +528,13 @@ export {
   notTestTicket,
 } from '@quackback/db'
 
+// Background index list and builder, for the deferred-index-build job.
+export {
+  DEFERRED_INDEX_SPECS,
+  ensureConcurrentIndexes,
+  type ConcurrentIndexSpec,
+} from '@quackback/db/schema-ops'
+
 // Re-export schema types not covered by @quackback/db/types
 export type {
   AssistantInvolvementSource,
