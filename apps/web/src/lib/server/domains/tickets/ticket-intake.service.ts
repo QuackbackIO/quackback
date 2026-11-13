@@ -418,12 +418,25 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     // time-to-resolve clock from the same policy. A conversation with no SLA
     // (no default, a test customer, or a failed apply) hands nothing over.
     const { handoffConversationSlaToTicket } = await import('./ticket-conversation-link.service')
-    await handoffConversationSlaToTicket(created.ticket.id, backingConversation.id)
-    // The handoff writes the ticket's SLA stamp after the create transaction,
-    // so the event, the realtime update and the returned DTO read the row
-    // again rather than the one the transaction returned.
-    const [current] = await db.select().from(tickets).where(eq(tickets.id, created.ticket.id))
-    if (current) ticket = current
+    const handedOver = await handoffConversationSlaToTicket(
+      created.ticket.id,
+      backingConversation.id
+    )
+    // A handoff that stamped the ticket wrote after the create transaction, so
+    // the event, the realtime update and the returned DTO read the row again.
+    // Best effort: the ticket exists, so a failed read falls back to the
+    // transaction's row rather than failing an intake that already landed.
+    if (handedOver) {
+      try {
+        const [current] = await db.select().from(tickets).where(eq(tickets.id, created.ticket.id))
+        if (current) ticket = current
+      } catch (err) {
+        log.warn(
+          { err, ticket_id: created.ticket.id },
+          'ticket re-read after the SLA handoff failed; answering with the created row'
+        )
+      }
+    }
   }
 
   log.info({ ticket_id: created.ticket.id, type: created.ticket.type }, 'ticket created')
