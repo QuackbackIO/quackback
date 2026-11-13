@@ -27,7 +27,6 @@
  */
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
-import { config } from '@/lib/server/config'
 import {
   db,
   DEFERRED_INDEX_SPECS,
@@ -37,8 +36,7 @@ import {
 import { logger } from '@/lib/server/logger'
 import { kvGet, kvSet } from '@/lib/server/kv/pg-kv'
 import { enqueueJob, findJobByDedupeKey } from '@/lib/server/jobs/job-queue'
-import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
-import { resolveWorkspacePassword } from '@/lib/server/workspaces/pool-cache'
+import { directConnection } from '@/lib/server/workspaces/pool-cache'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { DURABLE_KV_TTL_SECONDS, maxAttemptsOf } from './batched'
 
@@ -204,7 +202,9 @@ export async function deferredIndexBuildDue(): Promise<boolean> {
  * changes nothing.
  */
 export async function buildDeferredIndex(spec: ConcurrentIndexSpec): Promise<void> {
-  const direct = openDirectConnection()
+  // One connection of its own, closed after the build.
+  const { url, password } = await directConnection()
+  const direct = postgres(url, { max: 1, connect_timeout: 15, password, onnotice: () => {} })
   try {
     await ensureConcurrentIndexes(direct, [spec], (event) => {
       if (event.phase === 'start') {
@@ -222,19 +222,4 @@ export async function buildDeferredIndex(spec: ConcurrentIndexSpec): Promise<voi
   } finally {
     await direct.end({ timeout: 5 }).catch(() => {})
   }
-}
-
-/** A connection of its own to this workspace's database, for one concurrent build. */
-function openDirectConnection(): postgres.Sql {
-  const workspace = getCurrentWorkspace()
-  if (workspace) {
-    return postgres(workspace.database.directUrl, {
-      max: 1,
-      connect_timeout: 15,
-      password: () => resolveWorkspacePassword(workspace),
-      onnotice: () => {},
-    })
-  }
-  if (!config.databaseUrl) throw new Error('DATABASE_URL is not set')
-  return postgres(config.databaseUrl, { max: 1, onnotice: () => {} })
 }

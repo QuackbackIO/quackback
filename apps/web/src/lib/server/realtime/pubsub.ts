@@ -43,13 +43,11 @@
  * nothing else would have caught it.
  */
 import { sql } from 'drizzle-orm'
-import { config } from '../config'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { currentWorkspaceNamespace } from '../workspaces/workspace-keyed'
-import { getWorkspaceScope } from '../workspaces/workspace-context'
 import { isPooledTenancy } from '../workspaces/mode'
-import { resolveWorkspacePassword } from '../workspaces/pool-cache'
+import { directConnection } from '../workspaces/pool-cache'
 import { openRealtimeListener, type RealtimeListener } from './pg-listener'
 import { logger } from '@/lib/server/logger'
 
@@ -170,27 +168,6 @@ function emit(handlers: Set<Handler>, message: string): void {
       log.error({ err }, 'listener threw')
     }
   }
-}
-
-/**
- * The direct DSN for the active workspace.
- *
- * Single-workspace installs use `DATABASE_URL`, which for a self-hosted deployment
- * already is a direct session-mode connection. Pooled installs must reach for
- * the registry's `directUrl` — the pooled URL would register the LISTEN and
- * deliver nothing.
- */
-async function directConnection(): Promise<{ url: string; password?: () => Promise<string> }> {
-  if (!isPooledTenancy()) return { url: config.databaseUrl }
-  const scope = getWorkspaceScope()
-  if (!scope) {
-    throw new Error(
-      'realtime subscribe requires a workspace scope under QUACKBACK_TENANCY=pooled: ' +
-        "the LISTEN connection is built from this workspace's direct DSN."
-    )
-  }
-  const workspace = scope.workspace
-  return { url: workspace.database.directUrl, password: () => resolveWorkspacePassword(workspace) }
 }
 
 /**
