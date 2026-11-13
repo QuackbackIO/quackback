@@ -457,7 +457,7 @@ describe.skipIf(!fixture.available)('linkTicketToConversation (real DB, rolled b
     expect(row.firstResponseAt).toBeNull()
   })
 
-  it('replaces a first_response_at the pair\'s messages do not support at link time', async () => {
+  it("replaces a first_response_at the pair's messages do not support at link time", async () => {
     await seedSettings()
     await seedStatuses()
     const actor = await seedAdminActor()

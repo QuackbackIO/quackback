@@ -102,7 +102,9 @@ async function seedPrincipal(role: 'member' | 'user'): Promise<PrincipalId> {
 }
 
 async function seedDefaultStatus(): Promise<void> {
-  await testDb.insert(settings).values({ name: 'Acme', slug: `acme_${suffix()}`, createdAt: new Date() })
+  await testDb
+    .insert(settings)
+    .values({ name: 'Acme', slug: `acme_${suffix()}`, createdAt: new Date() })
   await testDb
     .update(ticketStatuses)
     .set({ isDefault: false })
@@ -177,13 +179,16 @@ async function reactionJobs(
   type: string,
   count: number
 ): Promise<ClaimedJob[]> {
-  await vi.waitFor(async () => {
-    const rows = await testDb
-      .select({ eventId: events.eventId })
-      .from(events)
-      .where(and(eq(events.entityId, conversationId), eq(events.type, type)))
-    expect(rows).toHaveLength(count)
-  }, { timeout: 10_000 })
+  await vi.waitFor(
+    async () => {
+      const rows = await testDb
+        .select({ eventId: events.eventId })
+        .from(events)
+        .where(and(eq(events.entityId, conversationId), eq(events.type, type)))
+      expect(rows).toHaveLength(count)
+    },
+    { timeout: 10_000 }
+  )
   return queuedJobs(conversationId, type)
 }
 

@@ -124,7 +124,9 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
 
   it("an agent reply to the customer's message is a customer-visible ticket message that sets first_response_at", async () => {
     // The ticket_updated publish renders the ticket's stage labels.
-    await testDb.insert(settings).values({ name: 'Acme', slug: `acme_${suffix()}`, createdAt: new Date() })
+    await testDb
+      .insert(settings)
+      .values({ name: 'Acme', slug: `acme_${suffix()}`, createdAt: new Date() })
     const { ticketId, actor } = await seedTicketWithAgent()
     await seedCustomerMessage(ticketId)
     expect(await ticketFirstResponseAt(ticketId)).toBeNull()

@@ -345,7 +345,7 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
           {
             senderType: filedByRequester ? 'visitor' : 'agent',
             isInternal: false,
-                    actor,
+            actor,
           }
         )
       } catch (err) {
