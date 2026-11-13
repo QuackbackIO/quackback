@@ -16,6 +16,7 @@
  * ticket's first response, not deleted.
  */
 import { and, db, eq, or, sql, apiKeys, conversationMessages, principal } from '@/lib/server/db'
+import type { SQLWrapper } from 'drizzle-orm'
 import type { PrincipalId } from '@quackback/ids'
 
 /**
@@ -24,7 +25,7 @@ import type { PrincipalId } from '@quackback/ids'
  * than a join: a join lets the planner hash the whole principal table for a
  * long conversation, whatever the time bound.
  */
-function automatedPrincipal(id: unknown) {
+function automatedPrincipal(id: SQLWrapper) {
   return sql`(${id} in (select ${principal.id} from ${principal} where ${principal.type} = 'service')
     and ${id} not in (select ${apiKeys.principalId} from ${apiKeys} where ${apiKeys.kind} = 'personal'))`
 }
@@ -32,7 +33,7 @@ function automatedPrincipal(id: unknown) {
 /** Whether the message's author is an automated service principal. */
 export const byService = sql`coalesce(${automatedPrincipal(conversationMessages.principalId)}, false)`
 
-/** A public-or-not agent message from a teammate (callers add `is_internal = false`). */
+/** An agent message from a teammate. Callers add `is_internal = false` for a public reply. */
 export const humanReply = and(eq(conversationMessages.senderType, 'agent'), sql`not ${byService}`)!
 
 /**
