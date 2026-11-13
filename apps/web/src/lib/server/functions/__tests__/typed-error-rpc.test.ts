@@ -24,7 +24,7 @@ import {
   ServiceUnavailableError,
   isNotFoundError,
 } from '@/lib/shared/errors'
-import { UNEXPECTED_ERROR_MESSAGE } from '@/lib/shared/error-reference'
+import { UNEXPECTED_ERROR_MESSAGE, errorReferenceOf } from '@/lib/shared/error-reference'
 import { isTestDataLinkConflict } from '@/lib/shared/tickets'
 
 const { createServerFnRpc } = await import('./_server-fn-rpc')
@@ -57,6 +57,16 @@ beforeAll(async () => {
       'MAIL_PROVIDER_UNREACHABLE',
       "Couldn't reach the mail provider. Try again in a minute."
     )
+  })
+  define('provider-4xx', () => {
+    // An HTTP client's error for a provider's reply, carrying a 4xx status and
+    // a code: its message quotes the provider, so production hides it.
+    throw Object.assign(new Error('Provider said: token sk-acme-secret is invalid'), {
+      statusCode: 422,
+      code: 'PROVIDER_REJECTED',
+      status: 422,
+      headers: {},
+    })
   })
   define('plain', () => {
     throw new Error('Pick a board first')
@@ -96,6 +106,15 @@ describe('a typed server-function error, as the browser sees it in production', 
     expect(outage?.message).toBe("Couldn't reach the mail provider. Try again in a minute.")
     expect(outage?.code).toBeUndefined()
     expect(outage?.statusCode).toBeUndefined()
+  })
+
+  it('a typed error below 500 with a hidden message keeps its code and status', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const error = await failure('provider-4xx')
+    expect(error?.message).toBe(UNEXPECTED_ERROR_MESSAGE)
+    expect(errorReferenceOf(error)).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)
+    expect(error).toMatchObject({ code: 'PROVIDER_REJECTED', statusCode: 422 })
+    expect(JSON.stringify(error)).not.toContain('sk-acme-secret')
   })
 
   it('a plain throw stays hidden and reads as nothing typed', async () => {

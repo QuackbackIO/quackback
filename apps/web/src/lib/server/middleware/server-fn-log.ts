@@ -16,7 +16,7 @@ import { isNotFound, isRedirect } from '@tanstack/react-router'
 import type { AppLogger } from '@quackback/logger'
 import { logger } from '@/lib/server/logger'
 import { getLogContext } from '@/lib/server/log-context'
-import { DomainException, isSafeToShow } from '@/lib/shared/errors'
+import { DomainException, HiddenMessageRefusal, isSafeToShow } from '@/lib/shared/errors'
 import { UNEXPECTED_ERROR_MESSAGE, withErrorReference } from '@/lib/shared/error-reference'
 import { isAuthDenialError } from '@/lib/server/functions/auth-errors'
 import { isTechnicalFailure, newErrorReference } from './technical-failure'
@@ -76,6 +76,14 @@ function statusCodeOf(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined
   const candidate = error as { statusCode?: unknown }
   return typeof candidate.statusCode === 'number' ? candidate.statusCode : undefined
+}
+
+/** The code and status of a refusal below 500, or null for anything else. */
+function refusalCodeOf(error: unknown): { code: string; statusCode: number } | null {
+  const statusCode = statusCodeOf(error)
+  const code = (error as { code?: unknown } | null)?.code
+  if (statusCode === undefined || statusCode >= 500 || typeof code !== 'string') return null
+  return { code, statusCode }
 }
 
 /**
@@ -154,7 +162,15 @@ export async function runWithServerFnLogging<T>({
         `${name} failed`
       )
     }
-    if (reference) throw new Error(withErrorReference(UNEXPECTED_ERROR_MESSAGE, reference))
+    if (reference) {
+      const hiddenMessage = withErrorReference(UNEXPECTED_ERROR_MESSAGE, reference)
+      // A refusal below 500 keeps its code and status, only its words go.
+      const refusal = refusalCodeOf(error)
+      if (refusal) {
+        throw new HiddenMessageRefusal(refusal.code, refusal.statusCode, hiddenMessage)
+      }
+      throw new Error(hiddenMessage)
+    }
     throw error
   }
 }
