@@ -68,9 +68,10 @@ beforeAll(async () => {
 }, 240_000)
 
 afterAll(async () => {
+  // Dropping a database waits for a checkpoint, which a loaded server can take minutes over.
   await admin?.unsafe(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => {})
   await admin?.end({ timeout: 5 }).catch(() => {})
-}, 60_000)
+}, 180_000)
 
 describe('the self-hosted boot migration', () => {
   it('uses the fleet migrator lock timeout of 30 seconds', () => {
