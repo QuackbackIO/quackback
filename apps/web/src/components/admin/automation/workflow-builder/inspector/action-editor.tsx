@@ -1,10 +1,11 @@
 /**
  * The action step editor, ported from the old popover version: each action
  * type's config UI (team/agent selects, tag picker, priority, snooze, SLA
- * policy, set attribute). Logic and config shapes are unchanged — only the
+ * policy, set attribute, ticket status and due date). Logic and config shapes are unchanged — only the
  * home (inspector panel instead of a popover) and the entity source (the
  * shared WorkflowEntitiesProvider instead of a canvas-local context) differ.
  */
+import { useIntl } from 'react-intl'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -46,6 +47,106 @@ const CATEGORY_DEFAULT_TYPE = '__category_default__'
 function snoozeMode(action: SnoozeAction): SnoozeMode {
   if ('seconds' in action) return 'duration'
   return action.untilIso === null ? 'reply' : 'datetime'
+}
+
+type TicketDueAction = Extract<GraphAction, { type: 'set_ticket_due_date' }>
+type TicketDueMode = 'relative' | 'datetime' | 'clear'
+
+/** Default offset (1 day) when switching into relative mode — the same as
+ *  defaultAction's for a fresh step (workflow-graph.ts). */
+const DEFAULT_DUE_SECONDS = 86400
+
+function ticketDueMode(action: TicketDueAction): TicketDueMode {
+  if ('seconds' in action) return 'relative'
+  return action.dueAtIso === null ? 'clear' : 'datetime'
+}
+
+/** set_ticket_due_date's config: a relative offset from when the step runs,
+ *  a fixed date and time, or clearing the date. Its own component so the
+ *  intl hook only runs where this action is being edited. */
+function TicketDueDateFields({
+  action,
+  onChange,
+}: {
+  action: TicketDueAction
+  onChange: (action: GraphAction) => void
+}) {
+  const intl = useIntl()
+  const setMode = (mode: TicketDueMode) => {
+    if (mode === 'clear') return onChange({ type: 'set_ticket_due_date', dueAtIso: null })
+    if (mode === 'relative') {
+      return onChange({ type: 'set_ticket_due_date', seconds: DEFAULT_DUE_SECONDS })
+    }
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    d.setHours(17, 0, 0, 0)
+    onChange({ type: 'set_ticket_due_date', dueAtIso: d.toISOString() })
+  }
+
+  return (
+    <>
+      <Field
+        label={intl.formatMessage({
+          id: 'admin.automation.action.setTicketDueDate.mode',
+          defaultMessage: 'Due date',
+        })}
+      >
+        <Select value={ticketDueMode(action)} onValueChange={(v) => setMode(v as TicketDueMode)}>
+          <SelectTrigger size="sm" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="relative">
+              {intl.formatMessage({
+                id: 'admin.automation.action.setTicketDueDate.modeRelative',
+                defaultMessage: 'Relative to when this step runs',
+              })}
+            </SelectItem>
+            <SelectItem value="datetime">
+              {intl.formatMessage({
+                id: 'admin.automation.action.setTicketDueDate.modeDate',
+                defaultMessage: 'Specific date',
+              })}
+            </SelectItem>
+            <SelectItem value="clear">
+              {intl.formatMessage({
+                id: 'admin.automation.action.setTicketDueDate.modeClear',
+                defaultMessage: 'Clear the due date',
+              })}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      {'seconds' in action && (
+        <Field
+          label={intl.formatMessage({
+            id: 'admin.automation.action.setTicketDueDate.dueIn',
+            defaultMessage: 'Due in',
+          })}
+        >
+          <DurationInput
+            seconds={action.seconds}
+            onChange={(seconds) => onChange({ type: 'set_ticket_due_date', seconds })}
+          />
+        </Field>
+      )}
+      {!('seconds' in action) && action.dueAtIso !== null && (
+        <DateTimePicker
+          value={new Date(action.dueAtIso)}
+          minDate={new Date()}
+          onChange={(d) =>
+            d && onChange({ type: 'set_ticket_due_date', dueAtIso: d.toISOString() })
+          }
+        />
+      )}
+      <p className="text-[11px] text-muted-foreground">
+        {intl.formatMessage({
+          id: 'admin.automation.action.setTicketDueDate.help',
+          defaultMessage: 'Applies to the ticket linked to this conversation.',
+        })}
+      </p>
+    </>
+  )
 }
 
 export function ActionEditor({
@@ -333,6 +434,25 @@ export function ActionEditor({
           <p className="mt-1 text-[11px] text-muted-foreground">
             Applies to the conversation&apos;s linked customer ticket. No linked ticket fails this
             step.
+          </p>
+        </Field>
+      )}
+
+      {action.type === 'set_ticket_due_date' && (
+        <TicketDueDateFields action={action} onChange={onChange} />
+      )}
+
+      {action.type === 'add_ticket_watcher' && (
+        <Field label="Teammate">
+          <EntitySelect
+            value={action.principalId}
+            placeholder="Choose teammate"
+            items={members}
+            onChange={(principalId) => onChange({ ...action, principalId })}
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Adds them as a watcher of the conversation&apos;s linked customer ticket. No linked
+            ticket, or a teammate who can&apos;t see it, fails this step.
           </p>
         </Field>
       )}

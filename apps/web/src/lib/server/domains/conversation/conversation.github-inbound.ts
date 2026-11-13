@@ -45,6 +45,8 @@ export async function ingestGitHubChannelEvent(opts: {
   body: string
   eventName: string | null
   integration: IntegrationRow
+  /** The repository the signed delivery was routed to, when the webhook is per repository. */
+  destination?: { externalId: string }
 }): Promise<void> {
   const account = await getLiveGitHubConnectionAccount()
   if (!account) return
@@ -63,6 +65,7 @@ export async function ingestGitHubChannelEvent(opts: {
   const botLogin = typeof config.username === 'string' ? config.username : undefined
   const ownerRepo =
     payload.repository?.full_name ||
+    opts.destination?.externalId ||
     (typeof config.channelId === 'string' ? config.channelId : null)
   const issue = payload.issue
   if (!ownerRepo || !issue?.number) return

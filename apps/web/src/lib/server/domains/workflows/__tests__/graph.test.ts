@@ -303,6 +303,41 @@ describe('walkWorkflow — conversational block kinds (Phase C, slice C-1)', () 
     })
   })
 
+  it('send_ticket_form carries askDueDate into the posted block when the node sets it', () => {
+    const graph: WorkflowGraph = {
+      nodes: [
+        { id: 't', type: 'trigger' },
+        { id: 'f', type: 'send_ticket_form', body: doc, askDueDate: true },
+      ],
+      edges: [{ from: 't', to: 'f' }],
+    }
+    expect(walkWorkflow(graph, ctx()).actions).toEqual([
+      {
+        type: 'send_block',
+        nodeId: 'f',
+        block: { kind: 'ticketForm', body: doc, askDueDate: true },
+      },
+    ])
+  })
+
+  it('send_ticket_form leaves askDueDate absent when the node does not set it (or sets false)', () => {
+    for (const extra of [{}, { askDueDate: false }]) {
+      const graph: WorkflowGraph = {
+        nodes: [
+          { id: 't', type: 'trigger' },
+          { id: 'f', type: 'send_ticket_form', body: doc, ...extra },
+        ],
+        edges: [{ from: 't', to: 'f' }],
+      }
+      const [action] = walkWorkflow(graph, ctx()).actions
+      expect(action).toEqual({
+        type: 'send_block',
+        nodeId: 'f',
+        block: { kind: 'ticketForm', body: doc },
+      })
+    }
+  })
+
   describe("let_assistant_answer (Phase C, slice C-6: parks pending Quinn's outcome)", () => {
     const graph: WorkflowGraph = {
       nodes: [

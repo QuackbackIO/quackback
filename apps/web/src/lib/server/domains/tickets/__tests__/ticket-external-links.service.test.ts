@@ -34,6 +34,8 @@ vi.mock('../ticket.webhooks', () => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  emitTicketUpdated: vi.fn().mockResolvedValue(undefined),
+  emitTicketPriorityChanged: vi.fn().mockResolvedValue(undefined),
 }))
 
 // Neutralize the real Postgres-backed realtime publish; this suite doesn't
