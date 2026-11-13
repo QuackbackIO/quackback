@@ -100,6 +100,8 @@
   "widget.tickets.new.detailsPlaceholder": "أضف أي شيء يساعدنا على فهم المشكلة.",
   "widget.tickets.new.submit": "إنشاء تذكرة",
   "widget.tickets.blockCard.filed": "تم إنشاء التذكرة. سنتابعها من هنا.",
+  "widget.tickets.blockCard.formLoadFailed": "تعذّر تحميل هذا النموذج.",
+  "widget.tickets.blockCard.retry": "حاول مرة أخرى",
   "widget.tickets.new.email": "البريد الإلكتروني",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
   "widget.tickets.recent": "التذاكر الأخيرة",

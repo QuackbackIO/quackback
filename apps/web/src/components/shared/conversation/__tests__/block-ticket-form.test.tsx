@@ -25,8 +25,8 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 import { createMyTicketFn, getMyTicketFormFn } from '@/lib/server/functions/tickets'
 import { validateTicketIntakeValues, type TicketIntakeType } from '@/lib/shared/tickets'
 
-/** The intake types the form read returns for the current test (none by
- *  default, which is the read failing or returning nothing). */
+/** The intake types the form read returns for the current test (an empty
+ *  list by default: no intake types). */
 let intakeTypes: TicketIntakeType[] | undefined
 
 /**
@@ -53,8 +53,9 @@ function serverLikeCreate(args: {
 beforeEach(() => {
   intakeTypes = undefined
   vi.mocked(createMyTicketFn).mockImplementation(serverLikeCreate as never)
-  vi.mocked(getMyTicketFormFn).mockImplementation((async () =>
-    intakeTypes ? { types: intakeTypes } : undefined) as never)
+  vi.mocked(getMyTicketFormFn).mockImplementation((async () => ({
+    types: intakeTypes ?? [],
+  })) as never)
 })
 
 afterEach(() => {
@@ -194,5 +195,52 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
       data: { ticketTypeId: 'ticket_type_first', fieldValues: { order_number: 'B-7' } },
     })
     await screen.findByText(/ticket filed/i)
+  })
+
+  it('shows a loading state in the fields area and keeps Create off until the type list is in', async () => {
+    let release: (value: { types: TicketIntakeType[] }) => void = () => {}
+    vi.mocked(getMyTicketFormFn).mockImplementation(
+      (() =>
+        new Promise((resolve) => {
+          release = resolve
+        })) as never
+    )
+    renderCard()
+    fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
+      target: { value: 'Missing parcel' },
+    })
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    const submit = screen.getByRole('button', { name: /create ticket/i })
+    expect(submit).toBeDisabled()
+
+    release({ types: [intakeType('ticket_type_bug', true)] })
+    await screen.findByText('Order number')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('shows an error with Try again when the type list cannot be read, and never sends without it', async () => {
+    vi.mocked(getMyTicketFormFn).mockRejectedValueOnce(new Error())
+    intakeTypes = [intakeType('ticket_type_bug', true)]
+    renderCard()
+    fireEvent.change(screen.getByPlaceholderText(/summarize your request/i), {
+      target: { value: 'Missing parcel' },
+    })
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/couldn.t load this form/i)
+    const submit = screen.getByRole('button', { name: /create ticket/i })
+    expect(submit).toBeDisabled()
+    fireEvent.click(submit)
+    expect(createMyTicketFn).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    await screen.findByText('Order number')
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.change(inputUnder('Order number'), { target: { value: 'A-1001' } })
+    await waitFor(() => expect(submit).toBeEnabled())
+    fireEvent.click(submit)
+    await waitFor(() => expect(createMyTicketFn).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(createMyTicketFn).mock.calls[0][0]).toMatchObject({
+      data: { ticketTypeId: 'ticket_type_bug', fieldValues: { order_number: 'A-1001' } },
+    })
   })
 })

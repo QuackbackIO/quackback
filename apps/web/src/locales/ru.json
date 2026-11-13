@@ -100,6 +100,8 @@
   "widget.tickets.new.detailsPlaceholder": "Добавьте всё, что поможет нам понять проблему.",
   "widget.tickets.new.submit": "Создать тикет",
   "widget.tickets.blockCard.filed": "Тикет создан. Мы будем отслеживать его отсюда.",
+  "widget.tickets.blockCard.formLoadFailed": "Не удалось загрузить эту форму.",
+  "widget.tickets.blockCard.retry": "Повторить",
   "widget.tickets.new.email": "Электронная почта",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
   "widget.tickets.recent": "Недавние тикеты",
