@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { escapeCSV } from '@/lib/server/utils/csv'
 import { logger } from '@/lib/server/logger'
+import { internalRouteErrorResponse } from '@/lib/server/domains/api/responses'
 import type { SegmentId } from '@quackback/ids'
 
 const log = logger.child({ component: 'export-users' })
@@ -111,7 +112,7 @@ export async function handleExportUsers(request: Request): Promise<Response> {
       return Response.json(error.toResponseBody(), { status: error.statusCode })
     }
     log.error({ err: error }, 'users csv export failed')
-    return Response.json({ error: 'Internal server error' }, { status: 500 })
+    return internalRouteErrorResponse()
   }
 }
 

@@ -24,7 +24,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { db, assistantEvents } from '@/lib/server/db'
-import { gateCopilotFn } from '@/lib/server/domains/assistant/copilot-gate'
+import { CopilotUnavailableError, gateCopilotFn } from '@/lib/server/domains/assistant/copilot-gate'
 import { withAssistantItemRef } from '@/lib/server/domains/assistant/item-ref.schema'
 import {
   COPILOT_EVENT_TYPES,
@@ -101,13 +101,20 @@ export type CopilotEventInput = z.input<typeof recordCopilotEventSchema>
 export const recordCopilotEventFn = createServerFn({ method: 'POST' })
   .validator(recordCopilotEventSchema)
   .handler(async ({ data }) => {
-    // An expected denial here (no copilot.use, flag off / unconfigured, item
-    // not viewable) is the gate doing its job on a fire-and-forget telemetry
-    // write. The server-fn log middleware already classifies all three as warn
-    // rather than error — auth denials, CopilotUnavailableError via its
-    // statusCode, and NotFoundError as a DomainException — so this handler no
-    // longer sorts them itself.
-    const { auth, conversationId, ticketId } = await gateCopilotFn(data.item)
+    // An expected denial here (no copilot.use, item not viewable) is the gate
+    // doing its job on a fire-and-forget telemetry write, and the server-fn
+    // log middleware classifies both as warn. The assistant being unavailable
+    // is a 503, which that middleware logs at error: correct for a call a
+    // person is waiting on, noise for a write nobody reads the result of. So
+    // it is answered here as a value and nothing is logged.
+    let gate: Awaited<ReturnType<typeof gateCopilotFn>>
+    try {
+      gate = await gateCopilotFn(data.item)
+    } catch (error) {
+      if (error instanceof CopilotUnavailableError) return { ok: false as const }
+      throw error
+    }
+    const { auth, conversationId, ticketId } = gate
 
     await db.insert(assistantEvents).values({
       eventType: data.eventType,

@@ -32,10 +32,10 @@ vi.mock('@/lib/server/domains/settings/settings.tickets', () => ({
   getStageLabels: () => getStageLabels(),
 }))
 
-const getTicketWatchersForEvent = vi.fn<() => Promise<string[]>>()
+const getTicketNotifiableWatchers = vi.fn<() => Promise<string[]>>()
 const getTicketAgentWatchersForEvent = vi.fn<() => Promise<string[]>>()
 vi.mock('@/lib/server/domains/tickets/ticket-subscription.service', () => ({
-  getTicketWatchersForEvent: () => getTicketWatchersForEvent(),
+  getTicketNotifiableWatchers: () => getTicketNotifiableWatchers(),
   getTicketAgentWatchersForEvent: () => getTicketAgentWatchersForEvent(),
 }))
 
@@ -49,8 +49,8 @@ const {
 beforeEach(() => {
   getStageLabels.mockReset()
   getStageLabels.mockResolvedValue({ received: 'Received', resolved: 'Resolved' })
-  getTicketWatchersForEvent.mockReset()
-  getTicketWatchersForEvent.mockResolvedValue([])
+  getTicketNotifiableWatchers.mockReset()
+  getTicketNotifiableWatchers.mockResolvedValue([])
   getTicketAgentWatchersForEvent.mockReset()
   getTicketAgentWatchersForEvent.mockResolvedValue([])
 })
@@ -143,7 +143,7 @@ describe('getTicketExternalStatusChangedTargets', () => {
   it('resolves AGENT watchers only, with the link reference in config', async () => {
     getTicketAgentWatchersForEvent.mockResolvedValue(['principal_agent_1', 'principal_agent_2'])
     const target = await getTicketExternalStatusChangedTargets(externalStatusEvent())
-    expect(getTicketWatchersForEvent).not.toHaveBeenCalled()
+    expect(getTicketNotifiableWatchers).not.toHaveBeenCalled()
     expect(target).toEqual({
       type: 'notification',
       target: { principalIds: ['principal_agent_1', 'principal_agent_2'] },
@@ -173,7 +173,7 @@ describe('getTicketExternalStatusChangedTargets', () => {
 
 describe('getTicketRepliedTargets', () => {
   it('resolves all watchers minus the actor into one target with preview config', async () => {
-    getTicketWatchersForEvent.mockResolvedValue([
+    getTicketNotifiableWatchers.mockResolvedValue([
       'principal_requester',
       'principal_agent_1',
       'principal_actor',
@@ -194,7 +194,7 @@ describe('getTicketRepliedTargets', () => {
   })
 
   it('a requester reply (visitor sender) bells the remaining watchers, actor excluded', async () => {
-    getTicketWatchersForEvent.mockResolvedValue(['principal_requester', 'principal_agent_1'])
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester', 'principal_agent_1'])
     const target = await getTicketRepliedTargets(
       repliedEvent({ senderType: 'visitor', authorName: null })
     )
@@ -233,7 +233,7 @@ describe('getTicketNoteAddedTargets', () => {
       },
     })
     // The all-watchers lookup is never consulted — the agent-only query is the source.
-    expect(getTicketWatchersForEvent).not.toHaveBeenCalled()
+    expect(getTicketNotifiableWatchers).not.toHaveBeenCalled()
   })
 
   it('returns null when no agent watches (a requester-only watcher set stays silent)', async () => {
@@ -248,7 +248,7 @@ describe('getTicketNoteAddedTargets', () => {
 
 describe('getTicketStatusChangedTargets (watchers union)', () => {
   it('unions requester and watchers minus the actor into ONE target', async () => {
-    getTicketWatchersForEvent.mockResolvedValue([
+    getTicketNotifiableWatchers.mockResolvedValue([
       'principal_requester',
       'principal_agent_1',
       'principal_actor',
@@ -266,21 +266,21 @@ describe('getTicketStatusChangedTargets (watchers union)', () => {
   })
 
   it('a requester-less ticket with watchers still resolves (back-office parity)', async () => {
-    getTicketWatchersForEvent.mockResolvedValue(['principal_agent_1'])
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_agent_1'])
     const target = await getTicketStatusChangedTargets(statusEvent({ requesterPrincipalId: null }))
     expect(target?.target).toEqual({ principalIds: ['principal_agent_1'] })
     expect(target?.config).toMatchObject({ requesterPrincipalId: null })
   })
 
   it('B22: a null-stage crossing INTO CLOSED fires for watchers with the generic Closed label', async () => {
-    getTicketWatchersForEvent.mockResolvedValue(['principal_agent_1'])
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_agent_1'])
     const target = await getTicketStatusChangedTargets(statusEvent({ stage: null }))
     expect(target?.target).toEqual({ principalIds: ['principal_agent_1'] })
     expect(target?.config).toMatchObject({ stageLabel: 'Closed' })
   })
 
   it('a null-stage move that is not a closed crossing, and same-stage moves, stay silent regardless of watchers', async () => {
-    getTicketWatchersForEvent.mockResolvedValue(['principal_agent_1'])
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_agent_1'])
     expect(
       await getTicketStatusChangedTargets(
         statusEvent({ stage: null, newStatus: 'open', previousStatus: 'pending' })
