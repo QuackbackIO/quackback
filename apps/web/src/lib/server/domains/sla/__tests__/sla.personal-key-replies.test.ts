@@ -248,11 +248,32 @@ describe.skipIf(!fixture.available)('SLA clocks and API key replies', () => {
     expect((await stampOf(thread.conversationId)).firstResponseAt ?? null).toBeNull()
   })
 
-  it('a legacy key whose principal is a person settles first response from its own event', async () => {
+  it('an older key whose principal is a person: its own event settles nothing', async () => {
+    const thread = await seedThread()
+    const person = await seedPerson()
+    // An API key from before key kinds that acts as a person's own principal.
+    await testDb.insert(apiKeys).values({
+      name: 'older key',
+      keyHash: `${suffix()}${'1'.repeat(64)}`.slice(0, 64),
+      keyPrefix: 'qb_test',
+      createdById: person,
+      principalId: person,
+      kind: 'personal',
+      createdAt: new Date('2020-01-01T00:00:00Z'),
+    })
+    await recordSlaFromEvent(await write(thread, 'visitor', '10:05', thread.customer))
+    await recordSlaFromEvent(await write(thread, 'agent', '10:20', person, restActor(person)))
+    // Its row looks exactly like the person's inbox reply, so a later
+    // teammate reply's reaction, which reads the rows, still counts it; only
+    // the key's own event can tell, and it treats the reply as automated.
+    expect((await stampOf(thread.conversationId)).firstResponseAt ?? null).toBeNull()
+  })
+
+  it('a person sending from the inbox settles first response', async () => {
     const thread = await seedThread()
     const person = await seedPerson()
     await recordSlaFromEvent(await write(thread, 'visitor', '10:05', thread.customer))
-    await recordSlaFromEvent(await write(thread, 'agent', '10:20', person, restActor(person)))
+    await recordSlaFromEvent(await write(thread, 'agent', '10:20', person))
     expect((await stampOf(thread.conversationId)).firstResponseAt).toBe(iso('10:20'))
   })
 
@@ -286,17 +307,23 @@ describe.skipIf(!fixture.available)('SLA clocks and API key replies', () => {
     const workspaceKey = await seedKey('workspace', { createdById: null })
     const personalKey = await seedKey('personal', { createdById: null })
     const oldPersonalKey = await seedKey('personal', { createdById: null, madeBeforeCutoff: true })
-    expect(await isAutomatedAuthor(workspaceKey, 'service')).toBe(true)
-    expect(await isAutomatedAuthor(personalKey, 'service')).toBe(false)
-    expect(await isAutomatedAuthor(oldPersonalKey, 'service')).toBe(true)
+    expect(await isAutomatedAuthor(workspaceKey, { type: 'service' })).toBe(true)
+    expect(
+      await isAutomatedAuthor(personalKey, { type: 'service', principalId: personalKey })
+    ).toBe(false)
+    expect(
+      await isAutomatedAuthor(oldPersonalKey, { type: 'service', principalId: oldPersonalKey })
+    ).toBe(true)
     // A person's message is never automated, whoever the principal is.
-    expect(await isAutomatedAuthor(workspaceKey, 'user')).toBe(false)
-    expect(await isAutomatedAuthor(null, 'service')).toBe(false)
+    expect(await isAutomatedAuthor(workspaceKey, { type: 'user' })).toBe(false)
+    expect(await isAutomatedAuthor(null, { type: 'service' })).toBe(false)
   })
 
   it('treats every key as automated when no cutoff is recorded', async () => {
     const personalKey = await seedKey('personal', { createdById: null })
     await testDb.execute(sql`DELETE FROM kv_store WHERE key = ${PERSONAL_KEY_REPLY_CUTOFF_KEY}`)
-    expect(await isAutomatedAuthor(personalKey, 'service')).toBe(true)
+    expect(
+      await isAutomatedAuthor(personalKey, { type: 'service', principalId: personalKey })
+    ).toBe(true)
   })
 })

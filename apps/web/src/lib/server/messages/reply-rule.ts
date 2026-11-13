@@ -21,7 +21,7 @@
  */
 import { and, db, eq, or, sql, apiKeys, conversationMessages, principal } from '@/lib/server/db'
 import type { SQLWrapper } from 'drizzle-orm'
-import type { PrincipalId } from '@quackback/ids'
+import { toUuid, type PrincipalId } from '@quackback/ids'
 
 /** The kv key the migration records the personal-key cutoff under. */
 export const PERSONAL_KEY_REPLY_CUTOFF_KEY = 'api-keys:personal-reply-cutoff'
@@ -64,21 +64,42 @@ export const cycleOpener = or(
 )!
 
 /**
- * The same rule for one message's author, as an event reports it: true when a
- * message written by `principalId` is an automated service's. An event's
- * reaction uses it, so the reaction and the message rows agree. A message a
- * person sent (`actorType` 'user') is never automated, so only a service
+ * Whether a key acting as `id` replies as a person: a personal key made at or
+ * after the cutoff. Any other key (a workspace key, or a personal key from
+ * before the cutoff) is automated, whatever kind of principal it acts as.
+ */
+function keyRepliesAsPerson(id: SQLWrapper) {
+  return sql`exists (select 1 from ${apiKeys} where ${apiKeys.principalId} = ${id}
+    and ${apiKeys.kind} = 'personal' and ${apiKeys.createdAt} >= ${personalKeyCutoff})`
+}
+
+function isApiKey(id: SQLWrapper) {
+  return sql`exists (select 1 from ${apiKeys} where ${apiKeys.principalId} = ${id})`
+}
+
+/**
+ * The same rule for one message, as its event reports it: true when the reply
+ * is automated. An event's reaction uses it, so the reaction and the message
+ * rows agree, with one addition the rows cannot make. An older API key whose
+ * principal is a person writes rows exactly like that person's inbox replies,
+ * but its event carries a service actor; a reply sent by a service actor
+ * through any key that does not reply as a person is automated. A message a
+ * person sent (actor type 'user') is never automated, so only a service
  * actor's message costs a read.
  */
 export async function isAutomatedAuthor(
-  principalId: PrincipalId | null,
-  actorType: string | undefined
+  authorPrincipalId: PrincipalId | null,
+  actor: { type?: string; principalId?: string } | undefined
 ): Promise<boolean> {
-  if (!principalId || actorType === 'user') return false
-  const [row] = await db
-    .select({ id: principal.id })
-    .from(principal)
-    .where(and(eq(principal.id, principalId), automatedPrincipal(principal.id)))
-    .limit(1)
-  return row !== undefined
+  if (actor?.type === 'user') return false
+  // Raw parameters skip the typeid columns' mapping, so ids go in as uuids.
+  const author = authorPrincipalId ? sql`${toUuid(authorPrincipalId)}::uuid` : sql`null::uuid`
+  const actorId = actor?.principalId ? sql`${toUuid(actor.principalId)}::uuid` : sql`null::uuid`
+  const rows = (await db.execute(sql`
+    select (
+      coalesce(${automatedPrincipal(author)}, false)
+      or (${isApiKey(actorId)} and not ${keyRepliesAsPerson(actorId)})
+    ) as automated
+  `)) as unknown as Array<{ automated: boolean }>
+  return rows[0]?.automated === true
 }
