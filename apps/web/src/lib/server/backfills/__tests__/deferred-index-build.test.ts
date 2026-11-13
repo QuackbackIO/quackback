@@ -123,6 +123,14 @@ async function failForGood(dedupeKey: string, finishedAgoMs = 0): Promise<void> 
   `
 }
 
+/** The generation the pass last enqueued for an index. */
+async function currentGen(name: string): Promise<number | null> {
+  const rows = await testSql()<{ value: number }[]>`
+    SELECT value FROM kv_store WHERE key = ${`${QUEUE}:${name}:gen`} AND expires_at > now()
+  `
+  return rows[0]?.value ?? null
+}
+
 /** Age a spec's terminal row past the one-day cool-off. */
 async function ageTerminalRows(name: string): Promise<void> {
   await testSql()`
@@ -306,7 +314,9 @@ describe('a build that keeps failing', () => {
       expect(await enqueueDeferredIndexBuilds()).toBe(1)
       await failForGood(`${QUEUE}:${a.name}:${gen}`)
     }
-    expect(await rowsOf(a.name)).toHaveLength(5)
+    // Counted by generation, not by rows: another suite's prune may already
+    // have removed the aged terminal rows.
+    expect(await currentGen(a.name)).toBe(5)
 
     // Five rounds: stopped, however old the last one is, with one warning.
     await ageTerminalRows(a.name)
@@ -314,7 +324,7 @@ describe('a build that keeps failing', () => {
     expect(await enqueueDeferredIndexBuilds()).toBe(0)
     const warnings = logLines.filter((l) => l.level === 'warn' && l.fields.index === a.name)
     expect(warnings).toHaveLength(1)
-    expect(await rowsOf(a.name)).toHaveLength(5)
+    expect(await currentGen(a.name)).toBe(5)
 
     // A worker restart: the first pass of the new process tries once more.
     __resetDeferredIndexPassesForTests()
@@ -362,7 +372,7 @@ describe('the schedule gate', () => {
 
       const warnings = logLines.filter((l) => l.level === 'warn' && l.fields.index === a.name)
       expect(warnings).toHaveLength(1)
-      expect(await rowsOf(a.name)).toHaveLength(5)
+      expect(await currentGen(a.name)).toBe(5)
       expect(await deferredIndexBuildDue()).toBe(false)
     } finally {
       await testSql()`DELETE FROM job_queue WHERE queue = ${QUEUE} AND dedupe_key = ${key}`
