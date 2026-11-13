@@ -37,6 +37,7 @@ import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { createSlaPolicy } from '../sla-policy.service'
 import { applySlaToConversation, type SlaApplied } from '../sla.service'
 import { recordSlaFromEvent } from '../sla.event-hooks'
+import { isAutomatedAuthor } from '@/lib/server/messages/reply-rule'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -262,5 +263,15 @@ describe.skipIf(!fixture.available)('SLA clocks and API key replies', () => {
         .where(eq(slaEvents.conversationId, thread.conversationId))
     ).filter((event) => event.kind === 'next_response_met')
     expect(settled.map((event) => event.meta.at)).toEqual([iso('11:00')])
+  })
+
+  it("reads the author only for a service actor's message", async () => {
+    const workspaceKey = await seedKey('workspace', { createdById: null })
+    const personalKey = await seedKey('personal', { createdById: null })
+    expect(await isAutomatedAuthor(workspaceKey, 'service')).toBe(true)
+    expect(await isAutomatedAuthor(personalKey, 'service')).toBe(false)
+    // A person's message is never automated, whoever the principal is.
+    expect(await isAutomatedAuthor(workspaceKey, 'user')).toBe(false)
+    expect(await isAutomatedAuthor(null, 'service')).toBe(false)
   })
 })

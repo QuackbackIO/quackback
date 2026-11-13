@@ -92,7 +92,10 @@ export async function recordSlaFromEvent(event: EventData): Promise<void> {
       const message = event.data.message
       if (
         message.senderType === 'agent' &&
-        !(await isAutomatedAuthor((message.authorPrincipalId as PrincipalId | null) ?? null))
+        !(await isAutomatedAuthor(
+          (message.authorPrincipalId as PrincipalId | null) ?? null,
+          event.actor?.type
+        ))
       ) {
         // The shared reply rule on the message's own author, as the message
         // rows read it: the assistant, workflow blocks and workspace API keys

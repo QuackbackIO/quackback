@@ -120,7 +120,7 @@ describe('recordSlaFromEvent', () => {
 
   it('never settles on an agent message from an automated author, and re-arms instead', async () => {
     await recordSlaFromEvent(messageCreated('conversation_1', 'agent', 'principal_bot'))
-    expect(isAutomatedAuthor).toHaveBeenCalledWith('principal_bot')
+    expect(isAutomatedAuthor).toHaveBeenCalledWith('principal_bot', undefined)
     expect(recordFirstResponse).not.toHaveBeenCalled()
     expect(recordNextResponse).not.toHaveBeenCalled()
     expect(rearmNextResponse).toHaveBeenCalledWith('conversation_1', new Date(writtenAt))
@@ -133,7 +133,7 @@ describe('recordSlaFromEvent', () => {
       ...messageCreated('conversation_1', 'agent', 'principal_personal_key'),
       actor: { type: 'service' },
     } as EventData)
-    expect(isAutomatedAuthor).toHaveBeenCalledWith('principal_personal_key')
+    expect(isAutomatedAuthor).toHaveBeenCalledWith('principal_personal_key', 'service')
     expect(recordFirstResponse).toHaveBeenCalledWith('conversation_1', new Date(writtenAt))
     expect(recordNextResponse).toHaveBeenCalledWith('conversation_1', new Date(writtenAt))
     expect(rearmNextResponse).not.toHaveBeenCalled()
