@@ -374,6 +374,55 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/domains/analytics/analytics-queue').then((m) => m.runAnalyticsRefresh),
   },
 
+  // ── Upgrade work (backfills/) ──────────────────────────────────────────────
+  //
+  // Heavy and fleet-wide: each walks a large table or builds an index in every
+  // workspace after an upgrade, so each is capped across the fleet and retried
+  // with backoff, like `analytics`. Every new heavy or fleet-wide job does the
+  // same (JOBS.md §10).
+  {
+    // Startup backfills over hot tables, walked in short batches after the
+    // server listens. A scheduled row runs the enqueue pass, so a workspace
+    // that slept through startup still gets its rows; the gate is shut once
+    // every backfill is done. Retries by failing, from the kv cursor.
+    name: 'startup-backfill',
+    cron: '15 * * * *',
+    cronEnabled: () =>
+      import('@/lib/server/backfills/startup-backfill-queue').then((m) => m.startupBackfillDue()),
+    fleetConcurrency: 2,
+    maxAttempts: 20,
+    retryBackoffMs: 5_000,
+    handler: () =>
+      import('@/lib/server/backfills/startup-backfill-queue').then((m) => m.runStartupBackfillJob),
+  },
+  {
+    // The follow-up step a startup backfill registers, enqueued when its walk
+    // finishes and due about an hour later. With no step registered for the
+    // backfill it names, a row fails and is retried.
+    name: 'ticket-frt-reconcile',
+    fleetConcurrency: 2,
+    maxAttempts: 20,
+    retryBackoffMs: 5_000,
+    handler: () =>
+      import('@/lib/server/backfills/follow-up-queue').then((m) => m.runBackfillFollowUpJob),
+  },
+  {
+    // Background indexes (DEFERRED_INDEX_SPECS), one row per missing index.
+    // A scheduled row runs the pass; a build row creates one index
+    // concurrently. See backfills/deferred-indexes.ts for the rounds.
+    name: 'deferred-index-build',
+    cron: '35 * * * *',
+    cronEnabled: () =>
+      import('@/lib/server/backfills/deferred-index-build-queue').then((m) =>
+        m.deferredIndexBuildDue()
+      ),
+    fleetConcurrency: 2,
+    maxAttempts: 5,
+    retryBackoffMs: 60_000,
+    handler: () =>
+      import('@/lib/server/backfills/deferred-index-build-queue').then((m) => m.runDeferredIndexJob),
+  },
+
   // ── The eight moved off BullMQ (SAAS-HOSTING-STACK.md §7.1) ────────────────
 
   {
