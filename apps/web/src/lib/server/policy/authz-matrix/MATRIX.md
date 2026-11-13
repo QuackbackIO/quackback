@@ -1141,6 +1141,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/portal-access.ts`::recordPortalAccessDeniedFn | server-fn |
 | `lib/server/functions/portal-invites.ts`::acceptPortalInviteFn | server-fn |
 | `lib/server/functions/portal-permissions.ts`::getMyPortalPermissionsFn | server-fn |
+| `lib/server/functions/portal-session-token.ts`::getPortalSessionToken | server-fn |
 | `lib/server/functions/portal.ts`::fetchAvatars | server-fn |
 | `lib/server/functions/portal.ts`::fetchBoardCapabilitiesFn | server-fn |
 | `lib/server/functions/portal.ts`::fetchPortalData | server-fn |
@@ -1314,6 +1315,5 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/sitemap[.]xml.ts`::GET | route |
 | `routes/status/feed.ts`::GET | route |
 | `routes/unsubscribe.tsx`::POST | route |
-| `routes/widget.tsx`::getPortalSessionToken | server-fn |
 | `routes/widget.tsx`::getWidgetLocale | server-fn |
 | `routes/widget.tsx`::setIframeHeaders | server-fn |

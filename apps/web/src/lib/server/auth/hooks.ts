@@ -56,6 +56,7 @@ import {
   signDeviceCookie,
 } from './signin-device-cookie'
 import { getBaseUrl } from '@/lib/server/config'
+import { readSessionCookie } from '@/lib/shared/auth-cookies'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { readSsoClaims, readSsoClaimsWithProvenance, type ClaimRead } from './read-sso-claims'
 import { applyClaimAttributesAfter } from './apply-claim-attributes'
@@ -421,28 +422,18 @@ const WIDGET_AUTH_ALLOWLIST = new Set([
 
 type HeaderBag = { get(name: string): string | null }
 
-function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | null {
+function sessionTokenFromAuthHeaders(
+  headers: HeaderBag | undefined,
+  cookiePrefix?: string
+): string | null {
   if (!headers) return null
   const authHeader = headers.get('authorization') ?? headers.get('Authorization')
   if (authHeader && authHeader.slice(0, 7).toLowerCase() === 'bearer ') {
     const token = authHeader.slice(7).trim()
     if (token) return token.includes('.') ? token.split('.')[0]! : token
   }
-  const cookie = headers.get('cookie') ?? ''
-  for (const part of cookie.split(';')) {
-    const [name, ...rest] = part.trim().split('=')
-    if (name?.trim() !== 'better-auth.session_token') continue
-    const raw = rest.join('=')
-    if (!raw) return null
-    let value = raw
-    try {
-      value = decodeURIComponent(raw)
-    } catch {
-      /* keep raw */
-    }
-    return value.includes('.') ? value.split('.')[0]! : value
-  }
-  return null
+  const value = readSessionCookie(headers.get('cookie'), cookiePrefix)
+  return value ? (value.includes('.') ? value.split('.')[0]! : value) : null
 }
 
 /**
@@ -459,13 +450,14 @@ export async function handleWidgetAccountMutationGate(ctx: {
   headers?: HeaderBag
   request?: { headers?: HeaderBag }
   context?: {
+    options?: { advanced?: { cookiePrefix?: string } }
     internalAdapter?: {
       findSession?: (token: string) => Promise<unknown>
     }
   }
 }): Promise<void> {
   const headers = ctx.headers ?? ctx.request?.headers
-  const token = sessionTokenFromAuthHeaders(headers)
+  const token = sessionTokenFromAuthHeaders(headers, ctx.context?.options?.advanced?.cookiePrefix)
   if (token?.startsWith(TEST_CUSTOMER_SESSION_PREFIX)) {
     throw new APIError('FORBIDDEN', { message: 'A test session only works in the test widget' })
   }
