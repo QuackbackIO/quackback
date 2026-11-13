@@ -9,7 +9,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { getZendeskConnectUrl } from '@/integrations/zendesk/server/functions'
 import { useDeleteIntegration } from '@/lib/client/mutations'
 import { toastError } from '@/lib/client/error-notice'
-import { useOAuthResult } from '@/components/admin/settings/integrations/use-oauth-result'
+import { useOAuthResult } from '@/components/admin/settings/integrations/oauth-connection-actions'
 
 interface ZendeskConnectionActionsProps {
   integrationId?: string

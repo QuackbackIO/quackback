@@ -24,8 +24,7 @@ vi.mock('@/lib/client/mutations', () => ({
   useDeleteIntegration: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
-import { OAuthConnectionActions } from '../oauth-connection-actions'
-import { oauthErrorMessage } from '../oauth-error-message'
+import { OAuthConnectionActions, oauthErrorMessage } from '../oauth-connection-actions'
 
 function renderActions() {
   render(
