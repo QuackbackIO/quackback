@@ -809,7 +809,6 @@ export async function assignTicket(
     patch.assigneeTeamId = input.assigneeTeamId
   }
 
-
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
 
   // Realtime signal (unified inbox §3.2, M3): unconditional, unlike the

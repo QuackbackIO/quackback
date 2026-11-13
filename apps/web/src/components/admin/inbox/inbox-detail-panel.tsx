@@ -646,7 +646,11 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             {ticket.type === 'customer' && (
               <Row icon={CalendarIcon} label="First response">
                 <span className="text-sm font-medium text-foreground">
-                  {ticket.firstResponseAt ? <DetailDate date={ticket.firstResponseAt} /> : 'Not yet'}
+                  {ticket.firstResponseAt ? (
+                    <DetailDate date={ticket.firstResponseAt} />
+                  ) : (
+                    'Not yet'
+                  )}
                 </span>
               </Row>
             )}

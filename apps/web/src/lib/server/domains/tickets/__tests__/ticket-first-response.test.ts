@@ -58,7 +58,9 @@ async function seedPerson(): Promise<PrincipalId> {
 
 async function seedService(): Promise<PrincipalId> {
   const id = createId('principal') as PrincipalId
-  await testDb.insert(principal).values({ id, role: 'member', type: 'service', createdAt: new Date() })
+  await testDb
+    .insert(principal)
+    .values({ id, role: 'member', type: 'service', createdAt: new Date() })
   return id
 }
 

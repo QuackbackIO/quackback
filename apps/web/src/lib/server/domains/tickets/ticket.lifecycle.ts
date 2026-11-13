@@ -42,4 +42,3 @@ export function statusTransition(
   if (leavingClosed) return { resolvedAt: null, reopenedIncrement: 1 }
   return { resolvedAt: undefined, reopenedIncrement: 0 }
 }
-

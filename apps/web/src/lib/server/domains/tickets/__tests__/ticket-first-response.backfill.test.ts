@@ -117,13 +117,15 @@ async function seed(name: string): Promise<Array<{ id: TicketId; expected: Date 
         createdAt: EDITED,
         updatedAt: EDITED,
       })
-    await testDb().insert(conversationMessages).values({
-      ticketId: id,
-      principalId: customer,
-      senderType: 'visitor',
-      content: 'help',
-      createdAt: at(0),
-    })
+    await testDb()
+      .insert(conversationMessages)
+      .values({
+        ticketId: id,
+        principalId: customer,
+        senderType: 'visitor',
+        content: 'help',
+        createdAt: at(0),
+      })
     const answered = i % 2 === 0
     if (answered) {
       await testDb()
@@ -179,9 +181,7 @@ describe('the ticket first-response backfill', () => {
       SELECT dedupe_key, run_at FROM job_queue
       WHERE queue = 'ticket-frt-reconcile' AND dedupe_key LIKE ${`%:${entry.name}:%`}
     `
-    expect(followUps.map((row) => row.dedupe_key)).toEqual([
-      `ticket-frt-reconcile:${entry.name}:1`,
-    ])
+    expect(followUps.map((row) => row.dedupe_key)).toEqual([`ticket-frt-reconcile:${entry.name}:1`])
     const dueIn = new Date(followUps[0].run_at).getTime() - Date.now()
     expect(dueIn).toBeGreaterThan(55 * 60_000)
     expect(dueIn).toBeLessThanOrEqual(60 * 60_000)
