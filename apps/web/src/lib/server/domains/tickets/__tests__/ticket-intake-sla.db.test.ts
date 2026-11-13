@@ -19,10 +19,20 @@ import {
   type UserId,
 } from '@quackback/ids'
 
-vi.mock('@/lib/server/db', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/db')>()),
-  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
-}))
+// The app's `db` forwards to the test transaction. A test can put a hook on
+// `select` to watch or break the reads the code under test makes; the test's
+// own reads go through `testDb` and are never hooked.
+const dbHooks = vi.hoisted(() => ({ select: null as null | ((...args: unknown[]) => unknown) }))
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  const { testDb } = await import('@/lib/server/__tests__/db-test-fixture')
+  const db = new Proxy({} as typeof testDb, {
+    get: (_, prop) =>
+      prop === 'select' && dbHooks.select
+        ? dbHooks.select
+        : (testDb as unknown as Record<string | symbol, unknown>)[prop],
+  })
+  return { ...(await importOriginal<typeof import('@/lib/server/db')>()), db }
+})
 
 vi.mock('@/lib/server/config', () => ({
   config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
@@ -234,10 +244,42 @@ function expectCreateSignalsCarrySla(ticketId: TicketId, stamp: TicketSlaApplied
   })
 }
 
+/**
+ * Watches whole-row reads of the tickets table (`db.select().from(tickets)`),
+ * the shape intake uses to pick up the handoff's stamp. `fail` makes those
+ * reads throw, as a dropped connection after the commit would.
+ */
+function watchTicketRowReads(opts: { fail?: boolean } = {}) {
+  let count = 0
+  dbHooks.select = (...args: unknown[]) => {
+    const query = (testDb.select as (...a: unknown[]) => ReturnType<typeof testDb.select>)(...args)
+    if (args.length > 0) return query
+    const realFrom = query.from.bind(query)
+    return Object.assign(query, {
+      from: (table: typeof tickets) => {
+        if (table === tickets) {
+          count += 1
+          if (opts.fail) throw new Error('connection lost')
+        }
+        return realFrom(table)
+      },
+    })
+  }
+  return {
+    count: () => count,
+    restore: () => {
+      dbHooks.select = null
+    },
+  }
+}
+
 describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+  afterEach(() => {
+    dbHooks.select = null
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
@@ -330,9 +372,81 @@ describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, roll
     const dto = await createMyTicket(requesterActor(testCustomer), { title: 'Trying it out' })
 
     const pair = await readPair(dto.id as TicketId)
+    // The real guard: the default apply skips a test customer's conversation.
+    expect(pair.conversation.slaApplied).toBeNull()
+    expect(await appliedEventCount(pair.conversationId)).toBe(0)
+    // Follows from the line above (and the ticket apply refuses test tickets
+    // on its own), so this only records the outcome.
+    expect(pair.ticket.slaApplied).toBeNull()
+  })
+
+  it('a workspace with no default SLA files the ticket with no SLA and no extra read', async () => {
+    await seedWorkspace()
+    const requester = await seedPrincipal('user')
+    const keyPrincipal = await seedPrincipal('member')
+    const reads = watchTicketRowReads()
+
+    const dto = await createTicket(
+      {
+        type: 'customer',
+        title: 'No policy here',
+        requesterPrincipalId: requester,
+        withBackingConversation: true,
+      },
+      serviceActor(keyPrincipal)
+    )
+    const intakeReads = reads.count()
+    reads.restore()
+
+    const pair = await readPair(dto.id as TicketId)
     expect(pair.conversation.slaApplied).toBeNull()
     expect(pair.ticket.slaApplied).toBeNull()
     expect(await appliedEventCount(pair.conversationId)).toBe(0)
+    expect(dto.sla).toBeNull()
+    expect(ticketEmit.emitTicketCreated).toHaveBeenCalledTimes(1)
+    const [, eventRow] = ticketEmit.emitTicketCreated.mock.calls[0]!
+    expect(eventRow).toMatchObject({ id: dto.id, slaApplied: null })
+    // Nothing was handed over, so intake does not read the ticket again.
+    expect(intakeReads).toBe(0)
+  })
+
+  it('reads the ticket again only once, after a handoff that applied an SLA', async () => {
+    await seedWorkspace()
+    await seedDefaultPolicy()
+    const requester = await seedPrincipal('user')
+    const reads = watchTicketRowReads()
+
+    await createMyTicket(requesterActor(requester), { title: 'One read' })
+
+    expect(reads.count()).toBe(1)
+  })
+
+  it('a failed read after the handoff still files the ticket and sends ticket.created', async () => {
+    await seedWorkspace()
+    const policyId = await seedDefaultPolicy()
+    const requester = await seedPrincipal('user')
+    const keyPrincipal = await seedPrincipal('member')
+    const reads = watchTicketRowReads({ fail: true })
+
+    const dto = await createTicket(
+      {
+        type: 'customer',
+        title: 'Read fails',
+        requesterPrincipalId: requester,
+        withBackingConversation: true,
+      },
+      serviceActor(keyPrincipal)
+    )
+    expect(reads.count()).toBe(1)
+    reads.restore()
+
+    // The pair and its clock exist; the response falls back to the row the
+    // create transaction returned.
+    const pair = await readPair(dto.id as TicketId)
+    expect(pair.ticket.slaApplied).toMatchObject({ policyId })
+    expect(ticketEmit.emitTicketCreated).toHaveBeenCalledTimes(1)
+    const [, eventRow] = ticketEmit.emitTicketCreated.mock.calls[0]!
+    expect(eventRow).toMatchObject({ id: dto.id })
   })
 
   it('a default apply that throws still creates the ticket, with no SLA', async () => {

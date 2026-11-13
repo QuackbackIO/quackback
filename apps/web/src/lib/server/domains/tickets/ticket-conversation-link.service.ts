@@ -84,7 +84,7 @@ import { formatTicketNumber } from '@/lib/shared/tickets'
 import { logger } from '@/lib/server/logger'
 import { notTestTicket, notTestConversation } from '@/lib/server/test-data'
 import { loadSlaApplied } from '../sla/sla.service'
-import { applySlaToTicket } from '../sla/ticket-sla.service'
+import { applySlaToTicket, type TicketSlaApplied } from '../sla/ticket-sla.service'
 
 const log = logger.child({ component: 'ticket-conversation-link' })
 
@@ -343,27 +343,29 @@ export async function crossPostTicketNote(
  * workflow's own ticket-targeted step), and a policy without a TTR target no-ops inside
  * applySlaToTicket, which keeps the "does this policy even track TTR" check in
  * ONE place rather than duplicated at the call sites. Best-effort: the link
- * already landed, so a failure is logged, never surfaced.
+ * already landed, so a failure is logged, never surfaced. Returns the stamp
+ * written to the ticket, or null when nothing was handed over.
  */
 export async function handoffConversationSlaToTicket(
   ticketId: TicketId,
   conversationId: ConversationId
-): Promise<void> {
+): Promise<TicketSlaApplied | null> {
   try {
     const slaApplied = await loadSlaApplied(conversationId)
-    if (slaApplied) {
-      const applied = await applySlaToTicket(ticketId, slaApplied.policyId)
-      if (applied) {
-        log.info(
-          { ticket_id: ticketId, conversation_id: conversationId, policy_id: applied.policyId },
-          'ticket TTR clock started from conversation SLA handoff'
-        )
-      }
+    if (!slaApplied) return null
+    const applied = await applySlaToTicket(ticketId, slaApplied.policyId)
+    if (applied) {
+      log.info(
+        { ticket_id: ticketId, conversation_id: conversationId, policy_id: applied.policyId },
+        'ticket TTR clock started from conversation SLA handoff'
+      )
     }
+    return applied
   } catch (err) {
     log.warn(
       { err, ticket_id: ticketId, conversation_id: conversationId },
       'ticket SLA handoff failed (link already landed)'
     )
+    return null
   }
 }
