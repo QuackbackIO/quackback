@@ -1006,6 +1006,11 @@ interface SendStatusChangeParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 export async function sendStatusChangeEmail(params: SendStatusChangeParams): Promise<EmailResult> {
@@ -1019,6 +1024,8 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    from,
+    fromDisplayName,
   } = params
 
   const formattedNewStatus = newStatus.replace(/_/g, ' ')
@@ -1037,6 +1044,8 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
       logoUrl,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from,
+    fromDisplayName,
     emailType: 'StatusChangeEmail',
     preview: { postUrl },
   })
@@ -1057,6 +1066,11 @@ interface SendNewCommentParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 export async function sendNewCommentEmail(params: SendNewCommentParams): Promise<EmailResult> {
@@ -1071,6 +1085,8 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    from,
+    fromDisplayName,
   } = params
 
   return sendEmail({
@@ -1088,6 +1104,8 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
       logoUrl,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from,
+    fromDisplayName,
     emailType: 'NewCommentEmail',
     preview: { postUrl },
   })
@@ -1505,6 +1523,11 @@ export interface SendPostMentionEmailArgs {
   unsubscribeUrl?: string
   preferencesUrl?: string
   logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Promise<EmailResult> {
@@ -1518,6 +1541,8 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    from,
+    fromDisplayName,
   } = args
 
   const displayName = mentionerName || 'Anonymous user'
@@ -1537,6 +1562,8 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
       logoUrl,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from,
+    fromDisplayName,
     emailType: 'PostMentionEmail',
     preview: { postUrl },
   })
@@ -1618,9 +1645,11 @@ interface SendChangelogPublishedParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
-  /** Send from the changelog module's sending address (§4.8) instead of the
-   *  branded EMAIL_FROM. Absent = the workspace default. */
+  /** Send from the changelog's sending address instead of the branded
+   *  EMAIL_FROM. Absent = the platform default. */
   from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 export async function sendChangelogPublishedEmail(
@@ -1637,6 +1666,7 @@ export async function sendChangelogPublishedEmail(
     preferencesUrl,
     logoUrl,
     from,
+    fromDisplayName,
   } = params
 
   return sendEmail({
@@ -1653,6 +1683,7 @@ export async function sendChangelogPublishedEmail(
       logoUrl,
     }),
     from,
+    fromDisplayName,
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'ChangelogPublishedEmail',
     preview: { changelogUrl },
@@ -1725,6 +1756,11 @@ interface SendStatusIncidentPublishedParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 /** Sent once when a new incident is published on the workspace's status page. */
@@ -1743,6 +1779,8 @@ export async function sendStatusIncidentPublishedEmail(
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    from,
+    fromDisplayName,
   } = params
 
   return sendEmail({
@@ -1761,6 +1799,8 @@ export async function sendStatusIncidentPublishedEmail(
       logoUrl,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from,
+    fromDisplayName,
     emailType: 'StatusIncidentPublishedEmail',
     preview: { incidentUrl },
   })
@@ -1784,6 +1824,11 @@ interface SendStatusMaintenanceScheduledParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** Send from the workspace's address for this kind of email, once verified.
+   *  Absent = the platform default (EMAIL_FROM). */
+  from?: SendingIdentity
+  /** Display name for the From header, on `from` or on the platform default. */
+  fromDisplayName?: string
 }
 
 /** Sent once when maintenance is scheduled on the workspace's status page. */
@@ -1802,6 +1847,8 @@ export async function sendStatusMaintenanceScheduledEmail(
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    from,
+    fromDisplayName,
   } = params
 
   return sendEmail({
@@ -1820,6 +1867,8 @@ export async function sendStatusMaintenanceScheduledEmail(
       logoUrl,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    from,
+    fromDisplayName,
     emailType: 'StatusMaintenanceScheduledEmail',
     preview: { incidentUrl },
   })

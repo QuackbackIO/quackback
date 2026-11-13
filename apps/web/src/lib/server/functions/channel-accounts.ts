@@ -1,14 +1,18 @@
 /**
  * Server functions for the email channel settings (support platform §4.8): the
- * workspace inbound route, per-module sending addresses, and verified sending
- * domains. Gated on channel_account.manage. Scoped to the workspace default team
+ * workspace inbound route, the sending addresses, which of them each kind of
+ * email sends from, and verified sending domains. Gated on channel_account.manage. Scoped to the workspace default team
  * (the v0 owns email config at the workspace level). Returns JSON-safe DTOs.
  */
 import { ValidationError, ConflictError, ServiceUnavailableError } from '@/lib/shared/errors'
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { ChannelAccountId, SendingDomainId, TeamId } from '@quackback/ids'
-import type { ChannelAccount, EmailSendingDomain } from '@/lib/server/db'
+import {
+  EMAIL_SENDER_SURFACES,
+  type ChannelAccount,
+  type EmailSendingDomain,
+} from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
@@ -21,7 +25,14 @@ import {
   updateInboundTrust,
   clearInboundForwarding,
   updateSendingAddressSmtp,
+  updateSendingAddressName,
 } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import {
+  getEmailSenders,
+  setEmailSender,
+  type EmailSenderSurface,
+} from '@/lib/server/domains/channel-accounts/email-senders'
+import { permittedSendingIdentity } from '@/lib/server/domains/channel-accounts/outbound-identity'
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import {
@@ -101,7 +112,8 @@ export interface ChannelAccountDTO {
   id: string
   role: 'inbound' | 'sending' | 'connection'
   address: string | null
-  module: string | null
+  /** The name mail from it is sent under; null means the workspace name. */
+  senderName: string | null
   config: JsonObject
   inboundTrust: 'strict' | 'lenient'
   sendingDomainId: string | null
@@ -156,7 +168,23 @@ export interface SendingDomainDTO {
   preflight: SendingDomainPreflightDTO
 }
 
+/** A surface's choice of sender: an address by id, or (support) the inbox. */
+export type EmailSenderChoiceDTO = { mode: 'address'; id: string } | { mode: 'inbox' }
+
+/** Each surface's choice, or null where nothing is chosen. */
+export type EmailSendersDTO = Record<EmailSenderSurface, EmailSenderChoiceDTO | null>
+
 export interface EmailChannelConfigDTO {
+  /** The name mail is sent under when an address has none of its own. */
+  workspaceName: string
+  /** Which address each kind of email sends from. */
+  senders: EmailSendersDTO
+  /**
+   * Whether the forwarded support address may be sent as, or null when nothing
+   * is forwarded. Support set to reply from the inbox falls back while it may
+   * not, and the page says so.
+   */
+  forwardingTargetPermitted: boolean | null
   inboundRoute: ChannelAccountDTO | null
   sendingAddresses: ChannelAccountDTO[]
   domains: SendingDomainDTO[]
@@ -203,7 +231,7 @@ const toAccount = (a: ChannelAccount, domains: EmailSendingDomain[] = []): Chann
     id: a.id,
     role: a.role,
     address: a.address,
-    module: a.module,
+    senderName: a.senderName,
     config: a.config as JsonObject,
     inboundTrust: a.inboundTrust,
     sendingDomainId: a.sendingDomainId,
@@ -250,8 +278,27 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
     const addressMode = await sendingAddressMode()
     const sendingPaused = await sesTenantPausedNotice()
     const teamId = await defaultTeamId()
+    const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
+    const workspaceName = (await requireSettingsCached()).name
+    const choices = await getEmailSenders()
+    const senders = Object.fromEntries(
+      EMAIL_SENDER_SURFACES.map((surface) => {
+        const choice = choices.get(surface)
+        return [
+          surface,
+          !choice
+            ? null
+            : choice.mode === 'inbox'
+              ? { mode: 'inbox' as const }
+              : { mode: 'address' as const, id: choice.account.id },
+        ]
+      })
+    ) as EmailSendersDTO
     if (!teamId) {
       return {
+        workspaceName,
+        senders,
+        forwardingTargetPermitted: null,
         inboundRoute: null,
         sendingAddresses: [],
         domains: [],
@@ -266,7 +313,13 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
       listChannelAccounts(teamId),
       listSendingDomains(teamId),
     ])
+    const forwardingTarget = inbound?.config?.forwardingTarget ?? null
     return {
+      workspaceName,
+      senders,
+      forwardingTargetPermitted: forwardingTarget
+        ? (await permittedSendingIdentity(forwardingTarget)) !== null
+        : null,
       inboundRoute: inbound ? toAccount(inbound, domains) : null,
       sendingAddresses: accounts
         .filter((a) => a.role === 'sending')
@@ -296,13 +349,11 @@ export const createInboundRouteFn = createServerFn({ method: 'POST' })
     )
   })
 
+/** A sender name as typed; blank means the workspace name. */
+const senderNameSchema = z.string().max(100).nullable().optional()
+
 export const createSendingAddressFn = createServerFn({ method: 'POST' })
-  .validator(
-    z.object({
-      address: z.string().email(),
-      module: z.enum(['support', 'feedback', 'changelog']),
-    })
-  )
+  .validator(z.object({ address: z.string().email(), senderName: senderNameSchema }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     const teamId = await requireDefaultTeam()
@@ -315,10 +366,48 @@ export const createSendingAddressFn = createServerFn({ method: 'POST' })
         await addSendingAddress({
           owningTeamId: teamId,
           address: data.address,
-          module: data.module,
+          senderName: data.senderName ?? null,
         })
       )
     )
+  })
+
+export const updateSendingAddressNameFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ id: z.string(), senderName: senderNameSchema }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    return toAccount(
+      await updateSendingAddressName({
+        id: data.id as ChannelAccountId,
+        senderName: data.senderName ?? null,
+      })
+    )
+  })
+
+export const setEmailSenderFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      surface: z.enum(EMAIL_SENDER_SURFACES),
+      choice: z
+        .discriminatedUnion('mode', [
+          z.object({ mode: z.literal('address'), id: z.string() }),
+          z.object({ mode: z.literal('inbox') }),
+        ])
+        .nullable(),
+    })
+  )
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    const { choice } = data
+    await setEmailSender(
+      data.surface,
+      !choice
+        ? null
+        : choice.mode === 'inbox'
+          ? { mode: 'inbox' }
+          : { mode: 'address', channelAccountId: choice.id as ChannelAccountId }
+    )
+    return { surface: data.surface }
   })
 
 export const restartSendingDomainChecksFn = createServerFn({ method: 'POST' })

@@ -1,7 +1,7 @@
 /**
  * Real-DB coverage for the channel-account service (support platform §4.8 Layer 2):
- * one inbound route per workspace (partial-unique), sending addresses resolved per
- * module, sending-domain verify toggle, and the soft-delete filter. Runs inside the
+ * one inbound route per workspace (partial-unique), sending addresses and their
+ * sender names, sending-domain verify toggle, and the soft-delete filter. Runs inside the
  * db-test-fixture rollback transaction.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
@@ -14,7 +14,7 @@ import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-sco
 // so setting it here is enough to fix the address the platform inbox derives.
 process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
 process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_dGVzdHNlY3JldA=='
-import { teams, channelAccounts, emailSendingDomains, eq } from '@/lib/server/db'
+import { teams, channelAccounts, emailSendingDomains } from '@/lib/server/db'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
 const inboundLimit = vi.hoisted(() => ({ cap: null as number | null }))
@@ -37,7 +37,7 @@ import {
   createSendingAddress,
   createSendingDomain,
   getInboundRoute,
-  getSendingAddress,
+  updateSendingAddressName,
   getSendingDomain,
   deleteSendingDomain,
   SendingDomainInUseError,
@@ -48,7 +48,7 @@ import {
   clearInboundForwarding,
   updateSendingAddressSmtp,
 } from '../channel-account.service'
-import { resolveSendingAddress } from '../sender-resolver'
+import { getEmailSenders } from '../email-senders'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -121,27 +121,32 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
     ).rejects.toBeInstanceOf(TierLimitError)
   })
 
-  it('resolves a sending address by module', async () => {
+  it('stores a sending address lowercased, with its sender name', async () => {
     const teamId = await seedTeam()
-    await createSendingAddress({
+    const named = await createSendingAddress({
       owningTeamId: teamId,
       address: 'Support@Acme.com',
-      module: 'support',
+      senderName: '  Acme Support ',
     })
-    await createSendingAddress({
+    const unnamed = await createSendingAddress({
       owningTeamId: teamId,
       address: 'ideas@acme.com',
-      module: 'feedback',
+      senderName: '   ',
     })
 
-    const support = await getSendingAddress(teamId, 'support')
-    expect(support?.address).toBe('support@acme.com') // lowercased on write
-    expect(support?.module).toBe('support')
+    expect(named.address).toBe('support@acme.com') // lowercased on write
+    expect(named.senderName).toBe('Acme Support')
+    // Blank is the workspace name, stored as null so a rename reaches it.
+    expect(unnamed.senderName).toBeNull()
+  })
 
-    const feedback = await getSendingAddress(teamId, 'feedback')
-    expect(feedback?.address).toBe('ideas@acme.com')
-
-    expect(await getSendingAddress(teamId, 'changelog')).toBeNull()
+  it('renames a sending address, and a blank name means the workspace name', async () => {
+    const teamId = await seedTeam()
+    const row = await createSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
+    expect((await updateSendingAddressName({ id: row.id, senderName: 'Acme' })).senderName).toBe(
+      'Acme'
+    )
+    expect((await updateSendingAddressName({ id: row.id, senderName: '' })).senderName).toBeNull()
   })
 
   it('creates a sending domain pending, and removing it frees the name again', async () => {
@@ -179,7 +184,6 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
     await createSendingAddress({
       owningTeamId: teamId,
       address: 'help@acme.com',
-      module: 'support',
       sendingDomainId: domain.id,
     })
     await expect(deleteSendingDomain(domain.id)).rejects.toBeInstanceOf(SendingDomainInUseError)
@@ -207,7 +211,6 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
     const sending = await createSendingAddress({
       owningTeamId: teamId,
       address: 'help@acme.com',
-      module: 'support',
     })
     const withSmtp = await updateSendingAddressSmtp({
       id: sending.id,
@@ -232,7 +235,6 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
     const sending = await createSendingAddress({
       owningTeamId: teamId,
       address: 'support@acme.com',
-      module: 'support',
     })
 
     // Match a sending address (case-insensitive, display name stripped by caller).
@@ -335,28 +337,26 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
   /**
    * The mirror of the inbound direction, and the same unique index either way.
    *
-   * `channel_accounts_sending_address_uq` covers (team, channel, address) with no
-   * module in it, so the second write of an address a workspace already holds is
-   * a 23505. Unhandled, that reaches a person as a 500 from a settings button.
+   * `channel_accounts_sending_address_uq` covers (team, channel, address), so the
+   * second write of an address a workspace already holds is a 23505. Unhandled,
+   * that reaches a person as a 500 from a settings button.
    */
-  it('re-adding a sending address moves it rather than failing the request', async () => {
+  it('re-adding a sending address updates it rather than failing the request', async () => {
     const teamId = await seedTeam()
     const first = await createSendingAddress({
       owningTeamId: teamId,
       address: 'support@acme.com',
-      module: 'support',
     })
 
     const moved = await createSendingAddress({
       owningTeamId: teamId,
       address: 'Support@Acme.com',
-      module: 'feedback',
+      senderName: 'Acme',
     })
 
     expect(moved.id).toBe(first.id)
-    expect(moved.module).toBe('feedback')
+    expect(moved.senderName).toBe('Acme')
     expect(await listChannelAccounts(teamId)).toHaveLength(1)
-    expect(await getSendingAddress(teamId, 'support')).toBeNull()
   })
 
   /**
@@ -366,7 +366,7 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
    * `channel_accounts_sending_address_uq` spans ROLES: `address` is a column an
    * inbound route may carry too, because a person can point a front door at an
    * address by hand. Left to a plain upsert, adding that address as a From
-   * identity would find the inbound row, rewrite its module and config, and hand
+   * identity would find the inbound row, rewrite its config, and hand
    * back a row whose role is still `inbound` — the workspace's one front door
    * quietly repurposed by a settings button, and its mail stops arriving.
    *
@@ -394,7 +394,6 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
         // The spelling a person's mail client shows them; folded on the way in,
         // so it collides with the stored one rather than inserting beside it.
         address: 'Support@Acme.com',
-        module: 'support',
       })
     ).rejects.toBeInstanceOf(ChannelAddressInUseError)
 
@@ -402,7 +401,6 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
     // is what the route's survival rests on, not a later repair.
     expect(await listChannelAccounts(teamId)).toEqual([route])
     expect((await getInboundRoute(teamId))?.id).toBe(route.id)
-    expect(await getSendingAddress(teamId, 'support')).toBeNull()
   })
 
   it('adds the workspace platform address as a sending address beside the default route', async () => {
@@ -419,47 +417,10 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
     const sending = await createSendingAddress({
       owningTeamId: platform.owningTeamId,
       address: PLATFORM_ADDRESS,
-      module: 'support',
     })
     expect(sending.role).toBe('sending')
     expect(sending.id).not.toBe(platform.id)
-    expect((await getSendingAddress(platform.owningTeamId, 'support'))?.address).toBe(
-      PLATFORM_ADDRESS
-    )
-  })
-
-  it('resolveSendingAddress: assigned team, default-team fallback, then null', async () => {
-    const teamId = await seedTeam()
-    await createSendingAddress({
-      owningTeamId: teamId,
-      address: 'team@acme.com',
-      module: 'support',
-    })
-    // The conversation's assigned team's sending address wins.
-    expect(await resolveSendingAddress(teamId)).toBe('team@acme.com')
-
-    // With no assigned team, fall back to THE default team's sending address.
-    // (One default team is a workspace invariant, so set the address on the
-    // existing one rather than minting a second.)
-    const [defaultTeam] = await testDb
-      .select({ id: teams.id })
-      .from(teams)
-      .where(eq(teams.isDefault, true))
-      .limit(1)
-    expect(defaultTeam, 'a workspace is seeded with one default team').toBeTruthy()
-
-    // A team with no sending address, and no default-team address either,
-    // resolves null (caller uses EMAIL_FROM).
-    const bare = await seedTeam()
-    expect(await resolveSendingAddress(bare)).toBeNull()
-
-    await createSendingAddress({
-      owningTeamId: defaultTeam.id as TeamId,
-      address: 'default@acme.com',
-      module: 'support',
-    })
-    expect(await resolveSendingAddress(null)).toBe('default@acme.com')
-    // And the team with none of its own now sends as the default team.
-    expect(await resolveSendingAddress(bare)).toBe('default@acme.com')
+    // The first address added becomes the default sender.
+    expect((await getEmailSenders()).get('default')?.account?.address).toBe(PLATFORM_ADDRESS)
   })
 })

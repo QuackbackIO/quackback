@@ -8,6 +8,8 @@ vi.mock('@quackback/email', () => ({
   sendPostMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendTicketEventEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendNoteMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
+  sendStatusIncidentPublishedEmail: vi.fn().mockResolvedValue({ sent: true }),
+  sendStatusMaintenanceScheduledEmail: vi.fn().mockResolvedValue({ sent: true }),
 }))
 
 /**
@@ -68,6 +70,8 @@ import {
   sendPostMentionEmail,
   sendTicketEventEmail,
   sendNoteMentionEmail,
+  sendStatusIncidentPublishedEmail,
+  sendStatusMaintenanceScheduledEmail,
 } from '@quackback/email'
 import type {
   EmailTarget,
@@ -180,6 +184,8 @@ describe('emailHook', () => {
         workspaceName: 'TestWorkspace',
         unsubscribeUrl: 'https://example.com/unsubscribe',
         logoUrl: 'https://example.com/logo.png',
+        // Named after the workspace even on the platform address.
+        fromDisplayName: 'TestWorkspace',
       })
     })
 
@@ -204,6 +210,8 @@ describe('emailHook', () => {
         workspaceName: 'TestWorkspace',
         unsubscribeUrl: 'https://example.com/unsubscribe',
         logoUrl: 'https://example.com/logo.png',
+        // Named after the workspace even on the platform address.
+        fromDisplayName: 'TestWorkspace',
       })
     })
     it('sends changelog published email with the full rendered body and returns success', async () => {
@@ -468,6 +476,8 @@ describe('emailHook — post.mentioned', () => {
       workspaceName: 'TestWorkspace',
       unsubscribeUrl: 'https://example.com/unsubscribe',
       logoUrl: 'https://example.com/logo.png',
+      // Named after the workspace even on the platform address.
+      fromDisplayName: 'TestWorkspace',
     })
   })
 
@@ -734,4 +744,79 @@ describe('emailHook — conversation.note_mentioned', () => {
       success: true,
     })
   })
+})
+
+describe('emailHook: feedback, changelog and status senders', () => {
+  const mocks = {
+    'post.status_changed': vi.mocked(sendStatusChangeEmail),
+    'comment.created': vi.mocked(sendNewCommentEmail),
+    'post.mentioned': vi.mocked(sendPostMentionEmail),
+    'changelog.published': vi.mocked(sendChangelogPublishedEmail),
+    'status.incident_created': vi.mocked(sendStatusIncidentPublishedEmail),
+    'status.maintenance_scheduled': vi.mocked(sendStatusMaintenanceScheduledEmail),
+  } as const
+  const event = (type: string) =>
+    ({
+      id: 'evt-sender',
+      type,
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', displayName: 'Sam' },
+      data: { postTitle: 'Dark mode', excerpt: '', postUrl: 'https://p/1' },
+    }) as unknown as EventData
+  const config = {
+    ...baseConfig,
+    workspaceName: 'Acme',
+    previousStatus: 'open',
+    newStatus: 'planned',
+    commenterName: 'Sam',
+    commentPreview: 'Nice',
+    changelogTitle: 'May',
+    changelogUrl: 'https://p/changelog',
+    incidentTitle: 'API errors',
+    incidentUrl: 'https://p/status/1',
+    statusLabel: 'Investigating',
+    from: 'updates@acme.example',
+    fromDisplayName: 'Acme Updates',
+  }
+
+  beforeEach(() => {
+    emailBudgetAvailable.mockResolvedValue(true)
+    for (const mock of Object.values(mocks)) mock.mockReset().mockResolvedValue({ sent: true })
+    permittedSendingIdentity.mockReset().mockImplementation(async (from) => from)
+  })
+
+  it.each(Object.keys(mocks))(
+    '%s sends from the re-checked address under its sender name',
+    async (type) => {
+      permittedSendingIdentity.mockResolvedValue('updates@acme.example')
+      const result = await emailHook.run(event(type), baseTarget, config)
+      expect(result).toEqual({ success: true })
+      expect(permittedSendingIdentity).toHaveBeenCalledWith('updates@acme.example')
+      expect(mocks[type as keyof typeof mocks]).toHaveBeenCalledWith(
+        expect.objectContaining({ from: 'updates@acme.example', fromDisplayName: 'Acme Updates' })
+      )
+    }
+  )
+
+  it.each(Object.keys(mocks))(
+    '%s falls back to the platform address under the workspace name when refused',
+    async (type) => {
+      permittedSendingIdentity.mockResolvedValue(null)
+      await emailHook.run(event(type), baseTarget, config)
+      expect(mocks[type as keyof typeof mocks]).toHaveBeenCalledWith(
+        expect.objectContaining({ from: undefined, fromDisplayName: 'Acme' })
+      )
+    }
+  )
+
+  it.each(Object.keys(mocks))(
+    '%s sends from the platform under the workspace name with no address resolved',
+    async (type) => {
+      const { from: _from, fromDisplayName: _name, ...withoutSender } = config
+      await emailHook.run(event(type), baseTarget, withoutSender)
+      expect(mocks[type as keyof typeof mocks]).toHaveBeenCalledWith(
+        expect.objectContaining({ from: undefined, fromDisplayName: 'Acme' })
+      )
+    }
+  )
 })

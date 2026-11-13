@@ -28,8 +28,9 @@ vi.mock('@/lib/server/domains/settings/settings.changelog', () => ({
     emailsDisabled: false,
   }),
 }))
+const resolveSender = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
-  resolveSendingAddress: vi.fn().mockResolvedValue(null),
+  resolveSender,
 }))
 vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
   getSubscribersForEvent: vi.fn().mockResolvedValue([]),
@@ -241,6 +242,30 @@ describe.skipIf(!dbAvailable)('changelog segment targeting (execution-level)', (
     const targets = await getChangelogSubscriberTargets(publishEvent(ENTRY_OPEN), context)
     expect(emailAddresses(targets)).toEqual([MEMBER_EMAIL, OUTSIDER_EMAIL].sort())
     expect(notificationPrincipalIds(targets)).toEqual([P_MEMBER, P_OUTSIDER].sort())
+  })
+
+  it("sends from the changelog's address under its sender name, resolved once", async () => {
+    resolveSender.mockClear().mockResolvedValueOnce({
+      from: 'news@acme.example',
+      source: 'surface',
+      senderName: 'Acme Updates',
+    })
+    const targets = await getChangelogSubscriberTargets(publishEvent(ENTRY_OPEN), context)
+    expect(resolveSender).toHaveBeenCalledTimes(1)
+    expect(resolveSender).toHaveBeenCalledWith({ surface: 'changelog' })
+    const emails = targets.filter((t) => t.type === 'email')
+    expect(emails.length).toBeGreaterThan(0)
+    for (const t of emails) {
+      expect(t.config).toMatchObject({ from: 'news@acme.example', fromDisplayName: 'Acme Updates' })
+    }
+  })
+
+  it('sends from the platform with no changelog address resolved', async () => {
+    resolveSender.mockResolvedValueOnce(null)
+    const targets = await getChangelogSubscriberTargets(publishEvent(ENTRY_OPEN), context)
+    for (const t of targets.filter((x) => x.type === 'email')) {
+      expect((t.config as Record<string, unknown>).from).toBeUndefined()
+    }
   })
 
   it('segment-targeted entry emails only subscribers in that segment', async () => {

@@ -387,6 +387,7 @@ describe('replayGateVerdict', () => {
       '0310_sending_domain_ownership_grace',
       '0311_sending_domain_ownership_warning_sent',
       '0312_conversation_thread_sender',
+      '0313_email_senders',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)
