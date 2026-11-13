@@ -31,7 +31,12 @@ import {
 import { resolveBlockReply, type BlockReplyInput, type ResolvedBlockReply } from './block-reply'
 import { isTeamMember } from '@/lib/shared/roles'
 import { conversationFilter } from '@/lib/server/policy/conversations'
-import type { ConversationAttachment, ConversationMessageCitation, Team } from '@/lib/server/db'
+import type {
+  ConversationAttachment,
+  ConversationMessageCitation,
+  Team,
+  Transaction,
+} from '@/lib/server/db'
 import { getTeam } from '@/lib/server/domains/teams'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
 import type {
@@ -2143,6 +2148,13 @@ export async function isPairedWithCustomerTicket(conversationId: ConversationId)
   return !!link
 }
 
+interface AppendAssistantReplyOpts {
+  waiting: boolean
+  citations?: ConversationMessageCitation[]
+  contentJson?: TiptapContent | null
+  metadata?: ConversationMessageMetadata | null
+}
+
 /**
  * Append a reply authored by the assistant service principal — the message-
  * append primitive for Quinn. Like an agent reply it bumps the last-message
@@ -2160,25 +2172,35 @@ export async function isPairedWithCustomerTicket(conversationId: ConversationId)
  * sites (a plain-text answer, the handover line) are unaffected. Returns the
  * posted message's DTO so a block send can read back its id (stamped onto an
  * InputWaitCursor when the plan parks right after).
+ *
+ * `onlyIf` makes the post conditional: the conversation row is locked first,
+ * and the reply posts only when `onlyIf` returns true on that same
+ * transaction, so two concurrent conditional posts decide one after the
+ * other. A declined post writes and publishes nothing and returns null.
  */
 export async function appendAssistantReply(
   conversationId: ConversationId,
   content: string,
   author: ConversationAuthorInput,
-  opts: {
-    waiting: boolean
-    citations?: ConversationMessageCitation[]
-    contentJson?: TiptapContent | null
-    metadata?: ConversationMessageMetadata | null
-  }
-): Promise<ConversationMessageDTO> {
+  opts: AppendAssistantReplyOpts & { onlyIf: (tx: Transaction) => Promise<boolean> }
+): Promise<ConversationMessageDTO | null>
+export async function appendAssistantReply(
+  conversationId: ConversationId,
+  content: string,
+  author: ConversationAuthorInput,
+  opts: AppendAssistantReplyOpts
+): Promise<ConversationMessageDTO>
+export async function appendAssistantReply(
+  conversationId: ConversationId,
+  content: string,
+  author: ConversationAuthorInput,
+  opts: AppendAssistantReplyOpts & { onlyIf?: (tx: Transaction) => Promise<boolean> }
+): Promise<ConversationMessageDTO | null> {
   const txResult = await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId))
-      .limit(1)
+    const select = tx.select().from(conversations).where(eq(conversations.id, conversationId))
+    const [existing] = opts.onlyIf ? await select.for('update') : await select.limit(1)
     if (!existing) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+    if (opts.onlyIf && !(await opts.onlyIf(tx))) return null
     const [message] = await tx
       .insert(conversationMessages)
       .values({
@@ -2209,6 +2231,7 @@ export async function appendAssistantReply(
       .returning()
     return { conversation: updated, message }
   })
+  if (!txResult) return null
 
   const authored = await resolveAuthorAudiences(author)
   const messageDTO = toMessageDTO(txResult.message, authored.supportAuthor, author.principalId)
