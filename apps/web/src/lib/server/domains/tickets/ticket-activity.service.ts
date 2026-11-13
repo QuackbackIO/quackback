@@ -83,7 +83,7 @@ export function recordTicketActivity(opts: RecordTicketActivityOpts): void {
 // ============================================
 
 /** The activity types that record a move of the ticket's status. */
-const STATUS_MOVES: TicketActivityType[] = ['status.changed', 'ticket.reopened']
+export const STATUS_MOVES: readonly TicketActivityType[] = ['status.changed', 'ticket.reopened']
 
 /**
  * Whether the ticket's status moved after `since`, as its activity log records
