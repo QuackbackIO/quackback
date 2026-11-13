@@ -99,24 +99,26 @@ export function requesterUpdatedAtSql(stagedStatusIds: readonly TicketStatusId[]
 export async function buildRequesterTicketContext(
   rows: Ticket[]
 ): Promise<RequesterTicketDTOContext> {
-  const [ctx, stagedStatusIds] = await Promise.all([
-    buildTicketContext(rows),
-    loadStagedStatusIds(),
-  ])
+  const [ctx, times] = await Promise.all([buildTicketContext(rows), readRequesterUpdatedAt(rows)])
+  return { ...ctx, requesterUpdatedAt: times }
+}
+
+/** Each row's customer-visible update time, in one query. */
+async function readRequesterUpdatedAt(rows: Ticket[]): Promise<Map<TicketId, Date>> {
   const requesterUpdatedAt = new Map<TicketId, Date>()
-  if (rows.length > 0) {
-    const times = await db
-      .select({ id: tickets.id, at: requesterUpdatedAtSql(stagedStatusIds) })
-      .from(tickets)
-      .where(
-        inArray(
-          tickets.id,
-          rows.map((r) => r.id)
-        )
+  if (rows.length === 0) return requesterUpdatedAt
+  const updatedAt = requesterUpdatedAtSql(await loadStagedStatusIds())
+  const times = await db
+    .select({ id: tickets.id, at: updatedAt })
+    .from(tickets)
+    .where(
+      inArray(
+        tickets.id,
+        rows.map((r) => r.id)
       )
-    for (const t of times) requesterUpdatedAt.set(t.id, t.at)
-  }
-  return { ...ctx, requesterUpdatedAt }
+    )
+  for (const t of times) requesterUpdatedAt.set(t.id, t.at)
+  return requesterUpdatedAt
 }
 
 /**
