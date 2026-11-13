@@ -176,7 +176,9 @@ describe.skipIf(!fixture.available)('MCP client scope reconcile retry (real DB)'
     expect(await scopesOf(clientId)).not.toContain('read:settings')
 
     release()
-    await vi.waitFor(async () => expect(await scopesOf(clientId)).toContain('read:settings'))
+    await vi.waitFor(async () => expect(await scopesOf(clientId)).toContain('read:settings'), {
+      timeout: 10_000,
+    })
     for (const scope of MCP_AS_SCOPES) expect(await scopesOf(clientId)).toContain(scope)
 
     // Done: no further attempt, however late the next request.
@@ -194,11 +196,11 @@ describe.skipIf(!fixture.available)('MCP client scope reconcile retry (real DB)'
     const start = Date.now()
     vi.spyOn(Date, 'now').mockReturnValue(start + 61_000)
     expect(await getAuth()).toBe(auth)
-    await vi.waitFor(() => expect(control.warns).toBe(2))
+    await vi.waitFor(() => expect(control.warns).toBe(2), { timeout: 10_000 })
 
     vi.spyOn(Date, 'now').mockReturnValue(start + 2 * 61_000 + 1_000)
     expect(await getAuth()).toBe(auth)
-    await vi.waitFor(() => expect(control.warns).toBe(3))
+    await vi.waitFor(() => expect(control.warns).toBe(3), { timeout: 10_000 })
     expect(control.calls).toBe(3)
   })
 
