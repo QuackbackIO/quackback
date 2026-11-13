@@ -16,6 +16,7 @@ import {
   conflictResponse,
   validationErrorResponse,
   internalErrorResponse,
+  internalRouteErrorResponse,
   handleDomainError,
   parsePaginationParams,
   encodeCursor,
@@ -219,6 +220,21 @@ describe('API Responses', () => {
       expect(response.status).toBe(500)
       expect(body.error.requestId).toBe('req-456')
       expect(JSON.stringify(body)).not.toContain('ECONNREFUSED')
+    })
+
+    it("rides beside the plain string the app's own routes answer with", async () => {
+      const response = await runWithLogContext(
+        { request_id: 'req-321', route: '/api/export' },
+        () => Promise.resolve(internalRouteErrorResponse())
+      )
+      expect(response.status).toBe(500)
+      expect(await response.json()).toEqual({
+        error: 'Internal server error',
+        requestId: 'req-321',
+      })
+      expect(await internalRouteErrorResponse().json()).toEqual({
+        error: 'Internal server error',
+      })
     })
 
     it('is left off a 4xx, and off a 5xx built outside a request', async () => {

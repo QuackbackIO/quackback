@@ -61,7 +61,7 @@ import {
   listTicketWatcherCandidates,
   listWatchersOfTicket,
 } from '../ticket-watchers.service'
-import { getTicketWatchersForEvent } from '../ticket-subscription.service'
+import { getTicketNotifiableWatchers } from '../ticket-subscription.service'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -311,7 +311,9 @@ describe.skipIf(!fixture.available)('ticket-watchers.service (real DB, rolled ba
       { ticketId, principalId: requester, reason: 'requester' },
       { ticketId, principalId: scoped, reason: 'manual' },
     ])
-    expect(new Set(await getTicketWatchersForEvent(ticketId))).toEqual(new Set([requester, scoped]))
+    expect(new Set(await getTicketNotifiableWatchers(ticketId, requester))).toEqual(
+      new Set([requester, scoped])
+    )
 
     // The ticket moves to another team: the scoped teammate keeps the row but
     // hears nothing until it comes back to them.
@@ -319,7 +321,7 @@ describe.skipIf(!fixture.available)('ticket-watchers.service (real DB, rolled ba
     await testDb.insert(teams).values({ id: otherTeam, name: `Other ${suffix()}` })
     await testDb.update(tickets).set({ assigneeTeamId: otherTeam }).where(eq(tickets.id, ticketId))
 
-    expect(await getTicketWatchersForEvent(ticketId)).toEqual([requester])
+    expect(await getTicketNotifiableWatchers(ticketId, requester)).toEqual([requester])
     expect(await reasonOf(ticketId, scoped)).toBe('manual')
   })
 })
