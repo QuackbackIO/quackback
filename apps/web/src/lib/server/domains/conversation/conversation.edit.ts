@@ -22,12 +22,15 @@ import {
   type ConversationMessage,
   type ConversationMessageMetadata,
 } from '@/lib/server/db'
-import type { ConversationMessageId, PrincipalId } from '@quackback/ids'
+import type { ConversationMessageId, PrincipalId, TicketId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { canEditMessage, canViewConversation } from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
+import type {
+  AgentConversationMessageDTO,
+  ConversationMessageDTO,
+} from '@/lib/shared/conversation/types'
 import {
   publishAgentConversationEvent,
   publishConversationOnlyEvent,
@@ -113,23 +116,23 @@ function bodyUnchanged(
  * events, so an edit shown there needs its own push: to the message's ticket,
  * or to the customer ticket paired with its conversation.
  */
-async function publishTicketThreadEdit(message: ConversationMessage): Promise<void> {
+async function publishTicketThreadEdit(
+  message: ConversationMessage
+): Promise<{ ticketId: TicketId; message: ConversationMessageDTO } | null> {
   let ticketId = message.ticketId
   if (!ticketId && message.conversationId) {
     const { resolvePairTicketIdForConversation } =
       await import('@/lib/server/domains/tickets/pair-thread.service')
     ticketId = await resolvePairTicketIdForConversation(message.conversationId)
   }
-  if (!ticketId) return
+  if (!ticketId) return null
   const author = message.principalId
     ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
       fallbackAuthor(message.principalId))
     : null
-  publishTicketEvent(ticketId, {
-    kind: 'ticket_message_updated',
-    ticketId,
-    message: toMessageDTO(message, author),
-  })
+  const dto = toMessageDTO(message, author)
+  publishTicketEvent(ticketId, { kind: 'ticket_message_updated', ticketId, message: dto })
+  return { ticketId, message: dto }
 }
 
 /** Replace the body of a message the actor authored. */
@@ -294,7 +297,18 @@ async function applyEdit(
   }
 
   const dto = await toAgentDto(updated, viewerId)
-  await publishTicketThreadEdit(updated)
+  const ticketEdit = await publishTicketThreadEdit(updated)
+  // A public reply shown in a ticket thread also tells the ticket's
+  // integrations (ticket.reply_updated); an internal note never does.
+  if (ticketEdit && !updated.isInternal && updated.senderType !== 'system') {
+    const { emitTicketReplyUpdated } = await import('@/lib/server/domains/tickets/ticket.webhooks')
+    void emitTicketReplyUpdated(
+      actor,
+      ticketEdit.ticketId,
+      ticketEdit.message,
+      updated.editedAt ?? now
+    )
+  }
 
   if (updated.conversationId) {
     publishAgentConversationEvent({

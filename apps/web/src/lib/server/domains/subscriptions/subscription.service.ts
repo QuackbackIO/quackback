@@ -43,7 +43,6 @@ import {
   levelFromFlags,
   type SubscriptionReason,
   type Subscriber,
-  type Subscription,
   type NotificationPreferencesData,
   type SubscriptionLevel,
 } from './subscription.types'
@@ -52,7 +51,6 @@ import {
 export type {
   SubscriptionReason,
   Subscriber,
-  Subscription,
   NotificationPreferencesData,
   SubscriptionLevel,
 } from './subscription.types'
@@ -71,13 +69,14 @@ interface SubscribeOptions {
  * @param postId - The post ID to subscribe to
  * @param reason - Why the subscription was created
  * @param options - Optional existing database transaction and notification level
+ * @returns Whether a subscription was created (false when one already existed)
  */
 export async function subscribeToPost(
   principalId: PrincipalId,
   postId: PostId,
   reason: SubscriptionReason,
   options?: SubscribeOptions
-): Promise<void> {
+): Promise<boolean> {
   log.debug({ post_id: postId, principal_id: principalId, reason }, 'subscribe to post')
   const executor = options?.tx ?? db
   const level = options?.level ?? 'all'
@@ -85,7 +84,7 @@ export async function subscribeToPost(
   const notifyComments = level === 'all'
   const notifyStatusChanges = level === 'all' || level === 'status_only'
 
-  await executor
+  const inserted = await executor
     .insert(postSubscriptions)
     .values({
       postId,
@@ -95,6 +94,8 @@ export async function subscribeToPost(
       notifyStatusChanges,
     })
     .onConflictDoNothing()
+    .returning({ id: postSubscriptions.id })
+  return inserted.length > 0
 }
 
 /**
@@ -260,35 +261,6 @@ export async function getSubscribersForEvent(
       ? (subscriber: Subscriber) => subscriber.notifyComments
       : (subscriber: Subscriber) => subscriber.notifyStatusChanges
   return [...unique.values()].filter(wantsEvent)
-}
-
-/**
- * Get all subscriptions for a member
- */
-export async function getMemberSubscriptions(principalId: PrincipalId): Promise<Subscription[]> {
-  const rows = await db
-    .select({
-      id: postSubscriptions.id,
-      postId: postSubscriptions.postId,
-      postTitle: posts.title,
-      reason: postSubscriptions.reason,
-      notifyComments: postSubscriptions.notifyComments,
-      notifyStatusChanges: postSubscriptions.notifyStatusChanges,
-      createdAt: postSubscriptions.createdAt,
-    })
-    .from(postSubscriptions)
-    .innerJoin(posts, and(eq(postSubscriptions.postId, posts.id), isNull(posts.deletedAt)))
-    .where(eq(postSubscriptions.principalId, principalId))
-
-  return rows.map((row) => ({
-    id: row.id,
-    postId: row.postId,
-    postTitle: row.postTitle,
-    reason: row.reason as SubscriptionReason,
-    notifyComments: row.notifyComments,
-    notifyStatusChanges: row.notifyStatusChanges,
-    createdAt: row.createdAt,
-  }))
 }
 
 /**

@@ -6,6 +6,10 @@
  * next send. The dialog lists the customers currently added, so a repeat add
  * is visible rather than silently idempotent and every row carries its own
  * remove affordance.
+ *
+ * On a conversation that is a customer ticket's thread, adding someone shares
+ * the ticket with them (ticket-sharing.service): they also see and reply on the
+ * thread in the portal and the widget, and follow the ticket. The copy says so.
  */
 import { memo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -22,6 +26,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { formatTicketNumber } from '@/lib/shared/tickets'
 import {
   addConversationParticipantFn,
   removeConversationParticipantFn,
@@ -33,11 +38,16 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
   open,
   onOpenChange,
   conversationId,
+  sharedTicketNumber,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   conversationId: ConversationId
+  /** Set when the conversation is a customer ticket's thread: adding someone
+   *  shares the ticket with them. */
+  sharedTicketNumber?: number | null
 }) {
+  const ticketLabel = sharedTicketNumber != null ? formatTicketNumber(sharedTicketNumber) : null
   const [email, setEmail] = useState('')
   const [pending, setPending] = useState(false)
   const [removingId, setRemovingId] = useState<string | null>(null)
@@ -54,7 +64,11 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
     setPending(true)
     try {
       await addConversationParticipantFn({ data: { conversationId, email: trimmed } })
-      toast.success('Customer added — they will receive future replies by email')
+      toast.success(
+        ticketLabel
+          ? `Shared ${ticketLabel}: they can see and reply on the thread`
+          : 'Customer added — they will receive future replies by email'
+      )
       setEmail('')
       void participantsQuery.refetch()
     } catch (err) {
@@ -69,7 +83,11 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
     setRemovingId(principalId)
     try {
       await removeConversationParticipantFn({ data: { conversationId, principalId } })
-      toast.success('Customer removed — they no longer receive replies')
+      toast.success(
+        ticketLabel
+          ? `Stopped sharing ${ticketLabel} with them`
+          : 'Customer removed — they no longer receive replies'
+      )
       void participantsQuery.refetch()
     } catch (err) {
       toastError(err, 'Failed to remove customer')
@@ -82,10 +100,11 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Conversation customers</DialogTitle>
+          <DialogTitle>{ticketLabel ? 'Shared with' : 'Conversation customers'}</DialogTitle>
           <DialogDescription>
-            Add another customer to this conversation. They receive every future reply by email
-            until removed.
+            {ticketLabel
+              ? `Share ${ticketLabel} with another customer. They can see and reply on its thread in the portal and the widget, follow its progress, and get its replies by email until removed.`
+              : 'Add another customer to this conversation. They receive every future reply by email until removed.'}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -114,7 +133,7 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
                   <button
                     type="button"
                     aria-label={`Remove ${p.email ?? p.displayName ?? 'customer'}`}
-                    title="Remove from conversation"
+                    title={ticketLabel ? 'Stop sharing with them' : 'Remove from conversation'}
                     disabled={removingId === p.principalId}
                     onClick={() => void remove(p.principalId)}
                     className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
@@ -127,7 +146,7 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
           )}
           <DialogFooter>
             <Button type="submit" size="sm" disabled={pending || !email.trim()}>
-              {pending ? 'Adding…' : 'Add customer'}
+              {pending ? 'Adding…' : ticketLabel ? 'Share ticket' : 'Add customer'}
             </Button>
           </DialogFooter>
         </form>

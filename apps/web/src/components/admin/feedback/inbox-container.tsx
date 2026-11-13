@@ -124,6 +124,7 @@ export function InboxContainer({
         responded: undefined,
         updatedBefore: undefined,
         hasDuplicates: undefined,
+        following: undefined,
         sort: undefined,
         showDeleted: undefined,
         ...viewFilters,

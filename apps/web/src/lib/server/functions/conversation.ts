@@ -85,9 +85,11 @@ async function loadLinkedTicketForVisitor(
     const { isSupportTicketsEnabled } =
       await import('@/lib/server/domains/settings/settings.support')
     if (!(await isSupportTicketsEnabled())) return null
-    const { getRequesterTicketForConversation } =
-      await import('@/lib/server/domains/tickets/requester.service')
-    return await getRequesterTicketForConversation(conversationId, principalId)
+    // The requester's view of their own ticket, or the narrower view of a
+    // customer it was shared with.
+    const { getCustomerTicketForConversation } =
+      await import('@/lib/server/domains/tickets/customer-ticket-sharing.service')
+    return (await getCustomerTicketForConversation(conversationId, principalId))?.ticket ?? null
   } catch (error) {
     log.warn({ err: error, conversation_id: conversationId }, 'linked-ticket enrichment failed')
     return null
@@ -306,9 +308,11 @@ export const runSendConversationMessage = createServerOnlyFn(
         const { getMessengerConfig } = await import('@/lib/server/domains/settings/settings.widget')
         const messenger = await getMessengerConfig()
         if (messenger.preventRepliesWhenClosed) {
-          const { getConversationForVisitor } =
+          // The visitor's own thread, or a ticket thread shared with them: the
+          // setting holds for everyone who writes on it.
+          const { getConversationForCustomer } =
             await import('@/lib/server/domains/conversation/conversation.query')
-          const { conversation } = await getConversationForVisitor(
+          const { conversation } = await getConversationForCustomer(
             data.conversationId as ConversationId,
             ctx.principal.id
           )
@@ -483,6 +487,13 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
     // The pair's ticket (converged Messages surface): the thread header
     // card renders when this is set. Overridden on the loaded-thread path.
     linkedTicket: null as RequesterTicketDTO | null,
+    // How the caller reaches the loaded thread: their own, or a customer
+    // ticket shared with them (they reply, but never answer its blocks or
+    // rate it). Overridden on the loaded-thread path.
+    viewerRole: 'owner' as 'owner' | 'participant',
+    // The caller's principal, so a shared thread can tell their own messages
+    // from another customer's. Null until a thread is loaded.
+    viewerPrincipalId: null as string | null,
   }
 
   if (!enabled || !ctx?.principal) {
@@ -517,16 +528,19 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
 
   const {
     getActiveConversationForVisitor,
-    getConversationForVisitor,
+    getConversationForCustomer,
     conversationToDTO,
+    participantConversationToDTO,
     listMessages,
   } = await import('@/lib/server/domains/conversation/conversation.query')
 
-  // A specific thread (history row / ?c= deep link) or the active one (default).
+  // A specific thread (history row / ?c= deep link: their own, or a ticket
+  // shared with them) or the active one (default: always their own).
   const active = target
-    ? await getConversationForVisitor(target as ConversationId, ctx.principal.id)
-    : await getActiveConversationForVisitor(ctx.principal.id)
+    ? await getConversationForCustomer(target as ConversationId, ctx.principal.id)
+    : { ...(await getActiveConversationForVisitor(ctx.principal.id)), role: 'owner' as const }
   const conversation = active.conversation
+  const viewerRole = active.role === 'participant' ? 'participant' : 'owner'
   // Anonymous visitors carry a synthetic placeholder email — it must not count
   // as a real address (else the widget promises an email reply it can't send).
   const visitorHasEmail =
@@ -544,7 +558,9 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
   }
 
   const [dto, page, linkedTicket] = await Promise.all([
-    conversationToDTO(conversation, 'visitor'),
+    viewerRole === 'participant'
+      ? participantConversationToDTO(conversation, ctx.principal.id)
+      : conversationToDTO(conversation, 'visitor'),
     listMessages(conversation.id),
     loadLinkedTicketForVisitor(conversation.id, ctx.principal.id),
   ])
@@ -557,6 +573,8 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
     messages: page.messages,
     hasMore: page.hasMore,
     linkedTicket,
+    viewerRole,
+    viewerPrincipalId: ctx.principal.id as string,
   }
 })
 
@@ -579,6 +597,7 @@ export const runGetMyConversations = createServerOnlyFn(async function runGetMyC
   const empty = {
     conversations: [],
     linkedTickets: {} as Record<string, ConversationTicketSummary>,
+    sharedConversationIds: [] as string[],
   }
   const { isConversationsEnabledFor } =
     await import('@/lib/server/domains/settings/settings.support')
@@ -590,9 +609,10 @@ export const runGetMyConversations = createServerOnlyFn(async function runGetMyC
     if (!access.granted) return empty
   }
 
-  const { listConversationsForVisitor } =
+  // Their own conversations plus the customer tickets shared with them.
+  const { listConversationsForCustomer } =
     await import('@/lib/server/domains/conversation/conversation.query')
-  const conversations = await listConversationsForVisitor(ctx.principal.id, 50, 'visitor')
+  const { conversations, sharedIds } = await listConversationsForCustomer(ctx.principal.id, 50)
 
   // Converged Messages surface: decorate paired rows with their ticket's
   // stage chip + reference. The row's displayed state keys off the TICKET
@@ -603,9 +623,9 @@ export const runGetMyConversations = createServerOnlyFn(async function runGetMyC
     const { isSupportTicketsEnabled } =
       await import('@/lib/server/domains/settings/settings.support')
     if (conversations.length > 0 && (await isSupportTicketsEnabled())) {
-      const { getRequesterTicketSummaries } =
-        await import('@/lib/server/domains/tickets/requester.service')
-      const map = await getRequesterTicketSummaries(
+      const { getCustomerTicketSummaries } =
+        await import('@/lib/server/domains/tickets/customer-ticket-sharing.service')
+      const map = await getCustomerTicketSummaries(
         conversations.map((c) => c.id),
         ctx.principal.id
       )
@@ -615,7 +635,7 @@ export const runGetMyConversations = createServerOnlyFn(async function runGetMyC
     log.warn({ err: error }, 'linked-ticket list enrichment failed')
   }
 
-  return { conversations, linkedTickets }
+  return { conversations, linkedTickets, sharedConversationIds: sharedIds as string[] }
 })
 
 export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(async () => {
@@ -1593,21 +1613,29 @@ const removeParticipantSchema = z.object({
  * minted lead — the agent's explicit add is the trust decision), the join row
  * is idempotent, and the added customer receives every subsequent agent reply
  * by email (the notify fan-out). Gated on conversation.reply, the same
- * permission replying requires.
+ * permission replying requires. On a customer ticket's thread the add shares
+ * the ticket (ticket-sharing.service), which also takes ticket.reply on a
+ * ticket the caller can see.
  */
 export const addConversationParticipantFn = createServerFn({ method: 'POST' })
   .validator(addParticipantSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
     const actor = await policyActorFromAuth(ctx)
+    const conversationId = data.conversationId as ConversationId
+    // On a customer ticket's thread, adding someone shares the ticket with
+    // them (the thread on the portal, a watch): the ticket's own rules apply.
+    const { shareConversationTicketByEmail } =
+      await import('@/lib/server/domains/tickets/ticket-sharing.service')
+    const shared = await shareConversationTicketByEmail(conversationId, data.email, actor, {
+      actorDisplayName: ctx.user.name,
+    })
+    if (shared) return shared
     const { addConversationParticipantByEmail } =
       await import('@/lib/server/domains/conversation/conversation-participant.service')
-    return addConversationParticipantByEmail(
-      data.conversationId as ConversationId,
-      data.email,
-      actor,
-      { actorDisplayName: ctx.user.name }
-    )
+    return addConversationParticipantByEmail(conversationId, data.email, actor, {
+      actorDisplayName: ctx.user.name,
+    })
   })
 
 /**
@@ -1620,14 +1648,19 @@ export const removeConversationParticipantFn = createServerFn({ method: 'POST' }
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
     const actor = await policyActorFromAuth(ctx)
+    const conversationId = data.conversationId as ConversationId
+    const principalId = data.principalId as PrincipalId
+    const { unshareConversationTicket } =
+      await import('@/lib/server/domains/tickets/ticket-sharing.service')
+    const unshared = await unshareConversationTicket(conversationId, principalId, actor, {
+      actorDisplayName: ctx.user.name,
+    })
+    if (unshared) return unshared
     const { removeConversationParticipant } =
       await import('@/lib/server/domains/conversation/conversation-participant.service')
-    return removeConversationParticipant(
-      data.conversationId as ConversationId,
-      data.principalId as PrincipalId,
-      actor,
-      { actorDisplayName: ctx.user.name }
-    )
+    return removeConversationParticipant(conversationId, principalId, actor, {
+      actorDisplayName: ctx.user.name,
+    })
   })
 
 /** The customers added to a conversation, for the agent-side display. */
