@@ -25,16 +25,22 @@
  * list, search ranking, the REST `updatedAfter` sync and the retention clock
  * read it. The update is raw SQL, which the column's `$onUpdate` never sees.
  */
-import { db, and, eq, sql, conversationMessages, ticketConversations } from '@/lib/server/db'
-import type { Database, Transaction } from '@/lib/server/db'
+import {
+  db,
+  and,
+  eq,
+  sql,
+  conversationMessages,
+  ticketConversations,
+  tickets,
+} from '@/lib/server/db'
+import type { Ticket, Transaction } from '@/lib/server/db'
 import { fromUuid, toUuid, type ConversationId, type TicketId } from '@quackback/ids'
 import type { SQL } from 'drizzle-orm'
 import { humanReply } from '@/lib/server/messages/reply-rule'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'ticket-first-response' })
-
-type Executor = Database | Transaction
 
 /** One side of the thread: public, undeleted messages matching `parent`. */
 function threadRows(parent: SQL): SQL {
@@ -120,73 +126,94 @@ export async function recomputeFirstResponseIn(
   }))
 }
 
-/** The same, in a transaction of its own unless `executor` is one already. */
-export function recomputeFirstResponseWhere(
-  executor: Executor,
-  where: SQL
-): Promise<FirstResponseChange[]> {
-  return executor === db
-    ? db.transaction((tx) => recomputeFirstResponseIn(tx, where))
-    : recomputeFirstResponseIn(executor as Transaction, where)
-}
-
 /**
- * Recompute one ticket's first response, in `executor`'s transaction when
- * given. Returns the change, or null when the value stayed; the caller then
- * publishes the ticket (`publishFirstResponseChange`) once its transaction
- * commits.
+ * Recompute one ticket's first response, in `tx` when given, else in a
+ * transaction of its own: the lock and the update always share one. Returns
+ * the change, or null when the value stayed.
  */
-export async function recomputeTicketFirstResponse(
+export function recomputeTicketFirstResponse(
   ticketId: TicketId,
-  executor: Executor = db
+  tx?: Transaction
 ): Promise<FirstResponseChange | null> {
-  const [change] = await recomputeFirstResponseWhere(
-    executor,
-    sql`t.id = ${toUuid(ticketId)}::uuid`
-  )
-  return change ?? null
+  const run = async (t: Transaction) => {
+    const [change] = await recomputeFirstResponseIn(t, sql`t.id = ${toUuid(ticketId)}::uuid`)
+    return change ?? null
+  }
+  return tx ? run(tx) : db.transaction(run)
 }
 
 /**
- * Re-render the ticket in every open inbox after its first response changed.
- * Best-effort: the value is already stored, and the next read shows it.
+ * Whether adding or removing a message written at `messageAt` can move a first
+ * response that is now `current`. An internal note never can. Once the value
+ * is set, a message written after it cannot: an added one is not earlier than
+ * the first reply, and a removed one is not the first reply or anything before
+ * it. A removal that changed no row moves nothing either; callers skip it.
  */
-export async function publishFirstResponseChange(ticketId: TicketId): Promise<void> {
-  try {
-    const [{ loadTicketOr404 }, { publishTicketUpdated }] = await Promise.all([
-      import('./ticket.service'),
-      import('./ticket-intake.service'),
-    ])
-    await publishTicketUpdated(await loadTicketOr404(ticketId))
-  } catch (err) {
-    log.warn({ err, ticket_id: ticketId }, 'ticket first response: realtime publish failed')
+export function messageCanMoveFirstResponse(
+  current: Date | null,
+  message: { createdAt: Date; isInternal: boolean },
+  change: 'added' | 'removed'
+): boolean {
+  if (message.isInternal) return false
+  if (current === null) return true
+  const at = message.createdAt.getTime()
+  return change === 'added' ? at < current.getTime() : at <= current.getTime()
+}
+
+/**
+ * Re-render a ticket in every open inbox after its first response changed,
+ * from the row the caller holds. Fire-and-forget: the value is already
+ * stored, so a failed publish is logged and the next read shows it.
+ */
+export function publishFirstResponseChange(ticket: Ticket): void {
+  void import('./ticket-intake.service')
+    .then(({ publishTicketUpdated }) => publishTicketUpdated(ticket))
+    .catch((err: unknown) => {
+      log.warn({ err, ticket_id: ticket.id }, 'ticket first response: realtime publish failed')
+    })
+}
+
+/**
+ * Recompute one ticket in a transaction of its own, and publish it when it
+ * changed. The changed row is read in the same transaction, so the publish
+ * needs no second read.
+ */
+export async function syncTicketFirstResponse(ticketId: TicketId): Promise<void> {
+  const changed = await db.transaction(async (tx) => {
+    const [change] = await recomputeFirstResponseIn(tx, sql`t.id = ${toUuid(ticketId)}::uuid`)
+    if (!change) return null
+    const [row] = await tx.select().from(tickets).where(eq(tickets.id, ticketId))
+    return row ?? null
+  })
+  if (changed) {
+    log.debug({ ticket_id: ticketId }, 'ticket first response changed')
+    publishFirstResponseChange(changed)
   }
 }
 
-/** Publish every ticket whose first response changed, together. */
-async function publishChanged(changes: FirstResponseChange[]): Promise<void> {
-  await Promise.all(
-    changes.map((change) => {
-      log.debug({ ticket_id: change.id }, 'ticket first response changed')
-      return publishFirstResponseChange(change.id)
-    })
-  )
-}
-
-/** Recompute one ticket in a transaction of its own, and publish it when it changed. */
-export async function syncTicketFirstResponse(ticketId: TicketId): Promise<void> {
-  await publishChanged(await recomputeFirstResponseWhere(db, sql`t.id = ${toUuid(ticketId)}::uuid`))
-}
-
 /**
- * The same for the customer ticket paired with a conversation. The pair is
- * read first, so a conversation with no paired ticket, which is most of them,
- * costs that one indexed read and nothing else.
+ * The same after a message was removed from a ticket's own thread: skipped
+ * when the removal cannot move the value (`messageCanMoveFirstResponse`).
  */
-export async function syncPairTicketFirstResponse(conversationId: ConversationId): Promise<void> {
+export async function syncTicketFirstResponseAfterRemoval(
+  ticketId: TicketId,
+  message: { createdAt: Date; isInternal: boolean }
+): Promise<void> {
+  if (message.isInternal) return
+  const [row] = await db
+    .select({ firstResponseAt: tickets.firstResponseAt })
+    .from(tickets)
+    .where(eq(tickets.id, ticketId))
+  if (!row || !messageCanMoveFirstResponse(row.firstResponseAt, message, 'removed')) return
+  await syncTicketFirstResponse(ticketId)
+}
+
+/** The customer ticket paired with a conversation, if any: one indexed read. */
+async function pairTicketOf(conversationId: ConversationId) {
   const [pair] = await db
-    .select({ ticketId: ticketConversations.ticketId })
+    .select({ ticketId: tickets.id, firstResponseAt: tickets.firstResponseAt })
     .from(ticketConversations)
+    .innerJoin(tickets, eq(tickets.id, ticketConversations.ticketId))
     .where(
       and(
         eq(ticketConversations.conversationId, conversationId),
@@ -194,5 +221,23 @@ export async function syncPairTicketFirstResponse(conversationId: ConversationId
       )
     )
     .limit(1)
-  if (pair) await syncTicketFirstResponse(pair.ticketId as TicketId)
+  return pair
+    ? { ticketId: pair.ticketId as TicketId, firstResponseAt: pair.firstResponseAt }
+    : null
+}
+
+/**
+ * The same for the customer ticket paired with a conversation. The pair is
+ * read first, so a conversation with no paired ticket, which is most of them,
+ * costs that one indexed read and nothing else. With `message` (what was added
+ * or removed), a change that cannot move the value is skipped too.
+ */
+export async function syncPairTicketFirstResponse(
+  conversationId: ConversationId,
+  message?: { createdAt: Date; isInternal: boolean; change: 'added' | 'removed' }
+): Promise<void> {
+  const pair = await pairTicketOf(conversationId)
+  if (!pair) return
+  if (message && !messageCanMoveFirstResponse(pair.firstResponseAt, message, message.change)) return
+  await syncTicketFirstResponse(pair.ticketId)
 }

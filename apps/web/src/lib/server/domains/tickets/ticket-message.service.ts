@@ -101,7 +101,11 @@ import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/
 import { enrichMessagesForAgent } from '../conversation/conversation.query'
 import { listPairThreadMessages, resolvePairConversationId } from './pair-thread.service'
 import { crossPostTicketNote } from './ticket-conversation-link.service'
-import { publishFirstResponseChange, recomputeTicketFirstResponse } from './ticket-first-response'
+import {
+  messageCanMoveFirstResponse,
+  publishFirstResponseChange,
+  recomputeTicketFirstResponse,
+} from './ticket-first-response'
 import { loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
@@ -297,12 +301,15 @@ export async function insertTicketMessage(
     await linkFilesToMessage(tx, attachments, row!.id)
 
     await tx.update(tickets).set({ updatedAt: row.createdAt }).where(eq(tickets.id, input.ticketId))
-    // Worked out from the rows, so a reply, a note and a requester reply all
-    // leave it right; only a public human reply after the customer's first
-    // message can set it.
-    return { row, firstResponse: await recomputeTicketFirstResponse(input.ticketId, tx) }
+    // Worked out from the rows, so a reply and a requester reply leave it
+    // right. Skipped when this message cannot move it: a note, or a message
+    // written after a first response already set.
+    const canMove = messageCanMoveFirstResponse(existing.firstResponseAt, row, 'added')
+    return {
+      row,
+      firstResponse: canMove ? await recomputeTicketFirstResponse(input.ticketId, tx) : null,
+    }
   })
-  if (firstResponse) await publishFirstResponseChange(input.ticketId)
 
   const author =
     (await loadAuthors([principalId], { preferAccountName: true })).get(principalId) ??
@@ -323,6 +330,7 @@ export async function insertTicketMessage(
     updatedAt: messageRow.createdAt,
     firstResponseAt: firstResponse ? firstResponse.firstResponseAt : existing.firstResponseAt,
   }
+  if (firstResponse) publishFirstResponseChange(ticket)
   return { message, ticket }
 }
 
@@ -404,9 +412,26 @@ async function sendViaPairConversation(
   const updatedAt = new Date(message.createdAt)
   await db.update(tickets).set({ updatedAt }).where(eq(tickets.id, input.ticketId))
   publishTicketEvent(input.ticketId, { kind: 'ticket_message', ticketId: input.ticketId, message })
-  // The first response is set by the reaction to the conversation's message,
-  // a few seconds later; only the edit time moved here.
-  return { message, ticket: { ...ticket, updatedAt } }
+  // The reaction to the conversation's message also recomputes the first
+  // response, but only a few seconds later, so a reply that sets it does so
+  // here too and the caller's webhook carries it. Best-effort: the message
+  // landed, and the reaction corrects the value if this fails.
+  let firstResponseAt = ticket.firstResponseAt
+  const added = { createdAt: updatedAt, isInternal: false }
+  if (opts.senderType === 'agent' && messageCanMoveFirstResponse(firstResponseAt, added, 'added')) {
+    try {
+      const change = await recomputeTicketFirstResponse(input.ticketId)
+      if (change) firstResponseAt = change.firstResponseAt
+    } catch (err) {
+      log.warn(
+        { err, ticket_id: input.ticketId },
+        'ticket first response recompute after a paired reply failed'
+      )
+    }
+  }
+  const updated: Ticket = { ...ticket, updatedAt, firstResponseAt }
+  if (firstResponseAt !== ticket.firstResponseAt) publishFirstResponseChange(updated)
+  return { message, ticket: updated }
 }
 
 /** Agent reply on a customer ticket thread (customer-visible). */

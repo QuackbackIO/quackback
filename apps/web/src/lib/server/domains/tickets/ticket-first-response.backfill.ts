@@ -24,13 +24,13 @@ import type {
   BackfillRange,
   BatchedBackfill,
 } from '@/lib/server/backfills/batched'
-import { recomputeFirstResponseWhere } from './ticket-first-response'
+import { recomputeFirstResponseIn } from './ticket-first-response'
 
 const NAME = 'ticket-frt-recompute'
 
 /** Recompute the tickets in one id range. Raw SQL, so `updated_at` stays. */
 async function step(tx: Transaction, { fromId, toId }: BackfillRange): Promise<void> {
-  await recomputeFirstResponseWhere(
+  await recomputeFirstResponseIn(
     tx,
     sql`t.id <= ${toId}::uuid and (${fromId}::uuid is null or t.id > ${fromId}::uuid)`
   )
