@@ -3,6 +3,7 @@ import type { Role } from '@/lib/shared/roles'
 import { isValidTypeId } from '@quackback/ids'
 import type { ImportRunId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { internalRouteErrorResponse } from '@/lib/server/domains/api/responses'
 
 const log = logger.child({ component: 'import-run' })
 
@@ -38,7 +39,7 @@ export async function handleGetImportRun(runId: string): Promise<Response> {
       return Response.json({ error: error.message }, { status: 404 })
     }
     log.error({ err: error }, 'get import run failed')
-    return Response.json({ error: 'Internal server error' }, { status: 500 })
+    return internalRouteErrorResponse()
   }
 }
 

@@ -1,11 +1,132 @@
-import { useState, useEffect } from 'react'
-import { useSearch } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
+import { useIntl, type IntlShape } from 'react-intl'
 import { toast } from 'sonner'
 import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useDeleteIntegration } from '@/lib/client/mutations'
 import { toastError } from '@/lib/client/error-notice'
+
+/**
+ * Why a connection attempt came back as `?<integration>=error&reason=<code>`,
+ * in words. The codes are the ones oauth-handlers.ts sends: the provider's own
+ * refusal (`<integration>_denied`), an expired or tampered request, a session
+ * that ended or changed mid-flow, missing app credentials, an account already
+ * serving another workspace, or a failed token exchange.
+ */
+export function oauthErrorMessage(
+  intl: IntlShape,
+  reason: string | undefined,
+  integration: string,
+  displayName: string
+): string {
+  switch (reason) {
+    case `${integration}_denied`:
+      return intl.formatMessage(
+        {
+          id: 'admin.integrations.oauthError.denied',
+          defaultMessage: 'The connection was declined on {name}. Connect again to allow access.',
+        },
+        { name: displayName }
+      )
+    case 'invalid_state':
+    case 'state_expired':
+    case 'state_mismatch':
+    case 'invalid_request':
+      return intl.formatMessage({
+        id: 'admin.integrations.oauthError.expired',
+        defaultMessage: 'The connection request expired or was not valid. Try connecting again.',
+      })
+    // auth_required also covers a failed session lookup, so the copy does not
+    // claim the session changed.
+    case 'auth_required':
+    case 'session_mismatch':
+      return intl.formatMessage({
+        id: 'admin.integrations.oauthError.session',
+        defaultMessage: "We couldn't confirm your sign-in. Sign in again, then connect.",
+      })
+    case 'credentials_not_configured':
+      return intl.formatMessage(
+        {
+          id: 'admin.integrations.oauthError.credentials',
+          defaultMessage: 'Add the {name} app credentials before connecting.',
+        },
+        { name: displayName }
+      )
+    case 'already_connected_elsewhere':
+      return intl.formatMessage(
+        {
+          id: 'admin.integrations.oauthError.elsewhere',
+          defaultMessage:
+            'This {name} account is already connected to another Quackback workspace.',
+        },
+        { name: displayName }
+      )
+    // exchange_failed also covers our own save failing, and unknown codes land
+    // here too, so the copy blames neither side.
+    default:
+      return intl.formatMessage(
+        {
+          id: 'admin.integrations.oauthError.failed',
+          defaultMessage: "The connection to {name} didn't finish. Try connecting again.",
+        },
+        { name: displayName }
+      )
+  }
+}
+
+/**
+ * Reads the result the OAuth callback appends on its way back
+ * (`?<integration>=connected` or `?<integration>=error&reason=<code>`),
+ * shows it once, and strips it through the router. Stripping with
+ * window.history would leave the params in the router's search state, and the
+ * next navigation that spreads the previous search would put them back.
+ *
+ * Returns true for three seconds after a successful connection.
+ */
+export function useOAuthResult(searchParamKey: string, displayName: string): boolean {
+  const intl = useIntl()
+  const search = useSearch({ strict: false }) as Record<string, unknown>
+  const navigate = useNavigate()
+  const [showSuccess, setShowSuccess] = useState(false)
+
+  const result = search[searchParamKey]
+  const reason = typeof search.reason === 'string' ? search.reason : undefined
+
+  useEffect(() => {
+    if (result !== 'connected' && result !== 'error') return
+
+    void navigate({
+      to: '.',
+      search: (previous) => {
+        const { [searchParamKey]: _result, reason: _reason, ...rest } = previous
+        return rest
+      },
+      replace: true,
+    })
+
+    if (result === 'error') {
+      // A stable id keeps one toast if the effect runs again before the
+      // router applies the stripped search (StrictMode, a re-render).
+      toast.error(oauthErrorMessage(intl, reason, searchParamKey, displayName), {
+        id: `oauth-result-${searchParamKey}`,
+      })
+      return
+    }
+    setShowSuccess(true)
+  }, [result, reason, searchParamKey, displayName, intl, navigate])
+
+  // Separate from the effect above: stripping the params re-runs that effect,
+  // and its cleanup would cancel this timer and leave the banner up.
+  useEffect(() => {
+    if (!showSuccess) return
+    const timer = setTimeout(() => setShowSuccess(false), 3000)
+    return () => clearTimeout(timer)
+  }, [showSuccess])
+
+  return showSuccess
+}
 
 interface OAuthConnectionActionsProps {
   integrationId?: string
@@ -31,33 +152,10 @@ export function OAuthConnectionActions({
   disconnectDescription,
   connectLabel = `Connect ${displayName}`,
 }: OAuthConnectionActionsProps) {
-  const search = useSearch({ strict: false })
   const deleteMutation = useDeleteIntegration()
-  const [showSuccess, setShowSuccess] = useState(false)
+  const showSuccess = useOAuthResult(searchParamKey, displayName)
   const [connecting, setConnecting] = useState(false)
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false)
-
-  useEffect(() => {
-    const searchParams = search as Record<string, string | undefined>
-    if (
-      searchParams[searchParamKey] === 'error' &&
-      searchParams.reason === 'already_connected_elsewhere'
-    ) {
-      toast.error(
-        `This ${displayName} account is already connected to another Quackback workspace.`
-      )
-      return
-    }
-    if (searchParams[searchParamKey] !== 'connected') return
-
-    setShowSuccess(true)
-    const url = new URL(window.location.href)
-    url.searchParams.delete(searchParamKey)
-    window.history.replaceState({}, '', url.toString())
-
-    const timer = setTimeout(() => setShowSuccess(false), 3000)
-    return () => clearTimeout(timer)
-  }, [search, searchParamKey])
 
   const handleConnect = async () => {
     setConnecting(true)

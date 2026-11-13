@@ -194,6 +194,13 @@ vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
   normalizePrincipalType: (t: string) => t,
 }))
+vi.mock('@/lib/server/policy/permissions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/policy/permissions')>()
+  return {
+    ...actual,
+    permissionsForPrincipal: vi.fn(async () => actual.permissionsForLegacyRole('admin')),
+  }
+})
 vi.mock('@/lib/server/realtime/stream-connection-limit', () => ({
   streamLimiter: {
     acquire: () => ({
