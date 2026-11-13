@@ -94,6 +94,9 @@ function messageData(
     authorEmail: realEmail(author.email ?? null),
     content: m.content,
     createdAt: m.createdAt.toISOString(),
+    // Stored metadata is written by the server only: a block reply is kept
+    // there only after it matched a block on this conversation.
+    blockReplyKind: m.metadata?.blockReply?.kind ?? null,
   }
 }
 

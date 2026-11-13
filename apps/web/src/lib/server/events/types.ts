@@ -316,6 +316,10 @@ export interface EventMessageData {
   authorEmail: string | null // realEmail()
   content: string
   createdAt: string
+  /** The kind of conversation block the message answers ('csat', 'buttons',
+   *  ...), taken from the stored, server-matched block reply; null for every
+   *  other message. Absent on events stored before the field existed. */
+  blockReplyKind?: string | null
 }
 
 export interface ConversationCreatedPayload {

@@ -16,7 +16,7 @@ are opt-in: a webhook only receives the event types listed in its subscription.
 | `message.created`                 | A visitor or agent sends a public message.                                                                       |
 | `message.note_created`            | An agent adds an **internal note**. Private content — subscribe only if your endpoint should receive it.         |
 | `message.deleted`                 | A public message is soft-deleted.                                                                                |
-| `message.updated`                 | The author edits a public message. The payload carries the new body. Internal-note edits are not emitted.       |
+| `message.updated`                 | The author edits a public message. The payload carries the new body. Internal-note edits are not emitted.        |
 
 Internal-note deletions are not emitted. System messages (e.g. "chat ended") are
 represented by `conversation.*` events, not `message.created`. Anonymous visitors'
@@ -26,6 +26,13 @@ two events: `conversation.csat_submitted` fires once when the rating is recorded
 `conversation.csat_comment_added` fires once if the visitor later leaves a comment
 (both payloads carry the immutable first rating; comment text appears only on the
 comment event).
+
+`data.message.blockReplyKind` names the kind of conversation block a visitor message
+answers (`csat`, `buttons`, `collect` or `collectReply`), and is `null` for every
+other message. A rating given in the thread is a `message.created` with
+`blockReplyKind: "csat"`; it does not reopen a resolved conversation or its ticket.
+`message.note_created` and `message.updated` carry the field by the same rule. Events
+stored before the field existed omit it; treat a missing field as `null`.
 
 ## Payload envelope
 

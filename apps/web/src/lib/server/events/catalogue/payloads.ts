@@ -49,6 +49,10 @@ export const messageData = z.object({
   authorEmail: nullableStr,
   content: z.string(),
   createdAt: z.string(),
+  // The kind of conversation block the message answers ('csat', 'buttons', ...),
+  // null for every other message. Absent on events stored before the field
+  // existed, which reads the same as null.
+  blockReplyKind: z.string().nullable().optional(),
 })
 export const ticketRef = z.object({
   id,
