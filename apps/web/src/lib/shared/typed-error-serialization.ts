@@ -24,12 +24,12 @@ interface TypedErrorWire {
 }
 
 /** A typed error the browser may see in full: a planned refusal below 500. */
-export function isPlannedTypedError(value: unknown): value is DomainException {
+function isPlannedTypedError(value: unknown): value is DomainException {
   return value instanceof DomainException && value.statusCode < 500
 }
 
 /** The error the browser receives for a planned typed error. */
-export function reviveTypedError(wire: TypedErrorWire): DomainException {
+function reviveTypedError(wire: TypedErrorWire): DomainException {
   const error = new Error(wire.message)
   error.name = wire.name
   return Object.assign(error, {

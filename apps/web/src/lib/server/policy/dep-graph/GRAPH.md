@@ -30,6 +30,7 @@ Edges (29):
 - (root) -> components
 - (root) -> lib/client
 - (root) -> lib/server
+- (root) -> lib/shared
 - components -> integrations
 - components -> lib/client
 - components -> lib/server
