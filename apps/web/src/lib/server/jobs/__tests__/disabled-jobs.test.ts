@@ -44,13 +44,18 @@ const { logLines, stubLogger } = vi.hoisted(() => {
 vi.mock('@/lib/server/logger', () => ({ logger: stubLogger }))
 vi.mock('@/lib/server/workspaces/workspace-context', () => ({ getCurrentWorkspace: () => null }))
 
-import { __setJobDefinitionsForTests, JOB_DEFINITIONS } from '../definitions'
+import {
+  __setJobDefinitionsForTests,
+  JOB_DEFINITIONS,
+  logPausedJobs,
+  parseDisabledJobs,
+  runnableQueues,
+} from '../definitions'
 import {
   __resetWorkspaceDeadlinesForTests,
   earliestWorkspaceDeadline,
   registerWorkspaceDeadline,
 } from '../deadlines'
-import { parseDisabledJobs, pausedJobs } from '../disabled-jobs'
 import { earliestPendingJobAt, enqueueJob, nextPendingJobAt } from '../job-queue'
 import {
   awaitPool,
@@ -109,7 +114,7 @@ describe('parseDisabledJobs', () => {
 })
 
 describe('the paused log', () => {
-  it('names each paused job once and warns about an unknown name', () => {
+  it('names each paused job at worker start and warns about an unknown name', () => {
     const a = queue('log-a')
     const b = queue('log-b')
     __setJobDefinitionsForTests([
@@ -118,8 +123,10 @@ describe('the paused log', () => {
     ])
     pause(a, 'not-a-job')
 
-    expect([...pausedJobs()]).toEqual([a])
-    expect([...pausedJobs()]).toEqual([a])
+    // Reading the list logs nothing; the worker start does, once.
+    expect(runnableQueues()).toEqual([b])
+    expect(logLines).toHaveLength(0)
+    logPausedJobs()
 
     const paused = logLines.filter((l) => l.msg === 'job paused')
     expect(paused).toHaveLength(1)

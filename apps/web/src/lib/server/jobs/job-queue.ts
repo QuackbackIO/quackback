@@ -79,7 +79,7 @@ import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { noteDurableWork, SINGLE_WORKSPACE_KEY } from '@/lib/server/workspaces/after-commit'
-import { pausedJobs } from './disabled-jobs'
+import { pausedQueues } from './definitions'
 import {
   leaseClaimGroupedSql,
   leaseClaimSql,
@@ -120,9 +120,13 @@ export function isMissingJobQueue(err: unknown): boolean {
  * so a paused job never wakes a parked workspace or an idle loop.
  */
 function notPausedClause(): SQL {
-  const paused = [...pausedJobs()]
+  const paused = pausedQueues()
   if (paused.length === 0) return sql``
-  return sql` AND queue NOT IN (SELECT jsonb_array_elements_text(${JSON.stringify(paused)}::jsonb))`
+  // ARRAY[...] with one parameter each: drizzle spreads a JS array into a list.
+  return sql` AND queue <> ALL(ARRAY[${sql.join(
+    paused.map((queue) => sql`${queue}`),
+    sql`, `
+  )}]::text[])`
 }
 
 /**

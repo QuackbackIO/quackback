@@ -50,7 +50,7 @@ import {
   isHostedBillingConfigured,
 } from '@/lib/server/domains/billing/usage-report'
 import { earliestPendingJobAt, isMissingJobQueue, nextPendingJobAt } from './job-queue'
-import { pausedJobs } from './disabled-jobs'
+import { logPausedJobs } from './definitions'
 import {
   awaitPool,
   createJobPool,
@@ -709,9 +709,7 @@ export async function startJobWorker(): Promise<void> {
   })
 
   await primeJobHandlers()
-  // Every start names the jobs an operator paused, so a forgotten pause shows
-  // up in the boot log rather than only as work that never happens.
-  pausedJobs()
+  logPausedJobs()
 
   if (!config.isPooledTenancy) {
     startSingleWorkspaceLoop(cfg)

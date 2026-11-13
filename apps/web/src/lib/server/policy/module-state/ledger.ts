@@ -1469,15 +1469,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'warning is logged once. A cross-workspace hit would drop the warning for another workspace.',
   },
   {
-    file: 'apps/web/src/lib/server/jobs/disabled-jobs.ts',
-    name: 'parsed',
-    category: 'fleet-wide',
-    reason:
-      'The parsed QUACKBACK_DISABLED_JOBS list, a process environment setting checked against the ' +
-      'job definitions. It is the same for every workspace in the process; it is memoised only ' +
-      'so the "job paused" lines are logged once rather than on every pass.',
-  },
-  {
     file: 'apps/web/src/lib/server/backfills/deferred-indexes.ts',
     name: 'allBuiltSeen',
     category: 'workspace-keyed',

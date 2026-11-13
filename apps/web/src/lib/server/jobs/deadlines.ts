@@ -59,7 +59,7 @@
  * runs.
  */
 import { logger } from '@/lib/server/logger'
-import { pausedJobs } from './disabled-jobs'
+import { pausedQueues } from './definitions'
 
 const log = logger.child({ component: 'job-deadlines' })
 
@@ -155,7 +155,7 @@ export async function dueWithin(
  */
 export async function earliestWorkspaceDeadline(now = Date.now()): Promise<Date | null> {
   let earliest: Date | null = null
-  const paused = pausedJobs()
+  const paused = new Set(pausedQueues())
   for (const queue of providers.keys()) {
     // A paused schedule writes nothing, so its clock must not wake anything.
     if (paused.has(queue)) continue
