@@ -43,10 +43,10 @@
  * `tickets.updatedAt` is still bumped (listMyTickets orders by it), the
  * realtime `ticket_message` still publishes on the team-only ticket channel
  * (dual-publish — the conversation channel copy is the delegate's), and the
- * ticket's `firstResponseAt` column is deliberately NOT stamped by redirected
- * agent replies: at link time `linkTicketToConversation` backfills it from the
- * conversation's first agent message, and afterwards the conversation's
- * first-response machinery owns the timeline. The caller-side `ticket.replied`
+ * ticket's `firstResponseAt` is worked out from the pair's message rows
+ * (ticket-first-response.ts): a ticket-parented write recomputes it in its own
+ * transaction, and a redirected write leaves it to the ticket-first-response
+ * reaction to the conversation's `message.created`. The caller-side `ticket.replied`
  * emission (sendTicketMessage / appendRequesterReply) fires alongside the
  * delegate's `message.created` — the notification matrix's watcher fan-out.
  *
@@ -101,7 +101,7 @@ import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/
 import { enrichMessagesForAgent } from '../conversation/conversation.query'
 import { listPairThreadMessages, resolvePairConversationId } from './pair-thread.service'
 import { crossPostTicketNote } from './ticket-conversation-link.service'
-import { firstResponseStamp } from './ticket.lifecycle'
+import { publishFirstResponseChange, recomputeTicketFirstResponse } from './ticket-first-response'
 import { loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
@@ -214,8 +214,6 @@ function requireAgentPrincipal(actor: Actor): PrincipalId {
 interface InsertTicketMessageOpts {
   senderType: 'agent' | 'visitor'
   isInternal: boolean
-  /** Stamp first_response_at (once) — true only for an agent reply. */
-  stampFirstResponse: boolean
   /** The acting principal's policy actor, threaded through so the Phase 1a
    *  redirect can hand the conversation domain's send functions an actor to
    *  re-authorize (the caller still owns the primary authorization — an agent
@@ -263,8 +261,7 @@ export async function insertTicketMessage(
     attachments.length > 0 || !!fallbackLabel
   )
 
-  // Validate existence + read first_response_at before the write; the stamp is
-  // idempotent (set once), so a read-before-update race is harmless.
+  // Validate existence and read the ticket's type and parent before the write.
   const existing = await loadTicketOr404(input.ticketId)
 
   // THE PHASE 1a REDIRECT. The internal-note guard comes first (notes stay
@@ -283,6 +280,7 @@ export async function insertTicketMessage(
     }
   }
 
+  let firstResponseChanged = false
   const messageRow = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(conversationMessages)
@@ -299,19 +297,15 @@ export async function insertTicketMessage(
       .returning()
     await linkFilesToMessage(tx, attachments, row!.id)
 
-    await tx
-      .update(tickets)
-      .set({
-        // Only an agent reply is a "first response"; a note or a requester reply is not.
-        firstResponseAt: opts.stampFirstResponse
-          ? firstResponseStamp(existing.firstResponseAt, true, row.createdAt)
-          : undefined,
-        updatedAt: row.createdAt,
-      })
-      .where(eq(tickets.id, input.ticketId))
+    await tx.update(tickets).set({ updatedAt: row.createdAt }).where(eq(tickets.id, input.ticketId))
+    // Worked out from the rows, so a reply, a note and a requester reply all
+    // leave it right; only a public human reply after the customer's first
+    // message can set it.
+    firstResponseChanged = await recomputeTicketFirstResponse(input.ticketId, tx)
 
     return row
   })
+  if (firstResponseChanged) await publishFirstResponseChange(input.ticketId)
 
   const author =
     (await loadAuthors([principalId], { preferAccountName: true })).get(principalId) ??
@@ -349,9 +343,9 @@ export async function insertTicketMessage(
  * `tickets.updatedAt` keeps being bumped (listMyTickets orders by it), and the
  * `ticket_message` realtime is dual-published on the team-only ticket channel
  * so agent ticket-thread views update live (the conversation-channel publish
- * is the delegate's). The ticket's `firstResponseAt` column is deliberately
- * NOT stamped: `linkTicketToConversation` backfills it at link time and the
- * conversation's first-response machinery owns the pair's timeline afterwards.
+ * is the delegate's). The ticket's `firstResponseAt` is not written here: the
+ * ticket-first-response reaction to the delegate's `message.created` works it
+ * out from the pair's rows, a few seconds after the reply.
  */
 async function sendViaPairConversation(
   input: SendTicketMessageInput,
@@ -421,7 +415,6 @@ export async function sendTicketMessage(
   const { message, ticket } = await insertTicketMessage(input, principalId, {
     senderType: 'agent',
     isInternal: false,
-    stampFirstResponse: true,
     actor,
   })
   // Replying opts the agent in as a watcher (reason 'replier'). Must never
@@ -476,7 +469,7 @@ async function cascadeTrackerReplyAll(
           metadata: { ...input.metadata, repliedAllFromTicketId: tracker.id },
         },
         principalId,
-        { senderType: 'agent', isInternal: false, stampFirstResponse: true, actor }
+        { senderType: 'agent', isInternal: false, actor }
       )
     } catch (err) {
       log.warn(
@@ -497,7 +490,6 @@ export async function addTicketNote(
   const { message, ticket } = await insertTicketMessage(input, principalId, {
     senderType: 'agent',
     isInternal: true,
-    stampFirstResponse: false,
     actor,
   })
   // The note stays the ticket's own (the redirect above never touches an

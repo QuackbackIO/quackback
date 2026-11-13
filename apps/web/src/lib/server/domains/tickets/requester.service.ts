@@ -385,7 +385,6 @@ async function appendRequesterReply(
   const { message, ticket } = await insertTicketMessage(input, requesterPrincipalId, {
     senderType: 'visitor',
     isInternal: false,
-    stampFirstResponse: false,
     actor,
   })
   const { safeSubscribeToTicket } = await import('./ticket-subscription.service')

@@ -108,13 +108,20 @@ export async function recomputeTicketFirstResponse(
   return changed.length > 0
 }
 
-/** Re-render the ticket in every open inbox after its first response changed. */
+/**
+ * Re-render the ticket in every open inbox after its first response changed.
+ * Best-effort: the value is already stored, and the next read shows it.
+ */
 export async function publishFirstResponseChange(ticketId: TicketId): Promise<void> {
-  const [{ loadTicketOr404 }, { publishTicketUpdated }] = await Promise.all([
-    import('./ticket.service'),
-    import('./ticket-intake.service'),
-  ])
-  await publishTicketUpdated(await loadTicketOr404(ticketId))
+  try {
+    const [{ loadTicketOr404 }, { publishTicketUpdated }] = await Promise.all([
+      import('./ticket.service'),
+      import('./ticket-intake.service'),
+    ])
+    await publishTicketUpdated(await loadTicketOr404(ticketId))
+  } catch (err) {
+    log.warn({ err, ticket_id: ticketId }, 'ticket first response: realtime publish failed')
+  }
 }
 
 /** Recompute one ticket outside any transaction, and publish it when it changed. */

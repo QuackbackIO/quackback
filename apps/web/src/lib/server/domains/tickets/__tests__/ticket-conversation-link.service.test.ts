@@ -273,18 +273,27 @@ describe.skipIf(!fixture.available)('linkTicketToConversation (real DB, rolled b
     expect((err as ConflictError).code).toBe('ALREADY_LINKED')
   })
 
-  it('does not backfill first_response_at on a back-office ticket', async () => {
+  it('does not take first_response_at from the conversation on a back-office ticket', async () => {
     await seedSettings()
     await seedStatuses()
     const actor = await seedAdminActor()
     const conversationId = await seedConversation()
-    await testDb.insert(conversationMessages).values({
-      conversationId,
-      principalId: actor.principalId,
-      senderType: 'agent',
-      content: 'reply to the customer',
-      createdAt: new Date('2026-07-01T10:00:00Z'),
-    })
+    await testDb.insert(conversationMessages).values([
+      {
+        conversationId,
+        principalId: null,
+        senderType: 'visitor',
+        content: 'customer ask',
+        createdAt: new Date('2026-07-01T09:00:00Z'),
+      },
+      {
+        conversationId,
+        principalId: actor.principalId,
+        senderType: 'agent',
+        content: 'reply to the customer',
+        createdAt: new Date('2026-07-01T10:00:00Z'),
+      },
+    ])
     const ticket = await createTicket({ type: 'back_office', title: 'Internal follow-up' }, actor)
 
     await linkTicketToConversation(ticket.id, conversationId, actor)
@@ -357,20 +366,37 @@ describe.skipIf(!fixture.available)('linkTicketToConversation (real DB, rolled b
     expect((err as Error).message).toMatch(/already linked/i)
   })
 
-  // --- Phase 1a firstResponseAt rule (convergence-design.md, mechanics
-  // appendix "Write (Phase 1)"): backfill at link time from the conversation's
-  // first agent message; afterwards the conversation owns the timeline. ---
+  // --- first_response_at at link time: worked out from the pair's messages,
+  // so a reply the conversation already holds counts. ---
 
-  it("backfills the ticket's first_response_at from the conversation's first agent message at link time", async () => {
+  it("takes the ticket's first_response_at from the conversation's first teammate reply at link time", async () => {
     await seedSettings()
     await seedStatuses()
     const actor = await seedAdminActor()
     const conversationId = await seedConversation()
-    // Two agent messages: the EARLIEST is the first response (internal notes
-    // don't count, but both here are customer-visible).
+    const [assistant] = await testDb
+      .insert(principal)
+      .values({ role: 'member', type: 'service', createdAt: new Date() })
+      .returning({ id: principal.id })
+    // The customer writes, the assistant answers (never a first response),
+    // then two teammate replies: the EARLIER is the first response.
     const firstAt = new Date('2026-07-01T10:00:00Z')
     const secondAt = new Date('2026-07-02T10:00:00Z')
     await testDb.insert(conversationMessages).values([
+      {
+        conversationId,
+        principalId: null,
+        senderType: 'visitor',
+        content: 'customer ask',
+        createdAt: new Date('2026-07-01T09:00:00Z'),
+      },
+      {
+        conversationId,
+        principalId: assistant.id,
+        senderType: 'agent',
+        content: 'assistant answer',
+        createdAt: new Date('2026-07-01T09:01:00Z'),
+      },
       {
         conversationId,
         principalId: actor.principalId,
@@ -398,7 +424,7 @@ describe.skipIf(!fixture.available)('linkTicketToConversation (real DB, rolled b
     expect(row.firstResponseAt).toEqual(firstAt)
   })
 
-  it('ignores internal notes and visitor messages when backfilling first_response_at', async () => {
+  it('ignores internal notes and visitor messages when working out first_response_at', async () => {
     await seedSettings()
     await seedStatuses()
     const actor = await seedAdminActor()
@@ -431,23 +457,34 @@ describe.skipIf(!fixture.available)('linkTicketToConversation (real DB, rolled b
     expect(row.firstResponseAt).toBeNull()
   })
 
-  it('never overwrites an existing first_response_at at link time', async () => {
+  it('replaces a first_response_at the pair\'s messages do not support at link time', async () => {
     await seedSettings()
     await seedStatuses()
     const actor = await seedAdminActor()
     const conversationId = await seedConversation()
-    await testDb.insert(conversationMessages).values({
-      conversationId,
-      principalId: actor.principalId,
-      senderType: 'agent',
-      content: 'earlier conversation reply',
-      createdAt: new Date('2026-07-01T10:00:00Z'),
-    })
+    const repliedAt = new Date('2026-07-01T10:00:00Z')
+    await testDb.insert(conversationMessages).values([
+      {
+        conversationId,
+        principalId: null,
+        senderType: 'visitor',
+        content: 'customer ask',
+        createdAt: new Date('2026-07-01T09:00:00Z'),
+      },
+      {
+        conversationId,
+        principalId: actor.principalId,
+        senderType: 'agent',
+        content: 'earlier conversation reply',
+        createdAt: repliedAt,
+      },
+    ])
     const ticket = await createTicket({ type: 'customer', title: 'Already answered' }, actor)
-    // The ticket got its own agent response before being linked (stamped once,
-    // never overwritten — ticket.lifecycle's firstResponseStamp rule).
-    const stamped = new Date('2026-07-03T12:00:00Z')
-    await testDb.update(tickets).set({ firstResponseAt: stamped }).where(eq(tickets.id, ticket.id))
+    // A value an older build stamped from a status change.
+    await testDb
+      .update(tickets)
+      .set({ firstResponseAt: new Date('2026-07-03T12:00:00Z') })
+      .where(eq(tickets.id, ticket.id))
 
     await linkTicketToConversation(ticket.id, conversationId, actor)
 
@@ -455,7 +492,7 @@ describe.skipIf(!fixture.available)('linkTicketToConversation (real DB, rolled b
       .select({ firstResponseAt: tickets.firstResponseAt })
       .from(tickets)
       .where(eq(tickets.id, ticket.id))
-    expect(row.firstResponseAt).toEqual(stamped)
+    expect(row.firstResponseAt).toEqual(repliedAt)
   })
 
   // --- SLA handoff (support platform §4.6, "applied first time" semantics) ---

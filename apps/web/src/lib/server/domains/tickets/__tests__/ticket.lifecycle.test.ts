@@ -3,7 +3,7 @@
  * and the once-only first-response stamp.
  */
 import { describe, it, expect } from 'vitest'
-import { resolveStage, statusTransition, firstResponseStamp } from '../ticket.lifecycle'
+import { resolveStage, statusTransition } from '../ticket.lifecycle'
 
 describe('resolveStage', () => {
   it('returns the status public stage', () => {
@@ -40,21 +40,5 @@ describe('statusTransition', () => {
     const t = statusTransition('closed', 'closed', now)
     expect(t.resolvedAt).toBeUndefined()
     expect(t.reopenedIncrement).toBe(0)
-  })
-})
-
-describe('firstResponseStamp', () => {
-  const now = new Date('2026-07-03T12:00:00.000Z')
-
-  it('stamps on the first agent action', () => {
-    expect(firstResponseStamp(null, true, now)).toEqual(now)
-  })
-
-  it('never overwrites an existing stamp', () => {
-    expect(firstResponseStamp(new Date('2020-01-01'), true, now)).toBeUndefined()
-  })
-
-  it('does not stamp for a non-agent action', () => {
-    expect(firstResponseStamp(null, false, now)).toBeUndefined()
   })
 })

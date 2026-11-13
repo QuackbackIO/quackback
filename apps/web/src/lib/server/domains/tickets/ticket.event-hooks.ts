@@ -5,7 +5,7 @@
  * (events/event-reactions.ts) route every `message.created` here, the hook
  * swallows its own errors, and the pure-DB recorders never re-enter the bus.
  *
- * Today exactly one reaction lives here: a VISITOR `message.created` on a
+ * Two reactions live here. The first: a VISITOR `message.created` on a
  * conversation paired with a CUSTOMER ticket reopens that ticket
  * (`autoReopenOnRequesterReply`). Without it a Messenger reply on the
  * conversation would leave the ticket stuck in "Waiting on customer". The
@@ -13,6 +13,12 @@
  * hook covers every reply written on the conversation and is idempotent
  * against that direct call. A rating (a reply to a csat block) is not the
  * requester reopening the ticket, so it never reopens it.
+ *
+ * The second: any `message.created` or `message.deleted` on a conversation
+ * paired with a customer ticket recomputes that ticket's first response from
+ * the pair's message rows (ticket-first-response.ts). It reads the rows, not
+ * the event, so it is idempotent and safe to run late, twice or out of order,
+ * and it lets its errors propagate so the reaction job retries it.
  *
  * LOOP SAFETY: the reopen emits `ticket.status_changed`, never
  * `message.created` (system stage notices — re-parented to the conversation or
@@ -26,6 +32,7 @@ import { db, eq, conversations } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { autoReopenOnRequesterReply } from './ticket.service'
 import { resolvePairTicketIdForConversation } from './pair-thread.service'
+import { syncPairTicketFirstResponse } from './ticket-first-response'
 
 const log = logger.child({ component: 'ticket-event-hooks' })
 
@@ -73,4 +80,14 @@ export async function autoReopenPairTicketFromEvent(event: EventData): Promise<v
   } catch (err) {
     log.error({ err, eventType: event.type }, 'pair-ticket auto-reopen failed')
   }
+}
+
+/**
+ * Recompute the first response of the customer ticket paired with the
+ * message's conversation, if any. Does nothing for a conversation with no
+ * paired ticket. Errors propagate: the reaction job retries.
+ */
+export async function recomputePairTicketFirstResponseFromEvent(event: EventData): Promise<void> {
+  if (event.type !== 'message.created' && event.type !== 'message.deleted') return
+  await syncPairTicketFirstResponse(event.data.message.conversationId as ConversationId)
 }
