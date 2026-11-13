@@ -46,13 +46,17 @@ export const cycleOpener = or(
 )!
 
 /**
- * The same rule for one principal, read from the database: true when a
+ * The same rule for one message's author, as an event reports it: true when a
  * message written by `principalId` is an automated service's. An event's
- * reaction uses it on the message's author, so the reaction and the message
- * rows agree.
+ * reaction uses it, so the reaction and the message rows agree. A message a
+ * person sent (`actorType` 'user') is never automated, so only a service
+ * actor's message costs a read.
  */
-export async function isAutomatedAuthor(principalId: PrincipalId | null): Promise<boolean> {
-  if (!principalId) return false
+export async function isAutomatedAuthor(
+  principalId: PrincipalId | null,
+  actorType: string | undefined
+): Promise<boolean> {
+  if (!principalId || actorType === 'user') return false
   const [row] = await db
     .select({ id: principal.id })
     .from(principal)
