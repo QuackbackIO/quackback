@@ -2,11 +2,10 @@
  * The self-hosted boot migration stops on a held table lock instead of waiting.
  *
  * `migrate.ts` is what the container runs at every start. A migration that needs
- * a lock another session holds (a long query, an open transaction) used to wait
- * for as long as that session kept it, holding the boot with it. It now waits the
- * same 30 seconds the fleet migrator does, fails with a lock timeout error that
- * says what happened, and the next start applies the migrations once the lock is
- * gone.
+ * a lock another session holds (a long query, an open transaction) waits the same
+ * 30 seconds the fleet migrator does rather than for as long as that session
+ * keeps it, fails with a lock timeout error that says what happened, and the next
+ * start applies the migrations once the lock is gone.
  *
  * The CLI itself is run, as the container runs it, against its own scratch
  * database. The lineage is one transaction, so the failed start changes nothing.
