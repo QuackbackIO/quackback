@@ -41,8 +41,8 @@ if (!process.exitCode) {
   const sql = postgres(url, { max: 1, onnotice: () => {} })
   try {
     await sql`
-      INSERT INTO domains (name, ownership_token)
-      VALUES (${BENCH_DOMAIN}, '0f1e2d3c4b5a69788796a5b4c3d2e1f0')
+      INSERT INTO domains (id, name, ownership_token)
+      VALUES (gen_random_uuid(), ${BENCH_DOMAIN}, '0f1e2d3c4b5a69788796a5b4c3d2e1f0')
       ON CONFLICT (name) DO NOTHING`
   } finally {
     await sql.end()
