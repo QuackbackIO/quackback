@@ -19,8 +19,11 @@ import { oauthAccessToken, oauthClient, oauthResource, session, user } from '@/l
 import { ensureMcpOauthResource } from '@/lib/server/auth/ensure-mcp-oauth-resource'
 import { API_KEY_SCOPES, MCP_AS_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 
+// An origin of its own: building auth upserts the MCP resource row for the
+// base URL, and this suite holds its transaction across waits, so sharing the
+// row with the other auth suites would make them wait on, or deadlock with, it.
 vi.hoisted(() => {
-  process.env.BASE_URL = 'http://localhost:3000'
+  process.env.BASE_URL = 'http://localhost:3197'
   process.env.SECRET_KEY = 'test-secret-key-for-reconcile-retry-0123456789'
 })
 
@@ -76,7 +79,7 @@ const fixture = await createDbTestFixture({
   },
 })
 
-const ORIGIN = 'http://localhost:3000'
+const ORIGIN = 'http://localhost:3197'
 
 /** A client registered before the settings scopes joined the catalogue. */
 const OLDER_CLIENT_SCOPES = MCP_AS_SCOPES.filter((s) => !s.endsWith(':settings'))
