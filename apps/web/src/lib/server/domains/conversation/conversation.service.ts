@@ -101,7 +101,6 @@ import {
   notifyConversationStarted,
 } from './conversation.notify'
 import { resolveReplyRecipient } from './conversation.recipient'
-import { recordBlockRating } from './csat-request.service'
 import { resolveMessageParent } from './message-parent'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
@@ -502,7 +501,12 @@ export async function sendVisitorMessage(
   // client payload.
   const matchedReply = resolvedBlockReply?.metadata.blockReply
   if (matchedReply?.kind === 'csat') {
-    await recordBlockRating(txResult.conversation.id, matchedReply, actor)
+    // Best-effort: a refused or failed rating never fails the message it came with.
+    try {
+      await recordCsat(txResult.conversation.id, matchedReply.rating, matchedReply.comment, actor)
+    } catch (err) {
+      log.warn({ err, conversationId: txResult.conversation.id }, 'csat block rating not recorded')
+    }
   }
 
   // A brand-new conversation: try auto-routing it to an active agent. Best-
@@ -2159,6 +2163,7 @@ export async function isPairedWithCustomerTicket(conversationId: ConversationId)
 
 interface AppendAssistantReplyOpts {
   waiting: boolean
+  onlyIf?: (tx: Transaction) => Promise<boolean>
   citations?: ConversationMessageCitation[]
   contentJson?: TiptapContent | null
   metadata?: ConversationMessageMetadata | null
@@ -2191,7 +2196,7 @@ export async function appendAssistantReply(
   conversationId: ConversationId,
   content: string,
   author: ConversationAuthorInput,
-  opts: AppendAssistantReplyOpts & { onlyIf: (tx: Transaction) => Promise<boolean> }
+  opts: AppendAssistantReplyOpts & { onlyIf: NonNullable<AppendAssistantReplyOpts['onlyIf']> }
 ): Promise<ConversationMessageDTO | null>
 export async function appendAssistantReply(
   conversationId: ConversationId,
@@ -2203,7 +2208,7 @@ export async function appendAssistantReply(
   conversationId: ConversationId,
   content: string,
   author: ConversationAuthorInput,
-  opts: AppendAssistantReplyOpts & { onlyIf?: (tx: Transaction) => Promise<boolean> }
+  opts: AppendAssistantReplyOpts
 ): Promise<ConversationMessageDTO | null> {
   const txResult = await db.transaction(async (tx) => {
     const select = tx.select().from(conversations).where(eq(conversations.id, conversationId))

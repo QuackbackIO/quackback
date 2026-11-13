@@ -16,17 +16,13 @@
  * that did not.
  *
  * A rating given in the thread (a matched reply to a csat block) is recorded
- * when it is sent (`recordBlockRating`), whether or not a workflow run is
+ * when it is sent (sendVisitorMessage), whether or not a workflow run is
  * waiting on the block. A run that resumes on it records the same value
  * again, which recordCsat treats as no change.
  */
-import { db, eq, and, isNull, sql, conversations, conversationMessages, emailLog } from '@/lib/server/db'
+import { db, eq, sql, conversations } from '@/lib/server/db'
 import type { Database, Transaction } from '@/lib/server/db'
 import type { ConversationId } from '@quackback/ids'
-import type { Actor } from '@/lib/server/policy/types'
-import { logger } from '@/lib/server/logger'
-
-const log = logger.child({ component: 'csat-request' })
 
 type Executor = Database | Transaction
 
@@ -35,34 +31,25 @@ export async function isCsatAlreadyRequested(
   conversationId: ConversationId,
   executor: Executor = db
 ): Promise<boolean> {
-  const [conversation] = await executor
-    .select({ csatRating: conversations.csatRating })
+  // One round trip. Column names are raw because a select-list expression
+  // would drop the table prefix and self-correlate the subqueries.
+  const [row] = await executor
+    .select({
+      rated: sql<boolean>`${conversations.csatRating} is not null`,
+      asked: sql<boolean>`exists (
+        select 1 from conversation_messages m
+        where m.conversation_id = conversations.id
+          and m.deleted_at is null
+          and m.metadata -> 'block' ->> 'kind' = 'csat')`,
+      emailed: sql<boolean>`exists (
+        select 1 from email_log e
+        where e.conversation_id = conversations.id
+          and e.email_type = 'CsatRequestEmail')`,
+    })
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .limit(1)
-  if (conversation?.csatRating != null) return true
-
-  const [block] = await executor
-    .select({ id: conversationMessages.id })
-    .from(conversationMessages)
-    .where(
-      and(
-        eq(conversationMessages.conversationId, conversationId),
-        isNull(conversationMessages.deletedAt),
-        sql`${conversationMessages.metadata} -> 'block' ->> 'kind' = 'csat'`
-      )
-    )
-    .limit(1)
-  if (block) return true
-
-  const [email] = await executor
-    .select({ id: emailLog.id })
-    .from(emailLog)
-    .where(
-      and(eq(emailLog.conversationId, conversationId), eq(emailLog.emailType, 'CsatRequestEmail'))
-    )
-    .limit(1)
-  return email !== undefined
+  return !!row && (row.rated || row.asked || row.emailed)
 }
 
 /**
@@ -72,22 +59,4 @@ export async function isCsatAlreadyRequested(
 export function mayAskForCsat(conversationId: ConversationId) {
   return async (tx: Transaction): Promise<boolean> =>
     !(await isCsatAlreadyRequested(conversationId, tx))
-}
-
-/**
- * Record the rating a visitor gave by answering a csat block, as that
- * visitor. Runs after the message is committed and is best-effort: a refused
- * or failed rating never fails the message it came with.
- */
-export async function recordBlockRating(
-  conversationId: ConversationId,
-  reply: { rating: number; comment?: string },
-  actor: Actor
-): Promise<void> {
-  try {
-    const { recordCsat } = await import('./conversation.service')
-    await recordCsat(conversationId, reply.rating, reply.comment, actor)
-  } catch (err) {
-    log.warn({ err, conversationId }, 'csat block rating not recorded')
-  }
 }
