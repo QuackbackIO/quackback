@@ -13,9 +13,6 @@
  * on the shared test database it would wait on whatever other suites hold open.
  * Each test builds indexes on a scratch table of its own.
  */
-import { spawn } from 'node:child_process'
-import path from 'node:path'
-import postgres from 'postgres'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeHarness, rowsFor } from '@/lib/server/jobs/__tests__/harness'
 
@@ -24,6 +21,7 @@ import { closeHarness, rowsFor } from '@/lib/server/jobs/__tests__/harness'
 const own = vi.hoisted(() => {
   if (!process.env.BASE_URL?.startsWith('http')) process.env.BASE_URL = 'http://localhost:3000'
   process.env.SECRET_KEY ??= 'test-secret-key-for-deferred-index-build-0123456789'
+  // The suite's own database (see OwnDatabase in ./harness).
   const shared =
     process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
   const name = `qb_deferred_index_${process.pid}_${Date.now().toString(36)}`
@@ -96,7 +94,15 @@ import {
 import { runDeferredIndexJob } from '../deferred-index-build-queue'
 import { runBackfillFollowUpJob } from '../follow-up-queue'
 import { noteUpgradeWorkDone } from '../upgrade-done'
-import { createScratchTable, sampleBackfill, testDb, testSql, uniqueName } from './harness'
+import {
+  createOwnDatabase,
+  createScratchTable,
+  dropOwnDatabase,
+  sampleBackfill,
+  testDb,
+  testSql,
+  uniqueName,
+} from './harness'
 
 const QUEUE = 'deferred-index-build'
 const CONFIG = { ...runnerConfig(), batchSize: 10 }
@@ -104,34 +110,6 @@ const TAG = '9999_sample_backfill_migration'
 
 let table = ''
 const specNames: string[] = []
-
-/** Migrate this suite's database the way a self-hosted install boots. */
-function migrateOwnDatabase(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('bun', ['src/migrate.ts'], {
-      cwd: path.resolve(__dirname, '../../../../../../../packages/db'),
-      env: { ...process.env, DATABASE_URL: own.url },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    let output = ''
-    child.stdout.on('data', (chunk) => (output += String(chunk)))
-    child.stderr.on('data', (chunk) => (output += String(chunk)))
-    child.on('error', reject)
-    child.on('exit', (code) =>
-      code === 0 ? resolve() : reject(new Error(`migrating ${own.name} failed:\n${output}`))
-    )
-  })
-}
-
-/** Run `body` on a connection to the shared test database, where databases are made. */
-async function onShared(body: (admin: postgres.Sql) => Promise<unknown>): Promise<void> {
-  const admin = postgres(own.shared, { max: 1, onnotice: () => {} })
-  try {
-    await body(admin)
-  } finally {
-    await admin.end({ timeout: 5 }).catch(() => {})
-  }
-}
 
 /** A spec for an index on this test's scratch table. */
 function spec(label: string, ddlBody?: string): ConcurrentIndexSpec {
@@ -230,10 +208,7 @@ function slotDedupeKey(queue: string, at: Date): string {
   return slotKey(queue, new Date(Math.floor(at.getTime() / 60_000) * 60_000))
 }
 
-beforeAll(async () => {
-  await onShared((admin) => admin.unsafe(`CREATE DATABASE ${own.name}`))
-  await migrateOwnDatabase()
-}, 240_000)
+beforeAll(() => createOwnDatabase(own), 240_000)
 
 beforeEach(async () => {
   table = `t_deferred_${process.pid}_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
@@ -256,9 +231,7 @@ afterEach(async () => {
 
 afterAll(async () => {
   await closeHarness()
-  process.env.DATABASE_URL = own.shared
-  // Dropping a database waits for a checkpoint, which a loaded server can take minutes over.
-  await onShared((admin) => admin.unsafe(`DROP DATABASE IF EXISTS ${own.name} WITH (FORCE)`))
+  await dropOwnDatabase(own)
 }, 180_000)
 
 describe('the pass', () => {

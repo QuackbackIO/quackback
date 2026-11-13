@@ -6,6 +6,8 @@
  * transactions, so a suite that never committed could not see a batch land.
  * Every name is unique per test, so nothing here touches another suite's rows.
  */
+import { spawn } from 'node:child_process'
+import path from 'node:path'
 import { sql } from 'drizzle-orm'
 import postgres from 'postgres'
 import { tickets } from '@/lib/server/db'
@@ -24,6 +26,57 @@ export { testDb, testSql }
 
 const URL =
   process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
+
+/**
+ * A database of one suite's own. The suite names it in a `vi.hoisted` block and
+ * points `DATABASE_URL` at it there, before the harness reads that variable.
+ *
+ * The background index suite needs one: `CREATE INDEX CONCURRENTLY` waits for
+ * every older transaction in its database, and other suites hold theirs open.
+ */
+export interface OwnDatabase {
+  /** The shared test database, where the suite's database is created and dropped. */
+  shared: string
+  name: string
+  url: string
+}
+
+async function onShared(own: OwnDatabase, statement: string): Promise<void> {
+  const admin = postgres(own.shared, { max: 1, onnotice: () => {} })
+  try {
+    await admin.unsafe(statement)
+  } finally {
+    await admin.end({ timeout: 5 }).catch(() => {})
+  }
+}
+
+/** Create the suite's database and migrate it the way a self-hosted install boots. */
+export async function createOwnDatabase(own: OwnDatabase): Promise<void> {
+  await onShared(own, `CREATE DATABASE ${own.name}`)
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('bun', ['src/migrate.ts'], {
+      cwd: path.resolve(__dirname, '../../../../../../../packages/db'),
+      env: { ...process.env, DATABASE_URL: own.url },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let output = ''
+    child.stdout.on('data', (chunk) => (output += String(chunk)))
+    child.stderr.on('data', (chunk) => (output += String(chunk)))
+    child.on('error', reject)
+    child.on('exit', (code) =>
+      code === 0 ? resolve() : reject(new Error(`migrating ${own.name} failed:\n${output}`))
+    )
+  })
+}
+
+/**
+ * Drop the suite's database once its connections are closed. Dropping waits
+ * for a checkpoint, which a loaded server can take minutes over.
+ */
+export async function dropOwnDatabase(own: OwnDatabase): Promise<void> {
+  process.env.DATABASE_URL = own.shared
+  await onShared(own, `DROP DATABASE IF EXISTS ${own.name} WITH (FORCE)`)
+}
 
 let counter = 0
 /** A backfill name no other test or worktree will use. */

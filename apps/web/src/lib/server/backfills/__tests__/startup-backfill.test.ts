@@ -16,6 +16,19 @@ import path from 'node:path'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeHarness, rowsFor } from '@/lib/server/jobs/__tests__/harness'
 
+// The walks run over a scratch table in a schema of this suite's own, put first
+// on the search path of every connection the harness opens. Other suites copy
+// every table in `public`, and a table dropped there mid-copy breaks them.
+const scratch = vi.hoisted(() => {
+  const schema = `t_backfill_${process.pid}_${Date.now().toString(36)}`
+  const url = new URL(
+    process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
+  )
+  url.searchParams.set('search_path', `${schema},public`)
+  process.env.DATABASE_URL = url.toString()
+  return { schema }
+})
+
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const { testDb } = await import('@/lib/server/jobs/__tests__/harness')
   return {
@@ -94,7 +107,7 @@ import {
 
 const TAG = '9999_sample_backfill_migration'
 /** The walks here run over a table of their own, so batch boundaries are this suite's alone. */
-const TABLE = `t_backfill_${process.pid}_${Date.now().toString(36)}`
+const TABLE = 'walked_rows'
 const CONFIG = { ...runnerConfig(), batchSize: 10 }
 const ENV = 'QUACKBACK_DISABLED_JOBS'
 
@@ -199,6 +212,7 @@ function slotDedupeKey(queue: string, at: Date): string {
 }
 
 beforeAll(async () => {
+  await testSql().unsafe(`CREATE SCHEMA ${scratch.schema}`)
   await createScratchTable(TABLE)
 })
 
@@ -219,7 +233,7 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
-  await testSql().unsafe(`DROP TABLE IF EXISTS ${TABLE}`)
+  await testSql().unsafe(`DROP SCHEMA IF EXISTS ${scratch.schema} CASCADE`)
   await closeHarness()
 })
 
