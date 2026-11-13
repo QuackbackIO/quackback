@@ -236,8 +236,11 @@ function buildNotifications(
 
   if (event.type === 'post.mentioned') {
     const data = event.data as EventPostMentionedData
+    // A service actor's displayName is its event source ('api', 'mcp'), not a name.
     const actorName =
-      config.mentionerName?.trim() || event.actor.displayName?.trim() || 'Anonymous user'
+      config.mentionerName?.trim() ||
+      (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
+      'Anonymous user'
     // principalIds is always a single-element array for post.mentioned (target resolver builds it that way).
     return principalIds.map((principalId) => ({
       principalId,

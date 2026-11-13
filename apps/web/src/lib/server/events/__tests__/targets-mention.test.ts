@@ -210,10 +210,34 @@ describe('post.mentioned target resolution', () => {
     ])
   })
 
+  it("falls back to the mentioner's account name when their principal has none", async () => {
+    setupMentionDbChain(
+      [{ id: 'principal_mentioned', type: 'user', role: 'user', email: 'alice@example.com' }],
+      [{ displayName: null, userName: 'Bea Account' }]
+    )
+    const targets = await getHookTargets(makePostMentionedEvent())
+    const bell = targets.find((t) => t.type === 'notification')
+    expect(bell?.config).toMatchObject({ mentionerName: 'Bea Account' })
+  })
+
+  it("never names a service actor by its event source ('api', 'mcp')", async () => {
+    setupMentionDbChain(
+      [{ id: 'principal_mentioned', type: 'user', role: 'user', email: 'alice@example.com' }],
+      [{ displayName: null, userName: null }]
+    )
+    const event = {
+      ...makePostMentionedEvent(),
+      actor: { type: 'service' as const, principalId: 'principal_actor', displayName: 'api' },
+    }
+    const targets = await getHookTargets(event)
+    const bell = targets.find((t) => t.type === 'notification')
+    expect(bell?.config).toMatchObject({ mentionerName: null })
+  })
+
   it('leaves the mentioner unnamed when their principal has no name', async () => {
     setupMentionDbChain(
       [{ id: 'principal_mentioned', type: 'user', role: 'user', email: 'alice@example.com' }],
-      [{ displayName: null }]
+      [{ displayName: null, userName: null }]
     )
     const targets = await getHookTargets(makePostMentionedEvent())
     const bell = targets.find((t) => t.type === 'notification')

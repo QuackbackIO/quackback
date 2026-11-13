@@ -537,14 +537,17 @@ async function mentionerNameOf(
 ): Promise<string | null> {
   if (mentioningPrincipalId) {
     const [row] = await db
-      .select({ displayName: principal.displayName })
+      .select({ displayName: principal.displayName, userName: user.name })
       .from(principal)
+      .leftJoin(user, eq(user.id, principal.userId))
       .where(eq(principal.id, mentioningPrincipalId as PrincipalId))
       .limit(1)
-    const name = row?.displayName?.trim()
+    const name = row?.displayName?.trim() || row?.userName?.trim()
     if (name) return name
   }
-  return actor.displayName?.trim() || null
+  // A relayed service actor's displayName is the event source ('api', 'mcp'),
+  // not a name, so only a user actor's name is used.
+  return (actor.type === 'user' && actor.displayName?.trim()) || null
 }
 
 /** Principal roles that are eligible to receive mention notifications */
