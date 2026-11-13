@@ -135,6 +135,15 @@ function ticketActionActor(actor: Actor): Actor {
   )
 }
 
+/**
+ * The actor for finding a conversation's paired ticket: a workspace-wide
+ * service actor with no permissions. The lookup is a system read, so a macro
+ * run by a scoped teammate still finds a pair it cannot see. `convert_to_ticket`
+ * then reports "already a ticket" instead of filing a second one, and
+ * `set_ticket_status` reaches the writer, which checks the run's own actor.
+ */
+const LINKED_TICKET_LOOKUP_ACTOR: Actor = boundedServiceActor(new Set())
+
 /** send_block's own dependencies, pre-resolved once for an entire plan (SF8
  *  perf fix) rather than re-fetched per action: workflow.engine.ts's
  *  applyPlanAndSettle resolves both in parallel exactly once, BEFORE its
@@ -523,7 +532,7 @@ export async function applyAction(
         // no-op success (see WorkflowAction's doc) — and a policy without a
         // TTR target no-ops inside applySlaToTicket, so both "nothing to
         // anchor to" cases degrade quietly instead of failing the run.
-        const linked = await getLinkedCustomerTicket(conversationId)
+        const linked = await getLinkedCustomerTicket(conversationId, LINKED_TICKET_LOOKUP_ACTOR)
         if (!linked) return label(null)
         await applySlaToTicket(linked.id, action.policyId)
         return label('SLA applied to ticket')
@@ -654,7 +663,7 @@ export async function applyAction(
       return label('note added')
     }
     case 'set_ticket_status': {
-      const linked = await getLinkedCustomerTicket(conversationId)
+      const linked = await getLinkedCustomerTicket(conversationId, LINKED_TICKET_LOOKUP_ACTOR)
       if (!linked) {
         throw new NotFoundError('NOT_FOUND', 'This conversation has no linked ticket')
       }
@@ -662,7 +671,7 @@ export async function applyAction(
       return label('ticket status updated')
     }
     case 'convert_to_ticket': {
-      const existing = await getLinkedCustomerTicket(conversationId)
+      const existing = await getLinkedCustomerTicket(conversationId, LINKED_TICKET_LOOKUP_ACTOR)
       if (existing) return label('already a ticket')
 
       const linkActor = ticketActionActor(actor)

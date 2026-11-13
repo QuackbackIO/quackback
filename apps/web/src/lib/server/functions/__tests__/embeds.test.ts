@@ -307,6 +307,7 @@ const TICKET_ROW: TicketEmbedRow = {
   requesterPrincipalId: REQUESTER,
   deletedAt: null,
   conversationId: 'conversation_01pair',
+  teamVisible: true,
   statusLabel: 'In progress',
   statusColor: '#3b82f6',
   priority: 'high',
@@ -368,6 +369,9 @@ describe('scopeTicketEmbed', () => {
   })
   it('lets a team member see the ticket even when they are not the requester', () => {
     expect(scopeTicketEmbed(TICKET_ROW, teamActor)).toEqual(TICKET_ROW)
+  })
+  it("hides the ticket from a team member whose ticket filter leaves it out", () => {
+    expect(scopeTicketEmbed({ ...TICKET_ROW, teamVisible: false }, teamActor)).toBeNull()
   })
   it('hides the ticket from a different visitor principal', () => {
     expect(scopeTicketEmbed(TICKET_ROW, otherVisitorActor)).toBeNull()

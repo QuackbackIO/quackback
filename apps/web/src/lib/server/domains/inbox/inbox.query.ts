@@ -296,9 +296,15 @@ const EMPTY_BRANCH = (cursor: string | null): InboxBranchFetch => ({
  * (`getLinkedCustomerTicket`, used by the unified detail panel + header's
  * ticket-status pill on a conversation item) can reuse the same join instead
  * of duplicating it.
+ *
+ * Only tickets the actor may open: a conversation whose paired ticket is
+ * outside the actor's ticket filter (or a role with no ticket key) gets no
+ * summary, so no id, number, title or status of that ticket leaves the
+ * server.
  */
 export async function loadLinkedCustomerTicketSummaries(
-  conversationIds: ConversationId[]
+  conversationIds: ConversationId[],
+  actor: Actor
 ): Promise<Map<ConversationId, LinkedTicketSummary>> {
   const map = new Map<ConversationId, LinkedTicketSummary>()
   if (conversationIds.length === 0) return map
@@ -317,7 +323,8 @@ export async function loadLinkedCustomerTicketSummaries(
     .where(
       and(
         inArray(ticketConversations.conversationId, conversationIds),
-        eq(ticketConversations.ticketType, 'customer')
+        eq(ticketConversations.ticketType, 'customer'),
+        ticketFilter(actor)
       )
     )
   for (const row of rows) {
@@ -374,7 +381,7 @@ async function fetchConversationBranch(
   // row matched; an unsearched one never runs the extra query.
   const term = filter.search?.trim()
   const [linkedTickets, snippets] = await Promise.all([
-    loadLinkedCustomerTicketSummaries(ids),
+    loadLinkedCustomerTicketSummaries(ids, actor),
     term ? loadConversationSearchSnippets(ids, term) : Promise.resolve(null),
   ])
   const items: InboxItemDTO[] = page.conversations.map((conversation) => ({
@@ -647,11 +654,13 @@ export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
  * The linked CUSTOMER ticket for one conversation (or null), for the unified
  * detail panel's Ticket card + Links section and the thread header's ticket-
  * status pill when a plain conversation links a ticket. Thin wrapper over the
- * same batched join the list branch uses.
+ * same batched join the list branch uses, so it is null for a ticket the
+ * actor cannot open.
  */
 export async function getLinkedCustomerTicket(
-  conversationId: ConversationId
+  conversationId: ConversationId,
+  actor: Actor
 ): Promise<LinkedTicketSummary | null> {
-  const map = await loadLinkedCustomerTicketSummaries([conversationId])
+  const map = await loadLinkedCustomerTicketSummaries([conversationId], actor)
   return map.get(conversationId) ?? null
 }

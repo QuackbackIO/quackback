@@ -102,7 +102,7 @@ export async function loadAgentConversationPanels(
   let link: Promise<LinkedTicketSummary | null> | undefined
   const readLink = () =>
     (link ??= import('@/lib/server/domains/inbox/inbox.query').then((m) =>
-      m.getLinkedCustomerTicket(conversation.id)
+      m.getLinkedCustomerTicket(conversation.id, caller.actor)
     ))
 
   const loaders: PanelLoaders = {
@@ -110,8 +110,8 @@ export async function loadAgentConversationPanels(
     linkedTicket: async () => {
       const summary = await readLink()
       if (!summary) return null
-      const { getTicket } = await import('@/lib/server/domains/tickets/ticket.service')
-      return getTicket(summary.id)
+      const { getTicketForActor } = await import('@/lib/server/domains/tickets/ticket.service')
+      return getTicketForActor(summary.id, caller.actor)
     },
     ticketStageLabels: async () => {
       if (!(await readLink())) return null
