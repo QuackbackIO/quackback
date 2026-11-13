@@ -24,7 +24,7 @@ vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ error: logError }) },
 }))
 
-import { recordTicketActivity } from '../ticket-activity.service'
+import { recordTicketActivity, recordTicketActivityAwaited } from '../ticket-activity.service'
 
 describe('recordTicketActivity failure isolation', () => {
   it('swallows a failed insert (no throw, no unhandled rejection) and logs it', async () => {
@@ -45,6 +45,18 @@ describe('recordTicketActivity failure isolation', () => {
     expect(insert).toHaveBeenCalledTimes(1)
     expect(logError).toHaveBeenCalledWith(
       expect.objectContaining({ activity_type: 'status.changed', err: insertError }),
+      'failed to record ticket activity'
+    )
+  })
+
+  it('the awaited variant resolves on a failed insert and logs it the same way', async () => {
+    logError.mockClear()
+    const ticketId = createId('ticket') as TicketId
+    await expect(
+      recordTicketActivityAwaited({ ticketId, principalId: null, type: 'ticket.created' })
+    ).resolves.toBeUndefined()
+    expect(logError).toHaveBeenCalledWith(
+      expect.objectContaining({ activity_type: 'ticket.created', err: insertError }),
       'failed to record ticket activity'
     )
   })

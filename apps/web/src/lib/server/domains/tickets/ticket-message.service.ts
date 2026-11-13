@@ -106,7 +106,7 @@ import {
   publishFirstResponseChange,
   recomputeTicketFirstResponse,
 } from './ticket-first-response'
-import { loadTicketOr404 } from './ticket.service'
+import { assertTicketVisible, loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
@@ -434,13 +434,15 @@ async function sendViaPairConversation(
   return { message, ticket: updated }
 }
 
-/** Agent reply on a customer ticket thread (customer-visible). */
+/** Agent reply on a customer ticket thread (customer-visible). A ticket the
+ *  actor cannot see is NotFound. */
 export async function sendTicketMessage(
   actor: Actor,
   input: SendTicketMessageInput
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_REPLY, 'reply to this ticket')
   const principalId = requireAgentPrincipal(actor)
+  await assertTicketVisible(input.ticketId, actor)
   const { message, ticket } = await insertTicketMessage(input, principalId, {
     senderType: 'agent',
     isInternal: false,
@@ -475,7 +477,10 @@ export async function sendTicketMessage(
  * already carries the stamp — the stamp outranks the ask, so a copy relayed
  * back onto a tracker cannot bounce the reply between trackers. Per-link
  * best-effort: the tracker's own reply already committed, so one failing link
- * is logged, not fatal. The dynamic import breaks the
+ * is logged, not fatal. The tracker was checked once by `sendTicketMessage`;
+ * the copies are a system effect, so they reach every linked ticket, also ones
+ * the sender cannot see, with the sender as author (`insertTicketMessage`
+ * makes no visibility check). The dynamic import breaks the
  * ticket-message.service <-> ticket-links static cycle (ticket-links imports
  * emitTicketSystemMessage from this module).
  */
@@ -509,13 +514,15 @@ async function cascadeTrackerReplyAll(
   }
 }
 
-/** Agent-only internal note on a ticket thread (never customer-visible). */
+/** Agent-only internal note on a ticket thread (never customer-visible). A
+ *  ticket the actor cannot see is NotFound. */
 export async function addTicketNote(
   actor: Actor,
   input: AddTicketNoteInput
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_NOTE, 'add a note to this ticket')
   const principalId = requireAgentPrincipal(actor)
+  await assertTicketVisible(input.ticketId, actor)
   const { message, ticket } = await insertTicketMessage(input, principalId, {
     senderType: 'agent',
     isInternal: true,
