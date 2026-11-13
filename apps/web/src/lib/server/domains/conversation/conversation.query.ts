@@ -60,7 +60,14 @@ import {
 import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
-import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
+import {
+  hasLinkedCustomerTicketSql,
+  linkedCustomerTicketDueAtSql,
+  linkedCustomerTicketDueSql,
+  loadLinkedCustomerTicketDueAt,
+  pairTicketWatchedBySql,
+} from '@/lib/server/messages/pair-link'
+import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { isTestThreadSql } from './conversation.test-data'
 import { testOwnerOf } from '@/lib/server/test-data'
@@ -1187,6 +1194,15 @@ export interface ConversationListFilter {
    *  standalone ticket rows from the ticket branch. Never set by the plain
    *  conversation scopes (their rows are unrestricted). */
   hasLinkedCustomerTicket?: boolean
+  /** The inbox's Due date filter, read through the pair edge: only
+   *  conversations whose linked live customer ticket is overdue, due within
+   *  24 hours, or has no due date. A customer ticket lists as its
+   *  conversation's row (the one-row rule), so this is where most tickets
+   *  meet the filter. */
+  linkedTicketDue?: TicketDueFilter
+  /** The inbox's Watching view: only pairs whose customer ticket this
+   *  principal watches (see `pairTicketWatchedBySql`). */
+  pairTicketWatchedBy?: PrincipalId
   /** "Spam" view: only conversations ended as spam. Spam-ended threads are
    *  excluded from every other list (the triage facets, queues, and searches
    *  must never surface them) — this flag is the one opt-in that lists them. */
@@ -1209,7 +1225,13 @@ export interface ConversationListFilter {
  * unit-testable without a database.
  */
 export interface SortDescriptor {
-  primary: 'lastMessageAt' | 'createdAt' | 'waitingSince' | 'priorityRank' | 'slaDueAt'
+  primary:
+    | 'lastMessageAt'
+    | 'createdAt'
+    | 'waitingSince'
+    | 'priorityRank'
+    | 'slaDueAt'
+    | 'linkedTicketDueAt'
   direction: 'asc' | 'desc'
 }
 
@@ -1225,6 +1247,8 @@ export function sortDescriptorFor(sort: ConversationSort = 'recent'): SortDescri
       return { primary: 'priorityRank', direction: 'desc' }
     case 'sla':
       return { primary: 'slaDueAt', direction: 'asc' }
+    case 'due':
+      return { primary: 'linkedTicketDueAt', direction: 'asc' }
     // 'relevance' has no descriptor of its own: it orders on a score computed
     // from the search term, not on a column, and degrades to most-recent
     // activity on a list that carries no term to score against.
@@ -1269,6 +1293,11 @@ function orderByForSort(sort: ConversationSort) {
     case 'slaDueAt':
       // Soonest breach first; rows with no active SLA clock sit at the end.
       return [sql`${slaDueExpr} ASC NULLS LAST`, asc(conversations.id)]
+    case 'linkedTicketDueAt':
+      // Soonest-due linked ticket first; conversations with no dated ticket
+      // (no link, a deleted ticket, or no date) sit at the end. A correlated
+      // subquery per row, like the SLA sort.
+      return [sql`${linkedCustomerTicketDueAtSql()} ASC NULLS LAST`, asc(conversations.id)]
     case 'createdAt':
       return [
         d.direction === 'asc' ? asc(conversations.createdAt) : desc(conversations.createdAt),
@@ -1320,8 +1349,14 @@ function relevanceCursorCondition(relevance: SQL<number>, score: number, c: Conv
  * pair, most-significant-first. The cursor is re-resolved from the DB (never
  * a client string) so ties + sub-ms precision are exact. Covers every sort,
  * including the waiting/SLA NULLS-LAST boundary and the priority-rank CASE.
+ * `linkedTicketDueAt` is the cursor row's linked ticket due date, re-read
+ * with the cursor (only the 'due' sort reads it).
  */
-function cursorConditionForSort(sort: ConversationSort, c: Conversation) {
+function cursorConditionForSort(
+  sort: ConversationSort,
+  c: Conversation,
+  linkedTicketDueAt: Date | null = null
+) {
   const d = sortDescriptorFor(sort)
   switch (d.primary) {
     case 'priorityRank': {
@@ -1369,6 +1404,22 @@ function cursorConditionForSort(sort: ConversationSort, c: Conversation) {
           }
         : { equal: sql`${slaDueExpr} IS NULL`, strict: undefined }
       return buildKeysetCondition([slaCol, ascColumn(conversations.id, c.id)])
+    }
+    case 'linkedTicketDueAt': {
+      // Same NULLS-LAST boundary shape as the SLA sort, against the linked
+      // ticket's due date re-read alongside the cursor row.
+      const linkedTicketDueExpr = linkedCustomerTicketDueAtSql()
+      const due = linkedTicketDueAt?.toISOString()
+      const dueCol: KeysetColumn = due
+        ? {
+            equal: sql`${linkedTicketDueExpr} = ${due}::timestamptz`,
+            strict: or(
+              sql`${linkedTicketDueExpr} > ${due}::timestamptz`,
+              sql`${linkedTicketDueExpr} IS NULL`
+            )!,
+          }
+        : { equal: sql`${linkedTicketDueExpr} IS NULL`, strict: undefined }
+      return buildKeysetCondition([dueCol, ascColumn(conversations.id, c.id)])
     }
     case 'createdAt': {
       const col =
@@ -1614,18 +1665,25 @@ export async function listConversationsForAgent(
   // ordering columns (which vary per sort) + ties are handled deterministically
   // (mirrors listMessages). An unknown id → first page, and a malformed cursor
   // can no longer reach a date parse / 500 the list. Relevance-ordered pages
-  // additionally need the cursor row's score, recomputed by the same expression.
+  // additionally need the cursor row's score, recomputed by the same expression,
+  // and 'due'-ordered pages the cursor row's linked ticket due date.
   let cursor: Conversation | null = null
   let cursorRelevance = 0
+  let cursorLinkedTicketDueAt: Date | null = null
   if (filter.before) {
-    const [row] = await db
-      .select({ row: conversations, relevance: relevance ?? sql<number>`0::float8` })
-      .from(conversations)
-      .where(eq(conversations.id, filter.before as ConversationId))
-      .limit(1)
+    const cursorId = filter.before as ConversationId
+    const [[row], linkedTicketDueAt] = await Promise.all([
+      db
+        .select({ row: conversations, relevance: relevance ?? sql<number>`0::float8` })
+        .from(conversations)
+        .where(eq(conversations.id, cursorId))
+        .limit(1),
+      sort === 'due' ? loadLinkedCustomerTicketDueAt(cursorId) : Promise.resolve(null),
+    ])
     if (row) {
       cursor = row.row
       cursorRelevance = Number(row.relevance)
+      cursorLinkedTicketDueAt = linkedTicketDueAt
     }
   }
 
@@ -1814,12 +1872,18 @@ export async function listConversationsForAgent(
         // can't keep listing. The shared fragment keeps this view and the
         // inbox nav's pair badge in lockstep.
         filter.hasLinkedCustomerTicket ? hasLinkedCustomerTicketSql() : undefined,
+        // The Due date filter, through the pair edge to the linked customer
+        // ticket (see `linkedCustomerTicketDueSql`).
+        filter.linkedTicketDue
+          ? linkedCustomerTicketDueSql(filter.linkedTicketDue, new Date())
+          : undefined,
+        filter.pairTicketWatchedBy ? pairTicketWatchedBySql(filter.pairTicketWatchedBy) : undefined,
         // Keyset comparison for the active order (re-resolved cursor row). id is
         // always the final tiebreak so a page boundary never dupes or skips.
         cursor
           ? relevance
             ? relevanceCursorCondition(relevance, cursorRelevance, cursor)
-            : cursorConditionForSort(sort, cursor)
+            : cursorConditionForSort(sort, cursor, cursorLinkedTicketDueAt)
           : undefined
       )
     )

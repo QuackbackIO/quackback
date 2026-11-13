@@ -1,6 +1,7 @@
 /**
  * Ticket mutation hooks (support platform §4.2, folded into the unified inbox
- * at UNIFIED-INBOX-SPEC.md M6): status, assignment, priority, and create. Each
+ * at UNIFIED-INBOX-SPEC.md M6): status, assignment, priority, due date, and
+ * create. Each
  * writes the returned ticket into its detail cache for a snappy update and
  * invalidates every ticket list so the row reflects the change.
  *
@@ -16,6 +17,7 @@ import {
   setTicketStatusFn,
   assignTicketFn,
   setTicketPriorityFn,
+  setTicketDueAtFn,
   createTicketFn,
   watchTicketFn,
   unwatchTicketFn,
@@ -66,6 +68,18 @@ export function useSetTicketPriority() {
   })
 }
 
+/** Set, move or clear (`dueAt: null`) the ticket's shared due date. */
+export function useSetTicketDueAt() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: { ticketId: TicketId; dueAt: Date | null }) =>
+      setTicketDueAtFn({
+        data: { ticketId: vars.ticketId, dueAt: vars.dueAt ? vars.dueAt.toISOString() : null },
+      }),
+    onSuccess: (ticket) => applyTicket(queryClient, ticket),
+  })
+}
+
 export function useCreateTicket() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -84,6 +98,7 @@ export function useCreateTicket() {
           priority: input.priority,
           companyId: input.companyId ?? undefined,
           customAttributes: input.customAttributes,
+          dueAt: input.dueAt ? input.dueAt.toISOString() : undefined,
         },
       }),
     onSuccess: (ticket) => applyTicket(queryClient, ticket),
@@ -94,10 +109,12 @@ export function useCreateTicket() {
 // Ticket watchers (subscriptions). The self-service mutations (watch/unwatch/
 // mute/unmute) optimistically write `ticketKeys.watch(id)` so the watch
 // control's trigger updates instantly, then settle with an invalidate to
-// reconcile with the server's `mutedUntil` timestamp. The admin roster
-// mutations (add/remove another watcher) have no useful optimistic shape —
-// they just invalidate the watcher list (and, for remove, the watch status,
-// since removing yourself changes it).
+// reconcile with the server's `mutedUntil` timestamp, and refresh the watcher
+// list the caller just joined or left. The admin roster mutations (add/remove
+// another watcher) have no useful optimistic shape — they invalidate the
+// watcher list, the picker's candidates, the caller's own watch status (the
+// person may be the caller) and the ticket's activity, which records the
+// change.
 // ---------------------------------------------------------------------------
 
 /**
@@ -126,6 +143,7 @@ function useWatchStatusMutation<V extends { ticketId: TicketId }>(
     },
     onSettled: (_data, _err, vars) => {
       void queryClient.invalidateQueries({ queryKey: ticketKeys.watch(vars.ticketId) })
+      void queryClient.invalidateQueries({ queryKey: ticketKeys.watchers(vars.ticketId) })
     },
   })
 }
@@ -168,19 +186,24 @@ export function useUnmuteTicket() {
   )
 }
 
-/** Admin: add another principal (a team member) as a manual watcher. Also
+/** Everything a change to someone's watch can make stale. */
+function invalidateWatcherRoster(queryClient: QueryClient, ticketId: TicketId) {
+  void queryClient.invalidateQueries({ queryKey: ticketKeys.watchers(ticketId) })
+  void queryClient.invalidateQueries({ queryKey: ticketKeys.watcherCandidates(ticketId) })
+  void queryClient.invalidateQueries({ queryKey: ticketKeys.watch(ticketId) })
+  void queryClient.invalidateQueries({ queryKey: ['activity', 'ticket', ticketId] })
+}
+
+/** Admin: add a teammate who can see the ticket as a manual watcher. Also
  *  invalidates watch status — the added principal may be the caller themself
- *  (the picker offers any not-yet-watching team member), which changes their
- *  own watch state. */
+ *  (the picker offers any not-yet-watching teammate), which changes their own
+ *  watch state. */
 export function useAdminAddTicketWatcher() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (vars: { ticketId: TicketId; principalId: PrincipalId }) =>
       adminAddTicketWatcherFn({ data: vars }),
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: ticketKeys.watchers(vars.ticketId) })
-      void queryClient.invalidateQueries({ queryKey: ticketKeys.watch(vars.ticketId) })
-    },
+    onSuccess: (_data, vars) => invalidateWatcherRoster(queryClient, vars.ticketId),
   })
 }
 
@@ -191,9 +214,6 @@ export function useAdminRemoveTicketWatcher() {
   return useMutation({
     mutationFn: (vars: { ticketId: TicketId; principalId: PrincipalId }) =>
       adminRemoveTicketWatcherFn({ data: vars }),
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: ticketKeys.watchers(vars.ticketId) })
-      void queryClient.invalidateQueries({ queryKey: ticketKeys.watch(vars.ticketId) })
-    },
+    onSuccess: (_data, vars) => invalidateWatcherRoster(queryClient, vars.ticketId),
   })
 }

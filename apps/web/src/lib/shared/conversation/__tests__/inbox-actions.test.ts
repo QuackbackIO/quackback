@@ -187,6 +187,32 @@ describe('isInboxActionEnabled', () => {
     ).toBe(true)
   })
 
+  it('keys Set due date on d in the Status group, gated on a ticket to land on', () => {
+    const due = byId('due')
+    expect(due.shortcut).toBe('d')
+    expect(due.group).toBe('Status')
+    expect(due.scope).toBe('both')
+    // A target with no ticket behind it (a plain conversation) has no due date.
+    expect(isInboxActionEnabled(due, { hasActiveConversation: true, hasSelection: false })).toBe(
+      false
+    )
+    expect(
+      isInboxActionEnabled(due, {
+        hasActiveConversation: true,
+        hasSelection: false,
+        hasDueTarget: true,
+      })
+    ).toBe(true)
+    // ...but never without a target at all.
+    expect(
+      isInboxActionEnabled(due, {
+        hasActiveConversation: false,
+        hasSelection: false,
+        hasDueTarget: true,
+      })
+    ).toBe(false)
+  })
+
   it('create_ticket is available with no target at all (a bare create)', () => {
     const createTicket = byId('create_ticket')
     expect(
