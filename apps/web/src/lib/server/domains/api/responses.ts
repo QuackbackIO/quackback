@@ -151,6 +151,19 @@ export function internalErrorResponse(message = 'Internal server error'): Respon
   return errorResponse('INTERNAL_ERROR', message, 500)
 }
 
+/**
+ * 500 for the app's own routes (export, import, profile), whose pages read
+ * `error` as a plain string. Same request id as the public envelope carries,
+ * so a person quoting it can be matched to the log line.
+ */
+export function internalRouteErrorResponse(): Response {
+  const requestId = getLogContext()?.request_id
+  return Response.json(
+    { error: 'Internal server error', ...(requestId && { requestId }) },
+    { status: 500 }
+  )
+}
+
 export function rateLimitedResponse(retryAfter: number): Response {
   return jsonResponse(
     { error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' } },
