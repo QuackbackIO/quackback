@@ -16,6 +16,7 @@ import {
   isNotNull,
   lte,
   inArray,
+  or,
   sql,
   conversations,
   conversationMessages,
@@ -170,6 +171,28 @@ async function conversationInScope(conversationId: ConversationId, actor: Actor)
     .where(and(eq(conversations.id, conversationId), conversationFilter(actor)))
     .limit(1)
   return !!row
+}
+
+/**
+ * A conversation the actor may see, or NotFound (never Forbidden). One query:
+ * the row is the visitor's own, or `conversationFilter` admits it for the
+ * actor, so a scoped teammate gets NotFound for another team's conversation.
+ */
+export async function assertConversationVisible(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<Conversation> {
+  const ownConversation =
+    actor.principalId != null ? eq(conversations.visitorPrincipalId, actor.principalId) : sql`false`
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(eq(conversations.id, conversationId), or(ownConversation, conversationFilter(actor)))
+    )
+    .limit(1)
+  if (!row) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+  return row
 }
 
 /**
