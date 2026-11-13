@@ -13,6 +13,8 @@
 import { createHash } from 'node:crypto'
 import { logger } from '@/lib/server/logger'
 import { kvSetNx } from '@/lib/server/kv/pg-kv'
+import type { JobHandler } from '@/lib/server/jobs/definitions'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import {
   backfillWorkDone,
   DURABLE_KV_TTL_SECONDS,
@@ -45,18 +47,26 @@ export function upgradeBuildKey(): string {
 }
 
 /**
+ * The build each workspace's upgrade work was last noted done for in this
+ * process, so once it is noted no later check reads kv or the catalogue.
+ */
+const notedBuild = new WorkspaceKeyedCache<string>(10_000)
+
+/**
  * Log `upgrade work done` if this workspace's upgrade work is finished and this
  * build has not said so yet. Returns true when it logged.
  */
 export async function noteUpgradeWorkDone(): Promise<boolean> {
+  const build = upgradeBuildKey()
+  if (notedBuild.get('build') === build) return false
   if (!(await backfillWorkDone())) return false
   if ((await pendingDeferredIndexes()).length > 0) return false
-  const build = upgradeBuildKey()
   const first = await kvSetNx(
     `upgrade-done:${build}`,
     { at: new Date().toISOString() },
     DURABLE_KV_TTL_SECONDS
   )
+  notedBuild.set('build', build)
   if (first) {
     log.info(
       {
@@ -69,6 +79,17 @@ export async function noteUpgradeWorkDone(): Promise<boolean> {
     )
   }
   return first
+}
+
+/**
+ * An upgrade job's handler, followed by the done check once it succeeds, so no
+ * upgrade handler can leave it out.
+ */
+export function upgradeJob(handler: JobHandler): JobHandler {
+  return async (job) => {
+    await handler(job)
+    await noteUpgradeWorkDone()
+  }
 }
 
 /**

@@ -1434,6 +1434,14 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'backfills have not finished.',
   },
   {
+    file: 'apps/web/src/lib/server/backfills/upgrade-done.ts',
+    name: 'notedBuild',
+    category: 'workspace-keyed',
+    reason:
+      'The build whose upgrade work this process has noted done, per workspace. A cross-workspace ' +
+      'hit would drop the one "upgrade work done" line for a workspace that has not logged it.',
+  },
+  {
     file: 'apps/web/src/lib/server/backfills/batched.ts',
     name: 'overrides',
     category: 'process-lifetime',
