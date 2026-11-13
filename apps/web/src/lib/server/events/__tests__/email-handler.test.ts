@@ -471,6 +471,25 @@ describe('emailHook — post.mentioned', () => {
     })
   })
 
+  it('names the mentioner the target resolved, as the relayed event carries no name', async () => {
+    mockPostMentionEmail.mockClear()
+    mockPostMentionEmail.mockResolvedValue({ sent: true })
+
+    const event = {
+      id: 'evt-mention-relayed',
+      type: 'post.mentioned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: mentionData,
+    } as unknown as EventData
+
+    await emailHook.run(event, baseTarget, { ...baseConfig, mentionerName: 'Bea' })
+
+    expect(mockPostMentionEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ mentionerName: 'Bea' })
+    )
+  })
+
   it('falls back to empty mentionerName when actor has no displayName', async () => {
     mockPostMentionEmail.mockClear()
     mockPostMentionEmail.mockResolvedValue({ sent: true })
