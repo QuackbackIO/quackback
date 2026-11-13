@@ -257,8 +257,11 @@ function tableIdentifier(table: string) {
 /**
  * Walk one table in batches until the done marker is set.
  *
+ * The marker is read once, before the first batch. Each batch transaction then
+ * takes the try-lock, reads the cursor, runs the step and moves the cursor.
  * `onFinish` runs inside the last batch's transaction, so the done marker and
- * whatever the finish enqueues commit together.
+ * whatever the finish enqueues commit together. A walk that races another
+ * runner to the end finds no rows left and writes the same marker again.
  */
 async function walk(opts: {
   label: string
@@ -269,6 +272,7 @@ async function walk(opts: {
 }): Promise<void> {
   const table = tableIdentifier(opts.walk.table)
   const batchSize = Math.max(1, Math.floor(opts.walk.batchSize))
+  if (await isDone(opts.keys.done)) return
   let batches = 0
   for (;;) {
     const finished = await db.transaction(async (tx) => {
@@ -276,7 +280,6 @@ async function walk(opts: {
         sql`SELECT pg_try_advisory_xact_lock(hashtext(${opts.lock})) AS locked`
       )) as unknown as Array<{ locked: boolean }>
       if (!lock[0]?.locked) throw new BackfillBusyError(opts.lock)
-      if ((await kvGet(opts.keys.done, { executor: tx })) !== null) return true
 
       const cursor = (await kvGet<{ id: string }>(opts.keys.cursor, { executor: tx }))?.id ?? null
       const range = (await tx.execute(sql`
