@@ -279,7 +279,7 @@ describe('suggestTicketFieldValues', () => {
     expect(content).toContain('Agent: Legacy ticket note about the export bug.')
   })
 
-  it('grounds on the conversation alone when the linked ticket is outside the caller\'s scope', async () => {
+  it("grounds on the conversation alone when the linked ticket is outside the caller's scope", async () => {
     mockResolvePairTicketId.mockResolvedValue(PAIR_TICKET_ID)
     mockIsTicketVisibleTo.mockResolvedValue(false)
     await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)
