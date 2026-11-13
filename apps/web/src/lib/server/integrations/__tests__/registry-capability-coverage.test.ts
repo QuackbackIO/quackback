@@ -25,6 +25,13 @@ describe('registry capability coverage', () => {
         expect(destination.label).toBeTruthy()
         if (destination.childOf) expect(provider.destinations?.[destination.childOf]).toBeTruthy()
       }
+      // Several destinations per connection: each is one of the provider's
+      // listable kinds, and inbound deliveries must say which one they are for.
+      if (provider.destination?.multiple) {
+        expect(provider.destinations?.[provider.destination.multiple.kind]).toBeTruthy()
+        expect(provider.inbound?.destinationOf).toBeTypeOf('function')
+      }
+      if (provider.inbound?.destinationOf) expect(provider.destination?.multiple).toBeTruthy()
       if (provider.appHooks) expect(provider.appHooks.execute).toBeTypeOf('function')
       if (provider.destination?.label)
         expect(
