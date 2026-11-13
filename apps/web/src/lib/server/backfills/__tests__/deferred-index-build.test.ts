@@ -8,15 +8,29 @@
  * five such rounds the pass stops for that index with a warning that names it.
  * The first pass after a worker restart starts the count again.
  *
- * Real Postgres. Each test builds indexes on a scratch table of its own.
+ * Real Postgres, on a database of this suite's own: `CREATE INDEX CONCURRENTLY`
+ * waits for every transaction in its database that is older than the build, so
+ * on the shared test database it would wait on whatever other suites hold open.
+ * Each test builds indexes on a scratch table of its own.
  */
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { spawn } from 'node:child_process'
+import path from 'node:path'
+import postgres from 'postgres'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeHarness, rowsFor } from '@/lib/server/jobs/__tests__/harness'
 
-// A single-workspace install builds on DATABASE_URL, read through the app config.
-vi.hoisted(() => {
+// A single-workspace install builds on DATABASE_URL, read through the app config,
+// and the harness connects to it too: both point at this suite's database.
+const own = vi.hoisted(() => {
   if (!process.env.BASE_URL?.startsWith('http')) process.env.BASE_URL = 'http://localhost:3000'
   process.env.SECRET_KEY ??= 'test-secret-key-for-deferred-index-build-0123456789'
+  const shared =
+    process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
+  const name = `qb_deferred_index_${process.pid}_${Date.now().toString(36)}`
+  const url = new URL(shared)
+  url.pathname = `/${name}`
+  process.env.DATABASE_URL = url.toString()
+  return { shared, name, url: url.toString() }
 })
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
@@ -82,7 +96,7 @@ import {
 import { runDeferredIndexJob } from '../deferred-index-build-queue'
 import { runBackfillFollowUpJob } from '../follow-up-queue'
 import { noteUpgradeWorkDone } from '../upgrade-done'
-import { cleanupBackfill, sampleBackfill, testDb, testSql, uniqueName } from './harness'
+import { createScratchTable, sampleBackfill, testDb, testSql, uniqueName } from './harness'
 
 const QUEUE = 'deferred-index-build'
 const CONFIG = { ...runnerConfig(), batchSize: 10 }
@@ -90,7 +104,34 @@ const TAG = '9999_sample_backfill_migration'
 
 let table = ''
 const specNames: string[] = []
-const backfillNames: string[] = []
+
+/** Migrate this suite's database the way a self-hosted install boots. */
+function migrateOwnDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('bun', ['src/migrate.ts'], {
+      cwd: path.resolve(__dirname, '../../../../../../../packages/db'),
+      env: { ...process.env, DATABASE_URL: own.url },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let output = ''
+    child.stdout.on('data', (chunk) => (output += String(chunk)))
+    child.stderr.on('data', (chunk) => (output += String(chunk)))
+    child.on('error', reject)
+    child.on('exit', (code) =>
+      code === 0 ? resolve() : reject(new Error(`migrating ${own.name} failed:\n${output}`))
+    )
+  })
+}
+
+/** Run `body` on a connection to the shared test database, where databases are made. */
+async function onShared(body: (admin: postgres.Sql) => Promise<unknown>): Promise<void> {
+  const admin = postgres(own.shared, { max: 1, onnotice: () => {} })
+  try {
+    await body(admin)
+  } finally {
+    await admin.end({ timeout: 5 }).catch(() => {})
+  }
+}
 
 /** A spec for an index on this test's scratch table. */
 function spec(label: string, ddlBody?: string): ConcurrentIndexSpec {
@@ -189,6 +230,11 @@ function slotDedupeKey(queue: string, at: Date): string {
   return slotKey(queue, new Date(Math.floor(at.getTime() / 60_000) * 60_000))
 }
 
+beforeAll(async () => {
+  await onShared((admin) => admin.unsafe(`CREATE DATABASE ${own.name}`))
+  await migrateOwnDatabase()
+}, 240_000)
+
 beforeEach(async () => {
   table = `t_deferred_${process.pid}_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
   await testSql().unsafe(`CREATE TABLE ${table} (id serial PRIMARY KEY, v int)`)
@@ -205,15 +251,15 @@ afterEach(async () => {
   logLines.length = 0
   // Rows a test left pending must not be claimed by the next test's drain.
   await testSql()`DELETE FROM job_queue WHERE queue = ${QUEUE} AND dedupe_key LIKE ${`${QUEUE}:${table}_%`}`
-  await testSql().unsafe(`DROP TABLE IF EXISTS ${table} CASCADE`)
+  await testSql().unsafe(`DROP TABLE IF EXISTS ${table}, ${table}_walk CASCADE`)
 })
 
 afterAll(async () => {
-  await testSql()`DELETE FROM job_queue WHERE queue = ${QUEUE} AND dedupe_key LIKE 'deferred-index-build:t_deferred_%'`
-  await testSql()`DELETE FROM kv_store WHERE key LIKE 'deferred-index-build:t_deferred_%'`
-  for (const name of backfillNames) await cleanupBackfill(name)
   await closeHarness()
-})
+  process.env.DATABASE_URL = own.shared
+  // Dropping a database waits for a checkpoint, which a loaded server can take minutes over.
+  await onShared((admin) => admin.unsafe(`DROP DATABASE IF EXISTS ${own.name} WITH (FORCE)`))
+}, 180_000)
 
 describe('the pass', () => {
   it('enqueues one row per missing index, each under its own key', async () => {
@@ -398,16 +444,6 @@ describe('the schedule gate', () => {
       await drainOnce(CONFIG)
       expect(await rowsOf(a.name)).toHaveLength(1)
       await drainAll()
-      if ((await indexState(a.name)) !== 'valid')
-        throw new Error(
-          'DEBUG ' +
-            JSON.stringify(await rowsOf(a.name)) +
-            JSON.stringify(
-              logLines
-                .filter((l) => l.level !== 'debug')
-                .map((l) => [l.msg, String(l.fields.err ?? '')])
-            )
-        )
       expect(await indexState(a.name)).toBe('valid')
     } finally {
       await testSql()`DELETE FROM job_queue WHERE queue = ${QUEUE} AND dedupe_key = ${key}`
@@ -436,8 +472,10 @@ describe('the upgrade work done line', () => {
 
   it('is logged once when every backfill is done and every background index is built', async () => {
     const name = uniqueName('upgrade-done')
-    backfillNames.push(name)
-    const entry = sampleBackfill(name, { requiresMigration: TAG })
+    // The backfill and its follow-up walk a table of their own.
+    const walkTable = `${table}_walk`
+    await createScratchTable(walkTable)
+    const entry = sampleBackfill(name, { requiresMigration: TAG, table: walkTable })
     const a = spec('done')
     __setBackfillsForTests([entry])
     __setDeferredIndexSpecsForTests([a])

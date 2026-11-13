@@ -208,8 +208,9 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  // Rows a test left pending must not be claimed by the next test's drain.
-  for (const name of names) await cleanupBackfill(name)
+  // Rows a test left pending must not be claimed by the next test's drain. Each
+  // test cleans up the names it made; earlier tests' names are gone already.
+  for (const name of names.splice(0)) await cleanupBackfill(name)
   delete process.env[ENV]
   __setBackfillsForTests(null)
   __setJobDefinitionsForTests(null)
