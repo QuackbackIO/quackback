@@ -3,7 +3,12 @@ config({ path: '../../.env', quiet: true })
 
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { MigrationPreflightError, runMigrations } from './migrate-runtime'
+import {
+  DEFAULT_MIGRATE_LOCK_TIMEOUT_MS,
+  isLockTimeoutError,
+  MigrationPreflightError,
+  runMigrations,
+} from './migrate-runtime'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -25,6 +30,12 @@ function formatDuration(ms: number): string {
  * private code, which is exactly why a migrator role could not reuse them:
  * importing this file to reach them ran migrations as a side effect. One
  * executor, two entrypoints.
+ *
+ * It waits for a table lock no longer than the fleet migrator does
+ * ({@link DEFAULT_MIGRATE_LOCK_TIMEOUT_MS}). A long query or an open transaction
+ * holding a table a migration alters stops this start with a lock timeout
+ * instead of holding it; the lineage is one transaction, so nothing changed, and
+ * the next start tries again.
  *
  * Two deliberate differences from the fleet migrator role:
  *
@@ -59,6 +70,7 @@ async function main() {
   const result = await runMigrations(connectionString, {
     migrationsFolder,
     requireSessionMode: false,
+    lockTimeoutMs: DEFAULT_MIGRATE_LOCK_TIMEOUT_MS,
     onStep: (step) => {
       if (step === 'lock') console.log('🔒 Waiting for migration lock...')
       if (step === 'requirements') console.log('🔓 Acquired migration lock')
@@ -109,6 +121,9 @@ async function main() {
         `❌ Migration ${currentMigration} failed; every migration in this run was rolled back.`
       )
     }
+    if (isLockTimeoutError(error)) {
+      throw new MigrationLockTimeout(currentMigration)
+    }
     throw error
   })
 
@@ -144,8 +159,21 @@ async function main() {
   }
 }
 
+/** A migration waited longer than the lock timeout; worded for the operator. */
+class MigrationLockTimeout extends Error {
+  constructor(tag: string | null) {
+    super(
+      `${tag ? `Migration ${tag}` : 'A migration'} stopped on a lock timeout: it waited more than ` +
+        `${DEFAULT_MIGRATE_LOCK_TIMEOUT_MS / 1000} s for a table that another session holds ` +
+        '(a long query or an open transaction). Nothing was changed. Stop that session, or wait ' +
+        'for it to finish, and start again.'
+    )
+    this.name = 'MigrationLockTimeout'
+  }
+}
+
 main().catch((error) => {
-  if (error instanceof MigrationPreflightError) {
+  if (error instanceof MigrationPreflightError || error instanceof MigrationLockTimeout) {
     // Already worded for the operator; a stack trace would only bury it.
     console.error(`❌ ${error.message}`)
   } else {
