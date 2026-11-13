@@ -106,12 +106,27 @@ fan-out commit together. Review-mode events resolve current links and show the
 source, remote item, and received status. Missing verified destination data may
 support a review of an existing current link; it never authorizes automatic local
 updates. Automatic updates additionally require destination and revision evidence.
+An optional `parseAssigneeChange` reads the same receipt for an item's assignee
+added or removed: in destinations that switch `assigneeSync` on, `sync/assignees.ts`
+resolves the account through the connection's teammate matches
+(`integration_user_mappings`) and queues one `assignee` operation per linked
+ticket, which assigns as the integration's principal and is superseded by a newer
+change to the same ticket.
 
 Remote content, outbound status changes, and selected archive requests become
 manual reviews. A provider must supply a verified conditional-write contract
 before automatic remote edits can be enabled. Reading and then writing
 unconditionally is insufficient. GitHub and Linear currently support read-only
 `issues.inspect` for verified link-existing recovery.
+
+A provider with `linkedItems` and `issues.create` can also create an issue for a
+ticket on its own: a destination's `ticket.created` / `ticket.assigned` mappings
+(with `ticketTeamIds` / `ticketTypeIds` filters, see `ticket-issues.ts`) queue the
+same create identity a teammate's "Create issue" uses, so a destination gets one
+issue per ticket. Nothing is queued for a change the integration's own principal
+made or a ticket opened before the opt-in, and the worker rechecks the current
+ticket before sending. `issues.formatTicketIssue` renders the issue (GitHub adds
+attachments, a footer, labels and a marker); without it the narrative is sent.
 
 Integration-only resync visits every active link without re-emitting `post.created`
 to unrelated sinks. Canonical rich text is converted with `contentJsonToMarkdown`;

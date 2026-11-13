@@ -549,6 +549,13 @@ export async function updatePost(
           ownerPrincipalId: newOwner,
           previousOwnerPrincipalId: oldOwner ?? null,
         })
+        // The owner follows the post they now own, the way a ticket's assignee
+        // watches it. A subscription they already have (and its level) is kept.
+        try {
+          await subscribeToPost(newOwner, id, 'owner')
+        } catch (err) {
+          log.warn({ err, post_id: id }, 'owner subscription failed')
+        }
       } else {
         const prevOwnerRow = oldOwner ? await resolveName(oldOwner) : null
         createActivity({
