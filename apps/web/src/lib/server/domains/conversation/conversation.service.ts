@@ -101,6 +101,7 @@ import {
   notifyConversationStarted,
 } from './conversation.notify'
 import { resolveReplyRecipient } from './conversation.recipient'
+import { recordBlockRating } from './csat-request.service'
 import { resolveMessageParent } from './message-parent'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
@@ -495,6 +496,14 @@ export async function sendVisitorMessage(
     { visitor: visitorMessage, agent: agentMessage },
     { conversationUpdated: created }
   )
+
+  // A rating given in the thread is recorded now, whether or not a workflow
+  // run waits on the block. It reads the server-matched reply, never the
+  // client payload.
+  const matchedReply = resolvedBlockReply?.metadata.blockReply
+  if (matchedReply?.kind === 'csat') {
+    await recordBlockRating(txResult.conversation.id, matchedReply, actor)
+  }
 
   // A brand-new conversation: try auto-routing it to an active agent. Best-
   // effort (never blocks the send), and runs outside the transaction so a store
