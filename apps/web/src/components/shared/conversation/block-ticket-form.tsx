@@ -36,6 +36,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/shared/spinner'
 import { toastError } from '@/lib/client/error-notice'
+import { BlockTicketFormLoadingRow } from './block-ticket-form-loading'
 
 const NO_TYPES: TicketIntakeType[] = []
 
@@ -137,12 +138,7 @@ export function BlockTicketForm({
           className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
       </div>
-      {intakeForm.isPending && (
-        <div role="status" className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
-          <Spinner size="sm" />
-          <FormattedMessage id="widget.loading" defaultMessage="Loading…" />
-        </div>
-      )}
+      {intakeForm.isPending && <BlockTicketFormLoadingRow />}
       {intakeForm.isError && (
         <div
           role="alert"
