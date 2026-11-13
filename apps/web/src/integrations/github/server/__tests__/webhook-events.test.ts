@@ -1,11 +1,35 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { githubWebhookEvents } from '@/lib/server/domains/channel-accounts/github-connection'
+import {
+  githubHookWanted,
+  githubWebhookEvents,
+} from '@/lib/server/domains/channel-accounts/github-connection'
 import { registerGitHubWebhook, patchGitHubWebhook } from '../webhook-registration'
 
 describe('githubWebhookEvents', () => {
-  it('adds issue_comment only when the inbox channel is live', () => {
-    expect(githubWebhookEvents(false)).toEqual(['issues'])
-    expect(githubWebhookEvents(true)).toEqual(['issues', 'issue_comment'])
+  it('adds issue_comment only for a repository bringing its issues (or tickets) into a live inbox', () => {
+    const inbox = { inboundMode: 'conversations' }
+    expect(githubWebhookEvents(inbox, { inboxLive: true })).toEqual(['issues', 'issue_comment'])
+    expect(githubWebhookEvents(inbox, { inboxLive: false })).toEqual(['issues'])
+    expect(githubWebhookEvents({ inboundMode: 'off' }, { inboxLive: true })).toEqual(['issues'])
+    expect(githubWebhookEvents({}, { inboxLive: true })).toEqual(['issues'])
+    expect(githubWebhookEvents({ inboundMode: 'tickets' }, { inboxLive: true })).toEqual([
+      'issues',
+      'issue_comment',
+    ])
+  })
+})
+
+describe('githubHookWanted', () => {
+  it('wants a hook for status sync, a live inbox repository, or assignee sync', () => {
+    const off = { statusSync: false, inboxLive: false }
+    expect(githubHookWanted({}, off)).toBe(false)
+    expect(githubHookWanted({}, { ...off, statusSync: true })).toBe(true)
+    expect(githubHookWanted({ inboundMode: 'tickets' }, off)).toBe(false)
+    expect(githubHookWanted({ inboundMode: 'tickets' }, { ...off, inboxLive: true })).toBe(true)
+    const assignees = { inboundMode: 'off', assigneeSync: true }
+    expect(githubHookWanted(assignees, off)).toBe(true)
+    // Assignees ride the `issues` events every hook carries.
+    expect(githubWebhookEvents(assignees, { inboxLive: false })).toEqual(['issues'])
   })
 })
 

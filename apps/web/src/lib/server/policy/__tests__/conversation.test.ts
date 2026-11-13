@@ -82,6 +82,17 @@ describe('canViewConversation', () => {
   it('denies a fully anonymous actor with no principal', () => {
     expect(canViewConversation(ANONYMOUS_ACTOR, openConv).allowed).toBe(false)
   })
+
+  it('allows a customer the paired ticket was shared with, never a service principal', () => {
+    const shared = { participant: true }
+    expect(canViewConversation(otherVisitorActor, openConv, shared).allowed).toBe(true)
+    expect(canViewConversation(otherVisitorActor, openConv, { participant: false }).allowed).toBe(
+      false
+    )
+    const serviceCustomer: Actor = { ...otherVisitorActor, principalType: 'service' }
+    expect(canViewConversation(serviceCustomer, openConv, shared).allowed).toBe(false)
+    expect(canViewConversation(ANONYMOUS_ACTOR, openConv, shared).allowed).toBe(false)
+  })
 })
 
 describe('canSendVisitorMessage', () => {
@@ -93,6 +104,13 @@ describe('canSendVisitorMessage', () => {
 
   it('denies a non-owner', () => {
     expect(canSendVisitorMessage(otherVisitorActor, openConv).allowed).toBe(false)
+  })
+
+  it('allows a customer the paired ticket was shared with', () => {
+    expect(
+      canSendVisitorMessage(otherVisitorActor, closedConv, { participant: true }).allowed
+    ).toBe(true)
+    expect(canSendVisitorMessage(serviceActor, openConv, { participant: true }).allowed).toBe(false)
   })
 
   it('denies an actor with no principal', () => {
@@ -197,6 +215,14 @@ describe('canDeleteMessage', () => {
   it("denies a visitor deleting another visitor's message", () => {
     const othersMsg = msg({ senderType: 'visitor', authorPrincipalId: OTHER })
     expect(canDeleteMessage(visitorActor, othersMsg, openConv).allowed).toBe(false)
+  })
+
+  it('lets a shared ticket participant delete only their own visitor message', () => {
+    const shared = { participant: true }
+    const theirs = msg({ senderType: 'visitor', authorPrincipalId: OTHER })
+    expect(canDeleteMessage(otherVisitorActor, theirs, openConv, shared).allowed).toBe(true)
+    expect(canDeleteMessage(otherVisitorActor, theirs, openConv).allowed).toBe(false)
+    expect(canDeleteMessage(otherVisitorActor, ownVisitorMsg, openConv, shared).allowed).toBe(false)
   })
 
   it('denies a non-team service principal via the visitor self-delete path', () => {
