@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/server/domains/inbox/inbox.query', () => ({
-  getLinkedCustomerTicket: mocks.getLinkedCustomerTicket,
+  getConversationTicketLink: mocks.getLinkedCustomerTicket,
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   getTicketForActor: mocks.getTicketForActor,

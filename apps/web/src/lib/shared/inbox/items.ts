@@ -37,8 +37,7 @@ export function resolveInboxSort(sort: InboxSort | undefined, search?: string): 
 
 /** A reference to one inbox item, discriminated by kind. */
 export type InboxItemRef =
-  | { kind: 'conversation'; id: ConversationId }
-  | { kind: 'ticket'; id: TicketId }
+  { kind: 'conversation'; id: ConversationId } | { kind: 'ticket'; id: TicketId }
 
 /** The linked customer ticket's summary, carried on a conversation item so the
  *  list row can render its ticket line (`#N · <title>`) without a second fetch
@@ -49,6 +48,22 @@ export interface LinkedTicketSummary {
   title: string
   statusName: string
   statusCategory: TicketStatusCategory
+}
+
+/** A conversation's paired ticket that the viewer cannot open: it exists, and
+ *  nothing else about it is said. */
+export interface HiddenLinkedTicket {
+  hidden: true
+}
+
+/** A conversation's paired customer ticket as one conversation's view reads
+ *  it: its summary, or only that it exists. */
+export type ConversationTicketLink = LinkedTicketSummary | HiddenLinkedTicket
+
+export function isHiddenTicketLink(
+  link: ConversationTicketLink | null | undefined
+): link is HiddenLinkedTicket {
+  return !!link && 'hidden' in link && link.hidden === true
 }
 
 /** The wire shape for one unified inbox row. */

@@ -62,6 +62,7 @@ import {
   type InboxSort,
   type InboxTriageFacet,
   type LinkedTicketSummary,
+  type ConversationTicketLink,
 } from '@/lib/shared/inbox/items'
 
 // The sort vocabulary + its resolution live in the shared inbox module; both
@@ -658,6 +659,41 @@ export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
  * same batched join the list branch uses, so it is null for a ticket the
  * actor cannot open.
  */
+/**
+ * The paired customer ticket of one conversation, as that conversation's own
+ * view reads it: the summary when the actor may open the ticket, a bare
+ * `{ hidden: true }` when a pair exists that the actor cannot open (so the view
+ * offers no second ticket), or null when there is no pair.
+ */
+export async function getConversationTicketLink(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<ConversationTicketLink | null> {
+  const summary = await getLinkedCustomerTicket(conversationId, actor)
+  if (summary) return summary
+  return (await hasCustomerTicketPair(conversationId)) ? { hidden: true } : null
+}
+
+/** Whether a conversation already has a live paired customer ticket, whoever
+ *  can see it. A system read: it says nothing about the ticket itself. */
+export async function hasCustomerTicketPair(conversationId: ConversationId): Promise<boolean> {
+  const [pair] = await db
+    .select({ ticketId: ticketConversations.ticketId })
+    .from(ticketConversations)
+    .innerJoin(
+      tickets,
+      and(eq(tickets.id, ticketConversations.ticketId), isNull(tickets.deletedAt))
+    )
+    .where(
+      and(
+        eq(ticketConversations.conversationId, conversationId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  return !!pair
+}
+
 export async function getLinkedCustomerTicket(
   conversationId: ConversationId,
   actor: Actor

@@ -17,7 +17,7 @@ import type { MacroDTO } from '@/lib/server/domains/macros/macro.service'
 import type { TeamMember } from '@/lib/server/domains/principals/principal.types'
 import type { ConversationListPage } from '@/lib/server/domains/conversation/conversation.query'
 import type { ConversationAssistantActivity } from '@/lib/shared/conversation/types'
-import type { LinkedTicketSummary } from '@/lib/shared/inbox/items'
+import { isHiddenTicketLink, type ConversationTicketLink } from '@/lib/shared/inbox/items'
 import type { TicketStageLabels } from '@/lib/shared/tickets'
 import type { AgentConversationPanel } from '@/lib/shared/conversation/agent-panels'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
@@ -29,7 +29,7 @@ import type { RunnableWorkflowDTO } from './workflows'
 const log = logger.child({ component: 'conversation-panels' })
 
 export interface AgentConversationPanels {
-  ticketLink?: LinkedTicketSummary | null
+  ticketLink?: ConversationTicketLink | null
   linkedTicket?: TicketDTO
   ticketStageLabels?: TicketStageLabels
   blockStatus?: { blockedAt: string | null }
@@ -99,22 +99,27 @@ export async function loadAgentConversationPanels(
   if (wanted.length === 0) return {}
 
   // The linked ticket's id comes from the link, which either panel needs.
-  let link: Promise<LinkedTicketSummary | null> | undefined
+  let link: Promise<ConversationTicketLink | null> | undefined
   const readLink = () =>
     (link ??= import('@/lib/server/domains/inbox/inbox.query').then((m) =>
-      m.getLinkedCustomerTicket(conversation.id, caller.actor)
+      m.getConversationTicketLink(conversation.id, caller.actor)
     ))
+  /** The linked ticket's summary, when the caller may open it. */
+  const readVisibleLink = async () => {
+    const value = await readLink()
+    return isHiddenTicketLink(value) ? null : value
+  }
 
   const loaders: PanelLoaders = {
     ticketLink: readLink,
     linkedTicket: async () => {
-      const summary = await readLink()
+      const summary = await readVisibleLink()
       if (!summary) return null
       const { getTicketForActor } = await import('@/lib/server/domains/tickets/ticket.service')
       return getTicketForActor(summary.id, caller.actor)
     },
     ticketStageLabels: async () => {
-      if (!(await readLink())) return null
+      if (!(await readVisibleLink())) return null
       const { getStageLabels } = await import('@/lib/server/domains/settings/settings.tickets')
       return getStageLabels()
     },
