@@ -60,7 +60,7 @@ const { logLines, stubLogger } = vi.hoisted(() => {
 })
 vi.mock('@/lib/server/logger', () => ({ logger: stubLogger }))
 
-import type { ConcurrentIndexSpec } from '@quackback/db/schema-ops'
+import type { ConcurrentIndexSpec } from '@/lib/server/db'
 import { JOB_DEFINITIONS, __setJobDefinitionsForTests } from '@/lib/server/jobs/definitions'
 import { drainOnce, resetJobHandlers, runnerConfig } from '@/lib/server/jobs/runner'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
@@ -79,7 +79,6 @@ import { cleanupBackfill, sampleBackfill, testDb, testSql, uniqueName } from './
 const QUEUE = 'deferred-index-build'
 const CONFIG = { ...runnerConfig(), batchSize: 10 }
 const TAG = '9999_sample_backfill_migration'
-const DAY_MS = 86_400_000
 
 let table = ''
 const specNames: string[] = []
@@ -220,9 +219,13 @@ describe('a build', () => {
     expect((await rowsOf(a.name)).map((r) => r.status)).toEqual(['succeeded'])
 
     const job = { ...cronRow(), payload: { index: a.name, gen: 1 } }
-    const [{ oid: before }] = await testSql()<{ oid: number }[]>`SELECT to_regclass(${a.name})::oid AS oid`
+    const [{ oid: before }] = await testSql()<
+      { oid: number }[]
+    >`SELECT to_regclass(${a.name})::oid AS oid`
     await runDeferredIndexJob(job)
-    const [{ oid: after }] = await testSql()<{ oid: number }[]>`SELECT to_regclass(${a.name})::oid AS oid`
+    const [{ oid: after }] = await testSql()<
+      { oid: number }[]
+    >`SELECT to_regclass(${a.name})::oid AS oid`
     expect(after).toBe(before)
     expect(await enqueueDeferredIndexBuilds()).toBe(0)
   })
@@ -345,7 +348,11 @@ describe('the upgrade work done line', () => {
     await walkBackfill(entry)
     // The follow-up is still to run.
     expect(await noteUpgradeWorkDone()).toBe(false)
-    await runBackfillFollowUpJob({ ...cronRow(), queue: 'ticket-frt-reconcile', payload: { name, gen: 1 } })
+    await runBackfillFollowUpJob({
+      ...cronRow(),
+      queue: 'ticket-frt-reconcile',
+      payload: { name, gen: 1 },
+    })
     // One background index is still missing.
     expect(await noteUpgradeWorkDone()).toBe(false)
     expect(doneLines()).toHaveLength(0)

@@ -12,19 +12,9 @@
  * setting the fleet sets per roll; no change to the code moves it.
  */
 import { db } from '@/lib/server/db'
-import {
-  BUNDLED_MIGRATIONS,
-  readAppliedLedger,
-  type LedgerReader,
-} from '@quackback/db/schema-version'
+import { migrationAppliedIn } from '@/lib/server/fleet/schema-floor'
 
-/** True when the ledger records the bundled migration `tag` (`0311_name`). */
-export async function migrationApplied(
-  tag: string,
-  reader: LedgerReader = db as unknown as LedgerReader
-): Promise<boolean> {
-  const migration = BUNDLED_MIGRATIONS.find((m) => m.tag === tag)
-  if (!migration) throw new Error(`"${tag}" is not a migration this build bundles`)
-  const ledger = await readAppliedLedger(reader)
-  return ledger.versions.has(migration.when)
+/** True when this workspace's ledger records the bundled migration `tag`. */
+export function migrationApplied(tag: string): Promise<boolean> {
+  return migrationAppliedIn(db as unknown as Parameters<typeof migrationAppliedIn>[0], tag)
 }

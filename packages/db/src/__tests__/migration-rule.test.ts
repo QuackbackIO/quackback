@@ -26,7 +26,11 @@ import { getTableConfig, PgTable } from 'drizzle-orm/pg-core'
 import { is } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as schema from '../schema'
-import { CONCURRENT_INDEX_SPECS, DEFERRED_INDEX_SPECS, type ConcurrentIndexSpec } from '../schema-ops'
+import {
+  CONCURRENT_INDEX_SPECS,
+  DEFERRED_INDEX_SPECS,
+  type ConcurrentIndexSpec,
+} from '../schema-ops'
 
 const HOT_TABLES = ['conversations', 'tickets', 'conversation_messages', 'events'] as const
 const DRIZZLE_DIR = path.resolve(__dirname, '../../drizzle')
@@ -83,9 +87,7 @@ function isHot(table: string): boolean {
 }
 
 /** Every index on `table` whose leading column is `column`, from the schema and both index lists. */
-function indexedColumns(
-  specs: readonly ConcurrentIndexSpec[]
-): Map<string, Set<string>> {
+function indexedColumns(specs: readonly ConcurrentIndexSpec[]): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>()
   const add = (table: string, column: string) => {
     let set = out.get(table)
@@ -100,7 +102,10 @@ function indexedColumns(
       if (first?.name) add(config.name, first.name)
     }
   }
-  const onTable = new RegExp(String.raw`\bON\s+${TABLE_NAME}\s*(?:USING\s+\w+\s*)?\(\s*"?([a-z_][a-z0-9_]*)"?`, 'i')
+  const onTable = new RegExp(
+    String.raw`\bON\s+${TABLE_NAME}\s*(?:USING\s+\w+\s*)?\(\s*"?([a-z_][a-z0-9_]*)"?`,
+    'i'
+  )
   for (const spec of specs) {
     const match = spec.ddl.match(onTable)
     if (match) add(match[1], match[2])
@@ -120,8 +125,14 @@ function migrationRuleViolations(
     String.raw`^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?"?([a-z0-9_]*)"?\s+ON\s+${TABLE_NAME}`,
     'i'
   )
-  const update = new RegExp(String.raw`\bUPDATE\s+${TABLE_NAME}\s+(?:AS\s+\w+\s+|\w+\s+)?SET\b`, 'gi')
-  const alter = new RegExp(String.raw`\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?${TABLE_NAME}\s+(.*)$`, 'i')
+  const update = new RegExp(
+    String.raw`\bUPDATE\s+${TABLE_NAME}\s+(?:AS\s+\w+\s+|\w+\s+)?SET\b`,
+    'gi'
+  )
+  const alter = new RegExp(
+    String.raw`\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?${TABLE_NAME}\s+(.*)$`,
+    'i'
+  )
   const addColumn = /^ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?"?([a-z_][a-z0-9_]*)"?\s+(.*)$/i
   const addConstraint = /^ADD\s+CONSTRAINT\s+"?[a-z0-9_]+"?\s+(FOREIGN\s+KEY|CHECK)\b(.*)$/i
 
@@ -298,7 +309,9 @@ describe('the migration rule on sample migrations', () => {
       'hot-index',
     ])
     expect(
-      check('CREATE UNIQUE INDEX IF NOT EXISTS "c_x" ON "public"."conversations" USING btree ("x");')
+      check(
+        'CREATE UNIQUE INDEX IF NOT EXISTS "c_x" ON "public"."conversations" USING btree ("x");'
+      )
     ).toHaveLength(1)
     expect(check('CREATE INDEX posts_x_idx ON posts (x);')).toEqual([])
   })
@@ -325,9 +338,9 @@ describe('the migration rule on sample migrations', () => {
 
   it('refuses a check on a new hot-table column written inline, and takes it NOT VALID in a guard', () => {
     expect(
-      check(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS kind text CHECK (kind IN ('a', 'b'));`).map(
-        (v) => v.rule
-      )
+      check(
+        `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS kind text CHECK (kind IN ('a', 'b'));`
+      ).map((v) => v.rule)
     ).toEqual(['hot-inline-check'])
     expect(
       check(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS kind text;

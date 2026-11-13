@@ -420,7 +420,9 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     maxAttempts: 5,
     retryBackoffMs: 60_000,
     handler: () =>
-      import('@/lib/server/backfills/deferred-index-build-queue').then((m) => m.runDeferredIndexJob),
+      import('@/lib/server/backfills/deferred-index-build-queue').then(
+        (m) => m.runDeferredIndexJob
+      ),
   },
 
   // ── The eight moved off BullMQ (SAAS-HOSTING-STACK.md §7.1) ────────────────

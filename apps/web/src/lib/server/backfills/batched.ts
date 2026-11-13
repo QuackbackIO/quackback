@@ -243,7 +243,8 @@ export async function enqueueBackfillPass(): Promise<number> {
       written += 1
     }
   }
-  if (written > 0) log.info({ event: 'backfill.enqueued', rows: written }, 'startup backfills enqueued')
+  if (written > 0)
+    log.info({ event: 'backfill.enqueued', rows: written }, 'startup backfills enqueued')
   return written
 }
 

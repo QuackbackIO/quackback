@@ -560,4 +560,3 @@ describe('locks', () => {
     expect(text).toMatch(/pg_try_advisory_xact_lock\(/)
   })
 })
-

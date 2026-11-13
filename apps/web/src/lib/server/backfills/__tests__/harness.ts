@@ -8,7 +8,7 @@
  */
 import { sql } from 'drizzle-orm'
 import postgres from 'postgres'
-import { tickets } from '@quackback/db/schema'
+import { tickets } from '@/lib/server/db'
 import { testDb, testSql } from '@/lib/server/jobs/__tests__/harness'
 import {
   backfillKeys,
@@ -86,7 +86,11 @@ export async function createScratchTable(name: string): Promise<void> {
 }
 
 /** How often the walk stepped each marked row (by title), read from `custom_attributes[flag]`. */
-export async function flagCounts(marker: string, flag: string, table = 'tickets'): Promise<number[]> {
+export async function flagCounts(
+  marker: string,
+  flag: string,
+  table = 'tickets'
+): Promise<number[]> {
   const rows = await testSql().unsafe<{ n: number | null }[]>(
     `SELECT (custom_attributes ->> $1)::int AS n FROM ${table} WHERE title LIKE $2 ORDER BY title`,
     [flag, `${marker}-%`]

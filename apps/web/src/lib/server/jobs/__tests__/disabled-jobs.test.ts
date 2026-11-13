@@ -94,11 +94,10 @@ afterAll(async () => {
 
 describe('parseDisabledJobs', () => {
   it('reads a comma list of known names and reports the rest', () => {
-    const parsed = parseDisabledJobs(' spam-retention, ,file-retention,spam-retention,no-such-job ', [
-      'spam-retention',
-      'file-retention',
-      'analytics',
-    ])
+    const parsed = parseDisabledJobs(
+      ' spam-retention, ,file-retention,spam-retention,no-such-job ',
+      ['spam-retention', 'file-retention', 'analytics']
+    )
     expect([...parsed.paused].sort()).toEqual(['file-retention', 'spam-retention'])
     expect(parsed.unknown).toEqual(['no-such-job'])
   })

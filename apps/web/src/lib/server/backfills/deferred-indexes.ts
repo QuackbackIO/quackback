@@ -27,13 +27,13 @@
  */
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
+import { config } from '@/lib/server/config'
 import {
+  db,
   DEFERRED_INDEX_SPECS,
   ensureConcurrentIndexes,
   type ConcurrentIndexSpec,
-} from '@quackback/db/schema-ops'
-import { config } from '@/lib/server/config'
-import { db } from '@/lib/server/db'
+} from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { kvGet, kvSet } from '@/lib/server/kv/pg-kv'
 import { enqueueJob, findJobByDedupeKey } from '@/lib/server/jobs/job-queue'
@@ -60,7 +60,9 @@ export function deferredIndexSpecs(): readonly ConcurrentIndexSpec[] {
 }
 
 /** Test seam: replace the background index list for one test. */
-export function __setDeferredIndexSpecsForTests(specs: readonly ConcurrentIndexSpec[] | null): void {
+export function __setDeferredIndexSpecsForTests(
+  specs: readonly ConcurrentIndexSpec[] | null
+): void {
   overrides = specs
 }
 
@@ -155,7 +157,10 @@ export async function enqueueDeferredIndexBuilds(now = Date.now()): Promise<numb
   }
   passedThisProcess.set('passed', true)
   if (written > 0) {
-    log.info({ event: 'deferred_index.enqueued', rows: written }, 'background index builds enqueued')
+    log.info(
+      { event: 'deferred_index.enqueued', rows: written },
+      'background index builds enqueued'
+    )
   }
   return written
 }

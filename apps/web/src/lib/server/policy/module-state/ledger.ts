@@ -1415,4 +1415,66 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'a log line: a wrong hit would drop one informational line, never change which providers ' +
       'are trusted.',
   },
+  {
+    file: 'apps/web/src/lib/server/auth/index.ts',
+    name: 'pendingClientScopeReconciles',
+    category: 'workspace-keyed',
+    reason:
+      'Whether this workspace has an MCP client scope reconcile to retry, and when it last tried. ' +
+      'A cross-workspace hit would retry the update against the wrong workspace, or skip the ' +
+      'retry a workspace still needs.',
+  },
+  {
+    file: 'apps/web/src/lib/server/backfills/batched.ts',
+    name: 'backfillsDoneSeen',
+    category: 'workspace-keyed',
+    reason:
+      'Workspaces this process has seen with every startup backfill done, keyed by the registry. ' +
+      'A cross-workspace hit would shut the startup-backfill schedule for a workspace whose ' +
+      'backfills have not finished.',
+  },
+  {
+    file: 'apps/web/src/lib/server/backfills/batched.ts',
+    name: 'overrides',
+    category: 'process-lifetime',
+    reason:
+      'Test seam holding a replacement backfill registry, null in production so ' +
+      'registeredBackfills() returns the compile-time BATCHED_BACKFILLS constant. Holds no ' +
+      'workspace value.',
+  },
+  {
+    file: 'apps/web/src/lib/server/backfills/deferred-indexes.ts',
+    name: 'overrides',
+    category: 'process-lifetime',
+    reason:
+      'Test seam holding a replacement background index list, null in production so ' +
+      'deferredIndexSpecs() returns the compile-time DEFERRED_INDEX_SPECS constant. Holds no ' +
+      'workspace value.',
+  },
+  {
+    file: 'apps/web/src/lib/server/backfills/deferred-indexes.ts',
+    name: 'passedThisProcess',
+    category: 'workspace-keyed',
+    reason:
+      'Workspaces this worker process has made its first background index pass for; that pass ' +
+      'starts every failing build again, which is how a restart retries. A cross-workspace hit ' +
+      'would skip that restart retry for a workspace that never had it.',
+  },
+  {
+    file: 'apps/web/src/lib/server/backfills/deferred-indexes.ts',
+    name: 'stopWarned',
+    category: 'workspace-keyed',
+    reason:
+      'Background indexes this process has already warned about as stopped, per workspace, so the ' +
+      'warning is logged once. A cross-workspace hit would drop the warning for another workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/disabled-jobs.ts',
+    name: 'parsed',
+    category: 'fleet-wide',
+    reason:
+      'The parsed QUACKBACK_DISABLED_JOBS list, a process environment setting checked against the ' +
+      'job definitions. It is the same for every workspace in the process; it is memoised only ' +
+      'so the "job paused" lines are logged once rather than on every pass.',
+  },
 ]

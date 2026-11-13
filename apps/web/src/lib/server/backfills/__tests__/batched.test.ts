@@ -12,6 +12,8 @@
  * follow-up always runs alongside it, and the check is shown to catch each way
  * a backfill can get this wrong.
  */
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
 import { closeHarness } from '@/lib/server/jobs/__tests__/harness'
 
@@ -32,11 +34,18 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
-import { BUNDLED_MIGRATIONS } from '@quackback/db/schema-version'
 import { __setBackfillsForTests, registeredBackfills, type BatchedBackfill } from '../batched'
 import { checkBackfill, cleanupBackfill, sampleBackfill, sampleWalk, uniqueName } from './harness'
 
-const NEWEST = BUNDLED_MIGRATIONS[BUNDLED_MIGRATIONS.length - 1].tag
+/** The newest migration this build bundles; any migrated test database has it. */
+const NEWEST = (
+  JSON.parse(
+    readFileSync(
+      path.resolve(__dirname, '../../../../../../../packages/db/drizzle/meta/_journal.json'),
+      'utf8'
+    )
+  ) as { entries: Array<{ tag: string }> }
+).entries.at(-1)!.tag
 const names: string[] = []
 function named(label: string): string {
   const name = uniqueName(label)

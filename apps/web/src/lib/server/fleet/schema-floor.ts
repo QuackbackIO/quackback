@@ -48,10 +48,12 @@
  */
 import type { Sql } from 'postgres'
 import {
+  BUNDLED_MIGRATIONS,
   evaluateSchemaFloor,
   readAppliedLedger,
   resolveVersionSpec,
   UnknownSchemaVersion,
+  type LedgerReader,
   type SchemaFloorVerdict,
 } from '@quackback/db/schema-version'
 
@@ -147,4 +149,15 @@ export async function assertSchemaFloor(workspaceKey: string, sql: Sql): Promise
   const applied = await readAppliedLedger(sql)
   const verdict = evaluateSchemaFloor(applied, floor)
   if (!verdict.ok) throw new WorkspaceSchemaFloorRefusal(workspaceKey, verdict)
+}
+
+/**
+ * True when the ledger `reader` reads records the bundled migration `tag`
+ * (`0311_name`). Not the floor: a job or backfill that needs one migration asks
+ * this, so it waits for the workspace to migrate rather than failing on it.
+ */
+export async function migrationAppliedIn(reader: LedgerReader, tag: string): Promise<boolean> {
+  const migration = BUNDLED_MIGRATIONS.find((m) => m.tag === tag)
+  if (!migration) throw new Error(`"${tag}" is not a migration this build bundles`)
+  return (await readAppliedLedger(reader)).versions.has(migration.when)
 }
