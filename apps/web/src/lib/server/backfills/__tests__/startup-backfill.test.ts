@@ -135,7 +135,7 @@ function onlyBackfillQueues(): void {
 
 async function backfillRows(entry: BatchedBackfill) {
   return (await rowsFor('startup-backfill')).filter((r) =>
-    r.dedupe_key?.startsWith(`startup-backfill:${entry.name}:`)
+    r.dedupe_key?.startsWith(`backfill:${entry.name}:`)
   )
 }
 
@@ -233,7 +233,7 @@ describe('the enqueue pass (startup and every schedule pass)', () => {
     expect(await enqueueBackfillPass()).toBe(0)
 
     expect((await backfillRows(a)).map((r) => [r.dedupe_key, r.status, r.payload])).toEqual([
-      [`startup-backfill:${a.name}:1`, 'pending', { name: a.name, gen: 1 }],
+      [`backfill:${a.name}:1`, 'pending', { name: a.name, gen: 1 }],
     ])
     expect(await backfillRows(b)).toHaveLength(1)
     expect(await walked(a)).toEqual([0, 0, 0, 0, 0])
@@ -428,7 +428,7 @@ describe('retries and generations', () => {
     // A row enqueued before the migration landed, which kept missing it.
     await enqueueBackfillPass()
     ledger.applied = new Set()
-    await failForGood(`startup-backfill:${entry.name}:1`)
+    await failForGood(`backfill:${entry.name}:1`)
 
     // Still no migration: nothing new.
     expect(await enqueueBackfillPass()).toBe(0)
@@ -437,8 +437,8 @@ describe('retries and generations', () => {
     expect(await enqueueBackfillPass()).toBe(1)
     expect(await enqueueBackfillPass()).toBe(0)
     expect((await backfillRows(entry)).map((r) => [r.dedupe_key, r.status])).toEqual([
-      [`startup-backfill:${entry.name}:1`, 'failed'],
-      [`startup-backfill:${entry.name}:2`, 'pending'],
+      [`backfill:${entry.name}:1`, 'failed'],
+      [`backfill:${entry.name}:2`, 'pending'],
     ])
     expect(await kvValue(walkKeys(entry.name).gen)).toBe(2)
 

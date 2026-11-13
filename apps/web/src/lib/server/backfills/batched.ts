@@ -199,8 +199,12 @@ async function isDone(key: string): Promise<boolean> {
   return (await kvGet(key)) !== null
 }
 
+/**
+ * A walk row's dedupe key: `backfill:<name>:<gen>` for the backfill itself and
+ * `<queue>:<name>:<gen>` for its follow-up, so each generation is a new key.
+ */
 function dedupeKeyFor(queue: string, name: string, gen: number): string {
-  return `${queue}:${name}:${gen}`
+  return queue === BACKFILL_QUEUE ? `backfill:${name}:${gen}` : `${queue}:${name}:${gen}`
 }
 
 /** One walk row: `{ name, gen }` under the generation's dedupe key. */
