@@ -306,6 +306,7 @@ const configSchema = z
     aiReasoningExclude: envBoolean,
     aiReasoningEffort: z.string().optional(),
     aiCombinedToolsAndSchema: envBoolean,
+    aiStructuredOutputStream: envBoolean,
 
     // Telemetry (optional)
     disableTelemetry: envBoolean,
@@ -493,6 +494,7 @@ function buildConfigFromEnv(): unknown {
     aiReasoningExclude: env('AI_REASONING_EXCLUDE'),
     aiReasoningEffort: env('AI_REASONING_EFFORT'),
     aiCombinedToolsAndSchema: env('AI_COMBINED_TOOLS_AND_SCHEMA'),
+    aiStructuredOutputStream: env('AI_STRUCTURED_OUTPUT_STREAM'),
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
@@ -804,6 +806,9 @@ export const config = {
   },
   get aiCombinedToolsAndSchema() {
     return loadConfig().aiCombinedToolsAndSchema
+  },
+  get aiStructuredOutputStream() {
+    return loadConfig().aiStructuredOutputStream
   },
 
   // Telemetry
