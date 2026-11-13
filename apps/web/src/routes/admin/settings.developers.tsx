@@ -1,4 +1,5 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { lazy, Suspense } from 'react'
+import { ClientOnly, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -6,17 +7,29 @@ import { z } from 'zod'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { ApiKeysSettings } from '@/components/admin/settings/api-keys/api-keys-settings'
+import { WorkspaceKeysSettings } from '@/components/admin/settings/api-keys/workspace-keys-settings'
+import { PersonalKeysOversight } from '@/components/admin/settings/api-keys/personal-keys-oversight'
 import { ApiReferenceCard } from '@/components/admin/settings/api-keys/api-reference-card'
 import { WebhooksSettings } from '@/components/admin/settings/webhooks/webhooks-settings'
-import { WebhookVerificationGuide } from '@/components/admin/settings/webhooks/webhook-verification-guide'
 import { McpServerSettings } from '@/components/admin/settings/mcp/mcp-server-settings'
-import { McpSetupGuide } from '@/components/admin/settings/mcp/mcp-setup-guide'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+
+// The two guides are long and sit on the Webhooks and MCP tabs, so they load
+// with their tab rather than with the Keys tab every visit opens on.
+const WebhookVerificationGuide = lazy(() =>
+  import('@/components/admin/settings/webhooks/webhook-verification-guide').then((mod) => ({
+    default: mod.WebhookVerificationGuide,
+  }))
+)
+const McpSetupGuide = lazy(() =>
+  import('@/components/admin/settings/mcp/mcp-setup-guide').then((mod) => ({
+    default: mod.McpSetupGuide,
+  }))
+)
 
 const searchSchema = z.object({
   tab: z.enum(['keys', 'webhooks', 'mcp']).optional(),
@@ -57,6 +70,8 @@ function ApiPage() {
   const navigate = useNavigate()
 
   const apiKeysQuery = useSuspenseQuery(adminQueries.apiKeys())
+  const workspaceKeys = apiKeysQuery.data.keys.filter((k) => k.kind === 'workspace')
+  const personalKeys = apiKeysQuery.data.keys.filter((k) => k.kind === 'personal')
   const webhooksQuery = useSuspenseQuery(adminQueries.webhooks())
   const developerConfigQuery = useSuspenseQuery(settingsQueries.developerConfig())
 
@@ -88,13 +103,22 @@ function ApiPage() {
         </TabsList>
 
         <TabsContent value="keys" className="space-y-6">
-          <ApiKeysSettings apiKeys={apiKeysQuery.data} />
+          <WorkspaceKeysSettings apiKeys={workspaceKeys} />
+          {/* Below the fold: drawn once the page is live, which keeps the document small. */}
+          <ClientOnly>
+            <PersonalKeysOversight
+              apiKeys={personalKeys}
+              policyEnabled={apiKeysQuery.data.personalKeysEnabled}
+            />
+          </ClientOnly>
           <ApiReferenceCard apiBaseUrl={apiBaseUrl} />
         </TabsContent>
 
         <TabsContent value="webhooks" className="space-y-6">
           <WebhooksSettings webhooks={webhooksQuery.data} entitled={webhooksEntitled} />
-          <WebhookVerificationGuide />
+          <Suspense fallback={null}>
+            <WebhookVerificationGuide />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="mcp" className="space-y-6">
@@ -107,7 +131,9 @@ function ApiPage() {
               }
             />
           </SettingsCard>
-          <McpSetupGuide endpointUrl={mcpEndpointUrl} />
+          <Suspense fallback={null}>
+            <McpSetupGuide endpointUrl={mcpEndpointUrl} />
+          </Suspense>
         </TabsContent>
       </Tabs>
     </SettingsPage>

@@ -19,21 +19,40 @@ vi.mock('@tanstack/react-router', () => ({
   useRouterState: ({ select }: { select: (value: unknown) => unknown }) =>
     select({ location: { pathname: state.pathname } }),
 }))
-vi.mock('@/lib/client/use-permissions', () => ({
-  usePermissions: () => new Set(['settings.manage', 'post.view_private']),
-}))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  usePermissions: () => new Set(['settings.manage', 'post.view_private']),
   usePrincipalId: () => 'owner-acme',
   useFeatureFlags: () => ({ feedback: true }),
   useBillingEnabled: () => false,
   useCloudEnabled: () => false,
 }))
 vi.mock('@/lib/server/functions/ask-search', () => ({
-  searchAskEntitiesFn: async ({ data }: { data: { query: string } }) => {
+  searchWorkspaceFn: async ({ data }: { data: { query: string } }) => {
     state.searches.push(data.query)
-    return data.query === 'refund'
-      ? [{ id: 'post_refund', title: 'Refund policy idea', href: '/admin/feedback?post=refund' }]
-      : []
+    return {
+      hasMore: false,
+      results:
+        data.query === 'refund'
+          ? [
+              {
+                id: 'company_refund',
+                kind: 'company',
+                title: 'Refund Co',
+                subtitle: 'refund.co',
+                href: '/admin/users?lifecycle=companies&company=company_refund',
+                score: 2,
+              },
+              {
+                id: 'post_refund',
+                kind: 'post',
+                title: 'Refund policy idea',
+                excerpt: 'Customers ask about refunds',
+                href: '/admin/feedback?post=refund',
+                score: 1.1,
+              },
+            ]
+          : [],
+    }
   },
 }))
 
@@ -63,15 +82,30 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-it('searches pages and entities with no AI and never asks Copilot', async () => {
+it('searches pages and records of every kind with no AI and never asks Copilot', async () => {
   mount()
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
   const input = await screen.findByRole('combobox', { name: 'Search Quackback' })
   fireEvent.change(input, { target: { value: 'refund' } })
-  fireEvent.click(await screen.findByRole('option', { name: /Refund policy idea/ }))
+  const company = await screen.findByRole('option', { name: /Refund Co/ })
+  const post = screen.getByRole('option', { name: /Refund policy idea/ })
+  expect(company.textContent).toContain('Company')
+  expect(post.textContent).toContain('Post')
+  // One list in the server's order, not one block per kind.
+  expect(company.compareDocumentPosition(post) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  fireEvent.click(post)
   expect(state.navigations).toEqual(['/admin/feedback?post=refund'])
   expect(state.searches).toEqual(['refund'])
   expect(screen.queryByText(/Copilot/)).toBeNull()
+})
+
+it('opens the results page when Enter is pressed on a query', async () => {
+  mount()
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+  const input = await screen.findByRole('combobox', { name: 'Search Quackback' })
+  fireEvent.change(input, { target: { value: 'refund policy' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(state.navigations).toEqual(['/admin/search?q=refund%20policy'])
 })
 
 it('toggles with Ctrl+K and opens from the Search row', async () => {

@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { fromUuid, type SegmentId } from '@quackback/ids'
+import { fromUuid } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { db, posts, boards } from '@/lib/server/db'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
-import type { Actor } from '@/lib/server/policy'
 
 export const Route = createFileRoute('/api/v1/apps/suggest')({
   server: {
@@ -28,13 +28,7 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
           // postViewFilter with team scope (otherwise the call
           // defaults to ANONYMOUS_ACTOR and team callers see only
           // public-board posts — wrong direction).
-          const actor: Actor = {
-            principalId: auth.principalId,
-            role: auth.role,
-            principalType: 'service',
-            segmentIds: new Set<SegmentId>(),
-            permissions: auth.permissions,
-          }
+          const actor = serviceActorFromApiAuth(auth)
 
           const { generateEmbedding } =
             await import('@/lib/server/domains/embeddings/embedding.service')

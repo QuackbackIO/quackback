@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { rotateWebhookSecretFn } from '@/lib/server/functions/webhooks'
 import type { Webhook } from '@/lib/shared/types'
+import { errorText } from '@/lib/client/error-text'
 
 interface RotateWebhookSecretDialogProps {
   webhook: Webhook
@@ -49,7 +50,7 @@ export function RotateWebhookSecretDialog({
       onOpenChange(false)
     } catch (err) {
       console.error('Failed to rotate webhook secret:', err)
-      setError(err instanceof Error ? err.message : 'Failed to rotate secret')
+      setError(errorText(err, 'Failed to rotate secret'))
     }
   }
 

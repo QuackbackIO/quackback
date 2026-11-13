@@ -5,11 +5,11 @@
  * for public API authentication.
  */
 
-import { db, apiKeys, principal, eq, and, isNull } from '@/lib/server/db'
+import { db, apiKeys, principal, eq, and, gt, isNull, or } from '@/lib/server/db'
 import { emit } from '@/lib/server/events/emit'
-import { apiKeyCreated, apiKeyDeleted } from '@/lib/server/events/catalogue'
+import { apiKeyCreated, apiKeyDeleted, apiKeyUpdated } from '@/lib/server/events/catalogue'
 import type { PrincipalId } from '@quackback/ids'
-import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isAdmin } from '@/lib/shared/roles'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
@@ -25,8 +25,22 @@ import {
   parseApiKeyScopes,
   parseScopesJson,
 } from './api-key-scopes'
-import type { ApiKey, ApiKeyId, CreateApiKeyInput, CreateApiKeyResult } from './api-key.types'
-export type { ApiKey, ApiKeyId, CreateApiKeyInput, CreateApiKeyResult }
+import type {
+  ApiKey,
+  ApiKeyGranter,
+  ApiKeyId,
+  ApiKeyKind,
+  CreateApiKeyInput,
+  CreateApiKeyResult,
+} from './api-key.types'
+import {
+  applyWorkspaceKeyRole,
+  assertCanManageWorkspaceKey,
+  resolveGrantableKeyRole,
+  type WorkspaceKeyRole,
+} from './workspace-key-role'
+import type { RoleId } from '@quackback/ids'
+export type { ApiKey, ApiKeyGranter, ApiKeyId, ApiKeyKind, CreateApiKeyInput, CreateApiKeyResult }
 
 /** API key prefix */
 const API_KEY_PREFIX = 'qb_'
@@ -36,11 +50,43 @@ const KEY_RANDOM_BYTES = 24 // 48 hex chars
 
 type ApiKeyRow = typeof apiKeys.$inferSelect
 
+/**
+ * Limits a change to keys of one kind and, for a teammate's own keys, one
+ * creator. A key outside the filter is not found, the same as a missing one.
+ */
+export interface ApiKeyFilter {
+  kind?: ApiKeyKind
+  createdById?: PrincipalId
+  /**
+   * Whoever changes a workspace key must be able to grant the role it holds
+   * now, or rotating it would hand them that role's authority.
+   */
+  granter?: ApiKeyGranter
+}
+
+/** Refuse a change to a workspace key whose role the filter's granter cannot grant. */
+async function assertFilterMayManage(id: ApiKeyId, filter: ApiKeyFilter): Promise<void> {
+  if (!filter.granter) return
+  const key = await db.query.apiKeys.findFirst({ where: liveKeyWhere(id, filter) })
+  if (!key) throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found or already revoked')
+  if (key.kind === 'workspace') await assertCanManageWorkspaceKey(key.principalId, filter.granter)
+}
+
+function liveKeyWhere(id: ApiKeyId, filter: ApiKeyFilter) {
+  return and(
+    eq(apiKeys.id, id),
+    isNull(apiKeys.revokedAt),
+    filter.kind ? eq(apiKeys.kind, filter.kind) : undefined,
+    filter.createdById ? eq(apiKeys.createdById, filter.createdById) : undefined
+  )
+}
+
 /** Map a database row to the public ApiKey shape (strips keyHash, parses scopes). */
 function toApiKey(row: ApiKeyRow): ApiKey {
   return {
     id: row.id,
     name: row.name,
+    kind: row.kind,
     keyPrefix: row.keyPrefix,
     createdById: row.createdById,
     principalId: row.principalId,
@@ -101,11 +147,16 @@ function getKeyPrefix(key: string): string {
 }
 
 /**
- * Create a new API key
+ * Create a new API key.
+ *
+ * A personal key (the default) acts as `createdById`. A workspace key needs a
+ * `roleId` and the creator's own authority as `granter`: the role is checked
+ * against it exactly as re-roling a teammate is, then held by the key itself.
  */
 export async function createApiKey(
   input: CreateApiKeyInput,
-  createdById: PrincipalId
+  createdById: PrincipalId,
+  granter?: ApiKeyGranter
 ): Promise<CreateApiKeyResult> {
   // Validate input
   if (!input.name?.trim()) {
@@ -116,6 +167,17 @@ export async function createApiKey(
   }
 
   const storedScopes = normalizeScopesInput(input.scopes)
+  const kind: ApiKeyKind = input.kind ?? 'personal'
+  let workspaceRole: WorkspaceKeyRole | null = null
+  if (kind === 'workspace') {
+    if (!input.roleId) {
+      throw new ValidationError('VALIDATION_ERROR', 'A workspace key needs a role')
+    }
+    if (!granter) {
+      throw new ForbiddenError('GRANT_CEILING', 'Creator permission set is required')
+    }
+    workspaceRole = await resolveGrantableKeyRole(input.roleId, granter)
+  }
 
   // Generate the key
   const plainTextKey = generateApiKey()
@@ -127,34 +189,49 @@ export async function createApiKey(
     where: eq(principal.id, createdById),
     columns: { role: true },
   })
-  const role = (isAdmin(creator?.role) ? 'admin' : 'member') as 'admin' | 'member'
+  const role =
+    workspaceRole?.legacyRole ??
+    ((isAdmin(creator?.role) ? 'admin' : 'member') as 'admin' | 'member')
 
-  // Create service principal for this API key
-  const servicePrincipal = await createServicePrincipal({
-    role,
-    displayName: input.name.trim(),
-    serviceMetadata: { kind: 'api_key', apiKeyId: '' }, // Will be updated below
+  // The principal, the key row and (for a workspace key) its role grant are one
+  // transaction: a grant that fails, say because the role was just deleted,
+  // must not leave a live key behind on a fallback preset.
+  const apiKey = await db.transaction(async (tx) => {
+    const servicePrincipal = await createServicePrincipal(
+      {
+        role,
+        displayName: input.name.trim(),
+        serviceMetadata: { kind: 'api_key', apiKeyId: '' }, // Will be updated below
+      },
+      tx
+    )
+
+    const [row] = await tx
+      .insert(apiKeys)
+      .values({
+        name: input.name.trim(),
+        kind,
+        keyHash,
+        keyPrefix,
+        createdById,
+        principalId: servicePrincipal.id,
+        expiresAt: input.expiresAt ?? null,
+        scopes: storedScopes,
+      })
+      .returning()
+
+    // Update service principal with the actual apiKeyId
+    await updatePrincipalFields(
+      { principalId: servicePrincipal.id },
+      { serviceMetadata: { kind: 'api_key', apiKeyId: row.id } },
+      { executor: tx }
+    )
+
+    if (workspaceRole) {
+      await applyWorkspaceKeyRole(servicePrincipal.id, workspaceRole, createdById, tx)
+    }
+    return row
   })
-
-  // Store the key
-  const [apiKey] = await db
-    .insert(apiKeys)
-    .values({
-      name: input.name.trim(),
-      keyHash,
-      keyPrefix,
-      createdById,
-      principalId: servicePrincipal.id,
-      expiresAt: input.expiresAt ?? null,
-      scopes: storedScopes,
-    })
-    .returning()
-
-  // Update service principal with the actual apiKeyId
-  await updatePrincipalFields(
-    { principalId: servicePrincipal.id },
-    { serviceMetadata: { kind: 'api_key', apiKeyId: apiKey.id } }
-  )
 
   // EVENTING-V2 WO-6a: emit the audit-relevant creation event. A short tx since
   // this service has no surrounding one; exposure.audit writes the audit_log row
@@ -162,7 +239,13 @@ export async function createApiKey(
   try {
     await db.transaction((tx) =>
       emit(tx, apiKeyCreated, {
-        payload: { apiKeyId: apiKey.id, name: apiKey.name, scopes: storedScopes },
+        payload: {
+          apiKeyId: apiKey.id,
+          name: apiKey.name,
+          scopes: storedScopes,
+          kind,
+          ...(workspaceRole ? { roleName: workspaceRole.roleName } : {}),
+        },
         actor: { type: 'user', id: createdById },
         entityId: apiKey.id,
         context: { source: 'admin' },
@@ -234,38 +317,59 @@ function hasScope(scopesRaw: string | null, scope: string): boolean {
  * Uses atomic UPDATE with WHERE clause to prevent race conditions
  * (HTTP-driver compatible, no interactive transactions)
  */
-export async function rotateApiKey(id: ApiKeyId): Promise<CreateApiKeyResult> {
+export async function rotateApiKey(
+  id: ApiKeyId,
+  filter: ApiKeyFilter = {}
+): Promise<CreateApiKeyResult> {
   // Generate new key credentials
   const plainTextKey = generateApiKey()
   const keyHash = hashApiKey(plainTextKey)
   const keyPrefix = getKeyPrefix(plainTextKey)
 
-  // Atomic update: only succeeds if key exists and isn't revoked
-  const [updatedKey] = await db
-    .update(apiKeys)
-    .set({
-      keyHash,
-      keyPrefix,
-      lastUsedAt: null, // Reset last used
-    })
-    .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt)))
-    .returning()
+  // Lock the key row for the whole rotation. A role change holds the same lock
+  // while it writes, so the ceiling is checked against the role the new secret
+  // will actually carry. The key must exist, be live and not have expired (a
+  // new secret for an expired key would not work).
+  return db.transaction(async (tx) => {
+    const [key] = await tx
+      .select()
+      .from(apiKeys)
+      .where(
+        and(
+          liveKeyWhere(id, filter),
+          or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, new Date()))
+        )
+      )
+      .limit(1)
+      .for('update')
+    if (!key) {
+      throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found or already revoked')
+    }
+    if (filter.granter && key.kind === 'workspace') {
+      await assertCanManageWorkspaceKey(key.principalId, filter.granter)
+    }
 
-  if (!updatedKey) {
-    throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found or already revoked')
-  }
-
-  return { apiKey: toApiKey(updatedKey), plainTextKey }
+    const [updatedKey] = await tx
+      .update(apiKeys)
+      .set({
+        keyHash,
+        keyPrefix,
+        lastUsedAt: null, // Reset last used
+      })
+      .where(eq(apiKeys.id, key.id))
+      .returning()
+    return { apiKey: toApiKey(updatedKey), plainTextKey }
+  })
 }
 
 /**
  * Revoke an API key (soft delete)
  */
-export async function revokeApiKey(id: ApiKeyId): Promise<void> {
+export async function revokeApiKey(id: ApiKeyId, filter: ApiKeyFilter = {}): Promise<void> {
   const result = await db
     .update(apiKeys)
     .set({ revokedAt: new Date() })
-    .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt)))
+    .where(liveKeyWhere(id, filter))
     .returning()
 
   if (result.length === 0) {
@@ -309,6 +413,19 @@ export async function listApiKeys(): Promise<ApiKey[]> {
   return keys.map(toApiKey)
 }
 
+/** One teammate's live personal keys, newest first. */
+export async function listPersonalApiKeys(createdById: PrincipalId): Promise<ApiKey[]> {
+  const keys = await db.query.apiKeys.findMany({
+    where: and(
+      isNull(apiKeys.revokedAt),
+      eq(apiKeys.kind, 'personal'),
+      eq(apiKeys.createdById, createdById)
+    ),
+    orderBy: (apiKeys, { desc }) => [desc(apiKeys.createdAt)],
+  })
+  return keys.map(toApiKey)
+}
+
 /**
  * Get an API key by ID
  */
@@ -327,7 +444,11 @@ export async function getApiKeyById(id: ApiKeyId): Promise<ApiKey> {
 /**
  * Update an API key's name
  */
-export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiKey> {
+export async function updateApiKeyName(
+  id: ApiKeyId,
+  name: string,
+  filter: ApiKeyFilter = {}
+): Promise<ApiKey> {
   if (!name?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'API key name is required')
   }
@@ -335,10 +456,12 @@ export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiK
     throw new ValidationError('VALIDATION_ERROR', 'API key name must be 255 characters or less')
   }
 
+  await assertFilterMayManage(id, filter)
+
   const [updated] = await db
     .update(apiKeys)
     .set({ name: name.trim() })
-    .where(eq(apiKeys.id, id))
+    .where(liveKeyWhere(id, filter))
     .returning()
 
   if (!updated) {
@@ -349,4 +472,40 @@ export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiK
   await syncPrincipalProfileById(updated.principalId, { displayName: name.trim() })
 
   return toApiKey(updated)
+}
+
+/**
+ * Give a workspace key a different role. Any holder of key management may do
+ * this, within the same grant ceiling as creating one. Personal keys have no
+ * role of their own (they act as their creator), so they are not found here.
+ */
+export async function setWorkspaceKeyRole(
+  id: ApiKeyId,
+  roleId: RoleId,
+  granter: ApiKeyGranter,
+  grantedBy: PrincipalId
+): Promise<ApiKey> {
+  const role = await resolveGrantableKeyRole(roleId, granter)
+  // Lock the key row for the whole change. Revoking updates that row, so a
+  // revoke either waits and then demotes the key's principal last, or commits
+  // first and this finds no live key. A revoked key is never re-promoted.
+  return db.transaction(async (tx) => {
+    const [key] = await tx
+      .select()
+      .from(apiKeys)
+      .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt), eq(apiKeys.kind, 'workspace')))
+      .limit(1)
+      .for('update')
+    if (!key) throw new NotFoundError('API_KEY_NOT_FOUND', 'Workspace key not found')
+    // The role it holds now must be one the caller could grant, as well as the new one.
+    await assertCanManageWorkspaceKey(key.principalId, granter)
+    await applyWorkspaceKeyRole(key.principalId, role, grantedBy, tx)
+    await emit(tx, apiKeyUpdated, {
+      payload: { apiKeyId: key.id, changedKeys: ['role'], roleName: role.roleName },
+      actor: { type: 'user', id: grantedBy },
+      entityId: key.id,
+      context: { source: 'admin' },
+    })
+    return toApiKey(key)
+  })
 }

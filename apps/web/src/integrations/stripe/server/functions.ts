@@ -2,6 +2,7 @@
  * Stripe-specific server functions.
  * Stripe uses an API key (no OAuth) — admin pastes their restricted key.
  */
+import { ValidationError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -23,7 +24,10 @@ export const saveStripeKeyFn = createServerFn({ method: 'POST' })
     })
 
     if (!response.ok) {
-      throw new Error(`Invalid Stripe API key: HTTP ${response.status}`)
+      throw new ValidationError(
+        'CONNECTION_TEST_FAILED',
+        `Invalid Stripe API key: HTTP ${response.status}`
+      )
     }
 
     await saveIntegration('stripe', {

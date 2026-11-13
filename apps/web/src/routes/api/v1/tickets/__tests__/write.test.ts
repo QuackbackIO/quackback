@@ -8,6 +8,7 @@ const mockSetPriority = vi.fn()
 const mockSendMessage = vi.fn()
 const mockAddNote = vi.fn()
 
+const mockAssertVisible = vi.fn(async (..._args: unknown[]) => ({}))
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: vi.fn(() => (opts: unknown) => ({ options: opts })),
 }))
@@ -19,6 +20,7 @@ vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   setTicketStatus: (...a: unknown[]) => mockSetStatus(...a),
   assignTicket: (...a: unknown[]) => mockAssign(...a),
   setTicketPriority: (...a: unknown[]) => mockSetPriority(...a),
+  assertTicketVisible: (...a: unknown[]) => mockAssertVisible(...a),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   sendTicketMessage: (...a: unknown[]) => mockSendMessage(...a),
@@ -239,6 +241,21 @@ describe('POST /api/v1/tickets/:id/status', () => {
     expect(res.status).toBe(200)
     expect(mockAuth).toHaveBeenCalledWith(expect.anything(), { permission: 'ticket.set_status' })
     expect(mockSetStatus).toHaveBeenCalledWith(TICKET_ID, STATUS_ID, expect.anything())
+  })
+
+  it("404s a ticket outside the key creator's scope without changing it", async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockAssertVisible.mockRejectedValueOnce(
+      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+    )
+    const res = await post(StatusRoute)({
+      request: jsonReq(`https://x.test/api/v1/tickets/${TICKET_ID}/status`, {
+        statusId: STATUS_ID,
+      }),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(res.status).toBe(404)
+    expect(mockSetStatus).not.toHaveBeenCalled()
   })
 
   it('400s a malformed statusId without calling the service', async () => {

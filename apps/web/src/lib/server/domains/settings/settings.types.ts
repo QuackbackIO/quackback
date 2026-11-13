@@ -526,6 +526,11 @@ export interface DeveloperConfig {
    * toggle takes effect without a restart.
    */
   oauthDynamicClientRegistrationEnabled: boolean
+  /**
+   * Whether teammates may create personal API keys for themselves. Turning it
+   * off stops new keys only; existing keys keep working until revoked.
+   */
+  personalApiKeysEnabled: boolean
 }
 
 /**
@@ -536,6 +541,7 @@ export const DEFAULT_DEVELOPER_CONFIG: DeveloperConfig = {
   mcpEnabled: true,
   mcpPortalAccessEnabled: false,
   oauthDynamicClientRegistrationEnabled: true,
+  personalApiKeysEnabled: true,
 }
 
 /**
@@ -545,6 +551,7 @@ export interface UpdateDeveloperConfigInput {
   mcpEnabled?: boolean
   mcpPortalAccessEnabled?: boolean
   oauthDynamicClientRegistrationEnabled?: boolean
+  personalApiKeysEnabled?: boolean
 }
 
 // =============================================================================
@@ -1150,9 +1157,6 @@ export interface FeatureFlags {
   /** Status page: public/private/segment-scoped service status with incidents,
    *  maintenance windows, uptime history, and subscriber notifications. */
   statusPage: boolean
-  /** Copilot on Home: the Home chat that answers from Copilot's knowledge and
-   *  proposes reversible settings changes. A Labs switch; on for new workspaces. */
-  copilotHome: boolean
 }
 
 /**
@@ -1228,22 +1232,12 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportInbox: false,
   supportTickets: false,
   statusPage: false,
-  copilotHome: false,
-}
-
-/** Flags that are Labs switches rather than products (Settings › Labs). */
-export const LABS_FEATURE_FLAGS = ['copilotHome'] as const satisfies readonly (keyof FeatureFlags)[]
-
-/** Flags a workspace is created with: the defaults plus Copilot on Home. */
-export const NEW_WORKSPACE_FEATURE_FLAGS: FeatureFlags = {
-  ...DEFAULT_FEATURE_FLAGS,
-  copilotHome: true,
 }
 
 /**
  * A new workspace's flags when its row was created bare (by an operator):
- * each flag new workspaces start with that the row never stored is filled
- * from NEW_WORKSPACE_FEATURE_FLAGS. A stored choice always stands.
+ * Changelog follows the goals when the row never stored it. A stored choice
+ * always stands.
  */
 export function withNewWorkspaceFlags(
   storedJson: string | null | undefined,
@@ -1252,9 +1246,6 @@ export function withNewWorkspaceFlags(
 ): FeatureFlags {
   const stored = parseStoredFeatureFlags(storedJson)
   const next = { ...flags }
-  for (const key of LABS_FEATURE_FLAGS) {
-    if (typeof stored[key] !== 'boolean') next[key] = NEW_WORKSPACE_FEATURE_FLAGS[key]
-  }
   if (goals && typeof stored.changelog !== 'boolean') {
     next.changelog = newWorkspaceBaseFlags(goals).changelog
   }
@@ -1264,7 +1255,7 @@ export function withNewWorkspaceFlags(
 /** A new workspace's flags before its goals add their modules. */
 export function newWorkspaceBaseFlags(goals: readonly FeatureFlagUseCase[]): FeatureFlags {
   return {
-    ...NEW_WORKSPACE_FEATURE_FLAGS,
+    ...DEFAULT_FEATURE_FLAGS,
     changelog: goals.length === 0 || goals.includes('product_feedback'),
   }
 }

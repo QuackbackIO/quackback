@@ -6,6 +6,7 @@
  * Status changes + assignment need an id-discovery tool first; a later slice.
  */
 
+import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -61,6 +62,17 @@ function withAttachmentsSummary(content: string, attachments: ConversationAttach
   if (!attachments.length) return content
   const lines = attachments.map((a) => `- ${a.name}: ${a.url}`)
   return `${content}\n\nAttachments:\n${lines.join('\n')}`
+}
+
+/** A link change touches both tickets, so the caller must be able to see each one. */
+async function assertBothEndsVisible(
+  trackerTicketId: TicketId,
+  ticketId: TicketId,
+  actor: Actor
+): Promise<void> {
+  const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+  await assertTicketVisible(trackerTicketId, actor)
+  await assertTicketVisible(ticketId, actor)
 }
 
 export function registerTicketTools(server: McpServer, auth: McpAuthContext) {
@@ -172,10 +184,15 @@ Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
     scope: 'read:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { getTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const { assertTicketVisible, getTicket } =
+        await import('@/lib/server/domains/tickets/ticket.service')
       const { listTicketMessages } =
         await import('@/lib/server/domains/tickets/ticket-message.service')
       const ticketId = args.ticketId as TicketId
+      // The same visibility list_tickets applies: a teammate scoped to their
+      // own and their teams' tickets gets NotFound for anyone else's, never
+      // its thread or internal notes.
+      await assertTicketVisible(ticketId, mcpAgentActor(auth))
       const [dto, page] = await Promise.all([
         getTicket(ticketId),
         listTicketMessages(ticketId, {
@@ -333,7 +350,10 @@ Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued y
     handler: async (args) => {
       const { sendTicketMessage } =
         await import('@/lib/server/domains/tickets/ticket-message.service')
-      const { message } = await sendTicketMessage(mcpAgentActor(auth), {
+      const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+      const actor = mcpAgentActor(auth)
+      await assertTicketVisible(args.ticketId as TicketId, actor)
+      const { message } = await sendTicketMessage(actor, {
         ticketId: args.ticketId as TicketId,
         content: args.content,
         contentJson: markdownToSanitizedJson(args.content),
@@ -373,7 +393,10 @@ Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the 
     teamOnly: true,
     handler: async (args) => {
       const { addTicketNote } = await import('@/lib/server/domains/tickets/ticket-message.service')
-      const { message } = await addTicketNote(mcpAgentActor(auth), {
+      const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+      const actor = mcpAgentActor(auth)
+      await assertTicketVisible(args.ticketId as TicketId, actor)
+      const { message } = await addTicketNote(actor, {
         ticketId: args.ticketId as TicketId,
         content: args.content,
         contentJson: markdownToSanitizedJson(args.content),
@@ -404,10 +427,12 @@ Example: link_ticket({ trackerTicketId: "ticket_01tracker...", ticketId: "ticket
       const { linkTicketToTracker, listLinkedTicketIds } =
         await import('@/lib/server/domains/tickets/ticket-links.service')
       const trackerTicketId = args.trackerTicketId as TicketId
-      await linkTicketToTracker(trackerTicketId, args.ticketId as TicketId, mcpAgentActor(auth))
+      const actor = mcpAgentActor(auth)
+      await assertBothEndsVisible(trackerTicketId, args.ticketId as TicketId, actor)
+      await linkTicketToTracker(trackerTicketId, args.ticketId as TicketId, actor)
       return jsonResult({
         trackerTicketId,
-        linkedTicketIds: await listLinkedTicketIds(trackerTicketId),
+        linkedTicketIds: await listLinkedTicketIds(trackerTicketId, actor),
       })
     },
   })
@@ -429,10 +454,12 @@ Example: unlink_ticket({ trackerTicketId: "ticket_01tracker...", ticketId: "tick
       const { unlinkTicketFromTracker, listLinkedTicketIds } =
         await import('@/lib/server/domains/tickets/ticket-links.service')
       const trackerTicketId = args.trackerTicketId as TicketId
-      await unlinkTicketFromTracker(trackerTicketId, args.ticketId as TicketId, mcpAgentActor(auth))
+      const actor = mcpAgentActor(auth)
+      await assertBothEndsVisible(trackerTicketId, args.ticketId as TicketId, actor)
+      await unlinkTicketFromTracker(trackerTicketId, args.ticketId as TicketId, actor)
       return jsonResult({
         trackerTicketId,
-        linkedTicketIds: await listLinkedTicketIds(trackerTicketId),
+        linkedTicketIds: await listLinkedTicketIds(trackerTicketId, actor),
       })
     },
   })

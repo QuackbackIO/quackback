@@ -171,11 +171,10 @@ export function requirePermissions(
 }
 
 /** Feature flags a tool can require before its scope/role guards run. */
-type ToolFeature = 'helpCenter' | 'copilotHome'
+type ToolFeature = 'helpCenter'
 
 const FEATURE_DENIALS: Record<ToolFeature, string> = {
   helpCenter: 'Error: Help center is not enabled. Enable it in Settings → General.',
-  copilotHome: 'Error: Settings tools follow Copilot on Home. Turn it on in Settings → Labs.',
 }
 
 /** Return an error if the help center feature is disabled. */
@@ -197,7 +196,6 @@ export async function requireHelpCenter(): Promise<CallToolResult | null> {
 // ============================================================================
 
 async function requireFeature(feature: ToolFeature): Promise<CallToolResult | null> {
-  if (feature === 'helpCenter') return requireHelpCenter()
   if (await isFeatureEnabled(feature)) return null
   return { isError: true, content: [{ type: 'text', text: FEATURE_DENIALS[feature] }] }
 }
@@ -279,7 +277,19 @@ export function registerTool<TArgs>(
   }) as unknown as ToolCallback<never>
 
   // MCP SDK still types against an older Zod shape; the runtime schema is ours.
-  server.tool(def.name, def.description, def.schema as never, def.annotations, wrapped)
+  const registered = server.tool(
+    def.name,
+    def.description,
+    def.schema as never,
+    def.annotations,
+    wrapped
+  )
+  // Declares the scope a tool needs in the listing, for clients that plan
+  // their authorization from it. A tool that picks its scope from its
+  // arguments declares none.
+  if (def.scope) {
+    registered?.update({ _meta: { securitySchemes: [{ type: 'oauth2', scopes: [def.scope] }] } })
+  }
 }
 
 /** Run a tool behind its guards, naming the outcome for the audit. */
@@ -351,7 +361,8 @@ export function principalTypeOf(auth: McpAuthContext): 'user' | 'service' {
  * Policy actor for the agent-side conversation tools. The conversation gates
  * (canViewConversation / canActAsAgent) short-circuit on the team role, so
  * segment memberships are never consulted and stay empty. A permission ceiling
- * on the context (an API key's resolved authority) rides along.
+ * on the context (an API key's resolved authority) rides along, and so does a
+ * personal key's creator, whose row scope the actor follows.
  */
 export function mcpAgentActor(auth: McpAuthContext): Actor {
   return {
@@ -360,6 +371,7 @@ export function mcpAgentActor(auth: McpAuthContext): Actor {
     principalType: principalTypeOf(auth),
     segmentIds: new Set<SegmentId>(),
     permissions: auth.permissions,
+    ...(auth.scopePrincipalId ? { scopePrincipalId: auth.scopePrincipalId } : {}),
   }
 }
 
@@ -376,6 +388,7 @@ export async function mcpMemberActor(auth: McpAuthContext): Promise<Actor> {
     principalType: principalTypeOf(auth),
     segmentIds: await segmentIdsForPrincipal(auth.principalId),
     permissions: auth.permissions,
+    ...(auth.scopePrincipalId ? { scopePrincipalId: auth.scopePrincipalId } : {}),
   }
 }
 

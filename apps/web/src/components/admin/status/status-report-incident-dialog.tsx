@@ -11,7 +11,6 @@
  */
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { toast } from 'sonner'
 import { PlusIcon } from '@heroicons/react/24/solid'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
@@ -38,6 +37,7 @@ import {
 } from './status-incident-fields'
 import { deriveImpact } from '@/lib/shared/status-calc'
 import { IMPACT_LABELS, type StatusIncidentImpact } from './status-admin-colors'
+import { toastError } from '@/lib/client/error-notice'
 
 export function ReportIncidentDialog({
   variant = 'default',
@@ -126,7 +126,7 @@ export function ReportIncidentDialog({
         search: { view: 'open', incident: created.id },
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to report incident')
+      toastError(error, 'Failed to report incident')
     }
   }
 
@@ -146,7 +146,7 @@ export function ReportIncidentDialog({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{backfill ? 'Log a past incident' : 'Report an incident'}</DialogTitle>
           <DialogDescription>

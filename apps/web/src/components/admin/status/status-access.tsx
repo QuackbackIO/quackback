@@ -10,7 +10,7 @@
  */
 import { LockClosedIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
-import { useHasPermission } from '@/lib/client/use-permissions'
+import { useHasPermission } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export type StatusAdminView =

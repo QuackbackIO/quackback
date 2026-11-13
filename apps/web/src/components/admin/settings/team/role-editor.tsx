@@ -9,7 +9,7 @@ import {
   type PermissionKey,
 } from '@/lib/shared/permissions'
 import { CATEGORY_LABELS } from '@/lib/client/permission-labels'
-import { usePermissions, useHasPermission } from '@/lib/client/use-permissions'
+import { usePermissions, useHasPermission } from '@/lib/client/hooks/use-root-context'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { createRoleFn, updateRoleFn, deleteRoleFn, listRolesFn } from '@/lib/server/functions/roles'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/shared/utils'
+import { toastError } from '@/lib/client/error-notice'
 
 type RoleWithMeta = Awaited<ReturnType<typeof listRolesFn>>['roles'][number]
 
@@ -164,7 +165,7 @@ export function RoleEditor(props: RoleEditorProps) {
       navigate(ROLES_TAB)
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Couldn't save role. Try again.")
+      toastError(error, "Couldn't save role. Try again.")
     },
   })
 
@@ -446,7 +447,7 @@ function DeleteRoleDialog({
       navigate(ROLES_TAB)
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Couldn't delete role. Try again.")
+      toastError(error, "Couldn't delete role. Try again.")
     },
   })
 

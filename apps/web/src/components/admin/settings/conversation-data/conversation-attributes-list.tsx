@@ -8,7 +8,6 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { PlusIcon, XMarkIcon, SparklesIcon } from '@heroicons/react/24/solid'
-import { toast } from 'sonner'
 import type { ConversationAttributeId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,6 +44,7 @@ import {
   conversationAttributeQueries,
   type ConversationAttributeItem,
 } from '@/lib/client/queries/conversation-attributes'
+import { toastError } from '@/lib/client/error-notice'
 
 const FIELD_TYPES = [
   { value: 'text', label: 'Text' },
@@ -213,13 +213,13 @@ function AttributeFormDialog({
   const draftDescriptions = useMutation({
     mutationFn: (input: Parameters<typeof draftAttributeDescriptionsFn>[0]['data']) =>
       draftAttributeDescriptionsFn({ data: input }),
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to draft descriptions'),
+    onError: (e) => toastError(e, 'Failed to draft descriptions'),
   })
   const previewDetection = useMutation({
     mutationFn: (input: Parameters<typeof previewAttributeDetectionFn>[0]['data']) =>
       previewAttributeDetectionFn({ data: input }),
     onSuccess: setPreviewResult,
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to test detection'),
+    onError: (e) => toastError(e, 'Failed to test detection'),
   })
 
   /** Fills description + per-option descriptions from a draft result, matching
@@ -627,23 +627,23 @@ export function ConversationAttributesList() {
     mutationFn: (input: Parameters<typeof createConversationAttributeFn>[0]['data']) =>
       createConversationAttributeFn({ data: input }),
     onSuccess: invalidate,
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to create attribute'),
+    onError: (e) => toastError(e, 'Failed to create attribute'),
   })
   const updateAttr = useMutation({
     mutationFn: (input: Parameters<typeof updateConversationAttributeFn>[0]['data']) =>
       updateConversationAttributeFn({ data: input }),
     onSuccess: invalidate,
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to update attribute'),
+    onError: (e) => toastError(e, 'Failed to update attribute'),
   })
   const archiveAttr = useMutation({
     mutationFn: (id: ConversationAttributeId) => archiveConversationAttributeFn({ data: { id } }),
     onSuccess: invalidate,
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to archive attribute'),
+    onError: (e) => toastError(e, 'Failed to archive attribute'),
   })
   const restoreAttr = useMutation({
     mutationFn: (id: ConversationAttributeId) => restoreConversationAttributeFn({ data: { id } }),
     onSuccess: invalidate,
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to restore attribute'),
+    onError: (e) => toastError(e, 'Failed to restore attribute'),
   })
 
   const [createOpen, setCreateOpen] = useState(false)

@@ -142,6 +142,7 @@ async function resolveOAuthContext(
       authMethod: 'oauth',
       ...(typeof payload.azp === 'string' && payload.azp ? { credentialId: payload.azp } : {}),
       scopes,
+      offlineAccess: scopeStr.split(' ').includes('offline_access'),
       auditAttribution: oauthClientAttribution({
         clientId,
         clientName: principalRecord.clientName,
@@ -222,6 +223,7 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
         name: principalRecord.displayName ?? authResult.apiKey.name,
         role: authResult.role as Role,
         permissions: authResult.permissions,
+        ...(authResult.scopePrincipalId ? { scopePrincipalId: authResult.scopePrincipalId } : {}),
         authMethod: 'api-key',
         credentialId: authResult.apiKey.id,
         clientName: authResult.apiKey.name,
@@ -238,6 +240,7 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       email: principalRecord.user?.email ?? undefined,
       role: authResult.role as Role,
       permissions: authResult.permissions,
+      ...(authResult.scopePrincipalId ? { scopePrincipalId: authResult.scopePrincipalId } : {}),
       authMethod: 'api-key',
       credentialId: authResult.apiKey.id,
       clientName: authResult.apiKey.name,
@@ -252,8 +255,8 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
 
 /**
  * OAuth-only: if this JSON-RPC call needs a scope the token lacks, return
- * HTTP 403 + `insufficient_scope` so the client can step up. API keys never
- * enter this path.
+ * HTTP 403 + `insufficient_scope` so the client can step up (see
+ * `insufficientScopeChallenge`). API keys never enter this path.
  */
 async function oauthScopeStepUp(request: Request, auth: McpAuthContext): Promise<Response | null> {
   if (request.method !== 'POST') return null
@@ -265,9 +268,29 @@ async function oauthScopeStepUp(request: Request, auth: McpAuthContext): Promise
   } catch {
     return null
   }
-  const missing = requiredScopesForMcpRpc(body).find((scope) => !hasApiScope(auth.scopes, scope))
-  if (!missing) return null
-  return insufficientScopeChallenge(missing)
+  // Every scope the request lacks goes in one challenge. Nothing in a batch
+  // runs when any call in it is refused, so every call gets the refusal.
+  const calls = Array.isArray(body) ? body : [body]
+  const missing = new Set<string>()
+  for (const call of calls) {
+    for (const scope of requiredScopesForMcpRpc(call)) {
+      if (!hasApiScope(auth.scopes, scope)) missing.add(scope)
+    }
+  }
+  if (missing.size === 0) return null
+  return insufficientScopeChallenge({
+    missing: [...missing],
+    held: auth.scopes,
+    offlineAccess: auth.offlineAccess === true,
+    calls: calls.map((call) => {
+      const { id, method } = (call ?? {}) as { id?: unknown; method?: unknown }
+      return {
+        id: typeof id === 'string' || typeof id === 'number' ? id : null,
+        method: typeof method === 'string' ? method : '',
+      }
+    }),
+    batch: Array.isArray(body),
+  })
 }
 
 /**

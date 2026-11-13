@@ -47,6 +47,7 @@ import {
 import { useConnectionTest, useProviderCapture } from './use-connection-test'
 import { useProviderSave } from './use-provider-save'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
+import { toastError } from '@/lib/client/error-notice'
 
 export function ConnectionCard({ provider }: { provider: IdentityProvider }) {
   // A provider with no saved secret cannot be tested, so there is nothing to
@@ -225,7 +226,7 @@ function ConnectionEditor({
       await setCreds({ data: { id: provider.id, clientSecret: secret } })
       return true
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not save the client secret.')
+      toastError(err, 'Could not save the client secret.')
       return false
     } finally {
       setSavingSecret(false)
@@ -303,7 +304,7 @@ function SwitchRedirectUri({
       setConfirming(false)
       toast.success('Redirect URI switched. Test the connection again.')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not switch the redirect URI.')
+      toastError(err, 'Could not switch the redirect URI.')
     } finally {
       setSwitching(false)
     }

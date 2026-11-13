@@ -4,6 +4,7 @@
  * domains. Gated on channel_account.manage. Scoped to the workspace default team
  * (the v0 owns email config at the workspace level). Returns JSON-safe DTOs.
  */
+import { ValidationError, ConflictError, ServiceUnavailableError } from '@/lib/shared/errors'
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { ChannelAccountId, SendingDomainId, TeamId } from '@quackback/ids'
@@ -27,6 +28,7 @@ import {
   SendingDomainRefusedError,
   restartSendingDomainChecks,
 } from '@/lib/server/domains/channel-accounts/sending-identity'
+import { ownershipGraceEnds } from '@/lib/server/domains/channel-accounts/ownership-grace'
 import {
   addSendingAddress,
   removeSendingAddress,
@@ -58,8 +60,17 @@ async function withDomainActionMessage<T>(action: DomainAction, run: () => Promi
   } catch (error) {
     if (!isDomainActionRefusal(error)) {
       log.error({ err: error, action }, 'sending domain action failed')
+      throw new ServiceUnavailableError(
+        'SENDING_DOMAIN_ACTION_FAILED',
+        domainActionMessage(error, action),
+        error
+      )
     }
-    throw new Error(domainActionMessage(error, action), { cause: error })
+    throw new ValidationError(
+      'SENDING_DOMAIN_ACTION_REFUSED',
+      domainActionMessage(error, action),
+      error
+    )
   }
 }
 
@@ -113,6 +124,11 @@ export interface SendingDomainDTO {
   status: string
   dnsRecords: DnsRecordDTO[]
   verifiedAt: string | null
+  /**
+   * Set on a verified domain whose ownership record has gone missing: when it
+   * stops sending as itself unless the record is added back.
+   */
+  ownershipDeadline?: string | null
   /** The MAIL FROM subdomain label the records are composed under. */
   mailFromLabel: string
   /**
@@ -204,6 +220,10 @@ const toDomain = (d: EmailSendingDomain): SendingDomainDTO => ({
   // and the wire shape says the same thing with an optional field.
   dnsRecords: (d.dnsRecords ?? []).map((r) => ({ ...r })),
   verifiedAt: d.verifiedAt ? d.verifiedAt.toISOString() : null,
+  ownershipDeadline:
+    d.status === 'verified' && d.ownershipMissingSince
+      ? ownershipGraceEnds(d.ownershipMissingSince).toISOString()
+      : null,
   mailFromLabel: d.mailFromLabel,
   dkimMode: d.dkimMode,
   signingKeyPending: d.pendingSigningKey != null,
@@ -214,7 +234,11 @@ const toDomain = (d: EmailSendingDomain): SendingDomainDTO => ({
 
 async function requireDefaultTeam(): Promise<TeamId> {
   const teamId = await defaultTeamId()
-  if (!teamId) throw new Error('No default team is configured for email.')
+  if (!teamId)
+    throw new ConflictError(
+      'EMAIL_DEFAULT_TEAM_MISSING',
+      'No default team is configured for email.'
+    )
   return teamId
 }
 

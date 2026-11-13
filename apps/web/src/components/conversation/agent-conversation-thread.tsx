@@ -205,7 +205,6 @@ import { useAgentFileUpload } from '@/lib/client/hooks/use-file-upload'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { useCopilotInsert } from '@/lib/client/hooks/use-copilot-insert'
 import { useComposerFocus } from '@/lib/client/hooks/use-composer-focus'
-import { usePermissions } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   EMPTY_DRAFT,
@@ -256,8 +255,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn, tomorrowAt, inHours, nextMondayAt } from '@/lib/shared/utils'
-import { useFeatureFlag, usePrincipalId } from '@/lib/client/hooks/use-root-context'
+import { useFeatureFlag, usePrincipalId, usePermissions } from '@/lib/client/hooks/use-root-context'
 import { useStableCallback } from '@/lib/client/hooks/use-stable-callback'
+import { toastError } from '@/lib/client/error-notice'
 
 // "Jump to message" tuning: how long the flash plays (must match the
 // flash-highlight keyframe duration) and how many older pages we'll auto-pull
@@ -1294,7 +1294,7 @@ export function AgentConversationThread({
       await retryGitHubAgentMessageFn({ data: { messageId } })
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Could not send to GitHub.')
+      toastError(error, 'Could not send to GitHub.')
     },
   })
 
@@ -1388,7 +1388,7 @@ export function AgentConversationThread({
       toast.success('Person blocked')
       void queryClient.invalidateQueries({ queryKey: blockStatusKey })
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to block'),
+    onError: (e) => toastError(e, 'Failed to block'),
   })
   const unblockMutation = useMutation({
     mutationFn: () => unblockPersonFn({ data: { principalId: conversation!.visitor.principalId } }),
@@ -1396,7 +1396,7 @@ export function AgentConversationThread({
       toast.success('Person unblocked')
       void queryClient.invalidateQueries({ queryKey: blockStatusKey })
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to unblock'),
+    onError: (e) => toastError(e, 'Failed to unblock'),
   })
 
   // Export transcript (overflow menu, both kinds).

@@ -11,7 +11,7 @@ import {
   usePublishArticle,
   useUpdateArticle,
 } from '@/lib/client/mutations/help-center'
-import { useHasPermission } from '@/lib/client/use-permissions'
+import { useHasPermission } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { KbArticleId } from '@quackback/ids'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -27,6 +27,7 @@ import {
 } from './help-center-metadata-sidebar'
 import type { JSONContent } from '@tiptap/react'
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
+import { errorText } from '@/lib/client/error-text'
 
 interface CreateArticleDialogProps {
   /** Controlled open state. When provided, the built-in trigger button is hidden. */
@@ -109,7 +110,7 @@ export function CreateArticleDialog({
           articleId = (await createArticleMutation.mutateAsync(content)).id
         }
       } catch (error) {
-        setSaveError(error instanceof Error ? error.message : String(error))
+        setSaveError(errorText(error, "Couldn't save article"))
         return
       }
       try {

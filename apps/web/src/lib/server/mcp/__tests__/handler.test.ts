@@ -7,6 +7,7 @@ const devConfig = (overrides = {}) => ({
   mcpEnabled: true,
   mcpPortalAccessEnabled: true,
   oauthDynamicClientRegistrationEnabled: true,
+  personalApiKeysEnabled: true,
   ...overrides,
 })
 
@@ -46,7 +47,7 @@ const mockAuditInsertValues = vi.fn(async () => undefined)
 // row mockFindFirst serves: the mock key is a legacy human-backed key, so that
 // row is both the key's principal and the creator it acts for.
 const mockAuthority = vi.fn(async (_key: unknown) => {
-  const record = (await mockFindFirst()) as { role?: string } | null
+  const record = (await mockFindFirst()) as { id?: string; role?: string } | null
   if (!record || (record.role !== 'admin' && record.role !== 'member')) return null
   const { resolveActorPermissions } = await import('@/lib/server/policy/permissions')
   return {
@@ -54,6 +55,7 @@ const mockAuthority = vi.fn(async (_key: unknown) => {
     owner: record,
     role: record.role,
     permissions: resolveActorPermissions(record.role),
+    scopePrincipalId: record.id ?? null,
   }
 })
 vi.mock('@/lib/server/domains/api-keys/api-key-authority', () => ({
@@ -357,6 +359,7 @@ const MOCK_USER_ID = 'user_01h455vb4pex5vsknk084sn02s' as UserId
 const MOCK_API_KEY: ApiKey = {
   id: 'apikey_01h455vb4pex5vsknk084sn02q' as ApiKeyId,
   name: 'Test Key',
+  kind: 'personal' as const,
   keyPrefix: 'qb_test',
   principalId: MOCK_MEMBER_ID,
   createdById: MOCK_MEMBER_ID,
@@ -476,7 +479,8 @@ describe('MCP HTTP Handler', () => {
       expect(response.status).toBe(401)
       const challenge = response.headers.get('www-authenticate') ?? ''
       expect(challenge).toContain('resource_metadata=')
-      expect(challenge).toContain('scope="read:feedback read:article read:chat read:settings"')
+      expect(challenge).toContain('scope="read:feedback write:feedback ')
+      expect(challenge).toContain('write:settings"')
     })
 
     it('should return 401 when API key is invalid', async () => {
@@ -631,6 +635,16 @@ describe('MCP HTTP Handler', () => {
 
       expect(response.status).toBe(429)
       expect(response.headers.get('retry-after')).toBe('30')
+    })
+
+    it('carries the creator row scope on a legacy human-backed key context', async () => {
+      await setupValidAuth()
+
+      const { resolveAuthContext } = await import('../handler')
+      const auth = await resolveAuthContext(mcpRequest(jsonRpcRequest('initialize')))
+
+      expect(auth).not.toBeInstanceOf(Response)
+      expect((auth as { scopePrincipalId?: string }).scopePrincipalId).toBe(MOCK_MEMBER_RECORD.id)
     })
 
     it('should propagate unexpected errors from withApiKeyAuth instead of swallowing as 401', async () => {
@@ -1704,7 +1718,9 @@ describe('MCP HTTP Handler', () => {
 
       expect(response.status).toBe(403)
       expect(response.headers.get('www-authenticate') ?? '').toContain('error="insufficient_scope"')
-      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="read:feedback"')
+      expect(response.headers.get('www-authenticate') ?? '').toMatch(
+        /scope="[^"]*read:feedback[^"]*"/
+      )
     })
 
     it('should deny create_post when write:feedback scope missing', async () => {
@@ -1721,7 +1737,46 @@ describe('MCP HTTP Handler', () => {
 
       expect(response.status).toBe(403)
       expect(response.headers.get('www-authenticate') ?? '').toContain('error="insufficient_scope"')
-      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:feedback"')
+      expect(response.headers.get('www-authenticate') ?? '').toMatch(
+        /scope="[^"]*write:feedback[^"]*"/
+      )
+    })
+
+    it('challenges with the scopes the token holds plus the missing one', async () => {
+      const handleMcpRequest = await initializeOAuthSession(['read:feedback', 'read:chat'])
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'create_post',
+            arguments: { boardId: 'board_test', title: 'Test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(403)
+      const header = response.headers.get('www-authenticate') ?? ''
+      expect(header).toContain('scope="read:feedback write:feedback read:chat"')
+      const body = (await response.json()) as {
+        result: { isError: boolean; _meta: Record<string, string[]> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result._meta['mcp/www_authenticate']).toEqual([header])
+    })
+
+    it('declares the scope each tool needs in the tool listing', async () => {
+      const handleMcpRequest = await initializeOAuthSession(['read:feedback', 'write:feedback'])
+
+      const response = await handleMcpRequest(oauthRequest(jsonRpcRequest('tools/list', {})))
+      const body = (await response.json()) as {
+        result: { tools: { name: string; _meta?: { securitySchemes?: unknown } }[] }
+      }
+      const schemes = (name: string) =>
+        body.result.tools.find((tool) => tool.name === name)?._meta?.securitySchemes
+
+      expect(schemes('create_post')).toEqual([{ type: 'oauth2', scopes: ['write:feedback'] }])
+      // A tool that picks its scope from its arguments declares none.
+      expect(schemes('search')).toBeUndefined()
     })
 
     it('should deny create_changelog when write:changelog scope missing', async () => {
@@ -1737,7 +1792,9 @@ describe('MCP HTTP Handler', () => {
       )
 
       expect(response.status).toBe(403)
-      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:changelog"')
+      expect(response.headers.get('www-authenticate') ?? '').toMatch(
+        /scope="[^"]*write:changelog[^"]*"/
+      )
     })
 
     it('should deny search(articles) when read:article scope missing', async () => {
@@ -1754,7 +1811,9 @@ describe('MCP HTTP Handler', () => {
 
       expect(response.status).toBe(403)
       expect(response.headers.get('www-authenticate') ?? '').toContain('error="insufficient_scope"')
-      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="read:article"')
+      expect(response.headers.get('www-authenticate') ?? '').toMatch(
+        /scope="[^"]*read:article[^"]*"/
+      )
     })
 
     it('should allow search with read:feedback scope', async () => {
@@ -1822,7 +1881,9 @@ describe('MCP HTTP Handler', () => {
       )
 
       expect(response.status).toBe(403)
-      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:feedback"')
+      expect(response.headers.get('www-authenticate') ?? '').toMatch(
+        /scope="[^"]*write:feedback[^"]*"/
+      )
     })
 
     it('should deny restore_post when write:feedback scope missing', async () => {
@@ -1838,7 +1899,9 @@ describe('MCP HTTP Handler', () => {
       )
 
       expect(response.status).toBe(403)
-      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:feedback"')
+      expect(response.headers.get('www-authenticate') ?? '').toMatch(
+        /scope="[^"]*write:feedback[^"]*"/
+      )
     })
 
     it('should deny search posts for OAuth portal user (inbox is team-only)', async () => {
@@ -2598,7 +2661,7 @@ describe('MCP HTTP Handler', () => {
 
       expect(response.status).toBe(403)
       expect(response.headers.get('www-authenticate') ?? '').toContain('error="insufficient_scope"')
-      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:chat"')
+      expect(response.headers.get('www-authenticate') ?? '').toMatch(/scope="[^"]*write:chat[^"]*"/)
     })
 
     it('should deny share_post when write:chat scope missing', async () => {
@@ -2630,7 +2693,7 @@ describe('MCP HTTP Handler', () => {
       )
 
       expect(response.status).toBe(403)
-      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:chat"')
+      expect(response.headers.get('www-authenticate') ?? '').toMatch(/scope="[^"]*write:chat[^"]*"/)
     })
 
     it('should deny reply_to_conversation when write:chat scope missing', async () => {
@@ -2663,7 +2726,7 @@ describe('MCP HTTP Handler', () => {
       )
 
       expect(response.status).toBe(403)
-      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:chat"')
+      expect(response.headers.get('www-authenticate') ?? '').toMatch(/scope="[^"]*write:chat[^"]*"/)
     })
 
     it('should deny list_conversations for OAuth portal user (role enforcement)', async () => {

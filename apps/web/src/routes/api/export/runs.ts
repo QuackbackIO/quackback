@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import type { Role } from '@/lib/shared/roles'
 import { logger } from '@/lib/server/logger'
+import { internalRouteErrorResponse } from '@/lib/server/domains/api/responses'
 
 const log = logger.child({ component: 'export-runs' })
 
@@ -32,7 +33,7 @@ export async function handleListExportRuns(): Promise<Response> {
     return Response.json({ runs })
   } catch (error) {
     log.error({ err: error }, 'list export runs failed')
-    return Response.json({ error: 'Internal server error' }, { status: 500 })
+    return internalRouteErrorResponse()
   }
 }
 

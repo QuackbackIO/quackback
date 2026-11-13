@@ -52,7 +52,7 @@ import { ticketFilter } from '@/lib/server/policy/tickets'
 import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
 import { isTestPrincipalSql, notTestPrincipal } from '@/lib/server/test-data'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import type { Actor } from '@/lib/server/policy/types'
+import { isUnscopedService, rowScopePrincipalId, type Actor } from '@/lib/server/policy/types'
 import type { TicketAssigneeFilter } from '@/lib/server/domains/tickets/ticket.types'
 import {
   facetToConversationStatus,
@@ -343,7 +343,7 @@ async function fetchConversationBranch(
     await import('@/lib/server/domains/conversation/conversation.query')
   const assignedAgentPrincipalId: PrincipalId | undefined =
     filter.assignee === 'me'
-      ? (actor.principalId ?? undefined)
+      ? (rowScopePrincipalId(actor) ?? undefined)
       : filter.assignee && filter.assignee !== 'unassigned'
         ? filter.assignee
         : undefined
@@ -435,14 +435,15 @@ async function fetchTicketBranch(
 
 /**
  * Whether the actor can view conversations AT ALL (gates whether the branch
- * runs, not row scoping — that's `conversationFilter`). Service principals
- * (API keys, MCP, the AI agent) are workspace-wide by convention throughout
- * the policy layer regardless of their resolved permission set — mirrored
- * here so a service actor's branch isn't wrongly skipped.
+ * runs, not row scoping — that's `conversationFilter`). Unscoped service
+ * principals (workspace API keys, the AI agent, workflows) are workspace-wide
+ * by convention throughout the policy layer regardless of their resolved
+ * permission set, mirrored here so their branch isn't wrongly skipped. A
+ * personal API key needs its creator's real view permission.
  */
 function canViewConversations(actor: Actor): boolean {
   return (
-    actor.principalType === 'service' ||
+    isUnscopedService(actor) ||
     can(actor, PERMISSIONS.CONVERSATION_VIEW) ||
     can(actor, PERMISSIONS.CONVERSATION_VIEW_ALL)
   )
@@ -451,7 +452,7 @@ function canViewConversations(actor: Actor): boolean {
 /** Ticket-branch analogue of `canViewConversations`. */
 function canViewTickets(actor: Actor): boolean {
   return (
-    actor.principalType === 'service' ||
+    isUnscopedService(actor) ||
     can(actor, PERMISSIONS.TICKET_VIEW) ||
     can(actor, PERMISSIONS.TICKET_VIEW_ALL)
   )
@@ -618,7 +619,7 @@ export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
 
   const [conversationScopes, ticketsByType] = await Promise.all([
     canConversations
-      ? countConversationScopes(actor, actor.principalId)
+      ? countConversationScopes(actor, rowScopePrincipalId(actor))
       : Promise.resolve({ mine: 0, unassigned: 0, pair: 0, test: 0 }),
     canTickets
       ? countTicketScopesByType(actor)
