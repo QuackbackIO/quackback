@@ -103,7 +103,7 @@ describe('recordCopilotEventFn', () => {
     expect(hoisted.isAssistantConfigured).toHaveBeenCalled()
   })
 
-  it('rejects when the assistant is not configured, writing nothing', async () => {
+  it('answers ok: false when the assistant is not configured, writing nothing', async () => {
     hoisted.isAssistantConfigured.mockReturnValue(false)
     await expect(
       recordCopilotEventFn({
@@ -113,7 +113,7 @@ describe('recordCopilotEventFn', () => {
           destination: 'reply',
         },
       })
-    ).rejects.toThrow()
+    ).resolves.toEqual({ ok: false })
     expect(hoisted.insert).not.toHaveBeenCalled()
   })
 

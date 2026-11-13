@@ -186,17 +186,36 @@ export async function getTicketWatchStatus(
 }
 
 /**
- * Principals to fan notifications out to: every watcher whose mute is absent
- * or expired, minus any teammate who can no longer see the ticket (it moved
- * away from them and their team after they started watching). Their row stays,
- * so the watch resumes if the ticket comes back to them. Actor exclusion and
- * role filtering happen in the resolvers.
+ * Principals to fan a ticket notification out to, mute-filtered: watching team
+ * members (type `user`, role admin/member), plus `requesterPrincipalId` when
+ * that principal still watches. A watcher who is neither a current team member
+ * nor the requester (a former teammate, any other portal user) is never
+ * returned. A teammate who can no longer see the ticket (it moved away from
+ * them and their team after they started watching) is dropped too; their row
+ * stays, so the watch resumes if the ticket comes back to them. Actor exclusion
+ * happens in the resolvers.
  */
-export async function getTicketWatchersForEvent(ticketId: TicketId): Promise<PrincipalId[]> {
+export async function getTicketNotifiableWatchers(
+  ticketId: TicketId,
+  requesterPrincipalId: PrincipalId | null
+): Promise<PrincipalId[]> {
+  const isTeamWatcher = and(
+    eq(principal.type, 'user'),
+    inArray(principal.role, ['admin', 'member'])
+  )
   const rows = await db
     .select({ principalId: ticketSubscriptions.principalId })
     .from(ticketSubscriptions)
-    .where(and(eq(ticketSubscriptions.ticketId, ticketId), notMuted()))
+    .innerJoin(principal, eq(ticketSubscriptions.principalId, principal.id))
+    .where(
+      and(
+        eq(ticketSubscriptions.ticketId, ticketId),
+        notMuted(),
+        requesterPrincipalId
+          ? or(isTeamWatcher, eq(ticketSubscriptions.principalId, requesterPrincipalId))
+          : isTeamWatcher
+      )
+    )
   return withoutTeammatesWhoCannotSee(
     ticketId,
     rows.map((r) => r.principalId)
@@ -207,7 +226,7 @@ export async function getTicketWatchersForEvent(ticketId: TicketId): Promise<Pri
  * Watchers who are team members (admin/member roles), mute-filtered — the
  * recipient set for agent-only signals like internal-note bells. One joined
  * query so requester-watchers are excluded structurally, not by a second pass;
- * the visibility filter is the same as getTicketWatchersForEvent's.
+ * the visibility filter is the same as getTicketNotifiableWatchers'.
  */
 export async function getTicketAgentWatchersForEvent(ticketId: TicketId): Promise<PrincipalId[]> {
   const rows = await db
