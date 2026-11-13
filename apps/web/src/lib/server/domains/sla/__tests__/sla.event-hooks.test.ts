@@ -133,7 +133,7 @@ describe('recordSlaFromEvent', () => {
       ...messageCreated('conversation_1', 'agent', 'principal_personal_key'),
       actor: { type: 'service' },
     } as EventData)
-    expect(isAutomatedAuthor).toHaveBeenCalledWith('principal_personal_key', 'service')
+    expect(isAutomatedAuthor).toHaveBeenCalledWith('principal_personal_key', { type: 'service' })
     expect(recordFirstResponse).toHaveBeenCalledWith('conversation_1', new Date(writtenAt))
     expect(recordNextResponse).toHaveBeenCalledWith('conversation_1', new Date(writtenAt))
     expect(rearmNextResponse).not.toHaveBeenCalled()

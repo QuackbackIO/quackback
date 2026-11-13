@@ -94,13 +94,13 @@ export async function recordSlaFromEvent(event: EventData): Promise<void> {
         message.senderType === 'agent' &&
         !(await isAutomatedAuthor(
           (message.authorPrincipalId as PrincipalId | null) ?? null,
-          event.actor?.type
+          event.actor
         ))
       ) {
-        // The shared reply rule on the message's own author, as the message
-        // rows read it: the assistant, workflow blocks and workspace API keys
-        // never satisfy a response clock, and a personal API key's reply is
-        // its creator's.
+        // The shared reply rule on the message's author and the key it was
+        // sent with: the assistant, workflow blocks, workspace API keys and
+        // personal keys made before the cutoff never satisfy a response
+        // clock, and a newer personal key's reply is its creator's.
         // Ordered: the first-response clock settles first, then the armed
         // next-response cycle (if any): a first reply never double-settles
         // a cycle that only a LATER customer message could have armed.
