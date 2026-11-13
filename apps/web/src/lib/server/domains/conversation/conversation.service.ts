@@ -716,7 +716,11 @@ export async function startAgentConversation(
   return { conversation: agentDTO, message: messageDTO, created: true }
 }
 
-/** Agent reply. Auto-assigns the conversation to the replying agent if unowned. */
+/**
+ * Agent reply. A person replying claims an unowned conversation; a service
+ * principal (the assistant's cards, an API key) never does, so the
+ * conversation stays in the unassigned queue for routing and the team.
+ */
 export async function sendAgentMessage(
   conversationId: ConversationId,
   rawContent: string,
@@ -794,9 +798,12 @@ export async function sendAgentMessage(
       .set({
         lastMessageAt: message.createdAt,
         lastMessagePreview: preview(content || fallbackLabel, attachments),
-        // Replying counts as reading; claim the conversation if unassigned.
+        // Replying counts as reading. A person claims the conversation if
+        // unassigned; a service principal is never a routing owner.
         agentLastReadAt: message.createdAt,
-        assignedAgentPrincipalId: existing.assignedAgentPrincipalId ?? agent.principalId,
+        assignedAgentPrincipalId:
+          existing.assignedAgentPrincipalId ??
+          (actor.principalType === 'service' ? null : agent.principalId),
         status: agentNextStatus,
         // A teammate reply answers the customer — the wait clock stops. (A
         // snoozed thread stays snoozed on ANY teammate reply: send-and-stay, per
@@ -2321,6 +2328,9 @@ export async function executeAssistantHandoff(
     .update(conversations)
     .set({
       status: 'open',
+      // A conversation the assistant holds is released so routing can place
+      // it with a teammate; a teammate's assignment stays as it is.
+      assignedAgentPrincipalId: sql`CASE WHEN ${eq(conversations.assignedAgentPrincipalId, author.principalId)} THEN NULL ELSE ${conversations.assignedAgentPrincipalId} END`,
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversationId))
