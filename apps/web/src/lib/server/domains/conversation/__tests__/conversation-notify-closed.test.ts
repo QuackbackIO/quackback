@@ -8,7 +8,7 @@ const buildHookContext = vi.fn(async () => ({
   portalBaseUrl: 'https://acme.example.com',
   logoUrl: null,
 }))
-let csatRows: Array<Record<string, unknown>> = []
+const isCsatAlreadyRequested = vi.fn(async (_id: unknown) => false)
 let limitQueue: Array<Array<Record<string, unknown>>> = []
 
 vi.mock('@quackback/email', () => ({
@@ -56,6 +56,10 @@ vi.mock('@/lib/server/email/email-log.sink', () => ({
   ensureEmailLogSink: () => undefined,
 }))
 
+vi.mock('../csat-request.service', () => ({
+  isCsatAlreadyRequested: (id: unknown) => isCsatAlreadyRequested(id),
+}))
+
 vi.mock('../csat-email-token', () => ({
   mintCsatEmailToken: () => 'csat-token',
 }))
@@ -67,7 +71,6 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     c.leftJoin = () => c
     c.where = () => c
     c.limit = async () => (limitQueue.length ? limitQueue.shift()! : [])
-    c.then = (resolve: (v: unknown) => unknown) => resolve(csatRows)
     return c
   }
   return {
@@ -80,7 +83,7 @@ import { notifyConversationClosed } from '../conversation.notify-closed'
 
 beforeEach(() => {
   vi.clearAllMocks()
-  csatRows = []
+  isCsatAlreadyRequested.mockResolvedValue(false)
   limitQueue = []
   sendConversationClosedEmail.mockResolvedValue({ sent: true })
   enforceEmailBudget.mockResolvedValue(undefined)
@@ -101,7 +104,6 @@ describe('notifyConversationClosed', () => {
       ],
       [{ type: 'user', email: 'priya@x.com', contactEmail: null }],
     ]
-    csatRows = []
 
     await notifyConversationClosed({
       conversationId: 'conversation_1' as ConversationId,
@@ -116,6 +118,11 @@ describe('notifyConversationClosed', () => {
       conversationSubject: 'Billing',
       conversationId: 'conversation_1',
     })
+    expect(isCsatAlreadyRequested).toHaveBeenCalledWith('conversation_1')
+    const ratingUrls = (sendConversationClosedEmail.mock.calls[0][0] as { ratingUrls?: string[] })
+      .ratingUrls
+    expect(ratingUrls).toHaveLength(5)
+    expect(ratingUrls?.[4]).toBe('https://acme.example.com/csat?token=csat-token&rating=5')
   })
 
   it('leaves the platform address to be named for the workspace when no address resolves', async () => {
@@ -220,7 +227,7 @@ describe('notifyConversationClosed', () => {
     expect(sendConversationClosedEmail).not.toHaveBeenCalled()
   })
 
-  it('omits CSAT when a request was already sent for the conversation', async () => {
+  it('omits CSAT when the conversation was already asked or rated', async () => {
     limitQueue = [
       [
         {
@@ -233,9 +240,8 @@ describe('notifyConversationClosed', () => {
         },
       ],
       [{ type: 'user', email: 'priya@x.com', contactEmail: null }],
-      [{ id: 'emaillog_prior' }],
     ]
-    csatRows = [{ id: 'emaillog_prior' }]
+    isCsatAlreadyRequested.mockResolvedValue(true)
 
     await notifyConversationClosed({
       conversationId: 'conversation_1' as ConversationId,

@@ -1,4 +1,4 @@
-import { db, eq, and, conversations, emailLog, principal, user } from '@/lib/server/db'
+import { db, eq, conversations, principal, user } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import { resolveReplyRecipient } from './conversation.recipient'
 import { conversationEnvelope, recordSent } from './conversation.email-envelope'
@@ -6,6 +6,7 @@ import { visitorConversationLink } from './conversation.notify'
 import { buildHookContext } from '@/lib/server/events/hook-context'
 import { logger } from '@/lib/server/logger'
 import { ensureEmailLogSink } from '@/lib/server/email/email-log.sink'
+import { isCsatAlreadyRequested } from './csat-request.service'
 
 const log = logger.child({ component: 'conversation-notify-closed' })
 
@@ -57,10 +58,13 @@ export async function notifyConversationClosed(opts: {
     )
 
     // Automated mail goes under the address's sender name, else the workspace's.
-    const [envelope, includeCsat] = await Promise.all([
+    // Rating links ride the close email only when the conversation was never
+    // asked or rated (csat-request.service).
+    const [envelope, alreadyAsked] = await Promise.all([
       conversationEnvelope(opts.conversationId, ctx.workspaceName),
-      shouldAttachCsat(opts.conversationId),
+      isCsatAlreadyRequested(opts.conversationId),
     ])
+    const includeCsat = !alreadyAsked
     let ratingUrls: [string, string, string, string, string] | undefined
     if (includeCsat) {
       const { mintCsatEmailToken } = await import('./csat-email-token')
@@ -90,15 +94,4 @@ export async function notifyConversationClosed(opts: {
   } catch (err) {
     log.warn({ err, conversationId: opts.conversationId }, 'notify conversation closed failed')
   }
-}
-
-async function shouldAttachCsat(conversationId: ConversationId): Promise<boolean> {
-  const [existing] = await db
-    .select({ id: emailLog.id })
-    .from(emailLog)
-    .where(
-      and(eq(emailLog.conversationId, conversationId), eq(emailLog.emailType, 'CsatRequestEmail'))
-    )
-    .limit(1)
-  return !existing
 }
