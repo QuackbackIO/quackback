@@ -23,6 +23,8 @@ import type {
 } from '@/lib/shared/db-types'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 import type { JsonValue } from '@/lib/shared/json'
+import type { TICKET_SORTS } from '@/lib/shared/tickets'
+import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 
 // ---------------------------------------------------------------------------
 // Service inputs
@@ -62,6 +64,10 @@ export interface CreateTicketInput {
    *  still written by the separate link step (`linkTicketToConversation`). */
   sourceConversationId?: ConversationId | null
   customAttributes?: Record<string, unknown>
+  /** The ticket's shared due date (null/absent = none). A requester filing
+   *  their own ticket is held to the customer window, everyone else to the
+   *  teammate window — `createTicketCore` validates via `assertTicketDueAt`. */
+  dueAt?: Date | null
   /** CONVERGENCE PHASE 1b opt-in, set ONLY by the four customer-intake paths
    *  (portal `createMyTicket`, the widget fn, API v1, MCP `create_ticket`):
    *  on a CUSTOMER ticket with a requester, `createTicketCore` creates the
@@ -81,8 +87,9 @@ export interface AssignTicketInput {
   assigneeTeamId?: TeamId | null
 }
 
-/** How a ticket list is ordered. `recent`/`oldest` sort by activity (updatedAt). */
-export type TicketSort = 'recent' | 'oldest' | 'created' | 'priority'
+/** How a ticket list is ordered. `recent`/`oldest` sort by activity (updatedAt);
+ *  `due` is soonest due date first, tickets without one last. */
+export type TicketSort = (typeof TICKET_SORTS)[number]
 
 /** Who a list is scoped to by assignee: the caller, nobody, or a specific teammate. */
 export type TicketAssigneeFilter = 'me' | 'unassigned' | PrincipalId
@@ -97,9 +104,14 @@ export interface TicketListFilter {
   stage?: TicketStage
   priority?: ConversationPriority
   assignee?: TicketAssigneeFilter
+  /** Due-date filter: overdue, due within 24 hours, or no due date. */
+  due?: TicketDueFilter
   teamId?: TeamId
   requesterPrincipalId?: PrincipalId
   companyId?: CompanyId
+  /** Only tickets this principal watches (a ticket_subscriptions row, muted
+   *  or not): the inbox's Watching view and the API's watcher filter. */
+  watcherPrincipalId?: PrincipalId
   /** Free-text match over the ticket title + its messages' `search_vector`
    *  (same FTS primitive as `searchTickets`). A bare/`#`-prefixed integer
    *  (e.g. "42", "#42") also matches by ticket number, OR'd with the FTS match. */
@@ -286,6 +298,7 @@ export type BulkTicketAction =
   | { type: 'assign_team'; teamId: TeamId | null }
   | { type: 'priority'; priority: ConversationPriority }
   | { type: 'set_status'; statusId: TicketStatusId }
+  | { type: 'set_due'; dueAt: Date | null }
 
 /** The result of `bulkUpdateTickets`: which tickets updated, and why any
  *  didn't — mirrors the conversation bulk fn's succeeded/failed shape. */

@@ -59,6 +59,7 @@ export const API_ROUTE_SEGMENTS: ReadonlySet<string> = new Set([
   'conversations',
   'dismiss',
   'docs',
+  'due',
   'feedback',
   'files',
   'help-center',
@@ -74,6 +75,7 @@ export const API_ROUTE_SEGMENTS: ReadonlySet<string> = new Set([
   'moderation',
   'note',
   'openapi',
+  'participants',
   'pending',
   'posts',
   'principals',
@@ -93,6 +95,7 @@ export const API_ROUTE_SEGMENTS: ReadonlySet<string> = new Set([
   'setup',
   'status',
   'statuses',
+  'subscribers',
   'suggest',
   'suggestions',
   'summary',
@@ -107,6 +110,7 @@ export const API_ROUTE_SEGMENTS: ReadonlySet<string> = new Set([
   'v1',
   'vote',
   'voters',
+  'watchers',
   'webhooks',
 ])
 
