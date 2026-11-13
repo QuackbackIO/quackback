@@ -3,10 +3,12 @@
  *
  * - the requester DTO is an explicit allow-list (exact key set), with no
  *   agent-only key and only the ticket type's customer-visible field answers;
- * - its `updatedAt` is the last change the customer can see (their thread's
- *   newest public message, else the newest move into a status with a customer
- *   stage, else `createdAt`), so an internal note, an assignment or a priority
- *   change never moves it, and the customer ticket list sorts on the same time.
+ * - its `updatedAt` is the last change the customer can see (the latest of
+ *   their thread's newest public message, the newest move into a status the
+ *   customer sees, and `createdAt`), so an internal note, an assignment or a
+ *   priority change never moves it, and the customer ticket list sorts on the
+ *   same time;
+ * - a requester ticket search returns the same allow-listed DTO.
  *
  * Runs inside the db-test-fixture rollback transaction. Postgres `now()` is
  * frozen inside one transaction, so every seeded time is explicit and earlier
@@ -99,6 +101,7 @@ import {
   getRequesterTicketForConversation,
   listMyTicketSummaries,
 } from '../requester.service'
+import { searchTickets } from '../ticket-search.service'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -459,21 +462,89 @@ describe.skipIf(!fixture.available)('requester ticket DTO and customer-visible t
     expect(summary.updatedAt).toBe(T2.toISOString())
   })
 
-  it('a public message wins over a later status move', async () => {
+  it('a customer-visible status move after the last message moves the time and the list order', async () => {
     const me = await seedWorld()
+    const agent = await seedAgent()
     const start = await seedStatus({ category: 'open', publicStage: 'received' })
     const done = await seedStatus({ category: 'closed', publicStage: 'resolved' })
+    const older = await seedPair({ requester: me, statusId: start, updatedAt: T1 })
+    const newer = await seedPair({ requester: me, statusId: start, updatedAt: T2 })
+    await postVisitorMessage(older.conversationId, me, T1)
+    await postVisitorMessage(newer.conversationId, me, T2)
+    expect((await listMyTicketSummaries(me)).map((t) => t.ticketId)).toEqual([
+      newer.ticketId,
+      older.ticketId,
+    ])
+
+    await setTicketStatus(older.ticketId, done, agent)
+    const [move] = await testDb
+      .select({ createdAt: ticketActivity.createdAt })
+      .from(ticketActivity)
+      .where(eq(ticketActivity.ticketId, older.ticketId))
+    expect(move.createdAt.getTime()).toBeGreaterThan(T2.getTime())
+
+    const dto = await getRequesterTicketForConversation(older.conversationId, me)
+    expect(dto!.updatedAt).toBe(move.createdAt.toISOString())
+    const list = await listMyTicketSummaries(me)
+    expect(list.map((t) => t.ticketId)).toEqual([older.ticketId, newer.ticketId])
+    expect(list[0].updatedAt).toBe(move.createdAt.toISOString())
+  })
+
+  it('a move into a closed status with no customer stage counts', async () => {
+    const me = await seedWorld()
+    const agent = await seedAgent()
+    const start = await seedStatus({ category: 'open', publicStage: 'received' })
+    const closedNoStage = await seedStatus({ category: 'closed', publicStage: null })
     const pair = await seedPair({ requester: me, statusId: start, createdAt: T0 })
     await postVisitorMessage(pair.conversationId, me, T1)
-    await testDb.insert(ticketActivity).values({
-      ticketId: pair.ticketId,
-      principalId: me,
-      type: 'status.changed',
-      metadata: { fromId: start, toId: done },
-      createdAt: T2,
-    })
+
+    await setTicketStatus(pair.ticketId, closedNoStage, agent)
+    const [move] = await testDb
+      .select({ createdAt: ticketActivity.createdAt })
+      .from(ticketActivity)
+      .where(eq(ticketActivity.ticketId, pair.ticketId))
+    const dto = await getRequesterTicketForConversation(pair.conversationId, me)
+    expect(dto!.stage.closed).toBe(true)
+    expect(dto!.updatedAt).toBe(move.createdAt.toISOString())
+    expect(dto!.updatedAt).not.toBe(T1.toISOString())
+  })
+
+  it('keeps showing the visible answers of an archived ticket type', async () => {
+    const me = await seedWorld()
+    const statusId = await seedStatus({ category: 'open', publicStage: 'received' })
+    const typeId = await seedTicketType()
+    const pair = await seedPair({ requester: me, statusId })
+    await testDb
+      .update(tickets)
+      .set({
+        ticketTypeId: typeId,
+        customAttributes: { order_number: 'A-2002', root_cause: 'Bad deploy' },
+      })
+      .where(eq(tickets.id, pair.ticketId))
+    await testDb
+      .update(ticketTypes)
+      .set({ deletedAt: new Date() })
+      .where(eq(ticketTypes.id, typeId))
 
     const dto = await getRequesterTicketForConversation(pair.conversationId, me)
-    expect(dto!.updatedAt).toBe(T1.toISOString())
+    expect(dto!.customAttributes).toEqual({ order_number: 'A-2002' })
+  })
+
+  it('a requester ticket search returns the allow-listed DTO', async () => {
+    const me = await seedWorld()
+    const statusId = await seedStatus({ category: 'open', publicStage: 'in_progress' })
+    const pair = await seedPair({ requester: me, statusId })
+    await testDb
+      .update(tickets)
+      .set({ title: 'Quokka export failure', priority: 'high', dueAt: T3 })
+      .where(eq(tickets.id, pair.ticketId))
+
+    const results = await searchTickets(requesterActor(me), {
+      query: 'quokka',
+      audience: 'requester',
+    })
+    expect(results.map((r) => r.ticket.id)).toEqual([pair.ticketId])
+    expect(Object.keys(results[0].ticket).sort()).toEqual(REQUESTER_KEYS)
+    expect(Object.keys(results[0].ticket.assignee).sort()).toEqual(['displayName', 'principalId'])
   })
 })
