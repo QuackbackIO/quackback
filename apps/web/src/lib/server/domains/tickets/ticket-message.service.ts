@@ -280,8 +280,7 @@ export async function insertTicketMessage(
     }
   }
 
-  let firstResponseChanged = false
-  const messageRow = await db.transaction(async (tx) => {
+  const { row: messageRow, firstResponse } = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(conversationMessages)
       .values({
@@ -301,11 +300,9 @@ export async function insertTicketMessage(
     // Worked out from the rows, so a reply, a note and a requester reply all
     // leave it right; only a public human reply after the customer's first
     // message can set it.
-    firstResponseChanged = await recomputeTicketFirstResponse(input.ticketId, tx)
-
-    return row
+    return { row, firstResponse: await recomputeTicketFirstResponse(input.ticketId, tx) }
   })
-  if (firstResponseChanged) await publishFirstResponseChange(input.ticketId)
+  if (firstResponse) await publishFirstResponseChange(input.ticketId)
 
   const author =
     (await loadAuthors([principalId], { preferAccountName: true })).get(principalId) ??
@@ -319,7 +316,14 @@ export async function insertTicketMessage(
   // team-member-only in this phase (routes/api/chat/stream.ts's `ticketId`
   // scope gate), unlike the conversation domain's visitor-facing channel.
   publishTicketEvent(input.ticketId, { kind: 'ticket_message', ticketId: input.ticketId, message })
-  return { message, ticket: existing }
+  // The ticket as the write left it, so a caller's webhook carries the new
+  // edit time and first response.
+  const ticket: Ticket = {
+    ...existing,
+    updatedAt: messageRow.createdAt,
+    firstResponseAt: firstResponse ? firstResponse.firstResponseAt : existing.firstResponseAt,
+  }
+  return { message, ticket }
 }
 
 /**
@@ -397,12 +401,12 @@ async function sendViaPairConversation(
         ).message
   const message = { ...sent, author: supportAuthor }
 
-  await db
-    .update(tickets)
-    .set({ updatedAt: new Date(message.createdAt) })
-    .where(eq(tickets.id, input.ticketId))
+  const updatedAt = new Date(message.createdAt)
+  await db.update(tickets).set({ updatedAt }).where(eq(tickets.id, input.ticketId))
   publishTicketEvent(input.ticketId, { kind: 'ticket_message', ticketId: input.ticketId, message })
-  return { message, ticket }
+  // The first response is set by the reaction to the conversation's message,
+  // a few seconds later; only the edit time moved here.
+  return { message, ticket: { ...ticket, updatedAt } }
 }
 
 /** Agent reply on a customer ticket thread (customer-visible). */
