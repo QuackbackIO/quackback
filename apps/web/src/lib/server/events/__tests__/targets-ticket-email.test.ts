@@ -42,9 +42,9 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
 }))
 
 // --- watcher service ---
-const getTicketWatchersForEvent = vi.fn<() => Promise<string[]>>()
+const getTicketNotifiableWatchers = vi.fn<() => Promise<string[]>>()
 vi.mock('@/lib/server/domains/tickets/ticket-subscription.service', () => ({
-  getTicketWatchersForEvent: () => getTicketWatchersForEvent(),
+  getTicketNotifiableWatchers: () => getTicketNotifiableWatchers(),
   getTicketAgentWatchersForEvent: vi.fn().mockResolvedValue([]),
 }))
 
@@ -98,7 +98,7 @@ const context: HookContext = {
 beforeEach(() => {
   selectQueue.length = 0
   isSupportTicketsEnabled.mockReset().mockResolvedValue(true)
-  getTicketWatchersForEvent.mockReset().mockResolvedValue([])
+  getTicketNotifiableWatchers.mockReset().mockResolvedValue([])
   listTeamMemberPrincipalIds.mockReset().mockResolvedValue([])
   resolveSendingAddress.mockReset().mockResolvedValue(null)
   inboundTicketReplyToAddress.mockReset().mockReturnValue(null)
@@ -265,7 +265,7 @@ describe('getTicketRepliedEmailTargets', () => {
   })
 
   it('emails the requester (portal CTA) and agent watchers (inbox CTA), actor excluded', async () => {
-    getTicketWatchersForEvent.mockResolvedValue([
+    getTicketNotifiableWatchers.mockResolvedValue([
       'principal_requester',
       'principal_agent_1',
       'principal_agent_actor',
@@ -296,7 +296,7 @@ describe('getTicketRepliedEmailTargets', () => {
   })
 
   it('drops a synthetic-anon requester', async () => {
-    getTicketWatchersForEvent.mockResolvedValue(['principal_requester'])
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester'])
     queueSelect([
       { id: 'principal_requester', email: 'temp-x@anon.quackback.io', contactEmail: null },
     ])
@@ -309,7 +309,7 @@ describe('getTicketRepliedEmailTargets', () => {
   })
 
   it('returns [] when emailMuted / matrix denies the only recipient', async () => {
-    getTicketWatchersForEvent.mockResolvedValue(['principal_requester'])
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester'])
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
     batchGetNotificationPreferences.mockResolvedValue(
       new Map([['principal_requester', { emailMuted: true }]])
@@ -343,7 +343,7 @@ function statusEvent(overrides: Record<string, unknown> = {}): EventData {
 
 describe('getTicketResolvedEmailTargets', () => {
   it('fires on open→closed and emails the watching requester with stage labels', async () => {
-    getTicketWatchersForEvent.mockResolvedValue(['principal_requester'])
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester'])
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
     queueSelect([{ conversationId: 'conversation_1' }]) // the pair (requester CTA target)
     const targets = await getTicketResolvedEmailTargets(statusEvent(), context)
@@ -363,7 +363,7 @@ describe('getTicketResolvedEmailTargets', () => {
   })
 
   it('B22: a null-stage close emails with the generic Closed label + closedGeneric copy', async () => {
-    getTicketWatchersForEvent.mockResolvedValue(['principal_requester'])
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester'])
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
     const targets = await getTicketResolvedEmailTargets(statusEvent({ stage: null }), context)
     expect(targets).toHaveLength(1)
@@ -511,7 +511,7 @@ describe('getSlaEmailTargets', () => {
 
 describe('customer-type gate on requester-facing emails', () => {
   it('a non-customer ticket yields agent-facing targets only (no portal CTA, no reply-to)', async () => {
-    getTicketWatchersForEvent.mockResolvedValue(['principal_requester', 'principal_agent_1'])
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester', 'principal_agent_1'])
     queueSelect([
       { id: 'principal_requester', email: 'req@example.com', contactEmail: null },
       { id: 'principal_agent_1', email: 'agent1@example.com', contactEmail: null },
