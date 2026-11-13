@@ -11,7 +11,7 @@
 -- published as `_quackback` TXT `quackback-domain-verification=<token>`. Only
 -- finding that exact value moves a row to `verified`; `pending` proves nothing.
 CREATE TABLE IF NOT EXISTS "domains" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "id" uuid PRIMARY KEY NOT NULL,
   "name" text NOT NULL,
   "ownership_token" text NOT NULL,
   "status" text DEFAULT 'pending' NOT NULL CHECK ("status" IN ('pending', 'verified')),
