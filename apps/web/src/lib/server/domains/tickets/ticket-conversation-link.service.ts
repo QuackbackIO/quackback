@@ -337,10 +337,10 @@ export async function crossPostTicketNote(
  * ticking from the LINK instant. Shared by `linkTicketToConversation` (the
  * create-from-a-conversation flow) and the Phase 1b intake transaction
  * (`createTicketCore`'s backing-conversation path) so the handoff rule lives
- * in ONE place — a conversation with no SLA skips silently (the intake case:
- * a fresh backing conversation is born SLA-free, so this is a no-op there by
- * construction, and the same-TICKET handoff later fires off the conversation's
- * own SLA application), and a policy without a TTR target no-ops inside
+ * in ONE place — a conversation with no SLA skips silently (at intake the
+ * caller awaits the conversation default SLA first, so the handoff reads it;
+ * an SLA that a workflow applies later reaches the ticket only through that
+ * workflow's own ticket-targeted step), and a policy without a TTR target no-ops inside
  * applySlaToTicket, which keeps the "does this policy even track TTR" check in
  * ONE place rather than duplicated at the call sites. Best-effort: the link
  * already landed, so a failure is logged, never surfaced.
