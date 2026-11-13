@@ -14,10 +14,19 @@
  * (`isCsatAlreadyRequested`). The close email's own rating links are not a
  * signal: the email log cannot tell a close email that carried them from one
  * that did not.
+ *
+ * A rating given in the thread (a matched reply to a csat block) is recorded
+ * when it is sent (`recordBlockRating`), whether or not a workflow run is
+ * waiting on the block. A run that resumes on it records the same value
+ * again, which recordCsat treats as no change.
  */
 import { db, eq, and, isNull, sql, conversations, conversationMessages, emailLog } from '@/lib/server/db'
 import type { Database, Transaction } from '@/lib/server/db'
 import type { ConversationId } from '@quackback/ids'
+import type { Actor } from '@/lib/server/policy/types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'csat-request' })
 
 type Executor = Database | Transaction
 
@@ -63,4 +72,22 @@ export async function isCsatAlreadyRequested(
 export function mayAskForCsat(conversationId: ConversationId) {
   return async (tx: Transaction): Promise<boolean> =>
     !(await isCsatAlreadyRequested(conversationId, tx))
+}
+
+/**
+ * Record the rating a visitor gave by answering a csat block, as that
+ * visitor. Runs after the message is committed and is best-effort: a refused
+ * or failed rating never fails the message it came with.
+ */
+export async function recordBlockRating(
+  conversationId: ConversationId,
+  reply: { rating: number; comment?: string },
+  actor: Actor
+): Promise<void> {
+  try {
+    const { recordCsat } = await import('./conversation.service')
+    await recordCsat(conversationId, reply.rating, reply.comment, actor)
+  } catch (err) {
+    log.warn({ err, conversationId }, 'csat block rating not recorded')
+  }
 }

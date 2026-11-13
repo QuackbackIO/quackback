@@ -1,5 +1,6 @@
 /**
- * A rating on a resolved ticket's conversation never reopens the ticket.
+ * A rating given in the thread: it is recorded with or without a workflow run
+ * waiting on it, and it never reopens a resolved ticket.
  *
  * The requester answers a csat block on the closed pair conversation through
  * the real visitor send. The `message.created` event goes through the real
@@ -10,6 +11,9 @@
  * Controls with the same seeding: a plain message and a block reply that
  * matches no block both reopen the ticket and the conversation, so the rating
  * assertions cannot pass because nothing reopens.
+ *
+ * The rating is counted from what is stored: the rating, the
+ * `conversation.csat_submitted` events in the outbox and the team marker.
  *
  * Real DB (rolled back). Realtime, the ticket event bridge, notifications and
  * the assistant are spied, so no fire-and-forget write races the fixture's
@@ -101,6 +105,7 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { runEventReactions } from '@/lib/server/events/event-reactions-queue'
 import { EVENT_REACTIONS_QUEUE } from '@/lib/server/events/event-reactions'
 import { sendVisitorMessage } from '@/lib/server/domains/conversation/conversation.service'
+import { applyAction } from '@/lib/server/domains/workflows/action.executor'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -339,6 +344,8 @@ describe.skipIf(!fixture.available)('a rating never reopens a resolved ticket', 
       reopenedCount: 1,
       conversation: 'open',
     })
+    // An unmatched block reply is a plain message: no rating is recorded.
+    expect((await storedRating(conversationId)).rating).toBeNull()
   })
 
   it('reopens both on a plain message', async () => {
@@ -357,6 +364,110 @@ describe.skipIf(!fixture.available)('a rating never reopens a resolved ticket', 
       ticket: 'open',
       reopenedCount: 1,
       conversation: 'open',
+    })
+  })
+})
+
+/** What the conversation holds for its rating, counted from storage. */
+async function storedRating(conversationId: ConversationId) {
+  const [c] = await testDb
+    .select({ rating: conversations.csatRating, comment: conversations.csatComment })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+  const countEvents = async (type: string) =>
+    (
+      await testDb
+        .select({ id: events.eventId })
+        .from(events)
+        .where(and(eq(events.type, type), eq(events.entityId, conversationId)))
+    ).length
+  const markers = await testDb
+    .select({ id: conversationMessages.id })
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        sql`${conversationMessages.metadata}->'systemEvent'->>'kind' = 'csat_submitted'`
+      )
+    )
+  return {
+    rating: c.rating,
+    comment: c.comment,
+    submittedEvents: await countEvents('conversation.csat_submitted'),
+    commentEvents: await countEvents('conversation.csat_comment_added'),
+    markers: markers.length,
+  }
+}
+
+describe.skipIf(!fixture.available)('a rating given in the thread is recorded', () => {
+  beforeEach(() => {
+    pending.emits.length = 0
+    return fixture.begin()
+  })
+  afterEach(fixture.rollback)
+
+  it('records a rating with no workflow run waiting on it', async () => {
+    const { requester, conversationId, blockMessageId } = await seedResolvedPairWithCsatBlock()
+
+    await send(conversationId, requester, {
+      content: '',
+      blockReply: { kind: 'csat', inReplyToMessageId: blockMessageId, rating: 4 },
+    })
+
+    expect(await storedRating(conversationId)).toEqual({
+      rating: 4,
+      comment: null,
+      submittedEvents: 1,
+      commentEvents: 0,
+      markers: 1,
+    })
+  })
+
+  it('a workflow run resuming on the same rating records it once', async () => {
+    const { requester, conversationId, blockMessageId } = await seedResolvedPairWithCsatBlock()
+
+    await send(conversationId, requester, {
+      content: '',
+      blockReply: {
+        kind: 'csat',
+        inReplyToMessageId: blockMessageId,
+        rating: 5,
+        comment: 'Quick fix, thanks',
+      },
+    })
+    // The run waiting on the block resumes and records what it was given.
+    await applyAction(
+      { type: 'record_csat', rating: 5, comment: 'Quick fix, thanks' },
+      { conversationId, actor: visitorActor(requester), runId: 'run_test' }
+    )
+    await Promise.all(pending.emits.splice(0))
+
+    expect(await storedRating(conversationId)).toEqual({
+      rating: 5,
+      comment: 'Quick fix, thanks',
+      submittedEvents: 1,
+      commentEvents: 1,
+      markers: 1,
+    })
+  })
+
+  it('refuses a block rating from someone who is not the requester', async () => {
+    const { conversationId, blockMessageId } = await seedResolvedPairWithCsatBlock()
+    const stranger = await seedPrincipal('user')
+
+    await expect(
+      send(conversationId, stranger, {
+        content: '',
+        blockReply: { kind: 'csat', inReplyToMessageId: blockMessageId, rating: 1 },
+      })
+    ).rejects.toThrow()
+
+    expect(await storedRating(conversationId)).toEqual({
+      rating: null,
+      comment: null,
+      submittedEvents: 0,
+      commentEvents: 0,
+      markers: 0,
     })
   })
 })
