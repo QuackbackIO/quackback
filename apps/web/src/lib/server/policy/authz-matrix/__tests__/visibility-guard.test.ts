@@ -16,8 +16,8 @@
  *
  * The allowlist names each caller by file and enclosing function. An entry
  * that no longer matches a call fails the test, so the list only shrinks. The
- * conversation entries are the paths that move to `assertConversationVisible`
- * with the conversation-side checks.
+ * conversation entries are the conversation paths that still check
+ * `conversation.view` alone, without the per-item scope.
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -73,22 +73,22 @@ const ALLOWLIST: Record<string, string> = {
     'an inbound email reply, matched to the ticket by its reply token',
   'lib/server/domains/assistant/assistant.runtime.ts::loadTicketGroundingContext::getTicket':
     'the copilot gate has already asserted the ticket for the actor',
-  // Conversation paths that move to assertConversationVisible with the
-  // conversation-side checks.
+  // Conversation paths that check `conversation.view` alone, without the
+  // per-item scope.
   'lib/server/domains/conversation/conversation.service.ts::assertConversationViewable::loadConversationOr404':
-    'conversation side: moves to assertConversationVisible',
+    'conversation path without the per-item scope check',
   'lib/server/domains/conversation/conversation.service.ts::assertConversationViewable::canViewConversation':
-    'conversation side: moves to assertConversationVisible',
+    'conversation path without the per-item scope check',
   'lib/server/domains/conversation/conversation.service.ts::*::loadConversationOr404':
-    'conversation side: the agent write sites move to assertConversationVisible',
+    'conversation path without the per-item scope check',
   'lib/server/domains/conversation/conversation.service.ts::*::canViewConversation':
-    'conversation side: moves to assertConversationVisible',
+    'conversation path without the per-item scope check',
   'lib/server/domains/conversation/conversation-translation.service.ts::*::loadConversationOr404':
-    'conversation side: translation moves to assertConversationVisible',
+    'conversation path without the per-item scope check',
   'lib/server/domains/conversation/conversation.edit.ts::*::canViewConversation':
-    'conversation side: moves to assertConversationVisible',
+    'conversation path without the per-item scope check',
   'routes/api/chat/stream.ts::*::canViewConversation':
-    'conversation side: the per-conversation stream moves to assertConversationVisible',
+    'conversation path without the per-item scope check',
 }
 
 /** Callers that may pass `systemCascade: true`, keyed `file::function`. */
