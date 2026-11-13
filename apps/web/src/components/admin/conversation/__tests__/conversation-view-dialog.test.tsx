@@ -16,6 +16,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import { ConversationViewDialog } from '../conversation-view-dialog'
 import type { ConversationViewDTO } from '@/lib/shared/conversation/views'
 
@@ -121,9 +122,11 @@ afterEach(cleanup)
 function renderDialog(editing?: ConversationViewDTO | null) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <QueryClientProvider client={queryClient}>
-      <ConversationViewDialog open onOpenChange={() => {}} editing={editing} />
-    </QueryClientProvider>
+    <IntlProvider locale="en">
+      <QueryClientProvider client={queryClient}>
+        <ConversationViewDialog open onOpenChange={() => {}} editing={editing} />
+      </QueryClientProvider>
+    </IntlProvider>
   )
 }
 

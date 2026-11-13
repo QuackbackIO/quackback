@@ -704,7 +704,7 @@
     },
     "sweep:doc:admin:/admin/settings/notifications": {
       "dbQueries": 7,
-      "htmlKB": 82.2
+      "htmlKB": 86.4
     },
     "sweep:ui:admin:/admin/settings/notifications": {
       "dbQueries": 7,
@@ -906,7 +906,7 @@
       "serverRequests": 3,
       "requests": 102,
       "jsRequests": 96,
-      "jsKB": 441.6,
+      "jsKB": 442,
       "htmlTransferKB": 17.6,
       "componentRenders": 173
     },

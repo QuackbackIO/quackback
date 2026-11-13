@@ -112,6 +112,35 @@ describe('portal support index — converged Messages surface', () => {
     expect(screen.getByText('Open')).toBeTruthy()
   })
 
+  it('paired rows show the ticket due date next to the reference while the ticket is open', async () => {
+    getMyConversationsFn.mockResolvedValue({
+      conversations: [
+        conversationRow({ id: 'conversation_due', subject: 'Due' }),
+        conversationRow({ id: 'conversation_done', subject: 'Done' }),
+      ],
+      linkedTickets: {
+        conversation_due: {
+          ticketId: 'ticket_1',
+          reference: '#42',
+          title: 'Renewal paperwork',
+          stage: { slot: 'in_progress', label: 'In progress', closed: false },
+          dueAt: '2026-10-21T12:00:00.000Z',
+        },
+        conversation_done: {
+          ticketId: 'ticket_2',
+          reference: '#43',
+          title: 'Already resolved',
+          stage: { slot: 'resolved', label: 'Resolved', closed: true },
+          dueAt: '2026-11-02T12:00:00.000Z',
+        },
+      },
+    })
+    render(<Page />, { wrapper: wrapper() })
+
+    expect(await screen.findByText('Renewal paperwork')).toBeTruthy()
+    expect(screen.getAllByText(/^Due$/).map((el) => el.textContent)).toEqual(['Due Oct 21, 2026'])
+  })
+
   it('pair-state rule: a closed conversation with an open ticket shows the TICKET stage, never "Closed"', async () => {
     getMyConversationsFn.mockResolvedValue({
       conversations: [

@@ -60,6 +60,16 @@ const CreateTicketBodySchema = createRequestBodySchema({
   requesterPrincipalId: z.string().optional().meta({ description: 'Requester principal ID' }),
   companyId: z.string().optional().meta({ description: 'Associated company ID' }),
   attachments: z.array(TicketWriteAttachmentSchema).optional(),
+  dueAt: z
+    .string()
+    .datetime({ offset: true })
+    .optional()
+    .meta({
+      description:
+        'Shared due date as an ISO 8601 instant with a Z or offset. Allowed from a year ago to ' +
+        'five years ahead.',
+      example: '2026-11-03T17:00:00Z',
+    }),
 })
 
 const TicketMessageBodySchema = createRequestBodySchema({
@@ -88,6 +98,19 @@ const TicketAssignBodySchema = createRequestBodySchema({
 
 const TicketPriorityBodySchema = createRequestBodySchema({
   priority: z.enum(TICKET_PRIORITIES).meta({ example: 'high' }),
+})
+
+const TicketDueBodySchema = createRequestBodySchema({
+  dueAt: z
+    .string()
+    .datetime({ offset: true })
+    .nullable()
+    .meta({
+      description:
+        'Shared due date as an ISO 8601 instant with a Z or offset, or null to clear it. ' +
+        'Allowed from a year ago to five years ahead.',
+      example: '2026-11-03T17:00:00Z',
+    }),
 })
 
 // Standard error responses reused across the write routes.
@@ -249,6 +272,31 @@ registerPath('/tickets/{ticketId}/priority', {
     requestBody: {
       required: true,
       content: { 'application/json': { schema: asSchema(TicketPriorityBodySchema) } },
+    },
+    responses: {
+      200: {
+        description: 'Updated ticket',
+        content: {
+          'application/json': { schema: createItemResponseSchema(TicketSchema, 'Updated ticket') },
+        },
+      },
+      ...writeErrorResponses,
+    },
+  },
+})
+
+// Register POST /tickets/{ticketId}/due
+registerPath('/tickets/{ticketId}/due', {
+  post: {
+    tags: ['Tickets'],
+    summary: 'Set a ticket due date',
+    description:
+      'Set, move or clear (null) the due date shared with the customer. Independent of SLA ' +
+      'targets. Setting the same value again is a no-op.',
+    parameters: [ticketIdParam],
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: asSchema(TicketDueBodySchema) } },
     },
     responses: {
       200: {

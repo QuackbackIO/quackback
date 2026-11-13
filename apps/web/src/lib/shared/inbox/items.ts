@@ -20,7 +20,7 @@ import type { TermSegment } from '@/lib/shared/utils/keyword-context'
 /** The unified inbox's sorts. All but 'relevance' are a subset of both
  *  `ConversationSort` and `TicketSort`, so they type-check as either branch's
  *  `sort` param directly (see `resolveInboxSort` for 'relevance'). */
-export type InboxSort = 'recent' | 'oldest' | 'created' | 'priority' | 'relevance'
+export type InboxSort = 'recent' | 'oldest' | 'created' | 'priority' | 'due' | 'relevance'
 
 /** The order a unified list actually runs in. Relevance is the DEFAULT for a
  *  searched list, never an override: a pinned sort still wins, so a team can
@@ -37,8 +37,7 @@ export function resolveInboxSort(sort: InboxSort | undefined, search?: string): 
 
 /** A reference to one inbox item, discriminated by kind. */
 export type InboxItemRef =
-  | { kind: 'conversation'; id: ConversationId }
-  | { kind: 'ticket'; id: TicketId }
+  { kind: 'conversation'; id: ConversationId } | { kind: 'ticket'; id: TicketId }
 
 /** The linked customer ticket's summary, carried on a conversation item so the
  *  list row can render its ticket line (`#N · <title>`) without a second fetch
@@ -49,6 +48,9 @@ export interface LinkedTicketSummary {
   title: string
   statusName: string
   statusCategory: TicketStatusCategory
+  /** The linked ticket's shared due date (ISO), null when none or when the
+   *  ticket is soft-deleted (agrees with the 'due' sort expression). */
+  dueAt: string | null
 }
 
 /** The wire shape for one unified inbox row. */

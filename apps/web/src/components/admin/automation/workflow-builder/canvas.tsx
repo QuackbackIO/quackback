@@ -44,6 +44,7 @@ import '@xyflow/react/dist/style.css'
 import './canvas.css'
 import {
   BoltIcon,
+  CalendarDaysIcon,
   ExclamationTriangleIcon,
   FunnelIcon,
   MapIcon,
@@ -112,6 +113,7 @@ const ICONS: Record<IconKey, ComponentType<{ className?: string }>> = {
   set_attribute: AdjustmentsHorizontalIcon,
   add_note: DocumentTextIcon,
   set_ticket_status: TicketIcon,
+  set_ticket_due_date: CalendarDaysIcon,
   convert_to_ticket: TicketIcon,
   send_webhook: PaperAirplaneIcon,
   ...BLOCK_ICONS,

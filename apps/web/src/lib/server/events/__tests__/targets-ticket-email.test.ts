@@ -2,7 +2,8 @@
  * Target resolution for the ticket + SLA lifecycle EMAIL builders
  * (getTicketCreatedEmailTargets, getTicketRepliedEmailTargets,
  * getTicketResolvedEmailTargets, getTicketAssignedEmailTargets,
- * getSlaEmailTargets). Mocks the pure seams — support flag, watcher service,
+ * getSlaEmailTargets, getTicketDueEmailTargets) plus the due-date bell
+ * (getTicketDueTargets), which shares its recipient rule. Mocks the pure seams — support flag, watcher service,
  * team roster, channel-account From resolution, reply-to minting, stage labels,
  * preference matrix — and drives a flexible db.select() chain that yields one
  * queued result per select() call (FIFO), so email/ticket-fact/conversation
@@ -87,6 +88,8 @@ const {
   getTicketResolvedEmailTargets,
   getTicketAssignedEmailTargets,
   getSlaEmailTargets,
+  getTicketDueEmailTargets,
+  getTicketDueTargets,
 } = await import('../targets')
 
 const context: HookContext = {
@@ -506,6 +509,121 @@ describe('getSlaEmailTargets', () => {
   it('returns [] when there is neither an assigned agent nor team', async () => {
     queueSelect([{ assignedAgentPrincipalId: null, assignedTeamId: null, visitorName: null }])
     expect(await getSlaEmailTargets(slaEvent('sla.approaching_breach'), context)).toEqual([])
+  })
+})
+
+// ============================================================================
+// Ticket due dates
+// ============================================================================
+
+function dueEvent(
+  type: 'ticket.due_soon' | 'ticket.overdue',
+  ref: { assignedPrincipalId?: string | null; assignedTeamId?: string | null } = {}
+): EventData {
+  return {
+    id: `timer:${type}:ticket_1:2026-07-17T02:00:00.000Z`,
+    type,
+    timestamp: '2026-07-16T02:00:00Z',
+    actor: { type: 'service', principalId: 'principal_timer' },
+    data: {
+      ticket: {
+        id: 'ticket_1',
+        number: 142,
+        type: 'customer',
+        priority: 'high',
+        assignedPrincipalId: null,
+        assignedTeamId: null,
+        dueAt: '2026-07-17T02:00:00.000Z',
+        ...ref,
+      },
+      title: 'Cannot log in',
+      dueAt: '2026-07-17T02:00:00.000Z',
+    },
+  } as EventData
+}
+
+describe('getTicketDueEmailTargets', () => {
+  it('emails the assignee with the due label, inbox CTA and ticket threading', async () => {
+    listTeamMemberPrincipalIds.mockResolvedValue(['principal_member'])
+    queueSelect([{ id: 'principal_assignee', email: 'assignee@example.com', contactEmail: null }])
+    const targets = await getTicketDueEmailTargets(
+      dueEvent('ticket.due_soon', {
+        assignedPrincipalId: 'principal_assignee',
+        assignedTeamId: 'team_1',
+      }),
+      context
+    )
+    expect(targets).toHaveLength(1)
+    expect(targets[0].target).toMatchObject({ email: 'assignee@example.com' })
+    expect(targets[0].config).toMatchObject({
+      kind: 'due_soon',
+      ticketId: 'ticket_1',
+      ticketLabel: '#142',
+      title: 'Cannot log in',
+      ctaUrl: 'https://p/admin/inbox?i=ticket_1',
+      dueLabel: 'Jul 17, 02:00 AM UTC',
+    })
+    // The assignee wins: the team is never consulted.
+    expect(listTeamMemberPrincipalIds).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the assigned team when nobody is assigned', async () => {
+    listTeamMemberPrincipalIds.mockResolvedValue(['principal_member_1', 'principal_member_2'])
+    queueSelect([
+      { id: 'principal_member_1', email: 'm1@example.com', contactEmail: null },
+      { id: 'principal_member_2', email: 'm2@example.com', contactEmail: null },
+    ])
+    const targets = await getTicketDueEmailTargets(
+      dueEvent('ticket.overdue', { assignedTeamId: 'team_1' }),
+      context
+    )
+    expect(targets.map((t) => (t.target as { email: string }).email)).toEqual([
+      'm1@example.com',
+      'm2@example.com',
+    ])
+    expect(targets[0].config).toMatchObject({ kind: 'overdue' })
+  })
+
+  it('returns [] for an unassigned ticket', async () => {
+    expect(await getTicketDueEmailTargets(dueEvent('ticket.overdue'), context)).toEqual([])
+  })
+
+  it('returns [] when the support flag is off', async () => {
+    isSupportTicketsEnabled.mockResolvedValue(false)
+    const event = dueEvent('ticket.due_soon', { assignedPrincipalId: 'principal_assignee' })
+    expect(await getTicketDueEmailTargets(event, context)).toEqual([])
+  })
+
+  it.each([
+    ['ticket.due_soon', 'ticket_due_soon'],
+    ['ticket.overdue', 'ticket_overdue'],
+  ] as const)('%s respects the %s email preference', async (type, key) => {
+    batchGetNotificationPreferences.mockResolvedValue(denyEmail('principal_assignee', key))
+    queueSelect([{ id: 'principal_assignee', email: 'assignee@example.com', contactEmail: null }])
+    const event = dueEvent(type, { assignedPrincipalId: 'principal_assignee' })
+    expect(await getTicketDueEmailTargets(event, context)).toEqual([])
+  })
+})
+
+describe('getTicketDueTargets (bell)', () => {
+  it('bells the assignee with the ticket, title and due date', async () => {
+    const target = await getTicketDueTargets(
+      dueEvent('ticket.overdue', { assignedPrincipalId: 'principal_assignee' })
+    )
+    expect(target).toEqual({
+      type: 'notification',
+      target: { principalIds: ['principal_assignee'] },
+      config: { ticketId: 'ticket_1', title: 'Cannot log in', dueAt: '2026-07-17T02:00:00.000Z' },
+    })
+  })
+
+  it('bells the assigned team when nobody is assigned, and nobody when neither is set', async () => {
+    listTeamMemberPrincipalIds.mockResolvedValue(['principal_member'])
+    const team = await getTicketDueTargets(
+      dueEvent('ticket.due_soon', { assignedTeamId: 'team_1' })
+    )
+    expect(team?.target).toEqual({ principalIds: ['principal_member'] })
+    expect(await getTicketDueTargets(dueEvent('ticket.due_soon'))).toBeNull()
   })
 })
 
