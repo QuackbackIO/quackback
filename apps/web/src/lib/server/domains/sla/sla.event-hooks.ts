@@ -4,7 +4,8 @@
  * branch:
  *
  *   - message.created settles response clocks, but ONLY on a teammate reply
- *     (senderType 'agent'): first response first, then the armed next-response
+ *     (senderType 'agent' from an author the shared reply rule counts as a
+ *     teammate, `lib/server/messages/reply-rule.ts`): first response first, then the armed next-response
  *     cycle (if any) — the first reply never double-settles a clock the
  *     customer cycle hasn't armed yet. A VISITOR message does the opposite:
  *     it (re-)arms the next-response clock for the fresh customer-message
@@ -60,7 +61,8 @@
  * realtime/events), so nothing re-enters the bus.
  */
 import type { EventData } from '@/lib/server/events/types'
-import type { ConversationId, TicketId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
+import { isAutomatedAuthor } from '@/lib/server/messages/reply-rule'
 import {
   recordFirstResponse,
   recordNextResponse,
@@ -87,9 +89,15 @@ export async function recordSlaFromEvent(event: EventData): Promise<void> {
       // A customer message wakes a snooze, and every settle judges against
       // the pause ledger, so the ledger is brought up to date first.
       await reconcileSnoozePauses(conversationId, at)
-      if (event.data.message.senderType === 'agent' && event.actor?.type !== 'service') {
-        // Service actors (Quinn, workflow blocks) never satisfy human-response
-        // semantics, the same vocabulary the wait-interrupt path uses.
+      const message = event.data.message
+      if (
+        message.senderType === 'agent' &&
+        !(await isAutomatedAuthor((message.authorPrincipalId as PrincipalId | null) ?? null))
+      ) {
+        // The shared reply rule on the message's own author, as the message
+        // rows read it: the assistant, workflow blocks and workspace API keys
+        // never satisfy a response clock, and a personal API key's reply is
+        // its creator's.
         // Ordered: the first-response clock settles first, then the armed
         // next-response cycle (if any): a first reply never double-settles
         // a cycle that only a LATER customer message could have armed.
