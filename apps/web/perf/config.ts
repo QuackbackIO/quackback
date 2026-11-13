@@ -11,6 +11,48 @@ export const BENCH_URL = `http://localhost:${BENCH_PORT}`
 
 export const ADMIN = { email: 'demo@example.com', password: 'password' }
 
+/** How much support data a seeded workspace holds. */
+export interface PerfProfile {
+  teams: number
+  /** Spread over the teams, one team each. */
+  teammates: number
+  companies: number
+  /** Customers the conversations belong to; most belong to a company. */
+  customers: number
+  conversations: number
+  /** Messages per conversation, between these bounds (inclusive). */
+  messagesPerConversation: { min: number; max: number }
+  /** Customer tickets, each riding on its own conversation. */
+  tickets: number
+  workflows: number
+}
+
+/**
+ * A busy install: about 200k conversations, 2.5M messages, 50k tickets, 2k
+ * companies and 200 teammates in 20 teams. Big enough that a missing index or
+ * a scan shows in a plan.
+ */
+export const LARGE_PROFILE: PerfProfile = {
+  teams: 20,
+  teammates: 200,
+  companies: 2_000,
+  customers: 50_000,
+  conversations: 200_000,
+  messagesPerConversation: { min: 5, max: 20 },
+  tickets: 50_000,
+  workflows: 300,
+}
+
+/**
+ * `PERF_SCALE=large` adds {@link LARGE_PROFILE} on top of the demo seed. Unset
+ * (or `demo`) seeds the demo workspace alone, as the bench needs.
+ */
+export function perfScale(raw = process.env.PERF_SCALE): 'demo' | 'large' {
+  if (raw === undefined || raw === '' || raw === 'demo') return 'demo'
+  if (raw === 'large') return 'large'
+  throw new Error(`PERF_SCALE must be "large" or unset, got "${raw}"`)
+}
+
 /** The end of stderr a failed start reports. */
 const STDERR_TAIL_BYTES = 64 * 1024
 
