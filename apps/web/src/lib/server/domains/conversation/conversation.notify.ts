@@ -474,14 +474,12 @@ export async function sendVisitorConversationEmail(opts: {
   // it may send as that domain, else the assigned team's sending address, else
   // the branded workspace default (EMAIL_FROM). A thread that arrived at the
   // customer's own support address should not change identity on the way back.
+  // Named after the agent and the workspace on every channel: a widget or
+  // messenger reply that reaches the customer's inbox is still a person
+  // answering them, and an unnamed address reads as a robot.
   const resolvedFrom = (await resolveConversationFrom(opts.conversationId)) ?? undefined
-  const fromDisplayName = correspondence
-    ? agentReplyDisplayName(opts.senderName, opts.ctx.workspaceName)
-    : undefined
-  const from =
-    resolvedFrom && fromDisplayName
-      ? formatNamedSendingAddress(resolvedFrom, fromDisplayName)
-      : resolvedFrom
+  const fromDisplayName = agentReplyDisplayName(opts.senderName, opts.ctx.workspaceName)
+  const from = resolvedFrom ? formatNamedSendingAddress(resolvedFrom, fromDisplayName) : undefined
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const resolvedBody = await resolvedMessageBody(opts.content, opts.contentJson, opts.attachments)
   // One key for every attempt of this send, opened outside the retry loop for
@@ -772,6 +770,7 @@ export async function notifyCsatRequestEmail(
       .select({
         channel: conversations.channel,
         visitorPrincipalId: conversations.visitorPrincipalId,
+        subject: conversations.subject,
       })
       .from(conversations)
       .where(eq(conversations.id, conversationId))
@@ -816,6 +815,7 @@ export async function notifyCsatRequestEmail(
       ratingUrls,
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl,
+      conversationSubject: conv.subject ?? null,
     })
   } catch (err) {
     log.warn({ err, conversationId }, 'csat request email failed')

@@ -17,6 +17,7 @@ import {
   type ConversationId,
   type PrincipalId,
   type TeamId,
+  type TicketId,
   type UserId,
 } from '@quackback/ids'
 
@@ -31,6 +32,9 @@ import {
   conversations,
   principal,
   user,
+  tickets,
+  ticketStatuses,
+  ticketConversations,
 } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -43,7 +47,12 @@ import {
   createSendingAddress,
   createSendingDomain,
 } from '../channel-account.service'
-import { resolveConversationFrom, resolveSender, resolveSendingAddress } from '../sender-resolver'
+import {
+  resolveConversationFrom,
+  resolveSender,
+  resolveSendingAddress,
+  resolveTicketFrom,
+} from '../sender-resolver'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -254,6 +263,124 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
         from: 'help@home.example',
         source: 'default_team',
       })
+    })
+  })
+
+  describe('a thread keeps its first sender', () => {
+    async function storedSender(conv: ConversationId): Promise<string | null> {
+      const [row] = await testDb
+        .select({ address: conversations.threadSenderAddress })
+        .from(conversations)
+        .where(eq(conversations.id, conv))
+      return row?.address ?? null
+    }
+
+    it('records the address the first email on a conversation goes out from', async () => {
+      const home = await defaultTeam()
+      await seedVerifiedDomain(home, 'home.example')
+      await seedAddress(home, 'help@home.example', EARLIER)
+      const conv = await seedConversation({ assignedTeamId: home })
+
+      expect(await storedSender(conv)).toBeNull()
+      expect(await resolveConversationFrom(conv)).toBe('help@home.example')
+      expect(await storedSender(conv)).toBe('help@home.example')
+    })
+
+    it('keeps the From when the conversation is reassigned to a team with its own address', async () => {
+      const home = await defaultTeam()
+      await seedVerifiedDomain(home, 'home.example')
+      await seedAddress(home, 'help@home.example', EARLIER)
+      const billing = await seedTeam()
+      await seedAddress(billing, 'billing@home.example', LATER)
+      const conv = await seedConversation({ assignedTeamId: home })
+
+      expect(await resolveConversationFrom(conv)).toBe('help@home.example')
+      await testDb
+        .update(conversations)
+        .set({ assignedTeamId: billing })
+        .where(eq(conversations.id, conv))
+
+      expect(await resolveConversationFrom(conv)).toBe('help@home.example')
+      expect(await resolveSender({ module: 'support', conversationId: conv })).toEqual({
+        from: 'help@home.example',
+        source: 'thread',
+      })
+      expect(await storedSender(conv)).toBe('help@home.example')
+    })
+
+    it('falls through to the normal order once the stored domain is no longer verified', async () => {
+      const home = await defaultTeam()
+      await seedVerifiedDomain(home, 'home.example')
+      await seedAddress(home, 'help@home.example', EARLIER)
+      const conv = await seedConversation({ assignedTeamId: home })
+      expect(await resolveConversationFrom(conv)).toBe('help@home.example')
+
+      // The domain is demoted, and the team gains an address on another domain
+      // that is still live. The stored sender is no longer one the guard
+      // permits, so it gives way rather than suppressing the send.
+      await testDb
+        .update(emailSendingDomains)
+        .set({ status: 'failed' })
+        .where(eq(emailSendingDomains.domain, 'home.example'))
+      await seedVerifiedDomain(home, 'other.example')
+      await seedAddress(home, 'help@other.example', LATER)
+
+      expect(await resolveSender({ module: 'support', conversationId: conv })).toEqual({
+        from: 'help@other.example',
+        source: 'team',
+      })
+      // The thread's own sender is kept, so it comes back if the domain does.
+      expect(await storedSender(conv)).toBe('help@home.example')
+    })
+
+    it('records nothing when the thread sends from the platform default', async () => {
+      const conv = await seedConversation({ assignedTeamId: await seedTeam() })
+      expect(await resolveConversationFrom(conv)).toBeNull()
+      expect(await storedSender(conv)).toBeNull()
+    })
+  })
+
+  describe("a ticket's From", () => {
+    async function seedTicket(linked?: ConversationId): Promise<TicketId> {
+      const [status] = await testDb
+        .insert(ticketStatuses)
+        .values({ name: `Open-${suffix()}`, slug: createId('ticket_status') })
+        .returning()
+      const [ticket] = await testDb
+        .insert(tickets)
+        .values({ title: 'Cannot sign in', statusId: status.id })
+        .returning()
+      if (linked) {
+        await testDb
+          .insert(ticketConversations)
+          .values({ ticketId: ticket.id, conversationId: linked, ticketType: 'customer' })
+      }
+      return ticket.id
+    }
+
+    it("matches the linked conversation's replies, not the ticket team's address", async () => {
+      const home = await defaultTeam()
+      await seedVerifiedDomain(home, 'home.example')
+      await seedAddress(home, 'help@home.example', EARLIER)
+      const billing = await seedTeam()
+      await seedAddress(billing, 'billing@home.example', LATER)
+      const conv = await seedConversation({ assignedTeamId: home })
+      // The conversation has already been answered, so its thread has a sender.
+      expect(await resolveConversationFrom(conv)).toBe('help@home.example')
+
+      const ticket = await seedTicket(conv)
+      expect(await resolveTicketFrom(ticket, billing)).toBe('help@home.example')
+    })
+
+    it("uses the ticket team's address when no conversation is linked", async () => {
+      const home = await defaultTeam()
+      await seedVerifiedDomain(home, 'home.example')
+      await seedAddress(home, 'help@home.example', EARLIER)
+      const billing = await seedTeam()
+      await seedAddress(billing, 'billing@home.example', LATER)
+
+      const ticket = await seedTicket()
+      expect(await resolveTicketFrom(ticket, billing)).toBe('billing@home.example')
     })
   })
 
