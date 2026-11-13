@@ -14,11 +14,15 @@ import {
   type SendingDomainSummary,
   type SignInDomainSummary,
 } from '@/lib/server/functions/domains-overview'
+import { listDomainsFn, type AddedDomainSummary } from '@/lib/server/functions/domains'
+import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
 
 export interface DomainSummaries {
   sending: SendingDomainSummary[]
   signIn: SignInDomainSummary[]
   helpCenterDomain: HelpCenterDomainSummary | null
+  /** The domains added by name, with or without a use. */
+  added: AddedDomainSummary[]
 }
 
 export async function loadDomainSummaries({
@@ -29,7 +33,7 @@ export async function loadDomainSummaries({
   cloudEnabled?: boolean
 }): Promise<DomainSummaries> {
   const can = (permission: string) => permissions?.includes(permission) ?? false
-  const [sending, signIn, helpCenterDomain] = await Promise.all([
+  const [sending, signIn, helpCenterDomain, added] = await Promise.all([
     can(EMAIL_SENDING_PERMISSION)
       ? getSendingDomainSummariesFn().catch(() => [] as SendingDomainSummary[])
       : ([] as SendingDomainSummary[]),
@@ -40,6 +44,9 @@ export async function loadDomainSummaries({
     !cloudEnabled && can(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)
       ? getHelpCenterDomainSummaryFn().catch(() => null)
       : (null as HelpCenterDomainSummary | null),
+    DOMAINS_PAGE_PERMISSIONS.some(can)
+      ? listDomainsFn().catch(() => [] as AddedDomainSummary[])
+      : ([] as AddedDomainSummary[]),
   ])
-  return { sending, signIn, helpCenterDomain }
+  return { sending, signIn, helpCenterDomain, added }
 }

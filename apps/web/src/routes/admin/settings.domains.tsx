@@ -20,9 +20,9 @@ import { DomainsCard, QuackbackUrlCard } from '@/components/admin/settings/domai
 import {
   DomainList,
   DomainsEmptyState,
-  EMPTY_DESCRIPTION,
   domainRows,
 } from '@/components/admin/settings/domains-overview'
+import { AddDomainButton } from '@/components/admin/settings/add-domain-dialog'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { loadDomainSummaries } from '@/lib/client/domain-summaries'
 import { adminPageHead } from '@/lib/client/admin-head'
@@ -67,17 +67,22 @@ async function loadOperatorHostnames(context: {
 }
 
 function DomainsSettingsPage() {
-  const { operator, sending, signIn, helpCenterDomain, links } = Route.useLoaderData()
-  const rows = domainRows({ sending, signIn, helpCenterDomain })
+  const { operator, sending, signIn, helpCenterDomain, added, links } = Route.useLoaderData()
+  const { permissions } = Route.useRouteContext()
+  // Only settings.manage adds a bare domain; the other Domains permissions see the page without it.
+  const canAdd = permissions?.includes(PERMISSIONS.SETTINGS_MANAGE) ?? false
+  const rows = domainRows({ sending, signIn, helpCenterDomain, added })
   // Cloud hostnames keep their own card, where they are added and verified.
   const empty = rows.length === 0 && !operator?.domains.length
 
   return (
     <SettingsPage
       page="/admin/settings/domains"
-      description={empty ? EMPTY_DESCRIPTION : 'Every domain this workspace uses.'}
+      description={empty ? undefined : 'Every domain this workspace uses.'}
+      // With none yet, the empty card holds the one Add domain.
+      actions={canAdd && !empty ? <AddDomainButton /> : undefined}
     >
-      {empty && <DomainsEmptyState links={links} />}
+      {empty && <DomainsEmptyState canAdd={canAdd} />}
       {rows.length > 0 && <DomainList rows={rows} links={links} />}
       {operator && <OperatorHostnames {...operator} />}
     </SettingsPage>

@@ -3,11 +3,14 @@ import type { QueryClient } from '@tanstack/react-query'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 
-const SUMMARIES = { sending: [], signIn: [], helpCenterDomain: null }
+const SUMMARIES = { sending: [], signIn: [], helpCenterDomain: null, added: [] }
+const DETAIL = { name: 'acme.io', added: true, inUse: false }
 const loadDomainSummaries = vi.fn()
+const getDomain = vi.fn()
 const CONFIG_QUERY = { queryKey: ['email-channel-config'] }
 
 vi.mock('../domain-summaries', () => ({ loadDomainSummaries }))
+vi.mock('@/lib/server/functions/domains', () => ({ getDomainFn: getDomain }))
 vi.mock('@/lib/client/queries/channel-accounts', () => ({
   emailChannelConfigQuery: () => CONFIG_QUERY,
 }))
@@ -21,6 +24,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   loadDomainSummaries.mockResolvedValue(SUMMARIES)
   prefetchQuery.mockResolvedValue(undefined)
+  getDomain.mockResolvedValue(DETAIL)
 })
 
 describe('domain page loader', () => {
@@ -30,17 +34,33 @@ describe('domain page loader', () => {
       cloudEnabled: false,
       queryClient,
     }
-    await expect(loadDomainPage(context)).resolves.toBe(SUMMARIES)
+    await expect(loadDomainPage(context, 'acme.io')).resolves.toEqual({
+      ...SUMMARIES,
+      domain: DETAIL,
+    })
     expect(loadDomainSummaries).toHaveBeenCalledWith(context)
+    expect(getDomain).toHaveBeenCalledWith({ data: { name: 'acme.io' } })
     expect(prefetchQuery).toHaveBeenCalledWith(CONFIG_QUERY)
   })
 
   it('leaves the email config alone for a viewer who cannot read it', async () => {
-    await loadDomainPage({
-      permissions: [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SETTINGS_CUSTOM_DOMAIN],
-      cloudEnabled: false,
-      queryClient,
-    })
+    await loadDomainPage(
+      {
+        permissions: [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SETTINGS_CUSTOM_DOMAIN],
+        cloudEnabled: false,
+        queryClient,
+      },
+      'acme.io'
+    )
     expect(prefetchQuery).not.toHaveBeenCalled()
+  })
+
+  it('still shows the uses when the domain itself cannot be read', async () => {
+    getDomain.mockRejectedValue(new Error('down'))
+    const result = await loadDomainPage(
+      { permissions: [EMAIL_SENDING_PERMISSION], cloudEnabled: false, queryClient },
+      'acme.io'
+    )
+    expect(result).toEqual({ ...SUMMARIES, domain: null })
   })
 })
