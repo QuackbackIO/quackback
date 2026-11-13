@@ -54,7 +54,11 @@ import {
   sql,
 } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
-import { isCsatAlreadyRequested } from '../csat-request.service'
+import {
+  isConversationRated,
+  isCsatAlreadyRequested,
+  isCsatRatedOrEmailed,
+} from '../csat-request.service'
 import { applyAction } from '@/lib/server/domains/workflows/action.executor'
 
 const fixture = await createDbTestFixture({
@@ -138,7 +142,10 @@ function askForRating(conversationId: ConversationId) {
       nodeId: 'node_ask',
       block: {
         kind: 'csat',
-        body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'How did we do?' }] }] },
+        body: {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'How did we do?' }] }],
+        },
         allowTypingInterrupt: true,
       },
     },
@@ -183,6 +190,34 @@ describe.skipIf(!fixture.available)('csat ask signals', () => {
     const { conversationId } = await seedConversation()
     await addEmailLog(conversationId, 'CsatRequestEmail')
     expect(await isCsatAlreadyRequested(conversationId)).toBe(true)
+  })
+})
+
+describe.skipIf(!fixture.available)('the close email and rating signals', () => {
+  beforeEach(fixture.begin)
+  afterEach(fixture.rollback)
+
+  it('ignores an unanswered csat block, which a visitor who left never saw', async () => {
+    const { conversationId, visitor } = await seedConversation()
+    await addBlock(conversationId, visitor, 'csat')
+    expect(await isCsatAlreadyRequested(conversationId)).toBe(true)
+    expect(await isCsatRatedOrEmailed(conversationId)).toBe(false)
+    expect(await isConversationRated(conversationId)).toBe(false)
+  })
+
+  it('counts a rating and a rating email', async () => {
+    const rated = await seedConversation()
+    await testDb
+      .update(conversations)
+      .set({ csatRating: 4, csatSubmittedAt: new Date() })
+      .where(eq(conversations.id, rated.conversationId))
+    expect(await isCsatRatedOrEmailed(rated.conversationId)).toBe(true)
+    expect(await isConversationRated(rated.conversationId)).toBe(true)
+
+    const emailed = await seedConversation()
+    await addEmailLog(emailed.conversationId, 'CsatRequestEmail')
+    expect(await isCsatRatedOrEmailed(emailed.conversationId)).toBe(true)
+    expect(await isConversationRated(emailed.conversationId)).toBe(false)
   })
 })
 

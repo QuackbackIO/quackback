@@ -110,7 +110,11 @@ import { applySlaToConversation } from '@/lib/server/domains/sla/sla.service'
 import { applySlaToTicket } from '@/lib/server/domains/sla/ticket-sla.service'
 import { setConversationAttribute } from '@/lib/server/domains/conversation-attributes/set-attribute.service'
 import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
-import { mayAskForCsat } from '@/lib/server/domains/conversation/csat-request.service'
+import {
+  isConversationRated,
+  isCsatAlreadyRequested,
+  mayAskForCsat,
+} from '@/lib/server/domains/conversation/csat-request.service'
 import { resolveWorkflowVariables, type WorkflowVariables } from './workflow-variables'
 import { logRunEvent } from './workflow-run-events'
 import { interpolateTiptapContent } from '@/lib/shared/workflows/interpolate'
@@ -363,6 +367,9 @@ async function sendBlock(
   block: BlockSendSpec,
   resolvedDeps?: ResolvedBlockDeps
 ): Promise<ConversationMessageId | null> {
+  // Cheap early decline before any setup. The locked check inside the post
+  // stays the guard against two asks racing.
+  if (block.kind === 'csat' && (await isCsatAlreadyRequested(conversationId))) return null
   // Per-plan-resolved when the caller (applyPlanAndSettle) hoisted it — see
   // ResolvedBlockDeps — else resolved lazily here exactly as before (a macro
   // calling applyAction directly, or a standalone applyAction call in tests).
@@ -389,24 +396,31 @@ async function sendBlock(
     content = blockFallbackContent(resolvedBody, block)
   }
 
-  const messageDTO = await conversationService.appendAssistantReply(
-    conversationId,
-    content,
-    {
-      principalId: assistant.id,
-      displayName: assistantConfig.config.identity.name,
-      avatarUrl: assistantConfig.config.identity.avatarUrl,
-    },
-    {
-      // Our own turn just spoke; nobody is "waiting on us" until the customer
-      // replies again (which sets waitingSince through the ordinary visitor
-      // send path) — same as Quinn's normal (non-handover) answer.
-      waiting: false,
-      contentJson: block.kind === 'replyTime' ? null : resolvedBody,
-      metadata: { block: buildBlockPayload(block, { runId, nodeId }, replyTimeStatus) },
-      ...(block.kind === 'csat' ? { onlyIf: mayAskForCsat(conversationId) } : {}),
-    }
-  )
+  const blockAuthor = {
+    principalId: assistant.id,
+    displayName: assistantConfig.config.identity.name,
+    avatarUrl: assistantConfig.config.identity.avatarUrl,
+  }
+  const blockOpts = {
+    // Our own turn just spoke; nobody is "waiting on us" until the customer
+    // replies again (which sets waitingSince through the ordinary visitor
+    // send path) — same as Quinn's normal (non-handover) answer.
+    waiting: false,
+    contentJson: block.kind === 'replyTime' ? null : resolvedBody,
+    metadata: { block: buildBlockPayload(block, { runId, nodeId }, replyTimeStatus) },
+  }
+  const messageDTO =
+    block.kind === 'csat'
+      ? await conversationService.appendAssistantReply(conversationId, content, blockAuthor, {
+          ...blockOpts,
+          onlyIf: mayAskForCsat(conversationId),
+        })
+      : await conversationService.appendAssistantReply(
+          conversationId,
+          content,
+          blockAuthor,
+          blockOpts
+        )
   if (!messageDTO) return null
 
   // CSAT-over-email (support platform's CSAT-over-email extension): best-effort,
@@ -609,6 +623,9 @@ export async function applyAction(
       return label('handed to assistant')
     }
     case 'record_csat':
+      // A rating given in the thread is recorded when it is sent, so a run
+      // resuming on it finds the conversation already rated: nothing to do.
+      if (await isConversationRated(conversationId)) return label('csat already recorded')
       // recordCsat requires the caller to BE the visitor (amendment 1); the
       // engine passes a visitor-scoped actor for this action specifically,
       // never its own service actor.

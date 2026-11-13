@@ -135,6 +135,18 @@ vi.mock('@/lib/server/domains/inbox/inbox.query', () => ({ getLinkedCustomerTick
 const { notifyCsatRequestEmail } = vi.hoisted(() => ({ notifyCsatRequestEmail: vi.fn() }))
 vi.mock('@/lib/server/domains/conversation/conversation.notify', () => ({ notifyCsatRequestEmail }))
 
+// The csat signals read the database; this suite pins the dispatch around them.
+const { isCsatAlreadyRequested, isConversationRated, mayAskForCsat } = vi.hoisted(() => ({
+  isCsatAlreadyRequested: vi.fn(),
+  isConversationRated: vi.fn(),
+  mayAskForCsat: vi.fn(() => async () => true),
+}))
+vi.mock('@/lib/server/domains/conversation/csat-request.service', () => ({
+  isCsatAlreadyRequested,
+  isConversationRated,
+  mayAskForCsat,
+}))
+
 const mockDbSelect = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/server/db')>()
@@ -172,6 +184,8 @@ const ctx: WorkflowContext = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  isCsatAlreadyRequested.mockResolvedValue(false)
+  isConversationRated.mockResolvedValue(false)
   ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
   resolveWorkflowVariables.mockResolvedValue({
     first_name: 'Jane',
@@ -674,6 +688,16 @@ describe('applyAction', () => {
         expect(logRunEvent).not.toHaveBeenCalled()
       })
 
+      it('declines before any setup when the conversation was already asked or rated', async () => {
+        isCsatAlreadyRequested.mockResolvedValue(true)
+        const res = await applyAction(csatAction, runCtx)
+        expect(res.label).toContain('skipped')
+        expect(res.blockMessageId).toBeUndefined()
+        expect(isCsatAlreadyRequested).toHaveBeenCalledWith(conversationId)
+        expect(ensureAssistantPrincipal).not.toHaveBeenCalled()
+        expect(appendAssistantReply).not.toHaveBeenCalled()
+      })
+
       it('posts other blocks unconditionally', async () => {
         await applyAction(
           { type: 'send_block', nodeId: 'n10', block: { kind: 'message', body } },
@@ -852,6 +876,16 @@ describe('applyAction', () => {
         )
       ).toMatchObject({ label: 'csat recorded' })
       expect(recordCsat).toHaveBeenCalledWith(conversationId, 5, 'Great!', visitorActor)
+    })
+
+    it('does nothing, and does not fail, when the conversation is already rated', async () => {
+      isConversationRated.mockResolvedValue(true)
+      const res = await applyAction(
+        { type: 'record_csat', rating: 5, comment: 'Great!' },
+        { conversationId, actor }
+      )
+      expect(res.label).toBe('csat already recorded')
+      expect(recordCsat).not.toHaveBeenCalled()
     })
   })
 

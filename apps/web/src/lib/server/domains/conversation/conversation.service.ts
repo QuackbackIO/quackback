@@ -351,9 +351,15 @@ export async function sendVisitorMessage(
         resolveMessageContent(input.content, safeContentJson),
         attachments.length > 0 || !!fallbackLabel
       )
+  // A stored blockReply only ever comes from the server match above: one a
+  // caller supplies in metadata is dropped, so it cannot pose as a rating or
+  // keep a closed thread closed.
+  const { blockReply: _callerBlockReply, ...callerMetadata } = input.metadata ?? {}
   const messageMetadata: ConversationMessageMetadata | null = resolvedBlockReply
-    ? { ...input.metadata, ...resolvedBlockReply.metadata }
-    : (input.metadata ?? null)
+    ? { ...callerMetadata, ...resolvedBlockReply.metadata }
+    : Object.keys(callerMetadata).length > 0
+      ? callerMetadata
+      : null
 
   let created = false
   // The conversation's status BEFORE this message, so the assistant trigger can
@@ -2202,7 +2208,7 @@ export async function appendAssistantReply(
   conversationId: ConversationId,
   content: string,
   author: ConversationAuthorInput,
-  opts: AppendAssistantReplyOpts
+  opts: AppendAssistantReplyOpts & { onlyIf?: undefined }
 ): Promise<ConversationMessageDTO>
 export async function appendAssistantReply(
   conversationId: ConversationId,
