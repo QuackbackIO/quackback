@@ -1,6 +1,7 @@
 /**
- * A personal API key acts as its creator, so a reply sent through the REST API
- * with one is that teammate's reply: it settles the first-response clock and
+ * A personal API key made from the release that records the personal-key
+ * cutoff on acts as its creator, so a reply sent through the REST API with one
+ * is that teammate's reply: it settles the first-response clock and
  * an armed next-response cycle, and opens no cycle of its own. A workspace
  * key's reply is automated: it settles nothing and opens a cycle. A legacy key
  * whose principal is a person settles like that person.
@@ -20,6 +21,7 @@ import {
   slaEvents,
   user,
   eq,
+  sql,
   type PermissionKey,
 } from '@/lib/server/db'
 import type { EventData } from '@/lib/server/events/types'
@@ -37,7 +39,7 @@ import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { createSlaPolicy } from '../sla-policy.service'
 import { applySlaToConversation, type SlaApplied } from '../sla.service'
 import { recordSlaFromEvent } from '../sla.event-hooks'
-import { isAutomatedAuthor } from '@/lib/server/messages/reply-rule'
+import { isAutomatedAuthor, PERSONAL_KEY_REPLY_CUTOFF_KEY } from '@/lib/server/messages/reply-rule'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -64,7 +66,7 @@ async function seedPerson(): Promise<PrincipalId> {
 /** An API key and its service principal, as key creation writes them. */
 async function seedKey(
   kind: 'personal' | 'workspace',
-  opts: { createdById: PrincipalId | null; revoked?: boolean }
+  opts: { createdById: PrincipalId | null; revoked?: boolean; madeBeforeCutoff?: boolean }
 ): Promise<PrincipalId> {
   const principalId = createId('principal') as PrincipalId
   await testDb
@@ -79,6 +81,8 @@ async function seedKey(
     principalId,
     kind,
     revokedAt: opts.revoked ? new Date() : null,
+    // Before this release recorded the personal-key cutoff.
+    ...(opts.madeBeforeCutoff ? { createdAt: new Date('2020-01-01T00:00:00Z') } : {}),
   })
   return principalId
 }
@@ -209,6 +213,19 @@ describe.skipIf(!fixture.available)('SLA clocks and API key replies', () => {
     })
   }
 
+  it('a personal key made before the cutoff stays automated: its reply settles nothing and opens a cycle', async () => {
+    const thread = await seedThread()
+    const teammate = await seedPerson()
+    const key = await seedKey('personal', { createdById: teammate, madeBeforeCutoff: true })
+    await recordSlaFromEvent(await write(thread, 'visitor', '10:05', thread.customer))
+    await recordSlaFromEvent(await write(thread, 'agent', '10:30', teammate))
+
+    await recordSlaFromEvent(await write(thread, 'agent', '10:45', key, restActor(key)))
+    const stamp = await stampOf(thread.conversationId)
+    expect(stamp.firstResponseAt).toBe(iso('10:30'))
+    expect(stamp).toMatchObject({ nextResponseDueAt: iso('12:45'), nextResponseAt: null })
+  })
+
   it("a workspace key's reply settles no clock and opens a next-response cycle", async () => {
     const thread = await seedThread()
     const teammate = await seedPerson()
@@ -268,10 +285,18 @@ describe.skipIf(!fixture.available)('SLA clocks and API key replies', () => {
   it("reads the author only for a service actor's message", async () => {
     const workspaceKey = await seedKey('workspace', { createdById: null })
     const personalKey = await seedKey('personal', { createdById: null })
+    const oldPersonalKey = await seedKey('personal', { createdById: null, madeBeforeCutoff: true })
     expect(await isAutomatedAuthor(workspaceKey, 'service')).toBe(true)
     expect(await isAutomatedAuthor(personalKey, 'service')).toBe(false)
+    expect(await isAutomatedAuthor(oldPersonalKey, 'service')).toBe(true)
     // A person's message is never automated, whoever the principal is.
     expect(await isAutomatedAuthor(workspaceKey, 'user')).toBe(false)
     expect(await isAutomatedAuthor(null, 'service')).toBe(false)
+  })
+
+  it('treats every key as automated when no cutoff is recorded', async () => {
+    const personalKey = await seedKey('personal', { createdById: null })
+    await testDb.execute(sql`DELETE FROM kv_store WHERE key = ${PERSONAL_KEY_REPLY_CUTOFF_KEY}`)
+    expect(await isAutomatedAuthor(personalKey, 'service')).toBe(true)
   })
 })

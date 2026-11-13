@@ -66,7 +66,7 @@ async function seedService(): Promise<PrincipalId> {
 
 async function seedKey(
   kind: 'personal' | 'workspace',
-  opts: { createdById?: PrincipalId | null; revoked?: boolean } = {}
+  opts: { createdById?: PrincipalId | null; revoked?: boolean; madeBeforeCutoff?: boolean } = {}
 ): Promise<PrincipalId> {
   const id = await seedService()
   await testDb.insert(apiKeys).values({
@@ -77,6 +77,8 @@ async function seedKey(
     principalId: id,
     kind,
     revokedAt: opts.revoked ? new Date() : null,
+    // Before this release recorded the personal-key cutoff.
+    ...(opts.madeBeforeCutoff ? { createdAt: new Date('2020-01-01T00:00:00Z') } : {}),
   })
   return id
 }
@@ -157,10 +159,14 @@ describe.skipIf(!fixture.available)('ticket first response from the message rows
     expect(await firstResponse(ticketId)).toEqual(at('09:30'))
   })
 
-  it('a note, a system row, a deleted reply and automated replies never count', async () => {
+  it('a note, a system row, a deleted reply and automated replies (an older personal key too) never count', async () => {
     const [customer, teammate] = [await seedPerson(), await seedPerson()]
     const assistant = await seedService()
     const workspaceKey = await seedKey('workspace', { createdById: teammate })
+    const oldPersonalKey = await seedKey('personal', {
+      createdById: teammate,
+      madeBeforeCutoff: true,
+    })
     const ticketId = await seedTicket()
     await write({ ticketId }, 'visitor', '09:00', customer)
     await write({ ticketId }, 'agent', '09:05', teammate, { internal: true })
@@ -168,6 +174,7 @@ describe.skipIf(!fixture.available)('ticket first response from the message rows
     await write({ ticketId }, 'agent', '09:15', teammate, { deleted: true })
     await write({ ticketId }, 'agent', '09:20', assistant)
     await write({ ticketId }, 'agent', '09:25', workspaceKey)
+    await write({ ticketId }, 'agent', '09:30', oldPersonalKey)
     expect(await firstResponse(ticketId)).toBeNull()
 
     await write({ ticketId }, 'agent', '09:40', teammate)
