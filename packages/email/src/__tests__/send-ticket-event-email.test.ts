@@ -65,7 +65,8 @@ describe('sendTicketEventEmail', () => {
     const call = sendMailMock.mock.calls[0][0]
     expect(call.subject).toBe(subject)
     expect(call.to).toBe('requester@example.com')
-    expect(call.from).toBe('noreply@example.com')
+    // The platform address, under the workspace's name.
+    expect(call.from).toBe('Acme <noreply@example.com>')
   })
 
   it('sends SLA kinds with the clock facts in the subject', async () => {
