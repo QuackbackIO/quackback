@@ -1,11 +1,19 @@
 import { getIntegration } from '@/lib/server/integrations'
-import { eq, and, sql, integrations, postExternalLinks, ticketExternalLinks } from '@/lib/server/db'
+import {
+  eq,
+  and,
+  sql,
+  integrations,
+  integrationDestinations,
+  postExternalLinks,
+  ticketExternalLinks,
+} from '@/lib/server/db'
 import type { IntegrationId } from '@quackback/ids'
 import type { HookJobData } from '@/lib/server/events/hook-job'
 import type { JobSqlExecutor } from '@/lib/server/jobs/job-queue'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { queueSyncOperation } from './ledger'
-import { installationIdentity, reviewDestination, syncOperationKey } from './identity'
+import { installationIdentity, linkTarget, reviewDestination, syncOperationKey } from './identity'
 import { hookSource } from './hooks'
 
 /** Status is a remote edit too. No adapter currently declares verified conditional writes. */
@@ -48,16 +56,24 @@ export async function queueStatusSync(data: HookJobData, tx: JobSqlExecutor) {
   )
   if (!link) throw new Error('Status sync link is no longer available')
   if (!link.sync_scope) return null
-  const destination = reviewDestination(
-    { id: target.linkId, syncScope: link.sync_scope },
-    {
-      id: integrationId,
-      connectedAt: integration?.connected_at ?? null,
-      config,
-      integrationType: integration?.integration_type ?? 'unknown',
-    },
-    getIntegration(integration?.integration_type ?? '')
-  )
+  const reviewed = { id: target.linkId, syncScope: link.sync_scope }
+  const connection = {
+    id: integrationId,
+    connectedAt: integration?.connected_at ?? null,
+    config,
+    integrationType: integration?.integration_type ?? 'unknown',
+  }
+  const definition = getIntegration(integration?.integration_type ?? '')
+  // The link may be on any repository the connection syncs, not only its default.
+  const channelIds = definition?.destination?.multiple
+    ? getExecuteRows<{ external_id: string }>(
+        await tx.execute(
+          sql`SELECT external_id FROM ${integrationDestinations} WHERE ${eq(integrationDestinations.integrationId, integrationId as IntegrationId)}`
+        )
+      ).map((row) => row.external_id)
+    : []
+  const destination = reviewDestination(reviewed, connection, definition, channelIds)
+  const remoteTarget = linkTarget(reviewed, connection, definition, channelIds)
   return queueSyncOperation(
     {
       operationKey: syncOperationKey({
@@ -85,6 +101,7 @@ export async function queueStatusSync(data: HookJobData, tx: JobSqlExecutor) {
           linkId: target.linkId,
           sourceStatusId: data.config.sourceStatusId,
           proposedStatus: data.config.remoteStatus,
+          ...(remoteTarget ? { target: remoteTarget } : {}),
         },
       },
     },
