@@ -79,7 +79,10 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { runEventReactions } from '../event-reactions-queue'
 import { EVENT_REACTIONS, EVENT_REACTIONS_QUEUE } from '../event-reactions'
 import { createTicketCore } from '@/lib/server/domains/tickets/ticket.service'
-import { sendTicketMessage } from '@/lib/server/domains/tickets/ticket-message.service'
+import {
+  insertTicketMessage,
+  sendTicketMessage,
+} from '@/lib/server/domains/tickets/ticket-message.service'
 import { deleteConversationMessage } from '@/lib/server/domains/conversation/conversation.service'
 
 const fixture = await createDbTestFixture({
@@ -128,6 +131,7 @@ function agentActor(principalId: PrincipalId): Actor {
     permissions: new Set<PermissionKey>([
       PERMISSIONS.TICKET_VIEW_ALL,
       PERMISSIONS.TICKET_REPLY,
+      PERMISSIONS.TICKET_NOTE,
       PERMISSIONS.CONVERSATION_REPLY,
       PERMISSIONS.CONVERSATION_VIEW_ALL,
     ]),
@@ -253,15 +257,30 @@ describe.skipIf(!fixture.available)('ticket first response on an intake pair', (
   beforeEach(() => vi.clearAllMocks())
   afterEach(fixture.rollback)
 
-  it("is set by the reaction to a teammate's redirected reply, in any order, any number of times", async () => {
+  it("a teammate's redirected reply sets it at once and returns it, so the webhook carries it", async () => {
+    const { ticketId, conversationId, agent } = await intake()
+    const { message, ticket } = await insertTicketMessage(
+      { ticketId, content: 'Looking into it now.' },
+      agent,
+      { senderType: 'agent', isInternal: false, actor: agentActor(agent) }
+    )
+    expect(message.conversationId).toBe(conversationId)
+    expect(ticket.firstResponseAt?.toISOString()).toBe(message.createdAt)
+    expect((await firstResponseAt(ticketId))?.toISOString()).toBe(message.createdAt)
+  })
+
+  it('the reaction corrects a stale value, in any order, any number of times', async () => {
     const { ticketId, conversationId, agent } = await intake()
     const { message } = await sendTicketMessage(agentActor(agent), {
       ticketId,
       content: 'Looking into it now.',
     })
-    expect(message.conversationId).toBe(conversationId)
-    // The reply itself writes nothing on the ticket; the reaction does.
-    expect(await firstResponseAt(ticketId)).toBeNull()
+    // An older replica stamps the ticket wrongly after the reply.
+    await testDb
+      .update(tickets)
+      .set({ firstResponseAt: new Date('2020-01-01T00:00:00Z') })
+      .where(eq(tickets.id, ticketId))
+    vi.mocked(realtime.publishTicketEvent).mockClear()
 
     const jobs = await reactionJobs(conversationId, 'message.created', 2)
     expect(jobs).toHaveLength(2)
@@ -271,9 +290,13 @@ describe.skipIf(!fixture.available)('ticket first response on an intake pair', (
     await runEventReactions(jobs[0])
     await runEventReactions(jobs[1])
     expect((await firstResponseAt(ticketId))?.toISOString()).toBe(message.createdAt)
-    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
-      ticketId,
-      expect.objectContaining({ kind: 'ticket_updated' })
+    await vi.waitFor(
+      () =>
+        expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+          ticketId,
+          expect.objectContaining({ kind: 'ticket_updated' })
+        ),
+      { timeout: 10_000 }
     )
   })
 
@@ -328,5 +351,39 @@ describe.skipIf(!fixture.available)('ticket first response on an intake pair', (
 
     await deleteConversationMessage(message.id, actor)
     expect(await firstResponseAt(ticketId)).toBeNull()
+  })
+
+  it('deleting a note, or a reply after the first response, skips the recompute', async () => {
+    await seedDefaultStatus()
+    const requester = await seedPrincipal('user')
+    const agent = await seedPrincipal('member')
+    const actor = agentActor(agent)
+    const [status] = await testDb
+      .select({ id: ticketStatuses.id })
+      .from(ticketStatuses)
+      .where(eq(ticketStatuses.isDefault, true))
+    // A stamp the rows do not support: a recompute would clear it.
+    const stamped = new Date(Date.now() - 1_800_000)
+    const [ticket] = await testDb
+      .insert(tickets)
+      .values({
+        title: 'Standalone',
+        statusId: status.id,
+        requesterPrincipalId: requester,
+        firstResponseAt: stamped,
+      })
+      .returning({ id: tickets.id })
+    const ticketId = ticket.id as TicketId
+    const [note, later] = await testDb
+      .insert(conversationMessages)
+      .values([
+        { ticketId, principalId: agent, senderType: 'agent', content: 'n', isInternal: true },
+        { ticketId, principalId: agent, senderType: 'agent', content: 'later' },
+      ])
+      .returning({ id: conversationMessages.id })
+
+    await deleteConversationMessage(note.id, actor)
+    await deleteConversationMessage(later.id, actor)
+    expect(await firstResponseAt(ticketId)).toEqual(stamped)
   })
 })

@@ -139,10 +139,14 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
     expect(message.isInternal).toBe(false)
     expect(message.senderType).toBe('agent')
     expect((await ticketFirstResponseAt(ticketId))?.toISOString()).toBe(message.createdAt)
-    // The change re-renders the ticket in open inboxes.
-    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
-      ticketId,
-      expect.objectContaining({ kind: 'ticket_updated' })
+    // The change re-renders the ticket in open inboxes, without holding up the reply.
+    await vi.waitFor(
+      () =>
+        expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+          ticketId,
+          expect.objectContaining({ kind: 'ticket_updated' })
+        ),
+      { timeout: 10_000 }
     )
   })
 
@@ -161,6 +165,18 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
 
     expect(ticket.firstResponseAt?.toISOString()).toBe(message.createdAt)
     expect(ticket.updatedAt.toISOString()).toBe(message.createdAt)
+  })
+
+  it('a note, or a reply after the first response, does not recompute it', async () => {
+    const { ticketId, actor } = await seedTicketWithAgent()
+    await seedCustomerMessage(ticketId)
+    // A stamp the rows do not support: a recompute would clear it.
+    const stamped = new Date(Date.now() - 1_800_000)
+    await testDb.update(tickets).set({ firstResponseAt: stamped }).where(eq(tickets.id, ticketId))
+
+    await addTicketNote(actor, { ticketId, content: 'internal only' })
+    await sendTicketMessage(actor, { ticketId, content: 'a later reply' })
+    expect(await ticketFirstResponseAt(ticketId)).toEqual(stamped)
   })
 
   it('an agent reply before the customer has written leaves first_response_at empty', async () => {

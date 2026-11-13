@@ -190,7 +190,7 @@ async function applyGitHubCommentDelete(githubCommentId: string) {
   try {
     const { syncPairTicketFirstResponse } =
       await import('@/lib/server/domains/tickets/ticket-first-response')
-    await syncPairTicketFirstResponse(row.conversationId)
+    await syncPairTicketFirstResponse(row.conversationId, { ...row, change: 'removed' })
   } catch (err) {
     log.warn(
       { err, conversation_id: row.conversationId, message_id: row.id },

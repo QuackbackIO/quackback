@@ -1813,7 +1813,7 @@ export async function deleteConversationMessage(
     const decision = canDeleteMessage(actor, authored, null)
     if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
-    await db
+    const deleted = await db
       .update(conversationMessages)
       .set({
         deletedAt: new Date(),
@@ -1821,15 +1821,20 @@ export async function deleteConversationMessage(
         updatedAt: new Date(),
       })
       .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
+      .returning({ id: conversationMessages.id })
 
     // This branch emits no message.deleted, so the ticket's first response is
     // recomputed here: deleting the first reply moves it to the next one.
     // Best-effort, because the delete already landed. Dynamically imported:
     // this module imports nothing from the tickets domain.
+    // A delete that changed no row, or removed a note or a message written
+    // after the first response, cannot move it and is skipped.
     try {
-      const { syncTicketFirstResponse } =
-        await import('@/lib/server/domains/tickets/ticket-first-response')
-      await syncTicketFirstResponse(message.ticketId)
+      if (deleted.length > 0) {
+        const { syncTicketFirstResponseAfterRemoval } =
+          await import('@/lib/server/domains/tickets/ticket-first-response')
+        await syncTicketFirstResponseAfterRemoval(message.ticketId, message)
+      }
     } catch (err) {
       log.warn(
         { err, ticket_id: message.ticketId, message_id: messageId },
