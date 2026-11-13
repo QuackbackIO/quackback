@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 
 const mockListTickets = vi.fn()
-const mockGetTicket = vi.fn()
+const mockGetTicketForActor = vi.fn()
 const mockAssertTicketVisible = vi.fn()
 const mockCreateTicket = vi.fn()
 const mockListMessages = vi.fn()
@@ -11,7 +11,7 @@ const mockAddNote = vi.fn()
 
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   listTickets: (...a: unknown[]) => mockListTickets(...a),
-  getTicket: (...a: unknown[]) => mockGetTicket(...a),
+  getTicketForActor: (...a: unknown[]) => mockGetTicketForActor(...a),
   assertTicketVisible: (...a: unknown[]) => mockAssertTicketVisible(...a),
   createTicket: (...a: unknown[]) => mockCreateTicket(...a),
 }))
@@ -142,7 +142,7 @@ describe('ticket MCP tools', () => {
   })
 
   it('get_ticket returns the ticket, its thread, and derives the older-page cursor', async () => {
-    mockGetTicket.mockResolvedValue(ticketDTO)
+    mockGetTicketForActor.mockResolvedValue(ticketDTO)
     mockListMessages.mockResolvedValue({
       messages: [
         {
@@ -169,11 +169,10 @@ describe('ticket MCP tools', () => {
       hasMore: true,
     })
     const out = await collect(teamAuth).get('get_ticket')!({ ticketId: 'ticket_1' })
-    expect(mockAssertTicketVisible).toHaveBeenCalledWith(
+    expect(mockGetTicketForActor).toHaveBeenCalledWith(
       'ticket_1',
       expect.objectContaining({ principalId: 'principal_key' })
     )
-    expect(mockGetTicket).toHaveBeenCalledWith('ticket_1')
     expect(mockListMessages).toHaveBeenCalledWith('ticket_1', {
       before: undefined,
       includeInternal: false,
@@ -189,7 +188,7 @@ describe('ticket MCP tools', () => {
 
   it('get_ticket refuses a ticket the caller cannot see, without reading it or its thread', async () => {
     const { NotFoundError } = await import('@/lib/shared/errors')
-    mockAssertTicketVisible.mockRejectedValueOnce(
+    mockGetTicketForActor.mockRejectedValueOnce(
       new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
     )
     const out = await collect(teamAuth).get('get_ticket')!({
@@ -197,12 +196,11 @@ describe('ticket MCP tools', () => {
       includeInternal: true,
     })
     expect(out.isError).toBe(true)
-    expect(mockGetTicket).not.toHaveBeenCalled()
     expect(mockListMessages).not.toHaveBeenCalled()
   })
 
   it('get_ticket renders an image-bearing message as markdown, never empty', async () => {
-    mockGetTicket.mockResolvedValue(ticketDTO)
+    mockGetTicketForActor.mockResolvedValue(ticketDTO)
     mockListMessages.mockResolvedValue({
       messages: [
         {
@@ -239,7 +237,7 @@ describe('ticket MCP tools', () => {
   })
 
   it('get_ticket appends an attachments summary when a message carries attachments', async () => {
-    mockGetTicket.mockResolvedValue(ticketDTO)
+    mockGetTicketForActor.mockResolvedValue(ticketDTO)
     mockListMessages.mockResolvedValue({
       messages: [
         {

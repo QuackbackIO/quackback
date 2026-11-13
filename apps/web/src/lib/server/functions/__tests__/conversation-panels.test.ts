@@ -14,7 +14,7 @@ import { AGENT_CONVERSATION_PANELS } from '@/lib/shared/conversation/agent-panel
 
 const mocks = vi.hoisted(() => ({
   getLinkedCustomerTicket: vi.fn(),
-  getTicket: vi.fn(),
+  getTicketForActor: vi.fn(),
   getBlockStatus: vi.fn(),
   getPortalUserDetail: vi.fn(),
   listConversationsForAgent: vi.fn(),
@@ -30,7 +30,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/server/domains/inbox/inbox.query', () => ({
   getLinkedCustomerTicket: mocks.getLinkedCustomerTicket,
 }))
-vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({ getTicket: mocks.getTicket }))
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  getTicketForActor: mocks.getTicketForActor,
+}))
 vi.mock('@/lib/server/domains/principals/blocking', () => ({
   getBlockStatus: mocks.getBlockStatus,
 }))
@@ -102,7 +104,7 @@ const LINK = { id: TICKET, number: 7, title: 'Broken', statusName: 'Open', statu
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.getLinkedCustomerTicket.mockResolvedValue(LINK)
-  mocks.getTicket.mockResolvedValue({ id: TICKET, title: 'Broken' })
+  mocks.getTicketForActor.mockResolvedValue({ id: TICKET, title: 'Broken' })
   mocks.getBlockStatus.mockResolvedValue({ blockedAt: null })
   mocks.getPortalUserDetail.mockResolvedValue({ principalId: VISITOR })
   mocks.listConversationsForAgent.mockResolvedValue({
@@ -162,7 +164,7 @@ describe('loadAgentConversationPanels', () => {
       { visitorPrincipalId: VISITOR },
       actor
     )
-    expect(mocks.getTicket).toHaveBeenCalledWith(TICKET)
+    expect(mocks.getTicketForActor).toHaveBeenCalledWith(TICKET, actor)
     expect(mocks.listMacros).toHaveBeenCalledWith('support')
     // The link is read once for every ticket panel.
     expect(mocks.getLinkedCustomerTicket).toHaveBeenCalledTimes(1)
@@ -193,12 +195,12 @@ describe('loadAgentConversationPanels', () => {
       company: null,
       languagePreference: null,
     })
-    expect(mocks.getTicket).not.toHaveBeenCalled()
+    expect(mocks.getTicketForActor).not.toHaveBeenCalled()
     expect(mocks.getStageLabels).not.toHaveBeenCalled()
   })
 
   it.each([
-    ['linkedTicket', PERMISSIONS.TICKET_VIEW, mocks.getTicket],
+    ['linkedTicket', PERMISSIONS.TICKET_VIEW, mocks.getTicketForActor],
     ['ticketStageLabels', PERMISSIONS.TICKET_VIEW, mocks.getStageLabels],
     ['blockStatus', PERMISSIONS.PEOPLE_VIEW, mocks.getBlockStatus],
     ['contact', PERMISSIONS.PEOPLE_VIEW, mocks.getPortalUserDetail],

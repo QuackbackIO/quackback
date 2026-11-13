@@ -17,10 +17,8 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId')({
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_VIEW })
           const ticketId = parseTypeId<TicketId>(params.ticketId, 'ticket', 'ticket ID')
 
-          const { assertTicketVisible, getTicket } =
-            await import('@/lib/server/domains/tickets/ticket.service')
-          await assertTicketVisible(ticketId, serviceActorFromApiAuth(auth))
-          const dto = await getTicket(ticketId)
+          const { getTicketForActor } = await import('@/lib/server/domains/tickets/ticket.service')
+          const dto = await getTicketForActor(ticketId, serviceActorFromApiAuth(auth))
           return successResponse(serializeTicket(dto))
         } catch (error) {
           return handleDomainError(error)
