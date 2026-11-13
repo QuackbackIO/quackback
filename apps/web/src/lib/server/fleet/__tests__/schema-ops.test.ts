@@ -33,6 +33,7 @@ import {
   readPreflightFacts,
   verifySchemaPostconditions,
   CONCURRENT_INDEX_SPECS,
+  indexSpecsOfPhase,
   MigrationPreflightError,
   REQUIRED_EXTENSIONS,
   type ConcurrentIndexSpec,
@@ -197,9 +198,7 @@ describe('verifySchemaPostconditions', () => {
     // A hand-maintained "expected indexes" list would drift the day someone
     // added a spec. This asserts the two are the same object, so they cannot.
     const report = await verifySchemaPostconditions(sql)
-    expect(report.observed.missingIndexes).toEqual(
-      CONCURRENT_INDEX_SPECS.filter((s) => s.phase === 'boot').map((s) => s.name)
-    )
+    expect(report.observed.missingIndexes).toEqual(indexSpecsOfPhase('boot').map((s) => s.name))
   })
 })
 

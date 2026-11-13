@@ -217,6 +217,18 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
   },
 ]
 
+/**
+ * The specs built in one phase, in list order: `boot` for the boot step and the
+ * post-condition check, `background` for the `deferred-index-build` job. Every
+ * site that splits the list goes through this.
+ */
+export function indexSpecsOfPhase(
+  phase: ConcurrentIndexSpec['phase'],
+  specs: readonly ConcurrentIndexSpec[] = CONCURRENT_INDEX_SPECS
+): ConcurrentIndexSpec[] {
+  return specs.filter((s) => s.phase === phase)
+}
+
 /** The oldest server the lineage runs on (`CREATE OR REPLACE TRIGGER`). */
 export const MIN_SERVER_VERSION_NUM = 140000
 /** The oldest pgvector with the HNSW access method. */
@@ -543,7 +555,7 @@ export interface IndexBuildEvent {
 
 export async function ensureConcurrentIndexes(
   sql: postgres.Sql,
-  specs: readonly ConcurrentIndexSpec[] = CONCURRENT_INDEX_SPECS.filter((s) => s.phase === 'boot'),
+  specs: readonly ConcurrentIndexSpec[] = indexSpecsOfPhase('boot'),
   onBuild: (event: IndexBuildEvent) => void = () => {}
 ): Promise<string[]> {
   const rebuilt: string[] = []
@@ -701,7 +713,7 @@ export async function verifySchemaPostconditions(
   opts: { indexSpecs?: readonly ConcurrentIndexSpec[] } = {}
 ): Promise<PostconditionReport> {
   const specs = opts.indexSpecs ?? CONCURRENT_INDEX_SPECS
-  const deferredNames = new Set(specs.filter((s) => s.phase === 'background').map((s) => s.name))
+  const deferredNames = new Set(indexSpecsOfPhase('background', specs).map((s) => s.name))
   const invalid = await listInvalidIndexes(sql)
   // An invalid background index is a build the job will heal, not a broken database.
   const invalidIndexes = invalid.filter((i) => !deferredNames.has(i.name))
@@ -717,12 +729,11 @@ export async function verifySchemaPostconditions(
   const invalidNames = new Set(invalid.map((i) => i.name))
   const missingIndexes: string[] = []
   const pendingIndexes: string[] = []
-  for (const spec of specs) {
-    if (spec.phase === 'boot') {
-      if (!presentNames.has(spec.name)) missingIndexes.push(spec.name)
-    } else if (!presentNames.has(spec.name) || invalidNames.has(spec.name)) {
-      pendingIndexes.push(spec.name)
-    }
+  for (const spec of indexSpecsOfPhase('boot', specs)) {
+    if (!presentNames.has(spec.name)) missingIndexes.push(spec.name)
+  }
+  for (const spec of indexSpecsOfPhase('background', specs)) {
+    if (!presentNames.has(spec.name) || invalidNames.has(spec.name)) pendingIndexes.push(spec.name)
   }
 
   const extRows = await sql.unsafe<{ extname: string }[]>(`SELECT extname FROM pg_extension`)

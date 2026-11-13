@@ -530,8 +530,8 @@ export {
 
 // The index list and builder, for the deferred-index-build job.
 export {
-  CONCURRENT_INDEX_SPECS,
   ensureConcurrentIndexes,
+  indexSpecsOfPhase,
   type ConcurrentIndexSpec,
 } from '@quackback/db/schema-ops'
 

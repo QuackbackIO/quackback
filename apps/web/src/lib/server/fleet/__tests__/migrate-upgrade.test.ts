@@ -26,14 +26,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { runMigrations, type MigrationProgress } from '@quackback/db/migrate'
 import {
-  CONCURRENT_INDEX_SPECS,
+  indexSpecsOfPhase,
   MigrationPreflightError,
   type IndexBuildEvent,
 } from '@quackback/db/schema-ops'
 import { BUNDLED_MIGRATIONS, MIGRATIONS_DIR } from '@quackback/db/schema-version'
 
 /** The indexes the boot builds before the server listens. */
-const BOOT_SPECS = CONCURRENT_INDEX_SPECS.filter((s) => s.phase === 'boot')
+const BOOT_SPECS = indexSpecsOfPhase('boot')
 
 const ADMIN_URL =
   process.env.DRIFT_CHECK_DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/postgres'

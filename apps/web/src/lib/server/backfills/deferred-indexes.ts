@@ -29,7 +29,7 @@ import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
 import {
   db,
-  CONCURRENT_INDEX_SPECS,
+  indexSpecsOfPhase,
   ensureConcurrentIndexes,
   type ConcurrentIndexSpec,
 } from '@/lib/server/db'
@@ -52,7 +52,7 @@ const INDEX_BUILD_COOL_OFF_MS = 24 * 60 * 60 * 1000
 
 let overrides: readonly ConcurrentIndexSpec[] | null = null
 
-const BACKGROUND_INDEX_SPECS = CONCURRENT_INDEX_SPECS.filter((s) => s.phase === 'background')
+const BACKGROUND_INDEX_SPECS = indexSpecsOfPhase('background')
 
 /** The background-phase indexes this build creates. */
 export function deferredIndexSpecs(): readonly ConcurrentIndexSpec[] {
