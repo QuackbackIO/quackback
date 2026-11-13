@@ -28,7 +28,7 @@ vi.mock('@/lib/server/domains/settings/settings.changelog', () => ({
     emailsDisabled: false,
   }),
 }))
-vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', () => ({
+vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
   resolveSendingAddress: vi.fn().mockResolvedValue(null),
 }))
 vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
