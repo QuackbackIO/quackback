@@ -131,6 +131,8 @@ describe.skipIf(!fixture.available)(
       await fixture.begin()
       // The auth instance is cached across tests but its resource row is not:
       // the rollback removes it, so each test seeds the one the plugin expects.
+      // The open transaction holds that row for the whole test, so no other
+      // suite builds the auth instance on this origin.
       await ensureMcpOauthResource({
         db: testDb as unknown as Parameters<typeof ensureMcpOauthResource>[0]['db'],
         table: oauthResource,
