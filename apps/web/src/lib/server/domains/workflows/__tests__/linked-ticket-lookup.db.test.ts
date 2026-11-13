@@ -76,7 +76,10 @@ describe('the paired ticket lookup in workflow and macro actions (real DB, rolle
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  it("a scoped teammate's convert_to_ticket finds a pair it cannot see and files nothing", async () => {
+  it.each([
+    ['a pair it cannot see', false],
+    ['a soft-deleted pair', true],
+  ])("a scoped teammate's convert_to_ticket finds %s and files nothing", async (_, deleted) => {
     const teammate = await seedPerson('member')
     const visitor = await seedPerson('user')
     const teamX = createId('team') as TeamId
@@ -107,6 +110,7 @@ describe('the paired ticket lookup in workflow and macro actions (real DB, rolle
       type: 'customer',
       assigneeTeamId: teamY,
       requesterPrincipalId: visitor,
+      deletedAt: deleted ? new Date() : null,
     })
     await testDb
       .insert(ticketConversations)

@@ -300,7 +300,8 @@ const EMPTY_BRANCH = (cursor: string | null): InboxBranchFetch => ({
  * Only tickets the actor may open: a conversation whose paired ticket is
  * outside the actor's ticket filter (or a role with no ticket key) gets no
  * summary, so no id, number, title or status of that ticket leaves the
- * server.
+ * server. A workspace-wide service actor reads every pair, a soft-deleted
+ * ticket included, so a workflow's "already a ticket" check still sees it.
  */
 export async function loadLinkedCustomerTicketSummaries(
   conversationIds: ConversationId[],
@@ -324,7 +325,7 @@ export async function loadLinkedCustomerTicketSummaries(
       and(
         inArray(ticketConversations.conversationId, conversationIds),
         eq(ticketConversations.ticketType, 'customer'),
-        ticketFilter(actor)
+        isUnscopedService(actor) ? undefined : ticketFilter(actor)
       )
     )
   for (const row of rows) {
