@@ -1824,10 +1824,18 @@ export async function deleteConversationMessage(
 
     // This branch emits no message.deleted, so the ticket's first response is
     // recomputed here: deleting the first reply moves it to the next one.
-    // Dynamically imported: this module imports nothing from the tickets domain.
-    const { syncTicketFirstResponse } =
-      await import('@/lib/server/domains/tickets/ticket-first-response')
-    await syncTicketFirstResponse(message.ticketId)
+    // Best-effort, because the delete already landed. Dynamically imported:
+    // this module imports nothing from the tickets domain.
+    try {
+      const { syncTicketFirstResponse } =
+        await import('@/lib/server/domains/tickets/ticket-first-response')
+      await syncTicketFirstResponse(message.ticketId)
+    } catch (err) {
+      log.warn(
+        { err, ticket_id: message.ticketId, message_id: messageId },
+        'ticket first response recompute after a delete failed'
+      )
+    }
 
     // No realtime broadcast and no webhook here: ticket-thread update routing
     // (and its message.deleted webhook analogue) arrives with the customer
