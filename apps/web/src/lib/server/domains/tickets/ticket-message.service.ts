@@ -222,6 +222,9 @@ interface InsertTicketMessageOpts {
    *  reply passed TICKET_REPLY, a requester reply passed ownership). Unused on
    *  the ticket-parented paths. */
   actor: Actor
+  /** The ticket row, when the caller already loaded it (the visibility check),
+   *  so the write does not read it a second time. */
+  ticket?: Ticket
 }
 
 /**
@@ -265,7 +268,7 @@ export async function insertTicketMessage(
 
   // Validate existence + read first_response_at before the write; the stamp is
   // idempotent (set once), so a read-before-update race is harmless.
-  const existing = await loadTicketOr404(input.ticketId)
+  const existing = opts.ticket ?? (await loadTicketOr404(input.ticketId))
 
   // THE PHASE 1a REDIRECT. The internal-note guard comes first (notes stay
   // ticket-scoped whichever parent the pair has), then the pair resolution
@@ -419,8 +422,9 @@ export async function sendTicketMessage(
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_REPLY, 'reply to this ticket')
   const principalId = requireAgentPrincipal(actor)
-  await assertTicketVisible(input.ticketId, actor)
+  const visible = await assertTicketVisible(input.ticketId, actor)
   const { message, ticket } = await insertTicketMessage(input, principalId, {
+    ticket: visible,
     senderType: 'agent',
     isInternal: false,
     stampFirstResponse: true,
@@ -500,8 +504,9 @@ export async function addTicketNote(
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_NOTE, 'add a note to this ticket')
   const principalId = requireAgentPrincipal(actor)
-  await assertTicketVisible(input.ticketId, actor)
+  const visible = await assertTicketVisible(input.ticketId, actor)
   const { message, ticket } = await insertTicketMessage(input, principalId, {
+    ticket: visible,
     senderType: 'agent',
     isInternal: true,
     stampFirstResponse: false,
