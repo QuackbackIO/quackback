@@ -98,6 +98,7 @@ With `docker-compose.prod.yml`, pin the release with `QUACKBACK_TAG` in `.env`.
 | `NODE_ENV`                         | Environment                                                                                                                                                                                                                                                                                             | `production` |
 | `QUACKBACK_ROLE`                   | Process role: `all`, `web`, or `worker` (see [Scaling Out](#scaling-out))                                                                                                                                                                                                                               | `all`        |
 | `SKIP_MIGRATIONS`                  | Skip the startup migration step (run migrations out-of-band instead)                                                                                                                                                                                                                                    | `false`      |
+| `QUACKBACK_DISABLED_JOBS`          | Comma list of job names to pause, such as `spam-retention,file-retention`. A paused job writes and runs nothing and its queued jobs wait; each start logs one `job paused` line per name. Remove the name and restart to resume                                                                         | unset        |
 | `SETUP_OWNER_EMAIL`                | Hands an unfinished setup to this address. Use it when the first account created is not yours or you can't sign in to it, then restart; that address can create its account and finish setup. No effect once setup is finished                                                                          | -            |
 | `EMAIL_SMTP_HOST`                  | SMTP server for outbound email; with `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`                                                                                                                                                                                                            | -            |
 | `EMAIL_RESEND_API_KEY`             | Resend API key for outbound email (`RESEND_API_KEY` also works). Also fetches inbound mail bodies when receiving through Resend                                                                                                                                                                         | -            |
@@ -381,6 +382,12 @@ docker compose -f docker-compose.prod.yml pull
 # 3. Restart: migrations run automatically on startup
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+**There is no downgrade.** Migrations are not reversible, so the way back is the dump from step 1: keep it until the upgrade work below is done and you have checked the new version (an upgrade that changes existing data logs a summary line; read it first), and restore it to go back. Never start an older image on an upgraded database: it starts without an error and reads data the new version has already changed.
+
+**What happens on the first start.** Migrations run before the server listens. A migration waits at most 30 seconds for a table lock; if a long query or an open transaction holds one, the start stops with a lock timeout error and changes nothing, so stop that query and start again. Once the server listens, data changes on large tables and indexes nothing needs at boot run in the background, and some pages can be slower until they finish. The worker logs one `upgrade work done` line when they have.
+
+**Sizing.** Before upgrading a large install, make sure PostgreSQL has free disk of at least the size of your largest table: a background index is built next to the table, and a background data change writes new row versions before old ones are cleaned up.
 
 #### Upgrading from 0.13
 
