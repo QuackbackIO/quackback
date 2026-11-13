@@ -395,6 +395,66 @@ describe.skipIf(!fixture.available)('a rating never reopens a resolved ticket', 
     expect((await storedRating(conversationId)).rating).toBeNull()
   })
 
+  it('moves a waiting ticket on a collect reply to an open conversation', async () => {
+    const { requester, agent, ticketId, conversationId } = await seedResolvedPairWithCsatBlock()
+    const waiting = createId('ticket_status') as TicketStatusId
+    await testDb.insert(ticketStatuses).values({
+      id: waiting,
+      name: 'C-Waiting',
+      slug: `c_waiting_${suffix()}`,
+      category: 'open',
+      publicStage: 'awaiting_requester',
+      position: 50,
+    })
+    await testDb
+      .update(tickets)
+      .set({ statusId: waiting, resolvedAt: null })
+      .where(eq(tickets.id, ticketId))
+    await testDb
+      .update(conversations)
+      .set({ status: 'open', resolvedAt: null })
+      .where(eq(conversations.id, conversationId))
+    const [collect] = await testDb
+      .insert(conversationMessages)
+      .values({
+        conversationId,
+        principalId: agent,
+        senderType: 'agent',
+        content: 'What is your plan?',
+        metadata: {
+          block: {
+            v: 1,
+            kind: 'collect',
+            runId: 'run_test',
+            nodeId: 'node_collect',
+            waiting: true,
+            attributeKey: 'plan',
+            fieldType: 'text',
+            required: true,
+          },
+        },
+      })
+      .returning()
+
+    const { message } = await send(conversationId, requester, {
+      content: '',
+      blockReply: { kind: 'collect', inReplyToMessageId: collect.id, value: 'Pro' },
+    })
+    const event = await storedMessageEvent(message.id)
+    expect(
+      (event.payload as { message: { blockReplyKind?: unknown } }).message.blockReplyKind
+    ).toBe('collect')
+
+    await runReactionJob(event.eventId)
+
+    const [after] = await testDb
+      .select({ statusId: tickets.statusId })
+      .from(tickets)
+      .where(eq(tickets.id, ticketId))
+    expect(after.statusId).not.toBe(waiting)
+    expect((await state(ticketId, conversationId)).conversation).toBe('open')
+  })
+
   it('drops a blockReply a caller supplies in metadata, so the thread reopens', async () => {
     const { requester, ticketId, conversationId, blockMessageId } =
       await seedResolvedPairWithCsatBlock()

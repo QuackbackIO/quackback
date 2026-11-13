@@ -30,8 +30,8 @@ comment event).
 `data.message.blockReplyKind` names the kind of conversation block a visitor message
 answers (`csat`, `buttons`, `collect` or `collectReply`), and is `null` for every
 other message. A rating given in the thread is a `message.created` with
-`blockReplyKind: "csat"`. A reply to any block leaves a resolved conversation and its
-ticket as they are; only a message with `blockReplyKind: null` reopens them.
+`blockReplyKind: "csat"`. A block reply never reopens a closed conversation or its
+ticket. On an open or snoozed conversation it behaves like any other reply.
 `message.note_created` and `message.updated` carry the field by the same rule. Events
 stored before the field existed omit it; treat a missing field as `null`.
 
