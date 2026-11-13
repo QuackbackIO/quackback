@@ -10,9 +10,16 @@ import { eq } from 'drizzle-orm'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { user, verification } from '@/lib/server/db'
 
-vi.hoisted(() => {
-  process.env.BASE_URL = 'http://localhost:3000'
+// An origin no other suite builds the auth instance on. The build seeds the MCP
+// resource row for BASE_URL inside the test transaction, which holds it until
+// rollback. Two suites running in parallel on one origin each end up holding
+// that row or a shared cache row while waiting for the other, and Postgres
+// aborts one of them as a deadlock.
+const ORIGIN = vi.hoisted(() => {
+  const origin = 'http://localhost:3001'
+  process.env.BASE_URL = origin
   process.env.SECRET_KEY = 'test-secret-key-for-magic-link-mint-0123456789'
+  return origin
 })
 
 // The auth hooks read the request's headers; there is no server request here.
@@ -54,8 +61,6 @@ const fixture = await createDbTestFixture({
     await db.select({ id: user.id }).from(user).limit(0)
   },
 })
-
-const ORIGIN = 'http://localhost:3000'
 
 async function authHandler() {
   const { getAuth } = await import('@/lib/server/auth/index')
