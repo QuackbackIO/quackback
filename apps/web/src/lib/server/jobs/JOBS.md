@@ -647,7 +647,8 @@ summary's AI call. A database call that cannot be cancelled keeps running in
 the background, and its retry may overlap it, which the reactions tolerate
 because their writes are guarded on the state they read.
 
-`event-reactions` (SLA clocks, pair-ticket reopen, CSAT confirm) runs one job
+`event-reactions` (SLA clocks, pair-ticket reopen, ticket first response,
+CSAT confirm) runs one job
 at a time per worker process, claimed in enqueue order, so in the common case
 its reactions apply in event order. That is all it guarantees. The order is
 not global:
@@ -683,6 +684,10 @@ relying on it:
   the SLA was applied, read from the status changes. A settle judges its clock
   as it stood at the settle's own time and stores that deadline, so a pause
   excluded before the settle ran leaves no trace on it.
+- A customer ticket's first response is recomputed from the message rows of
+  the ticket and its paired conversation (`domains/tickets/ticket-first-response.ts`)
+  on every `message.created` and `message.deleted` of that conversation, so a
+  late, repeated or reordered reaction writes the same value.
 - The pair-ticket reopen leaves the ticket alone when its status moved after
   the message (a close, read from the row, or any move its activity log
   records; a status move and its record are written in one transaction), and
@@ -727,11 +732,6 @@ remove it. The known remaining effects:
   rollback, both would outlive it and, after a later roll-forward, exclude
   spans twice or make a newer cycle look older than its opener; step 5 of the
   runbook below strips them.
-- **A reply through an older API key reads as a person's.** Its row is stored
-  like the person's inbox reply, so the response clocks count it as a human
-  reply although its own event does not (see `sla.messages.ts`). Its own
-  reaction settles an armed next-response cycle at its time, and a later human
-  reply's reaction settles the first response at it.
 - **The history follows the order events were written.** Status changes on the
   older emit path are written to the event log without waiting, so two moves
   in quick succession can be written in the opposite order to the moves
