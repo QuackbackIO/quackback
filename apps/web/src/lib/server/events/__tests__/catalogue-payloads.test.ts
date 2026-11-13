@@ -42,6 +42,64 @@ describe('catalogue payloads (WO-5)', () => {
     expect(() => def.payload.parse({ ...good, senderType: 'robot' })).toThrow()
   })
 
+  it('ticket.due_changed carries the new and previous due dates, null when unset', () => {
+    const def = getEventDefinition('ticket.due_changed')!
+    const ticket = {
+      id: 'ticket_x',
+      number: 12,
+      type: 'customer',
+      priority: 'high',
+      dueAt: '2026-10-21T21:59:00.000Z',
+    }
+    const set = {
+      ticket,
+      title: 'Cannot log in',
+      dueAt: '2026-10-21T21:59:00.000Z',
+      previousDueAt: null,
+    }
+    expect(def.payload.parse(set)).toMatchObject({ previousDueAt: null })
+    const cleared = { ticket: { ...ticket, dueAt: null }, title: 'Cannot log in', dueAt: null }
+    expect(() =>
+      def.payload.parse({ ...cleared, previousDueAt: '2026-10-21T21:59:00.000Z' })
+    ).not.toThrow()
+    expect(() => def.payload.parse({ ...set, dueAt: 42 })).toThrow()
+  })
+
+  it.each(['ticket.due_soon', 'ticket.overdue'])('%s requires the due date it alerts for', (t) => {
+    const def = getEventDefinition(t)!
+    const good = {
+      ticket: {
+        id: 'ticket_x',
+        number: 12,
+        type: 'customer',
+        priority: 'none',
+        assignedPrincipalId: 'principal_agent',
+        assignedTeamId: null,
+        dueAt: '2026-10-21T21:59:00.000Z',
+      },
+      title: 'Cannot log in',
+      dueAt: '2026-10-21T21:59:00.000Z',
+    }
+    expect(def.payload.parse(good)).toMatchObject({ dueAt: '2026-10-21T21:59:00.000Z' })
+    expect(() => def.payload.parse({ ...good, dueAt: null })).toThrow()
+  })
+
+  it('the ticket ref takes a dueAt and still accepts a ref recorded without one', () => {
+    const def = getEventDefinition('ticket.assigned')!
+    const base = {
+      assignedPrincipalId: 'principal_agent',
+      previousPrincipalId: null,
+      assignedTeamId: null,
+      previousTeamId: null,
+    }
+    const ref = { id: 'ticket_x', number: 12, type: 'customer', priority: 'high' }
+    expect(() => def.payload.parse({ ...base, ticket: ref })).not.toThrow()
+    expect(() =>
+      def.payload.parse({ ...base, ticket: { ...ref, dueAt: '2026-10-21T21:59:00.000Z' } })
+    ).not.toThrow()
+    expect(() => def.payload.parse({ ...base, ticket: { ...ref, dueAt: 7 } })).toThrow()
+  })
+
   it('tolerates extra fields on a real event (loose top-level object)', () => {
     const def = getEventDefinition('conversation.created')!
     const withExtra = {
