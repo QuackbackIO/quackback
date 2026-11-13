@@ -99,7 +99,6 @@ export function upgradeJob(handler: JobHandler): JobHandler {
  * jobs; nothing here waits for them.
  */
 export async function enqueueUpgradeWork(): Promise<void> {
-  await enqueueBackfillPass()
-  await enqueueDeferredIndexBuilds()
+  await Promise.all([enqueueBackfillPass(), enqueueDeferredIndexBuilds()])
   await noteUpgradeWorkDone()
 }

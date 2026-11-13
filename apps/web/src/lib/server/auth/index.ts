@@ -134,15 +134,12 @@ const AUTH_CACHE_KEY = 'instance'
 const authBuilds = new WorkspaceKeyedCache<Promise<AuthInstance>>(256)
 
 /**
- * A workspace whose MCP client scope reconcile has failed and not yet
- * succeeded. Kept apart from the cached instance: `resetAuth()` drops the
- * instance on an auth config change, and the pending retry must outlive that.
+ * When a workspace's failed MCP client scope reconcile was last attempted; no
+ * entry once it has succeeded. Kept apart from the cached instance:
+ * `resetAuth()` drops the instance on an auth config change, and the pending
+ * retry must outlive that.
  */
-interface PendingClientScopeReconcile {
-  lastAttemptAt: number
-  inFlight: boolean
-}
-const pendingClientScopeReconciles = new WorkspaceKeyedCache<PendingClientScopeReconcile>(256)
+const clientScopeReconcileAttemptAt = new WorkspaceKeyedCache<number>(256)
 /** The least time between two attempts at a failed client scope reconcile. */
 const CLIENT_SCOPE_RECONCILE_RETRY_MS = 60_000
 
@@ -406,12 +403,9 @@ async function createAuth() {
   // Never throws. A failure leaves sign-in working and is retried in the
   // background by `getAuth()` (see retryClientScopeReconcile).
   if (await reconcileMcpOauthClientScopes({ db, log })) {
-    pendingClientScopeReconciles.delete(AUTH_CACHE_KEY)
+    clientScopeReconcileAttemptAt.delete(AUTH_CACHE_KEY)
   } else {
-    pendingClientScopeReconciles.set(AUTH_CACHE_KEY, {
-      lastAttemptAt: Date.now(),
-      inFlight: false,
-    })
+    clientScopeReconcileAttemptAt.set(AUTH_CACHE_KEY, Date.now())
   }
 
   // Origin allowlist. Better Auth rejects an auth POST whose Origin is
@@ -947,11 +941,12 @@ export async function getAuth(): Promise<AuthInstance> {
  * succeeds the workspace is no longer pending and nothing runs again.
  */
 function retryClientScopeReconcile(): void {
-  const pending = pendingClientScopeReconciles.get(AUTH_CACHE_KEY)
-  if (!pending || pending.inFlight) return
-  if (Date.now() - pending.lastAttemptAt < CLIENT_SCOPE_RECONCILE_RETRY_MS) return
-  pending.inFlight = true
-  pending.lastAttemptAt = Date.now()
+  const lastAttemptAt = clientScopeReconcileAttemptAt.get(AUTH_CACHE_KEY)
+  if (lastAttemptAt === undefined) return
+  if (Date.now() - lastAttemptAt < CLIENT_SCOPE_RECONCILE_RETRY_MS) return
+  // Stamped before the attempt starts, so the requests of the next minute
+  // start no second one.
+  clientScopeReconcileAttemptAt.set(AUTH_CACHE_KEY, Date.now())
   void import('@/lib/server/db')
     .then(({ db }) => reconcileMcpOauthClientScopes({ db, log }))
     .catch((err) => {
@@ -959,13 +954,7 @@ function retryClientScopeReconcile(): void {
       return false
     })
     .then((reconciled) => {
-      // A rebuild that reconciled in the meantime replaced or cleared the entry.
-      if (pendingClientScopeReconciles.get(AUTH_CACHE_KEY) !== pending) return
-      if (reconciled) pendingClientScopeReconciles.delete(AUTH_CACHE_KEY)
-      else {
-        pending.inFlight = false
-        pending.lastAttemptAt = Date.now()
-      }
+      if (reconciled) clientScopeReconcileAttemptAt.delete(AUTH_CACHE_KEY)
     })
 }
 
