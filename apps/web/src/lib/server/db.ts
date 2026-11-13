@@ -260,6 +260,8 @@ export {
   emailSendingDomains,
   emailSesTenants,
   emailSenders,
+  // Schema tables - domains added by name (Settings > Domains)
+  domains,
   EMAIL_SENDER_SURFACES,
   // Schema tables - office hours + SLA (support platform §4.6)
   officeHoursSchedules,
