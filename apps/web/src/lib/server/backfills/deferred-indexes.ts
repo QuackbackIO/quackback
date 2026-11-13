@@ -159,7 +159,7 @@ export async function enqueueDeferredIndexBuilds(now = Date.now()): Promise<numb
       }
       continue
     }
-    const finishedAt = row ? await finishedAtOf(dedupeKey(spec.name, gen)) : null
+    const finishedAt = row?.finishedAt ?? null
     if (finishedAt && now - finishedAt.getTime() < INDEX_BUILD_COOL_OFF_MS) continue
     if (await enqueueBuild(spec.name, gen + 1, rounds + 1)) written += 1
   }
@@ -171,14 +171,6 @@ export async function enqueueDeferredIndexBuilds(now = Date.now()): Promise<numb
     )
   }
   return written
-}
-
-async function finishedAtOf(key: string): Promise<Date | null> {
-  const rows = (await db.execute(sql`
-    SELECT finished_at FROM job_queue WHERE queue = ${DEFERRED_INDEX_QUEUE} AND dedupe_key = ${key}
-  `)) as unknown as Array<{ finished_at: Date | string | null }>
-  const value = rows[0]?.finished_at ?? null
-  return value === null ? null : new Date(value)
 }
 
 /**

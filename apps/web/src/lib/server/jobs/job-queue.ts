@@ -227,6 +227,8 @@ export interface JobLookup {
   runAt: Date
   attempts: number
   maxAttempts: number
+  /** When the row reached `succeeded` or `failed`; null while it is live. */
+  finishedAt: Date | null
 }
 
 /** The subset of a claimed row a handler and the lease writes need. */
@@ -470,7 +472,7 @@ export async function findJobByDedupeKey(
   dedupeKey: string
 ): Promise<JobLookup | null> {
   const result = await db.execute(sql`
-    SELECT job_id, queue, status, run_at, attempts, max_attempts
+    SELECT job_id, queue, status, run_at, attempts, max_attempts, finished_at
     FROM job_queue
     WHERE queue = ${queue} AND dedupe_key = ${dedupeKey}
     LIMIT 1
@@ -482,6 +484,7 @@ export async function findJobByDedupeKey(
     run_at: Date | string
     attempts: number
     max_attempts: number
+    finished_at: Date | string | null
   }>(result)
   if (rows.length === 0) return null
   const row = rows[0]
@@ -492,6 +495,7 @@ export async function findJobByDedupeKey(
     runAt: asDate(row.run_at),
     attempts: row.attempts,
     maxAttempts: row.max_attempts,
+    finishedAt: row.finished_at === null ? null : asDate(row.finished_at),
   }
 }
 
