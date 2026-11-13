@@ -47,7 +47,7 @@ import { kvGet, kvSet } from '@/lib/server/kv/pg-kv'
 import { enqueueJob, findJobByDedupeKey } from '@/lib/server/jobs/job-queue'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { findJobDefinition, maxAttemptsFor } from '@/lib/server/jobs/definitions'
-import { migrationApplied } from './schema-floor'
+import { migrationAppliedIn } from '@/lib/server/fleet/schema-floor'
 import { BATCHED_BACKFILLS } from './registry'
 
 const log = logger.child({ component: 'startup-backfill' })
@@ -84,7 +84,7 @@ export interface BackfillFixtureContext {
 }
 
 /** Reads the result a walk was meant to produce. True when it did. */
-export type BackfillVerify = (db: BackfillDb) => Promise<boolean>
+type BackfillVerify = (db: BackfillDb) => Promise<boolean>
 
 /** One table walk: the backfill itself, or the follow-up it registers. */
 export interface BackfillWalk {
@@ -179,11 +179,20 @@ export class BackfillBusyError extends Error {
 }
 
 /** Thrown when this workspace lacks the migration a walk needs. The row is retried. */
-export class BackfillMigrationMissingError extends Error {
+class BackfillMigrationMissingError extends Error {
   constructor(name: string, tag: string) {
     super(`backfill ${name} waits for migration ${tag}, which this workspace has not applied`)
     this.name = 'BackfillMigrationMissingError'
   }
+}
+
+/**
+ * Has this workspace applied the migration `tag`? The schedule pass does not
+ * enqueue a walk before it, and a walk that still meets it missing throws, so
+ * the queue retries the row rather than failing it for good.
+ */
+function migrationApplied(tag: string): Promise<boolean> {
+  return migrationAppliedIn(db, tag)
 }
 
 async function isDone(key: string): Promise<boolean> {

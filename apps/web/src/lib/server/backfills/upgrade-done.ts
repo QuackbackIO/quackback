@@ -37,7 +37,7 @@ function appVersion(): string {
  * The build, as far as its upgrade work goes: the app version and the set of
  * backfills and background indexes it carries.
  */
-export function upgradeBuildKey(): string {
+function upgradeBuildKey(): string {
   const work = [
     ...registeredBackfills().map((b) => `backfill:${b.name}${b.followUp ? '+follow-up' : ''}`),
     ...deferredIndexSpecs().map((s) => `index:${s.name}`),

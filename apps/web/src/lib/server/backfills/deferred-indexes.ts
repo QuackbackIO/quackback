@@ -42,13 +42,13 @@ import { DURABLE_KV_TTL_SECONDS, maxAttemptsOf } from './batched'
 
 const log = logger.child({ component: 'deferred-index-build' })
 
-export const DEFERRED_INDEX_QUEUE = 'deferred-index-build'
+const DEFERRED_INDEX_QUEUE = 'deferred-index-build'
 
 /** Generations a failing build gets before the pass stops for it. */
-export const MAX_INDEX_BUILD_ROUNDS = 5
+const MAX_INDEX_BUILD_ROUNDS = 5
 
 /** How long after a generation's row ends before a failing build gets the next. */
-export const INDEX_BUILD_COOL_OFF_MS = 24 * 60 * 60 * 1000
+const INDEX_BUILD_COOL_OFF_MS = 24 * 60 * 60 * 1000
 
 let overrides: readonly ConcurrentIndexSpec[] | null = null
 
@@ -152,7 +152,7 @@ export async function enqueueDeferredIndexBuilds(now = Date.now()): Promise<numb
       if (await enqueueBuild(spec.name, gen + 1, 1)) written += 1
       continue
     }
-    const rounds = (await kvGet<number>(keys.rounds)) ?? gen
+    const rounds = (await kvGet<number>(keys.rounds)) ?? 0
     if (rounds >= MAX_INDEX_BUILD_ROUNDS) {
       if (!state.warned.has(spec.name)) {
         state.warned.add(spec.name)

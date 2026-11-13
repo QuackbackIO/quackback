@@ -37,8 +37,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 })
 
 const ledger = vi.hoisted(() => ({ applied: new Set<string>() }))
-vi.mock('../schema-floor', () => ({
-  migrationApplied: async (tag: string) => ledger.applied.has(tag),
+vi.mock('@/lib/server/fleet/schema-floor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/fleet/schema-floor')>()),
+  migrationAppliedIn: async (_reader: unknown, tag: string) => ledger.applied.has(tag),
 }))
 
 const { logLines, stubLogger } = vi.hoisted(() => {
