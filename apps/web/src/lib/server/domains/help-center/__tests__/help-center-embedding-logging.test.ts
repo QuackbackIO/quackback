@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockEmbeddingsCreate = vi.fn()
 const mockWithUsageLogging = vi.fn()
+/** The column width: narrower vectors are refused without AI_EMBEDDING_ZERO_PAD. */
+const VECTOR = new Array(1536).fill(0.1)
 
 vi.mock('@/lib/server/domains/ai/config', () => ({
   getOpenAI: vi.fn(() => ({ embeddings: { create: mockEmbeddingsCreate } })),
@@ -44,7 +46,7 @@ beforeEach(() => {
     }
   )
   mockEmbeddingsCreate.mockResolvedValue({
-    data: [{ embedding: [0.1, 0.2] }],
+    data: [{ embedding: VECTOR }],
     usage: { prompt_tokens: 7, total_tokens: 7 },
   })
 })
@@ -56,7 +58,7 @@ describe('generateKbEmbedding usage logging', () => {
       metadata: { kbArticleId: 'article_1' },
     })
 
-    expect(result).toEqual([0.1, 0.2])
+    expect(result).toEqual(VECTOR)
     expect(mockWithUsageLogging).toHaveBeenCalledOnce()
     const [params] = mockWithUsageLogging.mock.calls[0]
     expect(params).toMatchObject({
@@ -104,8 +106,8 @@ describe('generateKbQueryEmbedding cache', () => {
   it('serves repeats from cache without a second provider call', async () => {
     const a = await generateKbQueryEmbedding('how do I vote')
     const b = await generateKbQueryEmbedding('how do I vote')
-    expect(a).toEqual([0.1, 0.2])
-    expect(b).toEqual([0.1, 0.2])
+    expect(a).toEqual(VECTOR)
+    expect(b).toEqual(VECTOR)
     expect(mockWithUsageLogging).toHaveBeenCalledOnce()
   })
 
@@ -119,7 +121,7 @@ describe('generateKbQueryEmbedding cache', () => {
     mockWithUsageLogging.mockRejectedValueOnce(new Error('boom'))
     expect(await generateKbQueryEmbedding('flaky query')).toBeNull()
     // Second call retries the provider instead of returning a cached null.
-    expect(await generateKbQueryEmbedding('flaky query')).toEqual([0.1, 0.2])
+    expect(await generateKbQueryEmbedding('flaky query')).toEqual(VECTOR)
     expect(mockWithUsageLogging).toHaveBeenCalledTimes(2)
   })
 })

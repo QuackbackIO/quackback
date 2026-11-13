@@ -10,6 +10,7 @@ import type { PostId, BoardId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { fitEmbeddingDimensions } from '@/lib/server/domains/ai/embedding-dimensions'
 import { embeddingUsage, withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { isTestPost } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
@@ -66,7 +67,10 @@ export async function generateEmbedding(
         ),
       (r) => embeddingUsage(r, truncated)
     )
-    return response.data[0]?.embedding ?? null
+    return fitEmbeddingDimensions(response.data[0]?.embedding, EMBEDDING_DIMENSIONS, {
+      model,
+      pipelineStep: logContext?.pipelineStep,
+    })
   } catch (error) {
     if (opts.signal?.aborted) {
       log.debug({ pipeline_step: logContext?.pipelineStep }, 'embedding generation aborted')

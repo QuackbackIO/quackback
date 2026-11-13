@@ -18,7 +18,7 @@ vi.mock('@/lib/server/domains/merge-suggestions/merge-check.service', () => ({
 }))
 vi.mock('@/lib/server/domains/ai/config', () => ({
   getOpenAI: () => ({
-    embeddings: { create: async () => ({ data: [{ embedding: [0.1, 0.2] }] }) },
+    embeddings: { create: async () => ({ data: [{ embedding: new Array(1536).fill(0.1) }] }) },
   }),
 }))
 vi.mock('@/lib/server/domains/ai/models', () => ({
