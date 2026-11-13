@@ -533,7 +533,7 @@ export const suggestTicketFieldValuesFn = createServerFn({ method: 'POST' })
     await assertConversationViewable(conversationId, actor)
     const { suggestTicketFieldValues } =
       await import('@/lib/server/domains/assistant/ticket-field-suggestion.service')
-    return suggestTicketFieldValues(conversationId, data.ticketTypeId as TicketTypeId)
+    return suggestTicketFieldValues(conversationId, data.ticketTypeId as TicketTypeId, actor)
   })
 
 // ---------------------------------------------------------------------------

@@ -123,6 +123,7 @@ import { setConversationAttributeValueFn } from '../conversation-attributes'
 import { loadAgentConversationPanels } from '../conversation-panels'
 import { getTicketEmbedForViewer } from '@/lib/server/domains/tickets/ticket-embed.service'
 import { listInboxItems } from '@/lib/server/domains/inbox/inbox.query'
+import { listMessages } from '@/lib/server/domains/conversation/conversation.query'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -329,6 +330,46 @@ describe('ticket reads check visibility (real DB, rolled back)', () => {
       expect(rows.has(hidden.conversationId)).toBe(true)
       expect(rows.get(hidden.conversationId)).toBeNull()
       expect(rows.get(visible.conversationId)).toMatchObject({ id: visible.ticketId })
+    })
+  })
+
+  describe('the thread of a conversation with a paired ticket', () => {
+    async function noteOn(ticketId: TicketId, principalId: PrincipalId) {
+      const content = `Acme internal note ${suffix()}`
+      await testDb.insert(conversationMessages).values({
+        ticketId,
+        principalId,
+        senderType: 'agent',
+        isInternal: true,
+        content,
+      })
+      return content
+    }
+
+    it('merges no row of a paired ticket I cannot see, internal notes included', async () => {
+      const w = await seedWorld()
+      const hidden = await w.pair(w.teamY)
+      const note = await noteOn(hidden.ticketId, w.teammate)
+      const page = await listMessages(hidden.conversationId, {
+        includeInternal: true,
+        linkedTicketViewer: w.actor,
+      })
+      const contents = page.messages.map((m) => m.content)
+      expect(contents).not.toContain(note)
+      expect(contents).not.toContain('Acme cannot sign in')
+    })
+
+    it('still merges the paired ticket I can see', async () => {
+      const w = await seedWorld()
+      const visible = await w.pair(w.teamX)
+      const note = await noteOn(visible.ticketId, w.teammate)
+      const page = await listMessages(visible.conversationId, {
+        includeInternal: true,
+        linkedTicketViewer: w.actor,
+      })
+      expect(page.messages.map((m) => m.content)).toEqual(
+        expect.arrayContaining([note, 'Acme cannot sign in'])
+      )
     })
   })
 

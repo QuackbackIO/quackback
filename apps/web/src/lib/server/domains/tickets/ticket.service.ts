@@ -127,6 +127,16 @@ export async function getTicket(id: TicketId): Promise<TicketDTO> {
   return ticketRowToDTO(await loadTicketOr404(id))
 }
 
+/** Whether the actor's ticket filter admits the ticket. */
+export async function isTicketVisibleTo(id: TicketId, actor: Actor): Promise<boolean> {
+  const [row] = await db
+    .select({ id: tickets.id })
+    .from(tickets)
+    .where(and(eq(tickets.id, id), ticketFilter(actor)))
+    .limit(1)
+  return !!row
+}
+
 /**
  * A ticket the actor may see, as its DTO, or NotFound. The read every
  * agent-facing path uses; `getTicket` is for system callers that run with no

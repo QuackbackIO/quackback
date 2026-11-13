@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ConversationId, TicketId, TicketTypeId } from '@quackback/ids'
+import type { Actor } from '@/lib/server/policy/types'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import type { TicketFormField } from '@/lib/shared/tickets'
 
@@ -59,6 +60,10 @@ vi.mock('@/lib/server/domains/tickets/ticket-type.service', () => ({
 
 const mockResolvePairTicketId = vi.fn()
 const mockListPairThreadMessages = vi.fn()
+const mockIsTicketVisibleTo = vi.fn()
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  isTicketVisibleTo: (...args: unknown[]) => mockIsTicketVisibleTo(...args),
+}))
 vi.mock('@/lib/server/domains/tickets/pair-thread.service', () => ({
   resolvePairTicketIdForConversation: (...args: unknown[]) => mockResolvePairTicketId(...args),
   listPairThreadMessages: (...args: unknown[]) => mockListPairThreadMessages(...args),
@@ -79,6 +84,13 @@ import {
 const CONVERSATION_ID = 'conversation_1' as ConversationId
 const TICKET_TYPE_ID = 'ticket_type_bug' as TicketTypeId
 const PAIR_TICKET_ID = 'ticket_1' as TicketId
+const ACTOR = {
+  principalId: 'principal_agent',
+  role: 'member',
+  principalType: 'user',
+  segmentIds: new Set(),
+  permissions: new Set(),
+} as unknown as Actor
 
 const field = (over: Partial<TicketFormField>): TicketFormField => ({
   key: 'field',
@@ -122,6 +134,7 @@ beforeEach(() => {
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
   mockIsFeatureEnabled.mockResolvedValue(true)
   mockGetChatModel.mockReturnValue('test-assistant-model')
+  mockIsTicketVisibleTo.mockResolvedValue(true)
   mockEnforceAiTokenBudget.mockResolvedValue(undefined)
   mockGetTicketType.mockResolvedValue({ id: TICKET_TYPE_ID, fields: ALL_FIELD_TYPES })
   mockResolvePairTicketId.mockResolvedValue(null)
@@ -224,7 +237,7 @@ describe('renderFieldCatalogue', () => {
 
 describe('suggestTicketFieldValues', () => {
   it('returns suggestions for a seeded thread, over one structured-completion call', async () => {
-    const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)
+    const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)
     expect(result).toEqual({
       suggestions: {
         title: 'CSV export drops filter columns',
@@ -255,7 +268,7 @@ describe('suggestTicketFieldValues', () => {
       hasMore: false,
     })
 
-    const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)
+    const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)
     expect(result.unavailable).not.toBe(true)
     expect(mockListPairThreadMessages).toHaveBeenCalledWith(PAIR_TICKET_ID, {
       all: true,
@@ -266,39 +279,48 @@ describe('suggestTicketFieldValues', () => {
     expect(content).toContain('Agent: Legacy ticket note about the export bug.')
   })
 
+  it('grounds on the conversation alone when the linked ticket is outside the caller\'s scope', async () => {
+    mockResolvePairTicketId.mockResolvedValue(PAIR_TICKET_ID)
+    mockIsTicketVisibleTo.mockResolvedValue(false)
+    await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)
+    expect(mockIsTicketVisibleTo).toHaveBeenCalledWith(PAIR_TICKET_ID, ACTOR)
+    expect(mockListPairThreadMessages).not.toHaveBeenCalled()
+    expect(mockListForGrounding).toHaveBeenCalledWith(CONVERSATION_ID, { includeInternal: true })
+  })
+
   it('reads the conversation grounding loader with internal notes pre-conversion (no linked ticket)', async () => {
-    await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)
+    await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)
     expect(mockListForGrounding).toHaveBeenCalledWith(CONVERSATION_ID, { includeInternal: true })
   })
 
   it('returns unavailable when the completion throws — no partials', async () => {
     mockChat.mockRejectedValue(new Error('provider 500'))
-    const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)
+    const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)
     expect(result).toEqual({ unavailable: true })
   })
 
   it('returns unavailable when the model output fails field validation (poisoned out-of-enum)', async () => {
     mockChat.mockResolvedValue({ title: 'x', severity: 'Critical' })
-    const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)
+    const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)
     expect(result).toEqual({ unavailable: true })
   })
 
   it('returns unavailable when the model answers nothing usable', async () => {
     mockChat.mockResolvedValue({})
-    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)).toEqual({
+    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)).toEqual({
       unavailable: true,
     })
   })
 
   it('drops a whitespace-only title but keeps field suggestions', async () => {
     mockChat.mockResolvedValue({ title: '   ', steps: 'repro' })
-    const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)
+    const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)
     expect(result).toEqual({ suggestions: { steps: 'repro' } })
   })
 
   it('returns unavailable when the assistant model is not configured', async () => {
     mockGetChatModel.mockReturnValue(null)
-    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)).toEqual({
+    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)).toEqual({
       unavailable: true,
     })
     expect(mockChat).not.toHaveBeenCalled()
@@ -306,7 +328,7 @@ describe('suggestTicketFieldValues', () => {
 
   it('returns unavailable when the AI client is not configured', async () => {
     mockConfig.openaiApiKey = undefined
-    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)).toEqual({
+    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)).toEqual({
       unavailable: true,
     })
     expect(mockChat).not.toHaveBeenCalled()
@@ -316,7 +338,7 @@ describe('suggestTicketFieldValues', () => {
     mockEnforceAiTokenBudget.mockRejectedValue(
       new TierLimitError({ limit: 'aiTokensPerMonth', message: 'budget exceeded' })
     )
-    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)).toEqual({
+    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)).toEqual({
       unavailable: true,
     })
     expect(mockChat).not.toHaveBeenCalled()
@@ -324,7 +346,7 @@ describe('suggestTicketFieldValues', () => {
 
   it('returns unavailable on an empty thread, without calling the model', async () => {
     mockListForGrounding.mockResolvedValue([])
-    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)).toEqual({
+    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)).toEqual({
       unavailable: true,
     })
     expect(mockChat).not.toHaveBeenCalled()
@@ -332,7 +354,7 @@ describe('suggestTicketFieldValues', () => {
 
   it('propagates an unknown ticket type as a genuine client error', async () => {
     mockGetTicketType.mockRejectedValue(new Error('Ticket type not found'))
-    await expect(suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)).rejects.toThrow(
+    await expect(suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID, ACTOR)).rejects.toThrow(
       'Ticket type not found'
     )
   })
