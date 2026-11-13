@@ -122,7 +122,8 @@ export const fetchInboxCountsFn = createServerFn({ method: 'GET' }).handler(asyn
 export const getConversationTicketLinkFn = createServerFn({ method: 'GET' })
   .validator(z.object({ conversationId: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-    const { getLinkedCustomerTicket } = await import('@/lib/server/domains/inbox/inbox.query')
-    return getLinkedCustomerTicket(data.conversationId as ConversationId)
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { getConversationTicketLink } = await import('@/lib/server/domains/inbox/inbox.query')
+    return getConversationTicketLink(data.conversationId as ConversationId, actor)
   })

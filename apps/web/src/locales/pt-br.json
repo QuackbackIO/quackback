@@ -188,6 +188,7 @@
   "files.upload.error.blocked": "Esse tipo de arquivo não pode ser enviado",
   "files.upload.error.rateLimited": "Muitos envios. Tente novamente em um minuto.",
   "admin.inbox.filesSectionTitle": "Arquivos",
+  "admin.inbox.linkedTicketHidden": "Ticket vinculado que você não pode abrir",
   "admin.inbox.translationOverAllowance": "O uso de IA deste período acabou. A tradução continua funcionando. Faça upgrade do seu plano para ter mais.",
   "admin.helpCenter.autoTranslatePaused": "Pausado: o uso de IA deste período acabou. Faça upgrade do seu plano para ter mais.",
   "admin.billing.aiResets": "Reinicia em {date}",

@@ -902,7 +902,11 @@ describe('applyAction', () => {
         { conversationId, actor: engineActor }
       )
       expect(result).toMatchObject({ label: 'ticket status updated' })
-      expect(getLinkedCustomerTicket).toHaveBeenCalledWith(conversationId)
+      // The pair lookup is a system read: a workspace-wide service actor.
+      expect(getLinkedCustomerTicket).toHaveBeenCalledWith(
+        conversationId,
+        expect.objectContaining({ principalType: 'service', principalId: null })
+      )
       expect(setTicketStatus).toHaveBeenCalledTimes(1)
       const [ticketIdArg, statusIdArg, actorArg] = setTicketStatus.mock.calls[0]!
       expect(ticketIdArg).toBe('ticket_1')

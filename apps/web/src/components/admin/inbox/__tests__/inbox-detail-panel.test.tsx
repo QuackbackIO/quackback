@@ -139,10 +139,11 @@ function renderPanel(
   extra: {
     openCopilotToken?: number
     issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
+    pairHidden?: boolean
   } = {}
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const ui = (props: { openCopilotToken?: number }) => (
+  const ui = (props: { openCopilotToken?: number; pairHidden?: boolean }) => (
     <IntlProvider locale="en-US" messages={{}}>
       <QueryClientProvider client={client}>
         <InboxDetailPanel
@@ -445,5 +446,25 @@ describe('<InboxDetailPanel> Files section', () => {
     const [files, index] = filesHoisted.openViewer.mock.calls[0] as [{ name: string }[], number]
     expect(files.map((f) => f.name)).toEqual(['b.pdf', 'a.pdf'])
     expect(index).toBe(0)
+  })
+})
+
+describe('<InboxDetailPanel> paired ticket the viewer cannot open', () => {
+  afterEach(() => {
+    routeContextState.settings = undefined
+  })
+
+  it('shows one muted line instead of Create ticket', () => {
+    routeContextState.settings = { featureFlags: { supportTickets: true } as FeatureFlags }
+    renderPanel(makeConversation(), { pairHidden: true })
+    expect(screen.getByText("Linked ticket you can't open")).toBeTruthy()
+    expect(screen.queryByText('Create ticket')).toBeNull()
+  })
+
+  it('offers Create ticket for a conversation with no ticket', () => {
+    routeContextState.settings = { featureFlags: { supportTickets: true } as FeatureFlags }
+    renderPanel(makeConversation())
+    expect(screen.getByText('Create ticket')).toBeTruthy()
+    expect(screen.queryByText("Linked ticket you can't open")).toBeNull()
   })
 })

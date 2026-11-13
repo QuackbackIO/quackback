@@ -39,7 +39,7 @@ import type {
 import { requireAuth, policyActorFromAuth, assertPermission } from './auth-helpers'
 import { HexColorFormatSchema, PageLimitMinOneSchema } from '@/lib/shared/schemas/taxonomy'
 import type { ConversationAttachment } from '@/lib/shared/db-types'
-import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
+import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { conversationIdSchema } from '@/lib/server/domains/assistant/conversation-id.schema'
 import {
   ticketAttachmentSchema,
@@ -120,12 +120,14 @@ export const listTicketsFn = createServerFn({ method: 'GET' })
     return (await listTickets(filter, actor)).tickets
   })
 
+/** A ticket's detail. A ticket outside the caller's view is NotFound. */
 export const getTicketFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ticketId: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
-    const { getTicket } = await import('@/lib/server/domains/tickets/ticket.service')
-    return getTicket(data.ticketId as TicketId)
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { getTicketForActor } = await import('@/lib/server/domains/tickets/ticket.service')
+    return getTicketForActor(data.ticketId as TicketId, actor)
   })
 
 /**
@@ -181,9 +183,11 @@ export const createTicketFn = createServerFn({ method: 'POST' })
     // because the agent dialog renders the type's full field set. Without a
     // type the legacy passthrough stands.
     let customAttributes = data.customAttributes
+    let category = data.type ?? 'customer'
     if (ticketTypeId) {
       const svc = await import('@/lib/server/domains/tickets/ticket-type.service')
       const type = await svc.getTicketType(ticketTypeId)
+      category = type.category
       const result = validateTicketIntakeValues(type.fields, customAttributes ?? {}, {
         includeInternal: true,
       })
@@ -194,6 +198,20 @@ export const createTicketFn = createServerFn({ method: 'POST' })
         )
       }
       customAttributes = Object.keys(result.values).length > 0 ? result.values : undefined
+    }
+
+    // A conversation has at most one customer ticket. Refuse up front, before
+    // a ticket exists, when it already has one, also one the caller cannot
+    // open: the link step would refuse it and leave the new ticket orphaned.
+    if (
+      category === 'customer' &&
+      data.conversationId &&
+      isValidTypeId(data.conversationId, 'conversation')
+    ) {
+      const { hasCustomerTicketPair } = await import('@/lib/server/domains/inbox/inbox.query')
+      if (await hasCustomerTicketPair(data.conversationId as ConversationId)) {
+        throw new ConflictError('ALREADY_LINKED', 'This conversation already has a linked ticket')
+      }
     }
 
     const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
@@ -356,20 +374,27 @@ export const bulkUpdateTicketsFn = createServerFn({ method: 'POST' })
 // ---------------------------------------------------------------------------
 
 /** The links for a ticket detail: a tracker's linked customer tickets, or the
- *  tracker a customer ticket belongs to. Reads on TICKET_VIEW. */
+ *  tracker a customer ticket belongs to. Reads on TICKET_VIEW; a ticket
+ *  outside the caller's view is NotFound. Linked tickets and a tracker the
+ *  caller cannot see are left out: a tracker reports only how many more it
+ *  tracks (`hiddenCount`), a customer ticket only that its tracker exists
+ *  (`trackerHidden`). */
 export const getTicketLinksFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ticketId: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
-    const { getTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { getTicketForActor } = await import('@/lib/server/domains/tickets/ticket.service')
     const { getTrackerForTicket, listLinkedTickets } =
       await import('@/lib/server/domains/tickets/ticket-links.service')
     const ticketId = data.ticketId as TicketId
-    const ticket = await getTicket(ticketId)
+    const ticket = await getTicketForActor(ticketId, actor)
     if (ticket.type === 'tracker') {
-      return { tracker: null, linked: await listLinkedTickets(ticketId) }
+      const { items, hiddenCount } = await listLinkedTickets(ticketId, actor)
+      return { tracker: null, trackerHidden: false, linked: items, hiddenCount }
     }
-    return { tracker: await getTrackerForTicket(ticketId), linked: [] }
+    const { tracker, hidden } = await getTrackerForTicket(ticketId, actor)
+    return { tracker, trackerHidden: hidden, linked: [], hiddenCount: 0 }
   })
 
 export const linkTicketToTrackerFn = createServerFn({ method: 'POST' })
@@ -404,11 +429,14 @@ export const unlinkTicketFromTrackerFn = createServerFn({ method: 'POST' })
 
 /** A ticket's linked tracker issues, plus the connected trackers that support
  *  manual linking (drives the panel's per-tracker sections). Reads on
- *  TICKET_VIEW. */
+ *  TICKET_VIEW; a ticket outside the caller's view is NotFound. */
 export const fetchTicketExternalLinksFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ticketId: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
     const { listTicketExternalLinks, listLinkableTrackers } =
       await import('@/lib/server/domains/tickets/ticket-external-links.service')
     const [links, trackers] = await Promise.all([
@@ -521,7 +549,7 @@ export const suggestTicketFieldValuesFn = createServerFn({ method: 'POST' })
     await assertConversationViewable(conversationId, actor)
     const { suggestTicketFieldValues } =
       await import('@/lib/server/domains/assistant/ticket-field-suggestion.service')
-    return suggestTicketFieldValues(conversationId, data.ticketTypeId as TicketTypeId)
+    return suggestTicketFieldValues(conversationId, data.ticketTypeId as TicketTypeId, actor)
   })
 
 // ---------------------------------------------------------------------------
@@ -673,41 +701,39 @@ export const addTicketNoteFn = createServerFn({ method: 'POST' })
 /** How many conversations this ticket was opened FROM (its provenance links) —
  *  the only thing the note composer needs to know to decide whether sharing a
  *  note is even on offer. The pair link is not one of them: a customer ticket
- *  and its conversation are one thread already. Reads on TICKET_VIEW. */
+ *  and its conversation are one thread already. Reads on TICKET_VIEW; a
+ *  ticket outside the caller's view is NotFound. */
 export const getTicketProvenanceConversationsFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ticketId: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
     const { resolveProvenanceConversationIds } =
       await import('@/lib/server/domains/tickets/ticket-conversation-link.service')
     const ids = await resolveProvenanceConversationIds(data.ticketId as TicketId)
     return { count: ids.length }
   })
 
+/**
+ * A page of a ticket's thread for the agent inbox, internal notes included,
+ * enriched with the viewer's reactions and flags. Agent-only: a ticket outside
+ * the caller's view is NotFound, and a requester reads their thread through
+ * the conversation they share with the team, never this function.
+ */
 export const listTicketMessagesFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ticketId: z.string(), before: z.string().optional() }))
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
-    const { isTeamMember } = await import('@/lib/shared/roles')
-    const isAgent = isTeamMember(ctx.principal.role)
-    const { listTicketMessages, listTicketMessagesForAgent } =
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
+    const { listTicketMessagesForAgent } =
       await import('@/lib/server/domains/tickets/ticket-message.service')
-    // Agents get the enriched (reactions/flags) page — the toolbar these
-    // drive is agent-only; a non-agent caller (a customer viewing their own
-    // ticket via this same TICKET_VIEW-gated fn) keeps the bare shape.
-    if (isAgent) {
-      return listTicketMessagesForAgent(
-        data.ticketId as TicketId,
-        ctx.principal.id as PrincipalId,
-        {
-          before: data.before,
-          includeInternal: true,
-        }
-      )
-    }
-    return listTicketMessages(data.ticketId as TicketId, {
+    return listTicketMessagesForAgent(data.ticketId as TicketId, ctx.principal.id as PrincipalId, {
       before: data.before,
-      includeInternal: false,
+      includeInternal: true,
     })
   })
 
@@ -757,7 +783,8 @@ export const markTicketReadFn = createServerFn({ method: 'POST' })
 /**
  * Export a ticket as a markdown transcript (agent-only — includes internal
  * notes). Pages the full thread oldest-first and renders it with the shared
- * transcript renderer. Returns the file body for the client to download.
+ * transcript renderer. Returns the file body for the client to download. A
+ * ticket outside the caller's view is NotFound.
  */
 export const exportTicketTranscriptFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ticketId: z.string() }))
@@ -767,9 +794,10 @@ export const exportTicketTranscriptFn = createServerFn({ method: 'GET' })
     if (!isTeamMember(ctx.principal.role)) {
       throw new ForbiddenError('FORBIDDEN', 'Only team members can export a transcript')
     }
+    const actor = await policyActorFromAuth(ctx)
     const ticketId = data.ticketId as TicketId
-    const { getTicket } = await import('@/lib/server/domains/tickets/ticket.service')
-    const ticket = await getTicket(ticketId)
+    const { getTicketForActor } = await import('@/lib/server/domains/tickets/ticket.service')
+    const ticket = await getTicketForActor(ticketId, actor)
     const { listTicketMessages } =
       await import('@/lib/server/domains/tickets/ticket-message.service')
 

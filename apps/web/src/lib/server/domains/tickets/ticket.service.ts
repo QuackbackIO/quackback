@@ -127,6 +127,25 @@ export async function getTicket(id: TicketId): Promise<TicketDTO> {
   return ticketRowToDTO(await loadTicketOr404(id))
 }
 
+/** Whether the actor's ticket filter admits the ticket. */
+export async function isTicketVisibleTo(id: TicketId, actor: Actor): Promise<boolean> {
+  const [row] = await db
+    .select({ id: tickets.id })
+    .from(tickets)
+    .where(and(eq(tickets.id, id), ticketFilter(actor)))
+    .limit(1)
+  return !!row
+}
+
+/**
+ * A ticket the actor may see, as its DTO, or NotFound. The read every
+ * agent-facing path uses; `getTicket` is for system callers that run with no
+ * actor.
+ */
+export async function getTicketForActor(id: TicketId, actor: Actor): Promise<TicketDTO> {
+  return ticketRowToDTO(await assertTicketVisible(id, actor))
+}
+
 const priorityRankExpr = priorityRankSql(tickets.priority)
 
 /**
@@ -412,17 +431,32 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
 }
 
 /**
+ * Options for a ticket write that runs as a system effect of another write.
+ * `systemCascade` skips the per-ticket visibility check and keeps the actor as
+ * author: the tracker status cascade checks the tracker once, then reaches
+ * every linked ticket, also ones the actor cannot see. Never take it from
+ * request input.
+ */
+export interface TicketWriteOptions {
+  systemCascade?: boolean
+}
+
+/**
  * Set a ticket's status. Entering a closed-category status stamps `resolvedAt`;
  * leaving one clears it and increments `reopenedCount`. An agent action also
- * stamps `firstResponseAt` the first time.
+ * stamps `firstResponseAt` the first time. A ticket the actor cannot see is
+ * NotFound.
  */
 export async function setTicketStatus(
   id: TicketId,
   statusId: TicketStatusId,
-  actor: Actor
+  actor: Actor,
+  options: TicketWriteOptions = {}
 ): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_SET_STATUS, 'change this ticket status')
-  const existing = await loadTicketOr404(id)
+  const existing = options.systemCascade
+    ? await loadTicketOr404(id)
+    : await assertTicketVisible(id, actor)
 
   // Independent reads, so run them together. `current` intentionally omits the
   // deletedAt guard: a ticket may still sit on a since-deleted status and we need
@@ -554,7 +588,9 @@ export async function setTicketStatus(
 /**
  * Fan a tracker's new status onto the customer tickets it tracks (§4.9). Each
  * linked ticket takes the tracker's status via setTicketStatus, so it runs its
- * own transition + requester notification. A linked ticket already in a closed
+ * own transition + requester notification. The tracker was checked once by
+ * the caller; the linked tickets are a system effect, so they skip the
+ * per-ticket visibility check and keep the actor as author. A linked ticket already in a closed
  * category is skipped — the cascade never regresses a resolved ticket. Per-link
  * best-effort: the tracker's own update already committed, so one failing link
  * is logged, not fatal. The dynamic import breaks the ticket.service <->
@@ -582,7 +618,7 @@ async function cascadeTrackerStatus(
         .where(eq(ticketStatuses.id, linked.statusId))
         .limit(1)
       if (current?.category === 'closed') continue // never regress a resolved ticket
-      await setTicketStatus(linkedId, statusId, actor)
+      await setTicketStatus(linkedId, statusId, actor, { systemCascade: true })
     } catch (err) {
       log.warn({ err, tracker_id: trackerId, linked_id: linkedId }, 'tracker cascade: link failed')
     }
@@ -788,7 +824,7 @@ export async function assignTicket(
   actor: Actor
 ): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'assign this ticket')
-  const existing = await loadTicketOr404(id)
+  const existing = await assertTicketVisible(id, actor)
 
   const patch: Partial<Ticket> = { updatedAt: new Date() }
 
@@ -916,7 +952,7 @@ export async function setTicketPriority(
   actor: Actor
 ): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_SET_STATUS, 'change this ticket priority')
-  const existing = await loadTicketOr404(id)
+  const existing = await assertTicketVisible(id, actor)
   const now = new Date()
   const patch: Partial<Ticket> = { priority, updatedAt: now }
   const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
@@ -946,8 +982,10 @@ export async function setTicketPriority(
  * their individual server fns call — never a bypass of their `assertCan`
  * checks, realtime publish, or webhook — so a bulk apply is exactly N
  * individual applies. Per-item isolation: one ticket's failure (missing,
- * forbidden, an invalid target) lands in `failed` and never aborts the rest
- * of the batch.
+ * hidden from the actor, forbidden, an invalid target) lands in `failed` and
+ * never aborts the rest of the batch. Each op checks its permission and then
+ * the ticket's visibility before it reads anything else, so a hidden ticket
+ * fails exactly as a missing one does.
  */
 export async function bulkUpdateTickets(
   ticketIds: TicketId[],
@@ -986,7 +1024,7 @@ export async function bulkUpdateTickets(
  */
 export async function softDeleteTicket(id: TicketId, actor: Actor): Promise<void> {
   assertCan(actor, PERMISSIONS.TICKET_SET_STATUS, 'delete this ticket')
-  await loadTicketOr404(id)
+  await assertTicketVisible(id, actor)
   const [updated] = await db
     .update(tickets)
     .set({ deletedAt: new Date(), updatedAt: new Date() })

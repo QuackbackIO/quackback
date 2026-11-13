@@ -188,6 +188,7 @@
   "files.upload.error.blocked": "Файлы такого типа нельзя отправить",
   "files.upload.error.rateLimited": "Слишком много загрузок. Повторите попытку через минуту.",
   "admin.inbox.filesSectionTitle": "Файлы",
+  "admin.inbox.linkedTicketHidden": "Связанный тикет, который вы не можете открыть",
   "admin.inbox.translationOverAllowance": "Использование ИИ за этот период исчерпано. Перевод продолжает работать. Перейдите на более высокий тариф, чтобы получить больше.",
   "admin.helpCenter.autoTranslatePaused": "Приостановлено: использование ИИ за этот период исчерпано. Перейдите на более высокий тариф, чтобы получить больше.",
   "admin.billing.aiResets": "Сброс {date}",

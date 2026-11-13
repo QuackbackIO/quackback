@@ -890,12 +890,22 @@ export async function findBackfillCursor(
 
 /**
  * The CUSTOMER ticket linked to a conversation, or null. At most one can
- * exist (0150's partial unique index; 0214's makes the pair 1:1).
+ * exist (0150's partial unique index; 0214's makes the pair 1:1). Only a
+ * ticket the viewer's ticket filter admits counts: a hidden pair's thread,
+ * internal notes included, never merges into the conversation.
  */
-async function resolvePairTicketId(conversationId: ConversationId): Promise<TicketId | null> {
+async function resolveVisiblePairTicketId(
+  conversationId: ConversationId,
+  viewer: Actor
+): Promise<TicketId | null> {
+  const [{ tickets }, { ticketFilter }] = await Promise.all([
+    import('@/lib/server/db'),
+    import('@/lib/server/policy/tickets'),
+  ])
   const [link] = await db
     .select({ ticketId: ticketConversations.ticketId })
     .from(ticketConversations)
+    .innerJoin(tickets, and(eq(tickets.id, ticketConversations.ticketId), ticketFilter(viewer)))
     .where(
       and(
         eq(ticketConversations.conversationId, conversationId),
@@ -942,8 +952,9 @@ function compareMessagesNewestFirst(a: ConversationMessage, b: ConversationMessa
  * pagination, returned oldest-first for rendering. `before` is a message id
  * cursor (fetch messages older than it).
  *
- * CONVERGENCE PHASE 0: agent surfaces pass `includeLinkedTicket` so a linked
- * CUSTOMER ticket's legacy ticket-parented rows render inline — one shared
+ * CONVERGENCE PHASE 0: agent surfaces pass `linkedTicketViewer` so a linked
+ * CUSTOMER ticket's legacy ticket-parented rows render inline, when that
+ * viewer may open the ticket — one shared
  * thread per pair (the agent conversation view of a pair; the ticket-side
  * twin is pair-thread.service.ts's loader, and the merge contract is the
  * same). The ticket parent's page is fetched with the same (created_at, id)
@@ -962,15 +973,16 @@ export async function listMessages(
     before?: string
     limit?: number
     includeInternal?: boolean
-    includeLinkedTicket?: boolean
+    /** Merge the paired customer ticket's rows when this viewer can see it. */
+    linkedTicketViewer?: Actor
     /** Agent surfaces show the account name. Posts and the visitor widget do not. */
     preferAccountName?: boolean
   }
 ): Promise<MessagePage> {
   const limit = Math.min(opts?.limit ?? MESSAGE_PAGE_SIZE, 100)
 
-  const linkedTicketId = opts?.includeLinkedTicket
-    ? await resolvePairTicketId(conversationId)
+  const linkedTicketId = opts?.linkedTicketViewer
+    ? await resolveVisiblePairTicketId(conversationId, opts.linkedTicketViewer)
     : null
 
   // Composite keyset cursor on (created_at, id): two messages can share a

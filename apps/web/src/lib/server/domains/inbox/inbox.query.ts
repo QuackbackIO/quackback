@@ -62,6 +62,7 @@ import {
   type InboxSort,
   type InboxTriageFacet,
   type LinkedTicketSummary,
+  type ConversationTicketLink,
 } from '@/lib/shared/inbox/items'
 
 // The sort vocabulary + its resolution live in the shared inbox module; both
@@ -296,9 +297,16 @@ const EMPTY_BRANCH = (cursor: string | null): InboxBranchFetch => ({
  * (`getLinkedCustomerTicket`, used by the unified detail panel + header's
  * ticket-status pill on a conversation item) can reuse the same join instead
  * of duplicating it.
+ *
+ * Only tickets the actor may open: a conversation whose paired ticket is
+ * outside the actor's ticket filter (or a role with no ticket key) gets no
+ * summary, so no id, number, title or status of that ticket leaves the
+ * server. A workspace-wide service actor reads every pair, a soft-deleted
+ * ticket included, so a workflow's "already a ticket" check still sees it.
  */
 export async function loadLinkedCustomerTicketSummaries(
-  conversationIds: ConversationId[]
+  conversationIds: ConversationId[],
+  actor: Actor
 ): Promise<Map<ConversationId, LinkedTicketSummary>> {
   const map = new Map<ConversationId, LinkedTicketSummary>()
   if (conversationIds.length === 0) return map
@@ -317,7 +325,8 @@ export async function loadLinkedCustomerTicketSummaries(
     .where(
       and(
         inArray(ticketConversations.conversationId, conversationIds),
-        eq(ticketConversations.ticketType, 'customer')
+        eq(ticketConversations.ticketType, 'customer'),
+        isUnscopedService(actor) ? undefined : ticketFilter(actor)
       )
     )
   for (const row of rows) {
@@ -374,7 +383,7 @@ async function fetchConversationBranch(
   // row matched; an unsearched one never runs the extra query.
   const term = filter.search?.trim()
   const [linkedTickets, snippets] = await Promise.all([
-    loadLinkedCustomerTicketSummaries(ids),
+    loadLinkedCustomerTicketSummaries(ids, actor),
     term ? loadConversationSearchSnippets(ids, term) : Promise.resolve(null),
   ])
   const items: InboxItemDTO[] = page.conversations.map((conversation) => ({
@@ -647,11 +656,48 @@ export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
  * The linked CUSTOMER ticket for one conversation (or null), for the unified
  * detail panel's Ticket card + Links section and the thread header's ticket-
  * status pill when a plain conversation links a ticket. Thin wrapper over the
- * same batched join the list branch uses.
+ * same batched join the list branch uses, so it is null for a ticket the
+ * actor cannot open.
  */
+/**
+ * The paired customer ticket of one conversation, as that conversation's own
+ * view reads it: the summary when the actor may open the ticket, a bare
+ * `{ hidden: true }` when a pair exists that the actor cannot open (so the view
+ * offers no second ticket), or null when there is no pair.
+ */
+export async function getConversationTicketLink(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<ConversationTicketLink | null> {
+  const summary = await getLinkedCustomerTicket(conversationId, actor)
+  if (summary) return summary
+  return (await hasCustomerTicketPair(conversationId)) ? { hidden: true } : null
+}
+
+/** Whether a conversation already has a live paired customer ticket, whoever
+ *  can see it. A system read: it says nothing about the ticket itself. */
+export async function hasCustomerTicketPair(conversationId: ConversationId): Promise<boolean> {
+  const [pair] = await db
+    .select({ ticketId: ticketConversations.ticketId })
+    .from(ticketConversations)
+    .innerJoin(
+      tickets,
+      and(eq(tickets.id, ticketConversations.ticketId), isNull(tickets.deletedAt))
+    )
+    .where(
+      and(
+        eq(ticketConversations.conversationId, conversationId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  return !!pair
+}
+
 export async function getLinkedCustomerTicket(
-  conversationId: ConversationId
+  conversationId: ConversationId,
+  actor: Actor
 ): Promise<LinkedTicketSummary | null> {
-  const map = await loadLinkedCustomerTicketSummaries([conversationId])
+  const map = await loadLinkedCustomerTicketSummaries([conversationId], actor)
   return map.get(conversationId) ?? null
 }

@@ -69,8 +69,10 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   listTickets: mocks.listTickets,
-  getTicket: mocks.getTicket,
-  assertTicketVisible: vi.fn().mockResolvedValue(undefined),
+  assertTicketVisible: vi.fn().mockResolvedValue({ id: 'ticket_1' }),
+}))
+vi.mock('@/lib/server/domains/tickets/ticket.dto', () => ({
+  ticketRowToDTO: () => mocks.getTicket(),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   listTicketMessages: mocks.listTicketMessages,

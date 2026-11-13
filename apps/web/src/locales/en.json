@@ -188,6 +188,7 @@
   "files.upload.error.blocked": "This file type can't be sent",
   "files.upload.error.rateLimited": "Too many uploads. Try again in a minute.",
   "admin.inbox.filesSectionTitle": "Files",
+  "admin.inbox.linkedTicketHidden": "Linked ticket you can't open",
   "admin.inbox.translationOverAllowance": "AI usage for this period is used up. Translation keeps working. Upgrade your plan for more.",
   "admin.helpCenter.autoTranslatePaused": "Paused: AI usage for this period is used up. Upgrade your plan for more.",
   "admin.billing.aiResets": "Resets {date}",

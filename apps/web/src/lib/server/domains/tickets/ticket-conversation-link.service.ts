@@ -62,6 +62,7 @@
 import {
   db,
   eq,
+  gt,
   ne,
   and,
   asc,
@@ -69,6 +70,7 @@ import {
   sql,
   conversations,
   conversationMessages,
+  ticketActivity,
   ticketConversations,
   tickets,
   type Ticket,
@@ -76,6 +78,7 @@ import {
 } from '@/lib/server/db'
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
+import { ticketFilter } from '@/lib/server/policy/tickets'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ForbiddenError, ConflictError, NotFoundError } from '@/lib/shared/errors'
@@ -88,6 +91,47 @@ import { applySlaToTicket } from '../sla/ticket-sla.service'
 
 const log = logger.child({ component: 'ticket-conversation-link' })
 
+/** How long after creating a ticket its creator may still link it unseen. */
+const OWN_CREATE_LINK_WINDOW_MS = 10 * 60 * 1000
+
+/**
+ * Whether the actor may link this ticket although its ticket filter hides it:
+ * only in the link step of the actor's own create. The ticket has no
+ * conversation link yet, and its `ticket.created` activity row names the
+ * actor. A new ticket takes the source conversation's assignee and no team,
+ * so its creator may not see it; any other ticket needs the filter.
+ *
+ * The create must be recent (`OWN_CREATE_LINK_WINDOW_MS`): the link step
+ * follows the create within a request or two, so a ticket the actor filed long
+ * ago and that has since left their scope is not reachable this way.
+ */
+async function isOwnUnlinkedCreate(
+  exec: Pick<typeof db, 'select'>,
+  ticketId: TicketId,
+  actor: Actor
+): Promise<boolean> {
+  if (!actor.principalId) return false
+  const [link] = await exec
+    .select({ ticketId: ticketConversations.ticketId })
+    .from(ticketConversations)
+    .where(eq(ticketConversations.ticketId, ticketId))
+    .limit(1)
+  if (link) return false
+  const [created] = await exec
+    .select({ id: ticketActivity.id })
+    .from(ticketActivity)
+    .where(
+      and(
+        eq(ticketActivity.ticketId, ticketId),
+        eq(ticketActivity.type, 'ticket.created'),
+        eq(ticketActivity.principalId, actor.principalId),
+        gt(ticketActivity.createdAt, new Date(Date.now() - OWN_CREATE_LINK_WINDOW_MS))
+      )
+    )
+    .limit(1)
+  return !!created
+}
+
 /**
  * Link `ticketId` to `conversationId`. Gated on `ticket.create` — this is only
  * ever called as the second step of the create-ticket flow (createTicketFn
@@ -95,6 +139,9 @@ const log = logger.child({ component: 'ticket-conversation-link' })
  * customer ticket links as the conversation's PAIR (see the module doc); any
  * other type links as provenance, which is the join row and a team-only note
  * and nothing else.
+ *
+ * Both items must be visible to the actor, else NotFound. The one exception is
+ * the ticket side of the actor's own create (see `isOwnUnlinkedCreate`).
  */
 export async function linkTicketToConversation(
   ticketId: TicketId,
@@ -104,6 +151,9 @@ export async function linkTicketToConversation(
   if (!can(actor, PERMISSIONS.TICKET_CREATE)) {
     throw new ForbiddenError('FORBIDDEN', 'You cannot link a ticket to a conversation')
   }
+  const { assertConversationVisible } =
+    await import('@/lib/server/domains/conversation/conversation.service')
+  await assertConversationVisible(conversationId, actor)
 
   let ticket: Ticket
   try {
@@ -114,7 +164,17 @@ export async function linkTicketToConversation(
         .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
         .for('update')
       if (!currentTicket) {
-        throw new NotFoundError('TICKET_NOT_FOUND', `Ticket ${ticketId} not found`)
+        throw new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+      }
+      // Under the row lock, so a second link cannot slip in between the
+      // check and the insert.
+      const [visible] = await tx
+        .select({ id: tickets.id })
+        .from(tickets)
+        .where(and(eq(tickets.id, ticketId), ticketFilter(actor)))
+        .limit(1)
+      if (!visible && !(await isOwnUnlinkedCreate(tx, ticketId, actor))) {
+        throw new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
       }
       const [conversation] = await tx
         .select({ id: conversations.id })

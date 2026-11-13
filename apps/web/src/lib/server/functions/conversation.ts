@@ -671,7 +671,8 @@ export const runListConversationMessages = createServerOnlyFn(
     const isTeam = isTeamMember(ctx.principal.role)
     // Agents keep seeing internal notes when paging older messages; visitors never do.
     // CONVERGENCE PHASE 0: the team branch also folds the linked customer
-    // ticket's legacy rows into the page (includeLinkedTicket — see
+    // ticket's legacy rows into the page when the caller may open it
+    // (linkedTicketViewer — see
     // listMessages); the visitor branch stays conversation-only in Phase 0.
     // The agent-only `postSuggestions`/`pendingActionPointers`/`translatedFromPointers`
     // maps are pulled out here so they're consumed by the enrichment and never
@@ -681,7 +682,7 @@ export const runListConversationMessages = createServerOnlyFn(
       await listMessages(data.conversationId as ConversationId, {
         before: data.before,
         includeInternal: isTeam,
-        includeLinkedTicket: isTeam,
+        linkedTicketViewer: isTeam ? actor : undefined,
       })
     // Team members get the agent-only reaction/flag/suggestion/pending-action
     // enrichment on older messages too; the visitor path returns the clean base DTOs.
@@ -1053,7 +1054,7 @@ export const getConversationFn = createServerFn({ method: 'GET' })
       listMessages(conversation.id, {
         before: data.before,
         includeInternal: true,
-        includeLinkedTicket: true,
+        linkedTicketViewer: actor,
       }),
       requestedPanels?.length
         ? import('./conversation-panels').then((m) =>

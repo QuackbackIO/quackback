@@ -3,11 +3,13 @@
  * Quinn drops into a widget conversation). Loads a ticket + its status,
  * projects the status to its customer-facing stage label (never the internal
  * status name), and applies {@link scopeTicketEmbed}: the card resolves only for
- * a team member or the ticket's own requester. Anything else — including a
+ * a team member whose ticket filter admits the ticket, or the ticket's own
+ * requester. Anything else — including a
  * different visitor or a soft-deleted ticket — returns null, which the embed
  * resolver degrades to "unavailable" without leaking existence.
  */
-import { db, eq, and, tickets, ticketStatuses, ticketConversations } from '@/lib/server/db'
+import { db, eq, and, sql, tickets, ticketStatuses, ticketConversations } from '@/lib/server/db'
+import { ticketFilter } from '@/lib/server/policy/tickets'
 import type { TicketId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { scopeTicketEmbed, type TicketEmbedRow } from '@/lib/server/functions/embeds'
@@ -37,6 +39,7 @@ export async function getTicketEmbedForViewer(
       // The pair's conversation: the requester-facing card links there
       // (converged Messages — there is no standalone ticket page).
       conversationId: ticketConversations.conversationId,
+      teamVisible: sql<boolean>`${ticketFilter(actor)}`,
     })
     .from(tickets)
     .leftJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
@@ -61,6 +64,7 @@ export async function getTicketEmbedForViewer(
     requesterPrincipalId: row.requesterPrincipalId,
     deletedAt: row.deletedAt,
     conversationId: row.conversationId ?? null,
+    teamVisible: row.teamVisible === true,
     statusLabel: stage ? stageLabels[stage] : null,
     statusColor: row.statusColor ?? '#6b7280',
     priority: row.priority,
