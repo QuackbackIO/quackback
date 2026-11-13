@@ -10,8 +10,11 @@
  * The type is the one the server files under when none is named (the intake
  * default, else the first intake type), and the form sends its id with the
  * answers, so a required field is filled here and passes the server's check.
- * With no intake types (or when the type list cannot be read) only the three
- * plain inputs show. The email is optional here: an identified visitor's
+ * With no intake types (an empty list) only the three plain inputs show. While
+ * the type list loads, the fields area shows a spinner; if the read still
+ * fails after its retries, the fields area shows the error and a Try again
+ * button, and the form cannot be sent, since the server would refuse a
+ * submit that skips a required field. The email is optional here: an identified visitor's
  * ticket links to their session principal, and an anonymous one can leave it
  * blank.
  *
@@ -24,6 +27,8 @@ import { useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
+import { ticketIntakeFormQuery } from '@/lib/client/queries/visitor-ticket-form'
+import { errorText } from '@/lib/client/error-text'
 import type { TicketIntakeType } from '@/lib/shared/tickets'
 import { TicketFormFields } from '@/components/shared/ticket-form-fields'
 import { useTicketIntakeForm } from '@/components/shared/use-ticket-intake-form'
@@ -52,14 +57,9 @@ export function BlockTicketForm({
   const [details, setDetails] = useState('')
   const [filed, setFiled] = useState(false)
 
-  // Shares the ticket header card's cache entry. A failed or empty read means
-  // no intake types: the form keeps its three plain inputs.
-  const intakeForm = useQuery({
-    queryKey: ['ticket-intake-form'],
-    queryFn: async () => (await rpc.getMyTicketForm({ headers: getAuthHeaders() })) ?? null,
-    staleTime: 5 * 60_000,
-    retry: false,
-  })
+  // Shares the ticket header card's cache entry. Only a successful empty list
+  // means no intake types.
+  const intakeForm = useQuery(ticketIntakeFormQuery(rpc, getAuthHeaders))
   const types = intakeForm.data?.types ?? NO_TYPES
   const intake = useTicketIntakeForm(types, { resolveSelectedType: intakeDefaultType })
 
@@ -86,8 +86,8 @@ export function BlockTicketForm({
     )
   }
 
-  // Wait for the type list, so a required field is on screen before a submit.
-  const canSubmit = title.trim().length > 0 && !create.isPending && !intakeForm.isPending
+  // Only once the type list is in, so a required field is on screen first.
+  const canSubmit = title.trim().length > 0 && !create.isPending && intakeForm.isSuccess
   const submit = () => {
     if (!canSubmit) return
     const type = intake.selectedType
@@ -137,6 +137,36 @@ export function BlockTicketForm({
           className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
       </div>
+      {intakeForm.isPending && (
+        <div role="status" className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+          <Spinner size="sm" />
+          <FormattedMessage id="widget.loading" defaultMessage="Loading…" />
+        </div>
+      )}
+      {intakeForm.isError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive"
+        >
+          <span>
+            {errorText(
+              intakeForm.error,
+              intl.formatMessage({
+                id: 'widget.tickets.blockCard.formLoadFailed',
+                defaultMessage: "Couldn't load this form.",
+              })
+            )}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void intakeForm.refetch()}
+            disabled={intakeForm.isFetching}
+          >
+            <FormattedMessage id="widget.tickets.blockCard.retry" defaultMessage="Try again" />
+          </Button>
+        </div>
+      )}
       <TicketFormFields
         fields={intake.fields}
         values={intake.fieldValues}
