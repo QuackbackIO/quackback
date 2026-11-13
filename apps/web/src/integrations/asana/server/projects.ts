@@ -1,3 +1,4 @@
+import { ServiceUnavailableError } from '@/lib/shared/errors'
 /**
  * Asana project listing via REST API.
  */
@@ -22,7 +23,10 @@ export async function listAsanaProjects(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list Asana projects: HTTP ${response.status}`)
+    throw new ServiceUnavailableError(
+      'PROVIDER_REQUEST_FAILED',
+      `Failed to list Asana projects: HTTP ${response.status}`
+    )
   }
 
   const body = (await response.json()) as {

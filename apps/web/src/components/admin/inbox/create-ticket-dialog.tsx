@@ -52,6 +52,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { toastError } from '@/lib/client/error-notice'
 
 // Native `<textarea maxLength>` used to silently cap this field; a rich doc
 // can't be truncated mid-node without corrupting it, so the cap is now
@@ -402,15 +403,14 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
           onCreated(ticket.id)
           onChanged?.()
         },
-        onError: (error) =>
-          toast.error(error instanceof Error ? error.message : 'Failed to create ticket'),
+        onError: (error) => toastError(error, 'Failed to create ticket'),
       }
     )
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
             {fromConversation ? 'Create ticket' : 'New ticket'}

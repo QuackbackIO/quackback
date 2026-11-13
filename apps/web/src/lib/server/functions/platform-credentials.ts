@@ -15,6 +15,7 @@ import {
 import type { PlatformCredentialField } from '@/lib/server/integrations/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
+import { ValidationError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'platform-credentials' })
 
@@ -47,13 +48,16 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
     const { getIntegration } = await import('@/lib/server/integrations')
     const definition = getIntegration(data.integrationType)
     if (!definition) {
-      throw new Error(`Unknown integration type: ${data.integrationType}`)
+      throw new ValidationError(
+        'UNKNOWN_INTEGRATION_TYPE',
+        `Unknown integration type: ${data.integrationType}`
+      )
     }
 
     for (const field of definition.platformCredentials) {
       if (field.required === false) continue
       if (!data.credentials[field.key]?.trim()) {
-        throw new Error(`${field.label} is required`)
+        throw new ValidationError('VALIDATION_ERROR', `${field.label} is required`)
       }
     }
 
@@ -80,7 +84,7 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
       if (!value) continue
       const verdict = await checkUrlSafety(value)
       if (!verdict.safe) {
-        throw new Error(`${field.label} must be a valid public URL`)
+        throw new ValidationError('VALIDATION_ERROR', `${field.label} must be a valid public URL`)
       }
     }
 
@@ -120,7 +124,10 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
     const { getIntegration } = await import('@/lib/server/integrations')
     const definition = getIntegration(data.integrationType)
     if (!definition) {
-      throw new Error(`Unknown integration type: ${data.integrationType}`)
+      throw new ValidationError(
+        'UNKNOWN_INTEGRATION_TYPE',
+        `Unknown integration type: ${data.integrationType}`
+      )
     }
 
     const { config } = await import('@/lib/server/config')

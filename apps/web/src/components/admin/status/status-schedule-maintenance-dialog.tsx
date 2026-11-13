@@ -5,7 +5,6 @@
  */
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -30,6 +29,7 @@ import {
   templateToAffectedRows,
   type AffectedRow,
 } from './status-incident-fields'
+import { toastError } from '@/lib/client/error-notice'
 
 export function ScheduleMaintenanceDialog({
   variant = 'outline',
@@ -102,7 +102,7 @@ export function ScheduleMaintenanceDialog({
         search: { ...search, view: 'maintenance', incident: created.id },
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to schedule maintenance')
+      toastError(error, 'Failed to schedule maintenance')
     }
   }
 
@@ -119,7 +119,7 @@ export function ScheduleMaintenanceDialog({
           Schedule maintenance
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Schedule maintenance</DialogTitle>
           <DialogDescription>

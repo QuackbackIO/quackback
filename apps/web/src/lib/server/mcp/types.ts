@@ -25,6 +25,12 @@ export interface McpAuthContext {
    */
   permissions?: ReadonlySet<PermissionKey>
   principalId: PrincipalId
+  /**
+   * For a personal API key, the creator whose row scope the key follows. Every
+   * support-tool actor built from this context carries it, so ticket and
+   * conversation reads show only what that teammate can see.
+   */
+  scopePrincipalId?: PrincipalId
   /** Null for service principals (API keys) */
   userId?: UserId
   /** Display name — always available (user.name for humans, displayName for service) */
@@ -46,6 +52,8 @@ export interface McpAuthContext {
    * their stored scopes, or every scope for legacy keys with none stored.
    */
   scopes: McpScope[]
+  /** OAuth only: the grant includes `offline_access` (the client can refresh). */
+  offlineAccess?: boolean
   /**
    * The credential this request's changes are attributed to: the OAuth client
    * or the API key. Set by the HTTP handler; absent for in-process callers,

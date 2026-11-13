@@ -35,6 +35,7 @@ import {
   type SyncFilter,
   type SyncHistoryItem,
 } from '@/lib/shared/integration-sync'
+import { toastError } from '@/lib/client/error-notice'
 
 const filters: Array<[SyncFilter, string]> = [
   ['all', 'All'],
@@ -78,7 +79,7 @@ export function IntegrationSyncHistory({ provider }: { provider: string }) {
       await queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Could not update this sync')
+      toastError(error, 'Could not update this sync')
     },
   })
   if (history.data?.available === false) return null
@@ -384,7 +385,7 @@ function LinkExistingSyncItem({ item }: { item: SyncHistoryItem }) {
       toast.success('Remote item linked')
       setOpen(false)
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => toastError(error, "Couldn't link the remote item"),
   })
   return (
     <>
@@ -397,7 +398,7 @@ function LinkExistingSyncItem({ item }: { item: SyncHistoryItem }) {
           if (!link.isPending) setOpen(value)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Link existing item</DialogTitle>
             <DialogDescription>

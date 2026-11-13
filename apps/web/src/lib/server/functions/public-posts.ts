@@ -56,6 +56,7 @@ import { countPublicPostFacetsOrNull } from '@/lib/server/domains/posts/post.pub
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
+import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'public-posts' })
 
@@ -258,7 +259,7 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
     // they can't view.
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     const ctx = await requireAuth()
     const { postId: postIdRaw, title, content, contentJson } = data
@@ -305,7 +306,7 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
     // Portal-visibility gate — see toggleVoteFn / createPublicPostFn.
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     const ctx = await requireAuth()
     const postId = data.postId as PostId
@@ -365,13 +366,13 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
     // tier was already enforced above by assertPostVotable.
     const settings = await getSettings()
     if (!workspaceAllowsAnonymous(settings?.portalConfig)) {
-      throw new Error('Anonymous interaction is not enabled')
+      throw new ForbiddenError('ANONYMOUS_NOT_ALLOWED', 'Anonymous interaction is not enabled')
     }
 
     // Rate limit anonymous voters by IP. Resolved the same way as the
     // `ipAddress` Better Auth records on the anonymous sessions it counts.
     if (!(await checkAnonVoteRateLimit(clientIp()))) {
-      throw new Error('Too many votes, please try again later')
+      throw new ValidationError('RATE_LIMITED', 'Too many votes, please try again later')
     }
   }
 
@@ -389,7 +390,7 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
     async ({ data }: { data: ToggleVoteInput }): Promise<{ voted: boolean; voteCount: number }> => {
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
-        throw new Error('Portal access required')
+        throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
       }
       return runToggleVote(await requireAuth(), data)
     }
@@ -422,7 +423,7 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
   ])
 
   if (!board) {
-    throw new Error('Board not found')
+    throw new NotFoundError('BOARD_NOT_FOUND', 'Board not found')
   }
 
   if (!settings) {
@@ -441,15 +442,15 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     // submit tier is the inner gate, existing workspaces carry an explicit
     // value from migration 0084).
     if (!actor.testFeedback?.canSubmit && !workspaceAllowsAnonymous(settings.portalConfig)) {
-      throw new Error('Anonymous interaction is not enabled')
+      throw new ForbiddenError('ANONYMOUS_NOT_ALLOWED', 'Anonymous interaction is not enabled')
     }
     // Boards can take ideas without an account, so cap how many one address
     // can post in an hour, across every anonymous identity it mints.
     if (!actor.testFeedback?.canSubmit && !(await reserveAnonPostSlot(clientIp()))) {
-      throw new Error('Too many posts, please try again later')
+      throw new ValidationError('RATE_LIMITED', 'Too many posts, please try again later')
     }
   } else if (!principalRecord) {
-    throw new Error('You must be a member to submit feedback.')
+    throw new ForbiddenError('POST_CREATE_DENIED', 'You must be a member to submit feedback.')
   }
 
   // Build author info (use ctx.principal for anonymous users who don't have a member record)
@@ -497,7 +498,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }: { data: CreatePublicPostInput }) => {
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      throw new Error('Portal access required')
+      throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
     }
     return runCreatePublicPost(await requireAuth(), data)
   })

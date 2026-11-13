@@ -10,6 +10,7 @@ import {
 } from '@/lib/server/workspaces/workspace-context'
 
 export class ControlPlaneUnavailableError extends Error {
+  readonly safeToShow = true
   constructor(
     message = 'Quackback Cloud is temporarily unavailable. Please try again.',
     public readonly status?: number
@@ -34,10 +35,16 @@ export type CustomDomainInstruction = {
    * until the proof is seen. A domain goes live only after it is published.
    */
   ownershipProof?: { name: string; value: string } | null
-  /** Set when a zone this workspace already proved stood in for that record. */
+  /** Set once a zone this workspace already proved was accepted in place of that record. */
   ownership?: 'proven-zone'
   ownershipSource?: HostnameProofSource
+  /** The routing record and certificate alone; absent from older operators. */
+  routing?: 'pending' | 'ready' | 'failed'
+  /** Whether ownership is accepted; absent from older operators. */
+  ownershipVerified?: boolean
 }
+
+const READINESS_VALUES: ReadonlySet<unknown> = new Set(['pending', 'ready', 'failed'])
 
 export async function requestWorkspaceIdentityMutation(input: {
   displayName?: string
@@ -66,18 +73,22 @@ export async function fetchWorkspaceCustomDomains(): Promise<CustomDomainInstruc
     { method: 'GET' }
   )
   if (!Array.isArray(result.customDomains)) return []
-  return result.customDomains.filter((row): row is CustomDomainInstruction => {
-    if (!row || typeof row !== 'object') return false
-    const domain = row as CustomDomainInstruction
-    return (
-      typeof domain.hostname === 'string' &&
-      (domain.readiness === 'pending' ||
-        domain.readiness === 'ready' ||
-        domain.readiness === 'failed') &&
-      typeof domain.isPrimary === 'boolean' &&
-      typeof domain.cnameTarget === 'string'
-    )
-  })
+  return result.customDomains
+    .filter((row): row is CustomDomainInstruction => {
+      if (!row || typeof row !== 'object') return false
+      const domain = row as CustomDomainInstruction
+      return (
+        typeof domain.hostname === 'string' &&
+        READINESS_VALUES.has(domain.readiness) &&
+        typeof domain.isPrimary === 'boolean' &&
+        typeof domain.cnameTarget === 'string'
+      )
+    })
+    .map(({ routing, ownershipVerified, ...domain }) => ({
+      ...domain,
+      ...(READINESS_VALUES.has(routing) ? { routing } : {}),
+      ...(typeof ownershipVerified === 'boolean' ? { ownershipVerified } : {}),
+    }))
 }
 
 export function deriveControlPlaneCredential(workspaceSecretKey: string): string {

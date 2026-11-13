@@ -143,7 +143,7 @@ async function linkPair(ticketId: TicketId, conversationId: ConversationId): Pro
 async function post(
   parent: { ticketId: TicketId } | { conversationId: ConversationId },
   opts: {
-    senderType: 'agent' | 'visitor'
+    senderType: 'agent' | 'visitor' | 'system'
     isInternal?: boolean
     content?: string
     createdAt?: Date
@@ -339,6 +339,87 @@ describe.skipIf(!fixture.available)('convergence Phase 3 cleanup (real DB, rolle
       expect(linkedDto.lastMessagePreview).toBe('pair preview')
       expect(standaloneDto.lastMessageAt).toBe(standaloneLatestAt.toISOString())
       expect(standaloneDto.lastMessagePreview).toBe('standalone preview')
+    })
+
+    it('single-ticket path: a newer system event counts as activity but never as the preview', async () => {
+      await seedSettingsRow()
+      const visitorP = await seedPrincipal('user')
+      const ticketId = await seedTicket({ requesterPrincipalId: visitorP })
+
+      await post(
+        { ticketId },
+        {
+          senderType: 'agent',
+          content: 'the last real message',
+          createdAt: new Date(Date.now() - 60_000),
+        }
+      )
+      const eventAt = new Date(Date.now() - 10_000)
+      await post(
+        { ticketId },
+        { senderType: 'system', content: 'Status updated to In progress', createdAt: eventAt }
+      )
+
+      const dto = await ticketRowToDTO(await loadTicketRow(ticketId))
+      expect(dto.lastMessageAt).toBe(eventAt.toISOString())
+      expect(dto.lastMessagePreview).toBe('the last real message')
+    })
+
+    it('batch path: a newer system event on either parent never becomes the preview', async () => {
+      await seedSettingsRow()
+      const visitorP = await seedPrincipal('user')
+      const linkedId = await seedTicket({ requesterPrincipalId: visitorP })
+      const conversationId = await seedConversation(visitorP)
+      await linkPair(linkedId, conversationId)
+      const standaloneId = await seedTicket({ requesterPrincipalId: visitorP })
+      const eventOnlyId = await seedTicket({ requesterPrincipalId: visitorP })
+
+      await post(
+        { conversationId },
+        {
+          senderType: 'visitor',
+          content: 'pair message',
+          createdAt: new Date(Date.now() - 60_000),
+        }
+      )
+      const pairEventAt = new Date(Date.now() - 10_000)
+      await post(
+        { conversationId },
+        { senderType: 'system', content: 'Ticket closed', createdAt: pairEventAt }
+      )
+      await post(
+        { ticketId: standaloneId },
+        {
+          senderType: 'agent',
+          content: 'standalone message',
+          createdAt: new Date(Date.now() - 60_000),
+        }
+      )
+      const standaloneEventAt = new Date(Date.now() - 10_000)
+      await post(
+        { ticketId: standaloneId },
+        {
+          senderType: 'system',
+          content: 'Status updated to Done',
+          createdAt: standaloneEventAt,
+        }
+      )
+      await post(
+        { ticketId: eventOnlyId },
+        { senderType: 'system', content: 'Status updated to Done' }
+      )
+
+      const rows = [linkedId, standaloneId, eventOnlyId]
+      const loaded = await Promise.all(rows.map(loadTicketRow))
+      const ctx = await buildTicketContext(loaded)
+      const [linkedDto, standaloneDto, eventOnlyDto] = loaded.map((row) => ticketToDTO(row, ctx))
+
+      expect(linkedDto.lastMessageAt).toBe(pairEventAt.toISOString())
+      expect(linkedDto.lastMessagePreview).toBe('pair message')
+      expect(standaloneDto.lastMessageAt).toBe(standaloneEventAt.toISOString())
+      expect(standaloneDto.lastMessagePreview).toBe('standalone message')
+      // With no real message the preview falls back to the title.
+      expect(eventOnlyDto.lastMessagePreview).toBe(loaded[2].title)
     })
 
     it('a linked pair falls back to ticket-parented activity when the conversation side is quiet', async () => {

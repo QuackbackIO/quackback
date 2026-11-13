@@ -86,6 +86,7 @@ const CREATOR = 'principal_01h455vb4pex5vsknk084sn02r' as PrincipalId
 const KEY: ApiKey = {
   id: 'api_key_01h455vb4pex5vsknk084sn02q' as ApiKeyId,
   name: 'Zapier',
+  kind: 'personal' as const,
   keyPrefix: 'qb_test',
   principalId: 'principal_01h455vb4pex5vsknk084sn02s' as PrincipalId,
   createdById: CREATOR,

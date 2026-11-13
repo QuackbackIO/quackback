@@ -24,6 +24,12 @@ import { sendPortalInviteEmail } from '@quackback/email'
 import { getSession } from '@/lib/server/auth/session'
 import { safeEmail } from '@/lib/shared/utils/string'
 import { logger } from '@/lib/server/logger'
+import {
+  ConflictError,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+} from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'portal-invites' })
 
@@ -116,7 +122,10 @@ async function sendOnePortalInvite({
       existingPrincipal &&
       (existingPrincipal.role === 'admin' || existingPrincipal.role === 'member')
     ) {
-      throw new Error('This person is already a team member and has access to the portal.')
+      throw new ConflictError(
+        'ALREADY_MEMBER',
+        'This person is already a team member and has access to the portal.'
+      )
     }
   }
 
@@ -133,7 +142,10 @@ async function sendOnePortalInvite({
     ),
   })
   if (existingInvite) {
-    throw new Error('A pending portal invitation has already been sent to this email address.')
+    throw new ConflictError(
+      'INVITE_PENDING',
+      'A pending portal invitation has already been sent to this email address.'
+    )
   }
 
   const inviteId = generateId('invite')
@@ -217,7 +229,10 @@ export const sendPortalInviteFn = createServerFn({ method: 'POST' })
     const message = data.message?.trim() || undefined
 
     if (data.emails.length > PORTAL_INVITE_BATCH_CAP) {
-      throw new Error(`Send at most ${PORTAL_INVITE_BATCH_CAP} invites at a time`)
+      throw new ValidationError(
+        'INVITE_BATCH_TOO_LARGE',
+        `Send at most ${PORTAL_INVITE_BATCH_CAP} invites at a time`
+      )
     }
 
     const batchId = data.emails.length > 1 ? `batch_${crypto.randomUUID()}` : undefined
@@ -269,10 +284,13 @@ export const cancelPortalInviteFn = createServerFn({ method: 'POST' })
     })
 
     if (!inv) {
-      throw new Error('Portal invitation not found.')
+      throw new NotFoundError('PORTAL_INVITE_NOT_FOUND', 'Portal invitation not found.')
     }
     if (inv.status !== 'pending') {
-      throw new Error(`Cannot cancel an invitation that is already ${inv.status}.`)
+      throw new ConflictError(
+        'INVITE_NOT_PENDING',
+        `Cannot cancel an invitation that is already ${inv.status}.`
+      )
     }
 
     // Include status='pending' in the WHERE clause to guard against a concurrent
@@ -346,11 +364,17 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
     })
 
     if (!inv) {
-      throw new Error('Portal invitation not found or is not pending.')
+      throw new NotFoundError(
+        'PORTAL_INVITE_NOT_FOUND',
+        'Portal invitation not found or is not pending.'
+      )
     }
 
     if (new Date(inv.expiresAt) < new Date()) {
-      throw new Error('This invitation has expired. Please cancel it and send a new one.')
+      throw new ValidationError(
+        'INVITE_EXPIRED',
+        'This invitation has expired. Please cancel it and send a new one.'
+      )
     }
 
     // Claim the slot FIRST, then mint + send. The previous ordering sent
@@ -386,7 +410,7 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
       // before minting a magic link or sending an email — those side
       // effects would otherwise leak a live link for a terminal row.
       log.warn({ invite_id: inviteId }, 'resend toctou, invite no longer pending')
-      throw new Error('Portal invitation is no longer pending.')
+      throw new ConflictError('INVITE_NOT_PENDING', 'Portal invitation is no longer pending.')
     }
 
     const portalUrl = getBaseUrl()
@@ -399,7 +423,10 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
     const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
     if (!(await appendInviteMagicLinkToken(inviteId, magicLinkToken))) {
       await revokeMagicLinkToken(magicLinkToken) // invite no longer pending; drop it
-      throw new Error('Invitation is no longer pending — refresh and try again')
+      throw new ConflictError(
+        'INVITE_NOT_PENDING',
+        'Invitation is no longer pending — refresh and try again'
+      )
     }
 
     const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
@@ -501,9 +528,11 @@ export const getPortalInviteLinkFn = createServerFn({ method: 'POST' })
     const inv = await db.query.invitation.findFirst({
       where: and(eq(invitation.id, data.inviteId as InviteId), eq(invitation.kind, 'portal')),
     })
-    if (!inv) throw new Error('PORTAL_INVITE_NOT_FOUND')
-    if (inv.status !== 'pending') throw new Error(`Invite is ${inv.status}, cannot mint a link`)
-    if (inv.expiresAt && inv.expiresAt < new Date()) throw new Error('Invite has expired')
+    if (!inv) throw new NotFoundError('PORTAL_INVITE_NOT_FOUND', 'PORTAL_INVITE_NOT_FOUND')
+    if (inv.status !== 'pending')
+      throw new ConflictError('INVITE_NOT_PENDING', `Invite is ${inv.status}, cannot mint a link`)
+    if (inv.expiresAt && inv.expiresAt < new Date())
+      throw new ValidationError('INVITE_EXPIRED', 'Invite has expired')
 
     const portalUrl = getBaseUrl()
     const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
@@ -522,7 +551,10 @@ export const getPortalInviteLinkFn = createServerFn({ method: 'POST' })
     )
     if (!(await appendInviteMagicLinkToken(inv.id, token))) {
       await revokeMagicLinkToken(token) // invite no longer pending; drop it
-      throw new Error('Invite is no longer pending — refresh and try again')
+      throw new ConflictError(
+        'INVITE_NOT_PENDING',
+        'Invite is no longer pending — refresh and try again'
+      )
     }
 
     await recordAuditEvent({
@@ -581,7 +613,7 @@ export const acceptPortalInviteFn = createServerFn({ method: 'POST' })
     // directly instead of requireAuth() to avoid the principal existence check.
     const session = await getSession()
     if (!session?.user) {
-      throw new Error('Authentication required')
+      throw new UnauthorizedError('Authentication required')
     }
 
     const sessionEmail = session.user.email?.toLowerCase()
@@ -594,7 +626,7 @@ export const acceptPortalInviteFn = createServerFn({ method: 'POST' })
     })
 
     if (!inv) {
-      throw new Error('PORTAL_INVITE_NOT_FOUND')
+      throw new NotFoundError('PORTAL_INVITE_NOT_FOUND', 'PORTAL_INVITE_NOT_FOUND')
     }
 
     // Email mismatch — check first, before any status short-circuit, so a
@@ -671,7 +703,7 @@ export const acceptPortalInviteFn = createServerFn({ method: 'POST' })
       })
       if (!fresh) {
         // Vanishingly rare (would require a hard delete) — treat as not-found.
-        throw new Error('PORTAL_INVITE_NOT_FOUND')
+        throw new NotFoundError('PORTAL_INVITE_NOT_FOUND', 'PORTAL_INVITE_NOT_FOUND')
       }
       log.debug(
         {

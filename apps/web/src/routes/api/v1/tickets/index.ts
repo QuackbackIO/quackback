@@ -21,7 +21,7 @@ import {
 } from './-validation'
 import type { TicketType, TicketStatusCategory, TicketStage } from '@/lib/server/db'
 import type { TicketSort } from '@/lib/server/domains/tickets/ticket.types'
-import type { PrincipalId, CompanyId, SegmentId, TicketTypeId } from '@quackback/ids'
+import type { PrincipalId, CompanyId, TicketTypeId } from '@quackback/ids'
 
 const createTicketSchema = z.object({
   // Optional since Phase 4: derivable from ticketTypeId (a mismatched explicit
@@ -63,13 +63,7 @@ export const Route = createFileRoute('/api/v1/tickets/')({
           const companyId = (url.searchParams.get('companyId') as CompanyId | null) ?? undefined
           const sort = (url.searchParams.get('sort') as TicketSort | null) ?? undefined
 
-          const actor = {
-            principalId: auth.principalId,
-            role: auth.role,
-            principalType: 'service' as const,
-            segmentIds: new Set<SegmentId>(),
-            permissions: auth.permissions,
-          }
+          const actor = serviceActorFromApiAuth(auth)
 
           const { listTickets } = await import('@/lib/server/domains/tickets/ticket.service')
           // The wire contract stays a bare array (no cursor param exposed here

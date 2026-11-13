@@ -20,6 +20,7 @@ import {
   useAssistantAutosave,
   useUnsavedChanges,
 } from './assistant-form'
+import { toastError } from '@/lib/client/error-notice'
 
 const NAME_SAVE_DELAY_MS = 800
 
@@ -173,7 +174,7 @@ export function AssistantIdentityCard() {
       editKind.current = 'avatar'
       setDraft((current) => (current ? { ...current, avatarUrl: publicUrl } : current))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to upload image')
+      toastError(error, 'Failed to upload image')
     } finally {
       setUploading(false)
     }

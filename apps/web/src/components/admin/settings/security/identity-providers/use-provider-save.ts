@@ -24,6 +24,7 @@ import type {
   UpsertIdentityProviderInput,
 } from '@/lib/server/domains/settings/identity-providers.service'
 import { IDENTITY_PROVIDERS_KEY } from './provider-shared'
+import { toastError } from '@/lib/client/error-notice'
 
 export type ProviderPatch = Partial<Omit<UpsertIdentityProviderInput, 'id' | 'registrationId'>>
 
@@ -57,7 +58,7 @@ export function useProviderSave(provider: IdentityProvider) {
       return true
     } catch (err) {
       if (onError?.(err)) return false
-      toast.error(err instanceof Error ? err.message : 'Could not save the identity provider.')
+      toastError(err, 'Could not save the identity provider.')
       return false
     } finally {
       setSaving(false)
@@ -96,7 +97,7 @@ export function useProviderSave(provider: IdentityProvider) {
       return saved ?? (provider as IdentityProvider)
     } catch (err) {
       if (onError?.(err)) return false
-      toast.error(err instanceof Error ? err.message : 'Could not save the identity provider.')
+      toastError(err, 'Could not save the identity provider.')
       return false
     } finally {
       setSaving(false)

@@ -89,7 +89,7 @@ export const fetchSlackChannelsFn = createServerFn({ method: 'GET' })
     })
 
     if (!integration || integration.status !== 'active') {
-      throw new Error('Slack not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Slack not connected')
     }
 
     if (!integration.secrets) {

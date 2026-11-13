@@ -42,6 +42,7 @@ import { useEmailSignin } from './use-email-signin'
 import { Spinner } from '@/components/shared/spinner'
 import { TwoFactorChallengeStep } from './two-factor-challenge-step'
 import type { AuthFormStep } from './email-signin-types'
+import { errorText } from '@/lib/client/error-text'
 
 // Enrollment carries the QR code library and is reached only by a password
 // sign-in to a workspace that requires two-factor, so it loads when reached.
@@ -506,12 +507,13 @@ export function PortalAuthFormInline({
       postAuthSuccess()
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'portal.auth.error.authFailed',
-              defaultMessage: 'Authentication failed',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'portal.auth.error.authFailed',
+            defaultMessage: 'Authentication failed',
+          })
+        )
       )
     } finally {
       // Success clears it too: the broadcast is a request to whatever hosts
@@ -564,12 +566,13 @@ export function PortalAuthFormInline({
       setView({ stage: 'methods-step', step: 'reset' })
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'portal.auth.error.resetLinkFailed',
-              defaultMessage: 'Failed to send reset link',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'portal.auth.error.resetLinkFailed',
+            defaultMessage: 'Failed to send reset link',
+          })
+        )
       )
     } finally {
       setLoadingAction(null)
@@ -684,12 +687,13 @@ export function PortalAuthFormInline({
     } catch (err) {
       popup.close()
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'portal.auth.error.initiateSignInFailed',
-              defaultMessage: 'Failed to initiate sign in',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'portal.auth.error.initiateSignInFailed',
+            defaultMessage: 'Failed to initiate sign in',
+          })
+        )
       )
       setLoadingAction(null)
     }

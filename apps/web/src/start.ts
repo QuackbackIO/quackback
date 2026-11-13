@@ -18,6 +18,8 @@ import { serverFnLogMiddleware } from '@/lib/server/middleware/server-fn-log'
 import { workspaceContextMiddleware } from '@/lib/server/middleware/workspace-context'
 import { auditAttributionMiddleware } from '@/lib/server/middleware/audit-attribution'
 import { expireRouteContextOnWrite } from '@/lib/client/route-context-middleware'
+import { serverFnFetch } from '@/lib/client/server-fn-fetch'
+import { liftErrorReferenceOnFailure } from '@/lib/client/error-reference-middleware'
 
 /**
  * Same-origin protection for server functions, matching the framework default.
@@ -58,6 +60,15 @@ export const startInstance = createStart(() => {
     // `requestMiddleware` above, this list replaces no framework default.
     // In the browser, a POST server function drops the route context kept
     // between navigations, so the next one sees what it changed.
-    functionMiddleware: [serverFnLogMiddleware, expireRouteContextOnWrite],
+    // A technical failure hidden by the server arrives with its reference code
+    // in the message; the browser lifts it off before anything prints it.
+    functionMiddleware: [
+      serverFnLogMiddleware,
+      expireRouteContextOnWrite,
+      liftErrorReferenceOnFailure,
+    ],
+    // In the browser, a 5xx that did not come from the function itself fails
+    // the call instead of resolving as its result (see server-fn-fetch.ts).
+    serverFns: { fetch: serverFnFetch },
   }
 })

@@ -595,6 +595,6 @@ See [Railway pricing](https://railway.com/pricing) for costs.
 
 ## Support
 
-- **Documentation**: https://quackback.io/docs
+- **Documentation**: https://feedback.quackback.io/hc
 - **GitHub Discussions**: https://github.com/quackbackio/quackback/discussions
 - **GitHub Issues**: https://github.com/quackbackio/quackback/issues

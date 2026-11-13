@@ -16,7 +16,7 @@ import type {
   MessengerConfig,
 } from './settings.types'
 import { DEFAULT_MESSENGER_CONFIG, resolveFeatureFlags } from './settings.types'
-import { ValidationError } from '@/lib/shared/errors'
+import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { AssistantConfigAuditActor } from './settings.assistant'
 import { recordAuditEventInTransaction } from '@/lib/server/audit/log'
 import {
@@ -265,7 +265,7 @@ export async function updateWidgetAssistantDeployment(
       .from(settings)
       .limit(1)
       .for('update')
-    if (!row) throw new Error('Settings not found')
+    if (!row) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
 
     const config = parseWidgetConfig(row.widgetConfig)
     const current = config.messenger?.assistant ?? {}

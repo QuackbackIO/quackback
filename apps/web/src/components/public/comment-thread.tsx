@@ -39,6 +39,7 @@ import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
 import { useApproveComment, useRejectComment } from '@/lib/client/mutations/moderation'
 import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import { errorText } from '@/lib/client/error-text'
 
 // Asked only when someone deletes a comment, so it loads on first use.
 const LazyConfirmDialog = lazy(() =>
@@ -465,12 +466,13 @@ function CommentItem({
       setIsEditing(false)
     } catch (err) {
       setEditError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'portal.commentThread.editFailed',
-              defaultMessage: 'Failed to save edit',
-            })
+        errorText(
+          err,
+          intl.formatMessage({
+            id: 'portal.commentThread.editFailed',
+            defaultMessage: 'Failed to save edit',
+          })
+        )
       )
     }
   }

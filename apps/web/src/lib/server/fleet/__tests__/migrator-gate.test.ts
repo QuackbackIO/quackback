@@ -383,6 +383,9 @@ describe('replayGateVerdict', () => {
       '0306_email_ses_tenants',
       '0307_drop_approval_bell_index',
       '0308_remove_approvals_leftovers',
+      '0309_api_key_kinds',
+      '0310_sending_domain_ownership_grace',
+      '0311_sending_domain_ownership_warning_sent',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

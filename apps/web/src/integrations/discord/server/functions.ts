@@ -85,7 +85,7 @@ export const fetchDiscordChannelsFn = createServerFn({ method: 'GET' }).handler(
     })
 
     if (!integration || integration.status !== 'active') {
-      throw new Error('Discord not connected')
+      throw new ValidationError('INTEGRATION_NOT_CONNECTED', 'Discord not connected')
     }
 
     if (!integration.secrets) {
@@ -100,7 +100,10 @@ export const fetchDiscordChannelsFn = createServerFn({ method: 'GET' }).handler(
 
     const cfg = (auth.config ?? {}) as DiscordIntegrationConfig
     if (!cfg.guildId) {
-      throw new Error('Discord guild ID not found. Please reconnect Discord.')
+      throw new ValidationError(
+        'INTEGRATION_RECONNECT_REQUIRED',
+        'Discord guild ID not found. Please reconnect Discord.'
+      )
     }
 
     const channels = await listDiscordChannels(secrets.accessToken, cfg.guildId)

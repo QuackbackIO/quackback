@@ -58,6 +58,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/shared/utils'
+import { toastError } from '@/lib/client/error-notice'
 
 // A rule while being edited: value may be blank until the teammate picks one.
 // The fixed-field shape carries a plain string value (as before); an attribute
@@ -317,7 +318,7 @@ export const ConversationViewDialog = memo(function ConversationViewDialog({
       onSaved?.(viewId)
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to save view')
+      toastError(error, 'Failed to save view')
     },
   })
 

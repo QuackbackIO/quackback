@@ -12,6 +12,7 @@ import { db, postVotes, eq, and, inArray } from '@/lib/server/db'
 import { relatedPostIdsSubquery } from '@/lib/server/domains/posts/post.merge-ids'
 import { isUnsubscribeToken } from '@/lib/shared/unsubscribe-token'
 import { logger } from '@/lib/server/logger'
+import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'subscriptions' })
 
@@ -72,7 +73,7 @@ async function gateSubscriptionWrite(
   const { resolvePortalAccessForRequest } = await import('./portal-access')
   const access = await resolvePortalAccessForRequest()
   if (!access.granted) {
-    throw new Error('Portal access required')
+    throw new ForbiddenError('PORTAL_ACCESS_REQUIRED', 'Portal access required')
   }
   const { assertPostViewable } = await import('@/lib/server/domains/posts/post.access')
   const { policyActorFromAuth } = await import('./auth-helpers')
@@ -167,7 +168,7 @@ export const adminUpdateVoterSubscriptionFn = createServerFn({ method: 'POST' })
       )
       .limit(1)
     if (!vote) {
-      throw new Error('Principal does not have a vote on this post')
+      throw new ValidationError('NOT_A_VOTER', 'Principal does not have a vote on this post')
     }
     const votePostId = vote.postId
     if (data.level === 'none') {

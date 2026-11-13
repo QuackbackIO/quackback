@@ -85,6 +85,7 @@ const mockAuthContext: ApiAuthContext = {
   apiKey: {
     id: 'api_key_test' as ApiKeyId,
     name: 'test',
+    kind: 'personal' as const,
     keyPrefix: 'qb_',
     createdById: null,
     principalId: 'principal_1' as PrincipalId,
