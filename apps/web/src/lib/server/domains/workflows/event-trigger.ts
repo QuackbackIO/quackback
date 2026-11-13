@@ -3,10 +3,11 @@
  * a dispatched conversation/message event to a WorkflowTrigger and hands it to the
  * dispatcher. Non-conversation events (posts, comments, ...) map to null.
  *
- * Ticket triggers (ticket.created / ticket.status_changed) are conversation-linked
+ * Ticket triggers (ticket.created / ticket.status_changed, plus the due-date trio
+ * ticket.due_changed / ticket.due_soon / ticket.overdue) are conversation-linked
  * tickets ONLY — a ticket event's own payload never carries a conversationId (see
  * ticket.webhooks.ts's EventTicketRef/EventTicketData), and the dispatcher is
- * conversation-keyed (WorkflowTrigger.conversationId is required), so these two
+ * conversation-keyed (WorkflowTrigger.conversationId is required), so these
  * event types need an extra async step: dispatchWorkflowsForEvent's own ticket
  * branch below resolves the ticket's linked CUSTOMER conversation (one indexed
  * lookup — ticket_conversations' real primary key leads with ticket_id, wrapped
@@ -80,6 +81,22 @@ import { readCursor } from './workflow-wait-queue'
  */
 const UNRESOLVED_TICKET_CONVERSATION_ID = '' as ConversationId
 
+/** The ticket event types that dispatch through dispatchWorkflowsForEvent's
+ *  linked-conversation branch. */
+const TICKET_TRIGGER_EVENT_TYPES = [
+  'ticket.created',
+  'ticket.status_changed',
+  'ticket.due_changed',
+  'ticket.due_soon',
+  'ticket.overdue',
+] as const
+type TicketTriggerEventType = (typeof TICKET_TRIGGER_EVENT_TYPES)[number]
+type TicketTriggerEvent = Extract<EventData, { type: TicketTriggerEventType }>
+
+function isTicketTriggerEvent(event: EventData): event is TicketTriggerEvent {
+  return (TICKET_TRIGGER_EVENT_TYPES as readonly string[]).includes(event.type)
+}
+
 /** ticket.created-only bounded re-poll (see dispatchWorkflowsForEvent's
  *  ticket branch doc for why): up to 3 extra lookups, ~1.5s apart. */
 const TICKET_CREATED_LINK_POLL_ATTEMPTS = 3
@@ -118,12 +135,13 @@ function delay(ms: number): Promise<void> {
  * link-visible. The poll remains for the dialog + convert_to_ticket flows,
  * which still link post-create.)
  *
- * `ticket.status_changed` is unaffected — it fires well after a ticket
- * already exists and is normally linked long before any status changes, so
- * it keeps the original single, immediate lookup.
+ * Every other ticket trigger (`ticket.status_changed` and the due-date trio)
+ * is unaffected — each fires well after a ticket already exists and is
+ * normally linked long before, so it keeps the original single, immediate
+ * lookup.
  */
 async function resolveTicketConversationIdForDispatch(
-  eventType: 'ticket.created' | 'ticket.status_changed',
+  eventType: TicketTriggerEventType,
   ticketId: string
 ): Promise<ConversationId | null> {
   const first = await resolvePairConversationId(ticketId as TicketId)
@@ -318,6 +336,37 @@ export function eventToWorkflowTrigger(
         message: null,
         ticketStatusCategory:
           previousStatus === newStatus ? null : (newStatus as TicketStatusCategory),
+      }
+    }
+    case 'ticket.due_changed': {
+      // Loop safety, same as ticket.status_changed above: a workflow's own
+      // set_ticket_due_date action writes through setTicketDueAt under the
+      // engine's bounded service actor, which fires this same event type. No
+      // allowServiceActor opt-out means the automated-actor gate blocks that
+      // write from ever re-triggering a ticket.due_changed workflow.
+      if (resolvedConversationId === null) return null
+      return {
+        triggerType: event.type,
+        conversationId: resolvedConversationId ?? UNRESOLVED_TICKET_CONVERSATION_ID,
+        actorType,
+        subjectPrincipalId: null,
+        message: null,
+      }
+    }
+    case 'ticket.due_soon':
+    case 'ticket.overdue': {
+      // Synthetic, timer-driven (the ticket-due sweep) — no principal ever
+      // "causes" a date to come due, so this opts out of the automated-actor
+      // gate the same way the SLA pair does. The sweep fires each at most
+      // once per ticket per due date, so there is no loop to guard against.
+      if (resolvedConversationId === null) return null
+      return {
+        triggerType: event.type,
+        conversationId: resolvedConversationId ?? UNRESOLVED_TICKET_CONVERSATION_ID,
+        actorType,
+        allowServiceActor: true,
+        subjectPrincipalId: null,
+        message: null,
       }
     }
     default:
@@ -536,8 +585,8 @@ export async function dispatchWorkflowsForEvent(event: EventData): Promise<void>
     return
   }
 
-  // Ticket triggers (ticket.created / ticket.status_changed): resolve the
-  // ticket's linked customer conversation FIRST (the async step
+  // Ticket triggers (ticket.created / ticket.status_changed and the due-date
+  // trio): resolve the ticket's linked customer conversation FIRST (the async step
   // eventToWorkflowTrigger itself can't do — see its doc), then hand the
   // resolved id to eventToWorkflowTrigger to build the real trigger. No
   // linked conversation -> no dispatch (ticket.created bounded-retries this
@@ -547,7 +596,7 @@ export async function dispatchWorkflowsForEvent(event: EventData): Promise<void>
   // lifecycle event), so — like the unresponsive pair above — this
   // dispatches straight through rather than falling into the
   // interrupt-then-dispatch machinery below.
-  if (event.type === 'ticket.created' || event.type === 'ticket.status_changed') {
+  if (isTicketTriggerEvent(event)) {
     const conversationId = await resolveTicketConversationIdForDispatch(
       event.type,
       event.data.ticket.id

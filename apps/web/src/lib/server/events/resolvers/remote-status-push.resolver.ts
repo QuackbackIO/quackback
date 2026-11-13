@@ -2,7 +2,9 @@
  * Resolve outbound status proposals for Sync history. When a Quackback
  * post/ticket status changes, each linked item with external statuses
  * and a matching `pushStatusMappings` entry gets a review operation.
- * No adapter currently supports a verified conditional remote write.
+ * No adapter supports a verified conditional remote write; a ticket link in
+ * a destination that opted into guarded automatic updates is left to the
+ * issue-update sink instead (see `sync/status.ts`).
  *
  * LOOP-SAFETY: an inbound webhook applies its status change via the
  * integration's service principal, so the emitted status-changed event carries

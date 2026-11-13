@@ -30,6 +30,8 @@ export const SYNC_ERRORS = {
     'The connection or destination changed. This operation cannot use the new connection.',
   missing_payload: 'The original data is no longer available. Start a new sync from the source.',
   local_persistence: 'The remote change succeeded; local confirmation still needs to be saved.',
+  unlinked_remote:
+    'This platform item names this ticket but is not linked to it. Inspect it and link it, or cancel.',
 } as const
 export type SyncErrorCode = keyof typeof SYNC_ERRORS
 export const SYNC_ATTENTION: readonly SyncState[] = [
@@ -55,6 +57,7 @@ export const SYNC_KIND_LABELS: Record<string, string> = {
   refresh: 'Update content',
   status: 'Update status',
   'receive-status': 'Status received',
+  assignee: 'Update assignee',
   'receive-webhook': 'Webhook received',
   membership: 'Segment membership',
   identify: 'Update user',
@@ -62,6 +65,17 @@ export const SYNC_KIND_LABELS: Record<string, string> = {
   'app-hook': 'App event',
   notify: 'Notification',
   link: 'Link existing item',
+  comment: 'Post reply as comment',
+  'comment-update': 'Update comment',
+  'comment-delete': 'Delete comment',
+  'issue-status': 'Update issue status',
+  'issue-priority': 'Update issue priority',
+  'issue-assignees': 'Update issue assignees',
+  'issue-title': 'Update issue title',
+  'comment-import': 'Bring comment in',
+  'comment-import-update': 'Update brought-in comment',
+  'comment-import-delete': 'Remove brought-in comment',
+  relink: 'Link found item',
 }
 export interface SyncHistoryItem {
   id: string

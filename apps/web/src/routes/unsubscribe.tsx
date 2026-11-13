@@ -255,18 +255,6 @@ const ACTION_COPY: Record<string, ActionCopy> = {
       defaultMessage: 'You will not get more email updates about this post.',
     },
   },
-  mute_post: {
-    confirmTitle: { id: 'unsubscribe.mute.confirmTitle', defaultMessage: 'Mute this post?' },
-    confirmBody: {
-      id: 'unsubscribe.mute.confirmBody',
-      defaultMessage: 'You will stop getting notifications about it.',
-    },
-    button: { id: 'unsubscribe.mute.button', defaultMessage: 'Mute' },
-    doneBody: {
-      id: 'unsubscribe.mute.doneBody',
-      defaultMessage: 'This post is muted. You can unmute it from the post.',
-    },
-  },
   unsubscribe_all: {
     confirmTitle: {
       id: 'unsubscribe.all.confirmTitle',

@@ -15,6 +15,7 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
+import type { TicketDTO } from '@/lib/server/domains/tickets'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
 afterEach(cleanup)
@@ -44,6 +45,10 @@ vi.mock('@/components/admin/inbox/ticket-controls', () => ({
   TicketWatchControl: () => null,
 }))
 vi.mock('@/components/admin/inbox/ticket-links', () => ({ TicketLinks: () => null }))
+vi.mock('@/components/admin/inbox/ticket-due-control', () => ({
+  TicketDueControl: () => null,
+  TicketDueChip: () => null,
+}))
 vi.mock('@/components/admin/users/block-person-control', () => ({
   usePersonBlockStatus: () => ({ blocked: false, isLoading: false }),
 }))
@@ -60,6 +65,11 @@ vi.mock('@/lib/server/functions/conversation-files', () => ({
 }))
 vi.mock('@/components/shared/files/file-viewer-context', () => ({
   useFileViewer: () => ({ open: filesHoisted.openViewer }),
+}))
+const watchHoisted = vi.hoisted(() => ({ getTicketWatchStatusFn: vi.fn() }))
+vi.mock('@/lib/server/functions/tickets', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/functions/tickets')>()),
+  getTicketWatchStatusFn: watchHoisted.getTicketWatchStatusFn,
 }))
 vi.mock('@/lib/server/functions/admin', () => ({
   getPortalUserFn: vi.fn().mockResolvedValue(null),
@@ -137,12 +147,13 @@ let panelShown = false
 function renderPanel(
   conversation: ConversationDTO = makeConversation(),
   extra: {
+    ticket?: TicketDTO | null
     openCopilotToken?: number
     issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
   } = {}
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const ui = (props: { openCopilotToken?: number }) => (
+  const ui = (props: { openCopilotToken?: number; ticket?: TicketDTO | null }) => (
     <IntlProvider locale="en-US" messages={{}}>
       <QueryClientProvider client={client}>
         <InboxDetailPanel
@@ -445,5 +456,45 @@ describe('<InboxDetailPanel> Files section', () => {
     const [files, index] = filesHoisted.openViewer.mock.calls[0] as [{ name: string }[], number]
     expect(files.map((f) => f.name)).toEqual(['b.pdf', 'a.pdf'])
     expect(index).toBe(0)
+  })
+})
+
+describe('<InboxDetailPanel> linked ticket watchers', () => {
+  const linkedTicket = {
+    id: 'ticket_1',
+    number: 7,
+    reference: '#7',
+    type: 'customer',
+    ticketType: null,
+    title: 'Refund not received',
+    status: { id: 'ticket_status_1', name: 'Open', color: '#10b981', category: 'open' },
+    stage: { slot: 'received', label: 'Received' },
+    priority: 'none',
+    requester: null,
+    assignee: { principalId: null, displayName: null, teamId: null, teamName: null },
+    company: null,
+    firstResponseAt: null,
+    dueAt: null,
+    resolvedAt: null,
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+    reopenedCount: 0,
+  } as unknown as TicketDTO
+
+  it('shows the watch control on the linked ticket card of a conversation row', async () => {
+    watchHoisted.getTicketWatchStatusFn.mockResolvedValue({
+      watching: false,
+      reason: null,
+      mutedUntil: null,
+    })
+    renderPanel(makeConversation(), { ticket: linkedTicket })
+    expect(await screen.findByText('Watchers')).toBeTruthy()
+  })
+
+  it('leaves the row out when the linked ticket is hidden from the viewer', async () => {
+    watchHoisted.getTicketWatchStatusFn.mockRejectedValue(new Error('Ticket not found'))
+    renderPanel(makeConversation(), { ticket: linkedTicket })
+    await waitFor(() => expect(watchHoisted.getTicketWatchStatusFn).toHaveBeenCalled())
+    expect(screen.queryByText('Watchers')).toBeNull()
   })
 })

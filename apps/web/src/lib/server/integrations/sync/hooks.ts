@@ -16,6 +16,21 @@ import {
 import type { IntegrationId, PostId, TicketId, PostCommentId, ChangelogId } from '@quackback/ids'
 import type { HookJobData } from '@/lib/server/events/hook-job'
 import { getIntegration } from '../index'
+import { outboundAllowed } from '../destinations'
+import { isTicketIssueEvent } from '../ticket-issues'
+import {
+  TICKET_COMMENT_HOOK,
+  TICKET_REPLY_EVENTS,
+  isTicketCommentKind,
+  persistTicketComment,
+  queueTicketCommentSync,
+} from './comments'
+import {
+  ISSUE_UPDATE_HOOK,
+  isIssueUpdateKind,
+  persistIssueUpdate,
+  queueIssueUpdateSync,
+} from './issue-updates'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import type { JobSqlExecutor } from '@/lib/server/jobs/job-queue'
 import { getBaseUrl } from '@/lib/server/config'
@@ -38,8 +53,14 @@ export function hookSource(data: HookJobData) {
     changelog?: { id: string }
     conversation?: { id: string }
     message?: { id: string }
+    messageId?: string
   }
   if (content.message?.id) return { sourceType: 'message', sourceId: content.message.id }
+  // A public reply on a ticket is the source of what is sent about it, so a
+  // reply removed or made internal since is not sent. A note or a deleted
+  // reply stays with its ticket.
+  if (content.ticket?.id && content.messageId && TICKET_REPLY_EVENTS.includes(data.event.type))
+    return { sourceType: 'message', sourceId: content.messageId }
   if (content.conversation?.id)
     return { sourceType: 'conversation', sourceId: content.conversation.id }
   if (content.comment?.id) return { sourceType: 'comment', sourceId: content.comment.id }
@@ -63,6 +84,17 @@ export async function queueHookSync(
     const { queueStatusSync } = await import('./status')
     return queueStatusSync(data, executor)
   }
+  // A linked ticket's reply, mirrored onto one linked issue as a comment.
+  if (data.hookType === TICKET_COMMENT_HOOK) return queueTicketCommentSync(data, executor)
+  // A ticket change a linked issue follows, where its destination updates issues automatically.
+  if (data.hookType === ISSUE_UPDATE_HOOK) return queueIssueUpdateSync(data, executor)
+  // A tracker that keeps linked issues opens one for a ticket its destination's
+  // opt-in matches: the same create a teammate can ask for, not a notification.
+  const definition = getIntegration(data.hookType)
+  if (isTicketIssueEvent(data.event.type) && definition?.linkedItems && definition.issues?.create) {
+    const { queueTicketIssueSync } = await import('./tickets')
+    return queueTicketIssueSync(data, executor)
+  }
   const integrationId = String(data.config.integrationId)
   const [row] = getExecuteRows<{
     connected_at: string | null
@@ -77,7 +109,7 @@ export async function queueHookSync(
     id: integrationId,
     connectedAt: row?.connected_at ?? null,
   })
-  const destination = syncDestination(data.target, row?.config ?? {}, getIntegration(data.hookType))
+  const destination = syncDestination(data.target, row?.config ?? {}, definition)
   const source = hookSource(data)
   const kind = data.event.type === 'post.created' ? 'create' : 'notify'
   const operationKey = syncOperationKey({
@@ -168,6 +200,9 @@ export async function executeHookSync(
       )
     })
   )
+    return { state: 'cancelled', errorCode: 'installation_changed' }
+  // A repository switched off or made inbound-only since this was queued takes nothing.
+  if (!(await outboundAllowed(integration, channel)))
     return { state: 'cancelled', errorCode: 'installation_changed' }
   // Re-read mutable content instead of re-exposing a removed snapshot.
   if (post && 'post' in event.data) {
@@ -263,10 +298,14 @@ export async function persistSyncLink(
   claim: SyncClaim,
   result: Record<string, unknown>
 ): Promise<void> {
+  if (isTicketCommentKind(claim.operation.kind)) return persistTicketComment(tx, claim, result)
+  if (isIssueUpdateKind(claim.operation.kind)) return persistIssueUpdate(tx, claim, result)
   if (typeof result.externalId !== 'string') return
   const op = claim.operation
-  // Notification receipts remain in sync history; only tracked items get lifecycle links.
-  if (op.kind !== 'create' || !getIntegration(op.provider)?.linkedItems) return
+  // Notification receipts remain in sync history; only tracked items get
+  // lifecycle links: a create, or a proposed link a teammate confirmed.
+  if ((op.kind !== 'create' && op.kind !== 'relink') || !getIntegration(op.provider)?.linkedItems)
+    return
   const remoteUrl = typeof result.externalUrl === 'string' ? result.externalUrl : null
   const displayId = typeof result.externalDisplayId === 'string' ? result.externalDisplayId : null
   if (op.sourceType === 'post') {
@@ -286,7 +325,7 @@ export async function persistSyncLink(
         origin: 'event',
       })
       .onConflictDoNothing()
-  } else if (op.sourceType === 'ticket' && op.kind === 'create') {
+  } else if (op.sourceType === 'ticket') {
     const ticket = await tx.query.tickets.findFirst({
       where: eq(tickets.id, op.sourceId as TicketId),
     })
