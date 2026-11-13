@@ -70,14 +70,28 @@ export async function isCsatAlreadyRequested(
  * and still needs a way to rate.
  */
 export async function isCsatRatedOrEmailed(conversationId: ConversationId): Promise<boolean> {
-  const signals = await readCsatSignals(conversationId, db)
-  return !!signals && (signals.rated || signals.emailed)
+  const [row] = await db
+    .select({
+      rated: sql<boolean>`${conversations.csatRating} is not null`,
+      emailed: sql<boolean>`exists (
+        select 1 from email_log e
+        where e.conversation_id = conversations.id
+          and e.email_type = 'CsatRequestEmail')`,
+    })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  return !!row && (row.rated || row.emailed)
 }
 
 /** Whether the conversation already has a rating on file. */
 export async function isConversationRated(conversationId: ConversationId): Promise<boolean> {
-  const signals = await readCsatSignals(conversationId, db)
-  return !!signals && signals.rated
+  const [row] = await db
+    .select({ rating: conversations.csatRating })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  return row?.rating != null
 }
 
 /**

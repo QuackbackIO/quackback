@@ -22,11 +22,21 @@
  */
 import type { EventData } from '@/lib/server/events/types'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
+import { db, eq, conversations } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { autoReopenOnRequesterReply } from './ticket.service'
 import { resolvePairTicketIdForConversation } from './pair-thread.service'
 
 const log = logger.child({ component: 'ticket-event-hooks' })
+
+async function conversationIsClosed(conversationId: ConversationId): Promise<boolean> {
+  const [row] = await db
+    .select({ status: conversations.status })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  return row?.status === 'closed'
+}
 
 /**
  * Reopen the customer ticket paired with `message.created`'s conversation, if
@@ -38,11 +48,14 @@ export async function autoReopenPairTicketFromEvent(event: EventData): Promise<v
   try {
     if (event.type !== 'message.created') return
     if (event.data.message.senderType !== 'visitor') return
-    // A reply to a conversation block (a rating, a button, a collected field)
-    // answers a prompt the conversation posted, not a new request: the ticket
-    // stays as it is, as the conversation does (applyVisitorReopenStatus).
-    if (event.data.message.blockReplyKind) return
     const conversationId = event.data.message.conversationId as ConversationId
+    // A rating answers the ask a resolve made: the ticket stays resolved. Any
+    // other block reply never reopens a closed conversation, so it leaves the
+    // ticket alone while the conversation is closed; on an open or snoozed
+    // conversation it is an ordinary reply and the ticket follows it.
+    const kind = event.data.message.blockReplyKind
+    if (kind === 'csat') return
+    if (kind && (await conversationIsClosed(conversationId))) return
     const ticketId = await resolvePairTicketIdForConversation(conversationId)
     if (!ticketId) return
     // The message author is the requester — threaded through so the reopen's
