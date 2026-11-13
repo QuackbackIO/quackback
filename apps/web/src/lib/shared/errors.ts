@@ -185,3 +185,17 @@ export function isSafeToShow(error: unknown): boolean {
     (error as { safeToShow?: unknown }).safeToShow === true
   )
 }
+
+/**
+ * Whether an error is a NotFound answer (deleted, or outside the caller's
+ * view). Read from the typed status, never the message or the class: a typed
+ * error below 500 reaches the browser with its `code` and `statusCode` but
+ * not its class (typed-error-serialization.ts).
+ */
+export function isNotFoundError(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    (error as { statusCode?: unknown }).statusCode === 404
+  )
+}

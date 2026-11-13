@@ -6,8 +6,9 @@
  * function middleware and the real serializer, and the test reads what the
  * client fetcher hands back. Only the session lookup is stubbed.
  *
- * The last case is why the refusal is a returned value: the same gate error,
- * thrown out of the handler, arrives as a bare `Error` without its code.
+ * The last case pins what a thrown gate error looks like instead: a plain
+ * `Error` that keeps its code and status, which the client's result check
+ * does not read as the refusal.
  */
 import './_server-fn-rpc'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -109,15 +110,14 @@ describe('recent sign-in through the client path', () => {
     await expect(createServerFnRpc()).rejects.toThrow(/once per process/)
   })
 
-  it('loses the code when the gate error is thrown instead of returned', async () => {
+  it('keeps the code on a thrown gate error, but the result check does not read it', async () => {
     hoisted.session.mockResolvedValue(signedIn(minutesAgo(11)))
     const error = await approveThrowing({ data: { changeId: 'change_1' } }).then(
       () => null,
       (e: unknown) => e
     )
     expect(error).toBeInstanceOf(Error)
-    expect((error as { code?: unknown }).code).toBeUndefined()
-    expect((error as { statusCode?: unknown }).statusCode).toBeUndefined()
+    expect(error).toMatchObject({ code: RECENT_SIGN_IN_REQUIRED, statusCode: 403 })
     expect(isRecentSignInRequired(error)).toBe(false)
   })
 })

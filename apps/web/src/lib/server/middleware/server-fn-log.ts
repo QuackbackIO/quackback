@@ -107,7 +107,8 @@ export function classifyServerFnError(error: unknown): 'warn' | 'error' | null {
  * logger. Mirrors `handleRequestWithContext` in request-context.ts.
  *
  * A thrown error crosses to the browser with its message intact, and the
- * interface prints it. In production only a planned failure keeps its message:
+ * interface prints it; a typed error below 500 also keeps its code and status
+ * (typed-error-serialization.ts). In production only a planned failure keeps its message:
  * one logged at warn (a typed 4xx, an auth denial, a rejected payload), or a
  * failure on our side whose class says its message was written for people
  * (`ServiceUnavailableError`). Anything else, which is every plain
