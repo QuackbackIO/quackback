@@ -71,9 +71,8 @@ import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import {
   BackfillBusyError,
   __setBackfillsForTests,
-  backfillKeys,
   enqueueBackfillPass,
-  followUpKeys,
+  walkKeys,
   startupBackfillDue,
   walkBackfill,
   type BatchedBackfill,
@@ -135,7 +134,7 @@ function onlyBackfillQueues(): void {
 
 async function backfillRows(entry: BatchedBackfill) {
   return (await rowsFor('startup-backfill')).filter((r) =>
-    r.dedupe_key?.startsWith(`backfill:${entry.name}:`)
+    r.dedupe_key?.startsWith(`startup-backfill:${entry.name}:`)
   )
 }
 
@@ -233,7 +232,7 @@ describe('the enqueue pass (startup and every schedule pass)', () => {
     expect(await enqueueBackfillPass()).toBe(0)
 
     expect((await backfillRows(a)).map((r) => [r.dedupe_key, r.status, r.payload])).toEqual([
-      [`backfill:${a.name}:1`, 'pending', { name: a.name, gen: 1 }],
+      [`startup-backfill:${a.name}:1`, 'pending', { name: a.name, gen: 1 }],
     ])
     expect(await backfillRows(b)).toHaveLength(1)
     expect(await walked(a)).toEqual([0, 0, 0, 0, 0])
@@ -270,7 +269,7 @@ describe('the enqueue pass (startup and every schedule pass)', () => {
     await seed(entry)
     await walkBackfill(entry)
 
-    expect(await kvValue(backfillKeys(entry.name).done)).not.toBeNull()
+    expect(await kvValue(walkKeys(entry.name).done)).not.toBeNull()
     expect(await enqueueBackfillPass()).toBe(0)
     expect(await backfillRows(entry)).toHaveLength(0)
   })
@@ -308,12 +307,12 @@ describe('the walk', () => {
 
     await expect(walkBackfill(entry)).rejects.toThrow('worker killed mid-walk')
     expect(seenFromOutside).toEqual([1, 1, 0, 0, 0])
-    expect(await kvValue(backfillKeys(entry.name).cursor)).not.toBeNull()
-    expect(await kvValue(backfillKeys(entry.name).done)).toBeNull()
+    expect(await kvValue(walkKeys(entry.name).cursor)).not.toBeNull()
+    expect(await kvValue(walkKeys(entry.name).done)).toBeNull()
 
     await walkBackfill(entry)
     expect(await walked(entry)).toEqual([1, 1, 1, 1, 1])
-    expect(await kvValue(backfillKeys(entry.name).done)).not.toBeNull()
+    expect(await kvValue(walkKeys(entry.name).done)).not.toBeNull()
   })
 
   it('throws, committing nothing, when another runner holds the backfill lock', async () => {
@@ -331,7 +330,7 @@ describe('the walk', () => {
       }
     })
     expect(await walked(entry)).toEqual([0, 0, 0, 0, 0])
-    expect(await kvValue(backfillKeys(entry.name).cursor)).toBeNull()
+    expect(await kvValue(walkKeys(entry.name).cursor)).toBeNull()
   })
 
   it('holds no lock after a batch fails', async () => {
@@ -409,7 +408,7 @@ describe('retries and generations', () => {
     // A row enqueued before the migration landed, which kept missing it.
     await enqueueBackfillPass()
     ledger.applied = new Set()
-    await failForGood(`backfill:${entry.name}:1`)
+    await failForGood(`startup-backfill:${entry.name}:1`)
 
     // Still no migration: nothing new.
     expect(await enqueueBackfillPass()).toBe(0)
@@ -418,10 +417,10 @@ describe('retries and generations', () => {
     expect(await enqueueBackfillPass()).toBe(1)
     expect(await enqueueBackfillPass()).toBe(0)
     expect((await backfillRows(entry)).map((r) => [r.dedupe_key, r.status])).toEqual([
-      [`backfill:${entry.name}:1`, 'failed'],
-      [`backfill:${entry.name}:2`, 'pending'],
+      [`startup-backfill:${entry.name}:1`, 'failed'],
+      [`startup-backfill:${entry.name}:2`, 'pending'],
     ])
-    expect(await kvValue(backfillKeys(entry.name).gen)).toBe(2)
+    expect(await kvValue(walkKeys(entry.name).gen)).toBe(2)
 
     await drainOnce(CONFIG)
     expect(await walked(entry)).toEqual([1, 1, 1, 1, 1])
@@ -486,7 +485,7 @@ describe('the follow-up', () => {
     await runBackfillFollowUpJob(jobFor({ name: entry.name, gen: 1 }, 'ticket-frt-reconcile'))
 
     expect(await reconciled(entry)).toEqual([1, 1, 1, 1, 1])
-    expect(await kvValue(followUpKeys(entry.name).done)).not.toBeNull()
+    expect(await kvValue(walkKeys(entry.name, 'follow-up').done)).not.toBeNull()
   })
 
   it('fails and retries a job for a backfill with no registered step', async () => {
@@ -526,7 +525,7 @@ describe('the follow-up', () => {
       [`ticket-frt-reconcile:${entry.name}:1`, 'failed'],
       [`ticket-frt-reconcile:${entry.name}:2`, 'pending'],
     ])
-    expect(await kvValue(followUpKeys(entry.name).gen)).toBe(2)
+    expect(await kvValue(walkKeys(entry.name, 'follow-up').gen)).toBe(2)
     // The backfill's own generation is untouched.
     expect(await backfillRows(entry)).toHaveLength(0)
 

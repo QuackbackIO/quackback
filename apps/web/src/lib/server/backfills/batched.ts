@@ -66,11 +66,7 @@ export function maxAttemptsOf(queue: string): number {
 }
 
 /** The queue that walks backfills. Its scheduled rows run the enqueue pass. */
-export const BACKFILL_QUEUE = 'startup-backfill'
-
-/** Queues a backfill's follow-up may run on. Each runs `runBackfillFollowUpJob`. */
-export const FOLLOW_UP_QUEUES = ['ticket-frt-reconcile'] as const
-export type FollowUpQueue = (typeof FOLLOW_UP_QUEUES)[number]
+const BACKFILL_QUEUE = 'startup-backfill'
 
 /** What a fixture seeds with, and what a verify reads through. */
 export type BackfillDb = Database | Transaction
@@ -112,7 +108,8 @@ export interface BackfillWalk {
 }
 
 export interface BackfillFollowUp extends BackfillWalk {
-  queue: FollowUpQueue
+  /** A queue whose handler is `runBackfillFollowUpJob` (`ticket-frt-reconcile`). */
+  queue: string
   /** How long after the walk finishes the follow-up is due. */
   delayMs: number
   /** The migration the follow-up needs. Defaults to the backfill's. */
@@ -127,42 +124,50 @@ export interface BatchedBackfill extends BackfillWalk {
   followUp?: BackfillFollowUp
 }
 
-let overrides: readonly BatchedBackfill[] | null = null
+/** A backfill as the registry holds it: its follow-up's migration resolved. */
+export interface RegisteredBackfill extends BatchedBackfill {
+  followUp?: BackfillFollowUp & { requiresMigration: string }
+}
+
+/** Resolve each follow-up's migration once, when the registry is built. */
+function register(entries: readonly BatchedBackfill[]): readonly RegisteredBackfill[] {
+  return entries.map((entry) =>
+    entry.followUp
+      ? {
+          ...entry,
+          followUp: {
+            ...entry.followUp,
+            requiresMigration: entry.followUp.requiresMigration ?? entry.requiresMigration,
+          },
+        }
+      : { ...entry, followUp: undefined }
+  )
+}
+
+const REGISTRY = register(BATCHED_BACKFILLS)
+let overrides: readonly RegisteredBackfill[] | null = null
 
 /** The backfills this build runs. */
-export function registeredBackfills(): readonly BatchedBackfill[] {
-  return overrides ?? BATCHED_BACKFILLS
+export function registeredBackfills(): readonly RegisteredBackfill[] {
+  return overrides ?? REGISTRY
 }
 
 /** Test seam: replace the registry for one test. */
 export function __setBackfillsForTests(entries: readonly BatchedBackfill[] | null): void {
-  overrides = entries
+  overrides = entries === null ? null : register(entries)
 }
 
-export function findBackfill(name: string): BatchedBackfill | undefined {
+export function findBackfill(name: string): RegisteredBackfill | undefined {
   return registeredBackfills().find((b) => b.name === name)
 }
 
-export interface WalkKeys {
-  cursor: string
-  done: string
-  gen: string
-}
-
-export function backfillKeys(name: string): WalkKeys {
-  return {
-    cursor: `backfill:${name}:cursor`,
-    done: `backfill:${name}:done`,
-    gen: `backfill:${name}:gen`,
-  }
-}
-
-export function followUpKeys(name: string): WalkKeys {
-  return {
-    cursor: `backfill:${name}:follow-up:cursor`,
-    done: `backfill:${name}:follow-up:done`,
-    gen: `backfill:${name}:follow-up:gen`,
-  }
+/** The kv keys of one walk: a backfill (`part` unset) or its follow-up. */
+export function walkKeys(
+  name: string,
+  part?: 'follow-up'
+): { cursor: string; done: string; gen: string } {
+  const base = part ? `backfill:${name}:${part}` : `backfill:${name}`
+  return { cursor: `${base}:cursor`, done: `${base}:done`, gen: `${base}:gen` }
 }
 
 /** Thrown when another runner holds this backfill's lock. The row is retried. */
@@ -185,36 +190,43 @@ async function isDone(key: string): Promise<boolean> {
   return (await kvGet(key)) !== null
 }
 
+function dedupeKeyFor(queue: string, name: string, gen: number): string {
+  return `${queue}:${name}:${gen}`
+}
+
+/** One walk row: `{ name, gen }` under the generation's dedupe key. */
+async function enqueueRow(opts: {
+  queue: string
+  name: string
+  gen: number
+  runAt?: Date
+  executor?: Transaction
+}): Promise<boolean> {
+  const { inserted } = await enqueueJob({
+    queue: opts.queue,
+    dedupeKey: dedupeKeyFor(opts.queue, opts.name, opts.gen),
+    payload: { name: opts.name, gen: opts.gen },
+    maxAttempts: maxAttemptsOf(opts.queue),
+    runAt: opts.runAt,
+    executor: opts.executor,
+  })
+  return inserted
+}
+
 /**
  * Enqueue the current generation of one walk, or a new generation when the
  * current one's row is terminal. A live row (pending or running) is left
  * alone. Returns true when a row was written.
  */
-async function enqueueGeneration(opts: {
-  queue: string
-  name: string
-  genKey: string
-  runAt?: Date
-}): Promise<boolean> {
-  let gen = (await kvGet<number>(opts.genKey)) ?? 1
-  const row = await findJobByDedupeKey(opts.queue, dedupeKeyFor(opts.queue, opts.name, gen))
+async function enqueueGeneration(queue: string, name: string, genKey: string): Promise<boolean> {
+  let gen = (await kvGet<number>(genKey)) ?? 1
+  const row = await findJobByDedupeKey(queue, dedupeKeyFor(queue, name, gen))
   if (row && (row.status === 'pending' || row.status === 'running')) return false
   if (row) {
     gen += 1
-    await kvSet(opts.genKey, gen, DURABLE_KV_TTL_SECONDS)
+    await kvSet(genKey, gen, DURABLE_KV_TTL_SECONDS)
   }
-  const { inserted } = await enqueueJob({
-    queue: opts.queue,
-    dedupeKey: dedupeKeyFor(opts.queue, opts.name, gen),
-    payload: { name: opts.name, gen },
-    maxAttempts: maxAttemptsOf(opts.queue),
-    runAt: opts.runAt,
-  })
-  return inserted
-}
-
-function dedupeKeyFor(queue: string, name: string, gen: number): string {
-  return queue === BACKFILL_QUEUE ? `backfill:${name}:${gen}` : `${queue}:${name}:${gen}`
+  return enqueueRow({ queue, name, gen })
 }
 
 /**
@@ -226,22 +238,18 @@ function dedupeKeyFor(queue: string, name: string, gen: number): string {
 export async function enqueueBackfillPass(): Promise<number> {
   let written = 0
   for (const entry of registeredBackfills()) {
-    const keys = backfillKeys(entry.name)
+    const keys = walkKeys(entry.name)
     if (!(await isDone(keys.done))) {
       if (!(await migrationApplied(entry.requiresMigration))) continue
-      if (await enqueueGeneration({ queue: BACKFILL_QUEUE, name: entry.name, genKey: keys.gen })) {
-        written += 1
-      }
+      if (await enqueueGeneration(BACKFILL_QUEUE, entry.name, keys.gen)) written += 1
       continue
     }
     const followUp = entry.followUp
     if (!followUp) continue
-    const fkeys = followUpKeys(entry.name)
+    const fkeys = walkKeys(entry.name, 'follow-up')
     if (await isDone(fkeys.done)) continue
-    if (!(await migrationApplied(followUp.requiresMigration ?? entry.requiresMigration))) continue
-    if (await enqueueGeneration({ queue: followUp.queue, name: entry.name, genKey: fkeys.gen })) {
-      written += 1
-    }
+    if (!(await migrationApplied(followUp.requiresMigration))) continue
+    if (await enqueueGeneration(followUp.queue, entry.name, fkeys.gen)) written += 1
   }
   if (written > 0)
     log.info({ event: 'backfill.enqueued', rows: written }, 'startup backfills enqueued')
@@ -266,7 +274,7 @@ function tableIdentifier(table: string) {
 async function walk(opts: {
   label: string
   lock: string
-  keys: WalkKeys
+  keys: ReturnType<typeof walkKeys>
   walk: BackfillWalk
   onFinish?: (tx: Transaction) => Promise<void>
 }): Promise<void> {
@@ -321,16 +329,15 @@ export async function walkBackfill(entry: BatchedBackfill): Promise<void> {
   await walk({
     label: entry.name,
     lock: `quackback:backfill:${entry.name}`,
-    keys: backfillKeys(entry.name),
+    keys: walkKeys(entry.name),
     walk: entry,
     onFinish: followUp
       ? async (tx) => {
-          const gen = (await kvGet<number>(followUpKeys(entry.name).gen, { executor: tx })) ?? 1
-          await enqueueJob({
+          const genKey = walkKeys(entry.name, 'follow-up').gen
+          await enqueueRow({
             queue: followUp.queue,
-            dedupeKey: dedupeKeyFor(followUp.queue, entry.name, gen),
-            payload: { name: entry.name, gen },
-            maxAttempts: maxAttemptsOf(followUp.queue),
+            name: entry.name,
+            gen: (await kvGet<number>(genKey, { executor: tx })) ?? 1,
             runAt: new Date(Date.now() + followUp.delayMs),
             executor: tx,
           })
@@ -339,18 +346,17 @@ export async function walkBackfill(entry: BatchedBackfill): Promise<void> {
   })
 }
 
-/** Walk a backfill's follow-up to its end. */
-export async function walkFollowUp(entry: BatchedBackfill): Promise<void> {
+/** Walk a registered backfill's follow-up to its end. */
+export async function walkFollowUp(entry: RegisteredBackfill): Promise<void> {
   const followUp = entry.followUp
   if (!followUp) throw new Error(`no follow-up step is registered for backfill ${entry.name}`)
-  const tag = followUp.requiresMigration ?? entry.requiresMigration
-  if (!(await migrationApplied(tag))) {
-    throw new BackfillMigrationMissingError(`${entry.name} follow-up`, tag)
+  if (!(await migrationApplied(followUp.requiresMigration))) {
+    throw new BackfillMigrationMissingError(`${entry.name} follow-up`, followUp.requiresMigration)
   }
   await walk({
     label: `${entry.name} follow-up`,
     lock: `quackback:backfill:${entry.name}:follow-up`,
-    keys: followUpKeys(entry.name),
+    keys: walkKeys(entry.name, 'follow-up'),
     walk: followUp,
   })
 }
@@ -358,8 +364,8 @@ export async function walkFollowUp(entry: BatchedBackfill): Promise<void> {
 /** True when every registered backfill and follow-up has its done marker. */
 export async function backfillWorkDone(): Promise<boolean> {
   for (const entry of registeredBackfills()) {
-    if (!(await isDone(backfillKeys(entry.name).done))) return false
-    if (entry.followUp && !(await isDone(followUpKeys(entry.name).done))) return false
+    if (!(await isDone(walkKeys(entry.name).done))) return false
+    if (entry.followUp && !(await isDone(walkKeys(entry.name, 'follow-up').done))) return false
   }
   return true
 }

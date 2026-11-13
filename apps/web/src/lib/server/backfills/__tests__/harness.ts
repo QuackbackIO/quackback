@@ -11,10 +11,10 @@ import postgres from 'postgres'
 import { tickets } from '@/lib/server/db'
 import { testDb, testSql } from '@/lib/server/jobs/__tests__/harness'
 import {
-  backfillKeys,
-  followUpKeys,
+  findBackfill,
   walkBackfill,
   walkFollowUp,
+  walkKeys,
   type BackfillDb,
   type BackfillWalk,
   type BatchedBackfill,
@@ -34,7 +34,7 @@ export function uniqueName(label: string): string {
 
 /** Remove every kv row and job row a backfill of this name wrote. */
 export async function cleanupBackfill(name: string): Promise<void> {
-  const keys = [...Object.values(backfillKeys(name)), ...Object.values(followUpKeys(name))]
+  const keys = [...Object.values(walkKeys(name)), ...Object.values(walkKeys(name, 'follow-up'))]
   await testSql()`DELETE FROM kv_store WHERE key = ANY(${keys}::text[])`
   await testSql()`DELETE FROM job_queue WHERE dedupe_key LIKE ${`%:${name}:%`}`
   await testSql()`DELETE FROM tickets WHERE title LIKE ${`${name}%`}`
@@ -221,7 +221,16 @@ export async function checkBackfill(entry: BatchedBackfill): Promise<string[]> {
   const problems: string[] = []
   const walks: Array<[string, BackfillWalk | undefined, () => Promise<void>]> = [
     [entry.name, entry, () => walkBackfill(entry)],
-    [`${entry.name} follow-up`, entry.followUp, () => walkFollowUp(entry)],
+    [
+      `${entry.name} follow-up`,
+      entry.followUp,
+      () => {
+        // The follow-up walks as the registry holds it, its migration resolved.
+        const registered = findBackfill(entry.name)
+        if (!registered) throw new Error(`${entry.name} is not registered`)
+        return walkFollowUp(registered)
+      },
+    ],
   ]
   for (const [label, walk, run] of walks) {
     if (!walk) continue
