@@ -48,6 +48,7 @@ import {
   addTicketNote,
   listTicketMessages,
   listTicketMessagesForAgent,
+  insertTicketMessage,
 } from '../ticket-message.service'
 
 // Realtime publish (unified inbox §3.2, M3): neutralize the real Postgres-backed
@@ -143,6 +144,23 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
       ticketId,
       expect.objectContaining({ kind: 'ticket_updated' })
     )
+  })
+
+  it('returns the ticket as the reply left it: its new first response and edit time', async () => {
+    await testDb
+      .insert(settings)
+      .values({ name: 'Acme', slug: `acme_${suffix()}`, createdAt: new Date() })
+    const { ticketId, actor } = await seedTicketWithAgent()
+    await seedCustomerMessage(ticketId)
+
+    const { message, ticket } = await insertTicketMessage(
+      { ticketId, content: 'On it.' },
+      actor.principalId!,
+      { senderType: 'agent', isInternal: false, actor }
+    )
+
+    expect(ticket.firstResponseAt?.toISOString()).toBe(message.createdAt)
+    expect(ticket.updatedAt.toISOString()).toBe(message.createdAt)
   })
 
   it('an agent reply before the customer has written leaves first_response_at empty', async () => {

@@ -247,6 +247,21 @@ describe.skipIf(!fixture.available)('ticket first response from the message rows
     expect(await firstResponse(ticketId)).toBeNull()
   })
 
+  for (const type of ['back_office', 'tracker'] as const) {
+    it(`a ${type} ticket a teammate filed as its requester never gets a value, and loses a stamped one`, async () => {
+      const [filer, teammate] = [await seedPerson(), await seedPerson()]
+      const ticketId = await seedTicket(type)
+      await testDb
+        .update(tickets)
+        .set({ firstResponseAt: at('08:00') })
+        .where(eq(tickets.id, ticketId))
+      // The filer writes as the requester, then a teammate answers.
+      await write({ ticketId }, 'visitor', '09:00', filer)
+      await write({ ticketId }, 'agent', '09:30', teammate)
+      expect(await firstResponse(ticketId)).toBeNull()
+    })
+  }
+
   it('deleting the first reply moves the value forward, and deleting the only reply clears it', async () => {
     const [customer, teammate] = [await seedPerson(), await seedPerson()]
     const ticketId = await seedTicket()
@@ -278,10 +293,13 @@ describe.skipIf(!fixture.available)('ticket first response from the message rows
     await write({ ticketId }, 'visitor', '09:00', customer)
     await write({ ticketId }, 'agent', '09:30', teammate)
 
-    expect(await recomputeTicketFirstResponse(ticketId)).toBe(true)
+    expect(await recomputeTicketFirstResponse(ticketId)).toEqual({
+      id: ticketId,
+      firstResponseAt: at('09:30'),
+    })
     expect(await readTicket(ticketId)).toEqual({ firstResponseAt: at('09:30'), updatedAt: EDITED })
 
-    expect(await recomputeTicketFirstResponse(ticketId)).toBe(false)
+    expect(await recomputeTicketFirstResponse(ticketId)).toBeNull()
     expect(await readTicket(ticketId)).toEqual({ firstResponseAt: at('09:30'), updatedAt: EDITED })
   })
 })
