@@ -20,8 +20,9 @@
  *  - THE UNCHANGED PATHS: no-requester creates (back-office, requester-less
  *    customer) and flag-less agent creates (admin dialog / convert_to_ticket
  *    shape) stay standalone — no conversation, no link.
- *  - SLA: an intake conversation is born SLA-free, so the shared handoff
- *    no-ops (no ticket TTR clock) while the link itself exists.
+ *  - SLA on intake is not covered here: the conversation bridge is stubbed,
+ *    so no SLA can reach the pair. ticket-intake-sla.db.test.ts runs it
+ *    against the real bridge.
  *  - `ticket.created` now dispatches with the pair link already visible
  *    (the event-trigger.ts TICKET_CREATED_LINK_POLL race's proper fix).
  *
@@ -486,22 +487,6 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
 
       expect(ticketEmit.emitTicketCreated).toHaveBeenCalledTimes(1)
       expect(linkVisibleAtDispatch).toBe(true)
-    })
-
-    it('leaves the intake pair SLA-free: the link exists but no TTR handoff fires', async () => {
-      await seedDefaultStatus()
-      const requesterP = await seedPrincipal({})
-
-      const dto = await intakeCreate(requesterP, { title: 'sla-free birth', description: 'x' })
-
-      const link = await readPairLink(dto.id as TicketId)
-      expect(link).not.toBeNull()
-      const conversation = await readConversation(link!.conversationId)
-      const ticket = await readTicket(dto.id as TicketId)
-      // A fresh backing conversation carries no applied SLA, so the shared
-      // handoff (handoffConversationSlaToTicket) no-ops by construction.
-      expect(conversation.slaApplied).toBeNull()
-      expect(ticket.slaApplied).toBeNull()
     })
 
     it('a follow-up requester reply lands conversation-parented and still does not summon Quinn', async () => {
