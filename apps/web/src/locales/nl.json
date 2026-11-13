@@ -2262,5 +2262,11 @@
   "portal.feedback.list.searchWidenedMost": "Geen post bevat al je woorden. Posts met de meeste ervan worden getoond.",
   "portal.feedback.list.searchWidenedSimilar": "Geen exacte resultaten. Posts met een vergelijkbare spelling worden getoond.",
   "settings.labs.empty.title": "Op dit moment geen experimenten",
-  "settings.labs.empty.description": "Functies die je kunt uitproberen voordat ze uitkomen, verschijnen hier."
+  "settings.labs.empty.description": "Functies die je kunt uitproberen voordat ze uitkomen, verschijnen hier.",
+  "admin.integrations.oauthError.denied": "De verbinding is geweigerd op {name}. Maak opnieuw verbinding om toegang te geven.",
+  "admin.integrations.oauthError.expired": "Het verbindingsverzoek is verlopen of was ongeldig. Probeer opnieuw verbinding te maken.",
+  "admin.integrations.oauthError.session": "We konden je aanmelding niet bevestigen. Meld je opnieuw aan en maak daarna verbinding.",
+  "admin.integrations.oauthError.credentials": "Voeg de app-gegevens van {name} toe voordat je verbinding maakt.",
+  "admin.integrations.oauthError.elsewhere": "Dit {name}-account is al verbonden met een andere Quackback-werkruimte.",
+  "admin.integrations.oauthError.failed": "De verbinding met {name} is niet voltooid. Probeer opnieuw verbinding te maken."
 }

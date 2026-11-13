@@ -2262,5 +2262,11 @@
   "portal.feedback.list.searchWidenedMost": "沒有貼文包含你的所有詞語。顯示包含其中大部分詞語的貼文。",
   "portal.feedback.list.searchWidenedSimilar": "沒有完全相符的結果。顯示拼寫相近的貼文。",
   "settings.labs.empty.title": "目前沒有實驗功能",
-  "settings.labs.empty.description": "可在正式推出前試用的功能會顯示在這裡。"
+  "settings.labs.empty.description": "可在正式推出前試用的功能會顯示在這裡。",
+  "admin.integrations.oauthError.denied": "{name} 上的連線遭到拒絕。請重新連線以允許存取。",
+  "admin.integrations.oauthError.expired": "連線要求已過期或無效。請重新嘗試連線。",
+  "admin.integrations.oauthError.session": "我們無法確認你的登入狀態。請重新登入，然後再連接。",
+  "admin.integrations.oauthError.credentials": "請先新增 {name} 應用程式憑證再連線。",
+  "admin.integrations.oauthError.elsewhere": "此 {name} 帳戶已連線到另一個 Quackback 工作區。",
+  "admin.integrations.oauthError.failed": "與 {name} 的連線未完成。請重新嘗試連線。"
 }

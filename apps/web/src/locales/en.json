@@ -2262,5 +2262,11 @@
   "portal.feedback.list.searchWidenedMost": "No post has all your words. Showing posts with most of them.",
   "portal.feedback.list.searchWidenedSimilar": "No exact matches. Showing posts with a similar spelling.",
   "settings.labs.empty.title": "No experiments right now",
-  "settings.labs.empty.description": "Features you can try before they ship show up here."
+  "settings.labs.empty.description": "Features you can try before they ship show up here.",
+  "admin.integrations.oauthError.denied": "The connection was declined on {name}. Connect again to allow access.",
+  "admin.integrations.oauthError.expired": "The connection request expired or was not valid. Try connecting again.",
+  "admin.integrations.oauthError.session": "We couldn't confirm your sign-in. Sign in again, then connect.",
+  "admin.integrations.oauthError.credentials": "Add the {name} app credentials before connecting.",
+  "admin.integrations.oauthError.elsewhere": "This {name} account is already connected to another Quackback workspace.",
+  "admin.integrations.oauthError.failed": "The connection to {name} didn't finish. Try connecting again."
 }

@@ -2262,5 +2262,11 @@
   "portal.feedback.list.searchWidenedMost": "Żaden wpis nie zawiera wszystkich słów. Pokazujemy wpisy z większością z nich.",
   "portal.feedback.list.searchWidenedSimilar": "Brak dokładnych wyników. Pokazujemy wpisy o podobnej pisowni.",
   "settings.labs.empty.title": "Brak eksperymentów",
-  "settings.labs.empty.description": "Tutaj pojawiają się funkcje, które możesz wypróbować przed premierą."
+  "settings.labs.empty.description": "Tutaj pojawiają się funkcje, które możesz wypróbować przed premierą.",
+  "admin.integrations.oauthError.denied": "Połączenie zostało odrzucone w {name}. Połącz ponownie, aby zezwolić na dostęp.",
+  "admin.integrations.oauthError.expired": "Żądanie połączenia wygasło lub było nieprawidłowe. Spróbuj połączyć ponownie.",
+  "admin.integrations.oauthError.session": "Nie udało się potwierdzić logowania. Zaloguj się ponownie, a następnie połącz.",
+  "admin.integrations.oauthError.credentials": "Dodaj dane uwierzytelniające aplikacji {name} przed połączeniem.",
+  "admin.integrations.oauthError.elsewhere": "To konto {name} jest już połączone z innym obszarem roboczym Quackback.",
+  "admin.integrations.oauthError.failed": "Połączenie z {name} nie zostało ukończone. Spróbuj połączyć ponownie."
 }

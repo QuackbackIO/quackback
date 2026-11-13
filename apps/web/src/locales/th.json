@@ -2262,5 +2262,11 @@
   "portal.feedback.list.searchWidenedMost": "ไม่มีโพสต์ที่มีคำของคุณครบทุกคำ กำลังแสดงโพสต์ที่มีคำส่วนใหญ่",
   "portal.feedback.list.searchWidenedSimilar": "ไม่พบผลลัพธ์ที่ตรงกันทุกประการ กำลังแสดงโพสต์ที่สะกดคล้ายกัน",
   "settings.labs.empty.title": "ยังไม่มีการทดลองในตอนนี้",
-  "settings.labs.empty.description": "ฟีเจอร์ที่คุณลองใช้ได้ก่อนเปิดตัวจะแสดงที่นี่"
+  "settings.labs.empty.description": "ฟีเจอร์ที่คุณลองใช้ได้ก่อนเปิดตัวจะแสดงที่นี่",
+  "admin.integrations.oauthError.denied": "การเชื่อมต่อถูกปฏิเสธบน {name} เชื่อมต่ออีกครั้งเพื่ออนุญาตการเข้าถึง",
+  "admin.integrations.oauthError.expired": "คำขอเชื่อมต่อหมดอายุหรือไม่ถูกต้อง ลองเชื่อมต่ออีกครั้ง",
+  "admin.integrations.oauthError.session": "เราไม่สามารถยืนยันการลงชื่อเข้าใช้ของคุณได้ ลงชื่อเข้าใช้อีกครั้ง แล้วเชื่อมต่อ",
+  "admin.integrations.oauthError.credentials": "เพิ่มข้อมูลรับรองแอป {name} ก่อนเชื่อมต่อ",
+  "admin.integrations.oauthError.elsewhere": "บัญชี {name} นี้เชื่อมต่อกับพื้นที่ทำงาน Quackback อื่นอยู่แล้ว",
+  "admin.integrations.oauthError.failed": "การเชื่อมต่อกับ {name} ไม่เสร็จสมบูรณ์ ลองเชื่อมต่ออีกครั้ง"
 }

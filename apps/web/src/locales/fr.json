@@ -2262,5 +2262,11 @@
   "portal.feedback.list.searchWidenedMost": "Aucune publication ne contient tous vos mots. Voici celles qui en contiennent la plupart.",
   "portal.feedback.list.searchWidenedSimilar": "Aucun résultat exact. Voici des publications à l’orthographe proche.",
   "settings.labs.empty.title": "Aucune expérience pour le moment",
-  "settings.labs.empty.description": "Les fonctionnalités que vous pouvez essayer avant leur sortie apparaissent ici."
+  "settings.labs.empty.description": "Les fonctionnalités que vous pouvez essayer avant leur sortie apparaissent ici.",
+  "admin.integrations.oauthError.denied": "La connexion a été refusée sur {name}. Connectez-vous à nouveau pour autoriser l'accès.",
+  "admin.integrations.oauthError.expired": "La demande de connexion a expiré ou n'était pas valide. Réessayez de vous connecter.",
+  "admin.integrations.oauthError.session": "Nous n'avons pas pu confirmer votre connexion. Reconnectez-vous, puis connectez l'intégration.",
+  "admin.integrations.oauthError.credentials": "Ajoutez les identifiants de l'application {name} avant de vous connecter.",
+  "admin.integrations.oauthError.elsewhere": "Ce compte {name} est déjà connecté à un autre espace de travail Quackback.",
+  "admin.integrations.oauthError.failed": "La connexion à {name} n'a pas abouti. Réessayez de vous connecter."
 }

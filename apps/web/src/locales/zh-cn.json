@@ -2262,5 +2262,11 @@
   "portal.feedback.list.searchWidenedMost": "没有帖子包含你的所有词语。显示包含其中大部分词语的帖子。",
   "portal.feedback.list.searchWidenedSimilar": "没有完全匹配的结果。显示拼写相近的帖子。",
   "settings.labs.empty.title": "暂无实验功能",
-  "settings.labs.empty.description": "可在正式发布前试用的功能会显示在这里。"
+  "settings.labs.empty.description": "可在正式发布前试用的功能会显示在这里。",
+  "admin.integrations.oauthError.denied": "{name} 上的连接被拒绝。请重新连接以允许访问。",
+  "admin.integrations.oauthError.expired": "连接请求已过期或无效。请重新尝试连接。",
+  "admin.integrations.oauthError.session": "我们无法确认你的登录状态。请重新登录，然后再连接。",
+  "admin.integrations.oauthError.credentials": "请先添加 {name} 应用凭据再连接。",
+  "admin.integrations.oauthError.elsewhere": "此 {name} 账户已连接到另一个 Quackback 工作区。",
+  "admin.integrations.oauthError.failed": "与 {name} 的连接未完成。请重新尝试连接。"
 }

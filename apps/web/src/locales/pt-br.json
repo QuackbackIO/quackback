@@ -2262,5 +2262,11 @@
   "portal.feedback.list.searchWidenedMost": "Nenhum post tem todas as suas palavras. Mostrando posts com a maioria delas.",
   "portal.feedback.list.searchWidenedSimilar": "Nenhum resultado exato. Mostrando posts com grafia parecida.",
   "settings.labs.empty.title": "Nenhum experimento no momento",
-  "settings.labs.empty.description": "Os recursos que você pode testar antes do lançamento aparecem aqui."
+  "settings.labs.empty.description": "Os recursos que você pode testar antes do lançamento aparecem aqui.",
+  "admin.integrations.oauthError.denied": "A conexão foi recusada no {name}. Conecte novamente para permitir o acesso.",
+  "admin.integrations.oauthError.expired": "A solicitação de conexão expirou ou não era válida. Tente conectar novamente.",
+  "admin.integrations.oauthError.session": "Não conseguimos confirmar seu login. Entre novamente e depois conecte.",
+  "admin.integrations.oauthError.credentials": "Adicione as credenciais do app {name} antes de conectar.",
+  "admin.integrations.oauthError.elsewhere": "Esta conta do {name} já está conectada a outro espaço de trabalho do Quackback.",
+  "admin.integrations.oauthError.failed": "A conexão com {name} não foi concluída. Tente conectar novamente."
 }
