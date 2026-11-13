@@ -7,6 +7,7 @@
  * (with small batches) so this suite shares no lock, cursor or marker with the
  * registered one. Every message carries an explicit time.
  */
+import { createHash } from 'node:crypto'
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createId,
@@ -35,7 +36,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
-import { conversationMessages, principal, tickets, type Transaction } from '@/lib/server/db'
+import {
+  apiKeys,
+  conversationMessages,
+  principal,
+  tickets,
+  type Transaction,
+} from '@/lib/server/db'
 import {
   __setBackfillsForTests,
   findBackfill,
@@ -221,5 +228,58 @@ describe('the ticket first-response backfill', () => {
     expect(fixed.map((row) => row.first_response_at)).toEqual(
       seeded.map((row) => row.expected?.getTime() ?? null)
     )
+  })
+
+  it('never stamps a first response from a reply through a personal key made before the cutoff', async () => {
+    const entry = backfillNamed('frt-old-key')
+    const [status] = await testSql()<{ id: string }[]>`
+      SELECT id::text FROM ticket_statuses WHERE deleted_at IS NULL ORDER BY position LIMIT 1
+    `
+    const customer = createId('principal') as PrincipalId
+    const bot = createId('principal') as PrincipalId
+    await testDb()
+      .insert(principal)
+      .values([
+        { id: customer, role: 'user', type: 'user', createdAt: EDITED },
+        { id: bot, role: 'member', type: 'service', createdAt: EDITED },
+      ])
+    await testDb()
+      .insert(apiKeys)
+      .values({
+        name: 'bot key',
+        keyHash: createHash('sha256').update(entry.name).digest('hex'),
+        keyPrefix: 'qb_test',
+        principalId: bot,
+        kind: 'personal',
+        // Made before this release recorded the personal-key cutoff.
+        createdAt: new Date('2020-01-01T00:00:00Z'),
+      })
+    const id = createId('ticket') as TicketId
+    await testDb()
+      .insert(tickets)
+      .values({
+        id,
+        title: `${entry.name}-0`,
+        statusId: fromUuid('ticket_status', status.id) as TicketStatusId,
+        createdAt: EDITED,
+        updatedAt: EDITED,
+      })
+    await testDb()
+      .insert(conversationMessages)
+      .values([
+        {
+          ticketId: id,
+          principalId: customer,
+          senderType: 'visitor',
+          content: 'help',
+          createdAt: at(0),
+        },
+        { ticketId: id, principalId: bot, senderType: 'agent', content: 'auto', createdAt: at(5) },
+      ])
+
+    await walkBackfill(entry)
+
+    expect((await stateOf(entry.name)).map((row) => row.first_response_at)).toEqual([null])
+    await testSql()`DELETE FROM api_keys WHERE principal_id = ${toUuid(bot)}::uuid`
   })
 })

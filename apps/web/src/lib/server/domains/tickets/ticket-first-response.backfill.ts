@@ -99,8 +99,8 @@ async function fixture(db: BackfillDb, { ticketUpdatedAt }: BackfillFixtureConte
 
 export const ticketFirstResponseBackfill: BatchedBackfill = {
   name: NAME,
-  // The personal-key exemption reads api_keys.kind.
-  requiresMigration: '0309_api_key_kinds',
+  // The reply rule reads api_keys.kind and the personal-key cutoff.
+  requiresMigration: '0312_personal_key_reply_cutoff',
   table: 'tickets',
   batchSize: 500,
   pauseMs: 50,
