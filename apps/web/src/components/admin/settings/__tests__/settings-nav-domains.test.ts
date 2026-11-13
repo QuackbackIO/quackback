@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
-import {
-  buildNavSections,
-  isNavModule,
-  navSectionsFor,
-} from '../settings-nav-sections'
+import { buildNavSections, isNavModule, navSectionsFor } from '../settings-nav-sections'
 
 const FLAGS = { supportInbox: true, supportTickets: true }
 
@@ -35,7 +31,7 @@ describe('settings nav Domains row', () => {
   it('opens to a holder of any permission that owns a kind of domain', () => {
     expect(DOMAINS_PAGE_PERMISSIONS).toEqual([
       PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-      PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+      PERMISSIONS.SETTINGS_MANAGE,
       PERMISSIONS.AUTH_MANAGE,
     ])
     for (const permission of DOMAINS_PAGE_PERMISSIONS) {
@@ -45,7 +41,7 @@ describe('settings nav Domains row', () => {
 
   it('is hidden from a viewer who holds none of them', () => {
     expect(
-      workspaceLabels([PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.HELP_CENTER_MANAGE])
+      workspaceLabels([PERMISSIONS.CHANNEL_ACCOUNT_MANAGE, PERMISSIONS.HELP_CENTER_MANAGE])
     ).not.toContain('Domains')
   })
 })

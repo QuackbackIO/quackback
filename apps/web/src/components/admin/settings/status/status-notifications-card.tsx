@@ -2,6 +2,7 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Switch } from '@/components/ui/switch'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import type { StatusSettings } from '@/lib/shared/status-settings'
+import { SurfaceSenderRow } from '@/components/admin/channels/surface-sender-row'
 
 interface StatusNotificationsCardProps {
   settings: StatusSettings
@@ -30,6 +31,7 @@ export function StatusNotificationsCard({
             />
           }
         />
+        <SurfaceSenderRow surface="status" />
       </SettingRows>
     </SettingsCard>
   )

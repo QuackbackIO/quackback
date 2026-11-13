@@ -1778,6 +1778,7 @@
   "ask.destination.settings_workflows": "เวิร์กโฟลว์",
   "ask.destination.settings_general": "ทั่วไป",
   "ask.destination.settings_domains": "โดเมน",
+  "ask.destination.settings_email": "อีเมล",
   "ask.destination.settings_notifications": "การแจ้งเตือน",
   "ask.destination.settings_portal": "พอร์ทัล",
   "ask.destination.settings_widget": "วิดเจ็ต",

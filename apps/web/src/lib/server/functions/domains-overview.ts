@@ -20,7 +20,7 @@ export interface HelpCenterDomainSummary {
 
 export const getSendingDomainSummariesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<SendingDomainSummary[]> => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { listSendingDomainSummaries } =
       await import('@/lib/server/domains/domain-proof/domains-overview')
     return listSendingDomainSummaries()
