@@ -26,14 +26,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { runMigrations, type MigrationProgress } from '@quackback/db/migrate'
 import {
-  indexSpecsOfPhase,
+  CONCURRENT_INDEX_SPECS,
   MigrationPreflightError,
   type IndexBuildEvent,
 } from '@quackback/db/schema-ops'
 import { BUNDLED_MIGRATIONS, MIGRATIONS_DIR } from '@quackback/db/schema-version'
-
-/** The indexes the boot builds before the server listens. */
-const BOOT_SPECS = indexSpecsOfPhase('boot')
 
 const ADMIN_URL =
   process.env.DRIFT_CHECK_DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/postgres'
@@ -167,9 +164,9 @@ describe('upgrading a database at the last released schema', () => {
       `SELECT c.relname AS name, i.indisvalid AS valid
          FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
         WHERE c.relname = ANY($1::text[])`,
-      [BOOT_SPECS.map((s) => s.name)]
+      [CONCURRENT_INDEX_SPECS.map((s) => s.name)]
     )
-    expect(rows.map((r) => r.name).sort()).toEqual(BOOT_SPECS.map((s) => s.name).sort())
+    expect(rows.map((r) => r.name).sort()).toEqual(CONCURRENT_INDEX_SPECS.map((s) => s.name).sort())
     expect(rows.every((r) => r.valid)).toBe(true)
   })
 
@@ -232,7 +229,7 @@ describe('a fresh install', () => {
     // concurrentIndexes: false above, so anything present came from a migration.
     const rows = await sql.unsafe(
       `SELECT indexname FROM pg_indexes WHERE indexname = ANY($1::text[])`,
-      [BOOT_SPECS.filter((s) => s.concurrent).map((s) => s.name)]
+      [CONCURRENT_INDEX_SPECS.filter((s) => s.concurrent).map((s) => s.name)]
     )
     expect(rows).toEqual([])
   })

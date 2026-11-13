@@ -2,10 +2,10 @@
  * Background indexes: the indexes nothing needs at boot, built by the
  * `deferred-index-build` job after the server listens.
  *
- * `CONCURRENT_INDEX_SPECS` holds both kinds. A `boot` spec is built before the
- * server listens, because a boot-time or hot read needs it; an upgrade that
- * skips releases builds all of them first. A `background` spec is built here,
- * and its readers work, slower, until it exists.
+ * `CONCURRENT_INDEX_SPECS` are built before the server listens, because a
+ * boot-time or hot read needs them; an upgrade that skips releases builds all
+ * of them first. Every other new index goes in `DEFERRED_INDEX_SPECS`, and its
+ * readers work, slower, until it exists.
  *
  * ## One row per index, and when it is tried again
  *
@@ -29,7 +29,7 @@ import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
 import {
   db,
-  indexSpecsOfPhase,
+  DEFERRED_INDEX_SPECS,
   ensureConcurrentIndexes,
   type ConcurrentIndexSpec,
 } from '@/lib/server/db'
@@ -52,11 +52,9 @@ const INDEX_BUILD_COOL_OFF_MS = 24 * 60 * 60 * 1000
 
 let overrides: readonly ConcurrentIndexSpec[] | null = null
 
-const BACKGROUND_INDEX_SPECS = indexSpecsOfPhase('background')
-
-/** The background-phase indexes this build creates. */
+/** The background indexes this build creates. */
 export function deferredIndexSpecs(): readonly ConcurrentIndexSpec[] {
-  return overrides ?? BACKGROUND_INDEX_SPECS
+  return overrides ?? DEFERRED_INDEX_SPECS
 }
 
 /** Test seam: replace the background index list for one test. */

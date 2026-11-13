@@ -67,24 +67,10 @@ export const REQUIRED_EXTENSIONS = ['vector', 'pg_trgm'] as const
  * concurrently: `page_views` is range-partitioned (0137) and Postgres rejects
  * `CREATE INDEX CONCURRENTLY` on a partitioned parent. It is still verified
  * like the others.
- *
- * `phase` says when an index is built:
- *
- * - `boot`: a boot-time or hot read needs it, so the boot builds it before the
- *   server listens. An upgrade that skips releases waits for every one of these,
- *   and a missing one is a post-condition violation.
- * - `background`: nothing needs it at boot. The `deferred-index-build` job builds
- *   it after the server listens, one job per index, and its readers work, slower,
- *   until it exists. Say so in a comment on the entry, and list the index work in
- *   the release note. A missing or invalid one is pending work, not a violation.
- *
- * Every new index on a large table is `background` unless a boot or hot read
- * needs it.
  */
 export interface ConcurrentIndexSpec {
   name: string
   concurrent: boolean
-  phase: 'boot' | 'background'
   ddl: string
 }
 
@@ -92,37 +78,31 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
   {
     name: 'posts_embedding_hnsw_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_embedding_hnsw_idx ON posts USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
   },
   {
     name: 'kb_articles_embedding_hnsw_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS kb_articles_embedding_hnsw_idx ON kb_articles USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
   },
   {
     name: 'assistant_snippets_embedding_hnsw_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_snippets_embedding_hnsw_idx ON assistant_snippets USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
   },
   {
     name: 'conversation_summaries_embedding_hnsw_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_summaries_embedding_hnsw_idx ON conversation_summaries USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
   },
   {
     name: 'principal_display_name_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS principal_display_name_trgm_idx ON principal USING gin (display_name gin_trgm_ops) WHERE display_name IS NOT NULL',
   },
   {
     name: 'conversation_messages_content_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_messages_content_trgm_idx ON conversation_messages USING gin (content gin_trgm_ops) WHERE deleted_at IS NULL',
   },
   {
@@ -130,13 +110,11 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     // is a large table, so it is built here rather than in a migration.
     name: 'posts_title_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_title_trgm_idx ON posts USING gin (title gin_trgm_ops) WHERE deleted_at IS NULL',
   },
   {
     name: 'user_name_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS user_name_trgm_idx ON "user" USING gin (name gin_trgm_ops)',
   },
   // Workspace search (ask-search.ts) reads every kind from an index: the text
@@ -147,61 +125,51 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
   {
     name: 'tickets_title_search_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS tickets_title_search_idx ON tickets USING gin (to_tsvector('english', title))",
   },
   {
     name: 'conversations_subject_search_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_subject_search_idx ON conversations USING gin (to_tsvector('english', coalesce(subject, '')))",
   },
   {
     name: 'changelog_entries_search_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS changelog_entries_search_idx ON changelog_entries USING gin (to_tsvector('english', coalesce(title, '') || ' ' || coalesce(content, '')))",
   },
   {
     name: 'user_email_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS user_email_trgm_idx ON "user" USING gin (email gin_trgm_ops)',
   },
   {
     name: 'companies_name_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS companies_name_trgm_idx ON companies USING gin (name gin_trgm_ops)',
   },
   {
     name: 'companies_domain_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS companies_domain_trgm_idx ON companies USING gin (domain gin_trgm_ops)',
   },
   {
     name: 'kb_articles_title_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS kb_articles_title_trgm_idx ON kb_articles USING gin (title gin_trgm_ops)',
   },
   {
     name: 'changelog_entries_title_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS changelog_entries_title_trgm_idx ON changelog_entries USING gin (title gin_trgm_ops)',
   },
   {
     name: 'tickets_title_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS tickets_title_trgm_idx ON tickets USING gin (title gin_trgm_ops)',
   },
   {
     name: 'conversations_subject_trgm_idx',
     concurrent: true,
-    phase: 'boot',
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_subject_trgm_idx ON conversations USING gin (subject gin_trgm_ops)',
   },
   {
@@ -212,22 +180,24 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     // existing partitions.
     name: 'page_views_principal_id_idx',
     concurrent: false,
-    phase: 'boot',
     ddl: 'CREATE INDEX IF NOT EXISTS page_views_principal_id_idx ON page_views (principal_id) WHERE principal_id IS NOT NULL',
   },
 ]
 
 /**
- * The specs built in one phase, in list order: `boot` for the boot step and the
- * post-condition check, `background` for the `deferred-index-build` job. Every
- * site that splits the list goes through this.
+ * Indexes nothing needs at boot, built by the `deferred-index-build` job after
+ * the server listens, one job per index.
+ *
+ * `CONCURRENT_INDEX_SPECS` is for the indexes a boot-time or hot read needs:
+ * the boot builds every one of them before the server listens, so an upgrade
+ * that skips releases waits for all of them. Every other new index on a large
+ * table goes here instead, and its readers work, slower, until it exists. Say
+ * so in a comment on the entry, and list the index work in the release note.
+ *
+ * Same shape as the boot list. A missing or invalid index from this list is
+ * pending work, not a post-condition violation.
  */
-export function indexSpecsOfPhase(
-  phase: ConcurrentIndexSpec['phase'],
-  specs: readonly ConcurrentIndexSpec[] = CONCURRENT_INDEX_SPECS
-): ConcurrentIndexSpec[] {
-  return specs.filter((s) => s.phase === phase)
-}
+export const DEFERRED_INDEX_SPECS: readonly ConcurrentIndexSpec[] = []
 
 /** The oldest server the lineage runs on (`CREATE OR REPLACE TRIGGER`). */
 export const MIN_SERVER_VERSION_NUM = 140000
@@ -555,7 +525,7 @@ export interface IndexBuildEvent {
 
 export async function ensureConcurrentIndexes(
   sql: postgres.Sql,
-  specs: readonly ConcurrentIndexSpec[] = indexSpecsOfPhase('boot'),
+  specs: readonly ConcurrentIndexSpec[] = CONCURRENT_INDEX_SPECS,
   onBuild: (event: IndexBuildEvent) => void = () => {}
 ): Promise<string[]> {
   const rebuilt: string[] = []
@@ -629,8 +599,8 @@ export interface PostconditionReport {
     invalidIndexes: InvalidIndex[]
     missingIndexes: string[]
     /**
-     * Background-phase indexes ({@link CONCURRENT_INDEX_SPECS}) that are missing
-     * or invalid. Pending work for the `deferred-index-build` job, never a violation.
+     * Background indexes ({@link DEFERRED_INDEX_SPECS}) that are missing or
+     * invalid. Pending work for the `deferred-index-build` job, never a violation.
      */
     pendingIndexes: string[]
     extensions: string[]
@@ -710,10 +680,10 @@ export function declaredTables(): DeclaredTable[] {
  */
 export async function verifySchemaPostconditions(
   sql: postgres.Sql,
-  opts: { indexSpecs?: readonly ConcurrentIndexSpec[] } = {}
+  opts: { deferredIndexSpecs?: readonly ConcurrentIndexSpec[] } = {}
 ): Promise<PostconditionReport> {
-  const specs = opts.indexSpecs ?? CONCURRENT_INDEX_SPECS
-  const deferredNames = new Set(indexSpecsOfPhase('background', specs).map((s) => s.name))
+  const deferredSpecs = opts.deferredIndexSpecs ?? DEFERRED_INDEX_SPECS
+  const deferredNames = new Set(deferredSpecs.map((s) => s.name))
   const invalid = await listInvalidIndexes(sql)
   // An invalid background index is a build the job will heal, not a broken database.
   const invalidIndexes = invalid.filter((i) => !deferredNames.has(i.name))
@@ -726,15 +696,13 @@ export async function verifySchemaPostconditions(
        AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
   `)
   const presentNames = new Set(present.map((r) => r.relname))
+  const missingIndexes = CONCURRENT_INDEX_SPECS.filter((s) => !presentNames.has(s.name)).map(
+    (s) => s.name
+  )
   const invalidNames = new Set(invalid.map((i) => i.name))
-  const missingIndexes: string[] = []
-  const pendingIndexes: string[] = []
-  for (const spec of indexSpecsOfPhase('boot', specs)) {
-    if (!presentNames.has(spec.name)) missingIndexes.push(spec.name)
-  }
-  for (const spec of indexSpecsOfPhase('background', specs)) {
-    if (!presentNames.has(spec.name) || invalidNames.has(spec.name)) pendingIndexes.push(spec.name)
-  }
+  const pendingIndexes = deferredSpecs
+    .filter((s) => !presentNames.has(s.name) || invalidNames.has(s.name))
+    .map((s) => s.name)
 
   const extRows = await sql.unsafe<{ extname: string }[]>(`SELECT extname FROM pg_extension`)
   const extensions = extRows.map((r) => r.extname).sort()

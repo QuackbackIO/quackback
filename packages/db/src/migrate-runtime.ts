@@ -76,7 +76,7 @@ import {
   ensureConcurrentIndexes,
   ensureExtensions,
   verifySchemaPostconditions,
-  indexSpecsOfPhase,
+  CONCURRENT_INDEX_SPECS,
   type IndexBuildEvent,
   type InvalidIndex,
   type PostconditionReport,
@@ -346,7 +346,7 @@ export async function runMigrations(
 
     if (concurrentIndexes) {
       onStep('concurrent-indexes')
-      await ensureConcurrentIndexes(sql, indexSpecsOfPhase('boot'), onIndexBuild)
+      await ensureConcurrentIndexes(sql, CONCURRENT_INDEX_SPECS, onIndexBuild)
     }
 
     if (seed) {

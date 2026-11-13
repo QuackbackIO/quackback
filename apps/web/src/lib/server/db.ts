@@ -528,10 +528,10 @@ export {
   notTestTicket,
 } from '@quackback/db'
 
-// The index list and builder, for the deferred-index-build job.
+// Background index list and builder, for the deferred-index-build job.
 export {
+  DEFERRED_INDEX_SPECS,
   ensureConcurrentIndexes,
-  indexSpecsOfPhase,
   type ConcurrentIndexSpec,
 } from '@quackback/db/schema-ops'
 

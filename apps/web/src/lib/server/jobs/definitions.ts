@@ -408,7 +408,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/backfills/follow-up-queue').then((m) => m.runBackfillFollowUpJob),
   },
   {
-    // Background-phase indexes (CONCURRENT_INDEX_SPECS), one row per missing index.
+    // Background indexes (DEFERRED_INDEX_SPECS), one row per missing index.
     // A scheduled row runs the pass; a build row creates one index
     // concurrently. See backfills/deferred-indexes.ts for the rounds.
     name: 'deferred-index-build',
