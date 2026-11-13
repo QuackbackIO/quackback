@@ -75,7 +75,8 @@ export const TicketSchema = z.object({
     example: null,
   }),
   firstResponseAt: NullableTimestampSchema.meta({
-    description: 'When a teammate first responded, null until then',
+    description:
+      "When a teammate first replied to the customer: the first public reply after the customer's first message, on the ticket or its conversation. Replies from the AI agent, workflows and workspace API keys do not count; a reply sent with a personal API key counts as its creator's. Null until then, and always null on back-office and tracker tickets.",
   }),
   dueAt: NullableTimestampSchema.meta({ description: 'SLA due time, null if no policy applies' }),
   resolvedAt: NullableTimestampSchema.meta({

@@ -641,11 +641,15 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                 <DetailDate date={ticket.createdAt} />
               </span>
             </Row>
-            <Row icon={CalendarIcon} label="First response">
-              <span className="text-sm font-medium text-foreground">
-                {ticket.firstResponseAt ? <DetailDate date={ticket.firstResponseAt} /> : 'Not yet'}
-              </span>
-            </Row>
+            {/* Back-office and tracker tickets have no customer, so they
+                never get a first response. */}
+            {ticket.type === 'customer' && (
+              <Row icon={CalendarIcon} label="First response">
+                <span className="text-sm font-medium text-foreground">
+                  {ticket.firstResponseAt ? <DetailDate date={ticket.firstResponseAt} /> : 'Not yet'}
+                </span>
+              </Row>
+            )}
             {ticket.resolvedAt && (
               <Row icon={CalendarIcon} label="Resolved">
                 <span className="text-sm font-medium text-foreground">
