@@ -334,6 +334,25 @@ describe('the walk', () => {
     expect(await kvValue(walkKeys(entry.name).cursor)).toBeNull()
   })
 
+  it('returns at once for a walk already done, without a batch transaction', async () => {
+    const entry = backfill('done-walk', { followUp: false })
+    __setBackfillsForTests([entry])
+    await seed(entry)
+    await walkBackfill(entry)
+
+    // Another runner holds the lock: a batch would throw BackfillBusyError.
+    await withOtherConnection(async (other) => {
+      await other.unsafe('BEGIN')
+      await other`SELECT pg_advisory_xact_lock(hashtext(${`quackback:backfill:${entry.name}`}))`
+      try {
+        await expect(walkBackfill(entry)).resolves.toBeUndefined()
+      } finally {
+        await other.unsafe('ROLLBACK')
+      }
+    })
+    expect(await walked(entry)).toEqual([1, 1, 1, 1, 1])
+  })
+
   it('holds no lock after a batch fails', async () => {
     const entry = backfill('no-lock', {
       followUp: false,
