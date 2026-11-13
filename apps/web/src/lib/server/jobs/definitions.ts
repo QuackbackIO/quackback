@@ -256,6 +256,22 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // Ticket due-date alerts. Per-minute like the two sweeps above and gated the
+    // same way: a workspace with no open ticket whose alert is still to come
+    // never ticks, and one that has gets its alert within a minute.
+    name: 'ticket-due-sweep',
+    cron: '* * * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/tickets/ticket-due-sweep-queue').then(
+        (m) => m.runTicketDueSweep
+      ),
+    cronEnabled: () =>
+      import('@/lib/server/domains/tickets/ticket-due-sweep-queue').then((m) =>
+        m.isTicketDueSweepDue()
+      ),
+  },
+  {
     name: 'workflow-sweep',
     cron: '*/5 * * * *',
     maxAttempts: 3,

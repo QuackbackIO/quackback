@@ -88,8 +88,9 @@ export type WorkflowNode =
   // The ticket intake form as an in-thread block: posts the form card into
   // the conversation (visitor files the ticket in-thread — the widget renders
   // the intake form for block.kind 'ticketForm') and continues immediately,
-  // same SEND-and-continue shape as `message` above.
-  | { id: string; type: 'send_ticket_form'; body: TiptapContent }
+  // same SEND-and-continue shape as `message` above. `askDueDate` adds the
+  // optional "Needed by" date field to the form (absent = off).
+  | { id: string; type: 'send_ticket_form'; body: TiptapContent; askDueDate?: boolean }
   | { id: string; type: 'show_reply_time' }
   | {
       id: string
@@ -255,7 +256,13 @@ export function walkWorkflow(
         actions.push({
           type: 'send_block',
           nodeId: node.id,
-          block: { kind: 'ticketForm', body: node.body },
+          block: {
+            kind: 'ticketForm',
+            body: node.body,
+            // Only when set, so a form authored before the toggle existed
+            // posts the exact same block payload it always did.
+            ...(node.askDueDate === true ? { askDueDate: true } : {}),
+          },
         })
         nextId = successorId(graph, node.id)
         break
