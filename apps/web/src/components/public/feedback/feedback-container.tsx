@@ -578,7 +578,7 @@ export function FeedbackContainer({
                     {intl.formatMessage(
                       {
                         id: 'portal.feedback.list.noPostsYetDescription',
-                        defaultMessage: 'The {workspace} team reads every request.',
+                        defaultMessage: 'The {workspace} team reads every post.',
                       },
                       { workspace: workspaceName }
                     )}

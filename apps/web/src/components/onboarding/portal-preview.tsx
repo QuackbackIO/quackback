@@ -247,13 +247,13 @@ function EmptyBoard({ name }: { name: string }) {
             ? intl.formatMessage(
                 {
                   id: 'onboarding.preview.emptyBody',
-                  defaultMessage: 'The {name} team reads every request.',
+                  defaultMessage: 'The {name} team reads every post.',
                 },
                 { name }
               )
             : intl.formatMessage({
                 id: 'onboarding.preview.emptyBodyUnnamed',
-                defaultMessage: 'Your team reads every request.',
+                defaultMessage: 'Your team reads every post.',
               })}
         </p>
       </div>

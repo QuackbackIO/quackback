@@ -53,7 +53,7 @@ describe('portal preview', () => {
     cleanup()
 
     const goals = renderPreview({ name: '', goals: ['product_feedback'] })
-    expect(screen.getByText('Your team reads every request.')).toBeInTheDocument()
+    expect(screen.getByText('Your team reads every post.')).toBeInTheDocument()
     expect(goals.container.textContent).not.toMatch(/The Your workspace team/)
   })
 
@@ -87,7 +87,7 @@ describe('portal preview', () => {
       'Status',
     ])
     expect(screen.getByText('No posts yet. Be the first to post')).toBeInTheDocument()
-    expect(screen.getByText('The Fernhill team reads every request.')).toBeInTheDocument()
+    expect(screen.getByText('The Fernhill team reads every post.')).toBeInTheDocument()
     expect(screen.queryByText('Dark mode')).toBeNull()
     // The live portal has no Messenger launcher, so neither does its preview.
     expect(screen.queryByText('Hi there. How can we help?')).toBeNull()
