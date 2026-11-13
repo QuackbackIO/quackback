@@ -294,6 +294,19 @@ describe.skipIf(!fixture.available)('requester ticket DTO and customer-visible t
     expect(Object.keys(dto!.assignee).sort()).toEqual(['displayName', 'principalId'])
     expect(dto!.assignee.principalId).toBe(agent.principalId)
     expect(dto!.customAttributes).toEqual({ order_number: 'A-1001' })
+
+    // An attribute envelope stored under a visible field's key is an
+    // attribute write, not the customer's answer: it is left out.
+    await testDb
+      .update(tickets)
+      .set({
+        customAttributes: {
+          order_number: { v: 'Set by a teammate', src: 'teammate', at: T1.toISOString() },
+        },
+      })
+      .where(eq(tickets.id, pair.ticketId))
+    const afterEnvelope = await getRequesterTicketForConversation(pair.conversationId, me)
+    expect(afterEnvelope!.customAttributes).toEqual({})
   })
 
   it('createMyTicket returns the same allow-listed shape', async () => {
@@ -409,6 +422,41 @@ describe.skipIf(!fixture.available)('requester ticket DTO and customer-visible t
 
     const dto = await getRequesterTicketForConversation(pair.conversationId, me)
     expect(dto!.updatedAt).toBe(T2.toISOString())
+  })
+
+  it('counts a public message on a standalone ticket with no pair', async () => {
+    const me = await seedWorld()
+    const statusId = await seedStatus({ category: 'open', publicStage: 'received' })
+    const ticketId = createId('ticket') as TicketId
+    await testDb.insert(tickets).values({
+      id: ticketId,
+      title: 'Standalone',
+      statusId,
+      type: 'customer',
+      requesterPrincipalId: me,
+      createdAt: T0,
+      updatedAt: T0,
+    })
+    await testDb.insert(conversationMessages).values({
+      ticketId,
+      principalId: me,
+      senderType: 'visitor',
+      content: 'A public message',
+      isInternal: false,
+      createdAt: T2,
+    })
+    await testDb.insert(conversationMessages).values({
+      ticketId,
+      principalId: me,
+      senderType: 'agent',
+      content: 'An internal note',
+      isInternal: true,
+      createdAt: T3,
+    })
+
+    const [summary] = (await listMyTicketSummaries(me)).filter((t) => t.ticketId === ticketId)
+    expect(summary.conversationId).toBeNull()
+    expect(summary.updatedAt).toBe(T2.toISOString())
   })
 
   it('a public message wins over a later status move', async () => {

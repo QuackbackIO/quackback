@@ -123,9 +123,10 @@ export async function buildRequesterTicketContext(
  * The stored answers a requester may see: only keys of fields that the
  * ticket's live type marks visible to customers. Conversation attributes that
  * share the jsonb column, internal fields and keys no field defines are left
- * out. A `{ v, src, at }` envelope on a visible field is unwrapped to its value,
- * so who wrote it never reaches the customer. A typeless ticket, or one whose
- * type is archived or gone, has no customer-visible answers.
+ * out. A `{ v, src, at }` envelope is an attribute write, not the customer's
+ * intake answer, so it is left out too, even under a visible field's key (the
+ * two share one jsonb column and their keys can collide). A typeless ticket,
+ * or one whose type is archived or gone, has no customer-visible answers.
  */
 function customerVisibleAnswers(
   row: Ticket,
@@ -136,8 +137,9 @@ function customerVisibleAnswers(
   const answers: Record<string, JsonValue> = {}
   for (const field of type.fields) {
     if (!field.visibleToCustomer || !Object.hasOwn(stored, field.key)) continue
-    const read = readAttributeValue(stored[field.key])
-    if (read) answers[field.key] = read.v as JsonValue
+    const value = stored[field.key]
+    if (readAttributeValue(value)?.src) continue
+    answers[field.key] = value
   }
   return answers
 }
