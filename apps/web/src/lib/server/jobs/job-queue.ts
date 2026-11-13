@@ -79,6 +79,7 @@ import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { noteDurableWork, SINGLE_WORKSPACE_KEY } from '@/lib/server/workspaces/after-commit'
+import { pausedJobs } from './disabled-jobs'
 import {
   leaseClaimGroupedSql,
   leaseClaimSql,
@@ -115,6 +116,16 @@ export function isMissingJobQueue(err: unknown): boolean {
 }
 
 /**
+ * Leaves out the rows of queues the operator paused (`QUACKBACK_DISABLED_JOBS`),
+ * so a paused job never wakes a parked workspace or an idle loop.
+ */
+function notPausedClause(): SQL {
+  const paused = [...pausedJobs()]
+  if (paused.length === 0) return sql``
+  return sql` AND queue NOT IN (SELECT jsonb_array_elements_text(${JSON.stringify(paused)}::jsonb))`
+}
+
+/**
  * The earliest instant this workspace's queue has work waiting for.
  *
  * Read by the job worker on the connection it is **about to drop**, which is the point
@@ -132,7 +143,7 @@ export function isMissingJobQueue(err: unknown): boolean {
  */
 export async function earliestPendingJobAt(): Promise<Date | null> {
   const result = await db.execute(sql`
-    SELECT min(run_at) AS run_at FROM job_queue WHERE status = 'pending'
+    SELECT min(run_at) AS run_at FROM job_queue WHERE status = 'pending'${notPausedClause()}
   `)
   const rows = getExecuteRows<{ run_at: Date | string | null }>(result)
   const value = rows[0]?.run_at ?? null
@@ -151,7 +162,8 @@ export async function earliestPendingJobAt(): Promise<Date | null> {
  */
 export async function nextPendingJobAt(): Promise<Date | null> {
   const result = await db.execute(sql`
-    SELECT min(run_at) AS run_at FROM job_queue WHERE status = 'pending' AND run_at > now()
+    SELECT min(run_at) AS run_at FROM job_queue
+    WHERE status = 'pending' AND run_at > now()${notPausedClause()}
   `)
   const rows = getExecuteRows<{ run_at: Date | string | null }>(result)
   const value = rows[0]?.run_at ?? null

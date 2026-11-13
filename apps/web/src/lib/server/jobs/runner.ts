@@ -48,6 +48,7 @@ import {
   type JobHandler,
 } from './definitions'
 import { enqueueJob } from './job-queue'
+import { pausedJobs } from './disabled-jobs'
 import {
   latestSlotAtOrBefore,
   nextSlotAfter,
@@ -444,12 +445,18 @@ export function poolSize(pool: JobPool): number {
   return n
 }
 
-/** The free slots each queue has right now, given the pool and the caps. */
+/**
+ * The free slots each queue has right now, given the pool and the caps. A
+ * paused queue (`QUACKBACK_DISABLED_JOBS`) asks for none, so its rows stay
+ * `pending` with no attempt spent.
+ */
 export function claimSpecsFor(pool: JobPool, config: RunnerConfig): QueueClaimSpec[] {
   let budget = Math.max(0, config.maxConcurrency - poolSize(pool))
   const specs: QueueClaimSpec[] = []
+  const paused = pausedJobs()
   for (const def of jobDefinitions()) {
     if (budget <= 0) break
+    if (paused.has(def.name)) continue
     const free = Math.min(
       concurrencyFor(def) - (pool.inFlight.get(def.name) ?? 0),
       config.batchSize,
@@ -545,8 +552,9 @@ export function startClaimedJob(opts: {
 }
 
 /**
- * Try to claim `jobIds` now, honouring the same pool caps as `dispatchPass`.
- * Returns how many jobs were claimed. A miss is success — the sweeper still runs.
+ * Try to claim `jobIds` now, honouring the same pool caps and the same paused
+ * list as `dispatchPass`. Returns how many jobs were claimed. A miss is success
+ * — the sweeper still runs.
  */
 export async function startJobsById(opts: {
   pool: JobPool
@@ -561,7 +569,7 @@ export async function startJobsById(opts: {
       const peek = await peekRunnableJob(jobId)
       if (!peek) continue
       const def = findJobDefinition(peek.queue)
-      if (!def) continue
+      if (!def || pausedJobs().has(def.name)) continue
       const free = Math.min(
         concurrencyFor(def) - (opts.pool.inFlight.get(peek.queue) ?? 0),
         opts.config.maxConcurrency - poolSize(opts.pool),
@@ -859,13 +867,15 @@ export async function runScheduleTick(
     if (next && (!nextSlotAt || next < nextSlotAt)) nextSlotAt = next
   }
 
+  const paused = pausedJobs()
   for (const def of jobDefinitions()) {
     if (def.cron) {
       // A disabled schedule writes nothing, rather than enqueueing a job whose
       // handler returns immediately. The reference achieved the same by never
-      // constructing the worker; a table full of no-op rows would not.
-      let enabled = true
-      if (def.cronEnabled) {
+      // constructing the worker; a table full of no-op rows would not. A job
+      // the operator paused is a shut gate that nothing in the database opens.
+      let enabled = !paused.has(def.name)
+      if (enabled && def.cronEnabled) {
         try {
           enabled = await def.cronEnabled()
         } catch (err) {
@@ -888,6 +898,10 @@ export async function runScheduleTick(
         // The dedupe key must separate the schedules sharing this queue, or the
         // first segment's slot would spend every other segment's.
         const dedupeName = `${def.name}:${schedule.key}`
+        if (paused.has(def.name)) {
+          adopt(dedupeName, schedule.cron)
+          continue
+        }
         try {
           await tick(def, dedupeName, dedupeName, schedule.cron, schedule.payload)
         } catch (err) {
