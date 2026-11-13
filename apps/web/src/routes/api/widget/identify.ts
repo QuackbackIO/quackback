@@ -52,6 +52,7 @@ export const RESERVED_JWT_CLAIMS = new Set([
   'sub',
   'id',
   'email',
+  'email_verified',
   'name',
   'avatarURL',
   'avatarUrl',
@@ -214,6 +215,12 @@ export const Route = createFileRoute('/api/widget/identify')({
           )
         }
 
+        // The host app's statement about the address. Only JSON booleans
+        // count; any other value is treated as absent.
+        const emailVerifiedClaim =
+          typeof claims.email_verified === 'boolean' ? claims.email_verified : undefined
+        const emailUnverified = emailVerifiedClaim === false
+
         const identified: IdentifiedUser = {
           id: sub,
           email,
@@ -272,6 +279,33 @@ export const Route = createFileRoute('/api/widget/identify')({
           userRecord = await db.query.user.findFirst({
             where: sql`LOWER(${user.email}) = ${normalizedEmail}`,
           })
+          if (userRecord) {
+            // An email match joins an existing person only when the address
+            // is not marked unverified, and moves a person from one subject
+            // to another only when the host app says the address is verified.
+            // Checked before the teammate branch so neither row kind is joined
+            // or signed in on an email the host app does not vouch for.
+            const boundElsewhere = !!userRecord.externalId && userRecord.externalId !== externalId
+            if (emailUnverified || (boundElsewhere && emailVerifiedClaim !== true)) {
+              log.warn(
+                {
+                  external_id: externalId,
+                  claimed_email: normalizedEmail,
+                  matched_user_id: userRecord.id,
+                  bound_external_id: userRecord.externalId,
+                  email_verified: emailVerifiedClaim,
+                },
+                'verified identify email match refused for an account it cannot bind to'
+              )
+              return jsonError(
+                'EMAIL_IN_USE',
+                emailUnverified
+                  ? 'This email is not verified by the host app and is already in use'
+                  : 'This email is already bound to another account',
+                409
+              )
+            }
+          }
         }
 
         const country = captureCountryFromHeaders(request.headers)
@@ -300,7 +334,7 @@ export const Route = createFileRoute('/api/widget/identify')({
               // and back to text; there are no removals on this path.
               updates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[]}::text[]) || ${JSON.stringify(validAttrs)}::jsonb)::text`
             }
-            if (externalId && userRecord.email !== normalizedEmail) {
+            if (externalId && !emailUnverified && userRecord.email !== normalizedEmail) {
               // `sub` is authoritative on a verified email change. Adopt the
               // new address, or fail closed when another account already holds
               // it — never keep a stale email on a signed identify.
@@ -331,11 +365,12 @@ export const Route = createFileRoute('/api/widget/identify')({
               updates.country = country
             }
             if (externalId && userRecord.externalId !== externalId) {
-              // First verified sight of this account — stamp the durable subject.
+              // Stamp the durable subject: first sight of an unbound account, or
+              // a rebind the host app vouched for with `email_verified: true`.
               updates.externalId = externalId
             }
-            if (!userRecord.emailVerified) {
-              // Address came from a signed JWT.
+            if (!userRecord.emailVerified && !emailUnverified) {
+              // Address came from a signed JWT the host app does not mark unverified.
               updates.emailVerified = true
             }
           }
@@ -357,7 +392,7 @@ export const Route = createFileRoute('/api/widget/identify')({
               // index-eligible and the "one email per account" invariant
               // holds across mixed-case identify calls.
               email: normalizedEmail,
-              emailVerified: true,
+              emailVerified: !emailUnverified,
               image: identified.avatarURL ?? null,
               metadata: hasAttrs ? JSON.stringify(validAttrs) : null,
               country: country ?? null,
