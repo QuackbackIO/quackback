@@ -35,7 +35,10 @@ import {
   findBackfillCursor,
 } from '@/lib/server/domains/conversation/conversation.query'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
+import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
+import type { PermissionKey } from '@/lib/shared/permissions'
+import type { Role } from '@/lib/shared/roles'
 import { createSseStream, SSE_RESPONSE_HEADERS } from '@/lib/server/utils/sse'
 import { streamLimiter } from '@/lib/server/realtime/stream-connection-limit'
 import { startStreamHeartbeat } from '@/lib/server/realtime/stream-heartbeat'
@@ -145,11 +148,20 @@ export const Route = createFileRoute('/api/chat/stream')({
           return new Response('Not found', { status: 404 })
         }
 
+        // The actor carries the principal's assignment-derived permissions, as
+        // every other request path does. Non-dashboard audiences never carry
+        // team authority: the set is empty, not resolved, because a teammate's
+        // assignments would otherwise ride their widget or portal stream.
+        const permissions: ReadonlySet<PermissionKey> =
+          me.scope === 'dashboard'
+            ? await permissionsForPrincipal(me.principalId, me.role as Role)
+            : new Set()
         const actor: Actor = {
           principalId: me.principalId,
           role: (effectiveRole as Actor['role']) ?? null,
           principalType: normalizePrincipalType(me.type),
           segmentIds: new Set(),
+          permissions,
         }
 
         // Resolve which channel(s) to subscribe to, authorizing FIRST.
