@@ -296,8 +296,9 @@ describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, roll
     })
 
     const pair = await expectDefaultSlaOnPair(dto.id as TicketId, policyId, before)
-    // The requester's own view never shows the SLA; the team's signals do.
-    expect(dto.sla).toBeNull()
+    // The requester's own view never carries the SLA (it is team data, not on
+    // the requester DTO's allow-list); the ticket row and the team's signals do.
+    expect(dto).not.toHaveProperty('sla')
     expectCreateSignalsCarrySla(dto.id as TicketId, pair.ticket.slaApplied as TicketSlaApplied)
   })
 
@@ -415,10 +416,17 @@ describe.skipIf(!fixture.available)('default SLA on ticket intake (real DB, roll
     await seedDefaultPolicy()
     const requester = await seedPrincipal('user')
     const reads = watchTicketRowReads()
+    // Count the reads intake makes up to ticket.created, which it sends after
+    // its re-read. The requester projection read createMyTicket makes after
+    // intake returns is a separate read and is not counted.
+    let intakeReads: number | null = null
+    ticketEmit.emitTicketCreated.mockImplementationOnce(async () => {
+      intakeReads = reads.count()
+    })
 
     await createMyTicket(requesterActor(requester), { title: 'One read' })
 
-    expect(reads.count()).toBe(1)
+    expect(intakeReads).toBe(1)
   })
 
   it('a failed read after the handoff still files the ticket and sends ticket.created', async () => {
