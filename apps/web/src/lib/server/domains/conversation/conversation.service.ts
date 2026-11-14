@@ -93,6 +93,7 @@ import {
   publishConversationUpdate,
   publishTyping,
 } from '@/lib/server/realtime/conversation-channels'
+import type { InboxScopePrev } from '@/lib/server/realtime/inbox-envelope'
 import {
   validateContent,
   preview,
@@ -1526,7 +1527,23 @@ export async function routeUnassignedConversation(
   return assignRoutedConversation(conversation)
 }
 
-async function assignRoutedConversation(conversation: Conversation): Promise<PrincipalId | null> {
+/** A conversation's owner and team as the inbox scope rule reads them. */
+function inboxScopeOf(row: Conversation): InboxScopePrev {
+  return {
+    assigneePrincipalId: row.assignedAgentPrincipalId ?? null,
+    teamId: row.assignedTeamId ?? null,
+  }
+}
+
+/**
+ * `prev` is set by a caller that cleared the assignee just before routing (the
+ * offline requeue): the published update then carries it, so the teammate who
+ * lost the conversation gets its removal from their inbox stream.
+ */
+async function assignRoutedConversation(
+  conversation: Conversation,
+  prev?: InboxScopePrev
+): Promise<PrincipalId | null> {
   // Test threads belong to the teammate trying them out; they never take a
   // colleague's routing slot.
   if (await testOwnerOf(conversation.visitorPrincipalId)) return null
@@ -1544,7 +1561,11 @@ async function assignRoutedConversation(conversation: Conversation): Promise<Pri
     .returning()
   if (!assigned) return null
   await emitAssignmentSystemMessage(assigned.id, assignedPrincipalId)
-  await publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'))
+  await publishConversationUpdate(
+    assigned.id,
+    await conversationToDTO(assigned, 'agent'),
+    prev ? { prev } : undefined
+  )
   // Auto-routing only ever touches the agent column — the team side reports
   // no change (still-current value as its own "previous").
   void emitConversationAssigned(systemActor(), assigned, null, assigned.assignedTeamId ?? null)
@@ -1592,7 +1613,7 @@ export async function assignConversation(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  await publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto, { prev: inboxScopeOf(existing) })
   if (agentPrincipalId) {
     await emitAssignmentSystemMessage(conversationId, agentPrincipalId, attribution)
   }
@@ -1661,7 +1682,7 @@ export async function assignTeam(
     .returning()
 
   const dto = await conversationToDTO(updated, 'agent')
-  await publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto, { prev: inboxScopeOf(existing) })
 
   if (team) {
     await emitTeamAssignmentSystemMessage(conversationId, team.name)
@@ -1755,8 +1776,11 @@ export async function requeueUnansweredOnAgentOffline(
     // in parallel) so the load-aware strategy sees each prior assignment and
     // spreads the batch across the online team instead of piling it onto one.
     for (const conversation of updated) {
+      // The offline agent held these; the published update names them as the
+      // previous assignee so their inbox stream removes the row.
+      const prev = { assigneePrincipalId: agentPrincipalId, teamId: conversation.assignedTeamId }
       // assignRoutedConversation broadcasts the assigned DTO itself on success.
-      if (await assignRoutedConversation(conversation)) continue
+      if (await assignRoutedConversation(conversation, prev)) continue
       // Not re-routed: broadcast the CURRENT row (re-read), so a reassignment
       // that landed during the await isn't clobbered by a stale "unassigned" DTO.
       const [current] = await db
@@ -1765,7 +1789,9 @@ export async function requeueUnansweredOnAgentOffline(
         .where(eq(conversations.id, conversation.id))
         .limit(1)
       if (current)
-        await publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'))
+        await publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'), {
+          prev,
+        })
     }
   } catch (err) {
     log.warn({ err }, 'requeue unanswered on agent offline failed')
@@ -2025,7 +2051,10 @@ export async function signalTyping(conversationId: ConversationId, actor: Actor)
   const conversation = await assertConversationVisible(conversationId, actor)
   const side = conversationSideFor(conversation, actor)
   // The typist id rides along so the stream layer can drop the typist's own echo.
-  publishTyping(conversationId, side, new Date().toISOString(), actor.principalId)
+  publishTyping(conversationId, side, new Date().toISOString(), actor.principalId, {
+    assigneePrincipalId: conversation.assignedAgentPrincipalId ?? null,
+    teamId: conversation.assignedTeamId ?? null,
+  })
 }
 
 /** Mark a conversation read up to now for the actor's side of it. */

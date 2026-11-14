@@ -283,9 +283,18 @@ export async function runAssistantTurnForConversation(
   // this never churns a real inbox.
   const { isTestConversation } = await import('@/lib/server/test-data')
   const mirrorToInbox = await isTestConversation(conversationId)
+  // The mirror's scope envelope is read once for the turn, not once per
+  // streamed fragment. Without it each frame reads the row itself.
+  const mirrorScope = mirrorToInbox
+    ? await (
+        await import('@/lib/server/realtime/inbox-scope-read')
+      )
+        .readInboxItemScope('conversation', conversationId)
+        .catch(() => null)
+    : null
   const publishTurnSignal = (event: ConversationStreamEvent) => {
     publishConversationOnlyEvent(conversationId, event)
-    if (mirrorToInbox) publishAgentConversationEvent(event)
+    if (mirrorToInbox) publishAgentConversationEvent(event, mirrorScope ?? undefined)
   }
   // Mirrored into the KV cache on every publish (and cleared when the turn ends, in
   // the finally below) so a subscriber that connects mid-turn can replay the
