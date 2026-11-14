@@ -42,6 +42,7 @@ import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { addPrincipalToDefaultTeam } from '@/lib/server/domains/teams'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { enqueueMembershipSync } from './membership-sync'
+import { publishInboxScopeChanged } from '@/lib/server/realtime/inbox-scope-invalidate'
 
 /** The live db or an open transaction — both expose insert/update/query. */
 export type Executor = Database | Transaction
@@ -245,6 +246,22 @@ async function resolveUserId(
   return row?.userId ?? null
 }
 
+/** The principal a role write names, for the post-commit inbox scope signal. */
+async function rolePrincipalId(
+  ref: PrincipalRef,
+  exec: Executor
+): Promise<PrincipalId | undefined> {
+  if ('principalId' in ref) return ref.principalId
+  // Capability-gated like the lock in setPrincipalRole: the mocked executors
+  // in the unit suites carry no query builder.
+  if (typeof exec.query?.principal?.findFirst !== 'function') return undefined
+  const row = await exec.query.principal.findFirst({
+    where: eq(principal.userId, ref.userId),
+    columns: { id: true },
+  })
+  return row?.id
+}
+
 export interface SetRoleOpts extends MutateOpts {
   /**
    * Workspace-wide role assignment to write alongside the role column, for
@@ -287,10 +304,18 @@ export async function setPrincipalRole(
   // API-key teardown, and future callers without duplicating a TOCTOU-prone
   // count.
   if (!opts.executor && typeof db.transaction === 'function') {
-    const result = await db.transaction((tx) =>
-      setPrincipalRole(ref, role, { ...opts, executor: tx })
-    )
+    let changedPrincipalId: PrincipalId | undefined
+    const result = await db.transaction(async (tx) => {
+      const inner = await setPrincipalRole(ref, role, { ...opts, executor: tx })
+      changedPrincipalId = await rolePrincipalId(ref, tx)
+      return inner
+    })
     for (const key of result.cacheKeysToBust) await cacheDel(key)
+    // After the commit, so the person's open inbox stream reloads the new
+    // role (or closes, when they left the team). A caller that brings its own
+    // transaction is promoting a portal user or bootstrapping a workspace:
+    // that person has no inbox stream open, so it needs no signal.
+    if (changedPrincipalId) publishInboxScopeChanged([changedPrincipalId])
     return result
   }
 

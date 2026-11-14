@@ -143,6 +143,9 @@ import {
 } from '@/lib/server/domains/conversation/conversation.service'
 import { conversationToDTO } from '@/lib/server/domains/conversation/conversation.query'
 import { assignTicket } from '@/lib/server/domains/tickets/ticket.service'
+import { setTeamMembers } from '@/lib/server/domains/teams'
+import { setPrincipalRole } from '@/lib/server/domains/principals/principal.factory'
+import { deleteRole, updateRole } from '@/lib/server/domains/roles/role.service'
 import { permissionsForLegacyRole } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 
@@ -449,6 +452,82 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     ).toEqual([w.conv.y, w.conv.y])
   })
 
+  it('refreshes the cached scope at once when the teammate joins a team', async () => {
+    const w = await seedWorld()
+    const scoped = await openInbox(w.scoped)
+    publishTicketEvent(w.ticket.y, {
+      kind: 'ticket_read',
+      ticketId: w.ticket.y,
+      side: 'agent',
+      at: 'a',
+    })
+    await settle()
+    expect(scoped.frames().map(itemIdOf)).not.toContain(w.ticket.y)
+
+    await setTeamMembers(w.teamY, [w.scoped])
+    await settle()
+    expect(scoped.frames().map((f) => f.event)).toContain('inbox_scope_changed')
+
+    publishTicketEvent(w.ticket.y, {
+      kind: 'ticket_read',
+      ticketId: w.ticket.y,
+      side: 'agent',
+      at: 'b',
+    })
+    await settle()
+    expect(scoped.frames().map(itemIdOf)).toContain(w.ticket.y)
+
+    // And leaving the team takes it away again.
+    await setTeamMembers(w.teamY, [])
+    await settle()
+    const seen = scoped.frames().length
+    publishTicketEvent(w.ticket.y, {
+      kind: 'ticket_read',
+      ticketId: w.ticket.y,
+      side: 'agent',
+      at: 'c',
+    })
+    await settle()
+    expect(scoped.frames().slice(seen).map(itemIdOf)).not.toContain(w.ticket.y)
+  })
+
+  it("refreshes every holder's scope when their role gains or loses keys, or is deleted", async () => {
+    const w = await seedWorld()
+    const scoped = await openInbox(w.scoped)
+    const editor = { principalId: w.admin, permissions: [...permissionsForLegacyRole('admin')] }
+    const probe = async (at: string) => {
+      publishTicketEvent(w.ticket.y, {
+        kind: 'ticket_read',
+        ticketId: w.ticket.y,
+        side: 'agent',
+        at,
+      })
+      await settle()
+      return scoped
+        .frames()
+        .filter((f) => f.event === 'ticket_read')
+        .map((f) => f.data.at)
+        .includes(at)
+    }
+    expect(await probe('before')).toBe(false)
+
+    await updateRole(
+      w.scopedRole,
+      { permissionKeys: [...SCOPED_KEYS, PERMISSIONS.TICKET_VIEW_ALL] },
+      editor
+    )
+    await settle()
+    expect(await probe('granted')).toBe(true)
+
+    await updateRole(w.scopedRole, { permissionKeys: SCOPED_KEYS }, editor)
+    await settle()
+    expect(await probe('revoked')).toBe(false)
+
+    await deleteRole(w.scopedRole, { reassignToRoleId: w.viewAllRole }, editor)
+    await settle()
+    expect(await probe('reassigned')).toBe(true)
+  })
+
   it('reloads a scope older than 60 seconds before filtering the next frame', async () => {
     const w = await seedWorld()
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -500,6 +579,22 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     await settle()
     const reads = scoped.frames().filter((f) => f.event === 'ticket_read')
     expect(reads.map((f) => f.data.at)).toEqual(['kept'])
+  })
+
+  it('closes the stream when a reload finds the principal is no longer a teammate', async () => {
+    const w = await seedWorld()
+    const scoped = await openInbox(w.scoped)
+    await setPrincipalRole({ principalId: w.scoped }, 'user')
+    await settle()
+    await until(() => scoped.isDone())
+    publishTicketEvent(w.ticket.x, {
+      kind: 'ticket_read',
+      ticketId: w.ticket.x,
+      side: 'agent',
+      at: 'a',
+    })
+    await settle()
+    expect(scoped.frames().map(itemIdOf)).not.toContain(w.ticket.x)
   })
 
   it('keeps the frames for one item in call order, across a reload', async () => {
