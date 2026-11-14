@@ -211,7 +211,7 @@ import { getConversationTicketLinkFn } from '../inbox'
 import { applyMacroFn } from '../macros'
 import { removeConversationSlaFn } from '../sla'
 import { assignConversationTeamFn } from '../teams'
-import { createTicketFn } from '../tickets'
+import { createTicketFn, suggestTicketFieldValuesFn } from '../tickets'
 import { previewWorkflowFn, runWorkflowManuallyFn } from '../workflows'
 import { retryGitHubAgentMessageFn } from '@/integrations/github/server/functions'
 
@@ -597,6 +597,16 @@ describe('conversation server functions check visibility (real DB, rolled back)'
     expect((await row(hidden.id)).endReason).toBe('spam')
     await restoreConversationFromSpamFn({ data: { conversationId: visible.id } })
     expect((await row(visible.id)).endReason).not.toBe('spam')
+  })
+
+  it('ticket field suggestions for a hidden conversation are NotFound before any read', async () => {
+    const w = await seedWorld()
+    const hidden = await w.conversation(w.teamY)
+    await expect(
+      suggestTicketFieldValuesFn({
+        data: { conversationId: hidden.id, ticketTypeId: createId('ticket_type') },
+      })
+    ).rejects.toMatchObject(NOT_FOUND)
   })
 
   it('an inline tag on a hidden conversation mints no tag', async () => {
