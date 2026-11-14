@@ -113,11 +113,19 @@ export async function ensureDomain(
 
 /**
  * Take back a domain {@link ensureDomain} created for a use that then did not
- * happen: only while it is still pending and nothing holds its name.
+ * happen: only while it is still pending and nothing holds its name. The check
+ * and the delete run under the same lock on the name that issuing its token
+ * to a sending row takes (`sending-domain-token.ts`), so an add of the same
+ * name at that moment is not left holding a removed domain's token.
  */
 export async function discardUnusedDomain(domain: Domain): Promise<void> {
-  if ((await domainUsesOf(domain.name)).length > 0) return
-  await db.delete(domains).where(and(eq(domains.id, domain.id), eq(domains.status, 'pending')))
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`quackback:domain-token:${domain.name}`}))`
+    )
+    if ((await domainUsesOf(domain.name)).length > 0) return
+    await tx.delete(domains).where(and(eq(domains.id, domain.id), eq(domains.status, 'pending')))
+  })
 }
 
 /**
