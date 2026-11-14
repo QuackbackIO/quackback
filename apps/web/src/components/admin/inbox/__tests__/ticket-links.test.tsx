@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { TicketId } from '@quackback/ids'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
@@ -19,6 +20,7 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 
 import { TicketLinks } from '../ticket-links'
 import { ticketKeys } from '@/lib/client/queries/inbox'
+import { listTicketsFn } from '@/lib/server/functions/tickets'
 
 function ticket(overrides: Partial<TicketDTO> = {}): TicketDTO {
   return {
@@ -64,6 +66,18 @@ describe('TicketLinks', () => {
     expect(screen.getByText('Attach')).toBeTruthy()
     expect(screen.getByText('#142')).toBeTruthy()
     expect(screen.getByLabelText('Unlink #142')).toBeTruthy()
+  })
+
+  it('the Attach menu leaves out tickets the tracker already tracks', async () => {
+    const tracker = ticket({ id: 'ticket_tr' as TicketId, type: 'tracker', reference: '#9' })
+    const linked = ticket({ id: 'ticket_c' as TicketId, reference: '#142', title: 'Cannot log in' })
+    const other = ticket({ id: 'ticket_d' as TicketId, reference: '#143', title: 'Slow export' })
+    vi.mocked(listTicketsFn).mockResolvedValueOnce([linked, other] as never)
+    renderLinks(tracker, { tracker: null, linked: [linked] })
+
+    await userEvent.setup().click(screen.getByText('Attach'))
+    expect(await screen.findByRole('menuitem', { name: /Slow export/ })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /Cannot log in/ })).toBeNull()
   })
 
   it('a customer ticket shows the tracker it belongs to, with an unlink', () => {

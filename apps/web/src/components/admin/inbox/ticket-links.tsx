@@ -27,7 +27,7 @@ function TicketLabel({ ticket }: { ticket: Pick<TicketDTO, 'reference' | 'title'
   )
 }
 
-/** Pick a ticket of a given type from the recent list (bounded to 50). */
+/** Pick a ticket of a given type from the recent list (bounded to 50), minus `exclude`. */
 function TicketPicker({
   type,
   exclude,
@@ -35,12 +35,12 @@ function TicketPicker({
   onPick,
 }: {
   type: 'tracker' | 'customer'
-  exclude: TicketId
+  exclude: readonly TicketId[]
   label: string
   onPick: (id: TicketId) => void
 }) {
   const { data: candidates } = useQuery(ticketQueries.list({ type, limit: 50 }))
-  const options = (candidates ?? []).filter((t) => t.id !== exclude)
+  const options = (candidates ?? []).filter((t) => !exclude.includes(t.id))
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -110,7 +110,7 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
           </span>
           <TicketPicker
             type="customer"
-            exclude={ticket.id}
+            exclude={[ticket.id, ...linked.map((t) => t.id)]}
             label="Attach"
             onPick={(id) => link.mutate({ trackerTicketId: ticket.id, ticketId: id })}
           />
@@ -161,7 +161,7 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
       ) : ticket.type === 'customer' ? (
         <TicketPicker
           type="tracker"
-          exclude={ticket.id}
+          exclude={[ticket.id]}
           label="Link to tracker"
           onPick={(id) => link.mutate({ trackerTicketId: id, ticketId: ticket.id })}
         />
