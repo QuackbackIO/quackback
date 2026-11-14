@@ -5,7 +5,7 @@
  * updatePortalUser (update existing user by principal ID).
  */
 
-import { db, eq, and, principal, user, sql } from '@/lib/server/db'
+import { db, eq, and, principal, user } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import {
@@ -15,6 +15,7 @@ import {
 } from '@/lib/server/domains/principals/principal.factory'
 import { NotFoundError } from '@/lib/shared/errors'
 import { isUniqueViolation } from '@/lib/server/utils'
+import { mergeJsonbText } from '@/lib/server/db/jsonb-text'
 import type {
   IdentifyPortalUserInput,
   IdentifyPortalUserResult,
@@ -78,7 +79,7 @@ export async function identifyPortalUser(
       }
     }
     if (Object.keys(metadataUpdates).length > 0 || metadataRemovals.length > 0) {
-      userUpdates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${metadataRemovals}::text[]) || ${JSON.stringify(metadataUpdates)}::jsonb)::text`
+      userUpdates.metadata = mergeJsonbText(user.metadata, metadataUpdates, metadataRemovals)
     }
 
     if (Object.keys(userUpdates).length > 0) {
@@ -254,7 +255,7 @@ export async function updatePortalUser(
     }
   }
   if (Object.keys(metadataUpdates).length > 0 || metadataRemovals.length > 0) {
-    userUpdates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${metadataRemovals}::text[]) || ${JSON.stringify(metadataUpdates)}::jsonb)::text`
+    userUpdates.metadata = mergeJsonbText(user.metadata, metadataUpdates, metadataRemovals)
   }
 
   if (Object.keys(userUpdates).length > 0) {
