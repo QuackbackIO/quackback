@@ -22,7 +22,9 @@ import {
   settings,
   sql,
   ssoVerifiedDomain,
+  type Database,
   type Domain,
+  type Transaction,
 } from '@/lib/server/db'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { DomainUse } from '@/lib/shared/domains-permissions'
@@ -135,7 +137,7 @@ export async function ensureDomain(
 export async function discardUnusedDomain(domain: Domain): Promise<void> {
   await db.transaction(async (tx) => {
     await lockDomainName(tx, domain.name)
-    if ((await domainUsesOf(domain.name)).length > 0) return
+    if ((await domainUsesOf(domain.name, tx)).length > 0) return
     await tx.delete(domains).where(and(eq(domains.id, domain.id), eq(domains.status, 'pending')))
   })
 }
@@ -238,13 +240,16 @@ function helpCenterDomainOf(raw: string | null): string | null {
 }
 
 /** The uses that hold this name, in the order every page lists them. */
-export async function domainUsesOf(name: string): Promise<DomainUse[]> {
+export async function domainUsesOf(
+  name: string,
+  executor: Database | Transaction = db
+): Promise<DomainUse[]> {
   const key = toAsciiDomain(name)
   if (!key) return []
   const [sending, signIn, settingsRows] = await Promise.all([
-    db.select({ domain: emailSendingDomains.domain }).from(emailSendingDomains),
-    db.select({ name: ssoVerifiedDomain.name }).from(ssoVerifiedDomain),
-    db
+    executor.select({ domain: emailSendingDomains.domain }).from(emailSendingDomains),
+    executor.select({ name: ssoVerifiedDomain.name }).from(ssoVerifiedDomain),
+    executor
       .select({
         helpCenterConfig: settings.helpCenterConfig,
         cloudIdentity: settings.cloudIdentity,
