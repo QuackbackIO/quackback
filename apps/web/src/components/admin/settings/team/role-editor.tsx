@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { useSuspenseQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -89,6 +89,7 @@ export function RoleEditor(props: RoleEditorProps) {
   )
   const [search, setSearch] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const keyIdPrefix = useId()
   // Collapsed by default; categories carrying newly-shipped keys start open so
   // the New badges are seen. Searching expands every matching category.
   const [openCats, setOpenCats] = useState<Set<string>>(
@@ -330,12 +331,14 @@ export function RoleEditor(props: RoleEditorProps) {
                         )}
                       >
                         <Checkbox
+                          id={`${keyIdPrefix}-${p.key}`}
                           checked={selected.has(p.key)}
                           disabled={readOnly || aboveCeiling}
-                          aria-label={p.key}
                           onCheckedChange={() => toggle(p.key)}
                         />
-                        <span className="font-mono text-xs">{p.key}</span>
+                        <label htmlFor={`${keyIdPrefix}-${p.key}`} className="font-mono text-xs">
+                          {p.key}
+                        </label>
                         {newKeys.has(p.key) && (
                           <Badge size="sm" variant="outline">
                             New
