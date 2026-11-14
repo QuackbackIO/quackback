@@ -71,8 +71,14 @@ function DomainsSettingsPage() {
   const { permissions } = Route.useRouteContext()
   // Only settings.manage adds a bare domain; the other Domains permissions see the page without it.
   const canAdd = permissions?.includes(PERMISSIONS.SETTINGS_MANAGE) ?? false
-  const rows = domainRows({ sending, signIn, helpCenterDomain, added })
-  // Cloud hostnames keep their own card, where they are added and verified.
+  const rows = domainRows({
+    sending,
+    signIn,
+    helpCenterDomain,
+    webAddresses: operator?.domains,
+    added,
+  })
+  // Cloud hostnames are also on their own card, where they are added and verified.
   const empty = rows.length === 0 && !operator?.domains.length
 
   return (
