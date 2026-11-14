@@ -7,8 +7,8 @@
  * the uses whose permission they hold.
  */
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate } from '@tanstack/react-router'
 import {
   HELP_CENTER_SETTINGS,
   type DomainUse,
@@ -248,7 +248,8 @@ const OTHER_REMOVAL_NOTE: Record<OtherRemoval['use'], string> = {
  * email opens Add address on this domain; a custom domain is added as a Cloud
  * web address, or becomes the help center's domain (confirmed first when that
  * moves the help center off another one); sign-in goes to the one identity
- * provider, or to Sign-in settings to pick one. Email with addresses on it is
+ * provider, or to Sign-in settings to pick one (the providers are read on the
+ * click, not with the page). Email with addresses on it is
  * removed an address at a time, in the list below.
  */
 function UsesCard({
@@ -276,17 +277,15 @@ function UsesCard({
   const [error, setError] = useState<string | null>(null)
   const { data, domain, addresses } = sending
   const helpCenter = links.customDomain?.to === HELP_CENTER_SETTINGS
-  // Only asked for while sign-in is still to set up here.
-  const signInToSetUp = !!links.signIn && !uses.some((u) => u.use === 'signIn')
-  const providers = useQuery({ ...settingsQueries.identityProviders(), enabled: signInToSetUp })
-  const onlyProvider = providers.data?.length === 1 ? providers.data[0] : undefined
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
+  /** Run a change, then read the page again unless the action says nothing changed. */
   const run = async (action: () => Promise<unknown>, fallback: string) => {
     setError(null)
     setBusy(true)
     try {
-      await action()
-      onChanged()
+      if ((await action()) !== false) onChanged()
     } catch (err) {
       setError(errorText(err, fallback))
     } finally {
@@ -323,34 +322,25 @@ function UsesCard({
         void useForHelpCenter()
       }
     },
-    signIn: () => {
-      if (!onlyProvider) return
-      void run(
-        () => addProviderDomainFn({ data: { providerId: onlyProvider.id, name } }),
-        "Couldn't add the domain to sign-in."
-      )
-    },
+    signIn: () =>
+      void run(async () => {
+        const providers = await queryClient.fetchQuery(settingsQueries.identityProviders())
+        const only = providers.length === 1 ? providers[0] : undefined
+        if (only) return addProviderDomainFn({ data: { providerId: only.id, name } })
+        // With no identity provider or a choice of them, Sign-in settings picks one.
+        const link = links.signIn!
+        await navigate({ to: link.to, search: link.search, hash: link.hash })
+        return false
+      }, "Couldn't add the domain to sign-in."),
   }
 
   /** Set up for a use that is not on, when the viewer may set it up. */
-  const setUpControl = (use: DomainUse) => {
-    const link = links[use]
-    if (!link) return undefined
-    // With no identity provider or a choice of them, Sign-in settings picks one.
-    if (use === 'signIn' && !onlyProvider && !providers.isPending) {
-      return <LinkButton link={link}>Set up</LinkButton>
-    }
-    return (
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={busy || (use === 'signIn' && providers.isPending)}
-        onClick={setUp[use]}
-      >
+  const setUpControl = (use: DomainUse) =>
+    links[use] ? (
+      <Button variant="outline" size="sm" disabled={busy} onClick={setUp[use]}>
         Set up
       </Button>
-    )
-  }
+    ) : undefined
 
   const removeButton = (onClick: () => void) => (
     <Button variant="outline" size="sm" disabled={busy} onClick={onClick}>
