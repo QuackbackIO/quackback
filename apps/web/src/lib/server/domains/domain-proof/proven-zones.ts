@@ -140,6 +140,16 @@ export function isCoveredByProvenZone(name: string, zones: readonly ProvenZone[]
   return provenZoneCovering(name, zones) !== null
 }
 
+/** The rows the proven zones are worked out from, each read from this workspace's database. */
+export interface ProvenZoneRows {
+  /** Sending-domain rows; any that is not verified is skipped. */
+  sending: readonly (SendingRowProofInput & { domain: string })[]
+  /** Verified single sign-on domains, when they count. */
+  sso: readonly { name: string; verificationToken: string }[]
+  cloudIdentity: unknown
+  domains: readonly { name: string; ownershipToken: string; status: string }[]
+}
+
 /**
  * Every zone this workspace has proven, with where each proof came from.
  * Single sign-on domains are included only with `includeSso`.
@@ -175,13 +185,22 @@ export async function getProvenZones(
       })
       .from(domains),
   ])
+  return provenZonesFrom({
+    sending,
+    sso,
+    cloudIdentity: settingsRows[0]?.cloudIdentity,
+    domains: domainRows,
+  })
+}
 
+/** The zones proven by rows already read, in the order {@link getProvenZones} gives them. */
+export function provenZonesFrom(rows: ProvenZoneRows): ProvenZone[] {
   // The `_quackback` record of every domain added by name that is not
   // verified. A sending row issued that domain's token rests on the same
   // record, so it proves nothing while the domain does not: once the domain is
   // demoted for a missing record, the twin cannot keep the zone proven.
   const notVerifiedRecords = new Set(
-    domainRows
+    rows.domains
       .filter((d) => d.status !== 'verified')
       .map((d) => {
         const record = domainRecord(toAsciiDomain(d.name), d.ownershipToken)
@@ -190,7 +209,7 @@ export async function getProvenZones(
   )
 
   const zones: ProvenZone[] = []
-  for (const row of sending) {
+  for (const row of rows.sending) {
     const proof = sendingRowProofRecord(row)
     const zone = toAsciiDomain(row.domain)
     const name = proof && zone ? recordName(zone, proof.host) : ''
@@ -203,7 +222,7 @@ export async function getProvenZones(
       })
     }
   }
-  for (const row of sso) {
+  for (const row of rows.sso) {
     const zone = toAsciiDomain(row.name)
     if (!zone) continue
     zones.push({
@@ -216,7 +235,7 @@ export async function getProvenZones(
       },
     })
   }
-  for (const row of domainRows) {
+  for (const row of rows.domains) {
     if (row.status !== 'verified') continue
     const zone = toAsciiDomain(row.name)
     // A row with no token has nothing of its own to have been verified by.
@@ -228,7 +247,7 @@ export async function getProvenZones(
       record: domainRecord(zone, row.ownershipToken),
     })
   }
-  const identity = parseIdentityProjection(settingsRows[0]?.cloudIdentity)
+  const identity = parseIdentityProjection(rows.cloudIdentity)
   for (const hostname of identity?.customDomains ?? []) {
     if (hostname.readiness === 'ready') {
       zones.push({

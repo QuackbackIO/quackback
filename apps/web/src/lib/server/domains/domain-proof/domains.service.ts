@@ -225,13 +225,19 @@ export async function verifyDomainOnFoundRecord(
     )
 }
 
+/** The rows a domain's uses are worked out from. */
+export interface DomainUseRows {
+  sending: readonly { domain: string }[]
+  signIn: readonly { name: string }[]
+  settings: { helpCenterConfig: string | null; cloudIdentity: unknown } | undefined
+}
+
 /** The uses that hold this name, in the order every page lists them. */
 export async function domainUsesOf(
   name: string,
   executor: Database | Transaction = db
 ): Promise<DomainUse[]> {
-  const key = toAsciiDomain(name)
-  if (!key) return []
+  if (!toAsciiDomain(name)) return []
   const [sending, signIn, settingsRows] = await Promise.all([
     executor.select({ domain: emailSendingDomains.domain }).from(emailSendingDomains),
     executor.select({ name: ssoVerifiedDomain.name }).from(ssoVerifiedDomain),
@@ -243,16 +249,25 @@ export async function domainUsesOf(
       .from(settings)
       .limit(1),
   ])
+  return domainUsesFrom(name, { sending, signIn, settings: settingsRows[0] })
+}
+
+/** The uses that hold this name among rows already read, in the order every page lists them. */
+export function domainUsesFrom(name: string, rows: DomainUseRows): DomainUse[] {
+  const key = toAsciiDomain(name)
+  if (!key) return []
   const matches = (value: string | null | undefined) => !!value && toAsciiDomain(value) === key
-  const row = settingsRows[0]
   const webAddresses = [
-    parseJsonConfig(row?.helpCenterConfig ?? null, DEFAULT_HELP_CENTER_CONFIG).domain?.domain,
-    ...(parseIdentityProjection(row?.cloudIdentity)?.customDomains ?? []).map((h) => h.hostname),
+    parseJsonConfig(rows.settings?.helpCenterConfig ?? null, DEFAULT_HELP_CENTER_CONFIG).domain
+      ?.domain,
+    ...(parseIdentityProjection(rows.settings?.cloudIdentity)?.customDomains ?? []).map(
+      (h) => h.hostname
+    ),
   ]
   const uses: DomainUse[] = []
-  if (sending.some((s) => matches(s.domain))) uses.push('email')
+  if (rows.sending.some((s) => matches(s.domain))) uses.push('email')
   if (webAddresses.some(matches)) uses.push('customDomain')
-  if (signIn.some((s) => matches(s.name))) uses.push('signIn')
+  if (rows.signIn.some((s) => matches(s.name))) uses.push('signIn')
   return uses
 }
 
