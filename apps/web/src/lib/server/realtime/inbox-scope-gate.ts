@@ -119,8 +119,9 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
   let teamIds = opts.teamIds
   const nextExpiry = () => now() + ttlMs * (1 - TTL_JITTER * random())
   let expiresAt = nextExpiry()
-  // Set by a scope-changed signal or a failed reload; a reload clears it when
-  // it starts, so one that finds it set again when it ends reads again.
+  // Set by a scope-changed signal or a failed reload, and cleared when a
+  // reload starts. A change that lands during a reload is caught by the change
+  // count (`changes`), which makes that reload read again.
   let stale = opts.startStale ?? false
   let reloading = false
   let closed = false
@@ -262,11 +263,6 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
     actor = scopedActor(result.permissions)
     teamIds = result.teamIds
     expiresAt = nextExpiry()
-    if (stale) {
-      // A change landed while this reload read: its rows may predate it.
-      void reload()
-      return
-    }
     reloading = false
     if (recovering) {
       recovering = false
