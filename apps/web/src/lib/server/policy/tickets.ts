@@ -23,10 +23,10 @@ import {
 
 /**
  * Scalar subquery of the team ids an actor belongs to, over `team_members`.
- * Teams resolve membership team -> principals (teams.service
- * `listTeamMemberPrincipalIds`); there is no reverse principal -> teams lookup,
- * so this is the small correlated-free subquery the §4.11 filters use to stay a
- * pure predicate (no extra round trip). Shared by conversationFilter.
+ * The SQL filters use this correlated-free subquery to stay a pure predicate
+ * (no extra round trip). An in-memory check reads the same membership once
+ * with teams.service `teamIdsForPrincipal` and hands it to `rowInScope`.
+ * Shared by conversationFilter.
  */
 export function teamsForActor(principalId: string): SQL {
   // The WHERE uses drizzle `eq` (not a raw `= ${id}`) so the principal TypeID is
