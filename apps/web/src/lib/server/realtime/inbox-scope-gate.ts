@@ -22,7 +22,9 @@
  * - A reload that finds the principal is no longer a teammate closes the
  *   stream: the inbox gate at connect is otherwise never asked again.
  * - A scope-changed signal also sends one `inbox_scope_changed` event, so the
- *   client refetches lists the new scope changes.
+ *   client refetches lists the new scope changes. So does the first reload
+ *   that works after a failed one, since the frames dropped meanwhile may have
+ *   carried removals.
  */
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { rowInScope, SCOPE_VIEW_KEYS } from '@/lib/server/policy/row-scope'
@@ -113,6 +115,9 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
   let stale = opts.startStale ?? false
   let reloading = false
   let closed = false
+  // Set when a reload fails: the frames it dropped may have carried removals,
+  // so the next reload that works tells the client to refetch.
+  let recovering = false
   const queue: Queued[] = []
 
   const deliver = (item: Queued): void => {
@@ -204,6 +209,7 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       }
       for (const item of queue.splice(0)) if (item.type === 'changed') deliver(item)
       stale = true
+      recovering = true
       reloading = false
       return
     }
@@ -216,6 +222,10 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       return
     }
     reloading = false
+    if (recovering) {
+      recovering = false
+      if (!queue.some((q) => q.type === 'changed')) queue.unshift({ type: 'changed' })
+    }
     for (const item of queue.splice(0)) deliver(item)
   }
 
