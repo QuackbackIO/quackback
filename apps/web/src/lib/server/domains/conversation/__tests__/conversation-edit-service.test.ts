@@ -55,8 +55,13 @@ vi.mock('./sync-conversation-mentions', () => ({
 
 // The parent check passes here; a hidden parent is covered by
 // conversation-visibility-writes.db.test.ts.
-vi.mock('../message-parent', () => ({
-  assertMessageParentVisible: vi.fn(async () => ({ kind: 'ticket', ticketId: 'ticket_1' })),
+vi.mock('../message-parent', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../message-parent')>()),
+  assertMessageParentVisible: vi.fn(async (m: { conversationId?: string; ticketId?: string }) =>
+    m.conversationId
+      ? { kind: 'conversation', conversationId: m.conversationId, conversation: {} }
+      : { kind: 'ticket', ticketId: m.ticketId }
+  ),
 }))
 
 vi.mock('@/lib/server/domains/channels/github-deliver', () => ({
