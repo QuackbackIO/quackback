@@ -13,7 +13,7 @@ import type {
   TicketStatusId,
 } from '@quackback/ids'
 import { coerceTicketTypeId } from '@/lib/shared/tickets'
-import type { ConversationPriority } from '@/lib/shared/conversation/types'
+import { conversationIdOf, type ConversationPriority } from '@/lib/shared/conversation/types'
 import {
   isConversationSort,
   defaultConversationSort,
@@ -100,6 +100,7 @@ import {
 } from '@/lib/client/conversation/inbox-scope'
 import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
 import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
+import { itemRefId } from '@/lib/client/conversation/inbox-cache'
 import {
   removeInboxItemFromCaches,
   settleOpenItemAfterScopeChange,
@@ -367,11 +368,6 @@ function splitByKind(ids: Iterable<string>): {
   return { conversationIds, ticketIds }
 }
 
-/** The stable string id of any unified inbox row. */
-function itemRefId(item: InboxItemDTO): string {
-  return item.kind === 'conversation' ? item.conversation.id : item.ticket.id
-}
-
 /**
  * `ticket_updated` carries the full, fresh `TicketDTO` — rather than
  * invalidating the whole unified item-list (every scope/filter combo has its
@@ -413,6 +409,9 @@ function patchTicketInInboxLists(queryClient: QueryClient, ticket: TicketDTO): v
     }
   )
 }
+
+/** The most a refetch after a scope change is delayed, to spread the load. */
+const SCOPE_REFETCH_JITTER_MS = 2_000
 
 function InboxPage() {
   const queryClient = useQueryClient()
@@ -695,14 +694,20 @@ function InboxPage() {
       // refetches as a reconnect does, since lists and the open pane may all
       // have moved.
       if (evt.kind === 'inbox_item_removed') {
-        removeInboxItemFromCaches(queryClient, evt.itemKind, evt.id)
-        refreshInbox()
+        // The lists are patched here; only the counts need the server.
+        const ref = inboxItemRefFromId(evt.id)
+        if (ref) removeInboxItemFromCaches(queryClient, ref)
+        refreshInboxCounts()
         return
       }
       if (evt.kind === 'inbox_scope_changed') {
-        refreshInboxAfterReconnect()
-        // The open item may be the one that left; a Not found removes it.
-        if (selectedRef) void settleOpenItemAfterScopeChange(queryClient, selectedRef)
+        // Spread the refetch so streams told together do not ask together.
+        const open = selectedRef
+        setTimeout(() => {
+          refreshInboxAfterReconnect()
+          // The open item may be the one that left; a Not found removes it.
+          if (open) void settleOpenItemAfterScopeChange(queryClient, open)
+        }, Math.random() * SCOPE_REFETCH_JITTER_MS)
         return
       }
       refreshIfCompanionLost(evt)
@@ -758,12 +763,7 @@ function InboxPage() {
       // Thread caches: the open thread and any hover-prefetched (or previously
       // opened) thread for this event. Unvisited rows stay untouched. Ephemeral
       // typing / assistant frames have nothing in the cache to patch.
-      const conversationId =
-        evt.kind === 'conversation'
-          ? evt.conversation.id
-          : 'conversationId' in evt
-            ? evt.conversationId
-            : undefined
+      const conversationId = conversationIdOf(evt)
       if (
         conversationId &&
         evt.kind !== 'typing' &&

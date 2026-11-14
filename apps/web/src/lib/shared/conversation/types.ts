@@ -585,6 +585,12 @@ export type ConversationStreamEvent =
   | TicketStreamEvent
   | InboxScopeStreamEvent
 
+/** The conversation a stream event is about, when it names one. */
+export function conversationIdOf(event: ConversationStreamEvent): ConversationId | undefined {
+  if (event.kind === 'conversation') return event.conversation.id
+  return 'conversationId' in event ? event.conversationId : undefined
+}
+
 /** Hard caps shared by client + server validation. */
 export const MAX_CONVERSATION_MESSAGE_LENGTH = 4000
 export const MAX_CONVERSATION_ATTACHMENTS = 10

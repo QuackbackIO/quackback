@@ -31,7 +31,7 @@ function seeded() {
 describe('removeInboxItemFromCaches', () => {
   it('takes a ticket out of every unified list and drops its cached detail and thread', () => {
     const qc = seeded()
-    removeInboxItemFromCaches(qc, 'ticket', 'ticket_1')
+    removeInboxItemFromCaches(qc, { kind: 'ticket', id: 'ticket_1' as TicketId })
     expect(qc.getQueryData<{ items: unknown[] }>([...inboxKeys.items(), 'mine'])?.items).toEqual([
       conv('conversation_1'),
       conv('conversation_2'),
@@ -53,7 +53,7 @@ describe('removeInboxItemFromCaches', () => {
     qc.setQueryDefaults(ticketKeys.detail('ticket_1' as TicketId), {
       queryFn: () => Promise.reject(gone),
     })
-    await settleOpenItemAfterScopeChange(qc, { kind: 'ticket', id: 'ticket_1' })
+    await settleOpenItemAfterScopeChange(qc, { kind: 'ticket', id: 'ticket_1' as TicketId })
     expect(qc.getQueryData(ticketKeys.detail('ticket_1' as TicketId))).toBeUndefined()
     expect(qc.getQueryData<{ items: unknown[] }>([...inboxKeys.items(), 'team'])?.items).toEqual([])
   })
@@ -63,7 +63,7 @@ describe('removeInboxItemFromCaches', () => {
     qc.setQueryDefaults(ticketKeys.detail('ticket_1' as TicketId), {
       queryFn: async () => ({ id: 'ticket_1', title: 'fresh' }),
     })
-    await settleOpenItemAfterScopeChange(qc, { kind: 'ticket', id: 'ticket_1' })
+    await settleOpenItemAfterScopeChange(qc, { kind: 'ticket', id: 'ticket_1' as TicketId })
     expect(qc.getQueryData(ticketKeys.detail('ticket_1' as TicketId))).toEqual({
       id: 'ticket_1',
       title: 'fresh',
@@ -75,7 +75,10 @@ describe('removeInboxItemFromCaches', () => {
 
   it('takes a conversation out of the unified and the conversation lists, and drops its thread', () => {
     const qc = seeded()
-    removeInboxItemFromCaches(qc, 'conversation', 'conversation_1')
+    removeInboxItemFromCaches(qc, {
+      kind: 'conversation',
+      id: 'conversation_1' as ConversationId,
+    })
     expect(qc.getQueryData<{ items: unknown[] }>([...inboxKeys.items(), 'mine'])?.items).toEqual([
       ticket('ticket_1'),
       conv('conversation_2'),
