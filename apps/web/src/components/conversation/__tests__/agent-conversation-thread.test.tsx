@@ -648,7 +648,7 @@ describe('AgentConversationThread — ticket capability wiring', () => {
 })
 
 describe('AgentConversationThread — tracker Reply all mode', () => {
-  function renderTracker() {
+  function renderTracker(composerRef?: React.RefObject<ThreadComposerHandle | null>) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     client.setQueryData(['ticket-detail', 'ticket_tracker'], {
       ...mockTicket,
@@ -668,6 +668,7 @@ describe('AgentConversationThread — tracker Reply all mode', () => {
           onOpenPost={vi.fn()}
           isVisitorTyping={false}
           isOtherAgentTyping={false}
+          composerRef={composerRef}
         />
       </QueryClientProvider>
     )
@@ -730,6 +731,22 @@ describe('AgentConversationThread — tracker Reply all mode', () => {
     renderTracker()
     await chooseReplyAll()
     expect(screen.queryByText(/you can't access/)).not.toBeInTheDocument()
+  })
+
+  it('the reply shortcut keeps Note and says why when files are staged', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    staged.items = [{ id: 'f1', name: 'acme.png', status: 'done' }]
+    const composerRef = createRef<ThreadComposerHandle>()
+    renderTracker(composerRef)
+    await screen.findByRole('button', { name: 'Note' })
+    act(() => composerRef.current?.focusComposer('reply'))
+    expect(toastSpy.error).toHaveBeenCalledWith(
+      "Reply all can't include files. Remove them to switch."
+    )
+    expect(screen.getByTestId('editor')).toHaveAttribute(
+      'placeholder',
+      'Add an internal note for your team…'
+    )
   })
 
   it('keeps Note and says why when files are staged and Reply all is chosen', async () => {

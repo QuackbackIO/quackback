@@ -699,6 +699,18 @@ export function AgentConversationThread({
     if (!capabilities.reply || isTracker) setNoteMode(true)
   }, [capabilities.reply, isTracker, ticketId])
 
+  // Every switch of the composer mode (the menu, the shortcuts, the copilot
+  // insert). A tracker's Reply all carries text only, so files already staged
+  // keep the composer in Note until they are removed, and the teammate is told
+  // why.
+  const switchNoteMode = useStableCallback((note: boolean) => {
+    if (!note && trackerReplyAll && attachmentItems.length > 0) {
+      toast.error(`${REPLY_ALL_NO_FILES} Remove them to switch.`)
+      return
+    }
+    setNoteMode(note)
+  })
+
   // Every way into the attachment tray (paperclip, paste, drop). A tracker's
   // Reply all carries text only, so it stages nothing and says why.
   const stageFiles = useStableCallback((files: File[] | FileList) => {
@@ -1629,7 +1641,7 @@ export function AgentConversationThread({
   replyInsertRef.current = { insertText: (text: string) => insertAnswer('reply', text) }
   const insertFromCopilot = useCopilotInsert({
     noteMode,
-    setNoteMode,
+    setNoteMode: switchNoteMode,
     replyComposerRef: replyInsertRef,
   })
 
@@ -1646,7 +1658,7 @@ export function AgentConversationThread({
   }
   const focusComposerMode = useComposerFocus({
     noteMode,
-    setNoteMode,
+    setNoteMode: switchNoteMode,
     composerRef: activeEditorRef,
   })
   // A note-only thread has no reply composer to focus, so every request lands
@@ -1660,7 +1672,7 @@ export function AgentConversationThread({
         // The picker renders only on a reply-capable conversation out of note
         // mode; where it doesn't render there is nothing to open.
         if (!capabilities.macros) return
-        setNoteMode(false)
+        switchNoteMode(false)
         setMacroPickerOpen(true)
       },
     }),
@@ -1849,15 +1861,7 @@ export function AgentConversationThread({
   const selectEmoji = useStableCallback((emoji: string) =>
     insertText(noteMode ? 'note' : 'reply', emoji)
   )
-  // A tracker's Reply all carries text only, so files already staged keep the
-  // composer in Note until they are removed, and the teammate is told why.
-  const setComposerMode = useStableCallback((mode: string) => {
-    if (mode !== 'note' && trackerReplyAll && attachmentItems.length > 0) {
-      toast.error(`${REPLY_ALL_NO_FILES} Remove them to switch.`)
-      return
-    }
-    setNoteMode(mode === 'note')
-  })
+  const setComposerMode = useStableCallback((mode: string) => switchNoteMode(mode === 'note'))
 
   const activeMode: ComposerMode = noteMode || !capabilities.reply ? 'note' : 'reply'
   // Re-renders the thread only when the active draft turns empty or not.
