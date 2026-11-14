@@ -1,14 +1,24 @@
 /**
- * The Domains page's status sections: every domain the workspace uses, grouped
- * by what it is for. Rows are status only. Each links to the page that owns its
- * setup, and a viewer who cannot open that page sees the row without the link.
+ * The Domains page body: every domain the workspace uses, one row per domain
+ * name with a chip for each use, or, with none yet, the uses and where each is
+ * set up. Rows are status only. Each links to the page that owns its setup,
+ * and a viewer who cannot open that page sees the row without the link.
  */
+import { Fragment } from 'react'
+import {
+  HELP_CENTER_SETTINGS,
+  type DomainUse,
+  type DomainUseLinks,
+  type UseLink,
+} from '@/lib/shared/domains-permissions'
+import { Link } from '@tanstack/react-router'
 import { EnvelopeIcon, GlobeAltIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
-import { StateBadge } from '@/components/shared/state-badge'
-import { PhaseBadge } from '@/components/admin/channels/phase-badge'
-import { domainPhase } from '@/components/admin/channels/sending-domain-view'
+import { StateBadge, type BadgeState } from '@/components/shared/state-badge'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { domainPhase, type DomainPhase } from '@/components/admin/channels/sending-domain-view'
 import { verifiedThroughLabel } from '@/lib/shared/domain-proof'
 import type {
   HelpCenterDomainSummary,
@@ -19,98 +29,183 @@ import type {
 export const WEB_ADDRESSES_TITLE = 'Custom domains'
 export const WEB_ADDRESSES_DESCRIPTION = 'Where people reach your portal and help center.'
 
-/** The help center's own domain, on an install that serves it itself. */
-export function HelpCenterAddressSection({
-  domain,
-  canOpen,
-}: {
-  domain: HelpCenterDomainSummary
-  canOpen: boolean
-}) {
-  return (
-    <SettingsCard title={WEB_ADDRESSES_TITLE} description={WEB_ADDRESSES_DESCRIPTION} flush>
-      <SettingsList>
-        <SettingsListRow
-          leading={<RowIcon icon={GlobeAltIcon} />}
-          title={domain.domain}
-          meta="Help center"
-          badges={domain.verified ? undefined : <StateBadge state="pending" />}
-          {...(canOpen
-            ? { to: '/admin/settings/help-center', search: { tab: 'domains-languages' } }
-            : {})}
-        />
-      </SettingsList>
-    </SettingsCard>
-  )
+export const EMPTY_DESCRIPTION = 'Use your own domain for email, web addresses and sign-in.'
+
+const USE_ORDER: readonly DomainUse[] = ['email', 'customDomain', 'signIn']
+
+const USE_LABEL: Record<DomainUse, string> = {
+  email: 'Email',
+  customDomain: 'Custom domain',
+  signIn: 'Sign-in',
 }
 
-function sendingMeta(domain: SendingDomainSummary): string | undefined {
+interface DomainUseStatus {
+  use: DomainUse
+  /** Null when healthy: a normal state shows no badge. */
+  state: BadgeState | null
+  detail?: string
+}
+
+export interface DomainRow {
+  name: string
+  uses: DomainUseStatus[]
+}
+
+const PHASE_STATE = {
+  live: null,
+  'setting-up': 'pending',
+  attention: 'attention',
+  'not-found': 'attention',
+} as const satisfies Record<DomainPhase, BadgeState | null>
+
+function sendingDetail(domain: SendingDomainSummary): string | undefined {
   const parts = [domain.localParts.join(', ')]
   if (domain.ownershipProven) parts.push('Ownership verified')
   return parts.filter(Boolean).join(' · ') || undefined
 }
 
-export function EmailSendingSection({
-  domains,
-  canOpen,
-  now = new Date(),
-}: {
-  domains: SendingDomainSummary[]
-  canOpen: boolean
-  now?: Date
-}) {
-  return (
-    <SettingsCard title="Email sending" description="Domains your email is sent from." flush>
-      <SettingsList>
-        {domains.map((d) => (
-          <SettingsListRow
-            key={d.id}
-            leading={<RowIcon icon={EnvelopeIcon} />}
-            title={d.domain}
-            meta={sendingMeta(d)}
-            badges={<PhaseBadge phase={domainPhase(d, now)} />}
-            to={canOpen ? '/admin/settings/email' : undefined}
-          />
-        ))}
-      </SettingsList>
-    </SettingsCard>
-  )
-}
-
-function signInMeta(d: SignInDomainSummary): string | undefined {
+function signInDetail(d: SignInDomainSummary): string | undefined {
   if (d.verified) return d.provenBy ? verifiedThroughLabel(d.provenBy) : undefined
   return d.provenBy ? 'Already verified. Click Verify to use it.' : undefined
 }
 
-export function SignInSection({
-  domains,
-  canOpen,
+/** One row per domain name, its uses in a fixed order, the rows by name. */
+export function domainRows({
+  sending,
+  signIn,
+  helpCenterDomain,
+  now = new Date(),
 }: {
-  domains: SignInDomainSummary[]
-  canOpen: boolean
-}) {
+  sending: SendingDomainSummary[]
+  signIn: SignInDomainSummary[]
+  helpCenterDomain: HelpCenterDomainSummary | null
+  now?: Date
+}): DomainRow[] {
+  const byName = new Map<string, DomainUseStatus[]>()
+  const add = (name: string, status: DomainUseStatus) => {
+    const key = name.trim().toLowerCase()
+    byName.set(key, [...(byName.get(key) ?? []), status])
+  }
+  for (const d of sending) {
+    add(d.domain, {
+      use: 'email',
+      state: PHASE_STATE[domainPhase(d, now)],
+      detail: sendingDetail(d),
+    })
+  }
+  if (helpCenterDomain) {
+    add(helpCenterDomain.domain, {
+      use: 'customDomain',
+      state: helpCenterDomain.verified ? null : 'pending',
+      detail: 'Help center',
+    })
+  }
+  for (const d of signIn) {
+    add(d.name, { use: 'signIn', state: d.verified ? null : 'pending', detail: signInDetail(d) })
+  }
+  return [...byName.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([name, uses]) => ({
+      name,
+      uses: uses.sort((a, b) => USE_ORDER.indexOf(a.use) - USE_ORDER.indexOf(b.use)),
+    }))
+}
+
+/** The use a row opens: the first that needs attention, else the first, among those the viewer may open. */
+function rowLink(row: DomainRow, links: DomainUseLinks): UseLink | undefined {
+  const openable = row.uses.filter((u) => links[u.use])
+  const target = openable.find((u) => u.state) ?? openable[0]
+  return target ? links[target.use] : undefined
+}
+
+export function DomainList({ rows, links }: { rows: DomainRow[]; links: DomainUseLinks }) {
   return (
-    <SettingsCard title="Sign-in" description="Email domains that can use single sign-on." flush>
+    <SettingsCard flush>
       <SettingsList>
-        {domains.map((d) => (
-          <SettingsListRow
-            key={d.id}
-            leading={<RowIcon icon={LockClosedIcon} />}
-            title={d.name}
-            meta={signInMeta(d)}
-            badges={d.verified ? undefined : <StateBadge state="pending" />}
-            to={canOpen ? '/admin/settings/security/authentication' : undefined}
-          />
-        ))}
+        {rows.map((row) => {
+          const link = rowLink(row, links)
+          const meta = row.uses.flatMap((u) => (u.detail ? [u.detail] : [])).join(' · ')
+          return (
+            <SettingsListRow
+              key={row.name}
+              leading={<RowIcon icon={GlobeAltIcon} />}
+              title={row.name}
+              meta={meta || undefined}
+              badges={row.uses.map((u) => (
+                <Fragment key={u.use}>
+                  <Badge variant="outline" size="sm">
+                    {USE_LABEL[u.use]}
+                  </Badge>
+                  {u.state && <StateBadge state={u.state} />}
+                </Fragment>
+              ))}
+              to={link?.to}
+              search={link?.search}
+            />
+          )
+        })}
       </SettingsList>
     </SettingsCard>
   )
 }
 
-export function NoDomains() {
+const USES = [
+  {
+    use: 'email',
+    icon: EnvelopeIcon,
+    title: 'Email sending',
+    description: 'Send replies and announcements from your own address.',
+  },
+  {
+    use: 'customDomain',
+    icon: GlobeAltIcon,
+    title: 'Custom domain',
+    description: 'Put your portal on feedback.yourcompany.com.',
+  },
+  {
+    use: 'signIn',
+    icon: LockClosedIcon,
+    title: 'Sign-in',
+    description: 'Let everyone with an address at your domain sign in with SSO.',
+  },
+] as const satisfies readonly {
+  use: DomainUse
+  icon: typeof EnvelopeIcon
+  title: string
+  description: string
+}[]
+
+/** With no domains yet: each use the viewer may set up, with its own way there. */
+export function DomainsEmptyState({ links }: { links: DomainUseLinks }) {
+  const uses = USES.filter((u) => links[u.use])
+  if (uses.length === 0) return null
   return (
-    <p className="text-sm text-muted-foreground">
-      No domains yet. Add one from Email, Help Center or Access &amp; Security.
-    </p>
+    <SettingsCard flush>
+      <SettingsList>
+        {uses.map((u) => {
+          const link = links[u.use]!
+          // Off Cloud the only web address an install takes is its help center's.
+          const description =
+            u.use === 'customDomain' && link.to === HELP_CENTER_SETTINGS
+              ? 'Put your help center on help.yourcompany.com.'
+              : u.description
+          return (
+            <SettingsListRow
+              key={u.use}
+              leading={<RowIcon icon={u.icon} />}
+              title={u.title}
+              meta={description}
+              trailing={
+                <Button variant="outline" size="sm" asChild>
+                  <Link to={link.to} search={link.search} hash={link.hash}>
+                    Set up
+                  </Link>
+                </Button>
+              }
+            />
+          )
+        })}
+      </SettingsList>
+    </SettingsCard>
   )
 }
