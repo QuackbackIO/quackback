@@ -1862,11 +1862,11 @@ export async function deleteConversationMessage(
       if (deleted.length > 0) {
         const { syncTicketFirstResponseAfterRemoval } =
           await import('@/lib/server/domains/tickets/ticket-first-response')
-        await syncTicketFirstResponseAfterRemoval(message.ticketId, message)
+        await syncTicketFirstResponseAfterRemoval(parent.ticketId, message)
       }
     } catch (err) {
       log.warn(
-        { err, ticket_id: message.ticketId, message_id: messageId },
+        { err, ticket_id: parent.ticketId, message_id: messageId },
         'ticket first response recompute after a delete failed'
       )
     }

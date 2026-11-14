@@ -1,8 +1,10 @@
 /**
  * Recording a rating given in the thread is best-effort: when recordCsat
- * refuses the rating, the visitor's message still lands. The view policy is
- * replaced to deny, so the real recordCsat refuses a send the send policy
- * allows (the two agree in production, so a refusal there is rare).
+ * refuses the rating, the visitor's message still lands. The visibility check
+ * recordCsat reads the conversation through is replaced to deny, so the real
+ * recordCsat refuses a send the send policy allows (the two agree in
+ * production, so a refusal there is rare). The send path does not call that
+ * check, so only the rating is refused.
  *
  * Real DB (rolled back). Realtime, the webhook bridge, notifications and the
  * assistant are spied, so no fire-and-forget write races the fixture's single
@@ -53,14 +55,15 @@ vi.mock('@/lib/server/domains/assistant/assistant.orchestrator', () => ({
   runAssistantTurnForConversation: vi.fn().mockResolvedValue(undefined),
 }))
 const viewPolicy = vi.hoisted(() => ({ deny: false }))
-vi.mock('@/lib/server/policy/conversation', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@/lib/server/policy/conversation')>()
+vi.mock('../conversation-visibility', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../conversation-visibility')>()
+  const { NotFoundError } = await import('@/lib/shared/errors')
   return {
     ...real,
-    canViewConversation: (...args: Parameters<typeof real.canViewConversation>) =>
+    assertConversationVisible: (...args: Parameters<typeof real.assertConversationVisible>) =>
       viewPolicy.deny
-        ? { allowed: false, reason: 'Denied for this test' }
-        : real.canViewConversation(...args),
+        ? Promise.reject(new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found'))
+        : real.assertConversationVisible(...args),
   }
 })
 
