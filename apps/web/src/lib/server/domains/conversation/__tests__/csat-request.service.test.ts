@@ -256,3 +256,62 @@ describe.skipIf(!fixture.available)('a workflow csat block asks once', () => {
     expect(await csatBlockCount(conversationId)).toBe(0)
   })
 })
+
+describe.skipIf(!fixture.available)('a rating ask on a closed conversation', () => {
+  beforeEach(fixture.begin)
+  afterEach(fixture.rollback)
+
+  /** Close as a teammate would, an hour ago; returns the stored resolvedAt. */
+  async function closeConversation(conversationId: ConversationId): Promise<Date | null> {
+    const [row] = await testDb
+      .update(conversations)
+      .set({ status: 'closed', resolvedAt: new Date(Date.now() - 3_600_000) })
+      .where(eq(conversations.id, conversationId))
+      .returning({ resolvedAt: conversations.resolvedAt })
+    return row.resolvedAt
+  }
+
+  async function readStatus(conversationId: ConversationId) {
+    const [row] = await testDb
+      .select({ status: conversations.status, resolvedAt: conversations.resolvedAt })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+    return row
+  }
+
+  it('posts the ask and leaves the conversation closed', async () => {
+    const { conversationId } = await seedConversation()
+    const resolvedAt = await closeConversation(conversationId)
+
+    const result = await askForRating(conversationId)
+
+    expect(result.blockMessageId).toBeDefined()
+    expect(await csatBlockCount(conversationId)).toBe(1)
+    expect(await readStatus(conversationId)).toEqual({ status: 'closed', resolvedAt })
+  })
+
+  it('still reopens on another block, as any assistant reply does', async () => {
+    const { conversationId } = await seedConversation()
+    await closeConversation(conversationId)
+
+    const result = await applyAction(
+      {
+        type: 'send_block',
+        nodeId: 'node_buttons',
+        block: {
+          kind: 'buttons',
+          body: {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Pick one' }] }],
+          },
+          options: [{ key: 'a', label: 'A' }],
+          allowTyping: true,
+        },
+      },
+      { conversationId, actor: serviceActor, runId: 'run_buttons' }
+    )
+
+    expect(result.blockMessageId).toBeDefined()
+    expect((await readStatus(conversationId))?.status).toBe('open')
+  })
+})

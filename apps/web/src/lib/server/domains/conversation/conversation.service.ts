@@ -2178,7 +2178,8 @@ interface AppendAssistantReplyOpts {
 /**
  * Append a reply authored by the assistant service principal — the message-
  * append primitive for Quinn. Like an agent reply it bumps the last-message
- * preview and reopens a closed thread, but it never claims assignment (Quinn
+ * preview and reopens a closed thread (except a rating ask, which leaves it
+ * closed), but it never claims assignment (Quinn
  * fronts, it does not own) and it never marks the agent side read. `waiting`
  * controls the customer wait clock: an answer stops it; a hand-off restarts it
  * so the team sees a thread waiting on a human. Delivered over the normal
@@ -2233,10 +2234,16 @@ export async function appendAssistantReply(
         metadata: opts.metadata ?? null,
       })
       .returning()
-    const nextStatus = applyAgentReopenStatus(
-      existing.status,
-      getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
-    )
+    // A rating ask (a csat block) follows the close it rates: it leaves a
+    // closed conversation closed, keeping when it was resolved. Every other
+    // reply reopens as the channel says.
+    const isRatingAsk = opts.metadata?.block?.kind === 'csat'
+    const nextStatus = isRatingAsk
+      ? existing.status
+      : applyAgentReopenStatus(
+          existing.status,
+          getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
+        )
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -2244,7 +2251,9 @@ export async function appendAssistantReply(
         lastMessagePreview: preview(content, []),
         status: nextStatus,
         waitingSince: opts.waiting ? message.createdAt : null,
-        resolvedAt: resolvedAtForStatus(nextStatus, message.createdAt),
+        resolvedAt: isRatingAsk
+          ? existing.resolvedAt
+          : resolvedAtForStatus(nextStatus, message.createdAt),
         updatedAt: message.createdAt,
       })
       .where(eq(conversations.id, conversationId))
