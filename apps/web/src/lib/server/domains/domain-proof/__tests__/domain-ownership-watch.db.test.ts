@@ -386,7 +386,7 @@ describe.skipIf(!fixture.available)('domain ownership watch (real DB, rolled bac
     expect(await ssoVerified(unanswered.id)).toBe(false)
   })
 
-  it('stops counting a sending row that shares the token once the domain is demoted, and starts its grace', async () => {
+  it('stops counting a sending row that shares the token once the domain is demoted, and starts its own grace from then', async () => {
     const row = await seedDomain('acme.com')
     const [team] = await testDb.insert(teams).values({ name: 'Support' }).returning()
     const [twin] = await testDb
@@ -417,7 +417,9 @@ describe.skipIf(!fixture.available)('domain ownership watch (real DB, rolled bac
       .select()
       .from(emailSendingDomains)
       .where(eq(emailSendingDomains.id, twin.id))
-    expect(after.ownershipMissingSince).toEqual(since)
+    // Its own grace starts at the demotion, so it gets its own warning and period.
+    expect(after.ownershipMissingSince).toEqual(afterGrace(since))
+    expect(after.status).toBe('verified')
   })
 
   it("never touches another workspace's sign-in domains", async () => {

@@ -195,7 +195,9 @@ function logUndecided(row: Domain, undecided: readonly string[]): void {
  * went unanswered is left for a later run to judge
  * ({@link rejudgeLapsedDomains}), never a reason to keep the lapsed proof. A
  * sending row issued this domain's token rests on the same record, so its own
- * grace period is started too, from the same moment, if it had not started.
+ * grace period is started too, if it had not started. It starts now, at the
+ * demotion, so the sending domain gets its own warning and its own period
+ * rather than one that ran out with the domain's.
  */
 async function demote(row: Domain, since: Date, now: Date): Promise<void> {
   const { losing, undecided } = await signInDomainsLosingProof(row)
@@ -223,7 +225,7 @@ async function demote(row: Domain, since: Date, now: Date): Promise<void> {
     await tx
       .update(emailSendingDomains)
       .set({
-        ownershipMissingSince: since,
+        ownershipMissingSince: now,
         ownershipWarningClaimedAt: null,
         ownershipWarningSentAt: null,
       })
