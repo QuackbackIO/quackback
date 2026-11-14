@@ -439,6 +439,7 @@ went stale the moment a queue moved.
 | `spam-retention`                | `0 5 * * *`    | 1           | 3        | 60s   |
 | `sending-domain-recheck`        | `20 6 * * *`   | 1           | 3        | 60s   |
 | `sending-domain-watch`          | `7/10 * * * *` | 1           | 1        | 60s   |
+| `domain-ownership-watch`        | `50 6 * * *`   | 1           | 3        | 60s   |
 | `ses-tenant-reconcile`          | `41 * * * *`   | 1           | 3        | 60s   |
 | `analytics`                     | `0 * * * *`    | 1           | 3        | 60s   |
 | `startup-backfill`              | `15 * * * *`   | 1           | 20       | 60s   |
