@@ -168,4 +168,49 @@ describe('createInboxScopeGate', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(events).toEqual(['inbox_scope_changed'])
   })
+
+  it('never judges by a load that started before the latest scope change', async () => {
+    const loads: Array<ReturnType<typeof deferred<InboxScopeLoad>>> = []
+    const forwarded: string[] = []
+    const gate = createInboxScopeGate({
+      actor,
+      teamIds: new Set(),
+      load: () => {
+        const d = deferred<InboxScopeLoad>()
+        loads.push(d)
+        return d.promise
+      },
+      runReload: (body) => body(),
+      forward: (m) => forwarded.push(m),
+      sendEvent: () => {},
+      close: () => {},
+      startStale: true,
+      reloadTimeoutMs: 20,
+    })
+
+    // A load starts while the teammate is still on team Y, then times out.
+    const first = frame('team_y', 1)
+    gate.onInboxFrame(first.message, first.meta)
+    logged.length = 0
+    await vi.waitFor(() => expect(logged.some((m) => /timed out/.test(m))).toBe(true))
+    // They leave team Y while that load is still out; the reload it starts
+    // waits on the hung load.
+    gate.onScopeChanged()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(loads).toHaveLength(1)
+
+    // The old load answers with the scope from before the change.
+    loads[0].resolve({ permissions: scoped, teamIds: new Set(['team_y']) })
+    await new Promise((r) => setTimeout(r, 0))
+    const after = frame('team_y', 2)
+    gate.onInboxFrame(after.message, after.meta)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(forwarded).toEqual([])
+
+    // A fresh read decides, and it says team Y is gone.
+    await vi.waitFor(() => expect(loads).toHaveLength(2))
+    loads[1].resolve({ permissions: scoped, teamIds: new Set() })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(forwarded).toEqual([])
+  })
 })
