@@ -15,6 +15,7 @@ import {
 } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
+  apiKeys,
   auditLog,
   conversationMessages,
   eq,
@@ -43,6 +44,27 @@ const logged = vi.hoisted(() => ({ info: [] as string[], warn: [] as string[] })
 // A log call as one string: its fields and its message.
 const render = (args: unknown[]) =>
   args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')
+// When set, the first admin is demoted right after the workspace step, so the
+// key is minted for a principal that no longer holds the admin tier.
+const demoteAfterSetup = vi.hoisted(() => ({ on: false }))
+vi.mock('../setup-workspace', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../setup-workspace')>()
+  return {
+    ...real,
+    setupWorkspaceForUser: async (...args: Parameters<typeof real.setupWorkspaceForUser>) => {
+      const result = await real.setupWorkspaceForUser(...args)
+      if (demoteAfterSetup.on) {
+        const { testDb: tdb } = await import('@/lib/server/__tests__/db-test-fixture')
+        await tdb
+          .update(principal)
+          .set({ role: 'member' })
+          .where(eq(principal.userId, args[0].userId))
+      }
+      return result
+    },
+  }
+})
+
 vi.mock('@/lib/server/logger', () => {
   const fake: Record<string, unknown> = {
     info: (...args: unknown[]) => logged.info.push(render(args)),
@@ -104,6 +126,7 @@ describe.skipIf(!fixture.available)('POST /api/v1/setup (real DB, rolled back)',
   beforeEach(async () => {
     await fixture.begin()
     process.env.SETUP_TOKEN = TOKEN
+    demoteAfterSetup.on = false
     logged.info.length = 0
     logged.warn.length = 0
   })
@@ -237,11 +260,24 @@ describe.skipIf(!fixture.available)('POST /api/v1/setup (real DB, rolled back)',
     expect(
       await isAutomatedAuthor(key!.principalId, { type: 'service', principalId: key!.principalId })
     ).toBe(true)
+
+    // The key's creation is audited, with its scopes, as coming from the setup token.
+    const [created] = await auditEvents('apikey.created')
+    expect((created?.metadata as { source: string | null }).source).toBe('setup_token')
+    expect((created?.afterValue as { scopes: unknown }).scopes).toEqual(key?.scopes)
+  })
+
+  it("checks the Owner grant against the admin principal's real role", async () => {
+    demoteAfterSetup.on = true
+    const res = await handleSetupRequest(setupRequest())
+    expect(res.status).toBe(403)
+    expect(await testDb.select().from(apiKeys)).toHaveLength(0)
   })
 
   it('is gone once the first admin exists, and says nothing about why', async () => {
     expect((await handleSetupRequest(setupRequest())).status).toBe(201)
     const rejectedBefore = (await auditEvents('workspace.setup.rejected')).length
+    expect((await handleSetupRequest(setupRequest())).status).toBe(404)
     for (const token of [TOKEN, 'nope-nope-nope-nope-nope-nope-1']) {
       const again = await handleSetupRequest(
         setupRequest({ token, body: { ...BODY, adminEmail: 'other@example.com' } })
@@ -250,6 +286,7 @@ describe.skipIf(!fixture.available)('POST /api/v1/setup (real DB, rolled back)',
     }
     const humans = await testDb.select().from(principal).where(eq(principal.type, 'user'))
     expect(humans.filter((p) => p.role === 'admin')).toHaveLength(1)
+    expect(await testDb.select().from(apiKeys)).toHaveLength(1)
     expect(await auditEvents('workspace.setup.rejected')).toHaveLength(rejectedBefore)
   })
 

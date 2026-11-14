@@ -15,6 +15,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import type { PrincipalId, RoleId, UserId } from '@quackback/ids'
+import type { Role } from '@/lib/shared/roles'
 import { db, eq, principal, roles, session, user } from '@/lib/server/db'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { createApiKey } from '@/lib/server/domains/api-keys/api-key.service'
@@ -196,10 +197,11 @@ export async function runHeadlessSetup(
 
   const admin = await db.query.principal.findFirst({
     where: eq(principal.userId, userId),
-    columns: { id: true },
+    columns: { id: true, role: true },
   })
   if (!admin) throw new Error('Setup finished without an admin principal')
   const principalId = admin.id as PrincipalId
+  const adminRole = admin.role as Role
 
   const [owner] = await db
     .select({ id: roles.id })
@@ -210,7 +212,13 @@ export async function runHeadlessSetup(
   const { apiKey, plainTextKey } = await createApiKey(
     { name: 'Setup key', scopes: API_KEY_SCOPES, kind: 'workspace', roleId: owner.id as RoleId },
     principalId,
-    { role: 'admin', permissions: [...(await permissionsForPrincipal(principalId, 'admin'))] }
+    // The grant ceiling reads the principal as stored, so a setup that somehow
+    // left no admin tier is refused rather than handed an Owner key.
+    {
+      role: adminRole,
+      permissions: [...(await permissionsForPrincipal(principalId, adminRole))],
+    },
+    { source: 'setup_token' }
   )
 
   await recordAuditEvent({
