@@ -698,15 +698,35 @@ export function AgentConversationThread({
 
   // Derived once the ticket's type is known; a plain-object default while it's
   // still loading (never rendered — the isLoading guard below returns first).
+  // A tracker has no requester, so it has no plain reply. A teammate who may
+  // reply to tickets gets Reply all instead: the reply goes to every customer
+  // ticket the tracker tracks. Note stays the default.
+  const isTracker = isTicket && ticket?.type === 'tracker'
+  const trackerReplyAll = isTracker && permissions.has(PERMISSIONS.TICKET_REPLY)
   const capabilities: ThreadCapabilities = isTicket
-    ? ticketCapabilities(ticket?.type ?? 'customer')
+    ? {
+        ...ticketCapabilities(ticket?.type ?? 'customer'),
+        ...(trackerReplyAll ? { reply: true } : {}),
+      }
     : CONVERSATION_CAPABILITIES
+  const replyAllMode = trackerReplyAll && !noteMode
 
   // back_office/tracker tickets are note-only (§2.5) — force the mode once the
   // ticket's type resolves (it may not be known yet on first render).
   useEffect(() => {
     if (!capabilities.reply) setNoteMode(true)
   }, [capabilities.reply])
+  // A tracker opens on Note, also where Reply all is offered.
+  useEffect(() => {
+    if (isTracker) setNoteMode(true)
+  }, [isTracker, ticketId])
+  // How many tickets a Reply all reaches, and how many of them are hidden.
+  const { data: trackerLinks } = useQuery({
+    ...ticketQueries.links(ticketId ?? INACTIVE_TICKET_ID),
+    enabled: trackerReplyAll,
+  })
+  const trackerHiddenCount = trackerLinks?.hiddenCount ?? 0
+  const trackerLinkedCount = (trackerLinks?.linked.length ?? 0) + trackerHiddenCount
 
   const linkPreviewsEnabled = capabilities.linkPreviews && supportInbox
 
@@ -1047,6 +1067,8 @@ export function AgentConversationThread({
               content: vars.content,
               contentJson: vars.contentJson,
               attachments: vars.attachments,
+              // A tracker's only reply is Reply all.
+              ...(isTracker ? { replyAll: true } : {}),
             },
           })
         : sendAgentMessageFn({
@@ -2257,8 +2279,18 @@ export function AgentConversationThread({
                 switcher and force note mode (styled as today's note mode,
                 per §2.5). */}
             {capabilities.reply && (
-              <div className="mb-1.5 flex items-center">
-                <ComposerModeMenu noteMode={noteMode} onModeChange={setComposerMode} />
+              <div className="mb-1.5 flex items-center gap-2">
+                <ComposerModeMenu
+                  noteMode={noteMode}
+                  onModeChange={setComposerMode}
+                  replyLabel={trackerReplyAll ? 'Reply all' : 'Reply'}
+                />
+                {replyAllMode && trackerHiddenCount > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {trackerLinkedCount} linked tickets · includes {trackerHiddenCount} you can't
+                    access
+                  </span>
+                )}
               </div>
             )}
             <input
@@ -2325,15 +2357,18 @@ export function AgentConversationThread({
               <ComposerLinkPreviews drafts={drafts} mode={noteMode ? 'note' : 'reply'} />
             )}
             <div className="flex flex-wrap items-center gap-0.5 pt-1">
-              {/* Attach is available in both reply and note mode, for both kinds. */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-                aria-label="Attach files"
-              >
-                <PaperClipIcon className="h-4 w-4" />
-              </button>
+              {/* Attach is available in reply and note mode, for both kinds.
+                  A tracker's Reply all carries text only. */}
+              {!replyAllMode && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                  aria-label="Attach files"
+                >
+                  <PaperClipIcon className="h-4 w-4" />
+                </button>
+              )}
               {capabilities.emojiPicker && (
                 <EmojiPicker className="size-8" onSelect={selectEmoji} />
               )}
@@ -2668,9 +2703,12 @@ const ThreadOverflowMenu = memo(function ThreadOverflowMenu({
 const ComposerModeMenu = memo(function ComposerModeMenu({
   noteMode,
   onModeChange,
+  replyLabel = 'Reply',
 }: {
   noteMode: boolean
   onModeChange: (mode: string) => void
+  /** The customer-facing mode's name: Reply, or Reply all on a tracker. */
+  replyLabel?: string
 }) {
   return (
     <DropdownMenu>
@@ -2684,13 +2722,13 @@ const ComposerModeMenu = memo(function ComposerModeMenu({
               : 'bg-muted text-foreground hover:bg-muted/80'
           )}
         >
-          {noteMode ? 'Note' : 'Reply'}
+          {noteMode ? 'Note' : replyLabel}
           <ChevronDownIcon className="h-3 w-3" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         <DropdownMenuRadioGroup value={noteMode ? 'note' : 'reply'} onValueChange={onModeChange}>
-          <DropdownMenuRadioItem value="reply">Reply</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="reply">{replyLabel}</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="note">Note</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
