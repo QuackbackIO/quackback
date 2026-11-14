@@ -30,6 +30,17 @@ export interface InboxScopePrev {
   teamId: string | null
 }
 
+/**
+ * What a publisher may pass for an inbox frame: the item's current owner and
+ * team, and, from a write that can take the item out of someone's scope, what
+ * they were before it.
+ */
+export interface InboxItemScope {
+  assigneePrincipalId: string | null
+  teamId: string | null
+  prev?: InboxScopePrev
+}
+
 /** Whether a write said what the item's owner and team were before it. */
 export function hasPrev(s: InboxScopeEnvelope): boolean {
   return 'prevAssigneePrincipalId' in s || 'prevTeamId' in s
