@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
 import type { ConversationId, TicketId } from '@quackback/ids'
-import { removeInboxItemFromCaches } from '../inbox-removal'
+import { removeInboxItemFromCaches, settleOpenItemAfterScopeChange } from '../inbox-removal'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { inboxKeys, ticketKeys } from '@/lib/client/queries/inbox'
 
@@ -45,6 +45,32 @@ describe('removeInboxItemFromCaches', () => {
     expect(
       qc.getQueryData(conversationKeys.agentThread('conversation_1' as ConversationId))
     ).toEqual({ x: 1 })
+  })
+
+  it('after a scope change, drops an open ticket the server now answers Not found for', async () => {
+    const qc = seeded()
+    const gone = Object.assign(new Error('Ticket not found'), { statusCode: 404 })
+    qc.setQueryDefaults(ticketKeys.detail('ticket_1' as TicketId), {
+      queryFn: () => Promise.reject(gone),
+    })
+    await settleOpenItemAfterScopeChange(qc, { kind: 'ticket', id: 'ticket_1' })
+    expect(qc.getQueryData(ticketKeys.detail('ticket_1' as TicketId))).toBeUndefined()
+    expect(qc.getQueryData<{ items: unknown[] }>([...inboxKeys.items(), 'team'])?.items).toEqual([])
+  })
+
+  it('after a scope change, keeps an open ticket the server still returns', async () => {
+    const qc = seeded()
+    qc.setQueryDefaults(ticketKeys.detail('ticket_1' as TicketId), {
+      queryFn: async () => ({ id: 'ticket_1', title: 'fresh' }),
+    })
+    await settleOpenItemAfterScopeChange(qc, { kind: 'ticket', id: 'ticket_1' })
+    expect(qc.getQueryData(ticketKeys.detail('ticket_1' as TicketId))).toEqual({
+      id: 'ticket_1',
+      title: 'fresh',
+    })
+    expect(qc.getQueryData<{ items: unknown[] }>([...inboxKeys.items(), 'team'])?.items).toEqual([
+      ticket('ticket_1'),
+    ])
   })
 
   it('takes a conversation out of the unified and the conversation lists, and drops its thread', () => {

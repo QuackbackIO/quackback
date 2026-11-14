@@ -100,7 +100,10 @@ import {
 } from '@/lib/client/conversation/inbox-scope'
 import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
 import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
-import { removeInboxItemFromCaches } from '@/lib/client/conversation/inbox-removal'
+import {
+  removeInboxItemFromCaches,
+  settleOpenItemAfterScopeChange,
+} from '@/lib/client/conversation/inbox-removal'
 import type { Channel } from '@/lib/shared/channels'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
@@ -698,6 +701,8 @@ function InboxPage() {
       }
       if (evt.kind === 'inbox_scope_changed') {
         refreshInboxAfterReconnect()
+        // The open item may be the one that left; a Not found removes it.
+        if (selectedRef) void settleOpenItemAfterScopeChange(queryClient, selectedRef)
         return
       }
       refreshIfCompanionLost(evt)
