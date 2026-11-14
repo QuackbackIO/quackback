@@ -164,16 +164,11 @@ export const Route = createFileRoute('/api/chat/stream')({
         // every other request path does. Non-dashboard audiences never carry
         // team authority: the set is empty, not resolved, because a teammate's
         // assignments would otherwise ride their widget or portal stream.
-        //
-        // An inbox stream also caches the teammate's team ids for its
-        // per-frame filter; both reads run together.
-        const wantsInboxScope = scope === 'inbox' && isTeamMember(effectiveRole)
-        const [permissions, inboxTeamIds] = await Promise.all([
+        const permissions: ReadonlySet<PermissionKey> =
           me.scope === 'dashboard'
-            ? permissionsForPrincipal(me.principalId, me.role as Role)
-            : Promise.resolve<ReadonlySet<PermissionKey>>(new Set()),
-          wantsInboxScope ? teamIdsForPrincipal(me.principalId) : Promise.resolve(null),
-        ])
+            ? await permissionsForPrincipal(me.principalId, me.role as Role)
+            : new Set()
+        const wantsInboxScope = scope === 'inbox' && isTeamMember(effectiveRole)
         const actor: Actor = {
           principalId: me.principalId,
           role: (effectiveRole as Actor['role']) ?? null,
@@ -379,10 +374,15 @@ export const Route = createFileRoute('/api/chat/stream')({
 
             // The inbox carries every item in the workspace; the gate passes on
             // only what this teammate's scope holds (inbox-scope-gate.ts).
-            const gate: InboxScopeGate | null = inboxTeamIds
+            // It starts stale: a role or team change committed after the
+            // reads above but before the subscribe below sends a signal no one
+            // hears, so the first inbox frame waits for a reload that runs
+            // after the subscribe (and is dropped if that reload fails).
+            const gate: InboxScopeGate | null = wantsInboxScope
               ? createInboxScopeGate({
                   actor,
-                  teamIds: inboxTeamIds,
+                  teamIds: new Set(),
+                  startStale: true,
                   load: () => loadInboxScope(me.principalId),
                   runReload: withLivePool,
                   forward: (message) => deliverParsed(message),
