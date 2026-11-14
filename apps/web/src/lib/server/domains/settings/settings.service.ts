@@ -497,11 +497,12 @@ export async function insertVerifiedDomain(
   providerId?: IdentityProviderId
 ): Promise<VerifiedDomain> {
   log.info({ name, providerId }, 'insert verified domain')
+  let inserted: { row: typeof ssoVerifiedDomain.$inferSelect; changed: boolean }
   try {
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
 
-    const inserted = await db.transaction(async (tx) => {
+    inserted = await db.transaction(async (tx) => {
       const existing = await tx
         .select()
         .from(ssoVerifiedDomain)
@@ -538,18 +539,19 @@ export async function insertVerifiedDomain(
       await bumpAuthConfigVersionInTx(tx)
       return { row, changed: true }
     })
-    // The same domain on Settings > Domains, made in this one step.
-    const { ensureDomain } = await import('@/lib/server/domains/domain-proof/domains.service')
-    await ensureDomain(name)
     if (inserted.changed) {
       resetAuth()
       await invalidateSettingsCache()
     }
-    return rowToVerifiedDomain(inserted.row)
   } catch (error) {
     log.error({ err: error }, 'insert verified domain failed')
     wrapDbError('insert verified domain', error)
   }
+  // The same domain on Settings > Domains, made in this one step. After the
+  // write and the resets, and never a reason to report the write as failed.
+  const { ensureDomainAfterUse } = await import('@/lib/server/domains/domain-proof/ensure-domain')
+  await ensureDomainAfterUse(name)
+  return rowToVerifiedDomain(inserted.row)
 }
 
 /** Remove a verified-domain row by id. No-op if the row doesn't exist. */
