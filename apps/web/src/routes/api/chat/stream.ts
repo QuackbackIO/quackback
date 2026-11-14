@@ -47,6 +47,7 @@ import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspace
 import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { logger } from '@/lib/server/logger'
+import { customerVisibleMessageSql } from '@/lib/server/messages/customer-audience'
 
 const log = logger.child({ component: 'chat-stream' })
 
@@ -390,13 +391,12 @@ export const Route = createFileRoute('/api/chat/stream')({
                       and(
                         eq(conversationMessages.conversationId, backfillConversationId),
                         isNull(conversationMessages.deletedAt),
-                        // Mirror listMessages: internal notes are agent-only.
+                        // Mirror listMessages: internal rows and team-only
+                        // notices are agent-only.
                         // Visitor (non-team) reconnect backfill must exclude
                         // them — publish-time channel separation doesn't cover
                         // this DB read path.
-                        isTeamMember(effectiveRole)
-                          ? undefined
-                          : eq(conversationMessages.isInternal, false),
+                        isTeamMember(effectiveRole) ? undefined : customerVisibleMessageSql(),
                         or(
                           gt(conversationMessages.createdAt, cursor.createdAt),
                           and(

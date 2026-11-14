@@ -45,8 +45,9 @@ export type {
 }
 export { CONVERSATION_END_REASONS }
 export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
-// 'system' = a status event (e.g. assignment) shown to both sides, rendered as
-// a centered notice rather than a message bubble.
+// 'system' = an author-less status event (e.g. conversation ended), rendered as
+// a centered notice rather than a message bubble. Shown to both sides unless
+// the row is internal (assignment, priority, snooze), which is team-only.
 export type MessageSenderType = 'visitor' | 'agent' | 'system'
 /** A human side of a conversation — who acts (types, reads); 'system' is neither. */
 export type ConversationSide = Exclude<MessageSenderType, 'system'>

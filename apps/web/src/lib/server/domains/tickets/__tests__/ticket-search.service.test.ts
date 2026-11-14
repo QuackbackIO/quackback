@@ -34,6 +34,7 @@ import {
   conversations,
   conversationMessages,
   ticketConversations,
+  eq,
   PERMISSIONS,
   type PermissionKey,
 } from '@/lib/server/db'
@@ -238,6 +239,33 @@ describe.skipIf(!fixture.available)('searchTickets (real DB, rolled back)', () =
       await searchTickets(requesterActor(w.me), { query: 'cloakroom', audience: 'requester' })
     ).map((r) => r.ticket.id)
     expect(requesterInternal).not.toContain(w.mineMsg)
+  })
+
+  it('a requester never matches on a legacy public assignment notice', async () => {
+    const w = await seedWorld()
+    await seedLinkedConversation(w)
+    const [{ conversationId }] = await testDb
+      .select({ conversationId: ticketConversations.conversationId })
+      .from(ticketConversations)
+      .where(eq(ticketConversations.ticketId, w.mineMsg))
+    // Written public before assignment notices became team-only; the team
+    // notice carried no structured kind.
+    await testDb.insert(conversationMessages).values({
+      conversationId,
+      principalId: null,
+      senderType: 'system',
+      content: 'Conversation assigned to the Quarterdeck team',
+      isInternal: false,
+    })
+
+    const agent = (await searchTickets(w.agent, { query: 'quarterdeck', audience: 'agent' })).map(
+      (r) => r.ticket.id
+    )
+    expect(agent).toContain(w.mineMsg)
+    const requester = (
+      await searchTickets(requesterActor(w.me), { query: 'quarterdeck', audience: 'requester' })
+    ).map((r) => r.ticket.id)
+    expect(requester).not.toContain(w.mineMsg)
   })
 
   it('snippets come from the linked conversation when only it matches', async () => {
