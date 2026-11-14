@@ -62,6 +62,7 @@ vi.mock('@/lib/server/dns/resolver', () => {
 vi.mock('@/lib/server/kv/pg-kv', () => ({ kvSetNx: async () => true }))
 
 import { OWNERSHIP_VALUE_PREFIX, refreshSendingDomain } from '../sending-identity'
+import { issueOwnershipToken } from '../sending-domain-token'
 import { checkDomainOwnership } from '@/lib/server/domains/domain-proof/domains.service'
 import { checkSsoDomainOwnership } from '@/lib/server/domains/domain-proof/sso-domain-check'
 
@@ -131,6 +132,29 @@ describe.skipIf(!fixture.available)('sending row token on a domain added by name
     expect(tokenOf(a)).toBe(`${OWNERSHIP_VALUE_PREFIX}${TOKEN}`)
     expect(tokenOf(b)).toMatch(FRESH)
     expect(tokenOf(b)).not.toBe(tokenOf(a))
+  })
+
+  it('claims the token when it is issued, so a second row issued before the first is saved gets a fresh one', async () => {
+    await addedDomain('tenant-a.example', TOKEN)
+    const rows = await testDb
+      .insert(emailSendingDomains)
+      .values([
+        { owningTeamId: await seedTeam(), domain: 'tenant-a.example' },
+        { owningTeamId: await seedTeam(), domain: 'tenant-a.example' },
+      ])
+      .returning()
+
+    // Neither row has been checked or saved yet: the claim alone decides.
+    // (The fixture runs on one connection, where an advisory lock is
+    // re-entrant, so the lock itself cannot be raced here; the claim written
+    // before it is released is what a second issue sees.)
+    const a = await issueOwnershipToken(rows[0])
+    const b = await issueOwnershipToken(rows[1])
+    expect(a).toBe(TOKEN)
+    expect(b).toMatch(/^[0-9a-f]{32}$/)
+    expect(b).not.toBe(TOKEN)
+    // Issuing again for the row that holds it keeps it.
+    expect(await issueOwnershipToken(rows[0])).toBe(TOKEN)
   })
 
   it('mints a fresh token when the domain added is another name, even one above it', async () => {
