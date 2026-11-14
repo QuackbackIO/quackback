@@ -381,8 +381,8 @@ export const Route = createFileRoute('/api/chat/stream')({
             // only what this teammate's scope holds (inbox-scope-gate.ts).
             const gate: InboxScopeGate | null = inboxTeamIds
               ? createInboxScopeGate({
-                  principalId: me.principalId,
-                  initial: { permissions, teamIds: inboxTeamIds },
+                  actor,
+                  teamIds: inboxTeamIds,
                   load: () => loadInboxScope(me.principalId),
                   runReload: withLivePool,
                   forward: (message) => deliverParsed(message),

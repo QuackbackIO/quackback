@@ -12,17 +12,18 @@
  * - A frame whose envelope names previous owner and team, for an item the
  *   subscriber held before and does not now, becomes an `inbox_item_removed`
  *   event instead, so the row leaves their list.
- * - The cache is reloaded lazily: a frame that arrives more than `ttlMs` after
+ * - The cache is reloaded lazily: a frame that arrives more than the TTL after
  *   the last load, or after a scope-changed signal, waits for a reload first.
- *   Idle streams run no queries.
- * - While a reload runs, frames queue behind it in arrival order. A failed
- *   reload drops the queued frames (fail closed) and the next frame retries.
+ *   Idle streams run no queries. The TTL is jittered below `ttlMs` per load,
+ *   so streams opened together do not reload in lockstep.
+ * - While a reload runs, frames queue behind it in arrival order. A reload
+ *   that fails, or does not answer within `reloadTimeoutMs`, drops the queued
+ *   frames (fail closed) and the next frame retries.
  * - A reload that finds the principal is no longer a teammate closes the
  *   stream: the inbox gate at connect is otherwise never asked again.
  * - A scope-changed signal also sends one `inbox_scope_changed` event, so the
  *   client refetches lists the new scope changes.
  */
-import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { rowInScope } from '@/lib/server/policy/row-scope'
 import type { Actor } from '@/lib/server/policy/types'
@@ -31,8 +32,14 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'inbox-scope-gate' })
 
-/** How long a cached scope is trusted without a reload. */
+/** The most a cached scope is trusted without a reload. */
 export const INBOX_SCOPE_TTL_MS = 60_000
+
+/** How long a reload may take before the frames behind it are dropped. */
+export const INBOX_SCOPE_RELOAD_TIMEOUT_MS = 10_000
+
+/** The share of the TTL taken off at random per load. */
+const TTL_JITTER = 0.2
 
 /** The only keys the scope rule reads, so the cache holds nothing else. */
 const INBOX_VIEW_KEYS: readonly PermissionKey[] = [
@@ -51,8 +58,10 @@ export interface InboxScopeSnapshot {
 export type InboxScopeLoad = InboxScopeSnapshot | 'not-teammate'
 
 export interface InboxScopeGateOptions {
-  principalId: PrincipalId
-  initial: InboxScopeSnapshot
+  /** The stream's actor, as resolved at connect. Its keys are the initial scope. */
+  actor: Actor
+  /** The teammate's team ids, as read at connect. */
+  teamIds: ReadonlySet<string>
   /** Read the subscriber's scope afresh. May throw. */
   load: () => Promise<InboxScopeLoad>
   /**
@@ -69,7 +78,9 @@ export interface InboxScopeGateOptions {
   /** End the stream. */
   close: () => void
   now?: () => number
+  random?: () => number
   ttlMs?: number
+  reloadTimeoutMs?: number
 }
 
 type Queued = { type: 'frame'; message: string; scope?: InboxScopeEnvelope } | { type: 'changed' }
@@ -89,25 +100,25 @@ export function onlyInboxViewKeys(
 
 export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGate {
   const now = opts.now ?? Date.now
+  const random = opts.random ?? Math.random
   const ttlMs = opts.ttlMs ?? INBOX_SCOPE_TTL_MS
-  let scope: InboxScopeSnapshot = {
-    permissions: onlyInboxViewKeys(opts.initial.permissions),
-    teamIds: opts.initial.teamIds,
-  }
-  let loadedAt = now()
+  const reloadTimeoutMs = opts.reloadTimeoutMs ?? INBOX_SCOPE_RELOAD_TIMEOUT_MS
+  const principalId = opts.actor.principalId
+  // Rebuilt once per successful load, never per frame.
+  const scopedActor = (permissions: ReadonlySet<PermissionKey>): Actor => ({
+    ...opts.actor,
+    permissions: onlyInboxViewKeys(permissions),
+  })
+  let actor = scopedActor(opts.actor.permissions ?? new Set())
+  let teamIds = opts.teamIds
+  const nextExpiry = () => now() + ttlMs * (1 - TTL_JITTER * random())
+  let expiresAt = nextExpiry()
+  // Set by a scope-changed signal or a failed reload; a reload clears it when
+  // it starts, so one that finds it set again when it ends reads again.
   let stale = false
   let reloading = false
-  let reloadAgain = false
   let closed = false
   const queue: Queued[] = []
-
-  const actorFor = (): Actor => ({
-    principalId: opts.principalId,
-    role: 'member',
-    principalType: 'user',
-    segmentIds: new Set(),
-    permissions: scope.permissions,
-  })
 
   const deliver = (item: Queued): void => {
     if (item.type === 'changed') {
@@ -116,16 +127,14 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
     }
     const s = item.scope
     if (!s) {
-      log.warn({ principal_id: opts.principalId }, 'inbox frame without a scope envelope; dropped')
+      log.warn({ principal_id: principalId }, 'inbox frame without a scope envelope; dropped')
       return
     }
-    const actor = actorFor()
-    const current = { assigneePrincipalId: s.assigneePrincipalId, teamId: s.teamId }
-    if (rowInScope(actor, s.kind, current, scope.teamIds)) {
+    if (rowInScope(actor, s.kind, s, teamIds)) {
       opts.forward(item.message)
       return
     }
-    if (s.prev && rowInScope(actor, s.kind, s.prev, scope.teamIds)) {
+    if (s.prev && rowInScope(actor, s.kind, s.prev, teamIds)) {
       opts.sendEvent('inbox_item_removed', {
         kind: 'inbox_item_removed',
         itemKind: s.kind,
@@ -134,22 +143,43 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
     }
   }
 
-  const reload = async (): Promise<void> => {
-    reloading = true
-    reloadAgain = false
+  /** Run one load, or give up after the timeout. Undefined means it failed. */
+  const loadOnce = async (): Promise<InboxScopeLoad | undefined> => {
     let result: InboxScopeLoad | undefined
-    try {
-      await opts.runReload(async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timedOut = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), reloadTimeoutMs)
+    })
+    const run = opts
+      .runReload(async () => {
         result = await opts.load()
       })
-    } catch (err) {
-      log.warn({ err, principal_id: opts.principalId }, 'inbox scope reload failed')
+      .then(() => 'done' as const)
+      .catch((err: unknown) => {
+        log.warn({ err, principal_id: principalId }, 'inbox scope reload failed')
+        return 'done' as const
+      })
+    const outcome = await Promise.race([run, timedOut])
+    clearTimeout(timer)
+    if (outcome === 'timeout') {
+      log.warn(
+        { principal_id: principalId, timeout_ms: reloadTimeoutMs },
+        'inbox scope reload timed out'
+      )
+      return undefined
     }
+    return result
+  }
+
+  const reload = async (): Promise<void> => {
+    reloading = true
+    stale = false
+    const result = await loadOnce()
     if (closed) return
     if (result === 'not-teammate') {
       closed = true
       queue.length = 0
-      log.info({ principal_id: opts.principalId }, 'inbox stream closed: no longer a teammate')
+      log.info({ principal_id: principalId }, 'inbox stream closed: no longer a teammate')
       opts.close()
       return
     }
@@ -160,7 +190,7 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       const dropped = queue.filter((q) => q.type === 'frame').length
       if (dropped > 0) {
         log.warn(
-          { principal_id: opts.principalId, dropped },
+          { principal_id: principalId, dropped },
           'inbox scope unknown after a failed reload; queued frames dropped'
         )
       }
@@ -169,10 +199,10 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       reloading = false
       return
     }
-    scope = { permissions: onlyInboxViewKeys(result.permissions), teamIds: result.teamIds }
-    loadedAt = now()
-    stale = false
-    if (reloadAgain) {
+    actor = scopedActor(result.permissions)
+    teamIds = result.teamIds
+    expiresAt = nextExpiry()
+    if (stale) {
       // A change landed while this reload read: its rows may predate it.
       void reload()
       return
@@ -187,7 +217,7 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       queue.push(item)
       return
     }
-    if (stale || now() - loadedAt > ttlMs) {
+    if (stale || now() > expiresAt) {
       queue.push(item)
       void reload()
       return
@@ -201,7 +231,6 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
     onScopeChanged: () => {
       if (closed) return
       stale = true
-      if (reloading) reloadAgain = true
       accept({ type: 'changed' })
     },
   }
