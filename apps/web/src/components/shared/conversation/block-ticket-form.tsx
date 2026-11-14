@@ -16,7 +16,7 @@
  * `ticket_created` system event (delivered over the ordinary SSE flow) is
  * the durable record in the thread.
  */
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useMutation } from '@tanstack/react-query'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
@@ -36,6 +36,7 @@ export function BlockTicketForm({
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
   const [filed, setFiled] = useState(false)
+  const id = useId()
 
   const create = useMutation({
     mutationFn: (vars: { title: string; description?: string; email?: string }) =>
@@ -68,11 +69,12 @@ export function BlockTicketForm({
   return (
     <div className="mt-1.5 w-full max-w-sm space-y-2 rounded-xl border border-border bg-background p-3 shadow-xs">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
+        <label htmlFor={`${id}-subject`} className="text-xs font-medium text-muted-foreground">
           <FormattedMessage id="widget.tickets.new.subject" defaultMessage="Subject" />
           <span className="ms-0.5 text-destructive">*</span>
         </label>
         <Input
+          id={`${id}-subject`}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={300}
@@ -83,10 +85,11 @@ export function BlockTicketForm({
         />
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
+        <label htmlFor={`${id}-details`} className="text-xs font-medium text-muted-foreground">
           <FormattedMessage id="widget.tickets.new.details" defaultMessage="Details" />
         </label>
         <textarea
+          id={`${id}-details`}
           value={details}
           onChange={(e) => setDetails(e.target.value)}
           rows={3}
@@ -98,10 +101,11 @@ export function BlockTicketForm({
         />
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
+        <label htmlFor={`${id}-email`} className="text-xs font-medium text-muted-foreground">
           <FormattedMessage id="widget.tickets.new.email" defaultMessage="Email" />
         </label>
         <Input
+          id={`${id}-email`}
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}

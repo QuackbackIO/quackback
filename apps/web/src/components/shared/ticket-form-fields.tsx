@@ -7,7 +7,7 @@
  * the three never drift.
  */
 import { useIntl } from 'react-intl'
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import type { TicketFormField } from '@/lib/shared/tickets'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -53,9 +53,17 @@ function suggestionMarker(
   return null
 }
 
-function FieldLabel({ field, marker }: { field: TicketFormField; marker?: ReactNode }) {
+function FieldLabel({
+  field,
+  htmlFor,
+  marker,
+}: {
+  field: TicketFormField
+  htmlFor: string
+  marker?: ReactNode
+}) {
   return (
-    <label className="text-xs font-medium text-muted-foreground">
+    <label htmlFor={htmlFor} className="text-xs font-medium text-muted-foreground">
       {field.label}
       {field.required && <span className="ms-0.5 text-destructive">*</span>}
       {marker}
@@ -72,22 +80,26 @@ export function TicketFormFields({
   suggestionRun,
 }: TicketFormFieldsProps) {
   const intl = useIntl()
+  const idPrefix = useId()
   if (fields.length === 0) return null
   return (
     <>
       {fields.map((field) => {
         const marker = suggestionMarker(field, suggestedKeys, suggestionRun)
+        const id = `${idPrefix}-${field.key}`
         return (
           <div key={field.key} className="space-y-1.5">
-            {field.type !== 'checkbox' && <FieldLabel field={field} marker={marker} />}
+            {field.type !== 'checkbox' && <FieldLabel field={field} htmlFor={id} marker={marker} />}
             {field.type === 'text' && (
               <Input
+                id={id}
                 value={(values[field.key] as string) ?? ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
               />
             )}
             {field.type === 'long_text' && (
               <Textarea
+                id={id}
                 value={(values[field.key] as string) ?? ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 rows={3}
@@ -95,6 +107,7 @@ export function TicketFormFields({
             )}
             {field.type === 'number' && (
               <Input
+                id={id}
                 type="number"
                 value={(values[field.key] as string) ?? ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
@@ -102,6 +115,7 @@ export function TicketFormFields({
             )}
             {field.type === 'date' && (
               <Input
+                id={id}
                 type="date"
                 value={(values[field.key] as string) ?? ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
@@ -112,7 +126,7 @@ export function TicketFormFields({
                 value={(values[field.key] as string) ?? ''}
                 onValueChange={(v) => onChange(field.key, v)}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger id={id} className="w-full">
                   <SelectValue
                     placeholder={intl.formatMessage({
                       id: 'tickets.fields.selectPlaceholder',
