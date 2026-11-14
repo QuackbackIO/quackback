@@ -33,7 +33,7 @@ import {
   OWNERSHIP_VALUE_PREFIX,
 } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
-import { getProvenZones, provenZoneCovering } from './proven-zones'
+import { getProvenZones, provenZoneCovering, zonesBesidesDomain } from './proven-zones'
 
 export type { Domain }
 
@@ -108,7 +108,8 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
   if (!row) throw new NotFoundError('DOMAIN_NOT_FOUND', 'That domain has not been added.')
   await assertCheckRateLimit(row.id)
 
-  const proven = provenZoneCovering(row.name, await getProvenZones())
+  // A verified row is re-checked against its own record, never proven by itself.
+  const proven = provenZoneCovering(row.name, zonesBesidesDomain(row.name, await getProvenZones()))
   if (proven) return { ok: true, via: proven.source }
 
   // A person is waiting on this, so the lookup gets a second try.
