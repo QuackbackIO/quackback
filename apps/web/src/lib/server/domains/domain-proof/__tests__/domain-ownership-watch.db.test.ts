@@ -77,7 +77,7 @@ vi.mock('@/lib/server/domains/settings/settings.helpers', async (importOriginal)
   invalidateSettingsCache: async () => {},
 }))
 
-import { watchDomainOwnership } from '../domain-ownership-watch'
+import { DOMAIN_WATCH_BUDGET_MS, watchDomainOwnership } from '../domain-ownership-watch'
 import { ssoDomainProvenBy } from '../proven-zones'
 import {
   OWNERSHIP_GRACE_SLACK_MS,
@@ -346,6 +346,44 @@ describe.skipIf(!fixture.available)('domain ownership watch (real DB, rolled bac
     await watchDomainOwnership(new Date(afterGrace(since).getTime() + 120_000))
     expect(await ssoVerified(unanswered.id)).toBe(false)
     expect(notices.demoted.at(-1)).toEqual({ name: 'acme.com', signIn: ['acme.com'] })
+  })
+
+  it('stops judging a lapsed domain once every sign-in domain under it was decided', async () => {
+    const row = await seedDomain('acme.com')
+    const sso = await seedSso('eu.acme.com')
+    zone.published.set('_quackback-verify.eu.acme.com', [
+      `qb-domain-verify=${sso.verificationToken}`,
+    ])
+    const since = await lapse(row)
+    expect((await read(row)).status).toBe('pending')
+
+    zone.asked.length = 0
+    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 60_000))
+    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 120_000))
+
+    expect(zone.asked).toEqual([])
+    expect(await ssoVerified(sso.id)).toBe(true)
+  })
+
+  it('judges lapsed domains again only inside the run’s time budget', async () => {
+    const row = await seedDomain('acme.com')
+    const unanswered = await seedSso('acme.com')
+    zone.failing.add('_quackback-verify.acme.com')
+    const since = await lapse(row)
+    expect(await ssoVerified(unanswered.id)).toBe(true)
+    zone.failing.clear()
+
+    // Every reading of the clock is a whole budget later: the run is out of time.
+    let ticks = 0
+    const late = () => (ticks += DOMAIN_WATCH_BUDGET_MS)
+    zone.asked.length = 0
+    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 60_000), { clock: late })
+    expect(zone.asked).toEqual([])
+    expect(await ssoVerified(unanswered.id)).toBe(true)
+
+    // The domain left over is judged on the next run that has time.
+    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 120_000))
+    expect(await ssoVerified(unanswered.id)).toBe(false)
   })
 
   it('stops counting a sending row that shares the token once the domain is demoted, and starts its grace', async () => {
