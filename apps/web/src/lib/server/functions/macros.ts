@@ -122,6 +122,11 @@ export const applyMacroFn = createServerFn({ method: 'POST' })
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
     const actor = await policyActorFromAuth(ctx)
     const conversationId = data.conversationId as ConversationId
+    // A macro checks scope once, here, before anything is read: its own
+    // actions then run as one system effect (see applyMacroActions).
+    const { assertConversationVisible } =
+      await import('@/lib/server/domains/conversation/conversation.service')
+    await assertConversationVisible(conversationId, actor)
     // Independent reads: fetch the macro and build the render context together.
     const [macro, context] = await Promise.all([
       getMacro(data.macroId as MacroId),

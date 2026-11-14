@@ -181,6 +181,8 @@ const ctx: WorkflowContext = {
   workflowId: 'workflow_abc',
   subjectPrincipalId: 'principal_x' as PrincipalId,
 }
+/** A workflow run never skips the writers' per-item check (only a macro does). */
+const WORKFLOW_WRITE = { systemCascade: undefined }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -282,12 +284,24 @@ describe('applyAction', () => {
     expect(
       await applyAction({ type: 'assign_agent', principalId: 'principal_x' as PrincipalId }, ctx)
     ).toMatchObject({ label: 'assigned' })
-    expect(assignConversation).toHaveBeenCalledWith(conversationId, 'principal_x', actor, undefined)
+    expect(assignConversation).toHaveBeenCalledWith(
+      conversationId,
+      'principal_x',
+      actor,
+      undefined,
+      WORKFLOW_WRITE
+    )
 
     expect(
       await applyAction({ type: 'assign_team', teamId: 'team_1' as TeamId }, ctx)
     ).toMatchObject({ label: 'assigned to team' })
-    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor, undefined)
+    expect(assignTeam).toHaveBeenCalledWith(
+      conversationId,
+      'team_1',
+      actor,
+      undefined,
+      WORKFLOW_WRITE
+    )
 
     expect(
       await applyAction({ type: 'add_tag', tagId: 'ctag_1' as ConversationTagId }, ctx)
@@ -302,7 +316,12 @@ describe('applyAction', () => {
     expect(await applyAction({ type: 'set_priority', priority: 'high' }, ctx)).toMatchObject({
       label: 'priority high',
     })
-    expect(setConversationPriority).toHaveBeenCalledWith(conversationId, 'high', actor)
+    expect(setConversationPriority).toHaveBeenCalledWith(
+      conversationId,
+      'high',
+      actor,
+      WORKFLOW_WRITE
+    )
 
     expect(await applyAction({ type: 'close' }, ctx)).toMatchObject({ label: 'closed' })
     // The 5th argument is the close lifecycle: an explicit close, not an auto-close.
@@ -311,11 +330,19 @@ describe('applyAction', () => {
       'closed',
       actor,
       undefined,
-      'closed'
+      'closed',
+      WORKFLOW_WRITE
     )
 
     expect(await applyAction({ type: 'reopen' }, ctx)).toMatchObject({ label: 'reopened' })
-    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
+    expect(setConversationStatus).toHaveBeenCalledWith(
+      conversationId,
+      'open',
+      actor,
+      undefined,
+      undefined,
+      WORKFLOW_WRITE
+    )
   })
 
   it('threads ctx.workflowName as system-notice attribution into the notice-posting service calls', async () => {
@@ -326,21 +353,30 @@ describe('applyAction', () => {
       'closed',
       actor,
       { workflowName: 'Auto-close after CSAT' },
-      'closed'
+      'closed',
+      WORKFLOW_WRITE
     )
 
     await applyAction(
       { type: 'assign_agent', principalId: 'principal_x' as PrincipalId },
       attributedCtx
     )
-    expect(assignConversation).toHaveBeenCalledWith(conversationId, 'principal_x', actor, {
-      workflowName: 'Auto-close after CSAT',
-    })
+    expect(assignConversation).toHaveBeenCalledWith(
+      conversationId,
+      'principal_x',
+      actor,
+      { workflowName: 'Auto-close after CSAT' },
+      WORKFLOW_WRITE
+    )
 
     await applyAction({ type: 'assign_team', teamId: 'team_1' as TeamId }, attributedCtx)
-    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor, {
-      workflowName: 'Auto-close after CSAT',
-    })
+    expect(assignTeam).toHaveBeenCalledWith(
+      conversationId,
+      'team_1',
+      actor,
+      { workflowName: 'Auto-close after CSAT' },
+      WORKFLOW_WRITE
+    )
   })
 
   describe('reopen (SF4)', () => {
@@ -348,7 +384,14 @@ describe('applyAction', () => {
       setConversationStatus.mockResolvedValueOnce({ id: conversationId, status: 'open' })
       const result = await applyAction({ type: 'reopen' }, ctx)
       expect(result).toMatchObject({ label: 'reopened' })
-      expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
+      expect(setConversationStatus).toHaveBeenCalledWith(
+        conversationId,
+        'open',
+        actor,
+        undefined,
+        undefined,
+        WORKFLOW_WRITE
+      )
     })
 
     it('delegates unconditionally (no pre-check) when the conversation is already open, exactly like `close` does for an already-closed one', async () => {
@@ -362,7 +405,14 @@ describe('applyAction', () => {
       const result = await applyAction({ type: 'reopen' }, ctx)
       expect(result).toMatchObject({ label: 'reopened' })
       expect(setConversationStatus).toHaveBeenCalledTimes(1)
-      expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
+      expect(setConversationStatus).toHaveBeenCalledWith(
+        conversationId,
+        'open',
+        actor,
+        undefined,
+        undefined,
+        WORKFLOW_WRITE
+      )
     })
   })
 
@@ -371,10 +421,15 @@ describe('applyAction', () => {
     expect(await applyAction({ type: 'snooze', untilIso }, ctx)).toMatchObject({
       label: 'snoozed',
     })
-    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, new Date(untilIso), actor)
+    expect(snoozeConversation).toHaveBeenCalledWith(
+      conversationId,
+      new Date(untilIso),
+      actor,
+      WORKFLOW_WRITE
+    )
 
     await applyAction({ type: 'snooze', untilIso: null }, ctx)
-    expect(snoozeConversation).toHaveBeenLastCalledWith(conversationId, null, actor)
+    expect(snoozeConversation).toHaveBeenLastCalledWith(conversationId, null, actor, WORKFLOW_WRITE)
   })
 
   it('resolves a relative snooze to now + seconds, at execution time', async () => {
@@ -391,7 +446,7 @@ describe('applyAction', () => {
     // stored instant — so it falls within [before, after] + 3600s.
     expect(wakeAt.getTime()).toBeGreaterThanOrEqual(before + 3600 * 1000)
     expect(wakeAt.getTime()).toBeLessThanOrEqual(after + 3600 * 1000)
-    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, wakeAt, actor)
+    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, wakeAt, actor, WORKFLOW_WRITE)
   })
 
   it('resolves a zero-second relative snooze to (effectively) now, not null', async () => {

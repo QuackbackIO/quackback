@@ -129,8 +129,12 @@ async function seedPrincipal(): Promise<PrincipalId> {
 
 /** An agent carrying both the ticket-note and conversation-reply permissions —
  *  the carried note is written through the conversation domain's own note path,
- *  which re-authorizes under conversation.reply. */
-function agentActor(principalId: PrincipalId): Actor {
+ *  which re-authorizes under conversation.reply and checks that the author can
+ *  see the conversation (here every one, through conversation.view_all). */
+function agentActor(
+  principalId: PrincipalId,
+  conversationView: PermissionKey = PERMISSIONS.CONVERSATION_VIEW_ALL
+): Actor {
   return {
     ...ANONYMOUS_ACTOR,
     principalId,
@@ -140,6 +144,8 @@ function agentActor(principalId: PrincipalId): Actor {
       PERMISSIONS.TICKET_NOTE,
       PERMISSIONS.TICKET_REPLY,
       PERMISSIONS.CONVERSATION_REPLY,
+      PERMISSIONS.CONVERSATION_VIEW,
+      conversationView,
     ]),
   }
 }
@@ -321,6 +327,24 @@ describe.skipIf(!fixture.available)('ticket note cross-post (real DB, rolled bac
     // conversation, so the two threads cannot bounce a note between them.
     expect(await ticketNotesOf(ticketId)).toHaveLength(2)
     expect(await conversationMessagesOf(conversationId)).toHaveLength(1)
+  })
+
+  it('carries no copy onto a conversation the author cannot see, and keeps the note', async () => {
+    const statusId = await seedStatus()
+    const agentP = await seedPrincipal()
+    const ticketId = await seedTicket(statusId, 'back_office')
+    // No assignee and no team: outside a team-scoped author's view.
+    const conversationId = await seedConversation()
+    await link(ticketId, conversationId, 'back_office')
+
+    await addTicketNote(agentActor(agentP, PERMISSIONS.CONVERSATION_VIEW), {
+      ticketId,
+      content: 'Rerun the billing job.',
+      shareWithConversation: true,
+    })
+
+    expect(await ticketNotesOf(ticketId)).toHaveLength(1)
+    expect(await conversationMessagesOf(conversationId)).toHaveLength(0)
   })
 
   it('never carries a customer ticket note across its pair link', async () => {

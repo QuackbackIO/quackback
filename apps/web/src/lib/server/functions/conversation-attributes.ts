@@ -140,6 +140,11 @@ export const setConversationAttributeValueFn = createServerFn({ method: 'POST' }
         throw new ValidationError('VALIDATION_ERROR', 'Invalid conversation id')
       }
       assertPermission(ctx, PERMISSIONS.CONVERSATION_SET_ATTRIBUTES)
+      // A conversation outside the caller's view is NotFound, never written.
+      const actor = await policyActorFromAuth(ctx)
+      const { assertConversationVisible } =
+        await import('@/lib/server/domains/conversation/conversation.service')
+      await assertConversationVisible(data.conversationId as ConversationId, actor)
       target = { conversationId: data.conversationId as ConversationId }
     } else {
       if (!data.ticketId || !isValidTypeId(data.ticketId, 'ticket')) {

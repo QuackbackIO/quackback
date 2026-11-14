@@ -117,13 +117,18 @@ export const fetchInboxCountsFn = createServerFn({ method: 'GET' }).handler(asyn
  * The linked customer ticket for one conversation, or null (unified inbox
  * §M5): the unified detail panel's Ticket card/Links section and the thread
  * header's ticket-status pill read this for a plain conversation item.
- * Gated on conversation.view — the caller already has the conversation open.
+ * Gated on conversation.view and on the caller seeing the conversation.
  */
 export const getConversationTicketLinkFn = createServerFn({ method: 'GET' })
   .validator(z.object({ conversationId: z.string() }))
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(ctx)
+    // The conversation first: a hidden one is NotFound, so the answer never
+    // tells whether it has a ticket.
+    const { assertConversationVisible } =
+      await import('@/lib/server/domains/conversation/conversation.service')
+    await assertConversationVisible(data.conversationId as ConversationId, actor)
     const { getConversationTicketLink } = await import('@/lib/server/domains/inbox/inbox.query')
     return getConversationTicketLink(data.conversationId as ConversationId, actor)
   })

@@ -135,6 +135,9 @@ vi.mock('@/lib/server/db', () => {
       update: vi.fn((table: { __name?: string }) => chain(table?.__name ?? 'unknown')),
     },
     eq: vi.fn(),
+    and: vi.fn(),
+    or: vi.fn(),
+    sql: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
     conversationMessages: { __name: 'conversation_messages', id: 'id' },
   }

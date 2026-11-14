@@ -70,9 +70,18 @@ describe('canViewConversation', () => {
     expect(canViewConversation(anonVisitorActor, openConv).allowed).toBe(true)
   })
 
-  it('allows team members (admin + member) to view any conversation', () => {
-    expect(canViewConversation(adminActor, openConv).allowed).toBe(true)
-    expect(canViewConversation(memberActor, openConv).allowed).toBe(true)
+  it('allows a workspace-wide service principal', () => {
+    expect(canViewConversation(serviceActor, openConv).allowed).toBe(true)
+  })
+
+  it('denies a teammate: their access is the SQL scope check, not this helper', () => {
+    expect(canViewConversation(adminActor, openConv).allowed).toBe(false)
+    expect(canViewConversation(memberActor, openConv).allowed).toBe(false)
+  })
+
+  it('denies a personal key, which follows its creator through the SQL scope check', () => {
+    const personalKey: Actor = { ...serviceActor, scopePrincipalId: OTHER }
+    expect(canViewConversation(personalKey, openConv).allowed).toBe(false)
   })
 
   it('denies a different visitor', () => {

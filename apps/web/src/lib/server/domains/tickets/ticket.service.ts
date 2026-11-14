@@ -29,7 +29,6 @@ import {
   ticketStatuses,
   conversationMessages,
   ticketConversations,
-  conversations,
   principal,
   teams,
   type Ticket,
@@ -366,11 +365,20 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
 export async function createTicket(input: CreateTicketInput, actor: Actor): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_CREATE, 'create a ticket')
 
+  // A source conversation the actor cannot see is NotFound, like a missing
+  // one, before anything about it is read and before any ticket exists.
+  let source: { assignedAgentPrincipalId: PrincipalId | null } | null = null
+  if (input.sourceConversationId) {
+    const { assertConversationVisible } =
+      await import('@/lib/server/domains/conversation/conversation.service')
+    source = await assertConversationVisible(input.sourceConversationId, actor)
+  }
+
   // Assignee resolution: explicit > source conversation's assignee > creating
-  // agent. The two defaults are best-effort — a missing conversation or a
-  // creator whose principal doesn't resolve to a team member simply leaves
-  // the ticket unassigned (a default must never fail the create); an EXPLICIT
-  // assignee, by contrast, is validated hard, mirroring assignTicket.
+  // agent. The creator default is best-effort — a creator whose principal
+  // doesn't resolve to a team member simply leaves the ticket unassigned (a
+  // default must never fail the create); an EXPLICIT assignee, by contrast, is
+  // validated hard, mirroring assignTicket.
   let assigneePrincipalId = input.assigneePrincipalId ?? null
   if (assigneePrincipalId) {
     const [assignee] = await db
@@ -381,13 +389,8 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
     if (!assignee || !isTeamMember(assignee.role)) {
       throw new ValidationError('INVALID_ASSIGNEE', 'Can only assign to a team member')
     }
-  } else if (input.sourceConversationId) {
-    const [conversation] = await db
-      .select({ assigned: conversations.assignedAgentPrincipalId })
-      .from(conversations)
-      .where(eq(conversations.id, input.sourceConversationId))
-      .limit(1)
-    assigneePrincipalId = conversation?.assigned ?? null
+  } else if (source) {
+    assigneePrincipalId = source.assignedAgentPrincipalId ?? null
   }
   // A personal API key assigns to its creator, so the ticket stays inside the
   // scope the key reads with; the key itself stays the author for attribution.

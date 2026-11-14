@@ -9,15 +9,10 @@ export type MessageParent =
   { kind: 'ticket'; ticketId: TicketId } | { kind: 'conversation'; conversationId: ConversationId }
 
 /**
- * Resolve `message`'s parent. For a ticket-parented message, authorizes the
- * actor can see that ticket (§2.5) via `assertTicketVisible` — throwing
- * NotFound (never Forbidden) on an invisible parent, so a team member
- * without visibility on THIS ticket can't tell it exists. A
- * conversation-parented message gets no equivalent check here: a
- * pre-existing gap (callers today only re-check `canActAsAgent` plus the
- * flat `conversation.note` permission at the server-fn layer, or their own
- * conversation-level authz) that predates this helper — narrowing it further
- * is out of scope for this extraction.
+ * Resolve `message`'s parent and check that the actor can see it: the ticket
+ * through `assertTicketVisible`, the conversation through
+ * `assertConversationVisible`. A parent the actor cannot see throws NotFound
+ * (never Forbidden), so a teammate outside its scope can't tell it exists.
  */
 export async function resolveMessageParent(
   message: ConversationMessage,
@@ -30,5 +25,8 @@ export async function resolveMessageParent(
     return { kind: 'ticket', ticketId: message.ticketId }
   }
   // A message has exactly one parent, so conversationId is guaranteed here.
-  return { kind: 'conversation', conversationId: message.conversationId as ConversationId }
+  const conversationId = message.conversationId as ConversationId
+  const { assertConversationVisible } = await import('./conversation.service')
+  await assertConversationVisible(conversationId, actor)
+  return { kind: 'conversation', conversationId }
 }

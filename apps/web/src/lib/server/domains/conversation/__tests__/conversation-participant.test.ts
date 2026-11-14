@@ -83,9 +83,20 @@ vi.mock('@/lib/server/domains/principals/principal.factory', () => ({
 
 // The thread-notice seam (emitSystemMessage lives on the conversation write
 // service); the participant service must record each change through it.
-vi.mock('../conversation.service', () => ({
-  emitSystemMessage: hoisted.emitSystemMessage,
-}))
+// The visibility check is the conversation lookup here: it answers the next
+// queued row, or NotFound when there is none. Real scope is covered by
+// conversation-visibility-writes.db.test.ts.
+vi.mock('../conversation.service', async () => {
+  const { NotFoundError } = await import('@/lib/shared/errors')
+  return {
+    emitSystemMessage: hoisted.emitSystemMessage,
+    assertConversationVisible: vi.fn(async () => {
+      const [row] = (hoisted.selectQueue.shift() ?? []) as unknown[]
+      if (!row) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+      return row
+    }),
+  }
+})
 
 import {
   addConversationParticipantByEmail,
@@ -229,9 +240,20 @@ describe('addConversationParticipantByEmail', () => {
 })
 
 describe('removeConversationParticipant', () => {
+  it('throws NotFound and removes nothing when the conversation is not visible', async () => {
+    hoisted.selectQueue.length = 0
+    hoisted.selectQueue.push([]) // the visibility check misses
+    await expect(
+      removeConversationParticipant(CONVERSATION as never, 'principal_p1' as never, ACTOR)
+    ).rejects.toThrow(/not found/i)
+    expect(hoisted.deletedFrom).toEqual([])
+    expect(hoisted.emitSystemMessage).not.toHaveBeenCalled()
+  })
+
   it('deletes the join row and posts an internal thread notice', async () => {
-    hoisted.selectQueue.length = 0 // remove does not re-check the conversation
-    // Participant lookup (for the notice label), then the delete returning a row.
+    // The default conversation lookup (the visibility check) stays queued
+    // first; then the participant lookup (for the notice label), then the
+    // delete returning a row.
     hoisted.selectQueue.push([
       {
         displayName: 'Pat Doe',
@@ -259,7 +281,6 @@ describe('removeConversationParticipant', () => {
   })
 
   it('removing a never-added participant is a clean no-op — no error, no notice', async () => {
-    hoisted.selectQueue.length = 0
     hoisted.selectQueue.push([]) // no such participant
     hoisted.writeQueue.push([]) // delete matched nothing
 
@@ -275,7 +296,6 @@ describe('removeConversationParticipant', () => {
 
   it('a removed participant receives no further replies (fan-out reads the live join table)', async () => {
     // After the delete, the recipients read finds no rows — nothing to email.
-    hoisted.selectQueue.length = 0
     hoisted.selectQueue.push([]) // label lookup: row already gone mid-flow is fine
     hoisted.writeQueue.push([{ principalId: 'principal_p1' }])
     await removeConversationParticipant(CONVERSATION as never, 'principal_p1' as never, ACTOR)
