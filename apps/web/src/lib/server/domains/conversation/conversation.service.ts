@@ -475,7 +475,8 @@ export async function sendVisitorMessage(
   publishConversationMessage(
     txResult.conversation.id,
     { visitor: visitorMessage, agent: agentMessage },
-    { conversationUpdated: created }
+    { conversationUpdated: created },
+    conversationScopeOf(txResult.conversation)
   )
 
   // A rating given in the thread is recorded now, whether or not a workflow
@@ -690,7 +691,8 @@ export async function startAgentConversation(
   publishConversationMessage(
     txResult.conversation.id,
     { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
-    { conversationUpdated: true }
+    { conversationUpdated: true },
+    conversationScopeOf(txResult.conversation)
   )
 
   // Always email the first message — fire-and-forget; a delivery failure never
@@ -842,7 +844,8 @@ export async function sendAgentMessage(
   publishConversationMessage(
     txResult.conversation.id,
     { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
-    { conversationUpdated: true }
+    { conversationUpdated: true },
+    conversationScopeOf(txResult.conversation)
   )
 
   // P2-D.1: surface translatedFrom on the DTO returned to the sending agent,
@@ -2063,12 +2066,11 @@ export async function markConversationRead(
     .update(conversations)
     .set(side === 'agent' ? { agentLastReadAt: now } : { visitorLastReadAt: now })
     .where(eq(conversations.id, conversation.id))
-  publishConversationEvent(conversationId, {
-    kind: 'read',
+  publishConversationEvent(
     conversationId,
-    side,
-    at: now.toISOString(),
-  })
+    { kind: 'read', conversationId, side, at: now.toISOString() },
+    conversationScopeOf(conversation)
+  )
 }
 
 /** The watermark write + agent-side publish both unread entry points share. */
@@ -2081,12 +2083,15 @@ async function applyAgentUnreadWatermark(
     .update(conversations)
     .set({ agentLastReadAt: watermark })
     .where(eq(conversations.id, conversation.id))
-  publishAgentConversationEvent({
-    kind: 'read',
-    conversationId: conversation.id,
-    side: 'agent',
-    at: (watermark ?? new Date(0)).toISOString(),
-  })
+  publishAgentConversationEvent(
+    {
+      kind: 'read',
+      conversationId: conversation.id,
+      side: 'agent',
+      at: (watermark ?? new Date(0)).toISOString(),
+    },
+    conversationScopeOf(conversation)
+  )
 }
 
 /**
@@ -2314,7 +2319,8 @@ export async function appendAssistantReply(
       visitor: toMessageDTO(txResult.message, authored.publicAuthor, author.principalId),
       agent: messageDTO,
     },
-    { conversationUpdated: true }
+    { conversationUpdated: true },
+    conversationScopeOf(txResult.conversation)
   )
   // isFirstMessage only matters for a VISITOR message — this is Quinn's own
   // reply, so false.

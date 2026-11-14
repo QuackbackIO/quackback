@@ -46,6 +46,7 @@ import {
 } from '@/lib/server/db'
 import type { TicketId, ConversationMessageId } from '@quackback/ids'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
+import { ticketScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import { unreadWatermarkFromAnchor } from '@/lib/server/domains/conversation/conversation.lifecycle'
 import { assertTicketVisible } from './ticket.service'
 import { resolvePairConversationId } from './pair-thread.service'
@@ -227,10 +228,9 @@ export async function markTicketUnreadFromMessage(
 
   const watermark = unreadWatermarkFromAnchor(ticket.assigneeLastReadAt, message.createdAt)
   await db.update(tickets).set({ assigneeLastReadAt: watermark }).where(eq(tickets.id, ticketId))
-  publishTicketEvent(ticketId, {
-    kind: 'ticket_read',
+  publishTicketEvent(
     ticketId,
-    side: 'agent',
-    at: (watermark ?? new Date(0)).toISOString(),
-  })
+    { kind: 'ticket_read', ticketId, side: 'agent', at: (watermark ?? new Date(0)).toISOString() },
+    ticketScopeOf(ticket)
+  )
 }
