@@ -215,7 +215,11 @@ describe('assertConversationVisible (real DB, rolled back)', () => {
   it('opens exactly what the list filter admits for every teammate audience', async () => {
     const world = await seedWorld()
     const audiences: Actor[] = [
-      buildActor({ principalId: createId('principal') as PrincipalId, principalType: 'service' }),
+      buildActor({
+        principalId: createId('principal') as PrincipalId,
+        principalType: 'service',
+        permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+      }),
       buildActor({
         principalId: createId('principal') as PrincipalId,
         permissions: new Set([PERMISSIONS.CONVERSATION_VIEW_ALL]),
@@ -239,6 +243,16 @@ describe('assertConversationVisible (real DB, rolled back)', () => {
     for (const actor of audiences) {
       expect(await openableLabels(actor, world)).toEqual(await visibleLabels(actor, world))
     }
+  })
+
+  it('a workspace-wide service principal without conversation.view opens nothing', async () => {
+    const world = await seedWorld()
+    const assignOnly = buildActor({
+      principalId: createId('principal') as PrincipalId,
+      principalType: 'service',
+      permissions: new Set([PERMISSIONS.CONVERSATION_ASSIGN]),
+    })
+    expect(await openableLabels(assignOnly, world)).toEqual(new Set())
   })
 
   it("gives a scoped teammate NotFound for another team's conversation", async () => {

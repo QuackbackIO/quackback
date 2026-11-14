@@ -215,11 +215,14 @@ export async function sweepOrphanedWaitingRuns(now: Date): Promise<number> {
 }
 
 /** The bounded authority this sweep's own close acts with — just enough to
- *  pass setConversationStatus's canActAsAgent gate (CONVERSATION_REPLY) and
- *  perform the status change itself. Deliberately narrower than the run
- *  engine's own workflowActor (workflow.engine.ts): this pass only ever
- *  closes a conversation, never anything else. */
-const SWEEP_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
+ *  see the conversation (CONVERSATION_VIEW, which the writer's visibility
+ *  check asks of a service principal), pass setConversationStatus's
+ *  canActAsAgent gate (CONVERSATION_REPLY) and perform the status change
+ *  itself. Deliberately narrower than the run engine's own workflowActor
+ *  (workflow.engine.ts): this pass only ever closes a conversation, never
+ *  anything else. */
+export const SWEEP_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
+  PERMISSIONS.CONVERSATION_VIEW,
   PERMISSIONS.CONVERSATION_REPLY,
   PERMISSIONS.CONVERSATION_SET_STATUS,
 ])

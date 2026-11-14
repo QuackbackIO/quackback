@@ -4,7 +4,7 @@ import type { Conversation, ConversationMessage } from '@/lib/server/db'
 import type { ConversationId, TicketId } from '@quackback/ids'
 import { NotFoundError, isNotFoundError } from '@/lib/shared/errors'
 import type { Actor } from '@/lib/server/policy/types'
-import { assertConversationVisible } from './conversation-visibility'
+import { assertConversationVisible, loadConversationOr404 } from './conversation-visibility'
 
 export type MessageParent =
   | { kind: 'ticket'; ticketId: TicketId }
@@ -13,8 +13,11 @@ export type MessageParent =
 /**
  * Resolve `message`'s parent and check that the actor can see it: the ticket
  * through `assertTicketVisible`, the conversation through
- * `assertConversationVisible`. A parent the actor cannot see throws NotFound
- * (never Forbidden), so a teammate outside its scope can't tell it exists.
+ * `assertConversationVisible`. A conversation the actor cannot see is still
+ * admitted when it is the pair of a customer ticket they can see: the ticket
+ * thread shows that conversation's messages, and its actions must work there
+ * too. A parent the actor cannot see throws NotFound (never Forbidden), so a
+ * teammate outside its scope can't tell it exists.
  */
 export async function resolveMessageParent(
   message: ConversationMessage,
@@ -28,8 +31,23 @@ export async function resolveMessageParent(
   }
   // A message has exactly one parent, so conversationId is guaranteed here.
   const conversationId = message.conversationId as ConversationId
-  const conversation = await assertConversationVisible(conversationId, actor)
-  return { kind: 'conversation', conversationId, conversation }
+  try {
+    const conversation = await assertConversationVisible(conversationId, actor)
+    return { kind: 'conversation', conversationId, conversation }
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err
+    const { resolvePairTicketIdForConversation } =
+      await import('@/lib/server/domains/tickets/pair-thread.service')
+    const pairTicketId = await resolvePairTicketIdForConversation(conversationId)
+    if (!pairTicketId) throw err
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(pairTicketId, actor)
+    return {
+      kind: 'conversation',
+      conversationId,
+      conversation: await loadConversationOr404(conversationId),
+    }
+  }
 }
 
 /**

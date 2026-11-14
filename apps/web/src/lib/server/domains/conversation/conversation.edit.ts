@@ -144,9 +144,13 @@ export async function editConversationMessage(
     .from(conversationMessages)
     .where(eq(conversationMessages.id, messageId))
     .limit(1)
-  if (!message || message.deletedAt) {
+  if (!message || message.deletedAt || (!message.conversationId && !message.ticketId)) {
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
   }
+  // A parent the actor cannot see hides its messages too, before any other
+  // refusal could tell the message exists.
+  await assertMessageParentVisible(message, actor)
+
   if (message.metadata?.block) {
     throw new ForbiddenError('FORBIDDEN', 'This message cannot be edited')
   }
@@ -157,12 +161,6 @@ export async function editConversationMessage(
 
   const viewerId = actor.principalId
   if (!viewerId) throw new ForbiddenError('FORBIDDEN', 'A session is required to edit a message')
-
-  if (!message.conversationId && !message.ticketId) {
-    throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-  }
-  // A parent the actor cannot see hides its messages too.
-  await assertMessageParentVisible(message, actor)
 
   const decision = canEditMessage(actor, {
     senderType: message.senderType,

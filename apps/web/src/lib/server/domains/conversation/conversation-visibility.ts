@@ -13,7 +13,20 @@ import { and, db, eq, inArray, or, sql, conversations, type Conversation } from 
 import { isValidTypeId, type ConversationId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { conversationFilter } from '@/lib/server/policy/conversations'
-import type { Actor, SystemCascadeOptions } from '@/lib/server/policy/types'
+import { isUnscopedService, type Actor, type SystemCascadeOptions } from '@/lib/server/policy/types'
+import { can } from '@/lib/server/policy/authorize'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+
+/**
+ * Who besides the owning visitor may see a conversation: whoever
+ * `conversationFilter` admits. A workspace-wide service principal also needs
+ * the base `conversation.view` key, which `conversationFilter` does not ask of
+ * it, so a key that may only assign, say, still cannot read a conversation.
+ */
+function teamScope(actor: Actor) {
+  if (isUnscopedService(actor) && !can(actor, PERMISSIONS.CONVERSATION_VIEW)) return sql`false`
+  return conversationFilter(actor)
+}
 
 /** The row by id with no visibility check, for system callers only (the guard
  *  test names each one). */
@@ -40,9 +53,7 @@ export async function assertConversationVisible(
   const [row] = await db
     .select()
     .from(conversations)
-    .where(
-      and(eq(conversations.id, conversationId), or(ownConversation, conversationFilter(actor)))
-    )
+    .where(and(eq(conversations.id, conversationId), or(ownConversation, teamScope(actor))))
     .limit(1)
   if (!row) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
   return row
@@ -64,7 +75,7 @@ export async function visibleConversationIds(
   const rows = await db
     .select({ id: conversations.id })
     .from(conversations)
-    .where(and(inArray(conversations.id, valid), or(ownConversation, conversationFilter(actor))))
+    .where(and(inArray(conversations.id, valid), or(ownConversation, teamScope(actor))))
   return new Set(rows.map((r) => r.id as ConversationId))
 }
 
