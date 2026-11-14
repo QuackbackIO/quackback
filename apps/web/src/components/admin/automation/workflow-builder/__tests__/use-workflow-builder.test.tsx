@@ -21,7 +21,7 @@ import { WorkflowEntitiesProvider } from '../entities'
 // useWorkflowBuilder pulls entity labels from WorkflowEntitiesProvider, which
 // otherwise fires real queries — keep those trivial, same as step-list.test.tsx.
 vi.mock('@/lib/client/hooks/use-team-members', () => ({
-  useTeamMembers: () => ({ data: [] }),
+  useAdminTeamMembers: () => ({ data: [] }),
 }))
 vi.mock('@/components/admin/conversation/inbox-nav-sidebar', () => ({
   useInboxTeams: () => ({ data: [] }),

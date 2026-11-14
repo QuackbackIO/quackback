@@ -373,7 +373,8 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   const siblingsQuery = useQuery({
     queryKey: ['admin', 'owner-workspaces'],
     queryFn: () => listOwnerWorkspacesFn(),
-    enabled: Boolean(billingEnabled),
+    // The list needs settings.manage; anyone else would only be refused.
+    enabled: Boolean(billingEnabled) && permissions.has(PERMISSIONS.SETTINGS_MANAGE),
   })
   const siblings = siblingsQuery.data ?? []
 

@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 afterEach(cleanup)
 
 const hoisted = vi.hoisted(() => ({
+  permissions: ['company.view'] as string[],
   getCompanyForPrincipalFn: vi.fn(),
   qualifyCompanyFn: vi.fn(),
 }))
@@ -16,6 +17,10 @@ vi.mock('@/lib/server/functions/companies', () => ({
 }))
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a href="/">{children}</a>,
+  useRouteContext: (opts?: { select?: (context: unknown) => unknown }) => {
+    const context = { permissions: hoisted.permissions }
+    return opts?.select ? opts.select(context) : context
+  },
 }))
 
 import { CompanyCard } from '../company-card'
@@ -31,6 +36,7 @@ function renderCard() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  hoisted.permissions = ['company.view']
   hoisted.getCompanyForPrincipalFn.mockResolvedValue(null)
 })
 
@@ -46,5 +52,15 @@ describe('<CompanyCard>', () => {
     expect(screen.getByPlaceholderText('Company name')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Size (e.g. 11-50)')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save company' })).toBeDisabled()
+  })
+
+  it('stays hidden and asks nothing for a viewer without company.view', async () => {
+    hoisted.permissions = ['conversation.view', 'conversation.reply']
+    const { container } = renderCard()
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(hoisted.getCompanyForPrincipalFn).not.toHaveBeenCalled()
+    expect(container).toBeEmptyDOMElement()
   })
 })

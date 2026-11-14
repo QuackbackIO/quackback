@@ -14,6 +14,9 @@ import { WorkflowEntitiesProvider } from '../../entities'
 import { BranchEditor } from '../branch-editor'
 import { createStep, newTree, type TreeStep } from '../../../workflow-graph'
 
+// The viewer may read every list these controls load; the permission gates
+// themselves are pinned in components/admin/__tests__/permission-gated-reads.test.tsx.
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 // Base UI's DropdownMenu needs pointer-capture APIs happy-dom doesn't
 // implement (same class of issue noted in csat-editor.test.tsx) —
 // ConditionEditor renders one for its field picker, unused by these tests.

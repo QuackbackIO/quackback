@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { qualifyCompanyFn } from '@/lib/server/functions/companies'
 import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
 import { toastError } from '@/lib/client/error-notice'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 /**
  * Company context for the conversation detail panel: the visitor's company with
@@ -27,10 +29,14 @@ export const CompanyCard = memo(function CompanyCard({
 }) {
   const [editing, setEditing] = useState(false)
   const queryClient = useQueryClient()
+  // A viewer without company.view gets no card: the read would be refused.
+  const canView = usePermission(PERMISSIONS.COMPANY_VIEW)
   const { data: company, isPending } = useQuery({
     ...conversationPanelQueries.company(principalId),
-    enabled: enabled && !!principalId,
+    enabled: canView && enabled && !!principalId,
   })
+
+  if (!canView) return null
 
   if (isPending) return null
 

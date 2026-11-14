@@ -48,6 +48,8 @@ vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({ mutate: vi.fn() }),
   useQuery: ({ queryKey, enabled }: { queryKey?: unknown[]; enabled?: boolean }) => {
     if (Array.isArray(queryKey) && queryKey.includes('owner-workspaces')) {
+      ownerWorkspacesQueryEnabled.current = enabled !== false
+      if (enabled === false) return { data: undefined }
       return { data: mockBillingEnabled.current ? mockSiblings.current : undefined }
     }
     if (Array.isArray(queryKey) && queryKey[0] === 'admin' && queryKey[1] === 'onboarding') {
@@ -79,7 +81,9 @@ const {
   moderationQueryEnabled,
   mockLaunchStatus,
   launchQueryEnabled,
+  ownerWorkspacesQueryEnabled,
 } = vi.hoisted(() => ({
+  ownerWorkspacesQueryEnabled: { current: false },
   mockLaunchStatus: { current: undefined as unknown },
   launchQueryEnabled: { current: false },
   mockPending: { current: 0 },
@@ -140,7 +144,21 @@ describe('AdminSidebar: workspace switcher', () => {
   afterEach(() => {
     mockSiblings.current = []
     mockBillingEnabled.current = false
+    ownerWorkspacesQueryEnabled.current = false
     cleanup()
+  })
+
+  it('is absent, and not asked for, for a teammate who cannot manage settings', () => {
+    // A custom inbox-only role: the server would refuse the workspace list.
+    mockBillingEnabled.current = true
+    mockSiblings.current = [
+      { instanceId: 'inst_south', displayName: 'South', url: 'https://south.example.com' },
+    ]
+    renderSidebar('member', {
+      permissions: [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+    })
+    expect(ownerWorkspacesQueryEnabled.current).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Switch workspace' })).toBeNull()
   })
 
   it('is absent when cloud is off', () => {
