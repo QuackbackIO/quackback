@@ -21,8 +21,10 @@ vi.mock('@/lib/server/domains/conversation/sync-conversation-mentions', () => ({
 }))
 
 const isAnyAgentOnlineSpy = vi.fn().mockResolvedValue(false)
+const onlineAgentIds = vi.fn().mockResolvedValue([])
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: () => isAnyAgentOnlineSpy(),
+  listOnlineAgentIds: () => onlineAgentIds(),
 }))
 
 import { notificationHook } from '../handlers/notification'
@@ -35,6 +37,7 @@ beforeEach(() => {
   markNotifiedSpy.mockClear()
   isAnyAgentOnlineSpy.mockClear()
   isAnyAgentOnlineSpy.mockResolvedValue(false)
+  onlineAgentIds.mockReset().mockResolvedValue([])
 })
 
 describe('notificationHook — post.mentioned', () => {
@@ -922,8 +925,9 @@ describe('notificationHook — message.created', () => {
     ])
   })
 
-  it('gates out (success:true, no batch) a non-first message while an agent is online', async () => {
+  it('gates out (success:true, no batch) a non-first message while a recipient is online', async () => {
     isAnyAgentOnlineSpy.mockResolvedValue(true)
+    onlineAgentIds.mockResolvedValue(['principal_member'])
 
     const result = await notificationHook.run(makeEvent(false), target, {
       ...config,
@@ -932,6 +936,18 @@ describe('notificationHook — message.created', () => {
     expect(result).toEqual({ success: true })
     expect(result.shouldRetry).toBeUndefined()
     expect(batchSpy).not.toHaveBeenCalled()
+  })
+
+  it('bells the team for a non-first message when the only agent online is not a recipient', async () => {
+    isAnyAgentOnlineSpy.mockResolvedValue(true)
+    onlineAgentIds.mockResolvedValue(['principal_elsewhere'])
+
+    const result = await notificationHook.run(makeEvent(false), target, {
+      ...config,
+      isFirstMessage: false,
+    })
+    expect(result.success).toBe(true)
+    expect(batchSpy).toHaveBeenCalledTimes(1)
   })
 
   it('bells the team for a non-first message when no agent is online', async () => {

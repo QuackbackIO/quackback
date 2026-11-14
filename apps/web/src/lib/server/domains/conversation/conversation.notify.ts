@@ -48,7 +48,11 @@ import type { ConversationId, ConversationMessageId, PrincipalId } from '@quackb
 import type { JSONContent } from '@tiptap/core'
 import { generateContentHTML } from '@/lib/shared/content-html'
 import { withEmailProxyHint } from '@/lib/server/content/email-image-proxy'
-import { isAnyAgentOnline, isPrincipalOnline } from '@/lib/server/realtime/presence'
+import {
+  isAnyAgentOnline,
+  isPrincipalOnline,
+  listOnlineAgentIds,
+} from '@/lib/server/realtime/presence'
 import { buildHookContext } from '@/lib/server/events/hook-context'
 import { truncate } from '@/lib/shared/utils/string'
 import { resolveReplyRecipient } from './conversation.recipient'
@@ -244,6 +248,16 @@ async function resolveVisitorConversationLink(
 }
 
 /**
+ * Whether any of `principalIds` has a live inbox stream. A presence outage
+ * lists nobody, so the alert goes out: a possibly-redundant email beats a
+ * message nobody sees.
+ */
+async function anyOnlineAmong(principalIds: readonly PrincipalId[]): Promise<boolean> {
+  const online = new Set(await listOnlineAgentIds())
+  return principalIds.some((id) => online.has(id))
+}
+
+/**
  * Email the team of a new visitor message when no agent is online to see it
  * live. The in-app team bell for the same event moved to the
  * `message.created` event/hook pipeline (WO-3 slice 5, notificationHook in
@@ -263,19 +277,18 @@ export async function notifyVisitorMessage(opts: {
     // A test thread alerts only the teammate who owns its test customer.
     const testOwner = await testOwnerOf(opts.conversation.visitorPrincipalId)
 
-    const agentsOnline = await isAnyAgentOnline()
-    // Avoid email spam: only email the team on the first message of a
-    // conversation, or when nobody is around to see it live. This gate is
-    // redundant with the `!agentsOnline` check below for every case except
-    // the fast escape it buys (skip the team query entirely) — kept exactly
-    // as it was before the bell moved out, to not perturb email behavior.
+    // Avoid email spam: email only when nobody who can see the conversation
+    // is around to see it live. Nobody online at all is the fast case; when
+    // someone is, the check below asks whether any of them is a recipient,
+    // because an agent who cannot see the conversation must not silence the
+    // teammates who can.
     //
-    // Deliberate small skew: presence is now checked at TWO different
-    // moments — here, at request time, for the email; and again inside the
-    // notification hook, at worker time, for the bell (its own anti-spam
-    // gate: `!cfg.isFirstMessage && isAnyAgentOnline()`). Never try to unify
-    // them — the bell's check intentionally runs later, off the request path.
-    if (!opts.isFirstMessage && agentsOnline) return
+    // Deliberate small skew: presence is checked at TWO different moments —
+    // here, at request time, for the email; and again inside the notification
+    // hook, at worker time, for the bell (its own anti-spam gate, over the
+    // same in-scope recipients). Never try to unify them — the bell's check
+    // intentionally runs later, off the request path.
+    const anyAgentOnline = await isAnyAgentOnline()
 
     const teammates = await db
       .select({
@@ -307,57 +320,56 @@ export async function notifyVisitorMessage(opts: {
     const team = teammates.filter((t) => inScope.has(t.principalId))
 
     if (team.length === 0) return
+    if (anyAgentOnline && (await anyOnlineAmong(team.map((t) => t.principalId)))) return
 
     const body = previewOf(opts.content)
 
-    // Email the team only when no agent is online to handle it live.
-    if (!agentsOnline) {
-      const ctx = await buildHookContext()
-      if (!ctx) return
-      const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/admin/inbox?i=${opts.conversation.id}`
-      const { sendConversationMessageEmail } = await import('@quackback/email')
-      const { teamThreadRootMessageId, mintTeamOutboundMessageId } =
-        await import('@/lib/server/domains/conversation/conversation.email-channel')
-      const teamRoot = teamThreadRootMessageId(opts.conversation.id)
-      // Contact class: the only link is an /admin/inbox URL, which carries no
-      // capability — the session does. So a teammate reachable only via their
-      // contact address is correctly included, which the old truthiness filter
-      // on the account address would have dropped.
-      // Both address fields came back with the team query, so the recipient is
-      // decided from rows already in hand rather than by a second round trip.
-      const { contactRecipientFrom, mailContact } = await import('@/lib/server/email/recipient')
-      const resolvedBody = await resolvedMessageBody(
-        opts.content,
-        opts.contentJson,
-        opts.attachments,
-        { trustedSender: await isVerifiedVisitorSender(opts.conversation) }
-      )
-      await Promise.allSettled(
-        team
-          .flatMap((t) => {
-            const to = contactRecipientFrom({ accountEmail: t.email, contactEmail: t.contactEmail })
-            return to ? [{ ...t, to }] : []
+    // Email the team: no teammate who can see it is online to handle it live.
+    const ctx = await buildHookContext()
+    if (!ctx) return
+    const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/admin/inbox?i=${opts.conversation.id}`
+    const { sendConversationMessageEmail } = await import('@quackback/email')
+    const { teamThreadRootMessageId, mintTeamOutboundMessageId } =
+      await import('@/lib/server/domains/conversation/conversation.email-channel')
+    const teamRoot = teamThreadRootMessageId(opts.conversation.id)
+    // Contact class: the only link is an /admin/inbox URL, which carries no
+    // capability — the session does. So a teammate reachable only via their
+    // contact address is correctly included, which the old truthiness filter
+    // on the account address would have dropped.
+    // Both address fields came back with the team query, so the recipient is
+    // decided from rows already in hand rather than by a second round trip.
+    const { contactRecipientFrom, mailContact } = await import('@/lib/server/email/recipient')
+    const resolvedBody = await resolvedMessageBody(
+      opts.content,
+      opts.contentJson,
+      opts.attachments,
+      { trustedSender: await isVerifiedVisitorSender(opts.conversation) }
+    )
+    await Promise.allSettled(
+      team
+        .flatMap((t) => {
+          const to = contactRecipientFrom({ accountEmail: t.email, contactEmail: t.contactEmail })
+          return to ? [{ ...t, to }] : []
+        })
+        .map((t) =>
+          mailContact(sendConversationMessageEmail, t.to, {
+            direction: 'visitor_message',
+            senderName: opts.authorName,
+            messagePreview: body,
+            bodyHtml: resolvedBody.bodyHtml,
+            attachments: resolvedBody.attachments,
+            ctaUrl,
+            workspaceName: ctx.workspaceName,
+            logoUrl: ctx.logoUrl ?? undefined,
+            isFirstMessage: opts.isFirstMessage,
+            conversationSubject: opts.conversation.subject,
+            messageId: mintTeamOutboundMessageId(opts.conversation.id) ?? undefined,
+            inReplyTo: teamRoot ?? undefined,
+            references: teamRoot ? [teamRoot] : undefined,
+            conversationId: opts.conversation.id,
           })
-          .map((t) =>
-            mailContact(sendConversationMessageEmail, t.to, {
-              direction: 'visitor_message',
-              senderName: opts.authorName,
-              messagePreview: body,
-              bodyHtml: resolvedBody.bodyHtml,
-              attachments: resolvedBody.attachments,
-              ctaUrl,
-              workspaceName: ctx.workspaceName,
-              logoUrl: ctx.logoUrl ?? undefined,
-              isFirstMessage: opts.isFirstMessage,
-              conversationSubject: opts.conversation.subject,
-              messageId: mintTeamOutboundMessageId(opts.conversation.id) ?? undefined,
-              inReplyTo: teamRoot ?? undefined,
-              references: teamRoot ? [teamRoot] : undefined,
-              conversationId: opts.conversation.id,
-            })
-          )
-      )
-    }
+        )
+    )
   } catch (err) {
     log.warn({ err }, 'notify visitor message failed')
   }
