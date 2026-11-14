@@ -10,12 +10,13 @@
  * are stubbed.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
-import type { TeamId, TicketId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, TeamId, TicketId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { conversations, ticketSubscriptions, eq } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   SCOPED_KEYS,
+  seedConversation,
   seedPerson,
   seedTeam,
   seedTicket,
@@ -34,8 +35,17 @@ vi.mock('@/lib/server/domains/settings/settings.tickets', () => ({
 }))
 
 import type { EventData } from '../types'
+import type { HookContext } from '../hook-context'
 import type { HookTarget } from '../hook-types'
-import { getTicketNoteAddedTargets, getTicketRepliedTargets } from '../targets'
+import {
+  getAssistantHandedOffTargets,
+  getConversationAssignedTargets,
+  getSlaEmailTargets,
+  getTicketAssignedEmailTargets,
+  getTicketAssignedTargets,
+  getTicketNoteAddedTargets,
+  getTicketRepliedTargets,
+} from '../targets'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -50,6 +60,12 @@ beforeEach(async () => {
 afterEach(fixture.rollback)
 afterAll(fixture.close)
 
+const context = {
+  portalBaseUrl: 'https://p',
+  workspaceName: 'W',
+  logoUrl: null,
+} as unknown as HookContext
+
 interface World {
   billing: TeamId
   logistics: TeamId
@@ -61,6 +77,8 @@ interface World {
   elsewhere: SeededPerson
   /** Scoped, on no team: sees only what is assigned to them. */
   solo: SeededPerson
+  /** On Billing, but a custom role with no inbox keys: sees nothing. */
+  blind: SeededPerson
   /** Role user: a removed teammate, still on Billing and on old rows. */
   former: SeededPerson
   /** Not a teammate, yet holding view_all through a leftover assignment. */
@@ -76,6 +94,7 @@ async function seedWorld(): Promise<World> {
   const onTeam = await seedPerson('on-team', 'member', { keys: SCOPED_KEYS })
   const elsewhere = await seedPerson('elsewhere', 'member', { keys: SCOPED_KEYS })
   const solo = await seedPerson('solo', 'member', { keys: SCOPED_KEYS })
+  const blind = await seedPerson('blind', 'member', { keys: [] })
   const former = await seedPerson('former', 'user')
   const service = await seedPerson('service', 'member', {
     type: 'service',
@@ -83,15 +102,58 @@ async function seedWorld(): Promise<World> {
   })
   const actor = await seedPerson('actor', 'admin')
   const requester = await seedPerson('requester', 'user')
-  const billing = await seedTeam('Billing', [onTeam.id, former.id])
+  const billing = await seedTeam('Billing', [onTeam.id, blind.id, former.id])
   const logistics = await seedTeam('Logistics', [elsewhere.id])
-  return { billing, logistics, manager, onTeam, elsewhere, solo, former, service, actor, requester }
+  return {
+    billing,
+    logistics,
+    manager,
+    onTeam,
+    elsewhere,
+    solo,
+    blind,
+    former,
+    service,
+    actor,
+    requester,
+  }
 }
 
 const recipientsOf = (target: HookTarget | null) =>
   [...((target?.target as { principalIds: string[] } | undefined)?.principalIds ?? [])].sort()
 
+const emailsOf = (targets: HookTarget[]) =>
+  targets.map((t) => (t.target as { email: string }).email).sort()
+
 const sorted = (...ids: string[]) => [...ids].sort()
+
+/** Only the world's people: other committed rows in the database never count. */
+const within = (w: World, ids: string[]) => {
+  const mine = new Set<string>(
+    [
+      w.manager,
+      w.onTeam,
+      w.elsewhere,
+      w.solo,
+      w.blind,
+      w.former,
+      w.service,
+      w.actor,
+      w.requester,
+    ].map((p) => p.id)
+  )
+  return ids.filter((id) => mine.has(id)).sort()
+}
+
+async function moveConversation(
+  id: ConversationId,
+  to: { assignee: PrincipalId | null; team: TeamId | null }
+) {
+  await testDb
+    .update(conversations)
+    .set({ assignedAgentPrincipalId: to.assignee, assignedTeamId: to.team })
+    .where(eq(conversations.id, id))
+}
 
 function ticketRef(id: TicketId) {
   return { id, number: 1, type: 'customer', priority: 'none', assignedTeamId: null }
@@ -163,5 +225,178 @@ describe('ticket watchers hear only about tickets in their scope', () => {
       data: { ticket: ticketRef(id), content: 'Internal', title: 'Cannot log in', authorName: 'S' },
     } as unknown as EventData)
     expect(recipientsOf(target)).toEqual(sorted(w.manager.id, w.elsewhere.id))
+  })
+})
+
+// ============================================================================
+// Assignment bells and emails
+// ============================================================================
+
+function conversationAssigned(
+  w: World,
+  conversationId: ConversationId,
+  to: { assignee: PrincipalId | null; team: TeamId | null }
+): EventData {
+  return {
+    id: 'evt-ca',
+    type: 'conversation.assigned',
+    timestamp: '2026-01-01T00:00:00Z',
+    actor: { type: 'user', principalId: w.actor.id },
+    data: {
+      conversation: { id: conversationId },
+      assignedAgentPrincipalId: to.assignee,
+      previousAgentPrincipalId: null,
+      assignedTeamId: to.team,
+      previousTeamId: null,
+    },
+  } as unknown as EventData
+}
+
+function ticketAssigned(
+  w: World,
+  ticketId: TicketId,
+  to: { assignee: PrincipalId | null; team: TeamId | null }
+): EventData {
+  return {
+    id: 'evt-ta',
+    type: 'ticket.assigned',
+    timestamp: '2026-01-01T00:00:00Z',
+    actor: { type: 'user', principalId: w.actor.id },
+    data: {
+      ticket: ticketRef(ticketId),
+      assignedPrincipalId: to.assignee,
+      previousPrincipalId: null,
+      assignedTeamId: to.team,
+      previousTeamId: null,
+    },
+  } as unknown as EventData
+}
+
+describe('conversation assigned bell', () => {
+  it('reaches the scoped assignee and the team members whose scope holds it', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.solo.id, team: w.billing }
+    const { conversation } = await seedConversation(to)
+    const target = await getConversationAssignedTargets(
+      conversationAssigned(w, conversation.id as ConversationId, to)
+    )
+    expect(recipientsOf(target)).toEqual(sorted(w.solo.id, w.onTeam.id))
+  })
+
+  it('never bells a removed teammate who is still the direct assignee', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.former.id, team: null }
+    const { conversation } = await seedConversation(to)
+    const target = await getConversationAssignedTargets(
+      conversationAssigned(w, conversation.id as ConversationId, to)
+    )
+    expect(recipientsOf(target)).toEqual([])
+  })
+
+  it('reads where the conversation is now, not where the event said it went', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.solo.id, team: null }
+    const { conversation } = await seedConversation(to)
+    await moveConversation(conversation.id as ConversationId, { assignee: null, team: w.logistics })
+    const target = await getConversationAssignedTargets(
+      conversationAssigned(w, conversation.id as ConversationId, to)
+    )
+    expect(recipientsOf(target)).toEqual([])
+  })
+})
+
+describe('ticket assigned bell and email', () => {
+  it('bell: the scoped assignee and the in-scope members of the new team', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.solo.id, team: w.billing }
+    const ticket = await seedTicket({ requester: w.requester.id, ...to })
+    const target = await getTicketAssignedTargets(ticketAssigned(w, ticket.id as TicketId, to))
+    expect(recipientsOf(target)).toEqual(sorted(w.solo.id, w.onTeam.id))
+  })
+
+  it('bell: never a removed teammate who is still the direct assignee', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.former.id, team: null }
+    const ticket = await seedTicket({ requester: w.requester.id, ...to })
+    const target = await getTicketAssignedTargets(ticketAssigned(w, ticket.id as TicketId, to))
+    expect(recipientsOf(target)).toEqual([])
+  })
+
+  it('email: the same people as the bell', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.former.id, team: w.billing }
+    const ticket = await seedTicket({ requester: w.requester.id, ...to })
+    const targets = await getTicketAssignedEmailTargets(
+      ticketAssigned(w, ticket.id as TicketId, to),
+      context
+    )
+    expect(emailsOf(targets)).toEqual([w.onTeam.email])
+  })
+})
+
+describe('assistant hand-off bell', () => {
+  function handedOff(conversationId: ConversationId, actor: PrincipalId): EventData {
+    return {
+      id: 'evt-h',
+      type: 'assistant.handed_off',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'service', principalId: actor },
+      data: { conversationId, reason: 'asked_for_human' },
+    } as unknown as EventData
+  }
+
+  it('with a team: the members whose scope holds it', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    const target = await getAssistantHandedOffTargets(
+      handedOff(conversation.id as ConversationId, w.service.id)
+    )
+    expect(recipientsOf(target)).toEqual([w.onTeam.id])
+  })
+
+  it('without a team: only the teammates who see every conversation', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({})
+    const target = await getAssistantHandedOffTargets(
+      handedOff(conversation.id as ConversationId, w.service.id)
+    )
+    expect(within(w, recipientsOf(target))).toEqual(sorted(w.manager.id, w.actor.id))
+  })
+})
+
+// ============================================================================
+// SLA emails
+// ============================================================================
+
+describe('SLA email', () => {
+  function sla(conversationId: ConversationId): EventData {
+    return {
+      id: 'evt-sla',
+      type: 'sla.breached',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'service' },
+      data: { conversationId, clock: 'first_response', dueAt: '2026-01-01T00:00:00Z' },
+    } as unknown as EventData
+  }
+
+  it('mails a scoped direct assignee', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.solo.id })
+    const targets = await getSlaEmailTargets(sla(conversation.id as ConversationId), context)
+    expect(emailsOf(targets)).toEqual([w.solo.email])
+  })
+
+  it('never mails a removed teammate who is still the direct assignee', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.former.id })
+    const targets = await getSlaEmailTargets(sla(conversation.id as ConversationId), context)
+    expect(emailsOf(targets)).toEqual([])
+  })
+
+  it('mails the team members whose scope holds it', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    const targets = await getSlaEmailTargets(sla(conversation.id as ConversationId), context)
+    expect(emailsOf(targets)).toEqual([w.onTeam.email])
   })
 })
