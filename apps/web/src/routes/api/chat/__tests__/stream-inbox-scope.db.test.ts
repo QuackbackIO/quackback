@@ -149,7 +149,7 @@ vi.mock('@/lib/server/domains/principals/principal-display', async (importOrigin
   }
 })
 // The scope reload's team read, real unless a case makes it fail.
-const teamRead = vi.hoisted(() => ({ failNext: 0 }))
+const teamRead = vi.hoisted(() => ({ failNext: 0, failed: 0 }))
 vi.mock('@/lib/server/domains/teams', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/server/domains/teams')>()
   return {
@@ -159,6 +159,7 @@ vi.mock('@/lib/server/domains/teams', async (importOriginal) => {
         teamRead.failNext -= 1
         // Slow enough that frames published meanwhile queue behind it.
         await new Promise((r) => setTimeout(r, 50))
+        teamRead.failed += 1
         throw new Error('team read failed')
       }
       return actual.teamIdsForPrincipal(id)
@@ -212,6 +213,7 @@ if (fixture.available) {
     bus.beforeSubscribe = null
     authors.before = null
     teamRead.failNext = 0
+    teamRead.failed = 0
     routing.to = null
     await fixture.begin()
   })
@@ -372,8 +374,9 @@ async function openInbox(principalId: PrincipalId, query = 'scope=inbox') {
 }
 
 async function until(predicate: () => boolean, ms = 3_000): Promise<void> {
-  const deadline = Date.now() + ms
-  while (Date.now() < deadline) {
+  // performance.now, not Date.now: one case fakes Date to age the scope cache.
+  const deadline = performance.now() + ms
+  while (performance.now() < deadline) {
     if (predicate()) return
     await new Promise((r) => setTimeout(r, 5))
   }
@@ -391,7 +394,11 @@ function publishTicketRead(ticketId: TicketId, at: string): void {
   publishTicketEvent(ticketId, { kind: 'ticket_read', ticketId, side: 'agent', at })
 }
 
-/** Publish a `ticket_read` marked `at`, and say whether this inbox received it. */
+/**
+ * Publish a `ticket_read` marked `at`, and say whether this inbox received it.
+ * A frame can wait behind a scope reload of real reads, so this waits up to a
+ * second for it to arrive; an answer of false has waited the whole second.
+ */
 async function ticketReadReaches(
   inbox: Awaited<ReturnType<typeof openInbox>>,
   ticketId: TicketId,
@@ -399,7 +406,16 @@ async function ticketReadReaches(
 ): Promise<boolean> {
   publishTicketRead(ticketId, at)
   await settle()
-  return inbox.frames().some((f) => f.event === 'ticket_read' && f.data.at === at)
+  const arrived = () => inbox.frames().some((f) => f.event === 'ticket_read' && f.data.at === at)
+  return until(arrived, 1_000).then(
+    () => true,
+    () => false
+  )
+}
+
+/** Wait for the inbox to be told its scope changed (a reload runs first). */
+async function scopeChangeReaches(inbox: Awaited<ReturnType<typeof openInbox>>): Promise<void> {
+  await until(() => inbox.frames().some((f) => f.event === 'inbox_scope_changed'))
 }
 
 /** The ids an inbox frame is about, whatever its kind. */
@@ -543,7 +559,7 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
 
     await setTeamMembers(w.teamY, [w.scoped])
     await settle()
-    expect(scoped.frames().map((f) => f.event)).toContain('inbox_scope_changed')
+    await scopeChangeReaches(scoped)
 
     expect(await ticketReadReaches(scoped, w.ticket.y, 'b')).toBe(true)
 
@@ -586,7 +602,7 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
 
     await addPrincipalToDefaultTeam(w.scoped)
     await settle()
-    expect(scoped.frames().map((f) => f.event)).toContain('inbox_scope_changed')
+    await scopeChangeReaches(scoped)
     expect(await ticketReadReaches(scoped, w.ticket.y, 'enrolled')).toBe(true)
   })
 
@@ -610,7 +626,7 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
       editor
     )
     await settle()
-    expect(scoped.frames().map((f) => f.event)).toContain('inbox_scope_changed')
+    await scopeChangeReaches(scoped)
   })
 
   it('refreshes the scope of a teammate who accepts a scoped role invite while their inbox is open', async () => {
@@ -651,7 +667,7 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     await acceptInvitationFn({ data: { invitationId } })
     await settle()
 
-    expect(inbox.frames().map((f) => f.event)).toContain('inbox_scope_changed')
+    await scopeChangeReaches(inbox)
     expect(await ticketReadReaches(inbox, w.ticket.y, 'after')).toBe(false)
   })
 
@@ -707,8 +723,9 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     publishInboxScopeChanged([w.scoped])
     publishTicketRead(w.ticket.x, 'lost')
     await settle()
-    // Past the failed reload's slow read.
-    await new Promise((r) => setTimeout(r, 100))
+    // Past the failed reload's slow read, however long the machine takes.
+    await until(() => teamRead.failed === 1)
+    await settle()
     expect(scoped.frames().some((f) => f.data.at === 'lost')).toBe(false)
 
     publishTicketRead(w.ticket.x, 'kept')
