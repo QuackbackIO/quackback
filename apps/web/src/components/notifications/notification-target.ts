@@ -100,6 +100,11 @@ export function getNotificationTarget(
     return { to: '/admin/settings/email' }
   }
 
+  // Domain bells open Settings → Domains, where each domain's record is.
+  if (notification.type === 'domain_needs_attention') {
+    return { to: '/admin/settings/domains' }
+  }
+
   // Deep-link to the specific changelog entry when we have its id. Rows created
   // before changelogId was threaded through metadata fall back to the index.
   if (notification.type === 'changelog_published') {

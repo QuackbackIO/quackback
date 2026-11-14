@@ -573,11 +573,11 @@
       "componentRenders": 431
     },
     "sweep:doc:admin:/admin/settings/domains": {
-      "dbQueries": 14,
+      "dbQueries": 16,
       "htmlKB": 73.0
     },
     "sweep:ui:admin:/admin/settings/domains": {
-      "dbQueries": 14,
+      "dbQueries": 16,
       "serverRequests": 1,
       "requests": 108,
       "jsRequests": 104,
@@ -586,10 +586,10 @@
       "componentRenders": 346
     },
     "sweep:doc:admin:/admin/settings/domains/acme.com": {
-      "dbQueries": 27
+      "dbQueries": 29
     },
     "sweep:ui:admin:/admin/settings/domains/acme.com": {
-      "dbQueries": 27,
+      "dbQueries": 29,
       "jsKB": 431.4
     },
     "sweep:doc:admin:/admin/settings/email": {

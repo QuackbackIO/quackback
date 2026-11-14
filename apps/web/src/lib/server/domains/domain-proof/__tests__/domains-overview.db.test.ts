@@ -189,6 +189,23 @@ describe.skipIf(!fixture.available)('Domains page rows (real DB, rolled back)', 
       })
     })
 
+    it('reads a verified added domain as verified by its own record, not covered by itself', async () => {
+      await seedAdded('acme.io', 'verified')
+      await seedAdded('help.acme.io')
+      expect(await getDomainDetail('acme.io', ADMIN)).toMatchObject({
+        status: 'verified',
+        provenBy: null,
+      })
+      // A name under it is covered by it, and says so.
+      expect(await getDomainDetail('help.acme.io', ADMIN)).toMatchObject({
+        status: 'pending',
+        provenBy: 'domain',
+      })
+      expect(await getDomainDetail('help.acme.io', [PERMISSIONS.AUTH_MANAGE])).toMatchObject({
+        provenBy: 'workspace',
+      })
+    })
+
     it('says an added domain is in use while a use holds its name', async () => {
       await seedAdded('acme.com')
       await testDb.insert(ssoVerifiedDomain).values({ name: 'acme.com', verificationToken: 't1' })

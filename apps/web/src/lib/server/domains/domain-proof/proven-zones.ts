@@ -15,7 +15,12 @@
  *   Read only when a caller asks for it: a single sign-on domain never proves
  *   another, so the sign-in checks leave it out;
  * - an operator-managed hostname that is ready, which proves that exact
- *   hostname only.
+ *   hostname only;
+ * - a domain added by name (Settings > Domains) whose status is `verified`.
+ *   Only finding the row's own minted token at `_quackback.<name>` sets that
+ *   status, so a pending row proves nothing. It covers the domain and the
+ *   names under it, and keeps counting through the ownership watch's grace
+ *   period, like a sending domain.
  *
  * Everything is read from this workspace's own database on every call. There
  * is no cache: a module-level one would be shared by every workspace a process
@@ -23,6 +28,7 @@
  */
 import {
   db,
+  domains,
   emailSendingDomains,
   eq,
   isNotNull,
@@ -44,6 +50,10 @@ import { isAtOrUnder, toAsciiDomain } from '@/lib/server/domains/channel-account
 import { isKeyRecord } from '@/lib/server/domains/channel-accounts/dkim-key'
 import { ownershipRecordsOf } from '@/lib/server/domains/channel-accounts/sending-identity'
 import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
+import {
+  OWNERSHIP_RECORD_HOST,
+  OWNERSHIP_VALUE_PREFIX,
+} from '@/lib/server/domains/channel-accounts/sending-domain-records'
 
 export type { ProvenZoneSource }
 
@@ -101,6 +111,29 @@ export function provenZoneCovering(name: string, zones: readonly ProvenZone[]): 
   return null
 }
 
+/**
+ * The zones other than those that rest on a domain's own record. A verified
+ * domain is proven by its own record, never covered by itself; nor by a
+ * sending row issued its token, which is the same record. So whatever asks
+ * what ELSE covers a domain reads these, and a check of the domain always
+ * reads the record itself. Names are unique among added domains.
+ */
+export function zonesBesidesDomain(
+  domain: { name: string; ownershipToken: string },
+  zones: readonly ProvenZone[]
+): ProvenZone[] {
+  const own = toAsciiDomain(domain.name)
+  const record = {
+    name: recordName(own, OWNERSHIP_RECORD_HOST),
+    value: `${OWNERSHIP_VALUE_PREFIX}${domain.ownershipToken}`,
+  }
+  return zones.filter(
+    (z) =>
+      !(z.source === 'domain' && z.zone === own) &&
+      !(z.record && z.record.name === record.name && z.record.value === record.value)
+  )
+}
+
 export function isCoveredByProvenZone(name: string, zones: readonly ProvenZone[]): boolean {
   return provenZoneCovering(name, zones) !== null
 }
@@ -112,7 +145,7 @@ export function isCoveredByProvenZone(name: string, zones: readonly ProvenZone[]
 export async function getProvenZones(
   options: { includeSso?: boolean } = {}
 ): Promise<ProvenZone[]> {
-  const [sending, sso, settingsRows] = await Promise.all([
+  const [sending, sso, settingsRows, domainRows] = await Promise.all([
     db
       .select({
         domain: emailSendingDomains.domain,
@@ -132,18 +165,39 @@ export async function getProvenZones(
           .where(isNotNull(ssoVerifiedDomain.verifiedAt))
       : [],
     db.select({ cloudIdentity: settings.cloudIdentity }).from(settings).limit(1),
+    db
+      .select({
+        name: domains.name,
+        ownershipToken: domains.ownershipToken,
+        status: domains.status,
+      })
+      .from(domains),
   ])
+
+  // The `_quackback` record of every domain added by name that is not
+  // verified. A sending row issued that domain's token rests on the same
+  // record, so it proves nothing while the domain does not: once the domain is
+  // demoted for a missing record, the twin cannot keep the zone proven.
+  const notVerifiedRecords = new Set(
+    domainRows
+      .filter((d) => d.status !== 'verified')
+      .map(
+        (d) =>
+          `${recordName(toAsciiDomain(d.name), OWNERSHIP_RECORD_HOST)} ${OWNERSHIP_VALUE_PREFIX}${d.ownershipToken}`
+      )
+  )
 
   const zones: ProvenZone[] = []
   for (const row of sending) {
     const proof = sendingRowProofRecord(row)
     const zone = toAsciiDomain(row.domain)
-    if (proof && zone) {
+    const name = proof && zone ? recordName(zone, proof.host) : ''
+    if (proof && zone && !notVerifiedRecords.has(`${name} ${proof.value}`)) {
       zones.push({
         zone,
         source: 'email-sending',
         exact: false,
-        record: { name: recordName(zone, proof.host), value: proof.value },
+        record: { name, value: proof.value },
       })
     }
   }
@@ -157,6 +211,21 @@ export async function getProvenZones(
       record: {
         name: recordName(zone, SSO_VERIFY_RECORD_HOST),
         value: ssoVerifyRecordValue(row.verificationToken),
+      },
+    })
+  }
+  for (const row of domainRows) {
+    if (row.status !== 'verified') continue
+    const zone = toAsciiDomain(row.name)
+    // A row with no token has nothing of its own to have been verified by.
+    if (!zone || !row.ownershipToken) continue
+    zones.push({
+      zone,
+      source: 'domain',
+      exact: false,
+      record: {
+        name: recordName(zone, OWNERSHIP_RECORD_HOST),
+        value: `${OWNERSHIP_VALUE_PREFIX}${row.ownershipToken}`,
       },
     })
   }

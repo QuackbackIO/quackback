@@ -13,7 +13,14 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TeamId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { emailSendingDomains, settings, ssoVerifiedDomain, teams } from '@/lib/server/db'
+import {
+  domains,
+  emailSendingDomains,
+  eq,
+  settings,
+  ssoVerifiedDomain,
+  teams,
+} from '@/lib/server/db'
 import type { SendingDomainDnsRecord } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -47,6 +54,7 @@ const fixture = await createDbTestFixture({
     await db.select({ id: emailSendingDomains.dkimMode }).from(emailSendingDomains).limit(0)
     await db.select({ id: ssoVerifiedDomain.id }).from(ssoVerifiedDomain).limit(0)
     await db.select({ c: settings.cloudIdentity }).from(settings).limit(0)
+    await db.select({ t: domains.ownershipToken }).from(domains).limit(0)
   },
 })
 
@@ -110,6 +118,23 @@ async function seedSsoDomain(name: string, verified: boolean) {
       name,
       verificationToken: `tok${suffix()}`,
       verifiedAt: verified ? new Date() : null,
+    })
+    .returning()
+  return row
+}
+
+/**
+ * A domain added by name, in a given state, written directly: the only app
+ * writer of `verified` is the check that found this row's own token.
+ */
+async function seedDomainRow(name: string, status: 'pending' | 'verified') {
+  const [row] = await testDb
+    .insert(domains)
+    .values({
+      name,
+      ownershipToken: `tok${suffix()}`,
+      status,
+      verifiedAt: status === 'verified' ? new Date() : null,
     })
     .returning()
   return row
@@ -317,6 +342,78 @@ describe.skipIf(!fixture.available)('proven zones (real DB, rolled back)', () =>
 
       zone.published.set('_quackback-verify.acme.com', ['qb-domain-verify=someone-else'])
       expect(await checkSsoDomainOwnership(sso)).toEqual({ ok: false, reason: 'mismatch' })
+    })
+  })
+  describe('a domain added by name', () => {
+    it('proves its name and the names under it once verified, by its own record', async () => {
+      const row = await seedDomainRow('Acme.com', 'verified')
+
+      expect(await getProvenZones()).toEqual([
+        {
+          zone: 'acme.com',
+          source: 'domain',
+          exact: false,
+          record: {
+            name: '_quackback.acme.com',
+            value: `quackback-domain-verification=${row.ownershipToken}`,
+          },
+        },
+      ])
+      expect(await ssoDomainProvenBy('acme.com')).toBe('domain')
+      expect(await ssoDomainProvenBy('eu.acme.com')).toBe('domain')
+      expect(await ssoDomainProvenBy('notacme.com')).toBeNull()
+    })
+
+    it('counts a sending row issued its token only while the domain is verified', async () => {
+      const row = await seedDomainRow('acme.com', 'verified')
+      const shared: SendingDomainDnsRecord = {
+        type: 'TXT',
+        host: '_quackback',
+        value: `quackback-domain-verification=${row.ownershipToken}`,
+        purpose: 'ownership',
+      }
+      await seedSendingDomain('acme.com', { dnsRecords: [shared] })
+      expect((await getProvenZones()).map((z) => z.source).sort()).toEqual([
+        'domain',
+        'email-sending',
+      ])
+
+      await testDb.update(domains).set({ status: 'pending' }).where(eq(domains.id, row.id))
+      expect(await getProvenZones()).toEqual([])
+      expect(await ssoDomainProvenBy('acme.com')).toBeNull()
+    })
+
+    it('never proves a name above it', async () => {
+      await seedDomainRow('eu.acme.com', 'verified')
+      expect(await ssoDomainProvenBy('acme.com')).toBeNull()
+    })
+
+    it('proves nothing while pending', async () => {
+      await seedDomainRow('acme.com', 'pending')
+
+      expect(await getProvenZones({ includeSso: true })).toEqual([])
+      const sso = await seedSsoDomain('acme.com', false)
+      expect(await checkSsoDomainOwnership(sso)).toEqual({ ok: false, reason: 'no-record' })
+      expect(zone.asked).toEqual(['_quackback-verify.acme.com'])
+    })
+
+    it('verifies a single sign-on domain under it with no lookup', async () => {
+      await seedDomainRow('acme.com', 'verified')
+      const sso = await seedSsoDomain('eu.acme.com', false)
+
+      expect(await checkSsoDomainOwnership(sso)).toEqual({ ok: true, via: 'domain' })
+      expect(zone.asked).toEqual([])
+    })
+
+    it("never counts another workspace's domain", async () => {
+      await seedDomainRow('acme.com', 'verified')
+      expect(await ssoDomainProvenBy('acme.com')).toBe('domain')
+
+      await fixture.rollback()
+      await fixture.begin()
+      const sso = await seedSsoDomain('acme.com', false)
+      expect(await ssoDomainProvenBy('acme.com')).toBeNull()
+      expect(await checkSsoDomainOwnership(sso)).toEqual({ ok: false, reason: 'no-record' })
     })
   })
 })

@@ -74,6 +74,7 @@ import {
   SendingDomainAttentionEmail,
   type SendingDomainAttentionProblem,
 } from './templates/sending-domain-attention'
+import { DomainAttentionEmail, domainAttentionTitle } from './templates/domain-attention'
 import { NewSignInEmail } from './templates/new-sign-in'
 import { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 import type { IncidentImpact } from './templates/status-incident-published'
@@ -1034,6 +1035,52 @@ export async function sendSendingDomainAttentionEmail(
 }
 
 // ============================================================================
+// Domain needs attention
+// ============================================================================
+
+interface SendDomainAttentionParams {
+  to: SecureRecipient
+  domain: string
+  /** The ownership record to publish: its full name and exact value. */
+  record: { name: string; value: string }
+  /** Set for a warning: the formatted date the domain stops being verified. */
+  deadline?: string | null
+  /** Set once it stopped: the sign-in domains that stopped with it. */
+  signInDomains?: readonly string[] | null
+  settingsUrl?: string | null
+  workspaceName?: string
+  logoUrl?: string
+}
+
+/**
+ * To a person who manages the workspace's domains, when a domain added by name
+ * loses its ownership record: a warning with a deadline, or, once it stopped
+ * being verified, the sign-in domains that stopped with it.
+ */
+export async function sendDomainAttentionEmail(
+  params: SendDomainAttentionParams
+): Promise<EmailResult> {
+  const { to, domain, record, deadline, signInDomains, settingsUrl, workspaceName, logoUrl } =
+    params
+  log.debug('sending domain attention alert')
+  return sendEmail({
+    to,
+    subject: domainAttentionTitle(domain, !!signInDomains),
+    react: DomainAttentionEmail({
+      domain,
+      record,
+      deadline,
+      signInDomains,
+      settingsUrl,
+      workspaceName,
+      logoUrl,
+    }),
+    emailType: 'DomainAttentionEmail',
+    preview: { domain },
+  })
+}
+
+// ============================================================================
 // Status Change Email
 // ============================================================================
 
@@ -1968,6 +2015,11 @@ export type {
   SendingDomainAttentionRecord,
   SendingDomainAttentionProblem,
 } from './templates/sending-domain-attention'
+export {
+  DomainAttentionEmail,
+  domainAttentionMessage,
+  domainAttentionTitle,
+} from './templates/domain-attention'
 export { NewSignInEmail } from './templates/new-sign-in'
 export { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 export type { IncidentImpact } from './templates/status-incident-published'

@@ -134,6 +134,11 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     iconClass: 'text-amber-600',
     bgClass: 'bg-amber-600/10',
   },
+  domain_needs_attention: {
+    icon: BellIcon,
+    iconClass: 'text-amber-600',
+    bgClass: 'bg-amber-600/10',
+  },
 }
 
 export const defaultNotificationTypeConfig: NotificationTypeConfig = {
