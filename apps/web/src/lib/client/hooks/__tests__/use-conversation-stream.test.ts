@@ -87,6 +87,22 @@ describe('useConversationStream', () => {
     expect(onEvent).toHaveBeenCalledWith({ kind: 'ticket_updated', ticket: { id: 'ticket_1' } })
   })
 
+  it('delivers the inbox scope events the server builds itself', async () => {
+    const onEvent = vi.fn()
+    renderHook(() =>
+      useConversationStream({ buildUrl: async () => '/api/chat/stream', enabled: true, onEvent })
+    )
+    await flush()
+    const es = MockEventSource.instances[0]
+    const removed = { kind: 'inbox_item_removed', itemKind: 'ticket', id: 'ticket_1' }
+    act(() => {
+      es.emit('inbox_item_removed', removed)
+      es.emit('inbox_scope_changed', { kind: 'inbox_scope_changed' })
+    })
+    expect(onEvent).toHaveBeenCalledWith(removed)
+    expect(onEvent).toHaveBeenCalledWith({ kind: 'inbox_scope_changed' })
+  })
+
   it('does not connect when disabled', async () => {
     const buildUrl = vi.fn(async () => '/url')
     renderHook(() => useConversationStream({ buildUrl, enabled: false, onEvent: vi.fn() }))

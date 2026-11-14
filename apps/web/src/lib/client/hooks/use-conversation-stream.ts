@@ -60,6 +60,10 @@ const NAMED_EVENTS = [
   'ticket_message_updated',
   'ticket_updated',
   'ticket_read',
+  // Built by the inbox stream for this subscriber alone: an item left their
+  // scope, or their scope changed.
+  'inbox_item_removed',
+  'inbox_scope_changed',
 ] as const
 
 // After this many consecutive SSE failures with no successful open in between,

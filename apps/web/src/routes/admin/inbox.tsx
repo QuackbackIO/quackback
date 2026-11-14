@@ -100,6 +100,7 @@ import {
 } from '@/lib/client/conversation/inbox-scope'
 import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
 import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
+import { removeInboxItemFromCaches } from '@/lib/client/conversation/inbox-removal'
 import type { Channel } from '@/lib/shared/channels'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
@@ -686,6 +687,19 @@ function InboxPage() {
     buildUrl: async () => '/api/chat/stream?scope=inbox',
     onReconnect: refreshInboxAfterReconnect,
     onEvent: (evt) => {
+      // Scope events name no thread to patch. A removed item leaves every list
+      // at once and its open pane refetches into not found; a scope change
+      // refetches as a reconnect does, since lists and the open pane may all
+      // have moved.
+      if (evt.kind === 'inbox_item_removed') {
+        removeInboxItemFromCaches(queryClient, evt.itemKind, evt.id)
+        refreshInbox()
+        return
+      }
+      if (evt.kind === 'inbox_scope_changed') {
+        refreshInboxAfterReconnect()
+        return
+      }
       refreshIfCompanionLost(evt)
       // A ticket's live properties (status/assignee/priority/stage/type) name
       // their own cache keys precisely, so this patches them directly instead
