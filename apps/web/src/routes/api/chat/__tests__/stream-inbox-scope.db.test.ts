@@ -700,18 +700,21 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
   it('drops the frames that waited on a failed reload, and retries on the next frame', async () => {
     const w = await seedWorld()
     const scoped = await openInbox(w.scoped)
+    // A working load first, so the cache holds team X: a frame dropped below
+    // is dropped by the failed reload, not by an empty starting scope.
+    expect(await ticketReadReaches(scoped, w.ticket.x, 'connect')).toBe(true)
     teamRead.failNext = 1
     publishInboxScopeChanged([w.scoped])
     publishTicketRead(w.ticket.x, 'lost')
     await settle()
     // Past the failed reload's slow read.
     await new Promise((r) => setTimeout(r, 100))
-    expect(scoped.frames().map(itemIdOf)).not.toContain(w.ticket.x)
+    expect(scoped.frames().some((f) => f.data.at === 'lost')).toBe(false)
 
     publishTicketRead(w.ticket.x, 'kept')
     await settle()
     const reads = scoped.frames().filter((f) => f.event === 'ticket_read')
-    expect(reads.map((f) => f.data.at)).toEqual(['kept'])
+    expect(reads.map((f) => f.data.at)).toEqual(['connect', 'kept'])
   })
 
   it('closes the stream when a reload finds the principal is no longer a teammate', async () => {
