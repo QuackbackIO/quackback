@@ -6,6 +6,7 @@
  * observable. The rate limit is a fake that refuses once told to.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import postgres from 'postgres'
 import type { TeamId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
@@ -215,6 +216,26 @@ describe.skipIf(!fixture.available)('domains added by name (real DB, rolled back
       await testDb.update(domains).set({ status: 'verified' }).where(eq(domains.id, verified.id))
       await discardUnusedDomain(verified)
       expect(await getDomain('acme.io')).not.toBeNull()
+    })
+
+    it('waits for the lock on the name that issuing its token takes', async () => {
+      const row = await addDomain('acme.com')
+      const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL
+      const side = postgres(url!, { max: 1, onnotice: () => {} })
+      try {
+        await side`SELECT pg_advisory_lock(hashtext(${'quackback:domain-token:acme.com'}))`
+        let done = false
+        const discarding = discardUnusedDomain(row).then(() => {
+          done = true
+        })
+        await new Promise((r) => setTimeout(r, 300))
+        expect(done).toBe(false)
+        await side`SELECT pg_advisory_unlock(hashtext(${'quackback:domain-token:acme.com'}))`
+        await discarding
+        expect(await getDomain('acme.com')).toBeNull()
+      } finally {
+        await side.end()
+      }
     })
   })
 
