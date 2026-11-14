@@ -6,11 +6,20 @@
  * and its key really works, and nothing about a wrong or spent token leaks.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createId, type PrincipalId, type UserId } from '@quackback/ids'
+import {
+  createId,
+  type PrincipalId,
+  type TicketId,
+  type TicketStatusId,
+  type UserId,
+} from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   auditLog,
+  conversationMessages,
   eq,
+  tickets,
+  ticketStatuses,
   principal,
   session,
   settings,
@@ -50,6 +59,12 @@ import { ensureBootSetupToken, verifySetupToken } from '../headless-setup'
 import { setupWorkspaceForUser } from '../setup-workspace'
 import { getBucketCount } from '@/lib/server/utils/rate-bucket'
 import { verifyApiKey } from '@/lib/server/domains/api-keys/api-key.service'
+import { resolveApiKeyAuthority } from '@/lib/server/domains/api-keys/api-key-authority'
+import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
+import { recomputeTicketFirstResponse } from '@/lib/server/domains/tickets/ticket-first-response'
+import { isAutomatedAuthor, PERSONAL_KEY_REPLY_CUTOFF_KEY } from '@/lib/server/messages/reply-rule'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -150,13 +165,78 @@ describe.skipIf(!fixture.available)('POST /api/v1/setup (real DB, rolled back)',
     expect(isOnboardingComplete(getSetupState(row?.setupState ?? null))).toBe(true)
     expect((await testDb.select().from(postStatuses)).length).toBeGreaterThan(0)
 
-    // The key authenticates as the admin it was minted for.
+    // The key works, and records the admin who set the workspace up as its creator.
     const verified = await verifyApiKey(data.apiKey.key)
     expect(verified?.createdById).toBe(data.admin.principalId)
 
     const done = await auditEvents('workspace.setup.completed')
     expect(done).toHaveLength(1)
     expect(JSON.stringify(done[0])).not.toContain(data.apiKey.key)
+  })
+
+  it('mints the setup key as a workspace Owner key, so its replies stay automated', async () => {
+    // A cutoff well before the key: a personal key made now would reply as its creator.
+    await testDb.execute(sql`
+      INSERT INTO kv_store (workspace_key, key, value, expires_at)
+      VALUES ('_', ${PERSONAL_KEY_REPLY_CUTOFF_KEY}, to_jsonb('2020-01-01T00:00:00Z'::timestamptz),
+        now() + interval '100 years')
+      ON CONFLICT (workspace_key, key) DO UPDATE SET value = excluded.value`)
+
+    const res = await handleSetupRequest(setupRequest())
+    expect(res.status).toBe(201)
+    const { data } = (await res.json()) as {
+      data: { admin: { principalId: PrincipalId }; apiKey: { key: string } }
+    }
+
+    // A workspace key with the Owner role: workspace-wide, acting as itself,
+    // with exactly the tier and permissions the first admin holds (the first
+    // admin is an Owner, so a personal key would have carried the same).
+    const key = await verifyApiKey(data.apiKey.key)
+    expect(key?.kind).toBe('workspace')
+    expect(key?.createdById).toBe(data.admin.principalId)
+    expect(key?.scopes).toEqual([...API_KEY_SCOPES])
+    const authority = await resolveApiKeyAuthority(key!)
+    expect(authority?.owner).toBeNull()
+    expect(authority?.scopePrincipalId).toBeNull()
+    expect(authority?.role).toBe('admin')
+    const adminHeld = await permissionsForPrincipal(data.admin.principalId, 'admin')
+    expect([...(authority?.permissions ?? [])].sort()).toEqual([...adminHeld].sort())
+    expect(authority?.permissions.has(PERMISSIONS.BILLING_MANAGE)).toBe(true)
+
+    // A customer writes on a ticket and the setup key replies: no first response.
+    const statusId = createId('ticket_status') as TicketStatusId
+    await testDb.insert(ticketStatuses).values({ id: statusId, name: 'New', slug: 'setup-key' })
+    const ticketId = createId('ticket') as TicketId
+    await testDb.insert(tickets).values({ id: ticketId, title: 'T', statusId, type: 'customer' })
+    const customer = createId('principal') as PrincipalId
+    await testDb
+      .insert(principal)
+      .values({ id: customer, role: 'user', type: 'anonymous', createdAt: new Date() })
+    await testDb.insert(conversationMessages).values([
+      {
+        ticketId,
+        principalId: customer,
+        senderType: 'visitor',
+        content: 'Help',
+        createdAt: new Date('2026-03-02T09:00:00Z'),
+      },
+      {
+        ticketId,
+        principalId: key!.principalId,
+        senderType: 'agent',
+        content: 'On it',
+        createdAt: new Date('2026-03-02T09:05:00Z'),
+      },
+    ])
+    await recomputeTicketFirstResponse(ticketId)
+    const [ticket] = await testDb
+      .select({ firstResponseAt: tickets.firstResponseAt })
+      .from(tickets)
+      .where(eq(tickets.id, ticketId))
+    expect(ticket?.firstResponseAt).toBeNull()
+    expect(
+      await isAutomatedAuthor(key!.principalId, { type: 'service', principalId: key!.principalId })
+    ).toBe(true)
   })
 
   it('is gone once the first admin exists, and says nothing about why', async () => {

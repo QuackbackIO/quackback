@@ -160,7 +160,7 @@ const SetupResponseSchema = z.object({
       name: z.string(),
       key: z.string().meta({
         description:
-          'The first admin API key, with every scope. Shown only in this response; store it now.',
+          'A workspace API key with the Owner role and every scope. Shown only in this response; store it now.',
       }),
     }),
     reusedExistingAccount: z.boolean().meta({
@@ -186,7 +186,7 @@ registerPath('/setup', {
     tags: ['Workspace'],
     summary: 'Set up a new workspace without the browser',
     description:
-      "Creates the workspace and its first admin, and returns that admin's first API key, once. Authenticated with the setup token, sent as a bearer token: the SETUP_TOKEN environment variable, or the token the server writes to its log once on first boot. It exists only while the workspace has no admin; at any other time, and on hosted workspaces, it answers 404 without a trace. An existing account with that email is reused only if its address is verified (409 otherwise). API keys are not accepted. Limited to 10 requests per minute per address.",
+      "Creates the workspace and its first admin, and returns the workspace's first API key, once: a workspace key with the Owner role and every scope, so replies sent with it count as automated, never as the admin's own. Authenticated with the setup token, sent as a bearer token: the SETUP_TOKEN environment variable, or the token the server writes to its log once on first boot. It exists only while the workspace has no admin; at any other time, and on hosted workspaces, it answers 404 without a trace. An existing account with that email is reused only if its address is verified (409 otherwise). API keys are not accepted. Limited to 10 requests per minute per address.",
     security: [{ setupToken: [] }],
     requestBody: {
       required: true,
