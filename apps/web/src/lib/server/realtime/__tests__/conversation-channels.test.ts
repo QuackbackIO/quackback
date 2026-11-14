@@ -7,8 +7,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 
+// One spy for both transports, so every frame is seen in the order it left:
+// the visitor and per-ticket copies go through `publish`, the inbox copy
+// through `publishAsync` with its scope envelope as the third argument.
 const publish = vi.fn()
-vi.mock('../pubsub', () => ({ publish: (...args: unknown[]) => publish(...args) }))
+vi.mock('../pubsub', () => ({
+  publish: (...args: unknown[]) => publish(...args),
+  publishAsync: async (...args: unknown[]) => publish(...args),
+}))
+// A self-read answers with this row, so the walk below sees the envelope.
+const readInboxItemScope = vi.hoisted(() =>
+  vi.fn(async () => ({ assigneePrincipalId: 'principal_owner', teamId: 'team_1' }))
+)
+vi.mock('../inbox-scope-read', () => ({ readInboxItemScope }))
 const loadAuthors = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/domains/principals/principal-display', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/domains/principals/principal-display')>()),
@@ -28,6 +39,7 @@ import {
   ticketChannel,
   publishTicketEvent,
 } from '../conversation-channels'
+import { inboxPublishesSettled } from '../inbox-publish'
 
 const conversationId = 'conversation_1' as ConversationId
 
@@ -75,13 +87,14 @@ beforeEach(() => {
 })
 
 describe('publishConversationEvent', () => {
-  it('fans out to both the conversation channel and the inbox', () => {
+  it('fans out to both the conversation channel and the inbox', async () => {
     publishConversationEvent(conversationId, {
       kind: 'read',
       conversationId,
       side: 'agent',
       at: 'x',
     })
+    await inboxPublishesSettled()
     const channels = publish.mock.calls.map((c) => c[0])
     expect(channels).toContain(conversationChannel(conversationId))
     expect(channels).toContain(CONVERSATION_INBOX_CHANNEL)
@@ -89,7 +102,7 @@ describe('publishConversationEvent', () => {
 })
 
 describe('publishConversationMessage', () => {
-  it('keeps the public name on the visitor channel and the account name on the inbox', () => {
+  it('keeps the public name on the visitor channel and the account name on the inbox', async () => {
     const visitor = {
       id: 'conversation_msg_1',
       author: { principalId: 'principal_a', displayName: 'Quiet Otter', avatarUrl: null },
@@ -102,6 +115,7 @@ describe('publishConversationMessage', () => {
       visitor: visitor as never,
       agent: agent as never,
     })
+    await inboxPublishesSettled()
     const visitorEvent = publish.mock.calls.find(
       (c) => c[0] === conversationChannel(conversationId)
     )
@@ -110,10 +124,11 @@ describe('publishConversationMessage', () => {
     expect(inboxEvent?.[1].message.author.displayName).toBe('Ada Lovelace')
   })
 
-  it('tells the inbox, and only the inbox, when the same write sent the conversation update', () => {
+  it('tells the inbox, and only the inbox, when the same write sent the conversation update', async () => {
     const message = { id: 'conversation_msg_1' } as never
     publishConversationMessage(conversationId, { visitor: message }, { conversationUpdated: true })
     publishConversationMessage(conversationId, { visitor: message })
+    await inboxPublishesSettled()
 
     const inbox = publish.mock.calls.filter((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
     const visitor = publish.mock.calls.filter((c) => c[0] === conversationChannel(conversationId))
@@ -123,8 +138,9 @@ describe('publishConversationMessage', () => {
 })
 
 describe('publishAgentConversationEvent', () => {
-  it('publishes to the inbox channel ONLY (never the visitor conversation channel)', () => {
+  it('publishes to the inbox channel ONLY (never the visitor conversation channel)', async () => {
     publishAgentConversationEvent({ kind: 'conversation', conversation: agentDto })
+    await inboxPublishesSettled()
     expect(publish).toHaveBeenCalledTimes(1)
     expect(publish.mock.calls[0][0]).toBe(CONVERSATION_INBOX_CHANNEL)
   })
@@ -133,6 +149,7 @@ describe('publishAgentConversationEvent', () => {
 describe('publishConversationUpdate', () => {
   it('sends the full DTO to the inbox and strips ALL agent-only fields for the visitor', async () => {
     await publishConversationUpdate(conversationId, agentDto)
+    await inboxPublishesSettled()
 
     const inbox = publish.mock.calls.find((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
     const visitor = publish.mock.calls.find((c) => c[0] === conversationChannel(conversationId))
@@ -181,6 +198,7 @@ describe('publishConversationUpdate', () => {
     }
 
     await publishConversationUpdate(conversationId, dto)
+    await inboxPublishesSettled()
 
     expect(loadAuthors).toHaveBeenCalledExactlyOnceWith([
       visitor.principalId,
@@ -190,10 +208,11 @@ describe('publishConversationUpdate', () => {
       kind: 'conversation',
       conversation: expect.objectContaining({ visitor, assignedAgent }),
     })
-    expect(publish).toHaveBeenCalledWith(CONVERSATION_INBOX_CHANNEL, {
-      kind: 'conversation',
-      conversation: dto,
-    })
+    expect(publish).toHaveBeenCalledWith(
+      CONVERSATION_INBOX_CHANNEL,
+      { kind: 'conversation', conversation: dto },
+      expect.objectContaining({ kind: 'conversation', id: conversationId })
+    )
     expect(dto.assignedAgent.displayName).toBe('Private Agent Name')
   })
 
@@ -216,8 +235,9 @@ describe('publishConversationUpdate', () => {
 })
 
 describe('publishTyping', () => {
-  it('agent side: sends the typist id only to the inbox, never to the visitor channel', () => {
+  it('agent side: sends the typist id only to the inbox, never to the visitor channel', async () => {
     publishTyping(conversationId, 'agent', '2026-01-01T00:00:00.000Z', 'principal_agent' as never)
+    await inboxPublishesSettled()
 
     const inbox = publish.mock.calls.find((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
     const visitor = publish.mock.calls.find((c) => c[0] === conversationChannel(conversationId))
@@ -233,8 +253,9 @@ describe('publishTyping', () => {
     expect((visitor![1] as { typistPrincipalId?: string }).typistPrincipalId).toBeUndefined()
   })
 
-  it('visitor side: carries the typist id on BOTH channels so every stream can drop the echo', () => {
+  it('visitor side: carries the typist id on BOTH channels so every stream can drop the echo', async () => {
     publishTyping(conversationId, 'visitor', '2026-01-01T00:00:00.000Z', 'principal_owner' as never)
+    await inboxPublishesSettled()
 
     const inbox = publish.mock.calls.find((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
     const visitor = publish.mock.calls.find((c) => c[0] === conversationChannel(conversationId))
@@ -263,15 +284,112 @@ describe('ticketChannel', () => {
 })
 
 describe('publishTicketEvent', () => {
-  it('fans out the same event to the ticket channel AND the shared inbox channel', () => {
+  it('fans out the same event to the ticket channel AND the shared inbox channel', async () => {
     const ticketId = 'ticket_1' as TicketId
     const event = { kind: 'ticket_updated', ticket: { id: ticketId } } as never
     publishTicketEvent(ticketId, event)
+    await inboxPublishesSettled()
 
     expect(publish).toHaveBeenCalledTimes(2)
     const calls = publish.mock.calls.map((c) => [c[0], c[1]])
     expect(calls).toContainEqual([ticketChannel(ticketId), event])
     expect(calls).toContainEqual([CONVERSATION_INBOX_CHANNEL, event])
+  })
+})
+
+describe('every publisher: the scope envelope rides the inbox copy and nothing else', () => {
+  const ticketId = 'ticket_1' as TicketId
+  const message = { id: 'conversation_msg_1' } as never
+  const publishers: Array<[string, () => unknown, { kind: string; id: string }]> = [
+    [
+      'publishConversationEvent',
+      () =>
+        publishConversationEvent(conversationId, {
+          kind: 'read',
+          conversationId,
+          side: 'agent',
+          at: 'x',
+        }),
+      { kind: 'conversation', id: conversationId },
+    ],
+    [
+      'publishConversationMessage',
+      () => publishConversationMessage(conversationId, { visitor: message }),
+      { kind: 'conversation', id: conversationId },
+    ],
+    [
+      'publishTyping',
+      () => publishTyping(conversationId, 'visitor', 'x', 'principal_owner' as never),
+      { kind: 'conversation', id: conversationId },
+    ],
+    [
+      'publishAgentConversationEvent',
+      () => publishAgentConversationEvent({ kind: 'message', conversationId, message }),
+      { kind: 'conversation', id: conversationId },
+    ],
+    [
+      'publishConversationUpdate',
+      () => publishConversationUpdate(conversationId, agentDto),
+      { kind: 'conversation', id: conversationId },
+    ],
+    [
+      'publishTicketEvent',
+      () => publishTicketEvent(ticketId, { kind: 'ticket_read', ticketId, side: 'agent', at: 'x' }),
+      { kind: 'ticket', id: ticketId },
+    ],
+  ]
+
+  it.each(publishers)('%s', async (_name, call, item) => {
+    await call()
+    await inboxPublishesSettled()
+    const inbox = publish.mock.calls.filter((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
+    const others = publish.mock.calls.filter((c) => c[0] !== CONVERSATION_INBOX_CHANNEL)
+    expect(inbox).toHaveLength(1)
+    expect(inbox[0][2]).toMatchObject(item)
+    expect(inbox[0][2]).toHaveProperty('assigneePrincipalId')
+    expect(inbox[0][2]).toHaveProperty('teamId')
+    // The envelope is never folded into any payload, inbox or visitor.
+    for (const c of publish.mock.calls) expect(JSON.stringify(c[1])).not.toContain('"s":')
+    for (const c of others) expect(c).toHaveLength(2)
+  })
+
+  it('takes the envelope a caller passes instead of reading the row', async () => {
+    publishTyping(conversationId, 'agent', 'x', 'principal_agent' as never, {
+      assigneePrincipalId: 'principal_agent',
+      teamId: null,
+    })
+    await inboxPublishesSettled()
+    expect(readInboxItemScope).not.toHaveBeenCalled()
+    const inbox = publish.mock.calls.find((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
+    expect(inbox?.[2]).toEqual({
+      kind: 'conversation',
+      id: conversationId,
+      assigneePrincipalId: 'principal_agent',
+      teamId: null,
+    })
+  })
+
+  it('publishConversationUpdate takes its envelope from the DTO, and the previous values from the writer', async () => {
+    await publishConversationUpdate(conversationId, agentDto, {
+      prev: { assigneePrincipalId: 'principal_before', teamId: null },
+    })
+    await inboxPublishesSettled()
+    expect(readInboxItemScope).not.toHaveBeenCalled()
+    const inbox = publish.mock.calls.find((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
+    expect(inbox?.[2]).toEqual({
+      kind: 'conversation',
+      id: conversationId,
+      assigneePrincipalId: null,
+      teamId: 'team_1',
+      prevAssigneePrincipalId: 'principal_before',
+      prevTeamId: null,
+    })
+  })
+
+  it('drops an agent-only event that names no conversation', async () => {
+    publishAgentConversationEvent({ kind: 'ticket_read', ticketId, side: 'agent', at: 'x' })
+    await inboxPublishesSettled()
+    expect(publish).not.toHaveBeenCalled()
   })
 })
 

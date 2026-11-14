@@ -891,6 +891,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'SSE streams. Bounded instead by ref-counted release when a workspace loses its last subscriber.',
   },
   {
+    file: 'apps/web/src/lib/server/realtime/inbox-publish.ts',
+    name: 'chains',
+    category: 'workspace-scoped-key',
+    keyedBy: 'currentWorkspaceNamespace',
+    reason:
+      "The tail of each inbox item's publish chain, so frames for one item leave in call order. " +
+      'Keyed by the workspace namespace (taken at call time), the item kind and the id, so two ' +
+      'workspaces never share a chain even for equal ids. Deliberately NOT a WorkspaceKeyedCache: ' +
+      'evicting a live tail would let the next frame overtake it. Bounded by in-flight publishes: ' +
+      'an entry is deleted the moment its tail settles.',
+  },
+  {
     file: 'apps/web/src/lib/server/realtime/pubsub.ts',
     name: 'opening',
     category: 'workspace-scoped-key',
