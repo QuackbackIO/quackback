@@ -28,6 +28,14 @@ export const domains = pgTable(
     lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
     /** When a verified row's record was first found missing. Read by the ownership watch. */
     ownershipMissingSince: timestamp('ownership_missing_since', { withTimezone: true }),
+    /**
+     * When a check took the lease to send the missing ownership record
+     * warning. A lease never confirmed is taken again once it is old. Cleared
+     * with `ownershipMissingSince`.
+     */
+    ownershipWarningClaimedAt: timestamp('ownership_warning_claimed_at', { withTimezone: true }),
+    /** When that warning was delivered. Cleared with `ownershipMissingSince`. */
+    ownershipWarningSentAt: timestamp('ownership_warning_sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

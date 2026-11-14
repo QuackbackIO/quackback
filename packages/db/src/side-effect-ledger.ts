@@ -238,7 +238,20 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
     column: schema.domains.lastCheckedAt,
     policy: 'preserve',
     reason:
-      'Stamped on every ownership check of a domain added by name, for the "Last checked" line. Nothing outbound reads it and no sweep polls on it, so a rewound value only shows an older check time until the next one.',
+      'Stamped on every ownership check of a domain added by name, for the "Last checked" line. Nothing outbound reads it, and the ownership watch checks every verified row each day whatever it holds, using it only to order them, so a rewound value only shows an older check time until the next one.',
+  },
+  {
+    column: schema.domains.ownershipWarningSentAt,
+    policy: 'settle',
+    strategy: 'stamp-pending',
+    reason:
+      'The delivery receipt for the missing ownership record warning on a domain added by name, the same shape as email_sending_domains.ownership_warning_sent_at. Every watch check of a verified row in its grace period sends the warning while this is NULL, so a rewind warns the managers again about a period they were already warned about. Scoped to rows whose period had started by the restore.',
+    eligibleWhen: (restoredTo) =>
+      and(
+        eq(schema.domains.status, 'verified'),
+        isNotNull(schema.domains.ownershipMissingSince),
+        lte(schema.domains.ownershipMissingSince, restoredTo)
+      )!,
   },
   {
     column: schema.emailSendingDomains.ownershipWarningSentAt,
