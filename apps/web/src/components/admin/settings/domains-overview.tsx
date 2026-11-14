@@ -7,7 +7,7 @@
 import { Fragment } from 'react'
 import { DOMAIN_USE_ORDER, DOMAIN_VIEW_ROUTE } from '@/lib/shared/domain-uses'
 import type { DomainUse, DomainUseLinks } from '@/lib/shared/domains-permissions'
-import { EnvelopeIcon, GlobeAltIcon, LockClosedIcon } from '@heroicons/react/24/solid'
+import { GlobeAltIcon } from '@heroicons/react/24/solid'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
 import { StateBadge, type BadgeState } from '@/components/shared/state-badge'
@@ -27,10 +27,23 @@ export const WEB_ADDRESSES_DESCRIPTION = 'Where people reach your portal and hel
 
 export const EMPTY_DESCRIPTION = 'Use your own domain for email, web addresses and sign-in.'
 
-const USE_LABEL: Record<DomainUse, string> = {
-  email: 'Email',
-  customDomain: 'Custom domain',
-  signIn: 'Sign-in',
+/** Each use's words: its chip on the list, its row title and what it is for on a domain's page. */
+export const USE_COPY: Record<DomainUse, { chip: string; title: string; description: string }> = {
+  email: {
+    chip: 'Email',
+    title: 'Email sending',
+    description: 'Send replies and announcements from your own address.',
+  },
+  customDomain: {
+    chip: 'Custom domain',
+    title: 'Custom domain',
+    description: 'Put your portal on feedback.yourcompany.com.',
+  },
+  signIn: {
+    chip: 'Sign-in',
+    title: 'Sign-in',
+    description: 'Let everyone with an address at your domain sign in with SSO.',
+  },
 }
 
 export interface DomainUseStatus {
@@ -166,7 +179,7 @@ export function DomainList({ rows, links }: { rows: DomainRow[]; links: DomainUs
                   row.uses.map((u) => (
                     <Fragment key={u.use}>
                       <Badge variant="outline" size="sm">
-                        {USE_LABEL[u.use]}
+                        {USE_COPY[u.use].chip}
                       </Badge>
                       {u.state && <StateBadge state={u.state} />}
                     </Fragment>
@@ -182,32 +195,6 @@ export function DomainList({ rows, links }: { rows: DomainRow[]; links: DomainUs
     </SettingsCard>
   )
 }
-
-export const USES = [
-  {
-    use: 'email',
-    icon: EnvelopeIcon,
-    title: 'Email sending',
-    description: 'Send replies and announcements from your own address.',
-  },
-  {
-    use: 'customDomain',
-    icon: GlobeAltIcon,
-    title: 'Custom domain',
-    description: 'Put your portal on feedback.yourcompany.com.',
-  },
-  {
-    use: 'signIn',
-    icon: LockClosedIcon,
-    title: 'Sign-in',
-    description: 'Let everyone with an address at your domain sign in with SSO.',
-  },
-] as const satisfies readonly {
-  use: DomainUse
-  icon: typeof EnvelopeIcon
-  title: string
-  description: string
-}[]
 
 /** With no domains yet: one way to add one, for a viewer who may. */
 export function DomainsEmptyState({ canAdd }: { canAdd: boolean }) {

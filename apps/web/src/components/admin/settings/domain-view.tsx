@@ -53,9 +53,7 @@ import {
 import { addProviderDomainFn, removeVerifiedDomainFn } from '@/lib/server/functions/sso'
 import { updateHelpCenterDomainFn } from '@/lib/server/functions/help-center-domain'
 import { mutateCloudCustomDomainFn } from '@/lib/server/functions/cloud-identity'
-import { USES, type DomainRow, type DomainUseStatus } from './domains-overview'
-
-const USE_TITLE = Object.fromEntries(USES.map((u) => [u.use, u.title])) as Record<DomainUse, string>
+import { USE_COPY, type DomainRow, type DomainUseStatus } from './domains-overview'
 
 /** The name of the page a use is set up on, as its link reads. */
 function pageName(use: DomainUse, link: UseLink): string {
@@ -70,7 +68,7 @@ function useDescription(use: DomainUse, link: UseLink | undefined): string {
   if (use === 'customDomain' && link?.to === HELP_CENTER_SETTINGS) {
     return 'Put your help center on this domain.'
   }
-  return USES.find((u) => u.use === use)!.description
+  return USE_COPY[use].description
 }
 
 function LinkButton({ link, children }: { link: UseLink; children: string }) {
@@ -107,6 +105,27 @@ function useSendingDomain(name: string) {
   return { data, domain, addresses }
 }
 
+/**
+ * A change made from the page: busy while it runs, its error shown in place,
+ * and the page read again afterwards unless the action returns `false`.
+ */
+function useDomainAction(onChanged: () => void) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const run = async (action: () => Promise<unknown>, fallback: string) => {
+    setError(null)
+    setBusy(true)
+    try {
+      if ((await action()) !== false) onChanged()
+    } catch (err) {
+      setError(errorText(err, fallback))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return { busy, error, setError, run }
+}
+
 const CHECK_FAILED: Record<Extract<DomainOwnershipResult, { ok: false }>['reason'], string> = {
   'no-record': "We couldn't find the record yet.",
   mismatch: 'The record has a different value. Replace it with the value above.',
@@ -125,43 +144,26 @@ function OwnershipCard({
   onChanged: () => void
   onRemoved: () => void
 }) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { busy, error, setError, run } = useDomainAction(onChanged)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const verified = domain.status === 'verified' || domain.provenBy !== null
-
-  const run = async (action: () => Promise<string | null>, fallback: string) => {
-    setError(null)
-    setBusy(true)
-    try {
-      setError(await action())
-    } catch (err) {
-      setError(errorText(err, fallback))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const check = () =>
     run(async () => {
       const result = await checkDomainOwnershipFn({ data: { name: domain.name } })
-      if (!result.ok) return CHECK_FAILED[result.reason]
-      onChanged()
-      return null
+      if (result.ok) return
+      setError(CHECK_FAILED[result.reason])
+      return false
     }, "Couldn't check the record.")
 
   const addRecord = () =>
-    run(async () => {
-      await addDomainFn({ data: { name: domain.name } })
-      onChanged()
-      return null
-    }, "Couldn't add the record.")
+    run(() => addDomainFn({ data: { name: domain.name } }), "Couldn't add the record.")
 
   const remove = () =>
     run(async () => {
       await removeDomainFn({ data: { name: domain.name } })
       onRemoved()
-      return null
+      return false
     }, "Couldn't remove the domain.")
 
   return (
@@ -273,25 +275,11 @@ function UsesCard({
   const [other, setOther] = useState<OtherRemoval | null>(null)
   const [addressDialog, setAddressDialog] = useState<SendingAddressDialogTarget | null>(null)
   const [confirmMove, setConfirmMove] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { busy, error, setError, run } = useDomainAction(onChanged)
   const { data, domain, addresses } = sending
   const helpCenter = links.customDomain?.to === HELP_CENTER_SETTINGS
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-
-  /** Run a change, then read the page again unless the action says nothing changed. */
-  const run = async (action: () => Promise<unknown>, fallback: string) => {
-    setError(null)
-    setBusy(true)
-    try {
-      if ((await action()) !== false) onChanged()
-    } catch (err) {
-      setError(errorText(err, fallback))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const removeOther = (target: OtherRemoval) =>
     run(
@@ -380,7 +368,7 @@ function UsesCard({
             return (
               <SettingsListRow
                 key={use}
-                title={USE_TITLE[use]}
+                title={USE_COPY[use].title}
                 meta={useDescription(use, link)}
                 trailing={setUpControl(use)}
               />
@@ -389,7 +377,7 @@ function UsesCard({
           return (
             <SettingsListRow
               key={use}
-              title={USE_TITLE[use]}
+              title={USE_COPY[use].title}
               meta={meta(status)}
               badges={status.state ? <StateBadge state={status.state} /> : undefined}
               trailing={
