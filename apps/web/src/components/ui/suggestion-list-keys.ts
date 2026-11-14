@@ -68,7 +68,7 @@ export function firstPickableIndex<T>(
   items: readonly T[],
   isDisabled: (item: T) => boolean
 ): number {
-  return Math.max(0, items.length === 0 ? 0 : nearestPickable(items, 0, 1, isDisabled))
+  return Math.max(0, nearestPickable(items, 0, 1, isDisabled))
 }
 
 export function applySuggestionListKey<T>(
