@@ -97,7 +97,7 @@ async function startGrace(row: Domain, since: Date): Promise<Domain | null> {
 }
 
 /** A warning claim given back after a failed delivery: retaken at once, and never rings again. */
-const RELEASED_CLAIM = new Date(0)
+const releasedClaim = (): Date => new Date(0)
 
 /**
  * Warn about the missing record unless that was already delivered for this
@@ -145,7 +145,7 @@ async function deliverWarning(row: Domain): Promise<void> {
     .set(
       delivered
         ? { ownershipWarningSentAt: new Date() }
-        : { ownershipWarningClaimedAt: RELEASED_CLAIM }
+        : { ownershipWarningClaimedAt: releasedClaim() }
     )
     .where(ours)
   if (!delivered) {
