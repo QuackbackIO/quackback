@@ -171,6 +171,19 @@ describe('inScopeRecipients for a ticket', () => {
     expect(kept).toEqual([world.manager.id, world.onTeam.id, world.requester.id])
   })
 
+  it('drops the named requester of a back-office ticket who is not a teammate', async () => {
+    const { world, team } = await seedWorld()
+    const ticket = await seedTicket({ requester: world.requester.id, team, type: 'back_office' })
+
+    const kept = await inScopeRecipients(
+      { kind: 'ticket', id: ticket.id as TicketId },
+      [world.requester.id, world.onTeam.id],
+      { requesterPrincipalId: world.requester.id }
+    )
+
+    expect(kept).toEqual([world.onTeam.id])
+  })
+
   it('drops the requester when the caller does not name them', async () => {
     const { world, team } = await seedWorld()
     const ticket = await seedTicket({ requester: world.requester.id, team })
