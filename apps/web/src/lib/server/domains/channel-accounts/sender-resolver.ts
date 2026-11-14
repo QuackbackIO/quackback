@@ -145,8 +145,10 @@ async function resolve(input: {
     const address = conv?.threadSenderAddress ?? null
     if (address) {
       // Reused only while it is still one of the workspace's addresses, so
-      // removing an address moves its threads to whatever is chosen now.
-      const own = await workspaceAddress(address)
+      // removing an address moves its threads to whatever is chosen now. The
+      // guard's context is gathered meanwhile, which this step or a later one
+      // will check against.
+      const [own] = await Promise.all([workspaceAddress(address), ctx()])
       stored = { address, known: own.known }
       if (own.known) {
         const from = await permitted(address)
@@ -178,7 +180,12 @@ async function resolve(input: {
     const inboxAddress = account?.address ?? account?.config?.forwardingTarget ?? null
     const from = await permitted(inboxAddress)
     if (from && inboxAddress) {
-      const { senderName } = await workspaceAddress(inboxAddress)
+      // A sending row already carries its name; a forwarded address takes the
+      // name of the sending address it matches, if any.
+      const senderName =
+        account?.role === 'sending'
+          ? account.senderName
+          : (await workspaceAddress(inboxAddress)).senderName
       return answer({ from, source: 'inbox', senderName })
     }
   }
