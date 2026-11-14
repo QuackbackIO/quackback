@@ -179,6 +179,9 @@ async function deliverEmail(
       }
     }
 
+    // The From the config asks for, once the send guard permits it; nothing
+    // when it asks for none.
+    const sender = await checkedSender(cfg)
     let result: EmailResult
 
     if (event.type === 'post.status_changed') {
@@ -192,7 +195,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
-        ...(await checkedSender(cfg)),
+        ...sender,
       })
     } else if (event.type === 'comment.created') {
       result = await sendNewCommentEmail({
@@ -206,7 +209,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
-        ...(await checkedSender(cfg)),
+        ...sender,
       })
     } else if (event.type === 'post.mentioned') {
       const data = event.data as EventPostMentionedData
@@ -223,7 +226,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
-        ...(await checkedSender(cfg)),
+        ...sender,
       })
     } else if (event.type === 'conversation.note_mentioned') {
       const c = config as unknown as NoteMentionEmailConfig
@@ -249,7 +252,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
-        ...(await checkedSender(cfg)),
+        ...sender,
       })
     } else if (event.type === 'status.incident_created') {
       const c = config as Record<string, unknown>
@@ -265,7 +268,7 @@ async function deliverEmail(
         unsubscribeUrl: unsubscribeUrl ?? '',
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
-        ...(await checkedSender(cfg)),
+        ...sender,
       })
     } else if (event.type === 'status.maintenance_scheduled') {
       const c = config as Record<string, unknown>
@@ -283,7 +286,7 @@ async function deliverEmail(
         unsubscribeUrl: unsubscribeUrl ?? '',
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
-        ...(await checkedSender(cfg)),
+        ...sender,
       })
     } else if (TICKET_EMAIL_EVENT_TYPES.has(event.type)) {
       // All six ticket/SLA event types map onto sendTicketEventEmail; the
@@ -296,11 +299,10 @@ async function deliverEmail(
       result = await sendTicketEventEmail({
         to: email,
         ...t,
-        // Agent-facing ticket mail carries no From and no name: it goes from the
-        // platform address, which the email package names for `workspaceName`.
-        ...(t.from || t.fromDisplayName
-          ? await checkedSender(t)
-          : { from: undefined, fromDisplayName: undefined }),
+        // Agent-facing ticket mail carries no From, so no name either: it goes
+        // from the platform address, which the email package names for
+        // `workspaceName`.
+        ...sender,
         ...ticketThreading(t),
       })
     } else {
