@@ -182,8 +182,7 @@ describe('markConversationRead side derivation', () => {
     expect(mocks.updateSets.at(-1)).toHaveProperty('agentLastReadAt')
     expect(publish.publishConversationEvent).toHaveBeenCalledWith(
       conversationId,
-      expect.objectContaining({ kind: 'read', side: 'agent' }),
-      expect.objectContaining({ teamId: null }) // the item scope envelope
+      expect.objectContaining({ kind: 'read', side: 'agent' })
     )
   })
 
@@ -192,8 +191,7 @@ describe('markConversationRead side derivation', () => {
     expect(mocks.updateSets.at(-1)).toHaveProperty('visitorLastReadAt')
     expect(publish.publishConversationEvent).toHaveBeenCalledWith(
       conversationId,
-      expect.objectContaining({ kind: 'read', side: 'visitor' }),
-      expect.objectContaining({ teamId: null }) // the item scope envelope
+      expect.objectContaining({ kind: 'read', side: 'visitor' })
     )
   })
 })

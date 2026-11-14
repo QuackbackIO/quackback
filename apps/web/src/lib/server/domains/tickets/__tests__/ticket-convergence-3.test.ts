@@ -214,15 +214,12 @@ describe.skipIf(!fixture.available)('convergence Phase 3 cleanup (real DB, rolle
       expect(conversation.agentLastReadAt?.toISOString()).toBe(expected.toISOString())
       // …and the read event went out on the agent conversation channel, not
       // the ticket channel.
-      expect(realtime.publishAgentConversationEvent).toHaveBeenCalledWith(
-        {
-          kind: 'read',
-          conversationId,
-          side: 'agent',
-          at: expected.toISOString(),
-        },
-        expect.objectContaining({ teamId: null }) // the item scope envelope
-      )
+      expect(realtime.publishAgentConversationEvent).toHaveBeenCalledWith({
+        kind: 'read',
+        conversationId,
+        side: 'agent',
+        at: expected.toISOString(),
+      })
       expect(realtime.publishTicketEvent).not.toHaveBeenCalled()
     })
 
@@ -247,16 +244,12 @@ describe.skipIf(!fixture.available)('convergence Phase 3 cleanup (real DB, rolle
         .where(eq(tickets.id, ticketId))
       const expected = new Date(anchorCreatedAt.getTime() - 1)
       expect(ticket.assigneeLastReadAt?.toISOString()).toBe(expected.toISOString())
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
+        kind: 'ticket_read',
         ticketId,
-        {
-          kind: 'ticket_read',
-          ticketId,
-          side: 'agent',
-          at: expected.toISOString(),
-        },
-        expect.objectContaining({ teamId: null }) // the item scope envelope
-      )
+        side: 'agent',
+        at: expected.toISOString(),
+      })
     })
   })
 

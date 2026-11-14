@@ -186,16 +186,12 @@ describe.skipIf(!fixture.available)(
         // The conversation channel's read event fired (the pair lists as the
         // conversation row — that's the badge it clears); the legacy ticket
         // channel event did not.
-        expect(realtime.publishConversationEvent).toHaveBeenCalledWith(
+        expect(realtime.publishConversationEvent).toHaveBeenCalledWith(conversationId, {
+          kind: 'read',
           conversationId,
-          {
-            kind: 'read',
-            conversationId,
-            side: 'agent',
-            at: expect.any(String),
-          },
-          expect.objectContaining({ teamId: null }) // the item scope envelope
-        )
+          side: 'agent',
+          at: expect.any(String),
+        })
         expect(realtime.publishTicketEvent).not.toHaveBeenCalled()
       })
 

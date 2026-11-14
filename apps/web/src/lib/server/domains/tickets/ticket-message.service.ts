@@ -110,7 +110,6 @@ import { assertTicketVisible, loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
-import { ticketScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -326,11 +325,9 @@ export async function insertTicketMessage(
   // note on both the ticket + inbox channels unstripped — both audiences are
   // team-member-only in this phase (routes/api/chat/stream.ts's `ticketId`
   // scope gate), unlike the conversation domain's visitor-facing channel.
-  publishTicketEvent(
-    input.ticketId,
-    { kind: 'ticket_message', ticketId: input.ticketId, message },
-    ticketScopeOf(existing)
-  )
+  // No envelope: `existing` was read before this write, and the ticket may
+  // have moved since. The publish reads its owner at send time.
+  publishTicketEvent(input.ticketId, { kind: 'ticket_message', ticketId: input.ticketId, message })
   // The ticket as the write left it, so a caller's webhook carries the new
   // edit time and first response.
   const ticket: Ticket = {
@@ -422,11 +419,9 @@ async function sendViaPairConversation(
 
   const updatedAt = new Date(message.createdAt)
   await db.update(tickets).set({ updatedAt }).where(eq(tickets.id, input.ticketId))
-  publishTicketEvent(
-    input.ticketId,
-    { kind: 'ticket_message', ticketId: input.ticketId, message },
-    ticketScopeOf(ticket)
-  )
+  // No envelope: `ticket` was read before the pair send, which may have moved
+  // it. The publish reads its owner at send time.
+  publishTicketEvent(input.ticketId, { kind: 'ticket_message', ticketId: input.ticketId, message })
   // The reaction to the conversation's message also recomputes the first
   // response, but only a few seconds later, so a reply that sets it does so
   // here too and the caller's webhook carries it. Best-effort: the message
