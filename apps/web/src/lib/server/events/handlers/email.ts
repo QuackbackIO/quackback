@@ -134,7 +134,8 @@ async function checkedSender(cfg: {
   fromDisplayName?: string
   workspaceName: string
 }): Promise<{ from: SendingIdentity | undefined; fromDisplayName: string | undefined }> {
-  const from = (await permittedSendingIdentity(cfg.from ?? null)) ?? undefined
+  // No From asked for: nothing to check.
+  const from = cfg.from ? ((await permittedSendingIdentity(cfg.from)) ?? undefined) : undefined
   return { from, fromDisplayName: from ? (cfg.fromDisplayName ?? cfg.workspaceName) : undefined }
 }
 
