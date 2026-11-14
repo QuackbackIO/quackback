@@ -169,6 +169,8 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
             status: 'verified',
             verifiedAt: row.verifiedAt ?? now,
             ownershipMissingSince: null,
+            ownershipWarningClaimedAt: null,
+            ownershipWarningSentAt: null,
             lastCheckedAt: now,
             updatedAt: now,
           }

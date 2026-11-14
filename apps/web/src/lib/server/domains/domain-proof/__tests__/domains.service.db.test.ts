@@ -267,6 +267,27 @@ describe.skipIf(!fixture.available)('domains added by name (real DB, rolled back
       expect(after?.lastCheckedAt).toBeInstanceOf(Date)
     })
 
+    it("ends a verified domain's grace period and its warning together when the record is found", async () => {
+      const row = await addDomain('acme.com')
+      await testDb
+        .update(domains)
+        .set({
+          status: 'verified',
+          verifiedAt: new Date('2026-10-01T00:00:00Z'),
+          ownershipMissingSince: new Date('2026-11-01T06:00:00Z'),
+          ownershipWarningClaimedAt: new Date('2026-11-01T06:00:01Z'),
+          ownershipWarningSentAt: new Date('2026-11-01T06:00:02Z'),
+        })
+        .where(eq(domains.id, row.id))
+      published('acme.com', row.ownershipToken)
+
+      expect(await checkDomainOwnership('acme.com')).toEqual({ ok: true, via: 'dns' })
+      const after = await getDomain('acme.com')
+      expect(after?.ownershipMissingSince).toBeNull()
+      expect(after?.ownershipWarningClaimedAt).toBeNull()
+      expect(after?.ownershipWarningSentAt).toBeNull()
+    })
+
     it('stays pending when the record holds a different value', async () => {
       await addDomain('acme.com')
       // Another row's token, or a value copied from somewhere else, proves nothing.
