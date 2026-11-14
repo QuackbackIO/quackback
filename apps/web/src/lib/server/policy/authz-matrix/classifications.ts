@@ -740,6 +740,12 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
     why: 'SSE stream: the inbox and presence scopes are team-only; the conversation scope is gated by assertConversationVisible',
   },
+  'routes/api/chat/stream.ts::loadInboxScope::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
+    why: 'SSE inbox scope reload: re-asks the connect-time team gate, and closes the stream of a principal who has left the team',
+  },
   'lib/server/functions/portal-permissions.ts::getMyPortalPermissionsFn::isTeamMember': {
     intent: 'SECONDARY_GATE',
     roleBar: 'team',

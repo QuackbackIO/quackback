@@ -73,6 +73,11 @@ vi.mock('@/lib/server/domains/assistant/assistant-activity-snapshot', () => ({
 vi.mock('@/lib/server/realtime/pubsub', () => ({
   subscribe: (...a: unknown[]) => mockSubscribe(...a),
 }))
+// The inbox scope's team ids, read once at connect. Its filtering is covered
+// by stream-inbox-scope.db.test.ts.
+vi.mock('@/lib/server/domains/teams', () => ({
+  teamIdsForPrincipal: vi.fn(async () => new Set()),
+}))
 vi.mock('@/lib/server/realtime/presence', () => ({
   markPresent: (...a: unknown[]) => mockMarkPresent(...a),
   refreshPresence: (...a: unknown[]) => mockRefreshPresence(...a),
@@ -240,7 +245,11 @@ describe('GET /api/chat/stream - inbox scope', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('text/event-stream')
     await settleAndClose(res)
-    expect(mockSubscribe).toHaveBeenCalledWith(['conversation:inbox'], expect.any(Function))
+    // The principal's own channel carries scope changes for the inbox filter.
+    expect(mockSubscribe).toHaveBeenCalledWith(
+      ['conversation:inbox', expect.stringMatching(/^principal:/)],
+      expect.any(Function)
+    )
   })
 
   it('403s a promoted team role carried on a non-dashboard token', async () => {

@@ -12,6 +12,13 @@ import {
   type ParsedConversationFrame,
 } from '@/lib/server/realtime/conversation-channels'
 import { subscribe } from '@/lib/server/realtime/pubsub'
+import {
+  createInboxScopeGate,
+  type InboxScopeGate,
+  type InboxScopeLoad,
+} from '@/lib/server/realtime/inbox-scope-gate'
+import { inboxScopeChannel } from '@/lib/server/realtime/inbox-scope-invalidate'
+import { teamIdsForPrincipal } from '@/lib/server/domains/teams'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
 import { readActivitySnapshot } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
 import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
@@ -103,6 +110,21 @@ function formatFrame(
   }
 }
 
+/**
+ * Read a teammate's inbox scope afresh for the stream's cache: their view keys
+ * and team ids, or `'not-teammate'` when they have left the team (or the row
+ * is gone), which closes the stream.
+ */
+async function loadInboxScope(principalId: PrincipalId): Promise<InboxScopeLoad> {
+  const row = await db.query.principal.findFirst({ where: eq(principal.id, principalId) })
+  if (!row || !isTeamMember(row.role)) return 'not-teammate'
+  const [permissions, teamIds] = await Promise.all([
+    permissionsForPrincipal(principalId, row.role as Role),
+    teamIdsForPrincipal(principalId),
+  ])
+  return { permissions, teamIds }
+}
+
 export const Route = createFileRoute('/api/chat/stream')({
   server: {
     handlers: {
@@ -157,12 +179,18 @@ export const Route = createFileRoute('/api/chat/stream')({
         // Resolve which channel(s) to subscribe to, authorizing FIRST.
         const channels: string[] = []
         let backfillConversationId: ConversationId | null = null
+        // The inbox stream's scope, cached for its per-frame filter: the
+        // teammate's view keys (resolved above) and team ids.
+        let inboxTeamIds: ReadonlySet<string> | null = null
 
         if (scope === 'inbox') {
           if (!isTeamMember(effectiveRole)) {
             return new Response('Forbidden', { status: 403 })
           }
-          channels.push(CONVERSATION_INBOX_CHANNEL)
+          inboxTeamIds = await teamIdsForPrincipal(me.principalId)
+          // The inbox channel carries every item; the principal's own channel
+          // says when their role or teams change.
+          channels.push(CONVERSATION_INBOX_CHANNEL, inboxScopeChannel(me.principalId))
         } else if (scope === 'presence') {
           // App-wide agent presence: any admin page keeps a team member marked
           // online for routing. Heartbeat only — no channel subscription.
@@ -326,14 +354,7 @@ export const Route = createFileRoute('/api/chat/stream')({
             let backfilling = Boolean(backfillConversationId && lastEventId)
             const liveBuffer: Array<{ id?: string; frame: string }> = []
 
-            const unsub = await subscribe(channels, (_channel, message) => {
-              const event = parseConversationFrame(message)
-              // Never echo a subscriber's own typing back to them, on any
-              // surface — clients can treat every typing event they receive
-              // as someone else's.
-              if (isOwnTyping(event, me.principalId)) {
-                return
-              }
+            const deliver = (message: string, event: ParsedConversationFrame) => {
               const { id, frame } = formatFrame(message, event)
               if (backfilling) {
                 liveBuffer.push({ id, frame })
@@ -341,6 +362,43 @@ export const Route = createFileRoute('/api/chat/stream')({
               }
               if (id) sentMessageIds.add(id)
               sse.sendRaw(frame)
+            }
+
+            // The inbox carries every item in the workspace; the gate passes on
+            // only what this teammate's scope holds (inbox-scope-gate.ts).
+            const gate: InboxScopeGate | null = inboxTeamIds
+              ? createInboxScopeGate({
+                  principalId: me.principalId,
+                  initial: { permissions, teamIds: inboxTeamIds },
+                  load: () => loadInboxScope(me.principalId),
+                  runReload: withLivePool,
+                  forward: (message) => deliver(message, parseConversationFrame(message)),
+                  sendEvent: (name, data) =>
+                    sse.sendRaw(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`),
+                  close: () => void cleanup(),
+                })
+              : null
+            const scopeChannel = inboxScopeChannel(me.principalId)
+
+            const unsub = await subscribe(channels, (channel, message, frameScope) => {
+              if (gate && channel === scopeChannel) {
+                gate.onScopeChanged()
+                return
+              }
+              const event = parseConversationFrame(message)
+              // Never echo a subscriber's own typing back to them, on any
+              // surface — clients can treat every typing event they receive
+              // as someone else's.
+              if (isOwnTyping(event, me.principalId)) {
+                return
+              }
+              // Only the inbox channel is filtered; a conversation or ticket
+              // channel was authorized for its one item at connect.
+              if (gate && channel === CONVERSATION_INBOX_CHANNEL) {
+                gate.onInboxFrame(message, frameScope)
+                return
+              }
+              deliver(message, event)
             })
             // If the client aborted while subscribe() was in flight, cleanup
             // already ran (with unsubscribe still null) — release this orphan
