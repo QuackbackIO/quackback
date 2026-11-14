@@ -145,7 +145,9 @@ describe('signalTyping side derivation', () => {
       conversationId,
       'agent',
       expect.any(String),
-      'principal_agent'
+      'principal_agent',
+      // The row it already read is the inbox frame's scope envelope.
+      { assigneePrincipalId: null, teamId: null }
     )
   })
 
@@ -155,7 +157,9 @@ describe('signalTyping side derivation', () => {
       conversationId,
       'visitor',
       expect.any(String),
-      'principal_owner'
+      'principal_owner',
+      // The row it already read is the inbox frame's scope envelope.
+      { assigneePrincipalId: null, teamId: null }
     )
   })
 
@@ -165,7 +169,9 @@ describe('signalTyping side derivation', () => {
       conversationId,
       'visitor',
       expect.any(String),
-      'principal_owner'
+      'principal_owner',
+      // The row it already read is the inbox frame's scope envelope.
+      { assigneePrincipalId: null, teamId: null }
     )
   })
 })

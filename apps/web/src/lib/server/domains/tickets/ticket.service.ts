@@ -850,7 +850,12 @@ export async function assignTicket(
   // Realtime signal (unified inbox §3.2, M3): unconditional, unlike the
   // webhook below — an inbox row re-render on a no-op re-assign is harmless,
   // while a missed signal on an actual reorder-relevant change is not.
-  const dto = await publishTicketUpdated(updated)
+  const dto = await publishTicketUpdated(updated, {
+    prev: {
+      assigneePrincipalId: existing.assigneePrincipalId ?? null,
+      teamId: existing.assigneeTeamId ?? null,
+    },
+  })
 
   // Only signal when an assignee actually moved (a no-op re-assign must not fire).
   if (
