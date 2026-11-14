@@ -10,9 +10,21 @@
  * are stubbed.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
-import type { ConversationId, PrincipalId, TeamId, TicketId } from '@quackback/ids'
+import type {
+  ConversationId,
+  ConversationMessageId,
+  PrincipalId,
+  TeamId,
+  TicketId,
+} from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { conversations, ticketSubscriptions, eq } from '@/lib/server/db'
+import {
+  conversationMessageMentions,
+  conversationMessages,
+  conversations,
+  ticketSubscriptions,
+  eq,
+} from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   SCOPED_KEYS,
@@ -42,6 +54,11 @@ vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: async () => false,
   isPrincipalOnline: async () => false,
 }))
+const dispatchMentioned = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/events/dispatch', async (original) => ({
+  ...(await original<typeof import('@/lib/server/events/dispatch')>()),
+  dispatchConversationNoteMentioned: dispatchMentioned,
+}))
 vi.mock('@/lib/server/events/hook-context', () => ({
   buildHookContext: async () => ({
     workspaceName: 'W',
@@ -65,7 +82,10 @@ import {
   getTicketNoteAddedTargets,
   getTicketRepliedTargets,
   getMessageCreatedTargets,
+  getConversationNoteMentionedTargets,
+  getConversationNoteMentionedEmailTargets,
 } from '../targets'
+import { syncConversationMessageMentions } from '@/lib/server/domains/conversation/sync-conversation-mentions'
 import { notifyVisitorMessage } from '@/lib/server/domains/conversation/conversation.notify'
 
 const fixture = await createDbTestFixture({
@@ -78,6 +98,7 @@ beforeEach(async () => {
   expect(fixture.available).toBe(true)
   await fixture.begin()
   sendEmail.mockReset().mockResolvedValue({ sent: true })
+  dispatchMentioned.mockReset()
 })
 afterEach(fixture.rollback)
 afterAll(fixture.close)
@@ -527,5 +548,85 @@ describe('new-message bell and email', () => {
     expect(emailed.filter((e) => mine.some((p) => p.email === e))).toEqual(
       [w.manager.email, w.actor.email, w.solo.email].sort()
     )
+  })
+})
+
+// ============================================================================
+// @mentions in a conversation note
+// ============================================================================
+
+describe('note mentions', () => {
+  async function note(conversationId: ConversationId, author: PrincipalId) {
+    const [row] = await testDb
+      .insert(conversationMessages)
+      .values({
+        conversationId,
+        principalId: author,
+        senderType: 'agent',
+        content: 'Internal',
+        isInternal: true,
+      })
+      .returning()
+    return row.id as ConversationMessageId
+  }
+
+  function mentioned(
+    w: World,
+    conversationId: ConversationId,
+    messageId: ConversationMessageId,
+    ids: PrincipalId[]
+  ): EventData {
+    return {
+      id: 'evt-mention',
+      type: 'conversation.note_mentioned',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: w.actor.id },
+      data: {
+        conversationId,
+        conversationMessageId: messageId,
+        mentionedPrincipalIds: ids,
+        authorName: 'Actor',
+        preview: 'Internal',
+      },
+    } as unknown as EventData
+  }
+
+  it('the server drops a mention of a teammate who cannot see the conversation', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    const id = conversation.id as ConversationId
+    const messageId = await note(id, w.actor.id)
+
+    await syncConversationMessageMentions({
+      conversationMessageId: messageId,
+      conversationId: id,
+      mentionedIds: new Set([w.onTeam.id, w.elsewhere.id, w.blind.id, w.manager.id]),
+      authorPrincipalId: w.actor.id,
+      authorName: 'Actor',
+      content: 'Internal',
+    })
+
+    const rows = await testDb
+      .select({ principalId: conversationMessageMentions.principalId })
+      .from(conversationMessageMentions)
+      .where(eq(conversationMessageMentions.conversationMessageId, messageId))
+    expect(rows.map((r) => r.principalId).sort()).toEqual(sorted(w.onTeam.id, w.manager.id))
+    expect(dispatchMentioned).toHaveBeenCalledTimes(1)
+    const payload = dispatchMentioned.mock.calls[0][1] as { mentionedPrincipalIds: string[] }
+    expect([...payload.mentionedPrincipalIds].sort()).toEqual(sorted(w.onTeam.id, w.manager.id))
+  })
+
+  it('bell and email skip a mentioned teammate the conversation moved away from', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    const id = conversation.id as ConversationId
+    const messageId = await note(id, w.actor.id)
+    await moveConversation(id, { assignee: null, team: w.logistics })
+    const event = mentioned(w, id, messageId, [w.onTeam.id, w.manager.id])
+
+    const bell = await getConversationNoteMentionedTargets(event)
+    expect(recipientsOf(bell)).toEqual([w.manager.id])
+    const emails = await getConversationNoteMentionedEmailTargets(event, context)
+    expect(emailsOf(emails)).toEqual([w.manager.email])
   })
 })

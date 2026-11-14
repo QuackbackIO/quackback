@@ -68,6 +68,12 @@ function makeUpdateChain() {
   return chain
 }
 
+// The scope rule itself runs over real rows in
+// events/__tests__/notification-scope.db.test.ts; here every recipient is in
+// scope, so these cases test only what this module adds.
+vi.mock('@/lib/server/domains/notifications/recipient-scope', () => ({
+  inScopeRecipients: async (_item: unknown, ids: readonly string[]) => [...ids],
+}))
 vi.mock('@/lib/server/db', () => ({
   db: {
     select: (_cols: unknown) => makeSelect(),

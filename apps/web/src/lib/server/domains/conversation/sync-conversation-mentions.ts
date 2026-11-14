@@ -7,6 +7,9 @@
  *  - Mentions are TEAM-ONLY: a note is agent-facing, so only admin/member
  *    principals are eligible. Visitors (role 'user') and service principals are
  *    dropped server-side, defending against a tampered client.
+ *  - A teammate whose own scope does not hold the conversation is dropped too:
+ *    the composer blocks picking them, and a mention that gets past it (an old
+ *    client, a scope change while typing) stores no row and sends no notice.
  *  - Alerts ride the `conversation.note_mentioned` event/hook pipeline and fan
  *    out on two channels: a `chat_mention` in-app notification and an email to
  *    the same teammates. Each channel is gated independently by the
@@ -27,6 +30,7 @@ import type { EventActor } from '@/lib/server/events/types'
 import { truncate } from '@/lib/shared/utils/string'
 import type { ConversationMessageId, ConversationId, PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { inScopeRecipients } from '@/lib/server/domains/notifications/recipient-scope'
 
 const log = logger.child({ component: 'conversation-mentions' })
 
@@ -61,12 +65,16 @@ export async function syncConversationMessageMentions(
       .from(principal)
       .where(inArray(principal.id, Array.from(mentionedIds)))
 
-    const eligibleIds: PrincipalId[] = []
+    const teammateIds: PrincipalId[] = []
     for (const r of rows) {
       if (r.type === 'user' && (r.role === 'admin' || r.role === 'member')) {
-        eligibleIds.push(r.id as PrincipalId)
+        teammateIds.push(r.id as PrincipalId)
       }
     }
+    const eligibleIds = await inScopeRecipients(
+      { kind: 'conversation', id: conversationId },
+      teammateIds
+    )
     if (eligibleIds.length === 0) return
 
     const inserted = (await db
