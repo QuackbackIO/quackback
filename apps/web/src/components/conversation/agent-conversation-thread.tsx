@@ -279,6 +279,8 @@ const INACTIVE_TICKET_ID = '' as TicketId
 
 /** Why a tracker's Reply all takes no files. */
 const REPLY_ALL_NO_FILES = "Reply all can't include files."
+/** A tracker has no requester of its own: Reply all reaches each linked ticket's. */
+const REPLY_ALL_PLACEHOLDER = "Reply to every linked ticket's requester…"
 
 /**
  * The thread's imperative seam for the inbox's keyboard-first actions
@@ -2355,10 +2357,14 @@ export function AgentConversationThread({
                 borderless
                 minHeight="4.5rem"
                 autofocus={replyKey > 0 ? 'end' : false}
-                placeholder={channelReplyPlaceholder(conversation?.channel, {
-                  closed: isClosedConversation,
-                  isTicket,
-                })}
+                placeholder={
+                  replyAllMode
+                    ? REPLY_ALL_PLACEHOLDER
+                    : channelReplyPlaceholder(conversation?.channel, {
+                        closed: isClosedConversation,
+                        isTicket,
+                      })
+                }
                 className="max-h-64 overflow-y-auto"
                 onDocumentChange={onReplyChange}
                 onSubmit={onSend}

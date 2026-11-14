@@ -707,6 +707,16 @@ describe('AgentConversationThread — tracker Reply all mode', () => {
     expect(screen.queryByRole('button', { name: 'Note' })).not.toBeInTheDocument()
   })
 
+  it('asks for a reply to every linked ticket, not to a requester the tracker lacks', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    renderTracker()
+    await chooseReplyAll()
+    expect(screen.getByTestId('editor')).toHaveAttribute(
+      'placeholder',
+      "Reply to every linked ticket's requester…"
+    )
+  })
+
   it('has no attach button in Reply all mode, and keeps it for a note', async () => {
     routeContextState.permissions = ['ticket.view', 'ticket.reply']
     renderTracker()
