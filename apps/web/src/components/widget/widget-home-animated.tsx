@@ -21,13 +21,6 @@ import {
 import { m, AnimatePresence } from 'framer-motion'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { widgetListPublicPostsFn } from '@/lib/server/functions/widget/posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
@@ -47,6 +40,7 @@ import {
   RichTextEditorPlaceholder,
 } from '@/components/ui/lazy-rich-text-editor'
 import { useWidgetMediaUpload, WidgetSessionError } from './use-widget-image-upload'
+import { lazyWithPreload } from '@/lib/client/lazy-with-preload'
 import type { JSONContent } from '@tiptap/react'
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
@@ -272,6 +266,28 @@ const WidgetPostRow = memo(
     prev.canVote === next.canVote &&
     prev.noAccessReason === next.noAccessReason
 )
+
+// The board picker shows only once the visitor starts writing, so its select
+// and positioning code load behind this boundary, warmed when the title gets
+// focus, instead of in the widget's first load.
+const boardSelect = lazyWithPreload(() => import('./widget-board-select'), 'WidgetBoardSelect')
+const WidgetBoardSelect = boardSelect.Component
+const preloadBoardSelect = boardSelect.preload
+
+/** The picker's closed trigger, drawn without the select while it loads. */
+function BoardSelectPlaceholder({ name }: { name: string | undefined }) {
+  const intl = useIntl()
+  return (
+    <span className="inline-flex h-6 items-center gap-1 px-1.5 text-xs font-medium whitespace-nowrap text-foreground">
+      {name ??
+        intl.formatMessage({
+          id: 'widget.home.posting.selectBoard',
+          defaultMessage: 'Select a board',
+        })}
+      <span aria-hidden className="size-3" />
+    </span>
+  )
+}
 
 /**
  * The title as typed, held outside React state: the field and the similar-ideas
@@ -873,26 +889,19 @@ export function WidgetHomeAnimated({
                         defaultMessage="Posting to"
                       />
                     </span>
-                    <Select value={selectedBoardId} onValueChange={handleComposeBoardChange}>
-                      <SelectTrigger
-                        size="xs"
-                        className="border-0 font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
-                      >
-                        <SelectValue
-                          placeholder={intl.formatMessage({
-                            id: 'widget.home.posting.selectBoard',
-                            defaultMessage: 'Select a board',
-                          })}
+                    <Suspense
+                      fallback={
+                        <BoardSelectPlaceholder
+                          name={boards.find((b) => b.id === selectedBoardId)?.name}
                         />
-                      </SelectTrigger>
-                      <SelectContent align="start">
-                        {boards.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      }
+                    >
+                      <WidgetBoardSelect
+                        boards={boards}
+                        value={selectedBoardId}
+                        onValueChange={handleComposeBoardChange}
+                      />
+                    </Suspense>
                   </div>
                 </m.div>
               )}
@@ -922,6 +931,7 @@ export function WidgetHomeAnimated({
                   if (!val && expanded && !detailsRef.current?.html().trim()) setExpanded(false)
                 }}
                 onFocus={() => {
+                  preloadBoardSelect()
                   if (title.get() && !expanded) setExpanded(true)
                 }}
               />

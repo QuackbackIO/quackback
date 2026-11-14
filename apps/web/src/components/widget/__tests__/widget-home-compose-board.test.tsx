@@ -145,14 +145,15 @@ describe('widget compose board', () => {
     )
   })
 
-  it('shows the only board and enables Submit once the title is filled', () => {
+  it('shows the only board and enables Submit once the title is filled', async () => {
     renderHome({ boards: [ideas], boardPermissions: allow(ideas.id) })
     expect(screen.queryByText('Posting to')).toBeNull()
 
     typeTitle('Testing.')
 
     expect(screen.getByText('Posting to')).toBeTruthy()
-    expect(screen.getByRole('combobox')).toHaveValue(ideas.id)
+    // The picker loads behind a lazy boundary.
+    expect(await screen.findByRole('combobox')).toHaveValue(ideas.id)
     expect(screen.getByRole('option', { name: 'Feature Requests' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Post' })).toBeEnabled()
   })
