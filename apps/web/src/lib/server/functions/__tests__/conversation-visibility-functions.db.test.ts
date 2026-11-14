@@ -18,14 +18,11 @@ import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vites
 import {
   createId,
   type ConversationId,
-  type ConversationMessageId,
   type ConversationTagId,
   type MacroId,
-  type PrincipalId,
   type TeamId,
   type TicketId,
   type TicketStatusId,
-  type UserId,
 } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import type { PermissionKey } from '@/lib/shared/permissions'
@@ -33,18 +30,10 @@ import type { PermissionKey } from '@/lib/shared/permissions'
 const session = vi.hoisted(() => ({ actor: null as unknown as Actor }))
 const translation = vi.hoisted(() => ({ calls: 0 }))
 
-vi.mock('@tanstack/react-start', () => ({
-  createServerFn: () => {
-    const chain: Record<string, unknown> = {}
-    chain.validator = () => chain
-    chain.inputValidator = () => chain
-    chain.middleware = () => chain
-    chain.handler = (handler: (args: { data?: unknown }) => Promise<unknown>) =>
-      Object.assign((args?: { data?: unknown }) => handler(args ?? {}), chain)
-    return chain
-  },
-  createServerOnlyFn: (fn: unknown) => fn,
-}))
+vi.mock('@tanstack/react-start', async (importOriginal) => {
+  const { withServerFnsInProcess } = await import('@/test/server-fns-in-process')
+  return withServerFnsInProcess(await importOriginal<typeof import('@tanstack/react-start')>())
+})
 
 /** The session stand-in: the caller is `session.actor`, and a permission gate
  *  refuses exactly as the real one does when the actor lacks the key. */
@@ -76,49 +65,21 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
-
-vi.mock('@/lib/server/config', () => ({
-  config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
-  getBaseUrl: () => 'http://localhost:3000',
-}))
-
-vi.mock('@/lib/server/realtime/conversation-channels', () => ({
-  publishTicketEvent: vi.fn(),
-  publishConversationEvent: vi.fn(),
-  publishConversationOnlyEvent: vi.fn(),
-  publishConversationMessage: vi.fn(),
-  publishAgentConversationEvent: vi.fn(),
-  publishConversationUpdate: vi.fn(),
-  publishTyping: vi.fn(),
-}))
-
-vi.mock('@/lib/server/domains/tickets/ticket.webhooks', () => ({
-  emitTicketCreated: vi.fn().mockResolvedValue(undefined),
-  emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
-  emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
-  emitTicketReplied: vi.fn().mockResolvedValue(undefined),
-  emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
-  emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('@/lib/server/domains/conversation/conversation.webhooks', () => ({
-  emitConversationCreated: vi.fn().mockResolvedValue(undefined),
-  emitMessageCreated: vi.fn().mockResolvedValue(undefined),
-  emitMessageNoteCreated: vi.fn().mockResolvedValue(undefined),
-  emitMessageDeleted: vi.fn().mockResolvedValue(undefined),
-  emitMessageUpdated: vi.fn().mockResolvedValue(undefined),
-  emitConversationStatusChanged: vi.fn().mockResolvedValue(undefined),
-  emitConversationAssigned: vi.fn().mockResolvedValue(undefined),
-  emitConversationPriorityChanged: vi.fn().mockResolvedValue(undefined),
-  emitConversationCsatSubmitted: vi.fn().mockResolvedValue(undefined),
-  emitConversationCsatCommentAdded: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('@/lib/server/domains/conversation/conversation.notify', () => ({
-  notifyVisitorMessage: vi.fn().mockResolvedValue(undefined),
-  notifyAgentReply: vi.fn().mockResolvedValue(undefined),
-  notifyConversationStarted: vi.fn().mockResolvedValue(undefined),
-}))
+vi.mock('@/lib/server/config', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).configMocks()
+)
+vi.mock('@/lib/server/realtime/conversation-channels', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).channelMocks()
+)
+vi.mock('@/lib/server/domains/tickets/ticket.webhooks', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).ticketWebhookMocks()
+)
+vi.mock('@/lib/server/domains/conversation/conversation.webhooks', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).conversationWebhookMocks()
+)
+vi.mock('@/lib/server/domains/conversation/conversation.notify', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).notifyMocks()
+)
 
 /** Conversations are on, so the shared visitor and agent reads reach their
  *  visibility check instead of stopping at the feature gate. */
@@ -151,25 +112,26 @@ vi.mock(
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
+  MESSAGE_NOT_FOUND,
+  NOT_FOUND,
+  messagesOn,
+  row,
+  seedWorld as seedVisibilityWorld,
+  suffix,
+} from '@/lib/server/__tests__/conversation-visibility-world'
+import {
   conversationAttributeDefinitions,
   conversationMessageFlags,
   conversationMessageReactions,
-  conversationMessages,
   conversationParticipants,
   conversations,
   conversationTagAssignments,
   conversationTags,
   eq,
   macros,
-  principal,
-  settings,
-  teamMembers,
-  teams,
   ticketConversations,
   tickets,
   ticketStatuses,
-  user,
-  PERMISSIONS,
 } from '@/lib/server/db'
 import {
   addConversationNoteFn,
@@ -222,115 +184,15 @@ const fixture = await createDbTestFixture({
   },
 })
 
-const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-
-const NOT_FOUND = { code: 'CONVERSATION_NOT_FOUND', statusCode: 404 }
-const MESSAGE_NOT_FOUND = { code: 'MESSAGE_NOT_FOUND', statusCode: 404 }
-
-const SCOPED_PERMISSIONS: PermissionKey[] = [
-  PERMISSIONS.CONVERSATION_VIEW,
-  PERMISSIONS.CONVERSATION_REPLY,
-  PERMISSIONS.CONVERSATION_NOTE,
-  PERMISSIONS.CONVERSATION_SET_STATUS,
-  PERMISSIONS.CONVERSATION_ASSIGN,
-  PERMISSIONS.CONVERSATION_MANAGE,
-  PERMISSIONS.CONVERSATION_SET_TAGS,
-  PERMISSIONS.CONVERSATION_MANAGE_TAGS,
-  PERMISSIONS.CONVERSATION_SET_ATTRIBUTES,
-  PERMISSIONS.TICKET_VIEW,
-  PERMISSIONS.TICKET_CREATE,
-  PERMISSIONS.POST_CREATE,
-  PERMISSIONS.ROUTING_MANAGE,
-]
-
-async function seedPerson(role: 'member' | 'user'): Promise<PrincipalId> {
-  const userId = createId('user') as UserId
-  const principalId = createId('principal') as PrincipalId
-  await testDb
-    .insert(user)
-    .values({ id: userId, name: `P-${suffix()}`, email: `p-${suffix()}@example.com` })
-  await testDb
-    .insert(principal)
-    .values({ id: principalId, userId, role, type: 'user', createdAt: new Date() })
-  return principalId
-}
-
+/** The world, with the scoped teammate signed in. */
 async function seedWorld() {
-  await testDb
-    .insert(settings)
-    .values({ name: 'Acme', slug: `acme-${suffix()}`, createdAt: new Date() })
-  const teammate = await seedPerson('member')
-  const visitor = await seedPerson('user')
-  const teamX = createId('team') as TeamId
-  const teamY = createId('team') as TeamId
-  await testDb.insert(teams).values([
-    { id: teamX, name: `X-${suffix()}` },
-    { id: teamY, name: `Y-${suffix()}` },
-  ])
-  await testDb.insert(teamMembers).values({ teamId: teamX, principalId: teammate })
-
-  /** A conversation on `team`, with one visitor message and one own agent reply. */
-  async function conversation(
-    team: TeamId | null,
-    extra: Partial<typeof conversations.$inferInsert> = {}
-  ) {
-    const id = createId('conversation') as ConversationId
-    await testDb.insert(conversations).values({
-      id,
-      visitorPrincipalId: visitor,
-      channel: 'messenger',
-      assignedTeamId: team,
-      ...extra,
-    })
-    const [visitorMessage] = await testDb
-      .insert(conversationMessages)
-      .values({
-        conversationId: id,
-        principalId: visitor,
-        senderType: 'visitor',
-        content: 'Acme cannot sign in',
-      })
-      .returning()
-    const [ownReply] = await testDb
-      .insert(conversationMessages)
-      .values({
-        conversationId: id,
-        principalId: teammate,
-        senderType: 'agent',
-        content: 'Looking into it',
-      })
-      .returning()
-    return {
-      id,
-      messageId: visitorMessage.id as ConversationMessageId,
-      ownReplyId: ownReply.id as ConversationMessageId,
-    }
-  }
-
-  session.actor = {
-    principalId: teammate,
-    role: 'member',
-    principalType: 'user',
-    segmentIds: new Set(),
-    permissions: new Set(SCOPED_PERMISSIONS),
-  }
-  return { teammate, visitor, teamX, teamY, conversation }
+  const w = await seedVisibilityWorld({ withOwnReply: true })
+  session.actor = w.actor
+  return w
 }
 
 type W = Awaited<ReturnType<typeof seedWorld>>
 type C = Awaited<ReturnType<W['conversation']>>
-
-async function row(id: ConversationId) {
-  const [found] = await testDb.select().from(conversations).where(eq(conversations.id, id))
-  return found
-}
-
-async function messagesOn(id: ConversationId) {
-  return testDb
-    .select()
-    .from(conversationMessages)
-    .where(eq(conversationMessages.conversationId, id))
-}
 
 describe('conversation server functions check visibility (real DB, rolled back)', () => {
   beforeEach(async () => {
@@ -352,31 +214,23 @@ describe('conversation server functions check visibility (real DB, rolled back)'
    * conversation. Every one also succeeds on a visible conversation, and the
    * hidden row and its thread stay as they were.
    */
-  const calls: [string, (w: W, c: C) => Promise<unknown>, object][] = [
-    [
-      'getConversationFn',
-      (_, c) => getConversationFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
-    ],
+  const calls: [string, (w: W, c: C) => Promise<unknown>, object?][] = [
+    ['getConversationFn', (_, c) => getConversationFn({ data: { conversationId: c.id } })],
     [
       'listConversationMessagesFn',
       (_, c) => listConversationMessagesFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'exportConversationTranscriptFn',
       (_, c) => exportConversationTranscriptFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'markConversationReadFn',
       (_, c) => markConversationReadFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'sendConversationTypingFn',
       (_, c) => sendConversationTypingFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'editConversationMessageFn',
@@ -387,12 +241,10 @@ describe('conversation server functions check visibility (real DB, rolled back)'
     [
       'deleteConversationMessageFn',
       (_, c) => deleteConversationMessageFn({ data: { messageId: c.ownReplyId } }),
-      NOT_FOUND,
     ],
     [
       'getConversationAssistantActivityFn',
       (_, c) => getConversationAssistantActivityFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'sendAgentMessageFn',
@@ -400,12 +252,10 @@ describe('conversation server functions check visibility (real DB, rolled back)'
         sendAgentMessageFn({
           data: { conversationId: c.id, content: 'Hello from Acme', skipTranslation: true },
         }),
-      NOT_FOUND,
     ],
     [
       'addConversationNoteFn',
       (_, c) => addConversationNoteFn({ data: { conversationId: c.id, content: 'Acme note' } }),
-      NOT_FOUND,
     ],
     [
       'captureVisitorContactEmailFn',
@@ -413,57 +263,46 @@ describe('conversation server functions check visibility (real DB, rolled back)'
         captureVisitorContactEmailFn({
           data: { conversationId: c.id, email: 'pat@example.com' },
         }),
-      NOT_FOUND,
     ],
     [
       'sharePostFn',
       (_, c) => sharePostFn({ data: { conversationId: c.id, postId: createId('post') as string } }),
-      NOT_FOUND,
     ],
     [
       'setConversationStatusFn',
       (_, c) => setConversationStatusFn({ data: { conversationId: c.id, status: 'closed' } }),
-      NOT_FOUND,
     ],
     [
       'snoozeConversationFn',
       (_, c) => snoozeConversationFn({ data: { conversationId: c.id, until: null } }),
-      NOT_FOUND,
     ],
     [
       'endConversationFn',
       (_, c) => endConversationFn({ data: { conversationId: c.id, reason: 'resolved' } }),
-      NOT_FOUND,
     ],
     [
       'assignConversationFn',
       (_, c) => assignConversationFn({ data: { conversationId: c.id, assignTo: 'me' } }),
-      NOT_FOUND,
     ],
     [
       'setConversationPriorityFn',
       (_, c) => setConversationPriorityFn({ data: { conversationId: c.id, priority: 'urgent' } }),
-      NOT_FOUND,
     ],
     [
       'assignConversationTeamFn',
       (w, c) => assignConversationTeamFn({ data: { conversationId: c.id, teamId: w.teamX } }),
-      NOT_FOUND,
     ],
     [
       'addMessageReactionFn',
       (_, c) => addMessageReactionFn({ data: { messageId: c.messageId, emoji: '👍' } }),
-      NOT_FOUND,
     ],
     [
       'removeMessageReactionFn',
       (_, c) => removeMessageReactionFn({ data: { messageId: c.messageId, emoji: '👍' } }),
-      NOT_FOUND,
     ],
     [
       'setMessageFlagFn',
       (_, c) => setMessageFlagFn({ data: { messageId: c.messageId, flagged: true } }),
-      NOT_FOUND,
     ],
     [
       'markConversationUnreadFromMessageFn',
@@ -471,29 +310,24 @@ describe('conversation server functions check visibility (real DB, rolled back)'
         markConversationUnreadFromMessageFn({
           data: { conversationId: c.id, messageId: c.messageId },
         }),
-      NOT_FOUND,
     ],
     [
       'addConversationParticipantFn',
       (_, c) =>
         addConversationParticipantFn({ data: { conversationId: c.id, email: 'pat@example.com' } }),
-      NOT_FOUND,
     ],
     [
       'removeConversationParticipantFn',
       (w, c) =>
         removeConversationParticipantFn({ data: { conversationId: c.id, principalId: w.visitor } }),
-      NOT_FOUND,
     ],
     [
       'listConversationParticipantsFn',
       (_, c) => listConversationParticipantsFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'getLinkedPostsForConversationFn',
       (_, c) => getLinkedPostsForConversationFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'translateConversationMessagesFn',
@@ -501,37 +335,30 @@ describe('conversation server functions check visibility (real DB, rolled back)'
         translateConversationMessagesFn({
           data: { conversationId: c.id, messageIds: [c.messageId] },
         }),
-      NOT_FOUND,
     ],
     [
       'setInboxTranslationEnabledFn',
       (_, c) => setInboxTranslationEnabledFn({ data: { conversationId: c.id, enabled: true } }),
-      NOT_FOUND,
     ],
     [
       'dismissInboxTranslationSuggestionFn',
       (_, c) => dismissInboxTranslationSuggestionFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'getConversationTicketLinkFn',
       (_, c) => getConversationTicketLinkFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'removeConversationSlaFn',
       (_, c) => removeConversationSlaFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'listConversationFilesFn',
       (_, c) => listConversationFilesFn({ data: { conversationId: c.id } }),
-      NOT_FOUND,
     ],
     [
       'addConversationTagFn',
       (_, c) => addConversationTagFn({ data: { conversationId: c.id, name: `Acme ${suffix()}` } }),
-      NOT_FOUND,
     ],
     [
       'retryGitHubAgentMessageFn',
@@ -542,7 +369,7 @@ describe('conversation server functions check visibility (real DB, rolled back)'
 
   it.each(calls)(
     '%s: NotFound for a hidden conversation, which stays as it was',
-    async (_, call, notFound) => {
+    async (_, call, notFound = NOT_FOUND) => {
       const w = await seedWorld()
       // The same channel as the visible case, so only scope tells them apart.
       const hidden = await w.conversation(w.teamY, { channel: 'github' })
@@ -768,6 +595,15 @@ describe('conversation server functions check visibility (real DB, rolled back)'
         applyMacroFn({ data: { conversationId: hidden.id, macroId } })
       ).rejects.toMatchObject(NOT_FOUND)
       expect((await row(hidden.id)).priority).not.toBe('urgent')
+    })
+
+    it('applyMacroFn checks the conversation before it reads the macro or renders it', async () => {
+      const w = await seedWorld()
+      const hidden = await w.conversation(w.teamY)
+      // A missing macro would otherwise answer first, with its own NotFound.
+      await expect(
+        applyMacroFn({ data: { conversationId: hidden.id, macroId: createId('macro') } })
+      ).rejects.toMatchObject(NOT_FOUND)
     })
 
     it('a macro that moves the conversation to another team still finishes, then the teammate is out', async () => {

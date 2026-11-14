@@ -23,62 +23,42 @@ import {
   type ConversationId,
   type ConversationMessageId,
   type PostId,
-  type PrincipalId,
-  type TeamId,
   type TicketId,
   type TicketStatusId,
-  type UserId,
 } from '@quackback/ids'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
-
-vi.mock('@/lib/server/config', () => ({
-  config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
-  getBaseUrl: () => 'http://localhost:3000',
-}))
-
-vi.mock('@/lib/server/realtime/conversation-channels', () => ({
-  publishTicketEvent: vi.fn(),
-  publishConversationEvent: vi.fn(),
-  publishConversationOnlyEvent: vi.fn(),
-  publishConversationMessage: vi.fn(),
-  publishAgentConversationEvent: vi.fn(),
-  publishConversationUpdate: vi.fn(),
-  publishTyping: vi.fn(),
-}))
-
-vi.mock('@/lib/server/domains/tickets/ticket.webhooks', () => ({
-  emitTicketCreated: vi.fn().mockResolvedValue(undefined),
-  emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
-  emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
-  emitTicketReplied: vi.fn().mockResolvedValue(undefined),
-  emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
-  emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('../conversation.webhooks', () => ({
-  emitConversationCreated: vi.fn().mockResolvedValue(undefined),
-  emitMessageCreated: vi.fn().mockResolvedValue(undefined),
-  emitMessageNoteCreated: vi.fn().mockResolvedValue(undefined),
-  emitMessageDeleted: vi.fn().mockResolvedValue(undefined),
-  emitMessageUpdated: vi.fn().mockResolvedValue(undefined),
-  emitConversationStatusChanged: vi.fn().mockResolvedValue(undefined),
-  emitConversationAssigned: vi.fn().mockResolvedValue(undefined),
-  emitConversationPriorityChanged: vi.fn().mockResolvedValue(undefined),
-  emitConversationCsatSubmitted: vi.fn().mockResolvedValue(undefined),
-  emitConversationCsatCommentAdded: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('../conversation.notify', () => ({
-  notifyVisitorMessage: vi.fn().mockResolvedValue(undefined),
-  notifyAgentReply: vi.fn().mockResolvedValue(undefined),
-  notifyConversationStarted: vi.fn().mockResolvedValue(undefined),
-}))
+vi.mock('@/lib/server/config', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).configMocks()
+)
+vi.mock('@/lib/server/realtime/conversation-channels', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).channelMocks()
+)
+vi.mock('@/lib/server/domains/tickets/ticket.webhooks', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).ticketWebhookMocks()
+)
+vi.mock('../conversation.webhooks', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).conversationWebhookMocks()
+)
+vi.mock('../conversation.notify', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).notifyMocks()
+)
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import {
+  NOT_FOUND,
+  agentMessagesOn,
+  row,
+  seedPerson,
+  seedWorld,
+  suffix,
+  workspaceKey,
+  SCOPED_PERMISSIONS,
+  type World as W,
+} from '@/lib/server/__tests__/conversation-visibility-world'
 import {
   boards,
   conversationMessageFlags,
@@ -90,15 +70,9 @@ import {
   posts,
   postExternalLinks,
   principal,
-  settings,
-  teamMembers,
-  teams,
   ticketConversations,
   tickets,
   ticketStatuses,
-  user,
-  PERMISSIONS,
-  type PermissionKey,
 } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import {
@@ -158,107 +132,6 @@ const fixture = await createDbTestFixture({
   },
 })
 
-const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-
-const NOT_FOUND = { code: 'CONVERSATION_NOT_FOUND', statusCode: 404 }
-
-const SCOPED_PERMISSIONS: PermissionKey[] = [
-  PERMISSIONS.CONVERSATION_VIEW,
-  PERMISSIONS.CONVERSATION_REPLY,
-  PERMISSIONS.CONVERSATION_NOTE,
-  PERMISSIONS.CONVERSATION_SET_STATUS,
-  PERMISSIONS.CONVERSATION_ASSIGN,
-  PERMISSIONS.CONVERSATION_MANAGE,
-  PERMISSIONS.TICKET_VIEW,
-  PERMISSIONS.TICKET_REPLY,
-  PERMISSIONS.TICKET_CREATE,
-]
-
-async function seedPerson(role: 'member' | 'user'): Promise<PrincipalId> {
-  const userId = createId('user') as UserId
-  const principalId = createId('principal') as PrincipalId
-  await testDb
-    .insert(user)
-    .values({ id: userId, name: `P-${suffix()}`, email: `p-${suffix()}@example.com` })
-  await testDb
-    .insert(principal)
-    .values({ id: principalId, userId, role, type: 'user', createdAt: new Date() })
-  return principalId
-}
-
-/** A scoped teammate in team X, a visitor, and conversations on either team. */
-async function seedWorld() {
-  await testDb
-    .insert(settings)
-    .values({ name: 'Acme', slug: `acme-${suffix()}`, createdAt: new Date() })
-  const teammate = await seedPerson('member')
-  const visitor = await seedPerson('user')
-  const teamX = createId('team') as TeamId
-  const teamY = createId('team') as TeamId
-  await testDb.insert(teams).values([
-    { id: teamX, name: `X-${suffix()}` },
-    { id: teamY, name: `Y-${suffix()}` },
-  ])
-  await testDb.insert(teamMembers).values({ teamId: teamX, principalId: teammate })
-
-  /** A conversation on `team` with one visitor message. */
-  async function conversation(
-    team: TeamId | null,
-    extra: Partial<typeof conversations.$inferInsert> = {}
-  ) {
-    const id = createId('conversation') as ConversationId
-    await testDb.insert(conversations).values({
-      id,
-      visitorPrincipalId: visitor,
-      channel: 'messenger',
-      assignedTeamId: team,
-      ...extra,
-    })
-    const [message] = await testDb
-      .insert(conversationMessages)
-      .values({
-        conversationId: id,
-        principalId: visitor,
-        senderType: 'visitor',
-        content: 'Acme cannot sign in',
-      })
-      .returning()
-    return { id, messageId: message.id as ConversationMessageId }
-  }
-
-  const actor: Actor = {
-    principalId: teammate,
-    role: 'member',
-    principalType: 'user',
-    segmentIds: new Set(),
-    permissions: new Set(SCOPED_PERMISSIONS),
-  }
-  const author = { principalId: teammate, displayName: 'Ana', avatarUrl: null }
-  return { teammate, visitor, teamX, teamY, conversation, actor, author }
-}
-
-async function row(id: ConversationId) {
-  const [found] = await testDb.select().from(conversations).where(eq(conversations.id, id))
-  return found
-}
-
-async function agentMessagesOn(id: ConversationId) {
-  return (
-    await testDb
-      .select()
-      .from(conversationMessages)
-      .where(eq(conversationMessages.conversationId, id))
-  ).filter((m) => m.senderType === 'agent')
-}
-
-const workspaceKey: Actor = {
-  principalId: null,
-  role: 'admin',
-  principalType: 'service',
-  segmentIds: new Set(),
-  permissions: new Set(SCOPED_PERMISSIONS),
-}
-
 describe('conversation writes check visibility (real DB, rolled back)', () => {
   beforeEach(async () => {
     expect(fixture.available).toBe(true)
@@ -273,7 +146,6 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
   })
   afterAll(fixture.close)
 
-  type W = Awaited<ReturnType<typeof seedWorld>>
   /** Each write: run it on a conversation, and say whether the row changed. */
   const writes: [string, (w: W, id: ConversationId) => Promise<unknown>][] = [
     ['setConversationStatus', (w, id) => setConversationStatus(id, 'closed', w.actor)],
