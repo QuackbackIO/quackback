@@ -14,6 +14,7 @@ import {
   isNotNull,
   ne,
   principal,
+  sql,
   user,
   type ServiceMetadata,
 } from '@/lib/server/db'
@@ -121,13 +122,28 @@ async function selectAuthorRows(
 }
 
 /**
+ * The kv key recording when this database reached the release that treats a
+ * personal key's replies as its creator's. Written once by the migration
+ * `0312_personal_key_reply_cutoff`, and read the same way by the shared reply
+ * rule (`messages/reply-rule.ts`), so what a key's messages show and how they
+ * count follow one rule.
+ */
+export const PERSONAL_KEY_CUTOFF_KV_KEY = 'api-keys:personal-reply-cutoff'
+
+/**
  * A personal API key acts as the teammate who created it, so what it writes
  * shows that teammate's name and avatar rather than the key's own name. Only
  * the display fields change: the author's `principalId` stays the key's
  * service principal, which is what the message rows store and what the audit
- * trail and the reply-timing rules read. A workspace key belongs to nobody and
- * keeps its own name, as does a personal key whose creator was deleted.
- * Costs one read, and only when a batch has an API key author in it.
+ * trail and the reply-timing rules read.
+ *
+ * Only a personal key made at or after the cutoff above shows its creator.
+ * Every key older than API key kinds was marked personal, and the bots built
+ * on those keys keep their own name, just as their replies stay automated.
+ * With no cutoff recorded, every key keeps its own name. A workspace key
+ * belongs to nobody and keeps its own name, as does a personal key whose
+ * creator was deleted. Costs one read, and only when a batch has an API key
+ * author in it.
  */
 async function showPersonalKeysAsCreator<T extends AuthorRow>(rows: T[]): Promise<T[]> {
   const keyIds = rows.filter((row) => row.serviceMetadata?.kind === 'api_key').map((row) => row.id)
@@ -151,7 +167,10 @@ async function showPersonalKeysAsCreator<T extends AuthorRow>(rows: T[]): Promis
         inArray(apiKeys.principalId, keyIds),
         eq(apiKeys.kind, 'personal'),
         isNotNull(apiKeys.createdById),
-        ne(apiKeys.createdById, apiKeys.principalId)
+        ne(apiKeys.createdById, apiKeys.principalId),
+        // Each workspace has its own database, so the row is matched by key alone.
+        sql`${apiKeys.createdAt} >= (select min((value #>> '{}')::timestamptz) from kv_store
+          where key = ${PERSONAL_KEY_CUTOFF_KV_KEY} and expires_at > now())`
       )
     )
   if (creators.length === 0) return rows

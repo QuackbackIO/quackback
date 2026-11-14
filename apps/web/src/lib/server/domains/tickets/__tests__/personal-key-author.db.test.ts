@@ -9,6 +9,11 @@
  * rules that read it and the audit trail are unchanged. A workspace key belongs
  * to nobody and keeps showing its own name.
  *
+ * Only a personal key made at or after the cutoff that the migration
+ * `0312_personal_key_reply_cutoff` records shows its creator, the same rule the
+ * reply-timing code uses. An older personal key, or any key while no cutoff is
+ * recorded, keeps its own name.
+ *
  * Keys come from createApiKey and authenticate through withApiKeyAuth; the
  * ticket is opened through createTicket exactly as POST /api/v1/tickets does.
  */
@@ -98,6 +103,7 @@ import {
   principal,
   roles,
   settings,
+  sql,
   ticketStatuses,
   user,
 } from '@/lib/server/db'
@@ -105,7 +111,10 @@ import { ALL_PERMISSIONS, SYSTEM_ROLES } from '@/lib/shared/permissions'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { createApiKey } from '@/lib/server/domains/api-keys/api-key.service'
-import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
+import {
+  loadAuthors,
+  PERSONAL_KEY_CUTOFF_KV_KEY,
+} from '@/lib/server/domains/principals/principal-display'
 import { createTicket } from '../ticket.service'
 import {
   addTicketNote,
@@ -126,6 +135,18 @@ const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).sl
 const KEY_NAME = 'demo-local-test'
 const PUBLIC_NAME = 'Pat from Support'
 const ACCOUNT_NAME = 'Patricia Account'
+
+/** Record the personal-key cutoff, as the migration does, at `at`; null clears it. */
+async function setCutoff(at: Date | null): Promise<void> {
+  await testDb.execute(sql`delete from kv_store where key = ${PERSONAL_KEY_CUTOFF_KV_KEY}`)
+  if (!at) return
+  await testDb.execute(sql`insert into kv_store (workspace_key, key, value, expires_at)
+    values ('_', ${PERSONAL_KEY_CUTOFF_KV_KEY}, to_jsonb(${at.toISOString()}::timestamptz),
+      now() + interval '100 years')`)
+}
+
+const anHourAgo = () => new Date(Date.now() - 60 * 60 * 1000)
+const inAnHour = () => new Date(Date.now() + 60 * 60 * 1000)
 
 async function seedDefaultStatus(): Promise<void> {
   await testDb
@@ -224,7 +245,8 @@ if (fixture.available) {
 }
 
 describe.skipIf(!fixture.available)('messages sent through an API key', () => {
-  it('a ticket opened through a personal key shows its creator in the portal and the inbox', async () => {
+  it('a ticket opened through a personal key made after the cutoff shows its creator in the portal and the inbox', async () => {
+    await setCutoff(anHourAgo())
     await seedDefaultStatus()
     const creator = await seedCreator()
     const { apiKey, plainTextKey } = await createApiKey({ name: KEY_NAME }, creator)
@@ -249,7 +271,8 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     expect(inbox.author?.displayName).toBe(ACCOUNT_NAME)
   })
 
-  it('a reply and a note through a personal key show its creator, as sent and on reload', async () => {
+  it('a reply and a note through a personal key made after the cutoff show its creator, as sent and on reload', async () => {
+    await setCutoff(anHourAgo())
     await seedDefaultStatus()
     const creator = await seedCreator()
     const { plainTextKey } = await createApiKey({ name: KEY_NAME }, creator)
@@ -276,6 +299,7 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
   })
 
   it('a workspace key keeps showing its own name', async () => {
+    await setCutoff(anHourAgo())
     await seedDefaultStatus()
     const creator = await seedCreator()
     const { apiKey, plainTextKey } = await createApiKey(
@@ -293,7 +317,35 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     expect(inbox.author?.displayName).toBe('ops-bot')
   })
 
+  it('a personal key made before the cutoff keeps its own name', async () => {
+    await setCutoff(inAnHour())
+    await seedDefaultStatus()
+    const creator = await seedCreator()
+    const { apiKey, plainTextKey } = await createApiKey({ name: KEY_NAME }, creator)
+    const { ticketId } = await openTicketThroughKey(plainTextKey)
+
+    const portal = openingMessage((await listTicketMessages(ticketId)).messages)
+    expect(portal.author?.principalId).toBe(apiKey.principalId)
+    expect(portal.author?.displayName).toBe(KEY_NAME)
+    const inbox = openingMessage((await listTicketMessagesForAgent(ticketId, creator)).messages)
+    expect(inbox.author?.displayName).toBe(KEY_NAME)
+  })
+
+  it('with no cutoff recorded, a personal key keeps its own name', async () => {
+    await setCutoff(null)
+    await seedDefaultStatus()
+    const creator = await seedCreator()
+    const { plainTextKey } = await createApiKey({ name: KEY_NAME }, creator)
+    const { ticketId } = await openTicketThroughKey(plainTextKey)
+
+    const portal = openingMessage((await listTicketMessages(ticketId)).messages)
+    expect(portal.author?.displayName).toBe(KEY_NAME)
+    const inbox = openingMessage((await listTicketMessagesForAgent(ticketId, creator)).messages)
+    expect(inbox.author?.displayName).toBe(KEY_NAME)
+  })
+
   it('a personal key with no recorded creator keeps its own name', async () => {
+    await setCutoff(anHourAgo())
     const creator = await seedCreator()
     const { apiKey } = await createApiKey({ name: KEY_NAME }, creator)
     await testDb.update(apiKeys).set({ createdById: null }).where(eq(apiKeys.id, apiKey.id))
