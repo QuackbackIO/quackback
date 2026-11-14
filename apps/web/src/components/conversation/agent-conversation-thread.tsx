@@ -703,12 +703,15 @@ export function AgentConversationThread({
   // insert). A tracker's Reply all carries text only, so files already staged
   // keep the composer in Note until they are removed, and the teammate is told
   // why.
-  const switchNoteMode = useStableCallback((note: boolean) => {
+  // Returns whether it switched, so a caller holding text for the reply
+  // composer (the copilot insert) can drop it instead of landing it later.
+  const switchNoteMode = useStableCallback((note: boolean): boolean => {
     if (!note && trackerReplyAll && attachmentItems.length > 0) {
       toast.error(`${REPLY_ALL_NO_FILES} Remove them to switch.`)
-      return
+      return false
     }
     setNoteMode(note)
+    return true
   })
 
   // Every way into the attachment tray (paperclip, paste, drop). A tracker's
