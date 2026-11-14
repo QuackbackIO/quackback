@@ -2,11 +2,9 @@ import type { Query, QueryClient } from '@tanstack/react-query'
 import type { ConversationId } from '@quackback/ids'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import type { InboxItemDTO } from '@/lib/shared/inbox/items'
+import type { ConversationListPage, ItemListPage } from './inbox-cache'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { inboxKeys } from '@/lib/client/queries/inbox'
-
-type ItemListPage = { items: InboxItemDTO[] }
-type ConversationListPage = { conversations: ConversationDTO[] }
 
 /**
  * Carry an agent-side read of one conversation into every cached inbox list.

@@ -1,13 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query'
-import type { ConversationId, TicketId } from '@quackback/ids'
-import type { ConversationDTO } from '@/lib/shared/conversation/types'
-import type { InboxItemDTO } from '@/lib/shared/inbox/items'
+import type { InboxItemDTO, InboxItemRef } from '@/lib/shared/inbox/items'
+import { itemRefId, type ConversationListPage, type ItemListPage } from './inbox-cache'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { inboxKeys, ticketKeys } from '@/lib/client/queries/inbox'
 import { isNotFoundError } from '@/lib/shared/errors'
-
-type ItemListPage = { items: InboxItemDTO[] }
-type ConversationListPage = { conversations: ConversationDTO[] }
 
 /**
  * The teammate's role or teams changed (`inbox_scope_changed`), so the open
@@ -18,17 +14,15 @@ type ConversationListPage = { conversations: ConversationDTO[] }
  */
 export async function settleOpenItemAfterScopeChange(
   queryClient: QueryClient,
-  open: { kind: 'conversation' | 'ticket'; id: string }
+  open: InboxItemRef
 ): Promise<void> {
   const queryKey =
-    open.kind === 'ticket'
-      ? ticketKeys.detail(open.id as TicketId)
-      : conversationKeys.agentThread(open.id as ConversationId)
+    open.kind === 'ticket' ? ticketKeys.detail(open.id) : conversationKeys.agentThread(open.id)
   if (!queryClient.getQueryState(queryKey)) return
   try {
     await queryClient.fetchQuery({ queryKey, staleTime: 0 })
   } catch (err) {
-    if (isNotFoundError(err)) removeInboxItemFromCaches(queryClient, open.kind, open.id)
+    if (isNotFoundError(err)) removeInboxItemFromCaches(queryClient, open)
   }
 }
 
@@ -43,32 +37,24 @@ export async function settleOpenItemAfterScopeChange(
  * refetch keeps old data, so marking stale alone would leave the ticket on
  * screen.
  */
-export function removeInboxItemFromCaches(
-  queryClient: QueryClient,
-  itemKind: 'conversation' | 'ticket',
-  id: string
-): void {
-  const isItem = (item: InboxItemDTO) =>
-    item.kind === itemKind &&
-    (item.kind === 'conversation' ? item.conversation.id : item.ticket.id) === id
+export function removeInboxItemFromCaches(queryClient: QueryClient, ref: InboxItemRef): void {
+  const isItem = (item: InboxItemDTO) => item.kind === ref.kind && itemRefId(item) === ref.id
   queryClient.setQueriesData<ItemListPage>({ queryKey: inboxKeys.items() }, (prev) =>
     prev && prev.items.some(isItem)
       ? { ...prev, items: prev.items.filter((i) => !isItem(i)) }
       : prev
   )
-  if (itemKind === 'conversation') {
+  if (ref.kind === 'conversation') {
     queryClient.setQueriesData<ConversationListPage>(
       { queryKey: conversationKeys.agentConversations() },
       (prev) =>
-        prev?.conversations?.some((c) => c.id === id)
-          ? { ...prev, conversations: prev.conversations.filter((c) => c.id !== id) }
+        prev?.conversations?.some((c) => c.id === ref.id)
+          ? { ...prev, conversations: prev.conversations.filter((c) => c.id !== ref.id) }
           : prev
     )
-    void queryClient.resetQueries({
-      queryKey: conversationKeys.agentThread(id as ConversationId),
-    })
+    void queryClient.resetQueries({ queryKey: conversationKeys.agentThread(ref.id) })
     return
   }
-  void queryClient.resetQueries({ queryKey: ticketKeys.detail(id as TicketId) })
-  void queryClient.resetQueries({ queryKey: ticketKeys.thread(id as TicketId) })
+  void queryClient.resetQueries({ queryKey: ticketKeys.detail(ref.id) })
+  void queryClient.resetQueries({ queryKey: ticketKeys.thread(ref.id) })
 }

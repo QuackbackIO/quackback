@@ -28,6 +28,7 @@ import type {
   ConversationMessageDTO,
   ConversationSide,
 } from '@/lib/shared/conversation/types'
+import { conversationIdOf } from '@/lib/shared/conversation/types'
 import { publish } from './pubsub'
 import { CONVERSATION_INBOX_CHANNEL, publishInboxFrame } from './inbox-publish'
 import { conversationScopeOf, type InboxItemScope } from './inbox-envelope'
@@ -143,12 +144,7 @@ export function publishAgentConversationEvent(
   event: ConversationStreamEvent,
   envelope?: InboxItemScope
 ): void {
-  const conversationId =
-    event.kind === 'conversation'
-      ? event.conversation.id
-      : 'conversationId' in event
-        ? event.conversationId
-        : null
+  const conversationId = conversationIdOf(event)
   publishInboxFrame(
     conversationId ? { kind: 'conversation', id: conversationId } : null,
     event,
