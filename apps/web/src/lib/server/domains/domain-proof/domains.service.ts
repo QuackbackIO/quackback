@@ -40,6 +40,7 @@ import {
   ownershipRecord,
 } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
+import { GRACE_CLEARED } from '@/lib/server/domains/channel-accounts/ownership-grace'
 import { lockDomainName } from '@/lib/server/domains/channel-accounts/sending-domain-token'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 import { getProvenZones, provenZoneCovering, zonesBesidesDomain } from './proven-zones'
@@ -177,9 +178,7 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
         ? {
             status: 'verified',
             verifiedAt: row.verifiedAt ?? now,
-            ownershipMissingSince: null,
-            ownershipWarningClaimedAt: null,
-            ownershipWarningSentAt: null,
+            ...GRACE_CLEARED,
             lastCheckedAt: now,
             updatedAt: now,
           }
@@ -213,9 +212,7 @@ export async function verifyDomainOnFoundRecord(
     .set({
       status: 'verified',
       verifiedAt: sql`COALESCE(${domains.verifiedAt}, ${now.toISOString()}::timestamptz)`,
-      ownershipMissingSince: null,
-      ownershipWarningClaimedAt: null,
-      ownershipWarningSentAt: null,
+      ...GRACE_CLEARED,
       lastCheckedAt: now,
       updatedAt: now,
     })

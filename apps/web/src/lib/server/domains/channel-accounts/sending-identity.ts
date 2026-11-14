@@ -92,7 +92,12 @@ export {
   withPreviousChecks,
 } from './sending-domain-records'
 import { notifySendingDomainLive, notifySendingDomainNeedsAttention } from './sending-domain-notify'
-import { deliverOwnershipWarning, ownershipGrace, startOwnershipGrace } from './ownership-grace'
+import {
+  deliverOwnershipWarning,
+  GRACE_CLEARED,
+  ownershipGrace,
+  startOwnershipGrace,
+} from './ownership-grace'
 import { enqueueSesTenantReconcile } from './ses-tenant-queue'
 import { saveSendingDomainCheck } from './sending-domain-check-write'
 import { rekeyToHeldSigningKey, sealSigningKey, shouldHoldSigningKey } from './pending-signing-key'
@@ -520,13 +525,7 @@ export async function refreshSendingDomain(
         ? { preflight: { ...row.preflight, ...zone, ...(dmarc ? { dmarc } : {}) } }
         : {}),
       // Found again: the clock for a missing record starts over.
-      ...(ownershipProven
-        ? {
-            ownershipMissingSince: null,
-            ownershipWarningClaimedAt: null,
-            ownershipWarningSentAt: null,
-          }
-        : {}),
+      ...(ownershipProven ? GRACE_CLEARED : {}),
       lastCheckedAt: now,
       updatedAt: now,
     },

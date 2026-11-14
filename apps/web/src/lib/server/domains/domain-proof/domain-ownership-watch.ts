@@ -39,6 +39,7 @@ import { kvDel, kvGet, kvSet } from '@/lib/server/kv/pg-kv'
 import { ownershipRecord } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import type { OwnershipAnswer } from '@/lib/server/domains/channel-accounts/domain-verification'
 import {
+  GRACE_CLEARED,
   OWNERSHIP_WARNING_LEASE_MS,
   ownershipGrace,
   ownershipGraceEnds,
@@ -211,9 +212,7 @@ async function demote(row: Domain, since: Date, now: Date): Promise<void> {
       .update(domains)
       .set({
         status: 'pending',
-        ownershipMissingSince: null,
-        ownershipWarningClaimedAt: null,
-        ownershipWarningSentAt: null,
+        ...GRACE_CLEARED,
         lastCheckedAt: now,
         updatedAt: now,
       })
@@ -337,9 +336,7 @@ async function checkDomain(row: Domain, now: Date): Promise<'kept' | 'warned' | 
     await db
       .update(domains)
       .set({
-        ownershipMissingSince: null,
-        ownershipWarningClaimedAt: null,
-        ownershipWarningSentAt: null,
+        ...GRACE_CLEARED,
         lastCheckedAt: now,
         updatedAt: now,
       })
