@@ -105,4 +105,30 @@ describe('createInboxScopeGate', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(forwarded).toEqual([])
   })
+
+  it('starts no second load while a timed-out load is still hung', async () => {
+    const loads: Array<ReturnType<typeof deferred<InboxScopeLoad>>> = []
+    const { gate, forwarded } = gateWith(() => {
+      const d = deferred<InboxScopeLoad>()
+      loads.push(d)
+      return d.promise
+    }, 20)
+
+    gate.onScopeChanged()
+    const lost = frame('team_y', 1)
+    gate.onInboxFrame(lost.message, lost.meta)
+    logged.length = 0
+    await vi.waitFor(() => expect(logged.some((m) => /timed out/.test(m))).toBe(true))
+
+    // The read is still out: the next frame waits on it rather than piling a
+    // second read onto a database that is not answering.
+    const next = frame('team_y', 2)
+    gate.onInboxFrame(next.message, next.meta)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(loads).toHaveLength(1)
+
+    loads[0].resolve({ permissions: scoped, teamIds: new Set(['team_y']) })
+    await vi.waitFor(() => expect(forwarded).toEqual([next.message]))
+    expect(loads).toHaveLength(1)
+  })
 })

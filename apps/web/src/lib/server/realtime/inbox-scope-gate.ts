@@ -138,23 +138,36 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
     }
   }
 
+  // The load still running, if any. A load that timed out stays here until it
+  // settles, and the next reload waits on it instead of starting another, so
+  // a database that is not answering never gets a pile of reads.
+  let inFlight: Promise<InboxScopeLoad | undefined> | null = null
+
+  const startLoad = (): Promise<InboxScopeLoad | undefined> => {
+    let result: InboxScopeLoad | undefined
+    const load = opts
+      .runReload(async () => {
+        result = await opts.load()
+      })
+      .then(() => result)
+      .catch((err: unknown) => {
+        log.warn({ err, principal_id: principalId }, 'inbox scope reload failed')
+        return undefined
+      })
+    inFlight = load
+    void load.finally(() => {
+      if (inFlight === load) inFlight = null
+    })
+    return load
+  }
+
   /** Run one load, or give up after the timeout. Undefined means it failed. */
   const loadOnce = async (): Promise<InboxScopeLoad | undefined> => {
-    let result: InboxScopeLoad | undefined
     let timer: ReturnType<typeof setTimeout> | undefined
     const timedOut = new Promise<'timeout'>((resolve) => {
       timer = setTimeout(() => resolve('timeout'), reloadTimeoutMs)
     })
-    const run = opts
-      .runReload(async () => {
-        result = await opts.load()
-      })
-      .then(() => 'done' as const)
-      .catch((err: unknown) => {
-        log.warn({ err, principal_id: principalId }, 'inbox scope reload failed')
-        return 'done' as const
-      })
-    const outcome = await Promise.race([run, timedOut])
+    const outcome = await Promise.race([inFlight ?? startLoad(), timedOut])
     clearTimeout(timer)
     if (outcome === 'timeout') {
       log.warn(
@@ -163,7 +176,7 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       )
       return undefined
     }
-    return result
+    return outcome
   }
 
   const reload = async (): Promise<void> => {
