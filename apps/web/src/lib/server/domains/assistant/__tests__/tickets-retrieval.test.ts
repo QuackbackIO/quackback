@@ -12,9 +12,11 @@ vi.mock('@/lib/server/db', () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: (...args: unknown[]) => mockLimit(...args),
+        innerJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: (...args: unknown[]) => mockLimit(...args),
+            }),
           }),
         }),
       }),
@@ -26,6 +28,8 @@ vi.mock('@/lib/server/db', () => ({
     embedding: 'embedding',
     createdAt: 'created_at',
   },
+  tickets: { id: 'id' },
+  eq: vi.fn((...args: unknown[]) => ({ op: 'eq', args })),
   and: vi.fn((...args: unknown[]) => ({ op: 'and', args })),
   desc: vi.fn((...args: unknown[]) => ({ op: 'desc', args })),
   ilike: vi.fn((...args: unknown[]) => ({ op: 'ilike', args })),
@@ -38,7 +42,23 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
+// The scope predicate itself is covered against real Postgres in
+// tickets-retrieval-scope.db.test.ts; here it only has to be called.
+const mockTicketFilter = vi.fn((_actor: unknown) => ({ op: 'ticketFilter' }))
+vi.mock('@/lib/server/policy/tickets', () => ({
+  ticketFilter: (actor: unknown) => mockTicketFilter(actor),
+}))
+
 import { retrieveTicketSummaries, ticketsKnowledgeSource } from '../tickets-retrieval'
+import type { Actor } from '@/lib/server/policy/types'
+
+const viewer: Actor = {
+  principalId: 'principal_teammate' as Actor['principalId'],
+  principalType: 'user',
+  role: 'member',
+  segmentIds: new Set(),
+  permissions: new Set(),
+}
 
 function row(id: string, overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -68,7 +88,7 @@ describe('retrieveTicketSummaries', () => {
     mockGenerateEmbedding.mockResolvedValue([0.1, 0.2, 0.3])
     mockLimit.mockResolvedValue([row('ticket_1')])
 
-    const result = await retrieveTicketSummaries('sso', 'team')
+    const result = await retrieveTicketSummaries('sso', 'team', { viewer })
     expect(result).toEqual([
       {
         ticketId: 'ticket_1',
@@ -83,9 +103,24 @@ describe('retrieveTicketSummaries', () => {
     mockGenerateEmbedding.mockResolvedValue(null)
     mockLimit.mockResolvedValue([row('ticket_2')])
 
-    const result = await retrieveTicketSummaries('billing', 'team')
+    const result = await retrieveTicketSummaries('billing', 'team', { viewer })
     expect(result).toHaveLength(1)
     expect(result[0].ticketId).toBe('ticket_2')
+  })
+
+  it('scopes both paths by the viewer through ticketFilter', async () => {
+    mockGenerateEmbedding.mockResolvedValue([0.1])
+    await retrieveTicketSummaries('sso', 'team', { viewer })
+    mockGenerateEmbedding.mockResolvedValue(null)
+    await retrieveTicketSummaries('sso', 'team', { viewer })
+    expect(mockTicketFilter.mock.calls).toEqual([[viewer], [viewer]])
+  })
+
+  it('returns [] at the team ceiling without a viewer (never queries)', async () => {
+    const result = await retrieveTicketSummaries('sso', 'team')
+    expect(result).toEqual([])
+    expect(mockGenerateEmbedding).not.toHaveBeenCalled()
+    expect(mockLimit).not.toHaveBeenCalled()
   })
 })
 
@@ -99,7 +134,7 @@ describe('ticketsKnowledgeSource', () => {
     mockGenerateEmbedding.mockResolvedValue(null)
     mockLimit.mockResolvedValue([row('ticket_3', { summary: 'X'.repeat(5000) })])
 
-    const items = await ticketsKnowledgeSource.retrieve('sso', 'team', { topK: 5 })
+    const items = await ticketsKnowledgeSource.retrieve('sso', 'team', { topK: 5, viewer })
 
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({

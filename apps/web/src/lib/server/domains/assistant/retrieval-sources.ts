@@ -78,6 +78,11 @@ export interface RetrievedItem {
  * when there is no real customer to scope to (e.g. the admin sandbox), which
  * a customer-scoped source MUST treat as "return nothing", never "return
  * everything" — a missing scope is not the same as an unbounded one.
+ *
+ * `viewer` is the teammate the turn answers (the copilot's asker, or the
+ * workspace assistant's requester), never Quinn's own service actor. A source
+ * whose rows carry team scope (today the closed-tickets source) bounds its
+ * results by it, and returns nothing without it.
  */
 export interface KnowledgeSource {
   sourceType: RetrievedItem['sourceType']
@@ -89,6 +94,7 @@ export interface KnowledgeSource {
       signal?: AbortSignal
       customerPrincipalId?: PrincipalId
       conversationId?: ConversationId | null
+      viewer?: Actor
     }
   ): Promise<RetrievedItem[]>
 }
@@ -394,6 +400,8 @@ export async function retrieveKnowledge(
   opts: {
     topK?: number
     actor?: Actor
+    /** The teammate the turn answers; see `KnowledgeSource`. */
+    viewer?: Actor
     workspaceSearch?: boolean
     includeInternalNotes?: boolean
     notesOnly?: boolean
@@ -429,6 +437,7 @@ export async function retrieveKnowledge(
           signal: opts.signal,
           customerPrincipalId: opts.customerPrincipalId,
           conversationId: opts.conversationId,
+          viewer: opts.viewer,
         })
         .catch((error: unknown): RetrievedItem[] => {
           log.warn(

@@ -318,6 +318,10 @@ export type AssistantTurnInput = AssistantTurnCommonInput &
       }
     | {
         role: 'copilot_qa'
+        /** The asking teammate's own policy actor. Quinn still executes as its
+         *  bounded actor; this only bounds team-scoped retrieval (closed
+         *  tickets) to what the teammate can see. */
+        viewer: Actor
         surface: 'copilot'
         messages: AssistantThreadMessage[]
       }
@@ -988,6 +992,12 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   }
   const toolContext = makeAssistantToolContext({
     actor: input.role === 'workspace_assistant' ? input.actor : undefined,
+    viewer:
+      input.role === 'workspace_assistant'
+        ? input.actor
+        : input.role === 'copilot_qa'
+          ? input.viewer
+          : undefined,
     db: execDb,
     assistantPrincipalId: input.assistantPrincipalId,
     assistantName: runtimeConfig.config.identity.name,

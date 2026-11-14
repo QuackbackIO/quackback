@@ -314,6 +314,13 @@ export interface AssistantToolContext {
    */
   actor: Actor
   /**
+   * The teammate this turn answers (the copilot's asker, the workspace
+   * assistant's requester). Separate from `actor`: Quinn still executes as its
+   * own bounded actor, but team-scoped retrieval is bounded by what this
+   * teammate can see. Undefined on customer-facing turns.
+   */
+  viewer?: Actor
+  /**
    * Live attribute definitions for this turn (the same catalogue the system
    * prompt enumerates), so `summarize` can render set_attribute proposals with
    * the workspace's friendly label and option labels instead of the raw
@@ -352,6 +359,7 @@ export function makeAssistantToolContext(init: {
   writeToolPolicy?: AssistantWriteToolPolicy
   skills?: { count: number; loads: number }
   actor?: Actor
+  viewer?: Actor
   attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
   mcpSession?: import('./connectors/mcp-client').ConnectorMcpSession
   mcpConnectorSessions?: Map<string, import('./connectors/mcp-client').ConnectorMcpSession>
@@ -383,6 +391,7 @@ export function makeAssistantToolContext(init: {
     involvementId: init.involvementId ?? null,
     latestCustomerMessageId: init.latestCustomerMessageId ?? null,
     actor: init.actor ?? quinnActor(init.assistantPrincipalId),
+    viewer: init.viewer,
     attributeCatalogue: init.attributeCatalogue,
     mcpSession: init.mcpSession,
     mcpConnectorSessions: init.mcpConnectorSessions,
@@ -579,6 +588,7 @@ async function executeSearchKnowledge(
     sourceTypes: narrowing,
     enabledSources: ctx.knowledge.sources,
     actor: ctx.actor,
+    viewer: ctx.viewer,
     workspaceSearch: isHomeTurn(ctx),
     includeInternalNotes: ctx.knowledge.internalNotes,
     notesOnly: ctx.knowledge.pastConversations === false,
