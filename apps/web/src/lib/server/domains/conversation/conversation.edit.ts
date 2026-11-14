@@ -24,7 +24,7 @@ import {
 } from '@/lib/server/db'
 import type { ConversationMessageId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
-import { canEditMessage, canViewConversation } from '@/lib/server/policy/conversation'
+import { canEditMessage } from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
@@ -44,7 +44,7 @@ import {
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
-import { resolveMessageParent } from './message-parent'
+import { assertMessageParentVisible, permissionParentOf } from './message-parent'
 import { syncConversationMessageMentions } from './sync-conversation-mentions'
 import {
   conversationToDTO,
@@ -144,9 +144,13 @@ export async function editConversationMessage(
     .from(conversationMessages)
     .where(eq(conversationMessages.id, messageId))
     .limit(1)
-  if (!message || message.deletedAt) {
+  if (!message || message.deletedAt || (!message.conversationId && !message.ticketId)) {
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
   }
+  // A parent the actor cannot see hides its messages too, before any other
+  // refusal could tell the message exists.
+  const parent = await assertMessageParentVisible(message, actor)
+
   if (message.metadata?.block) {
     throw new ForbiddenError('FORBIDDEN', 'This message cannot be edited')
   }
@@ -158,24 +162,10 @@ export async function editConversationMessage(
   const viewerId = actor.principalId
   if (!viewerId) throw new ForbiddenError('FORBIDDEN', 'A session is required to edit a message')
 
-  if (!message.conversationId) {
-    if (!message.ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    await resolveMessageParent(message, actor)
-  } else {
-    const [conversation] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, message.conversationId))
-      .limit(1)
-    if (!conversation || !canViewConversation(actor, conversation).allowed) {
-      throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    }
-  }
-
   const decision = canEditMessage(actor, {
     senderType: message.senderType,
     authorPrincipalId: message.principalId,
-    parent: message.conversationId ? 'conversation' : 'ticket',
+    parent: permissionParentOf(parent),
     isInternal: message.isInternal,
   })
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)

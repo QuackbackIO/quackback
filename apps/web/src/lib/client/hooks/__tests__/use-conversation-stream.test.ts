@@ -81,10 +81,12 @@ describe('useConversationStream', () => {
       es.emit('message', { kind: 'message', conversationId: 'conversation_1' })
       es.emit('ticket_message', { kind: 'ticket_message', ticketId: 'ticket_1' })
       es.emit('ticket_updated', { kind: 'ticket_updated', ticket: { id: 'ticket_1' } })
+      for (const kind of ['inbox_item_removed', 'inbox_scope_changed']) es.emit(kind, { kind })
     })
     expect(onEvent).toHaveBeenCalledWith({ kind: 'message', conversationId: 'conversation_1' })
     expect(onEvent).toHaveBeenCalledWith({ kind: 'ticket_message', ticketId: 'ticket_1' })
     expect(onEvent).toHaveBeenCalledWith({ kind: 'ticket_updated', ticket: { id: 'ticket_1' } })
+    expect(onEvent).toHaveBeenCalledTimes(5) // the two inbox scope events included
   })
 
   it('does not connect when disabled', async () => {

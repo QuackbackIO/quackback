@@ -7,7 +7,7 @@
  * filter admits. Conversations have no soft-delete column, so there is no
  * deleted-row case here (unlike ticketFilter).
  */
-import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type TypeId, type UserId } from '@quackback/ids'
 
 type TeamId = TypeId<'team'>
@@ -17,7 +17,15 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import { conversations, teams, teamMembers, principal, user, and, inArray } from '@/lib/server/db'
 import { PERMISSIONS, type PermissionKey } from '@/lib/server/db'
 import { conversationFilter } from '../conversations'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'
+
+// The per-item check reads through the app's `db`; point it at the rollback
+// transaction so it sees the seeded rows.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -25,6 +33,8 @@ const fixture = await createDbTestFixture({
     await db.select({ id: teamMembers.id }).from(teamMembers).limit(0)
   },
 })
+
+afterAll(fixture.close)
 
 const suffix = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -78,7 +88,7 @@ async function seedWorld() {
   ])
 
   const allIds = Object.values(ids) as ConversationId[]
-  return { agentA, agentB, ids, allIds }
+  return { agentA, agentB, visitor, ids, allIds }
 }
 
 async function visibleLabels(actor: Actor, world: Awaited<ReturnType<typeof seedWorld>>) {
@@ -97,7 +107,6 @@ async function visibleLabels(actor: Actor, world: Awaited<ReturnType<typeof seed
 describe.skipIf(!fixture.available)('conversationFilter (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
   afterEach(fixture.rollback)
-  afterAll(fixture.close)
 
   it('service principals see ALL conversations', async () => {
     const world = await seedWorld()
@@ -179,5 +188,93 @@ describe.skipIf(!fixture.available)('conversationFilter (real DB, rolled back)',
     const noPerm = buildActor({ principalId: world.agentA, permissions: new Set() })
     expect(await visibleLabels(noPerm, world)).toEqual(new Set())
     expect(await visibleLabels(ANONYMOUS_ACTOR, world)).toEqual(new Set())
+  })
+})
+
+describe('assertConversationVisible (real DB, rolled back)', () => {
+  beforeEach(async () => {
+    expect(fixture.available).toBe(true)
+    await fixture.begin()
+  })
+  afterEach(fixture.rollback)
+
+  async function openableLabels(actor: Actor, world: Awaited<ReturnType<typeof seedWorld>>) {
+    const opened = new Set<string>()
+    for (const [label, id] of Object.entries(world.ids)) {
+      try {
+        const row = await assertConversationVisible(id as ConversationId, actor)
+        expect(row.id).toBe(id)
+        opened.add(label)
+      } catch (error) {
+        expect(error).toMatchObject({ code: 'CONVERSATION_NOT_FOUND', statusCode: 404 })
+      }
+    }
+    return opened
+  }
+
+  it('opens exactly what the list filter admits for every teammate audience', async () => {
+    const world = await seedWorld()
+    const audiences: Actor[] = [
+      buildActor({
+        principalId: createId('principal') as PrincipalId,
+        principalType: 'service',
+        permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+      }),
+      buildActor({
+        principalId: createId('principal') as PrincipalId,
+        permissions: new Set([PERMISSIONS.CONVERSATION_VIEW_ALL]),
+      }),
+      buildActor({
+        principalId: world.agentA,
+        permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+      }),
+      buildActor({
+        principalId: world.agentB,
+        permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+      }),
+      buildActor({
+        principalId: createId('principal') as PrincipalId,
+        principalType: 'service',
+        scopePrincipalId: world.agentA,
+        permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+      }),
+      ANONYMOUS_ACTOR,
+    ]
+    for (const actor of audiences) {
+      expect(await openableLabels(actor, world)).toEqual(await visibleLabels(actor, world))
+    }
+  })
+
+  it('a workspace-wide service principal without conversation.view opens nothing', async () => {
+    const world = await seedWorld()
+    const assignOnly = buildActor({
+      principalId: createId('principal') as PrincipalId,
+      principalType: 'service',
+      permissions: new Set([PERMISSIONS.CONVERSATION_ASSIGN]),
+    })
+    expect(await openableLabels(assignOnly, world)).toEqual(new Set())
+  })
+
+  it("gives a scoped teammate NotFound for another team's conversation", async () => {
+    const world = await seedWorld()
+    const agentA = buildActor({
+      principalId: world.agentA,
+      role: 'member',
+      permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+    })
+    await expect(assertConversationVisible(world.ids.teamY, agentA)).rejects.toMatchObject({
+      code: 'CONVERSATION_NOT_FOUND',
+    })
+    expect((await assertConversationVisible(world.ids.teamX, agentA)).id).toBe(world.ids.teamX)
+  })
+
+  it("opens every conversation the visitor owns, and no one else's", async () => {
+    const world = await seedWorld()
+    const visitor = buildActor({ principalId: world.visitor, role: 'user' })
+    expect(await openableLabels(visitor, world)).toEqual(
+      new Set(['selfA', 'teamX', 'teamY', 'selfB', 'unassigned'])
+    )
+    const stranger = buildActor({ principalId: world.agentB, role: 'user' })
+    expect(await openableLabels(stranger, world)).toEqual(new Set())
   })
 })

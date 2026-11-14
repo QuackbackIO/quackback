@@ -505,6 +505,16 @@ export type TicketStreamEvent =
   | { kind: 'ticket_updated'; ticket: TicketDTO }
   | { kind: 'ticket_read'; ticketId: TicketId; side: MessageSenderType; at: string }
 
+/**
+ * Events the inbox stream builds per subscriber, never published (see
+ * realtime/inbox-scope-gate.ts). `inbox_item_removed`: an item this teammate
+ * held left their scope (a reassignment), so its row leaves their lists.
+ * `inbox_scope_changed`: their role or teams changed, so lists are refetched.
+ */
+export type InboxScopeStreamEvent =
+  | { kind: 'inbox_item_removed'; itemKind: 'conversation' | 'ticket'; id: string }
+  | { kind: 'inbox_scope_changed' }
+
 export type ConversationStreamEvent =
   | {
       kind: 'message'
@@ -573,6 +583,13 @@ export type ConversationStreamEvent =
       at: string
     }
   | TicketStreamEvent
+  | InboxScopeStreamEvent
+
+/** The conversation a stream event is about, when it names one. */
+export function conversationIdOf(event: ConversationStreamEvent): ConversationId | undefined {
+  if (event.kind === 'conversation') return event.conversation.id
+  return 'conversationId' in event ? event.conversationId : undefined
+}
 
 /** Hard caps shared by client + server validation. */
 export const MAX_CONVERSATION_MESSAGE_LENGTH = 4000

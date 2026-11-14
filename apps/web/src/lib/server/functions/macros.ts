@@ -7,7 +7,8 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { MacroId, ConversationId } from '@quackback/ids'
-import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { requireAuth } from './auth-helpers'
+import { requireVisibleConversation } from './conversation-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   listMacros,
@@ -120,8 +121,11 @@ export const applyMacroFn = createServerFn({ method: 'POST' })
   .validator(applyMacroSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
-    const actor = await policyActorFromAuth(ctx)
     const conversationId = data.conversationId as ConversationId
+    // The conversation first: the render below reads it before
+    // applyMacroActions runs its own check, so a hidden one must answer
+    // NotFound before anything is read.
+    const { actor } = await requireVisibleConversation(ctx, conversationId)
     // Independent reads: fetch the macro and build the render context together.
     const [macro, context] = await Promise.all([
       getMacro(data.macroId as MacroId),

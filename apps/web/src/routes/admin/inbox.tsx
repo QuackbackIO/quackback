@@ -13,7 +13,7 @@ import type {
   TicketStatusId,
 } from '@quackback/ids'
 import { coerceTicketTypeId } from '@/lib/shared/tickets'
-import type { ConversationPriority } from '@/lib/shared/conversation/types'
+import { conversationIdOf, type ConversationPriority } from '@/lib/shared/conversation/types'
 import {
   isConversationSort,
   defaultConversationSort,
@@ -100,6 +100,12 @@ import {
 } from '@/lib/client/conversation/inbox-scope'
 import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
 import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
+import { itemRefId } from '@/lib/client/conversation/inbox-cache'
+import { coalescedJitter } from '@/lib/client/coalesced-jitter'
+import {
+  removeInboxItemFromCaches,
+  settleOpenItemAfterScopeChange,
+} from '@/lib/client/conversation/inbox-removal'
 import type { Channel } from '@/lib/shared/channels'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
@@ -363,11 +369,6 @@ function splitByKind(ids: Iterable<string>): {
   return { conversationIds, ticketIds }
 }
 
-/** The stable string id of any unified inbox row. */
-function itemRefId(item: InboxItemDTO): string {
-  return item.kind === 'conversation' ? item.conversation.id : item.ticket.id
-}
-
 /**
  * `ticket_updated` carries the full, fresh `TicketDTO` — rather than
  * invalidating the whole unified item-list (every scope/filter combo has its
@@ -409,6 +410,9 @@ function patchTicketInInboxLists(queryClient: QueryClient, ticket: TicketDTO): v
     }
   )
 }
+
+/** The most a refetch after a scope change is delayed, to spread the load. */
+const SCOPE_REFETCH_JITTER_MS = 2_000
 
 function InboxPage() {
   const queryClient = useQueryClient()
@@ -681,11 +685,41 @@ function InboxPage() {
   // is connected, it already keeps both list surfaces current (via
   // `refreshInboxList`/the ticket row-patch below), making a parallel poll
   // redundant load (QC-3).
+  // A scope change refetches the lists and the open item. Spread over a
+  // short random delay so streams told together do not ask together; a
+  // burst of changes runs one refetch; leaving the page cancels it. The open
+  // item is the one open when it runs, since that may be the one that left.
+  const onScopeChanged = useRef(() => {})
+  onScopeChanged.current = () => {
+    refreshInboxAfterReconnect()
+    if (selectedRef) void settleOpenItemAfterScopeChange(queryClient, selectedRef)
+  }
+  const scopeRefetch = useMemo(
+    () => coalescedJitter(() => onScopeChanged.current(), SCOPE_REFETCH_JITTER_MS),
+    []
+  )
+  useEffect(() => () => scopeRefetch.cancel(), [scopeRefetch])
+
   const { connected: streamConnected } = useConversationStream({
     enabled: true,
     buildUrl: async () => '/api/chat/stream?scope=inbox',
     onReconnect: refreshInboxAfterReconnect,
     onEvent: (evt) => {
+      // Scope events name no thread to patch. A removed item leaves every list
+      // at once and its open pane refetches into not found; a scope change
+      // refetches as a reconnect does, since lists and the open pane may all
+      // have moved.
+      if (evt.kind === 'inbox_item_removed') {
+        // The lists are patched here; only the counts need the server.
+        const ref = inboxItemRefFromId(evt.id)
+        if (ref) removeInboxItemFromCaches(queryClient, ref)
+        refreshInboxCounts()
+        return
+      }
+      if (evt.kind === 'inbox_scope_changed') {
+        scopeRefetch.schedule()
+        return
+      }
       refreshIfCompanionLost(evt)
       // A ticket's live properties (status/assignee/priority/stage/type) name
       // their own cache keys precisely, so this patches them directly instead
@@ -739,12 +773,7 @@ function InboxPage() {
       // Thread caches: the open thread and any hover-prefetched (or previously
       // opened) thread for this event. Unvisited rows stay untouched. Ephemeral
       // typing / assistant frames have nothing in the cache to patch.
-      const conversationId =
-        evt.kind === 'conversation'
-          ? evt.conversation.id
-          : 'conversationId' in evt
-            ? evt.conversationId
-            : undefined
+      const conversationId = conversationIdOf(evt)
       if (
         conversationId &&
         evt.kind !== 'typing' &&

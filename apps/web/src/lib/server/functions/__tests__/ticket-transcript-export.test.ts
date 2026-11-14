@@ -28,7 +28,7 @@ const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   policyActorFromAuth: vi.fn(),
   isTeamMember: vi.fn(),
-  getTicket: vi.fn(),
+  getTicketForActor: vi.fn(),
   listTicketMessages: vi.fn(),
 }))
 
@@ -37,7 +37,9 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   policyActorFromAuth: hoisted.policyActorFromAuth,
 }))
 vi.mock('@/lib/shared/roles', () => ({ isTeamMember: hoisted.isTeamMember }))
-vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({ getTicket: hoisted.getTicket }))
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  getTicketForActor: hoisted.getTicketForActor,
+}))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   listTicketMessages: hoisted.listTicketMessages,
 }))
@@ -79,7 +81,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   hoisted.requireAuth.mockResolvedValue({ principal: { id: 'principal_agent', role: 'admin' } })
   hoisted.isTeamMember.mockReturnValue(true)
-  hoisted.getTicket.mockResolvedValue(ticket)
+  hoisted.getTicketForActor.mockResolvedValue(ticket)
   hoisted.listTicketMessages.mockResolvedValue({ messages: [message({})], hasMore: false })
 })
 

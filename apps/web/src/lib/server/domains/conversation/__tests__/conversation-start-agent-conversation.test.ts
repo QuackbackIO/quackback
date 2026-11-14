@@ -298,7 +298,8 @@ describe('startAgentConversation happy path', () => {
         visitor: expect.anything(),
         agent: expect.anything(),
       }),
-      { conversationUpdated: true }
+      { conversationUpdated: true },
+      expect.objectContaining({ teamId: null }) // the item scope envelope
     )
     expect(emit.emitConversationCreated).toHaveBeenCalledTimes(1)
     expect(emit.emitMessageCreated).toHaveBeenCalledTimes(1)

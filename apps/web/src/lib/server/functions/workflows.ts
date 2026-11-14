@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { WorkflowId, WorkflowVersionId, ConversationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { requireVisibleConversation } from './conversation-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { Workflow, WorkflowClass, WorkflowStatus, WorkflowRunState } from '@/lib/server/db'
 import {
@@ -349,7 +350,8 @@ const previewSchema = z.object({ workflowId: z.string(), conversationId: z.strin
 export const previewWorkflowFn = createServerFn({ method: 'POST' })
   .validator(previewSchema)
   .handler(async ({ data }): Promise<WorkflowPreviewResult> => {
-    await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+    const ctx = await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+    await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     return previewWorkflow({
       workflowId: data.workflowId as WorkflowId,
       conversationId: data.conversationId as ConversationId,
@@ -443,7 +445,10 @@ export type RunWorkflowManuallyResult =
 export const runWorkflowManuallyFn = createServerFn({ method: 'POST' })
   .validator(runManuallySchema)
   .handler(async ({ data }): Promise<RunWorkflowManuallyResult> => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    // The conversation first: a hidden one is NotFound before any lock or
+    // condition read, and no run starts.
+    await requireVisibleConversation(auth, data.conversationId as ConversationId)
     const workflow = await getWorkflow(data.workflowId as WorkflowId)
     if (!workflow || workflow.status !== 'live') {
       return { ok: false, reason: 'not_live' }

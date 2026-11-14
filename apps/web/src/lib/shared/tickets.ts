@@ -13,6 +13,19 @@ import { z } from 'zod'
 import { isValidTypeId, type TicketTypeId } from '@quackback/ids'
 import type { TicketType, TicketStage, TicketStatusCategory } from '@/lib/shared/db-types'
 
+/**
+ * Whether a failed ticket-to-conversation link was refused because one side is
+ * test data and the other is real. Read from the typed code the server error
+ * keeps on its way to the browser, never from its message.
+ */
+export function isTestDataLinkConflict(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    (error as { code?: unknown }).code === 'TEST_DATA_LINK_CONFLICT'
+  )
+}
+
 /** Render a ticket's sequential number for display (plain `#142`). */
 export function formatTicketNumber(n: number): string {
   return `#${n}`

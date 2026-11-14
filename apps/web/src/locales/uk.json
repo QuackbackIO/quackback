@@ -188,6 +188,7 @@
   "files.upload.error.blocked": "Файли цього типу не можна надсилати",
   "files.upload.error.rateLimited": "Забагато завантажень. Спробуйте ще раз за хвилину.",
   "admin.inbox.filesSectionTitle": "Файли",
+  "admin.inbox.linkedTicketHidden": "Пов'язаний тікет, який ви не можете відкрити",
   "admin.inbox.translationOverAllowance": "Використання ШІ за цей період вичерпано. Переклад і далі працює. Перейдіть на тариф вище, щоб отримати більше.",
   "admin.helpCenter.autoTranslatePaused": "Призупинено: використання ШІ за цей період вичерпано. Перейдіть на тариф вище, щоб отримати більше.",
   "admin.billing.aiResets": "Оновлюється {date}",

@@ -738,7 +738,13 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     intent: 'SECONDARY_GATE',
     roleBar: 'team',
     resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
-    why: 'SSE stream: the inbox and presence scopes are team-only; the conversation scope is gated by canViewConversation',
+    why: 'SSE stream: the inbox and presence scopes are team-only; the conversation scope is gated by assertConversationVisible',
+  },
+  'routes/api/chat/stream.ts::loadInboxScope::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
+    why: 'SSE inbox scope reload: re-asks the connect-time team gate, and closes the stream of a principal who has left the team',
   },
   'lib/server/functions/portal-permissions.ts::getMyPortalPermissionsFn::isTeamMember': {
     intent: 'SECONDARY_GATE',
@@ -802,10 +808,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     why: 'the Files sidebar lists attachments off internal notes too; team-only on top of the CONVERSATION_VIEW permission gate (the conversation-target branch only — the ticket-target branch gates on TICKET_VIEW + assertTicketVisible, mirroring getTicketActivityFn)',
   },
   'lib/server/functions/embeds.ts::scopeTicketEmbed::isTeamMember': NOT_A_GATE(
-    'getEmbedPreviewFn already gates on portal access; team resolves any ticket embed (teammate read path), non-team callers resolve only their own customer ticket via the same ownership rule as loadOwnedTicketOr404'
-  ),
-  'lib/server/functions/tickets.ts::listTicketMessagesFn::isTeamMember': NOT_A_GATE(
-    'internal notes are agent-only; requesters never see them'
+    'getEmbedPreviewFn already gates on portal access; team resolves a ticket embed only when its ticket filter admits the ticket (teammate read path), non-team callers resolve only their own customer ticket via the same ownership rule as loadOwnedTicketOr404'
   ),
   'lib/server/functions/tickets.ts::exportTicketTranscriptFn::isTeamMember': {
     intent: 'SECONDARY_GATE',

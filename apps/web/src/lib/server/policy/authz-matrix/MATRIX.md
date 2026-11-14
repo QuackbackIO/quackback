@@ -1009,10 +1009,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | --- | --- |
 | `routes/api/plg-events.ts`::handlePlgEvent | END_USER (any authenticated) |
 
-### SSE stream (inline gate) — 1 surface
+### SSE stream (inline gate) — 2 surfaces
 
 | Surface | Enforces |
 | --- | --- |
+| `routes/api/chat/stream.ts`::loadInboxScope | TEAM-ONLY (~conversation.view) |
 | `routes/api/chat/stream.ts`::GET | TEAM-ONLY (~conversation.view) |
 
 ### MCP transport entry — 1 surface
