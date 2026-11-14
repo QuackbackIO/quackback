@@ -1,15 +1,15 @@
 /**
  * The Domains page body: every domain the workspace uses, one row per domain
  * name with a chip for each use, or, with none yet, the uses and where each is
- * set up. Rows are status only. Each links to the page that owns its setup,
- * and a viewer who cannot open that page sees the row without the link.
+ * set up. Rows are status only. Each opens the domain's own page, and a viewer
+ * who can open none of the row's uses sees the row without the link.
  */
 import { Fragment } from 'react'
+import { DOMAIN_USE_ORDER, DOMAIN_VIEW_ROUTE } from '@/lib/shared/domain-uses'
 import {
   HELP_CENTER_SETTINGS,
   type DomainUse,
   type DomainUseLinks,
-  type UseLink,
 } from '@/lib/shared/domains-permissions'
 import { Link } from '@tanstack/react-router'
 import { EnvelopeIcon, GlobeAltIcon, LockClosedIcon } from '@heroicons/react/24/solid'
@@ -31,15 +31,13 @@ export const WEB_ADDRESSES_DESCRIPTION = 'Where people reach your portal and hel
 
 export const EMPTY_DESCRIPTION = 'Use your own domain for email, web addresses and sign-in.'
 
-const USE_ORDER: readonly DomainUse[] = ['email', 'customDomain', 'signIn']
-
 const USE_LABEL: Record<DomainUse, string> = {
   email: 'Email',
   customDomain: 'Custom domain',
   signIn: 'Sign-in',
 }
 
-interface DomainUseStatus {
+export interface DomainUseStatus {
   use: DomainUse
   /** Null when healthy: a normal state shows no badge. */
   state: BadgeState | null
@@ -51,7 +49,7 @@ export interface DomainRow {
   uses: DomainUseStatus[]
 }
 
-const PHASE_STATE = {
+export const PHASE_STATE = {
   live: null,
   'setting-up': 'pending',
   attention: 'attention',
@@ -107,23 +105,19 @@ export function domainRows({
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([name, uses]) => ({
       name,
-      uses: uses.sort((a, b) => USE_ORDER.indexOf(a.use) - USE_ORDER.indexOf(b.use)),
+      uses: uses.sort((a, b) => DOMAIN_USE_ORDER.indexOf(a.use) - DOMAIN_USE_ORDER.indexOf(b.use)),
     }))
 }
 
-/** The use a row opens: the first that needs attention, else the first, among those the viewer may open. */
-function rowLink(row: DomainRow, links: DomainUseLinks): UseLink | undefined {
-  const openable = row.uses.filter((u) => links[u.use])
-  const target = openable.find((u) => u.state) ?? openable[0]
-  return target ? links[target.use] : undefined
-}
+/** Whether the viewer can open the setup of at least one of the row's uses. */
+const opens = (row: DomainRow, links: DomainUseLinks): boolean => row.uses.some((u) => links[u.use])
 
 export function DomainList({ rows, links }: { rows: DomainRow[]; links: DomainUseLinks }) {
   return (
     <SettingsCard flush>
       <SettingsList>
         {rows.map((row) => {
-          const link = rowLink(row, links)
+          const linked = opens(row, links)
           const meta = row.uses.flatMap((u) => (u.detail ? [u.detail] : [])).join(' · ')
           return (
             <SettingsListRow
@@ -139,8 +133,8 @@ export function DomainList({ rows, links }: { rows: DomainRow[]; links: DomainUs
                   {u.state && <StateBadge state={u.state} />}
                 </Fragment>
               ))}
-              to={link?.to}
-              search={link?.search}
+              to={linked ? DOMAIN_VIEW_ROUTE : undefined}
+              params={linked ? { domain: row.name } : undefined}
             />
           )
         })}
@@ -149,7 +143,7 @@ export function DomainList({ rows, links }: { rows: DomainRow[]; links: DomainUs
   )
 }
 
-const USES = [
+export const USES = [
   {
     use: 'email',
     icon: EnvelopeIcon,

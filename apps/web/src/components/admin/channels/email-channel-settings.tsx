@@ -19,8 +19,6 @@ import { PhaseBadge } from './phase-badge'
 import { emailChannelConfigQuery } from '@/lib/client/queries/channel-accounts'
 import {
   useCreateInboundRoute,
-  useDeleteSendingDomain,
-  useDeleteChannelAccount,
   useRestartSendingDomainChecks,
   useSendTestEmail,
   useUpdateInboundTrust,
@@ -28,8 +26,17 @@ import {
 } from '@/lib/client/mutations/channel-accounts'
 import type { EmailSendersDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { DomainSetupPanel } from './domain-setup-panel'
+import {
+  domainOf,
+  removalNote,
+  RemoveAddressDialog,
+  RemoveDomainDialog,
+  type AddressRemoval,
+  type DomainRemoval,
+  type SendingAddress,
+} from './sending-removal'
 import { SendingPausedNotice } from './sending-paused-notice'
-import { SENDER_SURFACE_NAMES, SendFromCard, type SenderIdentity } from './send-from-card'
+import { SendFromCard, type SenderIdentity } from './send-from-card'
 import {
   errorText,
   SendingAddressDialog,
@@ -378,18 +385,6 @@ function InboundRouteSection({
   )
 }
 
-type SendingAddress = {
-  id: string
-  address: string | null
-  senderName?: string | null
-  config: Record<string, unknown>
-  sendingDomainId?: string | null
-  sendingDomain: { domain: string; status: string } | null
-  createdAt?: string
-  /** Whether email can leave from it right now (the send guard's answer). */
-  sendable: boolean
-}
-
 /** "Sender name <address>", the sender name being the workspace's when unset. */
 const senderLabel = (a: SendingAddress, workspaceName: string): string => {
   const name = a.senderName ?? workspaceName
@@ -409,54 +404,6 @@ const ownDomains = (...addresses: Array<string | null | undefined>): string[] =>
 /** Oldest first: the order the page lists addresses and offers them in. */
 const oldestFirst = <T extends SendingAddress>(addresses: T[]): T[] =>
   [...addresses].sort((x, y) => (x.createdAt ?? '').localeCompare(y.createdAt ?? ''))
-
-/** "Feedback board and Changelog", "Support, Feedback board and Changelog". */
-const listOf = (items: string[]): string =>
-  items.length <= 1
-    ? (items[0] ?? '')
-    : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
-
-/**
- * The domain row an address sends through: the one it is linked to, else the
- * one whose zone it is in (addresses added before linking carry no id).
- */
-function domainOf(a: SendingAddress, domains: SendingDomainDTO[]): SendingDomainDTO | null {
-  if (a.sendingDomainId) {
-    const linked = domains.find((d) => d.id === a.sendingDomainId)
-    if (linked) return linked
-  }
-  const at = a.address?.split('@')[1]?.toLowerCase()
-  if (!at) return null
-  return domains.find((d) => at === d.domain || at.endsWith(`.${d.domain}`)) ?? null
-}
-
-/**
- * What removing an address does to the email that sends from it, in one
- * sentence: the kinds that override to it fall back to the default, and when
- * it is the default, everything it sends falls to the platform address.
- * Support counts as using the address behind its inbox.
- */
-function removalNote(
-  id: string,
-  senders: EmailSendersDTO,
-  platformFrom: string | null,
-  platformName: string
-): string | null {
-  if (senders.default?.mode === 'address' && senders.default.id === id) {
-    return `It's your default address, so email will come from ${platformFrom ?? `the ${platformName.toLowerCase()}`} instead.`
-  }
-  const using = (
-    Object.keys(SENDER_SURFACE_NAMES) as Array<keyof typeof SENDER_SURFACE_NAMES>
-  ).filter((s) => {
-    const choice = senders[s]
-    return (
-      (choice?.mode === 'address' && choice.id === id) ||
-      (choice?.mode === 'inbox' && choice.fallbackId === id)
-    )
-  })
-  if (using.length === 0) return null
-  return `${listOf(using.map((s) => SENDER_SURFACE_NAMES[s]))} email will come from your default address instead.`
-}
 
 /** The meta line of a row whose domain is not live yet, or is live with its ownership record missing. */
 function pendingMeta(
@@ -519,23 +466,13 @@ function SendingAddressesSection({
   loaded: boolean
 }) {
   const [dialog, setDialog] = useState<SendingAddressDialogTarget | null>(null)
-  const [domainRemoveTarget, setDomainRemoveTarget] = useState<{
-    id: string
-    domain: string
-  } | null>(null)
-  const [removeTarget, setRemoveTarget] = useState<{
-    id: string
-    address: string
-    alsoDomain: string | null
-    note: string | null
-  } | null>(null)
+  const [domainRemoveTarget, setDomainRemoveTarget] = useState<DomainRemoval | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<AddressRemoval | null>(null)
   // Records of live domains the person opened from the row menu, by domain.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   // One inline line for the last failed action, cleared when the next starts:
   // these failures name a fix, and a toast is gone before it is read.
   const [actionError, setActionError] = useState<string | null>(null)
-  const del = useDeleteChannelAccount()
-  const removeDomain = useDeleteSendingDomain()
   const restart = useRestartSendingDomainChecks()
   const sendTest = useSendTestEmail()
   const showError = (fallback: string) => (error: unknown) =>
@@ -747,56 +684,17 @@ function SendingAddressesSection({
         ownDomains={platformDomains}
         onClose={() => setDialog(null)}
       />
-      <ConfirmDialog
-        open={removeTarget !== null}
-        onOpenChange={(open) => !open && setRemoveTarget(null)}
-        title={removeTarget?.address ? `Remove ${removeTarget.address}?` : 'Remove address?'}
-        description={[
-          removeTarget?.note ?? 'Email can no longer be sent from this address.',
-          removeTarget?.alsoDomain ? `${removeTarget.alsoDomain} will be removed too.` : null,
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        confirmLabel="Remove address"
-        variant="destructive"
-        isPending={del.isPending}
-        onConfirm={() => {
-          if (removeTarget) {
-            const { id, alsoDomain } = removeTarget
-            setActionError(null)
-            del.mutate(id, {
-              // Only the domain the dialog named, and only when the server
-              // agrees no address uses it any more.
-              onSuccess: ({ lastOnDomain }) => {
-                if (alsoDomain && lastOnDomain?.domain === alsoDomain) {
-                  removeDomain.mutate(lastOnDomain.id, {
-                    onError: showError("Couldn't remove the domain."),
-                  })
-                }
-              },
-              onError: showError("Couldn't remove the address."),
-            })
-          }
-          setRemoveTarget(null)
-        }}
+      <RemoveAddressDialog
+        target={removeTarget}
+        onClose={() => setRemoveTarget(null)}
+        onStart={() => setActionError(null)}
+        onError={showError}
       />
-      <ConfirmDialog
-        open={domainRemoveTarget !== null}
-        onOpenChange={(open) => !open && setDomainRemoveTarget(null)}
-        title={domainRemoveTarget ? `Remove ${domainRemoveTarget.domain}?` : 'Remove domain?'}
-        description="Its DNS records can be deleted afterwards."
-        confirmLabel="Remove domain"
-        variant="destructive"
-        isPending={removeDomain.isPending}
-        onConfirm={() => {
-          if (domainRemoveTarget) {
-            setActionError(null)
-            removeDomain.mutate(domainRemoveTarget.id, {
-              onError: showError("Couldn't remove the domain."),
-            })
-          }
-          setDomainRemoveTarget(null)
-        }}
+      <RemoveDomainDialog
+        target={domainRemoveTarget}
+        onClose={() => setDomainRemoveTarget(null)}
+        onStart={() => setActionError(null)}
+        onError={showError}
       />
     </SettingsCard>
   )
