@@ -51,6 +51,8 @@ import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
+import { publishInboxScopeChanged } from '@/lib/server/realtime/inbox-scope-invalidate'
+import { roleHolderPrincipalIds } from './role.holders'
 
 const log = logger.child({ component: 'role-service' })
 
@@ -325,7 +327,7 @@ export async function updateRole(
   }
 
   let auditedBeforeCount = 0
-  await db.transaction(async (tx) => {
+  const holders = await db.transaction(async (tx) => {
     // Lock the role row so concurrent edits serialize: without it two diffs
     // against the same stale snapshot union-merge instead of last-write-wins.
     await lockRoleRow(tx, roleId)
@@ -382,7 +384,10 @@ export async function updateRole(
         )
       }
     }
+    return nextKeys ? roleHolderPrincipalIds(tx, roleId) : []
   })
+  // After the commit: every holder's open inbox stream reloads its keys.
+  publishInboxScopeChanged(holders)
 
   if (audit) {
     await recordAuditEvent({
@@ -444,12 +449,14 @@ export async function deleteRole(
   }
 
   let holders = 0
+  let holderIds: PrincipalId[] = []
   await db.transaction(async (tx) => {
     // Lock the role row: a concurrent assignment insert (updateMemberRole)
     // takes FOR KEY SHARE on it, so the two serialize instead of a fresh
     // holder slipping in after the reassign snapshot and being cascade-lost.
     await lockRoleRow(tx, roleId)
     holders = await assignmentCount(tx, roleId)
+    holderIds = await roleHolderPrincipalIds(tx, roleId)
     if (holders > 0 && !reassignTo) {
       throw new ValidationError(
         'ROLE_IN_USE',
@@ -480,6 +487,8 @@ export async function deleteRole(
     // Cascade clears role_permissions and any remaining assignment rows.
     await tx.delete(roles).where(eq(roles.id, roleId))
   })
+  // After the commit: each former holder now holds the reassigned role.
+  publishInboxScopeChanged(holderIds)
 
   if (audit) {
     await recordAuditEvent({

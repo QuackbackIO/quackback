@@ -28,6 +28,7 @@ import type { PrincipalId, TeamId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
+import { publishInboxScopeChanged } from '@/lib/server/realtime/inbox-scope-invalidate'
 import type {
   Team,
   CreateTeamInput,
@@ -230,7 +231,7 @@ export async function teamIdsForPrincipal(principalId: PrincipalId): Promise<Set
 /** Replace a team's membership set with exactly `principalIds`. */
 export async function setTeamMembers(teamId: TeamId, principalIds: PrincipalId[]): Promise<void> {
   const desired = Array.from(new Set(principalIds))
-  await db.transaction(async (tx) => {
+  const changed = await db.transaction(async (tx) => {
     const [team] = await tx
       .select({ id: teams.id })
       .from(teams)
@@ -269,7 +270,10 @@ export async function setTeamMembers(teamId: TeamId, principalIds: PrincipalId[]
         .values(toAdd.map((principalId) => ({ teamId, principalId })))
         .onConflictDoNothing()
     }
+    return [...toAdd, ...toRemove]
   })
+  // After the commit, so each open inbox stream reloads the new memberships.
+  publishInboxScopeChanged(changed)
 }
 
 /**
@@ -288,6 +292,10 @@ export async function addPrincipalToDefaultTeam(
     .limit(1)
   if (!dflt) return
   await exec.insert(teamMembers).values({ teamId: dflt.id, principalId }).onConflictDoNothing()
+  // Inside a caller's transaction the row is not committed yet, and the
+  // principal was created in that same transaction, so no stream of theirs
+  // can be open. Only a write this function owns signals.
+  if (exec === db) publishInboxScopeChanged([principalId])
 }
 
 /** Persist the round-robin rotation cursor after picking a member. */
