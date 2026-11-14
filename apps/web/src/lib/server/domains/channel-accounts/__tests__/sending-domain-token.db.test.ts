@@ -3,8 +3,9 @@
  * this workspace also added the domain by name, against a real database rolled
  * back after each test.
  *
- * The provider is a fake that is never verified, and the zone check records
- * the records it was handed, so which token a row is checked for is visible.
+ * The provider is a fake, and the zone is a fake resolver behind the real
+ * ownership checks, so what a published record does and does not prove is
+ * observable end to end.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TeamId } from '@quackback/ids'
@@ -13,9 +14,9 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   domains,
   emailSendingDomains,
+  ssoVerifiedDomain,
   teams,
   type EmailSendingDomain,
-  type SendingDomainDnsRecord,
 } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -31,26 +32,26 @@ const pending: SesDomainIdentity = {
   verifiedForSending: false,
   mailFrom: null,
 }
+/** The provider's answer, which by itself proves nothing about ownership. */
+const provider = vi.hoisted(() => ({ identity: null as SesDomainIdentity | null }))
 vi.mock('@quackback/email/ses-identity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@quackback/email/ses-identity')>()),
-  getSesDomainIdentity: async () => pending,
+  getSesDomainIdentity: async () => provider.identity,
   putSesMailFromDomain: async () => {},
 }))
 
-const checked = vi.hoisted(() => ({ records: [] as SendingDomainDnsRecord[] }))
-vi.mock('../domain-verification', () => ({
-  checkSendingDomainOwnership: async (_domain: string, expected: SendingDomainDnsRecord[]) => {
-    checked.records = expected
-    return 'absent'
-  },
-}))
-
+/** The zone: TXT values by full name, and every TXT name asked about. */
+const zone = vi.hoisted(() => ({ txt: new Map<string, string[]>(), asked: [] as string[] }))
 vi.mock('@/lib/server/dns/resolver', () => {
   const none = async (host: string) => {
     throw Object.assign(new Error(`ENODATA ${host}`), { code: 'ENODATA' })
   }
   const resolver = {
-    resolveTxt: none,
+    resolveTxt: async (host: string) => {
+      zone.asked.push(host)
+      const values = zone.txt.get(host)
+      return values ? values.map((v) => [v]) : none(host)
+    },
     resolveCname: none,
     resolveMx: none,
     resolve4: none,
@@ -58,8 +59,11 @@ vi.mock('@/lib/server/dns/resolver', () => {
   }
   return { systemResolver: resolver, interactiveResolver: resolver }
 })
+vi.mock('@/lib/server/kv/pg-kv', () => ({ kvSetNx: async () => true }))
 
 import { OWNERSHIP_VALUE_PREFIX, refreshSendingDomain } from '../sending-identity'
+import { checkDomainOwnership } from '@/lib/server/domains/domain-proof/domains.service'
+import { checkSsoDomainOwnership } from '@/lib/server/domains/domain-proof/sso-domain-check'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -102,7 +106,9 @@ describe.skipIf(!fixture.available)('sending row token on a domain added by name
     await fixture.begin()
     vi.stubEnv('EMAIL_SES_REGION', 'eu-west-2')
     vi.stubEnv('EMAIL_FROM', 'Quackback <notifications@mail.platform.test>')
-    checked.records = []
+    provider.identity = pending
+    zone.txt.clear()
+    zone.asked.length = 0
   })
   afterEach(async () => {
     vi.unstubAllEnvs()
@@ -115,8 +121,6 @@ describe.skipIf(!fixture.available)('sending row token on a domain added by name
     const row = await newEasyRow('Tenant-A.example')
 
     expect(tokenOf(row)).toBe(`${OWNERSHIP_VALUE_PREFIX}${TOKEN}`)
-    // And that record is the one the zone is checked for.
-    expect(checked.records.map((r) => r.value)).toEqual([tokenOf(row)])
   })
 
   it('never gives the same token to a second row', async () => {
@@ -153,5 +157,63 @@ describe.skipIf(!fixture.available)('sending row token on a domain added by name
 
     expect(tokenOf(await newEasyRow('tenant-a.example'))).toMatch(FRESH)
     expect(tokenOf(await newEasyRow('tenant-a.example'))).not.toContain(TOKEN)
+  })
+
+  describe('one published record', () => {
+    const verifiedIdentity: SesDomainIdentity = {
+      ...pending,
+      dkimTokens: ['aaa'],
+      dkimStatus: 'SUCCESS',
+      verifiedForSending: true,
+      mailFrom: { domain: 'qb-bounce.tenant-a.example', status: 'SUCCESS' },
+    }
+
+    it('verifies neither the sending row nor sign-in while the domain is pending and unpublished', async () => {
+      await addedDomain('tenant-a.example', TOKEN)
+      const row = await newEasyRow('tenant-a.example')
+      // The provider says verified, as it would to every workspace on the account.
+      provider.identity = verifiedIdentity
+
+      expect((await refreshSendingDomain(row!.id))?.status).toBe('pending')
+      expect(await checkDomainOwnership('tenant-a.example')).toEqual({
+        ok: false,
+        reason: 'no-record',
+      })
+      const [sso] = await testDb
+        .insert(ssoVerifiedDomain)
+        .values({ name: 'tenant-a.example', verificationToken: 'SSO1' })
+        .returning()
+      expect(await checkSsoDomainOwnership(sso)).toEqual({ ok: false, reason: 'no-record' })
+    })
+
+    it('verifies the domain, its sending row and sign-in under it', async () => {
+      await addedDomain('tenant-a.example', TOKEN)
+      const row = await newEasyRow('tenant-a.example')
+      zone.txt.set('_quackback.tenant-a.example', [`${OWNERSHIP_VALUE_PREFIX}${TOKEN}`])
+      provider.identity = verifiedIdentity
+
+      expect(await checkDomainOwnership('tenant-a.example')).toEqual({ ok: true, via: 'dns' })
+      const [sso] = await testDb
+        .insert(ssoVerifiedDomain)
+        .values({ name: 'eu.tenant-a.example', verificationToken: 'SSO2' })
+        .returning()
+      zone.asked.length = 0
+      expect(await checkSsoDomainOwnership(sso)).toEqual({ ok: true, via: 'domain' })
+      expect(zone.asked).toEqual([])
+      expect((await refreshSendingDomain(row!.id))?.status).toBe('verified')
+    })
+
+    it("never verifies on another row's token", async () => {
+      await addedDomain('tenant-a.example', TOKEN)
+      const row = await newEasyRow('tenant-a.example')
+      zone.txt.set('_quackback.tenant-a.example', [`${OWNERSHIP_VALUE_PREFIX}${'f'.repeat(32)}`])
+      provider.identity = verifiedIdentity
+
+      expect(await checkDomainOwnership('tenant-a.example')).toEqual({
+        ok: false,
+        reason: 'mismatch',
+      })
+      expect((await refreshSendingDomain(row!.id))?.status).toBe('pending')
+    })
   })
 })
