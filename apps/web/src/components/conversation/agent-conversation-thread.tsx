@@ -114,6 +114,7 @@ import {
   type InboxItemRef,
   type LinkedTicketSummary,
 } from '@/lib/shared/inbox/items'
+import { isNotFoundError } from '@/lib/shared/errors'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import {
   formatTicketNumber,
@@ -608,7 +609,11 @@ export function AgentConversationThread({
   // is ever `enabled` — the conversation adapter is unchanged from before the
   // fold (same key/query the route loader's SSR prefetch warms); the ticket
   // adapter reads the sibling factory in queries/inbox.ts.
-  const { data: convThread, isLoading: convLoading } = useQuery({
+  const {
+    data: convThread,
+    isLoading: convLoading,
+    error: convError,
+  } = useQuery({
     ...conversationInboxQueries.thread(conversationId ?? INACTIVE_CONVERSATION_ID),
     enabled: !isTicket,
   })
@@ -1915,6 +1920,21 @@ export function AgentConversationThread({
             <Skeleton className="h-24 w-full rounded-lg" />
           </div>
         </div>
+      </div>
+    )
+  }
+
+  // A conversation may 404 (deleted, or outside the viewer's scope): the same
+  // state as a missing ticket, with nothing to close or reply to. Any other
+  // failure keeps the thread as it is.
+  if (!isTicket && isNotFoundError(convError)) {
+    return (
+      <div className="flex h-full flex-1 min-w-0 items-center justify-center">
+        <EmptyState
+          icon={ChatBubbleLeftRightIcon}
+          title="Conversation not found"
+          description="It may have been deleted or you no longer have access."
+        />
       </div>
     )
   }
