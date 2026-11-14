@@ -71,10 +71,13 @@ export function BlockTicketForm({
       <div className="space-y-1">
         <label htmlFor={`${id}-subject`} className="text-xs font-medium text-muted-foreground">
           <FormattedMessage id="widget.tickets.new.subject" defaultMessage="Subject" />
-          <span className="ms-0.5 text-destructive">*</span>
+          <span aria-hidden className="ms-0.5 text-destructive">
+            *
+          </span>
         </label>
         <Input
           id={`${id}-subject`}
+          aria-required
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={300}

@@ -50,6 +50,15 @@ describe('BlockTicketForm (send_ticket_form block card)', () => {
     expect(screen.getByLabelText(/email/i)).toBe(screen.getByPlaceholderText(/you@example\.com/i))
   })
 
+  it('names the subject without its asterisk and marks it required', () => {
+    renderCard()
+    expect(screen.getByRole('textbox', { name: 'Subject' })).toHaveAttribute(
+      'aria-required',
+      'true'
+    )
+    expect(screen.getByRole('textbox', { name: 'Details' })).not.toHaveAttribute('aria-required')
+  })
+
   it('keeps Create disabled until a subject is typed', () => {
     renderCard()
     const submit = screen.getByRole('button', { name: /create ticket/i })
