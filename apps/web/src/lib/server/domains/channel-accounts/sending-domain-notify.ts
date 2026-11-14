@@ -25,7 +25,8 @@ import {
 } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
-import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
+import type { PermissionKey } from '@/lib/shared/permissions'
+import { permissionsForPrincipals } from '@/lib/server/policy/permissions'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
 import type { NotificationType } from '@/lib/server/domains/notifications/notification.types'
 import { batchGetNotificationPreferences } from '@/lib/server/domains/subscriptions/subscription.service'
@@ -35,25 +36,31 @@ import { isKeyRecord } from './dkim-key'
 
 const log = logger.child({ component: 'sending-domain-notify' })
 
-interface Manager {
+export interface Manager {
   principalId: PrincipalId
   userId: UserId | null
 }
 
-/** Every teammate who may manage how the workspace sends email, and so is told about its domains. */
-export async function sendingDomainManagers(): Promise<Manager[]> {
+/**
+ * Every teammate holding `permission`, their permissions resolved in one read
+ * rather than one per teammate.
+ */
+export async function managersHolding(permission: PermissionKey): Promise<Manager[]> {
   const people = await db
     .select({ id: principal.id, role: principal.role, userId: principal.userId })
     .from(principal)
     .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member'])))
-  const managers: Manager[] = []
-  for (const person of people) {
-    const held = await permissionsForPrincipal(person.id, person.role as 'admin' | 'member')
-    if (held.has(EMAIL_SENDING_PERMISSION)) {
-      managers.push({ principalId: person.id, userId: person.userId as UserId | null })
-    }
-  }
-  return managers
+  const held = await permissionsForPrincipals(
+    people.map((p) => ({ id: p.id, role: p.role as 'admin' | 'member' }))
+  )
+  return people
+    .filter((p) => held.get(p.id)?.has(permission))
+    .map((p) => ({ principalId: p.id, userId: p.userId as UserId | null }))
+}
+
+/** Every teammate who may manage how the workspace sends email, and so is told about its domains. */
+export function sendingDomainManagers(): Promise<Manager[]> {
+  return managersHolding(EMAIL_SENDING_PERMISSION)
 }
 
 /** The first record whose own check says it is wrong, in the order they are published. */
