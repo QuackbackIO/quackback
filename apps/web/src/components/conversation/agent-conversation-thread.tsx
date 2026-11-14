@@ -2338,6 +2338,7 @@ export function AgentConversationThread({
                 editorRef={activeEditorRef}
                 value={drafts.get('note').json ?? ''}
                 features={CONVERSATION_NOTE_FEATURES}
+                mentionItem={item}
                 borderless
                 minHeight="4.5rem"
                 autofocus={noteKey > 0 ? 'end' : false}

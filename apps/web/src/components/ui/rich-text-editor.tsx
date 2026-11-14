@@ -22,7 +22,7 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
-import { MentionExtension } from './mention-extension'
+import { MentionExtension, teamMentionExtensionFor, type MentionItemRef } from './mention-extension'
 import { createSuggestionPopup, createSuggestionPositioner } from './suggestion-popup'
 import { applySuggestionListKey } from './suggestion-list-keys'
 import { HighlightQuery, emojiSuggestionLabel } from './highlight-query'
@@ -186,9 +186,11 @@ export function buildExtensions(
     onVideoUpload?: (file: File) => Promise<string>
     /** When set, Enter submits (chat-send) instead of splitting the block. */
     onSubmit?: () => void
+    /** Replaces the default `@` extension (see `RichTextEditorProps.mentionItem`). */
+    mentionExtension?: typeof MentionExtension
   }
 ) {
-  const { placeholder, onImageUpload, onVideoUpload, onSubmit } = options
+  const { placeholder, onImageUpload, onVideoUpload, onSubmit, mentionExtension } = options
   return [
     StarterKit.configure({
       heading: features.headings ? { levels: [1, 2, 3] } : false,
@@ -317,7 +319,7 @@ export function buildExtensions(
     // every existing consumer keeps the `@` menu while visitor-facing composers can
     // drop it. Read-only surfaces render mention nodes via generateContentHTML,
     // which doesn't go through buildExtensions.
-    ...(features.mentions !== false ? [MentionExtension] : []),
+    ...(features.mentions !== false ? [mentionExtension ?? MentionExtension] : []),
     Markdown,
   ]
 }
@@ -1402,6 +1404,10 @@ interface RichTextEditorProps {
   /** Publishes the imperative focus seam. Mutually exclusive editors may share
    * one ref object: whichever instance is mounted owns it. */
   editorRef?: React.RefObject<RichTextEditorHandle | null>
+  /** The inbox item a note is written on. Mentions then suggest teammates
+   * only, and a teammate who cannot see the item shows muted with "No access"
+   * and cannot be picked. */
+  mentionItem?: MentionItemRef
 }
 
 // ============================================================================
@@ -1424,14 +1430,33 @@ function RichTextEditorBase({
   onVideoUpload,
   onSubmit,
   editorRef,
+  mentionItem,
 }: RichTextEditorProps) {
+  // One extension per item, kept while the item is open, so the extensions
+  // memo below stays stable across renders.
+  const mentionKind = mentionItem?.kind
+  const mentionId = mentionItem?.id
+  const mentionExtension = useMemo(
+    () =>
+      mentionKind && mentionId
+        ? teamMentionExtensionFor({ kind: mentionKind, id: mentionId })
+        : undefined,
+    [mentionKind, mentionId]
+  )
   // Memoize extensions keyed on individual feature flags.
   // TipTap v3's useEditor calls editor.setOptions() whenever the extensions
   // array reference changes (uses reference equality via compareOptions).
   // Rebuilding the array on every render causes setOptions→transaction→onUpdate
   // on every keystroke, resulting in 300–400 ms input violations.
   const extensions = useMemo(
-    () => buildExtensions(features, { placeholder, onImageUpload, onVideoUpload, onSubmit }),
+    () =>
+      buildExtensions(features, {
+        placeholder,
+        onImageUpload,
+        onVideoUpload,
+        onSubmit,
+        mentionExtension,
+      }),
 
     [
       features.headings,
@@ -1452,6 +1477,7 @@ function RichTextEditorBase({
       onVideoUpload,
       onSubmit,
       placeholder,
+      mentionExtension,
     ]
   )
 
@@ -1922,7 +1948,9 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     prev.borderless !== next.borderless ||
     prev.toolbarPosition !== next.toolbarPosition ||
     prev.className !== next.className ||
-    prev.editorRef !== next.editorRef
+    prev.editorRef !== next.editorRef ||
+    prev.mentionItem?.kind !== next.mentionItem?.kind ||
+    prev.mentionItem?.id !== next.mentionItem?.id
   )
     return false
   return sameFeatures(prev.features, next.features)

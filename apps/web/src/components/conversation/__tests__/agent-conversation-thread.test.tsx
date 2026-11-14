@@ -241,8 +241,10 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
       placeholder,
       editorRef,
       onDocumentChange,
+      mentionItem,
     }: {
       placeholder?: string
+      mentionItem?: { kind: string; id: string }
       editorRef?: React.RefObject<{ focus: () => void; clear?: () => void } | null>
       onDocumentChange?: (document: { json(): unknown; html(): string; markdown(): string }) => void
     }) => {
@@ -258,7 +260,15 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
         focus: () => areaRef.current?.focus(),
         clear: () => {},
       }))
-      return <textarea ref={areaRef} data-testid="editor" placeholder={placeholder} readOnly />
+      return (
+        <textarea
+          ref={areaRef}
+          data-testid="editor"
+          data-mention-item={mentionItem ? `${mentionItem.kind}:${mentionItem.id}` : undefined}
+          placeholder={placeholder}
+          readOnly
+        />
+      )
     },
   }
 })
@@ -579,6 +589,9 @@ describe('AgentConversationThread — ticket capability wiring', () => {
     )
     const editor = await screen.findByTestId('editor')
     expect(editor).toHaveAttribute('placeholder', 'Add an internal note for your team…')
+    // Ticket notes store no mentions, but the picker still marks who cannot
+    // see this ticket.
+    expect(editor).toHaveAttribute('data-mention-item', 'ticket:ticket_tracker')
     expect(screen.queryByText('Reply')).not.toBeInTheDocument()
     expect(screen.queryByText('Note')).not.toBeInTheDocument()
   })
@@ -1071,6 +1084,19 @@ describe('AgentConversationThread — composer focus handle', () => {
     const note = screen.getByTestId('editor')
     expect(note).toHaveAttribute('placeholder', 'Add an internal note for your team…')
     expect(document.activeElement).toBe(note)
+  })
+
+  it('the note editor checks mentions against the open conversation; the reply editor does not', async () => {
+    const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    const reply = await screen.findByTestId('editor')
+    expect(reply).not.toHaveAttribute('data-mention-item')
+
+    act(() => composerRef.current?.focusComposer('note'))
+
+    expect(screen.getByTestId('editor')).toHaveAttribute(
+      'data-mention-item',
+      'conversation:conversation_1'
+    )
   })
 
   it('marks the composer box so the inbox Escape binding can find it from the editor', async () => {
