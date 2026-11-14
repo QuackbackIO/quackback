@@ -86,9 +86,7 @@ const tenantClient: SesTenantClient = {
       return {} as never
     }
     if (kind(command) === 'GetReputationEntityCommand') {
-      const known = [...tenants.values()].some(
-        (t) => t.arn === input.ReputationEntityReference
-      )
+      const known = [...tenants.values()].some((t) => t.arn === input.ReputationEntityReference)
       if (!known) throw serviceError('NotFoundException', 404)
       return {
         ReputationEntity: {
@@ -114,7 +112,10 @@ const identityClient: SesIdentityClient = {
   },
 }
 
-const deps = { tenant: { client: tenantClient }, identity: { client: identityClient, region: 'eu-west-2' } }
+const deps = {
+  tenant: { client: tenantClient },
+  identity: { client: identityClient, region: 'eu-west-2' },
+}
 const associationsOf = () => [...(tenants.get(NAME)?.associations ?? [])].sort()
 
 const fixture = await createDbTestFixture({
@@ -124,7 +125,10 @@ const fixture = await createDbTestFixture({
 })
 
 async function seedTeam(): Promise<TeamId> {
-  const [team] = await testDb.insert(teams).values({ name: `Team-${createId('team')}` }).returning()
+  const [team] = await testDb
+    .insert(teams)
+    .values({ name: `Team-${createId('team')}` })
+    .returning()
   return team.id
 }
 
@@ -268,7 +272,12 @@ describe.skipIf(!fixture.available)('ses tenants (real DB, rolled back)', () => 
       await testDb.delete(emailSendingDomains).where(eq(emailSendingDomains.id, gone.id))
       await testDb
         .delete(emailSendingDomains)
-        .where(and(eq(emailSendingDomains.domain, 'shared.test'), eq(emailSendingDomains.owningTeamId, teamId)))
+        .where(
+          and(
+            eq(emailSendingDomains.domain, 'shared.test'),
+            eq(emailSendingDomains.owningTeamId, teamId)
+          )
+        )
       await reconcileSesTenant(deps)
 
       expect(associationsOf()).not.toContain(arnOf('identity', 'gone.test'))
@@ -357,6 +366,25 @@ describe.skipIf(!fixture.available)('ses tenants (real DB, rolled back)', () => 
       await reconcileSesTenant(deps)
       expect(await pausedBells(admin)).toHaveLength(2)
       expect(await sesTenantPausedNotice()).toEqual({ cause: 'Complaint rate above threshold.' })
+    })
+
+    it('says in the bell who can resume sending, where that is someone to contact', async () => {
+      const admin = await seedAdmin()
+      await recordSesTenantPaused(NAME, 'Bounce rate above threshold.')
+      const [own] = await pausedBells(admin)
+      expect(own.body).toBe(
+        'The email provider paused sending because of bounces or complaints. Bounce rate above threshold.'
+      )
+
+      // On a server shared by many workspaces, the people who run it lift a pause.
+      reputation.status = 'REINSTATED'
+      await reconcileSesTenant(deps)
+      vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+      await recordSesTenantPaused(NAME, 'Bounce rate above threshold.')
+      const bodies = (await pausedBells(admin)).map((bell) => bell.body)
+      expect(bodies).toContain(
+        'The email provider paused sending because of bounces or complaints. Bounce rate above threshold. Contact support to resume.'
+      )
     })
 
     it('leaves a long cause off the settings line', async () => {

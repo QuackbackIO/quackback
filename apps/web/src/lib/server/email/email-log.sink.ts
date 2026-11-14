@@ -1,5 +1,6 @@
 import {
   setDefaultFromResolver,
+  setDefaultFromShared,
   setEmailLogSink,
   setEmailPoweredByResolver,
   setSesTenantHooks,
@@ -9,6 +10,7 @@ import type { ConversationId, PostId, TicketId } from '@quackback/ids'
 import { db, emailLog } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 
 const log = logger.child({ component: 'email-log' })
 
@@ -81,17 +83,20 @@ export function ensureEmailLogSink(): void {
     return shouldShowPoweredBy(await getCloudConfig())
   })
   setDefaultFromResolver(() => getCurrentWorkspace()?.email.from ?? null)
+  // A server shared by many workspaces never lends its own From name to one of
+  // them, including on a send made outside any workspace's scope.
+  setDefaultFromShared(() => isPooledTenancy())
   // Per-workspace provider tenants. Each lookup returns null without touching
   // the database when tenants are off or no workspace is in scope.
   setSesTenantHooks({
     tenantFor: async (ctx) => {
-      const { tenantForSend } = await import('@/lib/server/domains/channel-accounts/ses-tenant-state')
+      const { tenantForSend } =
+        await import('@/lib/server/domains/channel-accounts/ses-tenant-state')
       return tenantForSend(ctx)
     },
     onTenantPaused: async (tenantName, detail) => {
-      const { recordSesTenantPaused } = await import(
-        '@/lib/server/domains/channel-accounts/ses-tenant-status'
-      )
+      const { recordSesTenantPaused } =
+        await import('@/lib/server/domains/channel-accounts/ses-tenant-status')
       await recordSesTenantPaused(tenantName, detail)
     },
   })

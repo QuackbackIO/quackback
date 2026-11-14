@@ -1116,6 +1116,7 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   const { customSendingDomainsAvailable } =
     await import('@/lib/server/domains/channel-accounts/sending-identity')
+  const { isPooledTenancy } = await import('@/lib/server/workspaces/mode')
   let fromAddress: string | null = null
   try {
     fromAddress = getEmailFrom()
@@ -1133,6 +1134,9 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
     customDomains: customSendingDomainsAvailable()
       ? ('available' as const)
       : ('unavailable' as const),
+    // Whether the server is this workspace's own to read about. On one shared
+    // by many workspaces the page leaves the transport out.
+    ownServer: !isPooledTenancy(),
   }
 })
 

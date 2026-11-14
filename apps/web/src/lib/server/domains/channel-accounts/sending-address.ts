@@ -61,13 +61,9 @@ const log = logger.child({ component: 'sending-address' })
 export type SendingAddressMode = 'any' | 'verified-domains' | 'unavailable'
 
 /** The mode for a guard context: the same answer the guard gives for an unknown From. */
-function addressModeFor(ctx: SendingIdentityContext): SendingAddressMode {
+export function addressModeFor(ctx: SendingIdentityContext): SendingAddressMode {
   if (!ctx.pooled) return 'any'
   return customSendingDomainsAvailable() ? 'verified-domains' : 'unavailable'
-}
-
-export async function sendingAddressMode(): Promise<SendingAddressMode> {
-  return addressModeFor(await sendingIdentityContext())
 }
 
 /** The A-label domain of an address, or null when it has none. */
@@ -180,10 +176,17 @@ export async function removeSendingAddress(
   id: ChannelAccountId
 ): Promise<{ lastOnDomain: { id: SendingDomainId; domain: string } | null }> {
   const account = await getChannelAccount(id)
+  // Already gone: removing it again changes nothing.
+  if (!account) return { lastOnDomain: null }
+  // Only ever a sending address. The inbox a customer writes to and a
+  // connected channel share this table and are managed elsewhere, under their
+  // own permission, so an id of one of those is refused here.
+  if (account.role !== 'sending') {
+    throw new SendingDomainRefusedError('That sending address no longer exists.')
+  }
   // Whatever sent from it sends from the default again (or the platform).
   await clearEmailSendersFor(id)
   await softDeleteChannelAccount(id)
-  if (!account) return { lastOnDomain: null }
 
   const domain = account.sendingDomainId
     ? await getSendingDomain(account.sendingDomainId)
@@ -231,7 +234,7 @@ export async function sendTestEmail(input: {
   const permitted = await permittedSendingIdentity(address)
   if (!permitted) {
     throw new SendingDomainRefusedError(
-      `${domainOfAddress(address) ?? address} isn't live yet. Send a test once its records are found.`
+      `${domainOfAddress(address) ?? address} isn't verified yet. You can send a test once it is.`
     )
   }
 
@@ -243,7 +246,7 @@ export async function sendTestEmail(input: {
   const name = (account.senderName ?? input.workspaceName).trim()
   const from = name ? withSendingDisplayName(permitted, name) : permitted
 
-  const text = `This is a test from ${address}. If it arrived, replies can be sent from this address.`
+  const text = `This is a test from ${address}. If you're reading it, email can be sent from this address.`
   const result = await sendRawEmail({
     from,
     to,

@@ -14,6 +14,21 @@ import {
   type ProductSenderSurface,
 } from '@/lib/shared/email-sending-permissions'
 
+/**
+ * The Send from card's anchor on Settings → Email, where "Change" lands. The
+ * card carries the same id (see `WorkspaceEmailSettings`).
+ */
+export const SEND_FROM_ANCHOR = 'send-from'
+
+/**
+ * The From a kind of email goes out under now, or null while unknown. For a
+ * card that shows nothing without one; read from here rather than from the
+ * query module, so product settings pages share one chunk for it.
+ */
+export function useSurfaceSender(surface: ProductSenderSurface): string | null {
+  return useQuery(surfaceSenderQuery(surface)).data?.from ?? null
+}
+
 export function SurfaceSenderRow({ surface }: { surface: ProductSenderSurface }) {
   const { data } = useQuery(surfaceSenderQuery(surface))
   const canChange = useHasPermission(EMAIL_SENDING_PERMISSION)
@@ -25,7 +40,9 @@ export function SurfaceSenderRow({ surface }: { surface: ProductSenderSurface })
       control={
         canChange ? (
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/admin/settings/email">Change</Link>
+            <Link to="/admin/settings/email" hash={SEND_FROM_ANCHOR}>
+              Change
+            </Link>
           </Button>
         ) : null
       }

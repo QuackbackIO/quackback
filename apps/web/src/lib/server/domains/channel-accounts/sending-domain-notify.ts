@@ -115,7 +115,7 @@ export async function notifySendingDomainLive(domain: EmailSendingDomain): Promi
     const managers = await sendingDomainManagers()
     if (managers.length === 0) return
     await ringManagers(managers, 'sending_domain_live', {
-      title: `${await addressOn(domain)} is live`,
+      title: `${await addressOn(domain)} is ready to send`,
       metadata: { sendingDomainId: domain.id, domain: domain.domain, audience: 'admin' },
     })
   } catch (err) {

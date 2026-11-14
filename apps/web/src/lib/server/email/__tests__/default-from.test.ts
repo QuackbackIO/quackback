@@ -6,7 +6,7 @@
  * the resolver between cases.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getEmailFrom } from '@quackback/email'
+import { getEmailFrom, platformFromPreview } from '@quackback/email'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 import { ensureEmailLogSink } from '../email-log.sink'
@@ -41,6 +41,11 @@ describe('pooled default From', () => {
   it('falls back to EMAIL_FROM outside a workspace scope', () => {
     expect(getEmailFrom()).toBe('Fleet <noreply@fleet.example>')
   })
+
+  it("never speaks for a workspace under the fleet's name, even outside a scope", () => {
+    vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+    expect(platformFromPreview('Acme')).toBe('Acme <noreply@fleet.example>')
+  })
 })
 
 describe('self-host default From', () => {
@@ -57,5 +62,9 @@ describe('self-host default From', () => {
   it('is EMAIL_FROM with no workspace scope, matching an OSS install', () => {
     expect(getCurrentWorkspace()).toBeNull()
     expect(getEmailFrom()).toBe('Selfhost <noreply@self.example>')
+  })
+
+  it("keeps the operator's own From name for the workspace's mail", () => {
+    expect(platformFromPreview('Acme')).toBe('Selfhost <noreply@self.example>')
   })
 })

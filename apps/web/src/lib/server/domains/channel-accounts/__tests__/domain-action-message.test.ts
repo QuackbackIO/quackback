@@ -5,7 +5,7 @@
  * a mapper that fell through to the fallback for everything would still return
  * a string, and only the exact text tells the branches apart.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SesIdentityConfigError, SesIdentityError } from '@quackback/email/ses-identity'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { ChannelAddressInUseError, SendingDomainInUseError } from '../channel-account.service'
@@ -15,7 +15,7 @@ import { domainActionMessage } from '../domain-action-message'
 
 const NOT_SET_UP =
   "Custom sending domains aren't set up correctly on this server. Nothing was added."
-const UNREACHABLE = "Couldn't reach the mail provider. Try again in a minute."
+const UNREACHABLE = "Couldn't reach the email provider. Try again in a minute."
 
 describe('domainActionMessage', () => {
   it('passes our own refusals through, since they name the fix', () => {
@@ -27,7 +27,7 @@ describe('domainActionMessage', () => {
     const identity = new SendingIdentityRefusedError('help@acme.com')
     expect(domainActionMessage(identity, 'address')).toBe(identity.message)
     expect(domainActionMessage(new ChannelAddressInUseError('help@acme.com'), 'address')).toBe(
-      "help@acme.com is already in use by this workspace's inbound route."
+      'help@acme.com is already used by your support inbox.'
     )
   })
 
@@ -67,20 +67,31 @@ describe('domainActionMessage', () => {
   it('falls back per action for a permanent provider failure, without server-log wording', () => {
     const err = new SesIdentityError('SES bad request', 400, 'BadRequestException', false)
     expect(domainActionMessage(err, 'address')).toBe(
-      "Couldn't add the address. Try again, and if it keeps failing, contact your workspace's operator."
+      "Couldn't add the address. Try again, and if it keeps failing, contact your administrator."
     )
+  })
+
+  it('points a workspace on a shared server to support, who can act on it', () => {
+    vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+    try {
+      expect(domainActionMessage(new Error('boom'), 'address')).toBe(
+        "Couldn't add the address. Try again, and if it keeps failing, contact support."
+      )
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('falls back per action for anything unrecognised', () => {
     const err = new Error('socket hang up at 10.0.0.1')
     expect(domainActionMessage(err, 'verify')).toBe(
-      "Couldn't check the records. Try again, and if it keeps failing, contact your workspace's operator."
+      "Couldn't check the records. Try again, and if it keeps failing, contact your administrator."
     )
     expect(domainActionMessage(err, 'remove')).toBe(
-      "Couldn't remove the domain. Try again, and if it keeps failing, contact your workspace's operator."
+      "Couldn't remove the domain. Try again, and if it keeps failing, contact your administrator."
     )
     expect(domainActionMessage(err, 'test')).toBe(
-      "Couldn't send the test email. Try again, and if it keeps failing, contact your workspace's operator."
+      "Couldn't send the test email. Try again, and if it keeps failing, contact your administrator."
     )
     for (const action of ['address', 'verify', 'remove', 'test'] as const) {
       expect(domainActionMessage(err, action)).not.toMatch(/log/i)

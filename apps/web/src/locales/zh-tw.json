@@ -1420,7 +1420,7 @@
   "ask.destination.settings_imports": "匯入與匯出",
   "ask.destination.settings_widget_install": "安裝",
   "ask.destination.settings_channels_messenger": "網頁小工具",
-  "ask.destination.settings_channels_email": "電子郵件",
+  "ask.destination.settings_channels_email": "支援電子郵件",
   "ask.destination.settings_channels_github": "GitHub",
   "ask.starter.branding": "設定我的品牌顏色",
   "ask.starter.invite": "邀請我的團隊",

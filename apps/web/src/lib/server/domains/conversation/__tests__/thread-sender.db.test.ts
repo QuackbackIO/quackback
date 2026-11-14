@@ -81,7 +81,7 @@ import { notifyAgentReply, notifyCsatRequestEmail } from '../conversation.notify
 import { notifyConversationClosed } from '../conversation.notify-closed'
 import { createSendingAddress } from '@/lib/server/domains/channel-accounts/channel-account.service'
 import { setEmailSender } from '@/lib/server/domains/channel-accounts/email-senders'
-import { resolveSendingAddress } from '@/lib/server/domains/channel-accounts/sender-resolver'
+import { resolveSender } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 
 const fixture = await createDbTestFixture({
@@ -348,10 +348,36 @@ describe.skipIf(!fixture.available)('one sender for a whole support thread (real
       expect(referenceIds(mails[i])).toEqual(expect.arrayContaining(ids.slice(0, i)))
     }
 
+    // The rating request is the newest mail on the thread, so it is what a
+    // customer answers with anything they still have to say: a reply to it
+    // reopens the conversation, as a reply to any other mail on it does.
+    const [conv2] = await testDb
+      .select({ status: conversations.status })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+    expect(conv2.status).toBe('closed')
+    const reply: ParsedInboundEmail = {
+      ...coldEmail,
+      toAddresses: [bareFrom(mails[2].get('reply-to'))],
+      subject: 'Re: Help with billing',
+      text: 'It is still wrong.',
+      messageId: '<reply-to-rating@example.org>',
+      inReplyTo: mails[2].get('message-id') ?? null,
+      references: [mails[2].get('message-id') ?? ''],
+    }
+    expect((await asWorkspace(() => ingestParsedEmail(reply))).status).toBe('ingested')
+    const [reopened] = await testDb
+      .select({ status: conversations.status })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+    expect(reopened.status).toBe('open')
+
     // Support is pointed at another address, which a new thread would use, and
     // the conversation is reassigned.
     await setEmailSender('support', { mode: 'address', channelAccountId: billingAddress.id })
-    expect(await asWorkspace(() => resolveSendingAddress(billing.id))).toBe('billing@home.example')
+    expect((await asWorkspace(() => resolveSender({ surface: 'support' })))?.from).toBe(
+      'billing@home.example'
+    )
     await testDb
       .update(conversations)
       .set({ assignedTeamId: billing.id, status: 'open', resolvedAt: null, endReason: null })

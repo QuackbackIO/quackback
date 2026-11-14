@@ -244,19 +244,21 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       await provisionSendingDomain({ owningTeamId: teamId, domain: 'b.example' })
       await provisionSendingDomain({ owningTeamId: teamId, domain: 'c.example' })
       zoneLookups.length = 0
+      // The domain a lookup was for: "NS a.example" and "TXT _dmarc.a.example" are both a.example.
+      const domainOf = (lookup: string) => lookup.split(' ')[1].split('.').slice(-2).join('.')
       // The first domain takes the whole budget.
       const clock = vi.fn<() => number>().mockReturnValueOnce(0).mockReturnValueOnce(0)
       clock.mockReturnValue(WATCH_BUDGET_MS)
 
       expect((await watchSendingDomains(new Date(), { clock })).watched).toBe(1)
-      const looked = new Set(zoneLookups.map((l) => l.split('.').slice(-2).join('.')))
+      const looked = new Set(zoneLookups.map(domainOf))
       expect(looked.size).toBe(1)
 
       // The next tick starts with the ones left unchecked.
       zoneLookups.length = 0
       const next = await watchSendingDomains(new Date(Date.now() + 60_000))
       expect(next.watched).toBe(3)
-      const order = [...new Set(zoneLookups.map((l) => l.split('.').slice(-2).join('.')))]
+      const order = [...new Set(zoneLookups.map(domainOf))]
       expect(order[order.length - 1]).toBe([...looked][0])
     })
 
@@ -327,7 +329,7 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
 
       const bells = await bellsFor([admin, member, portalUser], 'sending_domain_live')
       expect(bells.map((b) => [b.principalId, b.title])).toEqual([
-        [admin, 'help@a.example is live'],
+        [admin, 'help@a.example is ready to send'],
       ])
 
       // Further checks of a live domain ring nothing more.
@@ -359,6 +361,43 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
     })
   })
 
+  describe('the zone a domain sits in', () => {
+    it('is named on the next check for a domain set up before the zone was kept', async () => {
+      zone.set('zoned.example', { NS: ['ada.ns.cloudflare.com'] })
+      const row = await provisionSendingDomain({
+        owningTeamId: teamId,
+        domain: 'updates.zoned.example',
+      })
+      expect(row.preflight.zone).toBe('zoned.example')
+
+      // As a row from before the zone was kept: everything else, no zone.
+      await testDb
+        .update(emailSendingDomains)
+        .set({ preflight: { mailFromFree: true, dmarc: { found: false } } })
+        .where(eq(emailSendingDomains.id, row.id))
+      const refreshed = await refreshSendingDomain(row.id)
+      expect(refreshed?.preflight).toMatchObject({
+        zone: 'zoned.example',
+        dnsHost: 'cloudflare',
+        mailFromFree: true,
+      })
+    })
+
+    it('is not asked for again once it is known', async () => {
+      zone.set('zoned.example', { NS: ['ada.ns.cloudflare.com'] })
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'zoned.example' })
+      expect(row.preflight.zone).toBe('zoned.example')
+
+      zoneLookups.length = 0
+      const refreshed = await refreshSendingDomain(row.id)
+      expect(zoneLookups.filter((l) => l.startsWith('NS '))).toEqual([])
+      expect(refreshed?.preflight).toMatchObject({
+        zone: 'zoned.example',
+        dnsHost: 'cloudflare',
+      })
+    })
+  })
+
   describe('restartSendingDomainChecks', () => {
     it('opens a fresh 72 hour window and checks now', async () => {
       const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })
@@ -376,6 +415,37 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       expect(restarted?.lastCheckedAt).not.toBeNull()
       expect(getIdentity.mock.calls.map(([d]) => d)).toEqual(['a.example'])
       expect((await watchSendingDomains()).watched).toBe(1)
+    })
+
+    it('checks now without moving the deadline of a window that is still open', async () => {
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })
+      const deadline = new Date(Date.now() + 10 * 3600 * 1000)
+      await testDb
+        .update(emailSendingDomains)
+        .set({ autoCheckUntil: deadline, lastCheckedAt: new Date(Date.now() - 5 * 60_000) })
+        .where(eq(emailSendingDomains.id, row.id))
+      getIdentity.mockClear()
+
+      const checked = await restartSendingDomainChecks(row.id)
+      expect(checked?.autoCheckUntil?.getTime()).toBe(deadline.getTime())
+      expect(getIdentity.mock.calls.map(([d]) => d)).toEqual(['a.example'])
+      expect(Date.now() - (checked?.lastCheckedAt?.getTime() ?? 0)).toBeLessThan(5000)
+    })
+
+    it('answers from the last check when asked again within moments', async () => {
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })
+      const lastCheckedAt = new Date(Date.now() - 5000)
+      await testDb
+        .update(emailSendingDomains)
+        .set({ autoCheckUntil: new Date(Date.now() + 10 * 3600 * 1000), lastCheckedAt })
+        .where(eq(emailSendingDomains.id, row.id))
+      getIdentity.mockClear()
+
+      const answered = await restartSendingDomainChecks(row.id)
+      // The provider's management API is shared by every workspace, so a
+      // person pressing the button repeatedly costs it one call, not one each.
+      expect(getIdentity).not.toHaveBeenCalled()
+      expect(answered?.lastCheckedAt?.getTime()).toBe(lastCheckedAt.getTime())
     })
 
     it('answers null for a domain that does not exist', async () => {

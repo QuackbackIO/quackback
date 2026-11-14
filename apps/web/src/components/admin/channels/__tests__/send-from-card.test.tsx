@@ -37,6 +37,8 @@ vi.mock('@/components/ui/select', () => ({
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
     >
+      {/* Nothing chosen yet: the real trigger shows its placeholder. */}
+      {value === '' && <option value="" />}
       {children}
     </select>
   ),
@@ -45,6 +47,21 @@ vi.mock('@/components/ui/select', () => ({
   SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
   SelectItem: ({ value, children }: { value: string; children: ReactNode }) => (
     <option value={value}>{children}</option>
+  ),
+}))
+
+// The menu's popup also relies on layout APIs happy-dom lacks; render its items
+// in place, so what it offers and what picking one does are drivable.
+vi.mock('@/components/ui/dropdown-menu', () => ({
+  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: ReactNode }) => (
+    <button type="button">{children}</button>
+  ),
+  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div role="menu">{children}</div>,
+  DropdownMenuItem: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
+    <button type="button" role="menuitem" onClick={onClick}>
+      {children}
+    </button>
   ),
 }))
 
@@ -69,13 +86,19 @@ function renderCard(
     forwardingTarget: string | null
     forwardingTargetPermitted: boolean | null
     rows: Array<keyof EmailSendersDTO>
+    platformFrom: string | null
+    platformName: string
+    platformInbox: string | null
+    identities: Array<{ id: string; label: string; live: boolean }>
   }> = {}
 ) {
   return render(
     <SendFromCard
       senders={{ ...NONE, ...over.senders }}
-      identities={[HELLO, NEWS, PENDING]}
-      platformFrom={PLATFORM}
+      identities={over.identities ?? [HELLO, NEWS, PENDING]}
+      platformFrom={over.platformFrom === undefined ? PLATFORM : over.platformFrom}
+      platformName={over.platformName}
+      platformInbox={over.platformInbox}
       forwardingTarget={over.forwardingTarget ?? null}
       forwardingTargetPermitted={over.forwardingTargetPermitted ?? null}
       hasInboundRoute={over.hasInboundRoute ?? false}
@@ -87,9 +110,151 @@ function renderCard(
 
 const select = (name: string) => screen.getByRole('combobox', { name }) as HTMLSelectElement
 const options = (name: string) => [...select(name).options].map((o) => o.textContent)
+/** The kinds of email the "Use a different address for" menu offers. */
+const addable = () => screen.queryAllByRole('menuitem').map((item) => item.textContent)
+const pick = (name: string) => fireEvent.click(screen.getByRole('menuitem', { name }))
+const rowNames = () => screen.getAllByRole('combobox').map((s) => s.getAttribute('aria-label'))
 
 beforeEach(() => setSender.mockReset())
 afterEach(cleanup)
+
+describe('a server with its own default address', () => {
+  it('names the configured address the server default', () => {
+    renderCard({ platformName: 'Server default', platformFrom: 'Acme <noreply@acme.com>' })
+    expect(options('Default')).toContain('Server default (Acme <noreply@acme.com>)')
+  })
+
+  it('says when no address is configured at all', () => {
+    renderCard({ platformName: 'Server default', platformFrom: null })
+    expect(options('Default')).toContain('Server default (not set)')
+    expect(
+      screen.getByText("No default address is set, so email can't be sent until you choose one.")
+    ).toBeTruthy()
+  })
+})
+
+describe('support replying from the inbox with an address behind it', () => {
+  const withBehind = (id: string) => ({
+    senders: { support: { mode: 'inbox' as const, fallbackId: id } },
+    hasInboundRoute: true,
+    forwardingTarget: 'support@acme.com',
+    forwardingTargetPermitted: true,
+  })
+
+  it('keeps the inbox chosen and says where other support email comes from', () => {
+    renderCard(withBehind(HELLO.id))
+    expect(select('Support').value).toBe('__inbox')
+    expect(screen.getByText(`Conversations not started by email use ${HELLO.label}.`)).toBeTruthy()
+  })
+
+  it('says what it sends from instead while that address cannot send', () => {
+    renderCard(withBehind(PENDING.id))
+    expect(
+      screen.getByText(
+        `help@pending.example isn't verified yet, so conversations not started by email use ${PLATFORM} for now.`
+      )
+    ).toBeTruthy()
+  })
+
+  it('names it as what replies fall back to while the inbox address cannot send', () => {
+    renderCard({ ...withBehind(HELLO.id), forwardingTargetPermitted: false })
+    expect(
+      screen.getByText(`acme.com isn't verified, so replies come from ${HELLO.label}.`)
+    ).toBeTruthy()
+  })
+})
+
+describe('an inbox address that cannot send yet', () => {
+  const unverifiedInbox = {
+    senders: { support: { mode: 'inbox' as const } },
+    hasInboundRoute: true,
+    forwardingTarget: 'support@acme.com',
+    forwardingTargetPermitted: false,
+  }
+
+  it("names the workspace's own inbox on the platform, which replies fall back to", () => {
+    renderCard({ ...unverifiedInbox, platformInbox: 'Acme <acme@in.platform.test>' })
+    expect(
+      screen.getByText(
+        "acme.com isn't verified, so replies come from Acme <acme@in.platform.test>."
+      )
+    ).toBeTruthy()
+  })
+
+  it('names the default when one is chosen, which comes first', () => {
+    renderCard({
+      ...unverifiedInbox,
+      senders: { ...unverifiedInbox.senders, default: { mode: 'address', id: HELLO.id } },
+      platformInbox: 'Acme <acme@in.platform.test>',
+    })
+    expect(
+      screen.getByText(`acme.com isn't verified, so replies come from ${HELLO.label}.`)
+    ).toBeTruthy()
+  })
+})
+
+describe('a chosen address that cannot send', () => {
+  it('says the default goes out from the platform address meanwhile', () => {
+    renderCard({ senders: { default: { mode: 'address', id: PENDING.id } } })
+    expect(
+      screen.getByText(
+        `help@pending.example isn't verified yet, so email comes from ${PLATFORM} for now.`
+      )
+    ).toBeTruthy()
+  })
+
+  it('says no longer verified for an address whose domain stopped verifying', () => {
+    render(
+      <SendFromCard
+        senders={{ ...NONE, changelog: { mode: 'address', id: 'ca_old' } }}
+        identities={[{ id: 'ca_old', label: 'Acme <news@old.example>', live: false, lapsed: true }]}
+        platformFrom={PLATFORM}
+        forwardingTarget={null}
+        forwardingTargetPermitted={null}
+        hasInboundRoute={false}
+        onError={() => undefined}
+      />
+    )
+    expect(
+      screen.getByText(
+        `news@old.example is no longer verified, so email comes from ${PLATFORM} until it's fixed.`
+      )
+    ).toBeTruthy()
+  })
+
+  it('reads the address off a label whose name has brackets of its own', () => {
+    render(
+      <SendFromCard
+        senders={{ ...NONE, default: { mode: 'address', id: 'ca_odd' } }}
+        identities={[{ id: 'ca_odd', label: 'Acme <Support> <help@pending.example>', live: false }]}
+        platformFrom={PLATFORM}
+        forwardingTarget={null}
+        forwardingTargetPermitted={null}
+        hasInboundRoute={false}
+        onError={() => undefined}
+      />
+    )
+    expect(
+      screen.getByText(
+        `help@pending.example isn't verified yet, so email comes from ${PLATFORM} for now.`
+      )
+    ).toBeTruthy()
+  })
+
+  it('says an override goes out from the default meanwhile', () => {
+    renderCard({
+      senders: {
+        default: { mode: 'address', id: HELLO.id },
+        changelog: { mode: 'address', id: PENDING.id },
+      },
+    })
+    expect(
+      screen.getByText(
+        `help@pending.example isn't verified yet, so email comes from ${HELLO.label} for now.`
+      )
+    ).toBeTruthy()
+  })
+})
 
 describe('the default sender', () => {
   it('offers the verified addresses and the Quackback address', () => {
@@ -100,7 +265,7 @@ describe('the default sender', () => {
   it('says what email sends from while no default is chosen', () => {
     renderCard()
     expect(select('Default').value).toBe('__platform')
-    expect(screen.getByText(`Email sends from ${PLATFORM}.`)).toBeTruthy()
+    expect(screen.getByText(`Email comes from ${PLATFORM}.`)).toBeTruthy()
   })
 
   it('says nothing more once a default is chosen', () => {
@@ -129,47 +294,84 @@ describe('the default sender', () => {
   })
 })
 
-describe('the per-kind overrides', () => {
-  it.each(['Feedback board', 'Changelog', 'Status page'])(
-    '%s starts at Same as default, then the verified addresses',
-    (name) => {
-      renderCard({ hasInboundRoute: true })
-      expect(options(name)).toEqual(['Same as default', HELLO.label, NEWS.label])
-      expect(select(name).value).toBe('__default')
-    }
-  )
+describe('the kinds of email that differ from the default', () => {
+  it('lists only the default while every kind uses it', () => {
+    renderCard()
+    expect(rowNames()).toEqual(['Default'])
+    expect(screen.queryByText('Except')).toBeNull()
+    expect(addable()).toEqual(['Support', 'Feedback board', 'Changelog', 'Status page'])
+  })
 
-  it('points a kind of email at an address, and back to the default', () => {
+  it('lists a kind once it sends from something else, with its own addresses to choose', () => {
     renderCard({ senders: { changelog: { mode: 'address', id: NEWS.id } } })
+    expect(rowNames()).toEqual(['Default', 'Changelog'])
+    expect(screen.getByText('Except')).toBeTruthy()
+    // Going back to the default is the remove button, not an option.
+    expect(options('Changelog')).toEqual([HELLO.label, NEWS.label])
     expect(select('Changelog').value).toBe(NEWS.id)
-    fireEvent.change(select('Changelog'), { target: { value: '__default' } })
+    expect(addable()).toEqual(['Support', 'Feedback board', 'Status page'])
+  })
+
+  it('goes back to the default when the exception is removed', () => {
+    renderCard({ senders: { changelog: { mode: 'address', id: NEWS.id } } })
+    fireEvent.click(screen.getByRole('button', { name: 'Use the default for Changelog' }))
     expect(setSender).toHaveBeenLastCalledWith(
       { surface: 'changelog', choice: null },
       expect.anything()
     )
+  })
+
+  it('adds a kind from the menu, and saves only once an address is chosen', () => {
+    renderCard()
+    pick('Feedback board')
+    expect(rowNames()).toEqual(['Default', 'Feedback board'])
+    expect(select('Feedback board').value).toBe('')
+    expect(addable()).not.toContain('Feedback board')
+    expect(setSender).not.toHaveBeenCalled()
+
+    fireEvent.change(select('Feedback board'), { target: { value: HELLO.id } })
+    expect(setSender).toHaveBeenLastCalledWith(
+      { surface: 'feedback', choice: { mode: 'address', id: HELLO.id } },
+      expect.anything()
+    )
+  })
+
+  it('drops a kind picked from the menu without saving anything', () => {
+    renderCard()
+    pick('Status page')
+    fireEvent.click(screen.getByRole('button', { name: 'Use the default for Status page' }))
+    expect(rowNames()).toEqual(['Default'])
+    expect(setSender).not.toHaveBeenCalled()
+  })
+
+  it('offers nothing to add while there is no address to point a kind at', () => {
+    renderCard({ identities: [PENDING] })
+    expect(addable()).toEqual([])
+    expect(screen.queryByText('Use a different address for')).toBeNull()
+  })
+
+  it('offers support alone when the inbox is the only other choice', () => {
+    renderCard({ identities: [], hasInboundRoute: true })
+    expect(addable()).toEqual(['Support'])
   })
 })
 
 describe('support', () => {
   it('offers the address the customer wrote to first when the workspace receives email', () => {
     renderCard({ hasInboundRoute: true, senders: { support: { mode: 'inbox' } } })
-    expect(options('Support')).toEqual([
-      'Address the customer wrote to',
-      'Same as default',
-      HELLO.label,
-      NEWS.label,
-    ])
+    expect(options('Support')).toEqual(['Address the customer wrote to', HELLO.label, NEWS.label])
     expect(select('Support').value).toBe('__inbox')
   })
 
-  it('starts at Same as default without an inbound route', () => {
+  it('uses the default without an inbound route, whatever was chosen while there was one', () => {
     renderCard({ senders: { support: { mode: 'inbox' } } })
-    expect(options('Support')).toEqual(['Same as default', HELLO.label, NEWS.label])
-    expect(select('Support').value).toBe('__default')
+    expect(rowNames()).toEqual(['Default'])
+    expect(addable()).toContain('Support')
   })
 
   it('chooses the inbox', () => {
     renderCard({ hasInboundRoute: true })
+    pick('Support')
     fireEvent.change(select('Support'), { target: { value: '__inbox' } })
     expect(setSender).toHaveBeenLastCalledWith(
       { surface: 'support', choice: { mode: 'inbox' } },
@@ -185,7 +387,7 @@ describe('support', () => {
       forwardingTargetPermitted: false,
     })
     expect(
-      screen.getByText(`support@acme.com isn't verified yet, so replies come from ${HELLO.label}.`)
+      screen.getByText(`acme.com isn't verified, so replies come from ${HELLO.label}.`)
     ).toBeTruthy()
   })
 
@@ -197,7 +399,7 @@ describe('support', () => {
       forwardingTargetPermitted: false,
     })
     expect(
-      screen.getByText(`support@acme.com isn't verified yet, so replies come from ${PLATFORM}.`)
+      screen.getByText(`acme.com isn't verified, so replies come from ${PLATFORM}.`)
     ).toBeTruthy()
   })
 
@@ -213,37 +415,41 @@ describe('support', () => {
       forwardingTargetPermitted: false,
       ...over,
     } as Parameters<typeof renderCard>[0])
-    expect(screen.queryByText(/isn't verified yet/)).toBeNull()
+    expect(screen.queryByText(/isn't verified, so replies come from/)).toBeNull()
   })
 })
 
 describe('showing only some rows', () => {
-  const rowNames = () => screen.getAllByRole('combobox').map((s) => s.getAttribute('aria-label'))
-
-  it('shows only the kinds of email asked for', () => {
+  it('offers only the kinds of email asked for', () => {
     renderCard({ rows: ['default', 'feedback', 'changelog'] })
-    expect(rowNames()).toEqual(['Default', 'Feedback board', 'Changelog'])
+    expect(rowNames()).toEqual(['Default'])
+    expect(addable()).toEqual(['Feedback board', 'Changelog'])
   })
 
   it('says which address the default is when the default row is not shown', () => {
     renderCard({ rows: ['support'], senders: { default: { mode: 'address', id: HELLO.id } } })
-    expect(rowNames()).toEqual(['Support'])
-    expect(options('Support')[0]).toBe('Workspace default')
-    expect(screen.getByText(`Sends from ${HELLO.label}.`)).toBeTruthy()
+    // The card's one setting, named for what it does rather than for the card.
+    expect(rowNames()).toEqual(['Reply from'])
+    expect(options('Reply from')[0]).toBe('Workspace default')
+    expect(screen.queryByRole('button', { name: /Use the default for/ })).toBeNull()
+    expect(screen.getByText(`Replies come from ${HELLO.label}.`)).toBeTruthy()
   })
 
   it('names the Quackback address as that default when none is chosen', () => {
     renderCard({ rows: ['support'] })
-    expect(screen.getByText(`Sends from ${PLATFORM}.`)).toBeTruthy()
+    expect(screen.getByText(`Replies come from ${PLATFORM}.`)).toBeTruthy()
   })
 
   it('says nothing more once the row has its own address', () => {
     renderCard({ rows: ['support'], senders: { support: { mode: 'address', id: NEWS.id } } })
-    expect(screen.queryByText(/Sends from/)).toBeNull()
+    expect(screen.queryByText(/Replies come from/)).toBeNull()
   })
 
-  it('keeps the short wording beside the default row', () => {
-    renderCard({ rows: ['default', 'support'] })
-    expect(options('Support')[0]).toBe('Same as default')
+  it('has no way back to the default among the options beside the default row', () => {
+    renderCard({
+      rows: ['default', 'support'],
+      senders: { support: { mode: 'address', id: HELLO.id } },
+    })
+    expect(options('Support')).toEqual([HELLO.label, NEWS.label])
   })
 })

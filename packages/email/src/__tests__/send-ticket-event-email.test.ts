@@ -66,7 +66,7 @@ describe('sendTicketEventEmail', () => {
     expect(call.subject).toBe(subject)
     expect(call.to).toBe('requester@example.com')
     // The platform address, under the workspace's name.
-    expect(call.from).toBe('Acme <noreply@example.com>')
+    expect(call.from).toEqual({ name: 'Acme', address: 'noreply@example.com' })
   })
 
   it('sends SLA kinds with the clock facts in the subject', async () => {

@@ -4,9 +4,12 @@
  * `default` is the workspace's default sender; `support`, `feedback`,
  * `changelog` and `status` override it. A surface with no row sends from the
  * default, and no default row means the platform address. Support has one more
- * choice, `inbox`: reply from the address the customer wrote to, else the
- * default. Only the workspace scope is read or written here; the scope columns
- * are for per-team or per-site overrides later.
+ * choice, `inbox`: reply from the address the customer wrote to. An inbox row
+ * may name an address of its own, which support email that is not such a reply
+ * (or whose inbox address cannot send) leaves from before the default; a
+ * workspace that had both an inbox and a support address keeps both this way.
+ * Only the workspace scope is read or written here; the scope columns are for
+ * per-team or per-site overrides later.
  */
 import { ValidationError } from '@/lib/shared/errors'
 import type { ChannelAccountId } from '@quackback/ids'
@@ -16,6 +19,7 @@ import {
   asc,
   eq,
   isNull,
+  or,
   sql,
   channelAccounts,
   emailSenders,
@@ -25,9 +29,12 @@ import {
 
 export type { EmailSenderSurface }
 
-/** A surface's choice: an identity, the inbox (support only), or nothing chosen. */
+/**
+ * A surface's choice: an identity, or (support only) the inbox, with the
+ * address behind it when it has one.
+ */
 export type EmailSenderChoice =
-  { mode: 'address'; account: ChannelAccount } | { mode: 'inbox'; account: null }
+  { mode: 'address'; account: ChannelAccount } | { mode: 'inbox'; account: ChannelAccount | null }
 
 /** Each surface's workspace-scope choice. A surface that is absent has none. */
 export async function getEmailSenders(): Promise<Map<EmailSenderSurface, EmailSenderChoice>> {
@@ -47,7 +54,9 @@ export async function getEmailSenders(): Promise<Map<EmailSenderSurface, EmailSe
   for (const row of rows) {
     if (row.mode === 'inbox') {
       // Only support can reply from the inbox; a stray row elsewhere is ignored.
-      if (row.surface === 'support') choices.set('support', { mode: 'inbox', account: null })
+      if (row.surface === 'support') {
+        choices.set('support', { mode: 'inbox', account: row.account ?? null })
+      }
     } else if (row.account) {
       choices.set(row.surface, { mode: 'address', account: row.account })
     }
@@ -97,13 +106,19 @@ export async function setEmailSender(
       .limit(1)
     if (!account) throw new EmailSenderChoiceError('That sending address no longer exists.')
   }
+  // Choosing the inbox keeps the address the row already holds: the one behind
+  // the inbox, or the address support sent from until now. Either is what
+  // support email that is not a reply to the inbox leaves from.
   await db
     .insert(emailSenders)
     .values({ surface, mode: choice.mode, channelAccountId })
     .onConflictDoUpdate({
       target: [emailSenders.surface, emailSenders.scopeType],
       targetWhere: sql`scope_id IS NULL`,
-      set: { mode: choice.mode, channelAccountId, updatedAt: new Date() },
+      set:
+        choice.mode === 'inbox'
+          ? { mode: choice.mode, updatedAt: new Date() }
+          : { mode: choice.mode, channelAccountId, updatedAt: new Date() },
     })
 }
 
@@ -121,37 +136,49 @@ export async function chooseInboxForSupportIfUnset(): Promise<void> {
     })
 }
 
-/** The surfaces that send from an address, so removing it can say what falls back. */
-export async function surfacesUsingAccount(id: ChannelAccountId): Promise<EmailSenderSurface[]> {
-  const rows = await db
-    .select({ surface: emailSenders.surface })
-    .from(emailSenders)
-    .where(eq(emailSenders.channelAccountId, id))
-  return rows.map((r) => r.surface)
-}
-
-/** Clear every choice of an address, which is about to stop being one. */
+/**
+ * Clear every choice of an address, which is about to stop being one. An inbox
+ * choice that had it behind it stays an inbox choice, with nothing behind it.
+ */
 export async function clearEmailSendersFor(id: ChannelAccountId): Promise<void> {
+  await db
+    .update(emailSenders)
+    .set({ channelAccountId: null, updatedAt: new Date() })
+    .where(and(eq(emailSenders.channelAccountId, id), eq(emailSenders.mode, 'inbox')))
   await db.delete(emailSenders).where(eq(emailSenders.channelAccountId, id))
 }
 
 /**
- * The sender name of the live sending address with this address, when there is
- * one: a thread's stored sender or an inbox address names an address, not a
- * row. Null when none, or when it has no name of its own (the workspace name).
+ * What the workspace's own rows say about an address, in one read: whether it
+ * is still one of theirs (a sending address, or the address an inbound route
+ * forwards), and the name it sends under.
+ *
+ * A thread's stored sender and an inbox address name an address, not a row, so
+ * both questions are asked of the address. `senderName` is that of the oldest
+ * live sending address with it, null when there is none or it has no name of
+ * its own (the workspace name).
  */
-export async function senderNameForAddress(address: string): Promise<string | null> {
-  const [row] = await db
-    .select({ senderName: channelAccounts.senderName })
+export async function workspaceAddress(
+  address: string
+): Promise<{ known: boolean; senderName: string | null }> {
+  const bare = address.trim().toLowerCase()
+  const rows = await db
+    .select({
+      role: channelAccounts.role,
+      address: channelAccounts.address,
+      senderName: channelAccounts.senderName,
+    })
     .from(channelAccounts)
     .where(
       and(
-        eq(channelAccounts.role, 'sending'),
-        eq(channelAccounts.address, address.trim().toLowerCase()),
-        isNull(channelAccounts.deletedAt)
+        isNull(channelAccounts.deletedAt),
+        or(
+          sql`lower(${channelAccounts.address}) = ${bare}`,
+          sql`lower(${channelAccounts.config}->>'forwardingTarget') = ${bare}`
+        )
       )
     )
     .orderBy(asc(channelAccounts.createdAt), asc(channelAccounts.id))
-    .limit(1)
-  return row?.senderName ?? null
+  const sending = rows.find((r) => r.role === 'sending' && r.address?.toLowerCase() === bare)
+  return { known: rows.length > 0, senderName: sending?.senderName ?? null }
 }

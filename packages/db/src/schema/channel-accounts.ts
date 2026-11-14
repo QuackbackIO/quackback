@@ -153,6 +153,12 @@ export type SendingDomainDkimMode = 'easy' | 'byo' | 'shared'
 export interface SendingDomainPreflight {
   /** The DNS host the domain's nameservers belong to, matched by suffix. */
   dnsHost?: 'cloudflare' | 'route53' | 'godaddy' | 'namecheap' | 'google' | 'other'
+  /**
+   * The zone the domain's records go in: the domain itself, or the parent that
+   * holds it when it is a name inside that parent's zone. A DNS form appends
+   * this, not the domain, to the names typed into it.
+   */
+  zone?: string
   /** Whether nothing resolved at the MAIL FROM subdomain before we used it. */
   mailFromFree?: boolean
   /** The domain's DMARC record, read and never required. */
@@ -329,7 +335,8 @@ export const emailSenders = pgTable(
     scopeType: text('scope_type').notNull().default('workspace'),
     scopeId: text('scope_id'),
     /** `address`: send as `channelAccountId`. `inbox` (support only): reply from
-     *  the address the customer wrote to, else the default; names no identity. */
+     *  the address the customer wrote to; `channelAccountId`, when set, is the
+     *  address other support email leaves from, before the default. */
     mode: text('mode').$type<EmailSenderMode>().notNull().default('address'),
     channelAccountId: typeIdColumnNullable('channel_account')('channel_account_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

@@ -376,4 +376,28 @@ describe('checkRecords', () => {
     // The records themselves are what was asked for, untouched.
     expect(checked.map(({ check: _check, ...r }) => r)).toEqual([ownership, dkim, mx])
   })
+
+  it('looks for a doubled name under the zone a subdomain sits in', async () => {
+    // The form of the acme.com zone appends acme.com, not updates.acme.com.
+    const resolver = zoneResolver({
+      '_quackback.updates.acme.com.acme.com': {
+        TXT: [['quackback-domain-verification=abc123']],
+      },
+    })
+    const [checked] = await checkRecords('updates.acme.com', [ownership], resolver, NOW, 'acme.com')
+    expect(checked.check).toEqual({
+      state: 'mismatch',
+      seen: '_quackback.updates.acme.com.acme.com',
+      reason: 'doubled-name',
+      checkedAt: NOW.toISOString(),
+    })
+  })
+
+  it('ignores a zone that does not hold the domain', async () => {
+    const resolver = zoneResolver({
+      '_quackback.acme.com.acme.com': { TXT: [['quackback-domain-verification=abc123']] },
+    })
+    const [checked] = await checkRecords(DOMAIN, [ownership], resolver, NOW, 'elsewhere.com')
+    expect(checked.check?.reason).toBe('doubled-name')
+  })
 })

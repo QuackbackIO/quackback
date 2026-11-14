@@ -48,6 +48,34 @@ describe('<DnsRecordTable>', () => {
   })
 })
 
+describe('<DnsRecordTable> in a narrow space', () => {
+  it('names each cell, since the header row is not shown above a stacked record', () => {
+    render(
+      <DnsRecordTable
+        records={[
+          {
+            label: 'DKIM',
+            type: 'CNAME',
+            name: 'k1._domainkey',
+            value: 'k1.dkim.example.com',
+            state: 'waiting',
+          },
+        ]}
+      />
+    )
+    const row = document.querySelector('[data-slot="dns-record"]')!
+    // The record's own name needs no label; the other three say what they are.
+    expect([...row.querySelectorAll('td')].map((c) => c.getAttribute('data-label'))).toEqual([
+      null,
+      'Name',
+      'Type',
+      'Value',
+    ])
+    // Stacks by the room it has, not the screen's: it sits beside a sidebar.
+    expect(document.querySelector('table')!.parentElement).toHaveClass('@container')
+  })
+})
+
 describe('<DnsRecordTable> layout', () => {
   it('keeps a name on one line and lets a long value wrap anywhere', () => {
     render(

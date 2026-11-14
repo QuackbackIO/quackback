@@ -102,8 +102,9 @@ import {
   addSendingAddress,
   removeSendingAddress,
   sendTestEmail,
-  sendingAddressMode,
+  addressModeFor,
 } from '../sending-address'
+import { sendingIdentityContext } from '../outbound-identity'
 import { deleteSendingDomain, SendingDomainInUseError } from '../channel-account.service'
 
 const identity = (domain: string): SesDomainIdentity => ({
@@ -427,7 +428,9 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
     })
   })
 
-  describe('sendingAddressMode', () => {
+  describe('addressModeFor', () => {
+    const sendingAddressMode = async () => addressModeFor(await sendingIdentityContext())
+
     it('is any on a single-workspace server, whatever it can set up', async () => {
       vi.stubEnv('QUACKBACK_TENANCY', '')
       expect(await sendingAddressMode()).toBe('any')
@@ -520,6 +523,26 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         SendingDomainInUseError
       )
       expect(await domainsOf(teamId)).toHaveLength(1)
+    })
+
+    it('removes only a sending address, never the inbox a customer writes to', async () => {
+      const teamId = await seedTeam()
+      const [route] = await testDb
+        .insert(channelAccounts)
+        .values({
+          owningTeamId: teamId,
+          role: 'inbound',
+          config: { forwardingTarget: 'support@acme.com' },
+        })
+        .returning()
+      await expect(removeSendingAddress(route.id)).rejects.toThrow(
+        'That sending address no longer exists.'
+      )
+      const [kept] = await testDb
+        .select({ deletedAt: channelAccounts.deletedAt })
+        .from(channelAccounts)
+        .where(eq(channelAccounts.id, route.id))
+      expect(kept.deletedAt).toBeNull()
     })
 
     it('flags nothing for an address with no domain', async () => {

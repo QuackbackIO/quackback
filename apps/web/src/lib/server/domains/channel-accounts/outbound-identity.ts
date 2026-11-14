@@ -263,13 +263,20 @@ export async function permittedSendingIdentity(
    * A context the caller already gathered, so a caller checking several
    * candidates for one send reads the verified domains once, not per candidate.
    */
-  given?: SendingIdentityContext
+  given?: SendingIdentityContext,
+  /**
+   * `quiet` for a read that only asks what a send would do (a settings page
+   * showing the From): a refusal there is not a refused send, so it is not
+   * logged as one.
+   */
+  options: { quiet?: boolean } = {}
 ): Promise<SendingIdentity | null> {
   if (!from) return null
   const ctx = given ?? (await sendingIdentityContext())
   // The one cast to the brand, alongside its twin below. Reached only after the
   // rule above has said yes, which is the whole meaning of the type.
   if (isSendingIdentityPermitted(from, ctx)) return from as SendingIdentity
+  if (options.quiet) return null
   // The domain, never the local part: the domain is the configuration that is
   // wrong and the local part beside it is a person.
   log.warn(

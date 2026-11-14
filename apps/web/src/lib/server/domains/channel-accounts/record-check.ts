@@ -19,6 +19,7 @@
 import type { SendingDomainDnsRecord, SendingDomainRecordCheck } from '@/lib/server/db'
 import type { DnsResolver } from '@/lib/server/dns/resolver'
 import { isNoAnswer } from '@/lib/server/dns/lookup-outcome'
+import { recordZone } from '@/lib/shared/record-zone'
 import { dkimPublicKeyOf, isKeyRecord } from './dkim-key'
 
 export type { DnsResolver } from '@/lib/server/dns/resolver'
@@ -177,7 +178,9 @@ export async function checkRecord(
   domain: string,
   record: SendingDomainDnsRecord,
   resolver: DnsResolver,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** The zone the domain sits in, when known: what a DNS form appends to a name. */
+  zone: string = domain
 ): Promise<SendingDomainRecordCheck | null> {
   const checkedAt = now.toISOString()
   const name = recordName(domain, record.host)
@@ -185,7 +188,7 @@ export async function checkRecord(
     const result = await stateAt(name, record, resolver)
     if (result.state !== 'missing') return { ...result, checkedAt }
     // Nothing at the right name: look where a doubled entry would have put it.
-    const doubled = `${name}.${domain}`
+    const doubled = `${name}.${zone}`
     const there = await stateAt(doubled, record, resolver)
     if (there.state === 'found' || there.state === 'mismatch') {
       return { state: 'mismatch', seen: doubled, reason: 'doubled-name', checkedAt }
@@ -205,9 +208,14 @@ export async function checkRecords(
   domain: string,
   records: SendingDomainDnsRecord[],
   resolver: DnsResolver,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** The zone found for the domain at setup, when one was. */
+  zone?: string
 ): Promise<SendingDomainDnsRecord[]> {
-  const checks = await Promise.all(records.map((r) => checkRecord(domain, r, resolver, now)))
+  const within = recordZone(domain, zone)
+  const checks = await Promise.all(
+    records.map((r) => checkRecord(domain, r, resolver, now, within))
+  )
   return records.map((record, i) => {
     const check = checks[i] ?? record.check
     return check ? { ...record, check } : record
