@@ -42,6 +42,7 @@ const h = vi.hoisted(() => ({
   proofReads: 0,
   ensured: [] as string[],
   operatorFails: false,
+  ensureFails: false,
 }))
 
 vi.mock('@/lib/server/db', () => ({
@@ -93,6 +94,7 @@ vi.mock('@/lib/server/domains/domain-proof/hostname-proof', () => ({
 
 vi.mock('@/lib/server/domains/domain-proof/domains.service', () => ({
   ensureDomain: async (name: string) => {
+    if (h.ensureFails) throw new Error('domains table unavailable')
     h.ensured.push(name)
     return null
   },
@@ -111,6 +113,7 @@ beforeEach(() => {
   h.proofReads = 0
   h.ensured.length = 0
   h.operatorFails = false
+  h.ensureFails = false
 })
 afterEach(() => {
   delete process.env[FLAG]
@@ -159,6 +162,13 @@ describe('mutateCloudCustomDomainFn and Settings > Domains', () => {
   it('puts an added hostname on Settings > Domains in the same step', async () => {
     await mutate('add', 'feedback.acme.com')
     expect(h.ensured).toEqual(['feedback.acme.com'])
+  })
+
+  it('still reports the add as done when putting it on Settings > Domains fails', async () => {
+    h.ensureFails = true
+    await expect(mutate('add', 'feedback.acme.com')).resolves.toMatchObject({
+      projection: { canonicalOrigin: 'https://acme.example.com' },
+    })
   })
 
   it('adds no domain for any other action, or when the operator refuses the add', async () => {

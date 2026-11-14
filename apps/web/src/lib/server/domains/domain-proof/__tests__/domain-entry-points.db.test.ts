@@ -28,7 +28,24 @@ vi.mock('@/lib/server/cache', async (importOriginal) => ({
   cacheSet: async () => {},
   cacheDel: async () => {},
 }))
-vi.mock('@/lib/server/auth', () => ({ resetAuth: () => {} }))
+const side = vi.hoisted(() => ({ resets: 0, ensureFails: false }))
+vi.mock('@/lib/server/auth', () => ({
+  resetAuth: () => {
+    side.resets += 1
+  },
+}))
+// Putting the domain on Settings > Domains can be made to fail, to show the use's own write stands.
+vi.mock('@/lib/server/domains/domain-proof/domains.service', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/server/domains/domain-proof/domains.service')>()
+  return {
+    ...actual,
+    ensureDomain: (...args: Parameters<typeof actual.ensureDomain>) => {
+      if (side.ensureFails) throw new Error('domains table unavailable')
+      return actual.ensureDomain(...args)
+    },
+  }
+})
 
 import { insertVerifiedDomain } from '@/lib/server/domains/settings/settings.service'
 import { setHelpCenterDomain } from '@/lib/server/domains/help-center/help-center-domain.service'
@@ -66,6 +83,8 @@ async function useRecords() {
 
 describe.skipIf(!fixture.available)('in-context entry points (real DB, rolled back)', () => {
   beforeEach(async () => {
+    side.resets = 0
+    side.ensureFails = false
     await fixture.begin()
     await seedSettings()
   })
@@ -95,6 +114,16 @@ describe.skipIf(!fixture.available)('in-context entry points (real DB, rolled ba
       })
     })
 
+    it('adds the sign-in domain and rebuilds sign-in even when the domain cannot be put on Settings > Domains', async () => {
+      side.ensureFails = true
+      const added = await insertVerifiedDomain('acme.com', await seedProvider())
+
+      expect(added.name).toBe('acme.com')
+      expect((await useRecords()).signIn).toEqual(['acme.com'])
+      expect(side.resets).toBe(1)
+      expect(await addedDomains()).toEqual([])
+    })
+
     it('keeps the one domain and its token when added again', async () => {
       const providerId = await seedProvider()
       await insertVerifiedDomain('acme.com', providerId)
@@ -120,6 +149,14 @@ describe.skipIf(!fixture.available)('in-context entry points (real DB, rolled ba
         signIn: [],
         helpCenter: 'help.acme.com',
       })
+    })
+
+    it('sets the help center domain even when the domain cannot be put on Settings > Domains', async () => {
+      side.ensureFails = true
+      const set = await setHelpCenterDomain('help.acme.com')
+
+      expect(set.domain).toBe('help.acme.com')
+      expect((await useRecords()).helpCenter).toBe('help.acme.com')
     })
 
     it('keeps the one domain and its token when set again', async () => {
