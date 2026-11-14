@@ -132,6 +132,22 @@ vi.mock('@/lib/server/domains/conversation/routing', async (importOriginal) => (
   ...(await importOriginal<Record<string, unknown>>()),
   routeConversation: vi.fn(async () => ({ assignedPrincipalId: routing.to })),
 }))
+// Author loading runs between a write's reads and its publish: a case can
+// land a reassignment in that gap.
+const authors = vi.hoisted(() => ({ before: null as null | (() => Promise<void>) }))
+vi.mock('@/lib/server/domains/principals/principal-display', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/server/domains/principals/principal-display')>()
+  return {
+    ...actual,
+    loadAuthors: async (...args: Parameters<typeof actual.loadAuthors>) => {
+      const hook = authors.before
+      authors.before = null
+      await hook?.()
+      return actual.loadAuthors(...args)
+    },
+  }
+})
 // The scope reload's team read, real unless a case makes it fail.
 const teamRead = vi.hoisted(() => ({ failNext: 0 }))
 vi.mock('@/lib/server/domains/teams', async (importOriginal) => {
@@ -169,6 +185,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.service'
 import { conversationToDTO } from '@/lib/server/domains/conversation/conversation.query'
 import { assignTicket } from '@/lib/server/domains/tickets/ticket.service'
+import { sendTicketMessage } from '@/lib/server/domains/tickets/ticket-message.service'
 import { addPrincipalToDefaultTeam, setTeamMembers } from '@/lib/server/domains/teams'
 import { setPrincipalRole } from '@/lib/server/domains/principals/principal.factory'
 import { deleteRole, updateRole } from '@/lib/server/domains/roles/role.service'
@@ -193,6 +210,7 @@ if (fixture.available) {
     bus.wire.length = 0
     bus.handlers.clear()
     bus.beforeSubscribe = null
+    authors.before = null
     teamRead.failNext = 0
     routing.to = null
     await fixture.begin()
@@ -635,6 +653,22 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
 
     expect(inbox.frames().map((f) => f.event)).toContain('inbox_scope_changed')
     expect(await ticketReadReaches(inbox, w.ticket.y, 'after')).toBe(false)
+  })
+
+  it('judges a ticket message by the owner at send time, not the one read before the write', async () => {
+    const w = await seedWorld()
+    const scoped = await openInbox(w.scoped)
+    await ticketReadReaches(scoped, w.ticket.x, 'connect')
+    // The ticket moves to team Y after the reply read it but before it published.
+    authors.before = async () => {
+      await testDb
+        .update(tickets)
+        .set({ assigneeTeamId: w.teamY })
+        .where(eq(tickets.id, w.ticket.x))
+    }
+    await sendTicketMessage(w.adminActor, { ticketId: w.ticket.x, content: 'after the move' })
+    await settle()
+    expect(scoped.frames().map((f) => f.event)).not.toContain('ticket_message')
   })
 
   it('sees a scope change made between the connect reads and the subscribe', async () => {

@@ -375,11 +375,11 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       // The seed has an account name but no public name. The widget must not
       // receive the account name even though the team-only ticket copy does.
       expect(message.author?.displayName).toMatch(/^U-/)
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
+        kind: 'ticket_message',
         ticketId,
-        { kind: 'ticket_message', ticketId, message },
-        expect.objectContaining({ teamId: null }) // the item scope envelope
-      )
+        message,
+      })
     })
 
     it('keeps an internal note ticket-parented on a linked pair (ticket notes stay ticket-scoped)', async () => {

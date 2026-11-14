@@ -123,29 +123,21 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
   it('publishes a ticket_message realtime event (unified inbox §3.2, M3)', async () => {
     const { ticketId, actor } = await seedTicketWithAgent()
     const { message } = await sendTicketMessage(actor, { ticketId, content: 'On it.' })
-    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
+      kind: 'ticket_message',
       ticketId,
-      {
-        kind: 'ticket_message',
-        ticketId,
-        message,
-      },
-      expect.objectContaining({ teamId: null }) // the item scope envelope
-    )
+      message,
+    })
   })
 
   it('publishes a ticket_message event for an internal note too (agent-only channels)', async () => {
     const { ticketId, actor } = await seedTicketWithAgent()
     const { message } = await addTicketNote(actor, { ticketId, content: 'internal only' })
-    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
+      kind: 'ticket_message',
       ticketId,
-      {
-        kind: 'ticket_message',
-        ticketId,
-        message,
-      },
-      expect.objectContaining({ teamId: null }) // the item scope envelope
-    )
+      message,
+    })
   })
 
   it('first_response_at is stamped once, not on the second reply', async () => {

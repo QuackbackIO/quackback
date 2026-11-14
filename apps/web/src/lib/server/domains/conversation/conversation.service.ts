@@ -1988,11 +1988,14 @@ export async function markConversationRead(
     .update(conversations)
     .set(side === 'agent' ? { agentLastReadAt: now } : { visitorLastReadAt: now })
     .where(eq(conversations.id, conversation.id))
-  publishConversationEvent(
+  // No envelope: `conversation` was read before this write. The publish reads
+  // its owner at send time.
+  publishConversationEvent(conversationId, {
+    kind: 'read',
     conversationId,
-    { kind: 'read', conversationId, side, at: now.toISOString() },
-    conversationScopeOf(conversation)
-  )
+    side,
+    at: now.toISOString(),
+  })
 }
 
 /** The watermark write + agent-side publish both unread entry points share. */
@@ -2005,15 +2008,14 @@ async function applyAgentUnreadWatermark(
     .update(conversations)
     .set({ agentLastReadAt: watermark })
     .where(eq(conversations.id, conversation.id))
-  publishAgentConversationEvent(
-    {
-      kind: 'read',
-      conversationId: conversation.id,
-      side: 'agent',
-      at: (watermark ?? new Date(0)).toISOString(),
-    },
-    conversationScopeOf(conversation)
-  )
+  // No envelope: `conversation` is the caller's earlier read. The publish
+  // reads its owner at send time.
+  publishAgentConversationEvent({
+    kind: 'read',
+    conversationId: conversation.id,
+    side: 'agent',
+    at: (watermark ?? new Date(0)).toISOString(),
+  })
 }
 
 /**
