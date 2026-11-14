@@ -78,7 +78,7 @@ export function applySuggestionListKey<T>(
     selected: number
     onMove: (index: number) => void
     onConfirm: (item: T) => void
-    /** Rows that show but cannot be picked: moves skip them, confirm ignores them. */
+    /** Rows that show but cannot be picked: moves skip them, and confirming one falls through. */
     isDisabled?: (item: T) => boolean
   }
 ): boolean {
@@ -95,7 +95,10 @@ export function applySuggestionListKey<T>(
     if (index !== -1) opts.onMove(index)
     return true
   }
+  // A row that cannot be picked (or none at all) confirms nothing, and the key
+  // falls through to the editor rather than being swallowed.
   const item = opts.items[opts.selected]
-  if (item !== undefined && !isDisabled(item)) opts.onConfirm(item)
+  if (item === undefined || isDisabled(item)) return false
+  opts.onConfirm(item)
   return true
 }

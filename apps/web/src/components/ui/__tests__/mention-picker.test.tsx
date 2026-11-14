@@ -277,13 +277,12 @@ describe('MentionPicker', () => {
       expect(command).toHaveBeenLastCalledWith({ id: 'principal_jane', label: 'Jane Doe' })
     })
 
-    it('when nobody can be picked, Enter and Tab do nothing and stay in the picker', () => {
+    it('when nobody can be picked, Enter and Tab pick nothing and fall through to the editor', () => {
       const command = vi.fn()
       const ref = createRef<MentionPickerHandle>()
       render(<MentionPicker ref={ref} items={[marked[0], marked[2]]} command={command} />)
-      expect(fireKey(ref, 'Enter')).toBe(true)
-      expect(fireKey(ref, 'Tab')).toBe(true)
-      expect(fireKey(ref, 'ArrowDown')).toBe(true)
+      expect(fireKey(ref, 'Enter')).toBe(false)
+      expect(fireKey(ref, 'Tab')).toBe(false)
       expect(command).not.toHaveBeenCalled()
     })
   })
