@@ -8,7 +8,20 @@ import { assertConversationVisible, loadConversationOr404 } from './conversation
 
 export type MessageParent =
   | { kind: 'ticket'; ticketId: TicketId }
-  | { kind: 'conversation'; conversationId: ConversationId; conversation: Conversation }
+  | {
+      kind: 'conversation'
+      conversationId: ConversationId
+      conversation: Conversation
+      /** Set when the message was admitted as the pair of a visible customer
+       *  ticket: the actor acts on it through the ticket, with ticket keys. */
+      via?: 'pair'
+    }
+
+/** Which thread's permissions apply to a message: a pair-admitted message is
+ *  acted on through its ticket. */
+export function permissionParentOf(parent: MessageParent): 'conversation' | 'ticket' {
+  return parent.kind === 'ticket' || parent.via === 'pair' ? 'ticket' : 'conversation'
+}
 
 /**
  * Resolve `message`'s parent and check that the actor can see it: the ticket
@@ -46,6 +59,7 @@ export async function resolveMessageParent(
       kind: 'conversation',
       conversationId,
       conversation: await loadConversationOr404(conversationId),
+      via: 'pair',
     }
   }
 }

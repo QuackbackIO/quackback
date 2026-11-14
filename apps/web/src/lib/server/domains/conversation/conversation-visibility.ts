@@ -3,11 +3,12 @@
  * only on the database and the policy filters, so every domain, server
  * function and route can import it statically.
  *
- * A conversation is visible to the visitor who owns it, and to an actor whose
- * `conversationFilter` admits it (a workspace-wide service principal, a
- * teammate with `conversation.view_all`, or a scoped teammate for a
- * conversation assigned to them or one of their teams). Anyone else gets
- * NotFound, never Forbidden, so a conversation id cannot be probed.
+ * A conversation is visible to the visitor who owns it; to a workspace-wide
+ * service principal holding `conversation.view` or `conversation.view_all`; to
+ * a teammate with `conversation.view_all`; and to a scoped teammate for a
+ * conversation assigned to them or one of their teams (`conversationFilter`).
+ * Anyone else gets NotFound, never Forbidden, so a conversation id cannot be
+ * probed.
  */
 import { and, db, eq, inArray, or, sql, conversations, type Conversation } from '@/lib/server/db'
 import { isValidTypeId, type ConversationId } from '@quackback/ids'
@@ -20,11 +21,18 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 /**
  * Who besides the owning visitor may see a conversation: whoever
  * `conversationFilter` admits. A workspace-wide service principal also needs
- * the base `conversation.view` key, which `conversationFilter` does not ask of
- * it, so a key that may only assign, say, still cannot read a conversation.
+ * `conversation.view` or `conversation.view_all`, as the inbox queries ask,
+ * which `conversationFilter` does not ask of it, so a key that may only
+ * assign, say, still cannot read a conversation.
  */
 function teamScope(actor: Actor) {
-  if (isUnscopedService(actor) && !can(actor, PERMISSIONS.CONVERSATION_VIEW)) return sql`false`
+  if (
+    isUnscopedService(actor) &&
+    !can(actor, PERMISSIONS.CONVERSATION_VIEW) &&
+    !can(actor, PERMISSIONS.CONVERSATION_VIEW_ALL)
+  ) {
+    return sql`false`
+  }
   return conversationFilter(actor)
 }
 

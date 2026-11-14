@@ -44,7 +44,7 @@ import {
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
-import { assertMessageParentVisible } from './message-parent'
+import { assertMessageParentVisible, permissionParentOf } from './message-parent'
 import { syncConversationMessageMentions } from './sync-conversation-mentions'
 import {
   conversationToDTO,
@@ -149,7 +149,7 @@ export async function editConversationMessage(
   }
   // A parent the actor cannot see hides its messages too, before any other
   // refusal could tell the message exists.
-  await assertMessageParentVisible(message, actor)
+  const parent = await assertMessageParentVisible(message, actor)
 
   if (message.metadata?.block) {
     throw new ForbiddenError('FORBIDDEN', 'This message cannot be edited')
@@ -165,7 +165,7 @@ export async function editConversationMessage(
   const decision = canEditMessage(actor, {
     senderType: message.senderType,
     authorPrincipalId: message.principalId,
-    parent: message.conversationId ? 'conversation' : 'ticket',
+    parent: permissionParentOf(parent),
     isInternal: message.isInternal,
   })
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
