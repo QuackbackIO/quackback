@@ -37,8 +37,8 @@ import {
 } from './sending-removal'
 import { SendingPausedNotice } from './sending-paused-notice'
 import { SendFromCard, type SenderIdentity } from './send-from-card'
+import { errorText } from '@/lib/client/error-text'
 import {
-  errorText,
   SendingAddressDialog,
   ownDomains,
   type SendingAddressDialogTarget,

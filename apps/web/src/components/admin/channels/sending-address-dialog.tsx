@@ -25,6 +25,7 @@ import {
   useUpdateSendingAddressName,
 } from '@/lib/client/mutations/channel-accounts'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
+import { errorText } from '@/lib/client/error-text'
 import { addressDomainStanding } from './sending-domain-view'
 
 /** What the dialog is open for: a new address (on a domain, when one is given), or renaming one. */
@@ -37,10 +38,6 @@ const storedName = (typed: string, workspaceName: string): string | null => {
   const name = typed.trim()
   return name && name !== workspaceName ? name : null
 }
-
-/** The server's sentence for a failed action, or the generic line. */
-export const errorText = (error: unknown, fallback: string): string =>
-  error instanceof Error && error.message ? error.message : fallback
 
 /**
  * The domains of the platform's own addresses (the workspace's inbox on it and
