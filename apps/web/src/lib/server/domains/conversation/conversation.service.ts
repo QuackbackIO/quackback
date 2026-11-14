@@ -100,7 +100,7 @@ import {
   notifyConversationStarted,
 } from './conversation.notify'
 import { resolveReplyRecipient } from './conversation.recipient'
-import { resolveMessageParent } from './message-parent'
+import { assertMessageParentVisible } from './message-parent'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   conversationToDTO,
@@ -1764,7 +1764,12 @@ export async function deleteConversationMessage(
     .from(conversationMessages)
     .where(eq(conversationMessages.id, messageId))
     .limit(1)
-  if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+  if (!message || (!message.conversationId && !message.ticketId)) {
+    throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+  }
+  // A parent the actor cannot see answers exactly like a missing message, also
+  // for the author of the message, before any other refusal.
+  const parent = await assertMessageParentVisible(message, actor)
 
   const authored = {
     senderType: message.senderType,
@@ -1773,13 +1778,9 @@ export async function deleteConversationMessage(
     isInternal: message.isInternal,
   }
 
-  if (!message.conversationId) {
+  if (parent.kind === 'ticket') {
     // Ticket-thread message: the same own-message / moderator rule as a
-    // conversation, once the actor is known to see the ticket.
-    if (!message.ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    // Resolves the parent + authorizes ticket visibility (§2.5) — shared with
-    // message.actions.ts's identical resolve-then-authorize step.
-    await resolveMessageParent(message, actor)
+    // conversation.
     const decision = canDeleteMessage(actor, authored, null)
     if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
@@ -1799,11 +1800,7 @@ export async function deleteConversationMessage(
     return
   }
 
-  const conversationId = message.conversationId
-  // A conversation the actor cannot see is NotFound, like a missing one, also
-  // for the author of the message.
-  const conversation = await assertConversationVisible(conversationId, actor)
-
+  const { conversationId, conversation } = parent
   const decision = canDeleteMessage(actor, authored, conversation)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 

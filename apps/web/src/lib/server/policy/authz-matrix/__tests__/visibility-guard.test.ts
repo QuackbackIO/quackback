@@ -74,8 +74,6 @@ const BY_ID_CONVERSATION_READS: Record<string, string> = {
     'the copilot gate checked the conversation for the actor before the turn runs',
   'lib/server/domains/conversation/conversation.edit.ts::applyEdit::unscopedConversationRead':
     'reloads the row after editConversationMessage checked it, for the published DTO',
-  'lib/server/domains/conversation/conversation.query.ts::listConversationsForAgent::unscopedConversationRead':
-    'reads only the page cursor position; the page itself is filtered by conversationFilter',
   'lib/server/domains/conversation/conversation.service.ts::sendVisitorMessage::unscopedConversationRead':
     'the visitor send: the owner check runs on the row it reads',
   'lib/server/domains/conversation/conversation.service.ts::sendAgentMessage::unscopedConversationRead':
@@ -115,6 +113,8 @@ const ALLOWLIST: Record<string, string> = {
     'the copilot gate has already asserted the ticket for the actor',
   'lib/server/domains/conversation/conversation-visibility.ts::loadConversationForWrite::loadConversationOr404':
     'only under systemCascade: the caller checked the item once',
+  'lib/server/domains/conversation/message-parent.ts::resolveMessageParent::loadConversationOr404':
+    'the pair of a customer ticket the actor can see, after assertTicketVisible',
   'lib/server/domains/conversation/conversation.service.ts::addAgentNote::loadConversationOr404':
     'reloads the row after the checked write, for the published DTO',
   'lib/server/domains/conversation/conversation.service.ts::autoFileConversationAsSpam::loadConversationOr404':

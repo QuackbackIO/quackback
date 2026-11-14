@@ -52,6 +52,7 @@ import {
   NOT_FOUND,
   agentMessagesOn,
   row,
+  MESSAGE_NOT_FOUND,
   seedPerson,
   seedWorld,
   suffix,
@@ -73,6 +74,7 @@ import {
   ticketConversations,
   tickets,
   ticketStatuses,
+  PERMISSIONS,
 } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import {
@@ -112,6 +114,7 @@ import { applyMacroActions } from '@/lib/server/domains/macros/macro.actions'
 import { boundedServiceActor } from '@/lib/server/policy/service-actor'
 import { AUTOMATION_PERMISSIONS } from '@/lib/server/domains/workflows/workflow-actor-permissions'
 import { quinnActor } from '@/lib/server/domains/assistant/assistant.actor'
+import { SWEEP_PERMISSIONS } from '@/lib/server/domains/workflows/workflow-sweep'
 import { createTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { sendTicketMessage } from '@/lib/server/domains/tickets/ticket-message.service'
 import {
@@ -234,6 +237,23 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
     expect(await agentMessagesOn(hidden.id)).toHaveLength(1)
   })
 
+  it('a workspace key without conversation.view sees no conversation', async () => {
+    const w = await seedWorld()
+    const visible = await w.conversation(w.teamX)
+    const assignOnly: Actor = {
+      ...workspaceKey,
+      permissions: new Set([PERMISSIONS.CONVERSATION_ASSIGN]),
+    }
+    await expect(assertConversationVisible(visible.id, assignOnly)).rejects.toMatchObject(NOT_FOUND)
+  })
+
+  it('the auto-close sweep still closes a conversation on any team', async () => {
+    const w = await seedWorld()
+    const hidden = await w.conversation(w.teamY)
+    await setConversationStatus(hidden.id, 'closed', boundedServiceActor(SWEEP_PERMISSIONS))
+    expect((await row(hidden.id)).status).toBe('closed')
+  })
+
   it('a personal key follows its creator', async () => {
     const w = await seedWorld()
     const hidden = await w.conversation(w.teamY)
@@ -299,10 +319,11 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
         content: 'My own Acme reply',
       })
       .returning()
-    // The author who lost scope cannot delete their own message either.
+    // The author who lost scope cannot delete their own message either, and the
+    // answer is the missing-message one.
     await expect(
       deleteConversationMessage(mine.id as ConversationMessageId, w.actor)
-    ).rejects.toMatchObject(NOT_FOUND)
+    ).rejects.toMatchObject(MESSAGE_NOT_FOUND)
     await expect(
       editConversationMessage(mine.id as ConversationMessageId, 'Edited', null, w.actor)
     ).rejects.toMatchObject({ code: 'MESSAGE_NOT_FOUND', statusCode: 404 })
@@ -318,18 +339,57 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
     const w = await seedWorld()
     const hidden = await w.conversation(w.teamY)
     await expect(addMessageReaction(hidden.messageId, '👍', w.actor)).rejects.toMatchObject(
-      NOT_FOUND
+      MESSAGE_NOT_FOUND
     )
     await expect(removeMessageReaction(hidden.messageId, '👍', w.actor)).rejects.toMatchObject(
-      NOT_FOUND
+      MESSAGE_NOT_FOUND
     )
-    await expect(setMessageFlag(hidden.messageId, true, w.actor)).rejects.toMatchObject(NOT_FOUND)
+    await expect(setMessageFlag(hidden.messageId, true, w.actor)).rejects.toMatchObject(
+      MESSAGE_NOT_FOUND
+    )
     expect(await testDb.select().from(conversationMessageReactions)).toEqual([])
     expect(await testDb.select().from(conversationMessageFlags)).toEqual([])
     const visible = await w.conversation(w.teamX)
     await addMessageReaction(visible.messageId, '👍', w.actor)
     await setMessageFlag(visible.messageId, true, w.actor)
     expect(await testDb.select().from(conversationMessageReactions)).toHaveLength(1)
+  })
+
+  it('a hidden message answers exactly like a missing one, before any other refusal', async () => {
+    const w = await seedWorld()
+    const hidden = await w.conversation(w.teamY)
+    const missing = createId('conversation_message') as ConversationMessageId
+    const insert = async (values: Partial<typeof conversationMessages.$inferInsert>) =>
+      (
+        await testDb
+          .insert(conversationMessages)
+          .values({ conversationId: hidden.id, content: 'Acme', senderType: 'agent', ...values })
+          .returning()
+      )[0].id as ConversationMessageId
+    const system = await insert({ senderType: 'system' })
+    const someoneElses = await insert({ principalId: w.visitor })
+    const block = await insert({
+      principalId: w.teammate,
+      metadata: { block: { kind: 'csat' } } as never,
+    })
+    const refusalOf = (p: Promise<unknown>) =>
+      p.then(
+        () => null,
+        (e: { code?: string; statusCode?: number; message?: string }) => ({
+          code: e.code,
+          statusCode: e.statusCode,
+          message: e.message,
+        })
+      )
+    const asMissing = await refusalOf(addMessageReaction(missing, '👍', w.actor))
+    expect(asMissing).toMatchObject(MESSAGE_NOT_FOUND)
+    // A system row would be refused as Forbidden once seen; hidden, it is missing.
+    expect(await refusalOf(addMessageReaction(system, '👍', w.actor))).toEqual(asMissing)
+    expect(await refusalOf(setMessageFlag(system, true, w.actor))).toEqual(asMissing)
+    expect(await refusalOf(deleteConversationMessage(someoneElses, w.actor))).toEqual(asMissing)
+    expect(await refusalOf(deleteConversationMessage(missing, w.actor))).toEqual(asMissing)
+    expect(await refusalOf(editConversationMessage(block, 'x', null, w.actor))).toEqual(asMissing)
+    expect(await refusalOf(editConversationMessage(missing, 'x', null, w.actor))).toEqual(asMissing)
   })
 
   it('a flag on a conversation that left my scope drops out of my saved list', async () => {
@@ -539,6 +599,58 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
         .values({ ticketId, conversationId: conversation.id, ticketType: 'customer' })
       return { ticketId, conversation }
     }
+
+    /** My own reply on the pair conversation, as the ticket thread shows it. */
+    async function ownReplyOn(w: W, conversationId: ConversationId) {
+      const [reply] = await testDb
+        .insert(conversationMessages)
+        .values({
+          conversationId,
+          principalId: w.teammate,
+          senderType: 'agent',
+          content: 'My Acme reply',
+        })
+        .returning()
+      return reply.id as ConversationMessageId
+    }
+
+    it('on a visible ticket, my reply stored on its hidden pair can be edited, reacted to, flagged and deleted', async () => {
+      const w = await seedWorld()
+      const pair = await seedPair(w)
+      const reply = await ownReplyOn(w, pair.conversation.id)
+      await editConversationMessage(reply, 'My edited Acme reply', null, w.actor)
+      await addMessageReaction(reply, '👍', w.actor)
+      await removeMessageReaction(reply, '👍', w.actor)
+      await setMessageFlag(reply, true, w.actor)
+      await deleteConversationMessage(reply, w.actor)
+      const [after] = await testDb
+        .select()
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, reply))
+      expect(after.content).toBe('My edited Acme reply')
+      expect(after.deletedAt).not.toBeNull()
+      expect(await testDb.select().from(conversationMessageFlags)).toHaveLength(1)
+    })
+
+    it('a hidden ticket with a hidden pair still answers like a missing message', async () => {
+      const w = await seedWorld()
+      const pair = await seedPair(w)
+      await testDb
+        .update(tickets)
+        .set({ assigneeTeamId: w.teamY })
+        .where(eq(tickets.id, pair.ticketId))
+      const reply = await ownReplyOn(w, pair.conversation.id)
+      await expect(editConversationMessage(reply, 'x', null, w.actor)).rejects.toMatchObject(
+        MESSAGE_NOT_FOUND
+      )
+      await expect(deleteConversationMessage(reply, w.actor)).rejects.toMatchObject(
+        MESSAGE_NOT_FOUND
+      )
+      await expect(addMessageReaction(reply, '👍', w.actor)).rejects.toMatchObject(
+        MESSAGE_NOT_FOUND
+      )
+      await expect(setMessageFlag(reply, true, w.actor)).rejects.toMatchObject(MESSAGE_NOT_FOUND)
+    })
 
     it('a reply on a visible ticket lands in its hidden pair, and claims it for the sender', async () => {
       const w = await seedWorld()

@@ -426,9 +426,10 @@ export async function sendTicketMessage(
   assertCan(actor, PERMISSIONS.TICKET_REPLY, 'reply to this ticket')
   const principalId = requireAgentPrincipal(actor)
   const visible = await assertTicketVisible(input.ticketId, actor)
-  // Reply all carries text only: its copies reach tickets the sender may not
-  // see, so nothing is written, not even on the tracker, when it has files.
-  if (input.replyAll && (input.attachments?.length ?? 0) > 0) {
+  // A tracker's Reply all carries text only: its copies reach tickets the sender
+  // may not see, so nothing is written, not even on the tracker, when it has
+  // files. Elsewhere the ask is ignored, as the schema says.
+  if (input.replyAll && visible.type === 'tracker' && (input.attachments?.length ?? 0) > 0) {
     throw new ValidationError('REPLY_ALL_ATTACHMENTS', 'Reply all cannot include attachments')
   }
   const { message, ticket } = await insertTicketMessage(input, principalId, {

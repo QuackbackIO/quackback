@@ -134,6 +134,7 @@ import {
   ticketStatuses,
 } from '@/lib/server/db'
 import {
+  listConversationsFn,
   addConversationNoteFn,
   addConversationParticipantFn,
   addMessageReactionFn,
@@ -241,6 +242,7 @@ describe('conversation server functions check visibility (real DB, rolled back)'
     [
       'deleteConversationMessageFn',
       (_, c) => deleteConversationMessageFn({ data: { messageId: c.ownReplyId } }),
+      MESSAGE_NOT_FOUND,
     ],
     [
       'getConversationAssistantActivityFn',
@@ -295,14 +297,17 @@ describe('conversation server functions check visibility (real DB, rolled back)'
     [
       'addMessageReactionFn',
       (_, c) => addMessageReactionFn({ data: { messageId: c.messageId, emoji: '👍' } }),
+      MESSAGE_NOT_FOUND,
     ],
     [
       'removeMessageReactionFn',
       (_, c) => removeMessageReactionFn({ data: { messageId: c.messageId, emoji: '👍' } }),
+      MESSAGE_NOT_FOUND,
     ],
     [
       'setMessageFlagFn',
       (_, c) => setMessageFlagFn({ data: { messageId: c.messageId, flagged: true } }),
+      MESSAGE_NOT_FOUND,
     ],
     [
       'markConversationUnreadFromMessageFn',
@@ -402,6 +407,25 @@ describe('conversation server functions check visibility (real DB, rolled back)'
     } else {
       expect(outcome).toBeNull()
     }
+  })
+
+  it('a hidden conversation as the list cursor reads like an unknown one (relevance search)', async () => {
+    const w = await seedWorld()
+    const hour = 3_600_000
+    const newer = await w.conversation(w.teamX, { lastMessageAt: new Date(Date.now() - hour) })
+    const older = await w.conversation(w.teamX, { lastMessageAt: new Date(Date.now() - 2 * hour) })
+    // The oldest match, so a cursor on it would leave nothing after it.
+    const hidden = await w.conversation(w.teamY, {
+      lastMessageAt: new Date(Date.now() - 30 * 24 * hour),
+    })
+    const page = (before?: string) =>
+      listConversationsFn({ data: { search: 'Acme', sort: 'relevance', before } }).then((r) =>
+        r.conversations.map((c: { id: string }) => c.id)
+      )
+    const first = await page()
+    expect(first).toEqual(expect.arrayContaining([newer.id, older.id]))
+    expect(first).not.toContain(hidden.id)
+    expect(await page(hidden.id)).toEqual(first)
   })
 
   it('a reply to a hidden conversation is NotFound before it is translated, and stays unassigned', async () => {

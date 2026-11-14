@@ -1636,7 +1636,7 @@ export async function listConversationsForAgent(
   // Keyset cursor = the previous page's last conversation id. Re-read the exact
   // row from the DB rather than trusting a client-supplied string, so the sort's
   // ordering columns (which vary per sort) + ties are handled deterministically
-  // (mirrors listMessages). An unknown id → first page, and a malformed cursor
+  // (mirrors listMessages). An unknown or hidden id → first page, and a malformed cursor
   // can no longer reach a date parse / 500 the list. Relevance-ordered pages
   // additionally need the cursor row's score, recomputed by the same expression.
   let cursor: Conversation | null = null
@@ -1645,7 +1645,9 @@ export async function listConversationsForAgent(
     const [row] = await db
       .select({ row: conversations, relevance: relevance ?? sql<number>`0::float8` })
       .from(conversations)
-      .where(eq(conversations.id, filter.before as ConversationId))
+      // Scoped like the page: a cursor on a conversation the actor cannot see
+      // reads like an unknown one (the first page), and its text is never scored.
+      .where(and(eq(conversations.id, filter.before as ConversationId), conversationFilter(actor)))
       .limit(1)
     if (row) {
       cursor = row.row

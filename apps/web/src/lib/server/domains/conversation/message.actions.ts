@@ -25,7 +25,7 @@ import {
   toMessageDTO,
   enrichMessageForAgent,
 } from './conversation.query'
-import { resolveMessageParent } from './message-parent'
+import { assertMessageParentVisible } from './message-parent'
 import type { MessageReactionCount } from '@/lib/shared/conversation/types'
 
 /** Resolve the acting agent's principal id, or refuse. Mirrors the gate used by
@@ -39,8 +39,8 @@ function requireAgent(actor: Actor): PrincipalId {
 
 /** Load a message that an agent may react to / flag: it must exist, not be
  *  soft-deleted, and not be a system event (status notices aren't content).
- *  Its parent is resolved via `resolveMessageParent`, which requires the actor
- *  to see that ticket or conversation — 404, not 403. */
+ *  Its parent is checked first, through `assertMessageParentVisible`: a parent
+ *  the actor cannot see answers exactly like a missing message. */
 async function loadActionableMessageOr404(
   messageId: ConversationMessageId,
   actor: Actor
@@ -53,10 +53,11 @@ async function loadActionableMessageOr404(
   if (!message || message.deletedAt) {
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
   }
+  // A hidden parent answers like a missing message, before any other refusal.
+  await assertMessageParentVisible(message, actor)
   if (message.senderType === 'system') {
     throw new ForbiddenError('FORBIDDEN', 'System messages cannot be reacted to or flagged')
   }
-  await resolveMessageParent(message, actor)
   return message
 }
 
