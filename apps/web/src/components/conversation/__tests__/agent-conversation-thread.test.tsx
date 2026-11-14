@@ -297,9 +297,13 @@ vi.mock('@/lib/client/hooks/use-file-upload', () => ({
   useAgentFileUpload: () => ({ upload: vi.fn() }),
 }))
 const addFiles = vi.fn()
+/** Files staged in the composer tray; tests stage some per render. */
+const staged = vi.hoisted(() => ({ items: [] as unknown[] }))
+const toastSpy = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }))
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), toastSpy) }))
 vi.mock('@/lib/client/hooks/use-conversation-composer-attachments', () => ({
   useConversationComposerAttachments: () => ({
-    items: [],
+    items: staged.items,
     attachments: [],
     addFiles,
     remove: vi.fn(),
@@ -487,6 +491,7 @@ import { setConversationStatusFn } from '@/lib/server/functions/conversation'
 import { sendTicketMessageFn, setTicketStatusFn } from '@/lib/server/functions/tickets'
 
 afterEach(() => {
+  staged.items = []
   threadProbe.fail = null
   mockTrackerLinks.value = { linked: [], hiddenCount: 0 }
   mockTicketLink.value = null
@@ -725,6 +730,32 @@ describe('AgentConversationThread — tracker Reply all mode', () => {
     renderTracker()
     await chooseReplyAll()
     expect(screen.queryByText(/you can't access/)).not.toBeInTheDocument()
+  })
+
+  it('keeps Note and says why when files are staged and Reply all is chosen', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    staged.items = [{ id: 'f1', name: 'acme.png', status: 'done' }]
+    renderTracker()
+    fireEvent.click(await screen.findByRole('button', { name: 'Note' }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Reply all' }))
+    expect(toastSpy.error).toHaveBeenCalledWith(
+      "Reply all can't include files. Remove them to switch."
+    )
+    expect(screen.getByTestId('editor')).toHaveAttribute(
+      'placeholder',
+      'Add an internal note for your team…'
+    )
+  })
+
+  it('stages no pasted file in Reply all mode, and says why', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    renderTracker()
+    await chooseReplyAll()
+    const file = new File(['x'], 'acme.png', { type: 'image/png' })
+    const box = document.querySelector('[data-inbox-composer]') as HTMLElement
+    fireEvent.paste(box, { clipboardData: { files: [file] } })
+    expect(addFiles).not.toHaveBeenCalled()
+    expect(toastSpy.error).toHaveBeenCalledWith("Reply all can't include files.")
   })
 
   it('sends a Reply all as a reply-all on the tracker', async () => {
