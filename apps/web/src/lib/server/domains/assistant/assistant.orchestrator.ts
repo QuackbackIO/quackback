@@ -34,6 +34,7 @@ import {
   publishAgentConversationEvent,
   publishConversationOnlyEvent,
 } from '@/lib/server/realtime/conversation-channels'
+import { conversationScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import {
   writeActivitySnapshot,
   clearActivitySnapshot,
@@ -282,19 +283,13 @@ export async function runAssistantTurnForConversation(
   // Messenger sheet shows both sides at once. Test threads are a handful, so
   // this never churns a real inbox.
   const { isTestConversation } = await import('@/lib/server/test-data')
-  const mirrorToInbox = await isTestConversation(conversationId)
-  // The mirror's scope envelope is read once for the turn, not once per
-  // streamed fragment. Without it each frame reads the row itself.
-  const mirrorScope = mirrorToInbox
-    ? await (
-        await import('@/lib/server/realtime/inbox-scope-read')
-      )
-        .readInboxItemScope({ kind: 'conversation', id: conversationId })
-        .catch(() => null)
-    : null
+  const testThread = await isTestConversation(conversationId)
+  // The mirror's scope envelope comes from that one read, not one per
+  // streamed fragment.
+  const mirrorScope = testThread ? conversationScopeOf(testThread) : undefined
   const publishTurnSignal = (event: ConversationStreamEvent) => {
     publishConversationOnlyEvent(conversationId, event)
-    if (mirrorToInbox) publishAgentConversationEvent(event, mirrorScope ?? undefined)
+    if (mirrorScope) publishAgentConversationEvent(event, mirrorScope)
   }
   // Mirrored into the KV cache on every publish (and cleared when the turn ends, in
   // the finally below) so a subscriber that connects mid-turn can replay the
