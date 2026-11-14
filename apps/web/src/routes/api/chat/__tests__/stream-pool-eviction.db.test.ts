@@ -41,7 +41,8 @@ const registryLookup = vi.hoisted(() => ({ gone: new Set<string>() }))
 const heartbeatTicks = vi.hoisted(() => [] as Array<() => void>)
 const requeued = vi.hoisted(() => [] as Array<{ principalId: string; poolAnswered: boolean }>)
 const released = vi.hoisted(() => ({ count: 0 }))
-const AGENT = vi.hoisted(() => 'principal_01streampooleviction')
+// A well-formed id: the inbox scope read converts it to the stored uuid.
+const AGENT = vi.hoisted(() => 'principal_01m7bzjj7nfqev2c7txfrbafme')
 
 vi.mock('@/lib/server/logger', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/server/logger')>()
@@ -172,7 +173,17 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isConversationsEnabledFor: vi.fn(async () => true),
   isSupportTicketsEnabled: vi.fn(async () => true),
 }))
-vi.mock('@/lib/server/realtime/pubsub', () => ({ subscribe: vi.fn(async () => async () => {}) }))
+// The handlers a stream subscribes, so a case can deliver a frame the way a
+// NOTIFY would: from the listener, outside any request scope.
+const handlers = vi.hoisted(
+  () => new Map<string, (channel: string, message: string, scope?: unknown) => void>()
+)
+vi.mock('@/lib/server/realtime/pubsub', () => ({
+  subscribe: vi.fn(async (channels: string[], fn: (c: string, m: string, s?: unknown) => void) => {
+    for (const c of channels) handlers.set(c, fn)
+    return async () => {}
+  }),
+}))
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   conversationChannel: (id: string) => `conversation:${id}`,
   CONVERSATION_INBOX_CHANNEL: 'conversation:inbox',
@@ -246,14 +257,14 @@ interface OpenStream {
   reader: ReadableStreamDefaultReader<Uint8Array>
 }
 
-/** Open a presence stream the way the request middleware would: inside a checked-out scope. */
-async function openStream(): Promise<OpenStream> {
+/** Open a stream the way the request middleware would: inside a checked-out scope. */
+async function openStream(streamScope: 'presence' | 'inbox' = 'presence'): Promise<OpenStream> {
   const workspaceKey = `stream-evict-${randomUUID().slice(0, 8)}`
   const acquisition = await acquireScopeForWorkspaceId(workspaceKey, 'request')
   if (acquisition.kind !== 'ok') throw new Error(`fixture could not scope ${workspaceKey}`)
   const scope = acquisition.scope
   const controller = new AbortController()
-  const request = new Request('http://test/api/chat/stream?scope=presence&token=t', {
+  const request = new Request(`http://test/api/chat/stream?scope=${streamScope}&token=t`, {
     signal: controller.signal,
   })
   const res = await runWithWorkspaceScope(scope, () => GET({ request }))
@@ -302,6 +313,7 @@ beforeEach(() => {
   requeued.length = 0
   registryLookup.gone.clear()
   released.count = 0
+  handlers.clear()
 })
 
 afterEach(async () => {
@@ -377,5 +389,35 @@ describe('chat stream presence after its workspace pool is evicted', () => {
     const { value } = await stream.reader.read()
     expect(new TextDecoder().decode(value)).toContain(': ping')
     expect(released.count).toBe(0)
+  })
+
+  it('reloads an inbox scope on a live pool, from a frame delivered outside any scope', async () => {
+    const stream = await openStream('inbox')
+    opened.push(stream)
+    await evictStreamPool(stream)
+
+    // A role or team change, then a frame, both as the listener delivers them.
+    handlers.get(`principal:${AGENT}`)!(`principal:${AGENT}`, '{"kind":"inbox_scope_changed"}')
+    const payload = JSON.stringify({ kind: 'ticket_read', ticketId: 'ticket_1' })
+    handlers.get('conversation:inbox')!('conversation:inbox', payload, {
+      kind: 'ticket',
+      id: 'ticket_1',
+      assigneePrincipalId: AGENT,
+      teamId: null,
+    })
+
+    let text = ''
+    const deadline = Date.now() + 5_000
+    while (!text.includes('event: ticket_read') && Date.now() < deadline) {
+      const next = await Promise.race([
+        stream.reader.read(),
+        new Promise<{ done: true; value: undefined }>((r) =>
+          setTimeout(() => r({ done: true, value: undefined }), 250)
+        ),
+      ])
+      if (next.value) text += new TextDecoder().decode(next.value)
+    }
+    expect(text, warnings()).toContain('event: inbox_scope_changed')
+    expect(text, warnings()).toContain(`data: ${payload}`)
   })
 })
