@@ -325,16 +325,17 @@ async function buildEmailTargets(
   })
   if (eligibleSubscribers.length === 0) return []
 
-  const sender = await surfaceSender('feedback')
-
   // Batch generate unsubscribe tokens (single insert instead of N inserts)
-  const tokenMap = await batchGenerateUnsubscribeTokens(
-    eligibleSubscribers.map((s) => ({
-      principalId: s.principalId,
-      postId,
-      action: 'unsubscribe_post' as const,
-    }))
-  )
+  const [sender, tokenMap] = await Promise.all([
+    surfaceSender('feedback'),
+    batchGenerateUnsubscribeTokens(
+      eligibleSubscribers.map((s) => ({
+        principalId: s.principalId,
+        postId,
+        action: 'unsubscribe_post' as const,
+      }))
+    ),
+  ])
 
   // `Subscriber.email` is the IDENTITY field `isActorSubscriber` compares
   // against the actor, so it is read, never overwritten. The delivery address is
@@ -676,12 +677,15 @@ export async function getMentionTargets(
     const prefsMap = await batchGetNotificationPreferences([row.id as PrincipalId])
     const prefs = prefsMap.get(row.id as PrincipalId)
     if (!prefs || shouldNotify(prefs, 'post_mentioned', 'email')) {
-      const tokenMap = await batchGenerateUnsubscribeTokens([
-        {
-          principalId: row.id as PrincipalId,
-          postId: event.data.postId as PostId,
-          action: 'unsubscribe_all',
-        },
+      const [sender, tokenMap] = await Promise.all([
+        surfaceSender('feedback'),
+        batchGenerateUnsubscribeTokens([
+          {
+            principalId: row.id as PrincipalId,
+            postId: event.data.postId as PostId,
+            action: 'unsubscribe_all',
+          },
+        ]),
       ])
       const token = tokenMap.get(row.id as PrincipalId)
       targets.push(
@@ -693,7 +697,7 @@ export async function getMentionTargets(
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           eventType: 'post.mentioned',
           mentionerName,
-          ...(await surfaceSender('feedback')),
+          ...sender,
         })
       )
     }
@@ -1927,10 +1931,10 @@ export async function getChangelogSubscriberTargets(
       })()
 
   if (eligibleSubscribers.length > 0) {
-    const sender = await surfaceSender('changelog')
-    const tokenMap = await batchGenerateChangelogUnsubscribeTokens(
-      eligibleSubscribers.map((s) => s.principalId)
-    )
+    const [sender, tokenMap] = await Promise.all([
+      surfaceSender('changelog'),
+      batchGenerateChangelogUnsubscribeTokens(eligibleSubscribers.map((s) => s.principalId)),
+    ])
 
     // Both address fields already came back with the subscriber rows, so the
     // delivery address is decided here rather than in a second batched query.
@@ -2191,10 +2195,10 @@ export async function getStatusSubscriberTargets(
         return prefs ? shouldNotify(prefs, 'status_incident', 'email') : true
       })
       if (emailable.length > 0) {
-        const tokenMap = await batchGenerateStatusUnsubscribeTokens(
-          emailable.map((p) => p.id as PrincipalId)
-        )
-        const sender = await surfaceSender('status')
+        const [tokenMap, sender] = await Promise.all([
+          batchGenerateStatusUnsubscribeTokens(emailable.map((p) => p.id as PrincipalId)),
+          surfaceSender('status'),
+        ])
         for (const p of emailable) {
           targets.push(
             emailTarget(
