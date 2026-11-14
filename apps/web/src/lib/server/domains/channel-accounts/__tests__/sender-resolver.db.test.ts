@@ -338,6 +338,32 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
       expect((await getEmailSenders()).get('support')).toEqual({ mode: 'inbox', account: null })
     })
 
+    it('keeps the address behind the inbox when the inbox is chosen again', async () => {
+      await seedVerifiedDomain(await defaultTeam(), 'acme.example')
+      const help = await seedAddress('help@acme.example')
+      await seedForwardedInbox('support@acme.example')
+      await setInboxFallback(help)
+
+      await setEmailSender('support', { mode: 'inbox' })
+      expect((await getEmailSenders()).get('support')).toMatchObject({
+        mode: 'inbox',
+        account: { id: help },
+      })
+    })
+
+    it('keeps the chosen address behind the inbox when support moves back to it', async () => {
+      await seedVerifiedDomain(await defaultTeam(), 'acme.example')
+      const help = await seedAddress('help@acme.example')
+      await seedForwardedInbox('support@acme.example')
+
+      await setEmailSender('support', { mode: 'address', channelAccountId: help })
+      await setEmailSender('support', { mode: 'inbox' })
+      expect((await getEmailSenders()).get('support')).toMatchObject({
+        mode: 'inbox',
+        account: { id: help },
+      })
+    })
+
     it('keeps a support choice made before the route was created', async () => {
       await seedVerifiedDomain(await defaultTeam(), 'acme.example')
       const hello = await seedAddress('hello@acme.example')

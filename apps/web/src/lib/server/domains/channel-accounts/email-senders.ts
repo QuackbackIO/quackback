@@ -106,13 +106,19 @@ export async function setEmailSender(
       .limit(1)
     if (!account) throw new EmailSenderChoiceError('That sending address no longer exists.')
   }
+  // Choosing the inbox keeps the address the row already holds: the one behind
+  // the inbox, or the address support sent from until now. Either is what
+  // support email that is not a reply to the inbox leaves from.
   await db
     .insert(emailSenders)
     .values({ surface, mode: choice.mode, channelAccountId })
     .onConflictDoUpdate({
       target: [emailSenders.surface, emailSenders.scopeType],
       targetWhere: sql`scope_id IS NULL`,
-      set: { mode: choice.mode, channelAccountId, updatedAt: new Date() },
+      set:
+        choice.mode === 'inbox'
+          ? { mode: choice.mode, updatedAt: new Date() }
+          : { mode: choice.mode, channelAccountId, updatedAt: new Date() },
     })
 }
 
