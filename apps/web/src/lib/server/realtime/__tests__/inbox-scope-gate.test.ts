@@ -90,14 +90,19 @@ describe('createInboxScopeGate', () => {
     const lost = frame('team_y', 1)
     gate.onInboxFrame(lost.message, lost.meta)
     await vi.waitFor(() => expect(logged.some((m) => /timed out/.test(m))).toBe(true))
-    // The hung read answering late changes nothing.
+    // The hung read answering late changes nothing: given a tick to act, it
+    // still delivers none of the frames that were dropped.
     loads[0].resolve({ permissions: scoped, teamIds: new Set(['team_y']) })
+    await new Promise((r) => setTimeout(r, 0))
     expect(forwarded).toEqual([])
 
-    const kept = frame('team_y', 2)
-    gate.onInboxFrame(kept.message, kept.meta)
+    // The next frame is judged by a newer load, never by the late answer:
+    // that one says team Y is in scope, the newer one says it is not.
+    const next = frame('team_y', 2)
+    gate.onInboxFrame(next.message, next.meta)
     expect(loads).toHaveLength(2)
-    loads[1].resolve({ permissions: scoped, teamIds: new Set(['team_y']) })
-    await vi.waitFor(() => expect(forwarded).toEqual([kept.message]))
+    loads[1].resolve({ permissions: scoped, teamIds: new Set() })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(forwarded).toEqual([])
   })
 })
