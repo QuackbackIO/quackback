@@ -81,6 +81,7 @@ import {
   getTicketAssignedTargets,
   getTicketNoteAddedTargets,
   getTicketRepliedTargets,
+  getTicketRepliedEmailTargets,
   getMessageCreatedTargets,
   getConversationNoteMentionedTargets,
   getConversationNoteMentionedEmailTargets,
@@ -240,6 +241,31 @@ describe('ticket watchers hear only about tickets in their scope', () => {
       },
     } as EventData)
     expect(recipientsOf(target)).toEqual(sorted(w.manager.id, w.onTeam.id, w.requester.id))
+  })
+
+  it('reply email: in-scope watchers and the requester, never a watcher out of scope', async () => {
+    const w = await seedWorld()
+    const id = await watchedTicket(w)
+    const targets = await getTicketRepliedEmailTargets(
+      {
+        id: 'evt-re',
+        type: 'ticket.replied',
+        timestamp: '2026-01-01T00:00:00Z',
+        actor: { type: 'user', principalId: w.actor.id },
+        data: {
+          ticket: ticketRef(id),
+          messageId: 'conversation_message_1',
+          content: 'Fix is queued.',
+          attachments: null,
+          senderType: 'agent',
+          title: 'Cannot log in',
+          authorName: 'Sarah',
+          requesterPrincipalId: w.requester.id,
+        },
+      } as EventData,
+      context
+    )
+    expect(emailsOf(targets)).toEqual([w.manager.email, w.onTeam.email, w.requester.email].sort())
   })
 
   it('note bell: in-scope agent watchers only', async () => {
