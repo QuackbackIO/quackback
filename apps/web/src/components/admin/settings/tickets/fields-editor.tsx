@@ -310,6 +310,9 @@ function FieldDialog({
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
+    // This dialog portals out of the type dialog's form, but React still
+    // bubbles the submit through the component tree to that outer form.
+    e.stopPropagation()
     const options =
       fieldType === 'select'
         ? optionsText
