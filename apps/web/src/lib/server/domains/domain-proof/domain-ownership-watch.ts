@@ -87,9 +87,6 @@ async function startGrace(row: Domain, since: Date): Promise<Domain | null> {
   return started ?? null
 }
 
-/** A warning claim given back after a failed delivery: retaken at once, and never rings again. */
-const releasedClaim = (): Date => new Date(0)
-
 /**
  * Warn about the missing record unless that was already delivered for this
  * period: a lease first, so one check sends, confirmed on delivery and given
@@ -131,12 +128,13 @@ async function deliverWarning(row: Domain): Promise<void> {
     ring: !!first,
   })
   const ours = and(eq(domains.id, row.id), eq(domains.ownershipWarningClaimedAt, claimedAt))
+  // A claim given back is the epoch: retaken at once by the next check, and never rings again.
   await db
     .update(domains)
     .set(
       delivered
         ? { ownershipWarningSentAt: new Date() }
-        : { ownershipWarningClaimedAt: releasedClaim() }
+        : { ownershipWarningClaimedAt: new Date(0) }
     )
     .where(ours)
   if (!delivered) {
@@ -327,8 +325,8 @@ async function rejudgeLapsedDomains(outOfTime: () => boolean): Promise<void> {
   else await kvDel(REJUDGE_KEY)
 }
 
-/** Check one verified domain and act on what its zone says. */
-async function checkDomain(row: Domain, now: Date): Promise<'kept' | 'warned' | 'demoted'> {
+/** Check one verified domain and act on what its zone says. True when it was demoted. */
+async function checkDomain(row: Domain, now: Date): Promise<boolean> {
   const ownership = await readDomainOwnership(row)
   if (ownership === 'proven') {
     await db
@@ -339,22 +337,22 @@ async function checkDomain(row: Domain, now: Date): Promise<'kept' | 'warned' | 
         updatedAt: now,
       })
       .where(eq(domains.id, row.id))
-    return 'kept'
+    return false
   }
   await db.update(domains).set({ lastCheckedAt: now }).where(eq(domains.id, row.id))
   if (ownership === 'unknown') {
     log.warn({ domain: row.name }, 'domain ownership lookup went unanswered; keeping it verified')
-    return 'kept'
+    return false
   }
   const grace = ownershipGrace(row, ownership, now)
-  if (!grace.since) return 'kept'
+  if (!grace.since) return false
   if (grace.inGrace) {
     const started = row.ownershipMissingSince ? null : await startGrace(row, grace.since)
     await deliverWarning(started ?? row)
-    return 'warned'
+    return false
   }
   await demote(row, grace.since, now)
-  return 'demoted'
+  return true
 }
 
 /**
@@ -374,21 +372,22 @@ export async function watchDomainOwnership(
     .where(eq(domains.status, 'verified'))
     .orderBy(sql`${domains.lastCheckedAt} ASC NULLS FIRST`, domains.name)
   const started = clock()
+  const outOfTime = () => clock() - started >= DOMAIN_WATCH_BUDGET_MS
   let checked = 0
   let demoted = 0
   for (const row of rows) {
-    if (clock() - started >= DOMAIN_WATCH_BUDGET_MS) {
+    if (outOfTime()) {
       log.info({ left: rows.length - checked }, 'domain ownership watch out of time; rest next run')
       break
     }
     checked += 1
     try {
-      if ((await checkDomain(row, now)) === 'demoted') demoted += 1
+      if (await checkDomain(row, now)) demoted += 1
     } catch (err) {
       // One domain's failure must not stop the others being checked.
       log.warn({ err, domain: row.name }, 'domain ownership check failed')
     }
   }
-  await rejudgeLapsedDomains(() => clock() - started >= DOMAIN_WATCH_BUDGET_MS)
+  await rejudgeLapsedDomains(outOfTime)
   return { checked, demoted }
 }
