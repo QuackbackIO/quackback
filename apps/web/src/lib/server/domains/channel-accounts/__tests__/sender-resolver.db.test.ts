@@ -191,6 +191,15 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
   })
   afterAll(fixture.close)
 
+  /** The address a conversation's thread is stored as sending from. */
+  async function storedSender(conv: ConversationId): Promise<string | null> {
+    const [row] = await testDb
+      .select({ address: conversations.threadSenderAddress })
+      .from(conversations)
+      .where(eq(conversations.id, conv))
+    return row?.address ?? null
+  }
+
   describe('the workspace default', () => {
     it('sends every kind of email from the default when nothing overrides it', async () => {
       await seedVerifiedDomain(await defaultTeam(), 'acme.example')
@@ -507,14 +516,6 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
   })
 
   describe('a thread keeps its first sender', () => {
-    async function storedSender(conv: ConversationId): Promise<string | null> {
-      const [row] = await testDb
-        .select({ address: conversations.threadSenderAddress })
-        .from(conversations)
-        .where(eq(conversations.id, conv))
-      return row?.address ?? null
-    }
-
     it('records the address the first email on a conversation goes out from', async () => {
       await seedVerifiedDomain(await defaultTeam(), 'acme.example')
       await seedAddress('hello@acme.example')
@@ -655,7 +656,10 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
   })
 
   describe("a ticket's From", () => {
-    async function seedTicket(linked?: ConversationId): Promise<TicketId> {
+    async function seedTicket(
+      linked?: ConversationId,
+      ticketType: 'customer' | 'back_office' | 'tracker' = 'customer'
+    ): Promise<TicketId> {
       const [status] = await testDb
         .insert(ticketStatuses)
         .values({ name: `Open-${suffix()}`, slug: createId('ticket_status') })
@@ -667,7 +671,7 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
       if (linked) {
         await testDb
           .insert(ticketConversations)
-          .values({ ticketId: ticket.id, conversationId: linked, ticketType: 'customer' })
+          .values({ ticketId: ticket.id, conversationId: linked, ticketType })
       }
       return ticket.id
     }
@@ -693,6 +697,25 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
 
       const ticket = await seedTicket()
       expect((await resolveTicketSender(ticket))?.from).toBe('help@acme.example')
+    })
+
+    it("never takes a sender from another customer's conversation it only tracks", async () => {
+      await seedVerifiedDomain(await defaultTeam(), 'acme.example')
+      await seedAddress('hello@acme.example')
+      const answered = await seedConversation({})
+      expect(await conversationFrom(answered)).toBe('hello@acme.example')
+      const unanswered = await seedConversation({})
+      const help = await seedAddress('help@acme.example')
+      await setEmailSender('support', { mode: 'address', channelAccountId: help })
+
+      // A tracker or back-office ticket links conversations it is not the pair
+      // of: their thread senders belong to other customers.
+      const tracker = await seedTicket(answered, 'tracker')
+      expect((await resolveTicketSender(tracker))?.from).toBe('help@acme.example')
+      const backOffice = await seedTicket(unanswered, 'back_office')
+      expect((await resolveTicketSender(backOffice))?.from).toBe('help@acme.example')
+      // Nor is a sender stamped on a conversation the ticket only links to.
+      expect(await storedSender(unanswered)).toBeNull()
     })
   })
 })

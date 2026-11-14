@@ -10,7 +10,7 @@
 import type { ChannelAccountId, ConversationId, TicketId } from '@quackback/ids'
 import type { SendingIdentity } from '@quackback/email/sender'
 import { parseAddress } from '@quackback/email/ses'
-import { db, and, asc, eq, isNull, conversations, ticketConversations } from '@/lib/server/db'
+import { db, and, eq, isNull, conversations, ticketConversations } from '@/lib/server/db'
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { getChannelAccount } from './channel-account.service'
@@ -256,16 +256,22 @@ export async function resolveConversationSender(
  * A ticket opened from a conversation is the same customer's thread carried on
  * elsewhere, so it sends from that conversation's thread sender
  * ({@link resolveConversationSender}): the ticket's emails and the
- * conversation's replies then come from one address. With several linked, the
- * first one linked decides. A ticket with no linked conversation sends as
+ * conversation's replies then come from one address. Only that pair link
+ * counts (`ticket_type = 'customer'`, at most one per ticket): a tracker or
+ * back-office ticket links other customers' conversations, whose senders are
+ * not its own and must not be stamped by its sends. Any other ticket sends as
  * support does.
  */
 export async function resolveTicketSender(ticketId: TicketId): Promise<ResolvedSender | null> {
   const [link] = await db
     .select({ conversationId: ticketConversations.conversationId })
     .from(ticketConversations)
-    .where(eq(ticketConversations.ticketId, ticketId))
-    .orderBy(asc(ticketConversations.createdAt), asc(ticketConversations.conversationId))
+    .where(
+      and(
+        eq(ticketConversations.ticketId, ticketId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
     .limit(1)
   if (link) return resolveConversationSender(link.conversationId, 'support')
   return resolveSender({ surface: 'support' })

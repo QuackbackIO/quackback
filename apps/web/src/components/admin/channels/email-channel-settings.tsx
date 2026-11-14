@@ -6,7 +6,7 @@
  * support replies come from. An address on a domain that is not live yet
  * carries that domain's setup panel under it.
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { EnvelopeIcon, GlobeAltIcon } from '@heroicons/react/24/outline'
@@ -336,11 +336,17 @@ function InboundRouteSection({
             unverified.
           </p>
         </div>
-        <div className="inline-flex shrink-0 rounded-lg border border-border p-0.5">
+        <div
+          role="radiogroup"
+          aria-label="Unverified senders"
+          className="inline-flex shrink-0 rounded-lg border border-border p-0.5"
+        >
           {TRUST_OPTIONS.map((option) => (
             <button
               key={option.value}
               type="button"
+              role="radio"
+              aria-checked={inboundTrust === option.value}
               disabled={trust.isPending}
               onClick={() => {
                 setActionError(null)
@@ -351,7 +357,7 @@ function InboundRouteSection({
               className={cn(
                 'rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors',
                 inboundTrust === option.value
-                  ? 'bg-primary/10 text-foreground'
+                  ? 'bg-muted text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -400,6 +406,18 @@ const ownDomains = (...addresses: Array<string | null | undefined>): string[] =>
     const domain = /@([^\s<>@]+)>?\s*$/.exec(a ?? '')?.[1]?.toLowerCase()
     return domain ? [domain] : []
   })
+
+/**
+ * A row's icon from sm up. On a phone the tile is left out: every row carries
+ * the same one, and its width is what lets an address sit on one line.
+ */
+function PhoneHiddenIcon({ icon }: { icon: typeof EnvelopeIcon }) {
+  return (
+    <div className="hidden sm:block">
+      <RowIcon icon={icon} />
+    </div>
+  )
+}
 
 /** Oldest first: the order the page lists addresses and offers them in. */
 const oldestFirst = <T extends SendingAddress>(addresses: T[]): T[] =>
@@ -466,6 +484,15 @@ function SendingAddressesSection({
   loaded: boolean
 }) {
   const [dialog, setDialog] = useState<SendingAddressDialogTarget | null>(null)
+  // The Add address button on show (the card's, or the empty card's), and
+  // whether it opened the dialog: focus goes back to it when the dialog
+  // closes. A rename opens from a row's menu, which takes focus back itself.
+  const addButton = useRef<HTMLButtonElement>(null)
+  const openedByAdd = useRef(false)
+  const openAdd = () => {
+    openedByAdd.current = true
+    setDialog({ kind: 'add' })
+  }
   const [domainRemoveTarget, setDomainRemoveTarget] = useState<DomainRemoval | null>(null)
   const [removeTarget, setRemoveTarget] = useState<AddressRemoval | null>(null)
   // Records of live domains the person opened from the row menu, by domain.
@@ -528,10 +555,11 @@ function SendingAddressesSection({
       action={
         empty ? undefined : (
           <Button
+            ref={addButton}
             variant="outline"
             size="sm"
             disabled={!available}
-            onClick={() => setDialog({ kind: 'add' })}
+            onClick={openAdd}
           >
             Add address
           </Button>
@@ -553,8 +581,10 @@ function SendingAddressesSection({
           const items = [
             {
               label: 'Edit name',
-              onSelect: () =>
-                setDialog({ kind: 'rename', id: a.id, address, senderName: a.senderName ?? null }),
+              onSelect: () => {
+                openedByAdd.current = false
+                setDialog({ kind: 'rename', id: a.id, address, senderName: a.senderName ?? null })
+              },
             },
             ...(domain && first && phase === 'live'
               ? [
@@ -583,7 +613,7 @@ function SendingAddressesSection({
           return (
             <div key={a.id}>
               <SettingsListRow
-                leading={<RowIcon icon={EnvelopeIcon} />}
+                leading={<PhoneHiddenIcon icon={EnvelopeIcon} />}
                 title={title}
                 meta={(domain && pendingMeta(domain, phase, first, fallbackNote)) || undefined}
                 wrapMeta={phase !== 'live' || warned}
@@ -617,7 +647,7 @@ function SendingAddressesSection({
           return (
             <div key={domain.id}>
               <SettingsListRow
-                leading={<RowIcon icon={GlobeAltIcon} />}
+                leading={<PhoneHiddenIcon icon={GlobeAltIcon} />}
                 title={domain.domain}
                 meta="No address uses this domain"
                 badges={<PhaseBadge phase={phase} />}
@@ -656,7 +686,7 @@ function SendingAddressesSection({
           }
           action={
             available ? (
-              <Button variant="outline" onClick={() => setDialog({ kind: 'add' })}>
+              <Button ref={addButton} variant="outline" onClick={openAdd}>
                 Add address
               </Button>
             ) : undefined
@@ -683,6 +713,7 @@ function SendingAddressesSection({
         setsUpDomains={setsUpDomains}
         ownDomains={platformDomains}
         onClose={() => setDialog(null)}
+        finalFocus={() => (openedByAdd.current ? addButton.current : true)}
       />
       <RemoveAddressDialog
         target={removeTarget}

@@ -116,7 +116,7 @@ export function RemoveAddressDialog({
       title={target?.address ? `Remove ${target.address}?` : 'Remove address?'}
       description={[
         target?.note ?? 'Email can no longer be sent from this address.',
-        target?.alsoDomain ? `${target.alsoDomain} will be removed too.` : null,
+        target?.alsoDomain ? `${target.alsoDomain} stops sending email too.` : null,
       ]
         .filter(Boolean)
         .join(' ')}
@@ -150,8 +150,8 @@ export function RemoveAddressDialog({
 }
 
 /**
- * Confirms and removes a sending domain no address uses. `emailOnly` is for a
- * page that shows the domain's other uses too: it says only email stops.
+ * Confirms and removes a sending domain no address uses. Worded as what
+ * stops, since the domain may have other uses this does not touch.
  */
 export function RemoveDomainDialog({
   target,
@@ -159,26 +159,15 @@ export function RemoveDomainDialog({
   onStart,
   onError,
   onRemoved,
-  emailOnly = false,
-}: RemovalDialogProps<DomainRemoval> & { emailOnly?: boolean }) {
+}: RemovalDialogProps<DomainRemoval>) {
   const removeDomain = useDeleteSendingDomain()
   return (
     <ConfirmDialog
       open={target !== null}
       onOpenChange={(open) => !open && onClose()}
-      title={
-        !target
-          ? 'Remove domain?'
-          : emailOnly
-            ? `Stop sending email from ${target.domain}?`
-            : `Remove ${target.domain}?`
-      }
-      description={
-        emailOnly
-          ? 'Its email DNS records can be deleted afterwards. Its other uses stay as they are.'
-          : 'Its DNS records can be deleted afterwards.'
-      }
-      confirmLabel={emailOnly ? 'Stop sending email' : 'Remove domain'}
+      title={target ? `Stop sending email from ${target.domain}?` : 'Stop sending email?'}
+      description="Its email DNS records can be deleted afterwards."
+      confirmLabel="Stop sending email"
       variant="destructive"
       isPending={removeDomain.isPending}
       onConfirm={() => {
