@@ -4,9 +4,33 @@ import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import type { InboxItemDTO } from '@/lib/shared/inbox/items'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { inboxKeys, ticketKeys } from '@/lib/client/queries/inbox'
+import { isNotFoundError } from '@/lib/shared/errors'
 
 type ItemListPage = { items: InboxItemDTO[] }
 type ConversationListPage = { conversations: ConversationDTO[] }
+
+/**
+ * The teammate's role or teams changed (`inbox_scope_changed`), so the open
+ * item may have left their scope, and nothing says which. Refetch it: when the
+ * server now answers Not found, it goes through the same removal as an item
+ * reassigned away, so an open ticket pane shows Not found instead of the
+ * ticket it kept from before. Any other answer leaves the caches as fetched.
+ */
+export async function settleOpenItemAfterScopeChange(
+  queryClient: QueryClient,
+  open: { kind: 'conversation' | 'ticket'; id: string }
+): Promise<void> {
+  const queryKey =
+    open.kind === 'ticket'
+      ? ticketKeys.detail(open.id as TicketId)
+      : conversationKeys.agentThread(open.id as ConversationId)
+  if (!queryClient.getQueryState(queryKey)) return
+  try {
+    await queryClient.fetchQuery({ queryKey, staleTime: 0 })
+  } catch (err) {
+    if (isNotFoundError(err)) removeInboxItemFromCaches(queryClient, open.kind, open.id)
+  }
+}
 
 /**
  * An item left this teammate's scope (`inbox_item_removed` on the inbox
