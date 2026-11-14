@@ -3,45 +3,35 @@
  *
  * The inbox stream filters every frame against each subscriber's scope, so it
  * must know the item's kind, owner and team without parsing the payload. That
- * data rides beside the payload as the wire envelope's `s` field
- * (pubsub.ts), never inside it: the stream forwards the payload string
- * untouched, so neither an in-scope teammate nor a visitor ever receives an
- * owner, a team or a previous assignee they were not already shown. Only the
- * inbox publish sets it (inbox-publish.ts); a visitor or per-item channel
- * frame never carries one.
+ * data rides beside the payload as the wire envelope's `s` field (pubsub.ts
+ * carries it as opaque `meta`), never inside it: the stream forwards the
+ * payload string untouched, so neither an in-scope teammate nor a visitor
+ * ever receives an owner, a team or a previous assignee they were not already
+ * shown. Only the inbox publish sets it (inbox-publish.ts); a visitor or
+ * per-item channel frame never carries one.
  *
- * `prev*` is set (both keys, values may be null) by a write that can move an
- * item out of someone's scope. The stream then sends a removal to a
- * subscriber who held the item and no longer does.
+ * `prev` is set by a write that can move an item out of someone's scope. The
+ * stream then sends a removal to a subscriber who held the item and no longer
+ * does.
  */
-export interface InboxScopeEnvelope {
-  kind: 'conversation' | 'ticket'
-  /** The item id, which the removal frame names. */
-  id: string
-  assigneePrincipalId: string | null
-  teamId: string | null
-  prevAssigneePrincipalId?: string | null
-  prevTeamId?: string | null
-}
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
+import type { InboxItemRef } from '@/lib/shared/inbox/items'
 
-/** The owner and team an item had before a write moved it. */
-export interface InboxScopePrev {
-  assigneePrincipalId: string | null
-  teamId: string | null
-}
+/** An item's owner and team now, and before the write when it can move the item. */
+export type InboxItemScope = ScopedRow & { prev?: ScopedRow }
+
+/** The wire envelope: which item, and its scope. */
+export type InboxScopeEnvelope = InboxItemRef & InboxItemScope
 
 /**
- * What a publisher may pass for an inbox frame: the item's current owner and
- * team, and, from a write that can take the item out of someone's scope, what
- * they were before it.
+ * Narrow pubsub's opaque `meta` to an inbox envelope, or undefined when it is
+ * missing or malformed (which the stream treats as no envelope: dropped).
  */
-export interface InboxItemScope {
-  assigneePrincipalId: string | null
-  teamId: string | null
-  prev?: InboxScopePrev
-}
-
-/** Whether a write said what the item's owner and team were before it. */
-export function hasPrev(s: InboxScopeEnvelope): boolean {
-  return 'prevAssigneePrincipalId' in s || 'prevTeamId' in s
+export function asInboxEnvelope(meta: unknown): InboxScopeEnvelope | undefined {
+  if (typeof meta !== 'object' || meta === null) return undefined
+  const m = meta as Partial<InboxScopeEnvelope>
+  if ((m.kind !== 'conversation' && m.kind !== 'ticket') || typeof m.id !== 'string') {
+    return undefined
+  }
+  return m as InboxScopeEnvelope
 }

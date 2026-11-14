@@ -289,7 +289,7 @@ export async function runAssistantTurnForConversation(
     ? await (
         await import('@/lib/server/realtime/inbox-scope-read')
       )
-        .readInboxItemScope('conversation', conversationId)
+        .readInboxItemScope({ kind: 'conversation', id: conversationId })
         .catch(() => null)
     : null
   const publishTurnSignal = (event: ConversationStreamEvent) => {

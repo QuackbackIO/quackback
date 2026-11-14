@@ -381,8 +381,7 @@ describe('every publisher: the scope envelope rides the inbox copy and nothing e
       id: conversationId,
       assigneePrincipalId: null,
       teamId: 'team_1',
-      prevAssigneePrincipalId: 'principal_before',
-      prevTeamId: null,
+      prev: { assigneePrincipalId: 'principal_before', teamId: null },
     })
   })
 

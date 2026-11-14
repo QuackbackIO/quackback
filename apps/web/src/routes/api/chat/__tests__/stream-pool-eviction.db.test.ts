@@ -397,7 +397,7 @@ describe('chat stream presence after its workspace pool is evicted', () => {
     await evictStreamPool(stream)
 
     // A role or team change, then a frame, both as the listener delivers them.
-    handlers.get(`principal:${AGENT}`)!(`principal:${AGENT}`, '{"kind":"inbox_scope_changed"}')
+    handlers.get(`inbox-scope:${AGENT}`)!(`inbox-scope:${AGENT}`, '{"kind":"inbox_scope_changed"}')
     const payload = JSON.stringify({ kind: 'ticket_read', ticketId: 'ticket_1' })
     handlers.get('conversation:inbox')!('conversation:inbox', payload, {
       kind: 'ticket',

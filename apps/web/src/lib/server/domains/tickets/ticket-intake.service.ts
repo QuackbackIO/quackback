@@ -38,7 +38,7 @@ import type { Actor } from '@/lib/server/policy/types'
 import { ValidationError, InternalError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
-import type { InboxScopePrev } from '@/lib/server/realtime/inbox-envelope'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
 import { emitTicketCreated } from './ticket.webhooks'
 import { ticketRowToDTO } from './ticket.dto'
 import { recordTicketActivityAwaited } from './ticket-activity.service'
@@ -63,7 +63,7 @@ const MAX_TITLE_LENGTH = 300
  */
 export async function publishTicketUpdated(
   row: Ticket,
-  opts?: { prev?: InboxScopePrev }
+  opts?: { prev?: ScopedRow }
 ): Promise<TicketDTO> {
   const dto = await ticketRowToDTO(row)
   // The row is the one just written, so it is its own scope envelope. A write

@@ -31,6 +31,7 @@ import type {
 import { publish } from './pubsub'
 import { CONVERSATION_INBOX_CHANNEL, publishInboxFrame } from './inbox-publish'
 import type { InboxItemScope } from './inbox-envelope'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
 import { loadAuthors, fallbackAuthor } from '@/lib/server/domains/principals/principal-display'
 
 export function conversationChannel(conversationId: ConversationId): string {
@@ -178,7 +179,7 @@ export function publishConversationOnlyEvent(
 export async function publishConversationUpdate(
   conversationId: ConversationId,
   agentDto: ConversationDTO,
-  opts?: { prev?: InboxItemScope['prev'] }
+  opts?: { prev?: ScopedRow }
 ): Promise<void> {
   // Reuse the public profile loader: agent DTOs may contain account names.
   const authors = await loadAuthors([

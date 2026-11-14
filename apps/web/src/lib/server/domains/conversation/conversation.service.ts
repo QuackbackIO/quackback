@@ -87,7 +87,7 @@ import {
   publishConversationUpdate,
   publishTyping,
 } from '@/lib/server/realtime/conversation-channels'
-import type { InboxScopePrev } from '@/lib/server/realtime/inbox-envelope'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
 import {
   validateContent,
   preview,
@@ -1470,7 +1470,7 @@ export async function routeUnassignedConversation(
 }
 
 /** A conversation's owner and team as the inbox scope rule reads them. */
-function inboxScopeOf(row: Conversation): InboxScopePrev {
+function inboxScopeOf(row: Conversation): ScopedRow {
   return {
     assigneePrincipalId: row.assignedAgentPrincipalId ?? null,
     teamId: row.assignedTeamId ?? null,
@@ -1484,7 +1484,7 @@ function inboxScopeOf(row: Conversation): InboxScopePrev {
  */
 async function assignRoutedConversation(
   conversation: Conversation,
-  prev?: InboxScopePrev
+  prev?: ScopedRow
 ): Promise<PrincipalId | null> {
   // Test threads belong to the teammate trying them out; they never take a
   // colleague's routing slot.

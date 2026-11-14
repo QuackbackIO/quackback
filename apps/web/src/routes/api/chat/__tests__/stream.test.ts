@@ -247,7 +247,7 @@ describe('GET /api/chat/stream - inbox scope', () => {
     await settleAndClose(res)
     // The principal's own channel carries scope changes for the inbox filter.
     expect(mockSubscribe).toHaveBeenCalledWith(
-      ['conversation:inbox', expect.stringMatching(/^principal:/)],
+      ['conversation:inbox', expect.stringMatching(/^inbox-scope:/)],
       expect.any(Function)
     )
   })

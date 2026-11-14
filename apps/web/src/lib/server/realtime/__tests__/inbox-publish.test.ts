@@ -29,7 +29,7 @@ const gates = vi.hoisted(() => new Map<string, Promise<void>>())
 const reads = vi.hoisted(() => [] as string[])
 const failing = vi.hoisted(() => new Set<string>())
 vi.mock('../inbox-scope-read', () => ({
-  readInboxItemScope: vi.fn(async (_kind: string, id: string) => {
+  readInboxItemScope: vi.fn(async ({ id }: { id: string }) => {
     reads.push(id)
     await gates.get(id)
     if (failing.has(id)) throw new Error('read failed')
@@ -53,11 +53,11 @@ beforeEach(() => {
 describe('publishInboxFrame', () => {
   it('sends the envelope the caller passed, without reading the row', async () => {
     publishInboxFrame(
-      { kind: 'conversation', id: 'c1' },
+      { kind: 'conversation', id: 'conversation_c1' },
       { kind: 'x' },
       {
         assigneePrincipalId: 'p1',
-        teamId: 't1',
+        teamId: 'ticket_t1',
       }
     )
     await inboxPublishesSettled()
@@ -65,18 +65,23 @@ describe('publishInboxFrame', () => {
     expect(publishAsync).toHaveBeenCalledWith(
       INBOX,
       { kind: 'x' },
-      { kind: 'conversation', id: 'c1', assigneePrincipalId: 'p1', teamId: 't1' }
+      {
+        kind: 'conversation',
+        id: 'conversation_c1',
+        assigneePrincipalId: 'p1',
+        teamId: 'ticket_t1',
+      }
     )
   })
 
   it('reads the owner and team by id when the caller passed none', async () => {
-    rows.set('t9', { assigneePrincipalId: null, teamId: 'team_9' })
-    publishInboxFrame({ kind: 'ticket', id: 't9' }, { kind: 'ticket_read' })
+    rows.set('ticket_t9', { assigneePrincipalId: null, teamId: 'team_9' })
+    publishInboxFrame({ kind: 'ticket', id: 'ticket_t9' }, { kind: 'ticket_read' })
     await inboxPublishesSettled()
-    expect(reads).toEqual(['t9'])
+    expect(reads).toEqual(['ticket_t9'])
     expect(publishAsync.mock.calls[0][2]).toEqual({
       kind: 'ticket',
-      id: 't9',
+      id: 'ticket_t9',
       assigneePrincipalId: null,
       teamId: 'team_9',
     })
@@ -84,7 +89,7 @@ describe('publishInboxFrame', () => {
 
   it('carries both previous values when the writer passed them, even when null', async () => {
     publishInboxFrame(
-      { kind: 'conversation', id: 'c1' },
+      { kind: 'conversation', id: 'conversation_c1' },
       {},
       {
         assigneePrincipalId: 'p2',
@@ -95,16 +100,15 @@ describe('publishInboxFrame', () => {
     await inboxPublishesSettled()
     expect(publishAsync.mock.calls[0][2]).toEqual({
       kind: 'conversation',
-      id: 'c1',
+      id: 'conversation_c1',
       assigneePrincipalId: 'p2',
       teamId: null,
-      prevAssigneePrincipalId: 'p1',
-      prevTeamId: null,
+      prev: { assigneePrincipalId: 'p1', teamId: null },
     })
   })
 
   it('drops a frame whose row is gone, and one with no item, and logs both', async () => {
-    publishInboxFrame({ kind: 'conversation', id: 'missing' }, {})
+    publishInboxFrame({ kind: 'conversation', id: 'conversation_missing' }, {})
     publishInboxFrame(null, { kind: 'ticket_updated' })
     await inboxPublishesSettled()
     expect(publishAsync).not.toHaveBeenCalled()
@@ -113,11 +117,11 @@ describe('publishInboxFrame', () => {
 
   it('keeps call order for one item while an earlier frame waits on its read', async () => {
     let open!: () => void
-    gates.set('c1', new Promise<void>((r) => (open = r)))
-    rows.set('c1', { assigneePrincipalId: 'p1', teamId: null })
-    publishInboxFrame({ kind: 'conversation', id: 'c1' }, { n: 1 })
+    gates.set('conversation_c1', new Promise<void>((r) => (open = r)))
+    rows.set('conversation_c1', { assigneePrincipalId: 'p1', teamId: null })
+    publishInboxFrame({ kind: 'conversation', id: 'conversation_c1' }, { n: 1 })
     publishInboxFrame(
-      { kind: 'conversation', id: 'c1' },
+      { kind: 'conversation', id: 'conversation_c1' },
       { n: 2 },
       {
         assigneePrincipalId: 'p1',
@@ -126,7 +130,7 @@ describe('publishInboxFrame', () => {
     )
     // Another item is not held behind this one.
     publishInboxFrame(
-      { kind: 'conversation', id: 'c2' },
+      { kind: 'conversation', id: 'conversation_c2' },
       { n: 3 },
       {
         assigneePrincipalId: null,
@@ -144,8 +148,8 @@ describe('publishInboxFrame', () => {
     let release!: () => void
     publishAsync.mockImplementationOnce(() => new Promise<void>((r) => (release = r)))
     const scope = { assigneePrincipalId: null, teamId: null }
-    publishInboxFrame({ kind: 'ticket', id: 't1' }, { n: 1 }, scope)
-    publishInboxFrame({ kind: 'ticket', id: 't1' }, { n: 2 }, scope)
+    publishInboxFrame({ kind: 'ticket', id: 'ticket_t1' }, { n: 1 }, scope)
+    publishInboxFrame({ kind: 'ticket', id: 'ticket_t1' }, { n: 2 }, scope)
     await new Promise((r) => setTimeout(r, 10))
     expect(publishAsync).toHaveBeenCalledTimes(1)
     release()
@@ -154,12 +158,12 @@ describe('publishInboxFrame', () => {
   })
 
   it('a failed read or publish is logged and never blocks the next frame', async () => {
-    failing.add('c1')
-    publishInboxFrame({ kind: 'conversation', id: 'c1' }, { n: 1 })
+    failing.add('conversation_c1')
+    publishInboxFrame({ kind: 'conversation', id: 'conversation_c1' }, { n: 1 })
     publishAsync.mockRejectedValueOnce(new Error('notify failed'))
     const scope = { assigneePrincipalId: null, teamId: null }
-    publishInboxFrame({ kind: 'conversation', id: 'c1' }, { n: 2 }, scope)
-    publishInboxFrame({ kind: 'conversation', id: 'c1' }, { n: 3 }, scope)
+    publishInboxFrame({ kind: 'conversation', id: 'conversation_c1' }, { n: 2 }, scope)
+    publishInboxFrame({ kind: 'conversation', id: 'conversation_c1' }, { n: 3 }, scope)
     await inboxPublishesSettled()
     expect(publishAsync.mock.calls.map((c) => c[1])).toEqual([{ n: 2 }, { n: 3 }])
     expect(logged.filter((l) => l.level === 'warn')).toHaveLength(2)

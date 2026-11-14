@@ -728,7 +728,7 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     expect(offInbox.length).toBeGreaterThan(5)
     for (const e of offInbox) {
       expect(e.scope, e.channel).toBeUndefined()
-      expect(JSON.stringify(e.payload)).not.toMatch(/prevAssigneePrincipalId|prevTeamId/)
+      expect(JSON.stringify(e.payload)).not.toContain('"prev":')
     }
     expect(visitorStream.frames().map((f) => f.event)).toEqual(
       expect.arrayContaining(['read', 'message', 'typing', 'conversation'])

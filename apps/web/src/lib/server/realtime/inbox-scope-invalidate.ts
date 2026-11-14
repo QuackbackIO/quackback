@@ -16,7 +16,7 @@ import { publish } from './pubsub'
 
 /** The channel one teammate's inbox stream hears scope changes on. */
 export function inboxScopeChannel(principalId: PrincipalId | string): string {
-  return `principal:${principalId}`
+  return `inbox-scope:${principalId}`
 }
 
 /** Fire-and-forget: ask each principal's open inbox streams to reload their scope. */
