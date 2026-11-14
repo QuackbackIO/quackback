@@ -50,7 +50,6 @@ import { isPooledTenancy } from '../workspaces/mode'
 import { directConnection } from '../workspaces/pool-cache'
 import { openRealtimeListener, type RealtimeListener } from './pg-listener'
 import { logger } from '@/lib/server/logger'
-import type { InboxScopeEnvelope } from './inbox-envelope'
 
 const log = logger.child({ component: 'pubsub' })
 
@@ -75,19 +74,20 @@ const OVERFLOW_TTL_SECONDS = 60
  * workspace's inbox events to the other's subscriber. Measured, not imagined:
  * `pubsub.db.test.ts`'s cross-workspace case failed before this field existed.
  *
- * `s` is the inbox scope envelope (inbox-envelope.ts): who the item belongs to,
- * for the stream's per-subscriber filter. It is handed to handlers beside the
- * payload, never merged into it, and stays inline when `p` spills to a row.
+ * `s` is opaque metadata handed to handlers beside the payload, never merged
+ * into it, and kept inline when `p` spills to a row. Only the inbox publish
+ * sets it (its scope envelope, inbox-envelope.ts), and the inbox stream
+ * narrows it.
  */
 interface Envelope {
   t: string
   c: string
   p?: unknown
   o?: string
-  s?: InboxScopeEnvelope
+  s?: unknown
 }
 
-type Handler = (message: string, scope?: InboxScopeEnvelope) => void
+type Handler = (message: string, meta?: unknown) => void
 
 /**
  * `(workspaceNamespace, logical channel)` -> in-process handlers.
@@ -166,10 +166,10 @@ function dispatch(namespace: string, listener: RealtimeListener, raw: string): v
   emit(handlers, JSON.stringify(envelope.p ?? null), envelope.s)
 }
 
-function emit(handlers: Set<Handler>, message: string, scope?: InboxScopeEnvelope): void {
+function emit(handlers: Set<Handler>, message: string, meta?: unknown): void {
   for (const fn of handlers) {
     try {
-      fn(message, scope)
+      fn(message, meta)
     } catch (err) {
       log.error({ err }, 'listener threw')
     }
@@ -263,7 +263,7 @@ async function releaseConnection(namespace: string): Promise<void> {
 /**
  * Subscribe to one or more channels. The handler is invoked with the raw
  * string payload for every published message on any of those channels, and
- * the scope envelope when the publisher set one.
+ * the opaque metadata when the publisher set one.
  * Returns an async unsubscribe function that removes this handler and drops
  * the underlying connection once no listeners remain for the workspace.
  *
@@ -273,7 +273,7 @@ async function releaseConnection(namespace: string): Promise<void> {
  */
 export async function subscribe(
   channels: string[],
-  onMessage: (channel: string, message: string, scope?: InboxScopeEnvelope) => void
+  onMessage: (channel: string, message: string, meta?: unknown) => void
 ): Promise<() => Promise<void>> {
   const namespace = currentWorkspaceNamespace()
   // A presence-only stream subscribes to no logical channels. Opening a
@@ -286,7 +286,7 @@ export async function subscribe(
   for (const channel of channels) {
     const key = registryKey(namespace, channel)
     // The handler is told the logical name it asked for.
-    const fn: Handler = (message, scope) => onMessage(channel, message, scope)
+    const fn: Handler = (message, meta) => onMessage(channel, message, meta)
     let set = listeners.get(key)
     if (!set) {
       set = new Set()
@@ -327,20 +327,20 @@ export function publish(channel: string, payload: unknown): void {
 
 /**
  * The awaitable form, for tests and for callers that want back-pressure or
- * ordering. `scope` is set only by the inbox publish (inbox-publish.ts).
+ * ordering. `meta` is set only by the inbox publish (inbox-publish.ts).
  */
 export async function publishAsync(
   channel: string,
   payload: unknown,
-  scope?: InboxScopeEnvelope
+  meta?: unknown
 ): Promise<void> {
   const namespace = currentWorkspaceNamespace()
-  const withScope = scope ? { s: scope } : {}
+  const withMeta = meta === undefined ? {} : { s: meta }
   const inline = JSON.stringify({
     t: namespace,
     c: channel,
     p: payload,
-    ...withScope,
+    ...withMeta,
   } satisfies Envelope)
   if (Buffer.byteLength(inline, 'utf8') <= NOTIFY_PAYLOAD_LIMIT) {
     await db.execute(sql`SELECT pg_notify(${'quackback_realtime'}, ${inline})`)
@@ -364,7 +364,7 @@ export async function publishAsync(
     t: namespace,
     c: channel,
     o: String(id),
-    ...withScope,
+    ...withMeta,
   } satisfies Envelope)
   await db.execute(sql`SELECT pg_notify(${'quackback_realtime'}, ${envelope})`)
 }

@@ -26,7 +26,7 @@ import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { rowInScope } from '@/lib/server/policy/row-scope'
 import type { Actor } from '@/lib/server/policy/types'
-import { hasPrev, type InboxScopeEnvelope } from './inbox-envelope'
+import { asInboxEnvelope, type InboxScopeEnvelope } from './inbox-envelope'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'inbox-scope-gate' })
@@ -75,8 +75,8 @@ export interface InboxScopeGateOptions {
 type Queued = { type: 'frame'; message: string; scope?: InboxScopeEnvelope } | { type: 'changed' }
 
 export interface InboxScopeGate {
-  /** A frame from the shared inbox channel, with its wire envelope. */
-  onInboxFrame: (message: string, scope?: InboxScopeEnvelope) => void
+  /** A frame from the shared inbox channel, with pubsub's opaque metadata. */
+  onInboxFrame: (message: string, meta?: unknown) => void
   /** The subscriber's role or teams changed: reload now and tell the client. */
   onScopeChanged: () => void
 }
@@ -125,12 +125,7 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       opts.forward(item.message)
       return
     }
-    if (!hasPrev(s)) return
-    const before = {
-      assigneePrincipalId: s.prevAssigneePrincipalId ?? null,
-      teamId: s.prevTeamId ?? null,
-    }
-    if (rowInScope(actor, s.kind, before, scope.teamIds)) {
+    if (s.prev && rowInScope(actor, s.kind, s.prev, scope.teamIds)) {
       opts.sendEvent('inbox_item_removed', {
         kind: 'inbox_item_removed',
         itemKind: s.kind,
@@ -201,7 +196,8 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
   }
 
   return {
-    onInboxFrame: (message, s) => accept({ type: 'frame', message, scope: s }),
+    onInboxFrame: (message, meta) =>
+      accept({ type: 'frame', message, scope: asInboxEnvelope(meta) }),
     onScopeChanged: () => {
       if (closed) return
       stale = true

@@ -6,28 +6,25 @@
  * still reaches the teammates who held it (row-scope.ts).
  */
 import { db, eq, conversations, tickets } from '@/lib/server/db'
-import type { ConversationId, TicketId } from '@quackback/ids'
-import type { InboxItemScope } from './inbox-envelope'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
+import type { InboxItemRef } from '@/lib/shared/inbox/items'
 
-export async function readInboxItemScope(
-  kind: 'conversation' | 'ticket',
-  id: string
-): Promise<InboxItemScope | null> {
-  if (kind === 'conversation') {
+export async function readInboxItemScope(ref: InboxItemRef): Promise<ScopedRow | null> {
+  if (ref.kind === 'conversation') {
     const [row] = await db
       .select({
         assigneePrincipalId: conversations.assignedAgentPrincipalId,
         teamId: conversations.assignedTeamId,
       })
       .from(conversations)
-      .where(eq(conversations.id, id as ConversationId))
+      .where(eq(conversations.id, ref.id))
       .limit(1)
     return row ?? null
   }
   const [row] = await db
     .select({ assigneePrincipalId: tickets.assigneePrincipalId, teamId: tickets.assigneeTeamId })
     .from(tickets)
-    .where(eq(tickets.id, id as TicketId))
+    .where(eq(tickets.id, ref.id))
     .limit(1)
   return row ?? null
 }

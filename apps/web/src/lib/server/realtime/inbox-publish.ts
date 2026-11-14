@@ -21,7 +21,8 @@
  */
 import { publishAsync } from './pubsub'
 import { readInboxItemScope } from './inbox-scope-read'
-import type { InboxItemScope, InboxScopeEnvelope } from './inbox-envelope'
+import type { InboxItemScope } from './inbox-envelope'
+import type { InboxItemRef } from '@/lib/shared/inbox/items'
 import { currentWorkspaceNamespace } from '../workspaces/workspace-keyed'
 import { logger } from '@/lib/server/logger'
 
@@ -30,28 +31,8 @@ const log = logger.child({ component: 'inbox-publish' })
 /** Single shared channel all agents listen on for inbox-wide updates. */
 export const CONVERSATION_INBOX_CHANNEL = 'conversation:inbox'
 
-export interface InboxItemRef {
-  kind: 'conversation' | 'ticket'
-  id: string
-}
-
 /** Chain tails by `(workspace, kind, id)`; an entry leaves when its tail settles. */
 const chains = new Map<string, Promise<void>>()
-
-function toEnvelope(ref: InboxItemRef, scope: InboxItemScope): InboxScopeEnvelope {
-  return {
-    kind: ref.kind,
-    id: ref.id,
-    assigneePrincipalId: scope.assigneePrincipalId,
-    teamId: scope.teamId,
-    ...(scope.prev
-      ? {
-          prevAssigneePrincipalId: scope.prev.assigneePrincipalId,
-          prevTeamId: scope.prev.teamId,
-        }
-      : {}),
-  }
-}
 
 /**
  * Publish `payload` on the inbox channel for one item. `scope` is the item's
@@ -83,7 +64,7 @@ export function publishInboxFrame(
   const send = async (): Promise<void> => {
     let resolved: InboxItemScope | null
     try {
-      resolved = scope ?? (await readInboxItemScope(ref.kind, ref.id))
+      resolved = scope ?? (await readInboxItemScope(ref))
     } catch (err) {
       log.warn({ err, item_kind: ref.kind, item_id: ref.id }, 'inbox frame scope read failed')
       return
@@ -93,7 +74,7 @@ export function publishInboxFrame(
       return
     }
     try {
-      await publishAsync(CONVERSATION_INBOX_CHANNEL, payload, toEnvelope(ref, resolved))
+      await publishAsync(CONVERSATION_INBOX_CHANNEL, payload, { ...ref, ...resolved })
     } catch (err) {
       log.warn({ err, item_kind: ref.kind, item_id: ref.id }, 'inbox publish failed')
     }
