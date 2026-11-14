@@ -544,7 +544,8 @@ describe('conversation server functions check visibility (real DB, rolled back)'
     '%s: NotFound for a hidden conversation, which stays as it was',
     async (_, call, notFound) => {
       const w = await seedWorld()
-      const hidden = await w.conversation(w.teamY)
+      // The same channel as the visible case, so only scope tells them apart.
+      const hidden = await w.conversation(w.teamY, { channel: 'github' })
       const before = await row(hidden.id)
       const thread = await messagesOn(hidden.id)
       await expect(call(w, hidden)).rejects.toMatchObject(notFound)

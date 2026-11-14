@@ -121,6 +121,8 @@ import {
 } from '../conversation.service'
 import { editConversationMessage } from '../conversation.edit'
 import { suggestPost } from '../conversation.cards'
+import { registerConversationTools } from '@/lib/server/mcp/tools/conversations'
+import type { McpAuthContext } from '@/lib/server/mcp/types'
 import {
   dismissInboxTranslationSuggestion,
   setInboxTranslationEnabled,
@@ -528,6 +530,77 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
       (await getLinkedConversationsForPost(postId, w.actor)).map((c) => c.conversationId)
     ).toEqual([visible.id])
     expect(await getLinkedConversationsForPost(postId, workspaceKey)).toHaveLength(2)
+  })
+
+  describe('MCP conversation tools', () => {
+    type ToolResult = { isError?: boolean; content: { type: string; text: string }[] }
+    type Handler = (args: Record<string, unknown>) => Promise<ToolResult>
+
+    /** The real tools, for the scoped teammate signed in over OAuth. */
+    async function tools(w: W): Promise<Map<string, Handler>> {
+      const [me] = await testDb
+        .select({ userId: principal.userId })
+        .from(principal)
+        .where(eq(principal.id, w.teammate))
+      const handlers = new Map<string, Handler>()
+      const server = {
+        tool: (name: string, _d: string, _s: unknown, _a: unknown, handler: Handler) => {
+          handlers.set(name, handler)
+          return { update: () => {} }
+        },
+      }
+      const auth = {
+        principalId: w.teammate,
+        userId: me.userId,
+        name: 'Ana',
+        email: 'ana@example.com',
+        role: 'member',
+        authMethod: 'oauth',
+        scopes: ['read:chat', 'write:chat'],
+        permissions: new Set(SCOPED_PERMISSIONS),
+      } as unknown as McpAuthContext
+      registerConversationTools(server as never, auth)
+      return handlers
+    }
+
+    const calls: [string, (c: ConversationId, w: W) => Record<string, unknown>][] = [
+      ['get_conversation', (c) => ({ conversationId: c })],
+      ['reply_to_conversation', (c) => ({ conversationId: c, content: 'Hello from Acme' })],
+      ['set_conversation_status', (c) => ({ conversationId: c, status: 'closed' })],
+      ['share_post', (c) => ({ conversationId: c, postId: createId('post') })],
+      [
+        'suggest_post',
+        (c) => ({
+          conversationId: c,
+          boardId: createId('board'),
+          title: 'Acme idea',
+          content: 'Acme',
+        }),
+      ],
+    ]
+
+    it.each(calls)(
+      '%s: a hidden conversation is not found and stays as it was',
+      async (name, args) => {
+        const w = await seedWorld()
+        const hidden = await w.conversation(w.teamY, { status: 'closed' })
+        const before = await row(hidden.id)
+        const result = await (await tools(w)).get(name)!(args(hidden.id, w))
+        expect(result.isError).toBe(true)
+        expect(result.content[0].text).toMatch(/not found/i)
+        expect(await row(hidden.id)).toEqual(before)
+        expect(await agentMessagesOn(hidden.id)).toEqual([])
+      }
+    )
+
+    it('get_conversation still reads a conversation of my team', async () => {
+      const w = await seedWorld()
+      const visible = await w.conversation(w.teamX)
+      const result = await (await tools(w)).get('get_conversation')!({
+        conversationId: visible.id,
+      })
+      expect(result.isError).toBeFalsy()
+    })
   })
 
   describe('createTicket from a conversation', () => {
