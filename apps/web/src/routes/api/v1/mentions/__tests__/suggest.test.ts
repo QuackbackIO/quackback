@@ -53,6 +53,18 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
+// The item marks (`itemKind`/`itemId`) run over real rows in
+// suggest-scope.db.test.ts; these cases name no item.
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  isTicketVisibleTo: vi.fn(),
+}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  visibleConversationIds: vi.fn(),
+}))
+vi.mock('@/lib/server/domains/notifications/recipient-scope', () => ({
+  teammateView: vi.fn(),
+}))
+
 vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: (...args: unknown[]) => mockIncrementBucket(...args),
 }))
