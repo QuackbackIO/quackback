@@ -107,6 +107,12 @@ vi.mock('@/lib/server/realtime/presence', () => ({
 vi.mock('@/lib/server/domains/assistant/assistant-activity-snapshot', () => ({
   readActivitySnapshot: vi.fn(async () => null),
 }))
+// Routing for the offline requeue: declines unless a case names a target.
+const routing = vi.hoisted(() => ({ to: null as string | null }))
+vi.mock('@/lib/server/domains/conversation/routing', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  routeConversation: vi.fn(async () => ({ assignedPrincipalId: routing.to })),
+}))
 // The scope reload's team read, real unless a case makes it fail.
 const teamRead = vi.hoisted(() => ({ failNext: 0 }))
 vi.mock('@/lib/server/domains/teams', async (importOriginal) => {
@@ -167,6 +173,7 @@ if (fixture.available) {
     bus.wire.length = 0
     bus.handlers.clear()
     teamRead.failNext = 0
+    routing.to = null
     await fixture.begin()
   })
   afterEach(async () => {
@@ -452,6 +459,33 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     ).toEqual([w.conv.y, w.conv.y])
   })
 
+  it('removes a requeued conversation from the offline agent when routing gives it to someone else', async () => {
+    const w = await seedWorld()
+    await testDb
+      .update(conversations)
+      .set({ assignedAgentPrincipalId: w.scoped, assignedTeamId: null, status: 'open' })
+      .where(eq(conversations.id, w.conv.y))
+    const scoped = await openInbox(w.scoped)
+    const viewAll = await openInbox(w.viewAll)
+    routing.to = w.other
+    await requeueUnansweredOnAgentOffline(w.scoped)
+    await settle()
+    expect(
+      scoped
+        .frames()
+        .filter((f) => f.event === 'inbox_item_removed')
+        .map((f) => f.data.id)
+    ).toEqual([w.conv.y])
+    const routed = viewAll.frames().filter((f) => f.event === 'conversation')
+    expect(
+      routed.map(
+        (f) =>
+          (f.data.conversation as { assignedAgent?: { principalId?: string } }).assignedAgent
+            ?.principalId
+      )
+    ).toContain(w.other)
+  })
+
   it('refreshes the cached scope at once when the teammate joins a team', async () => {
     const w = await seedWorld()
     const scoped = await openInbox(w.scoped)
@@ -608,18 +642,16 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
       at: at(1),
     })
     publishInboxScopeChanged([w.scoped])
-    publishConversationEvent(w.conv.x, {
-      kind: 'read',
-      conversationId: w.conv.x,
-      side: 'agent',
-      at: at(2),
-    })
-    publishConversationEvent(w.conv.x, {
-      kind: 'read',
-      conversationId: w.conv.x,
-      side: 'agent',
-      at: at(3),
-    })
+    // The first frame reads its row; the later two carry their envelope and
+    // need no read, so without the per-item chain they would overtake it.
+    const envelope = { assigneePrincipalId: null, teamId: w.teamX }
+    for (const n of [2, 3]) {
+      publishConversationEvent(
+        w.conv.x,
+        { kind: 'read', conversationId: w.conv.x, side: 'agent', at: at(n) },
+        envelope
+      )
+    }
     await settle()
     expect(
       scoped
