@@ -25,6 +25,9 @@ let visitorRows: Array<Record<string, unknown>> = []
 let limitQueue: Array<Record<string, unknown>[]> = []
 
 const isAnyAgentOnline = vi.fn<() => Promise<boolean>>()
+// Who is online when isAnyAgentOnline says someone is: the first team row,
+// unless a case says otherwise.
+const listOnlineAgentIds = vi.fn<() => Promise<string[]>>(async () => ['principal_admin'])
 const isPrincipalOnline = vi.fn<(p: PrincipalId) => Promise<boolean>>()
 const buildHookContext =
   vi.fn<
@@ -48,6 +51,7 @@ vi.mock('@/lib/server/config', () => ({
 
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: (...a: []) => isAnyAgentOnline(...a),
+  listOnlineAgentIds: (...a: []) => listOnlineAgentIds(...a),
   isPrincipalOnline: (...a: [PrincipalId]) => isPrincipalOnline(...a),
 }))
 
