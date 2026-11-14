@@ -277,6 +277,9 @@ const MAX_JUMP_PAGES = 20
 const INACTIVE_CONVERSATION_ID = '' as ConversationId
 const INACTIVE_TICKET_ID = '' as TicketId
 
+/** Why a tracker's Reply all takes no files. */
+const REPLY_ALL_NO_FILES = "Reply all can't include files."
+
 /**
  * The thread's imperative seam for the inbox's keyboard-first actions
  * (`r` / `n` and their command-palette rows). The host owns neither the
@@ -582,6 +585,10 @@ export function AgentConversationThread({
     uploading,
   } = useConversationComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Whether the composer is in a tracker's Reply all mode, which carries text
+  // only. Read through a ref: the paste and drop handlers are made before the
+  // mode is known in this render.
+  const replyAllModeRef = useRef(false)
   // Same as the visitor messenger: paste/drop stages the tray. The editor has
   // no onImageUpload, so it never inlines a resizableImage into the draft.
   // Paste still works for an image from the clipboard; drop/paste now accept
@@ -591,6 +598,10 @@ export function AgentConversationThread({
       const files = Array.from(e.clipboardData?.files ?? [])
       if (files.length === 0) return
       e.preventDefault()
+      if (replyAllModeRef.current) {
+        toast.error(REPLY_ALL_NO_FILES)
+        return
+      }
       void addFiles(files)
     },
     [addFiles]
@@ -600,6 +611,10 @@ export function AgentConversationThread({
       const files = Array.from(e.dataTransfer?.files ?? [])
       if (files.length === 0) return
       e.preventDefault()
+      if (replyAllModeRef.current) {
+        toast.error(REPLY_ALL_NO_FILES)
+        return
+      }
       void addFiles(files)
     },
     [addFiles]
@@ -710,6 +725,7 @@ export function AgentConversationThread({
       }
     : CONVERSATION_CAPABILITIES
   const replyAllMode = trackerReplyAll && !noteMode
+  replyAllModeRef.current = replyAllMode
 
   // back_office/tracker tickets are note-only (§2.5) — force the mode once the
   // ticket's type resolves (it may not be known yet on first render).
@@ -1839,7 +1855,19 @@ export function AgentConversationThread({
   const selectEmoji = useStableCallback((emoji: string) =>
     insertText(noteMode ? 'note' : 'reply', emoji)
   )
-  const setComposerMode = useCallback((mode: string) => setNoteMode(mode === 'note'), [])
+  // A tracker's Reply all carries text only, so files already staged keep the
+  // composer in Note until they are removed, and the teammate is told why.
+  const stagedFileCount = attachmentItems.length
+  const setComposerMode = useCallback(
+    (mode: string) => {
+      if (mode !== 'note' && trackerReplyAll && stagedFileCount > 0) {
+        toast.error(`${REPLY_ALL_NO_FILES} Remove them to switch.`)
+        return
+      }
+      setNoteMode(mode === 'note')
+    },
+    [trackerReplyAll, stagedFileCount]
+  )
 
   const activeMode: ComposerMode = noteMode || !capabilities.reply ? 'note' : 'reply'
   // Re-renders the thread only when the active draft turns empty or not.
