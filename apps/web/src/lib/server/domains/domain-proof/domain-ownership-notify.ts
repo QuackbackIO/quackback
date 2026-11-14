@@ -21,8 +21,11 @@ import {
   ringManagers,
   type Manager,
 } from '@/lib/server/domains/channel-accounts/sending-domain-notify'
-import { OWNERSHIP_RECORD_HOST } from '@/lib/server/domains/channel-accounts/sending-domain-records'
-import { domainOwnershipValue } from './domains.service'
+import {
+  OWNERSHIP_RECORD_HOST,
+  ownershipRecord,
+} from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
 
 const log = logger.child({ component: 'domain-ownership-notify' })
 
@@ -35,8 +38,8 @@ function domainManagers(): Promise<Manager[]> {
 
 function recordOf(domain: Pick<Domain, 'name' | 'ownershipToken'>) {
   return {
-    name: `${OWNERSHIP_RECORD_HOST}.${domain.name}`,
-    value: domainOwnershipValue(domain.ownershipToken),
+    name: recordName(domain.name, OWNERSHIP_RECORD_HOST),
+    value: ownershipRecord(domain.ownershipToken).value,
   }
 }
 

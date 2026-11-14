@@ -15,14 +15,14 @@ import {
 import { shownProofSource, type ShownProofSource } from '@/lib/shared/domain-proof'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { toAsciiDomain } from '@/lib/server/domains/channel-accounts/outbound-identity'
-import { OWNERSHIP_RECORD_HOST } from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import { ownershipRecord } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import {
   getProvenZones,
   provenZoneCovering,
   sendingRowProvesZone,
   zonesBesidesDomain,
 } from './proven-zones'
-import { domainOwnershipValue, domainUsesOf, getDomain, listDomains } from './domains.service'
+import { domainUsesOf, getDomain, listDomains } from './domains.service'
 
 export interface SendingDomainSummary {
   id: string
@@ -156,15 +156,14 @@ export async function getDomainDetail(
     getProvenZones(),
     domainUsesOf(key),
   ])
+  const record = row ? ownershipRecord(row.ownershipToken) : null
   // Another proof that covers the name; a verified row is its own proof.
   const covering = provenZoneCovering(key, row ? zonesBesidesDomain(row, zones) : zones)
   return {
     name: row?.name ?? key,
     added: row !== null,
     status: row?.status ?? 'pending',
-    record: row
-      ? { host: OWNERSHIP_RECORD_HOST, value: domainOwnershipValue(row.ownershipToken) }
-      : null,
+    record: record ? { host: record.host, value: record.value } : null,
     verifiedAt: row?.verifiedAt?.toISOString() ?? null,
     lastCheckedAt: row?.lastCheckedAt?.toISOString() ?? null,
     provenBy: covering ? shownProofSource(covering.source, viewer) : null,

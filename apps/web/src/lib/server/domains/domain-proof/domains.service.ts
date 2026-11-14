@@ -27,7 +27,7 @@ import {
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { DomainUse } from '@/lib/shared/domains-permissions'
 import type { ProvenZoneSource } from '@/lib/shared/domain-proof'
-import { lookupVerificationTxt } from '@/lib/server/auth/dns-verify'
+import { lookupVerificationTxt, type LookupResult } from '@/lib/server/auth/dns-verify'
 import { verifiableDomain } from '@/lib/server/auth/normalize-domain'
 import { interactiveResolver } from '@/lib/server/dns/resolver'
 import { toAsciiDomain } from '@/lib/server/utils/mail-domain'
@@ -35,7 +35,9 @@ import {
   mintOwnershipToken,
   OWNERSHIP_RECORD_HOST,
   OWNERSHIP_VALUE_PREFIX,
+  ownershipRecord,
 } from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 import { getProvenZones, provenZoneCovering, zonesBesidesDomain } from './proven-zones'
 
@@ -45,9 +47,20 @@ export type DomainOwnershipCheck =
   | { ok: true; via: 'dns' | ProvenZoneSource }
   | { ok: false; reason: 'no-record' | 'lookup-failed' | 'mismatch' }
 
-/** The value this domain's ownership record must hold. */
-export function domainOwnershipValue(token: string): string {
-  return `${OWNERSHIP_VALUE_PREFIX}${token}`
+/**
+ * Look up a domain's own ownership record, with a second try since a person or
+ * a verified domain is waiting on the answer: the lookup's result, and whether
+ * it holds the row's own token.
+ */
+export async function lookupDomainRecord(
+  row: Pick<Domain, 'name' | 'ownershipToken'>
+): Promise<{ result: LookupResult; found: boolean }> {
+  const result = await lookupVerificationTxt(
+    recordName(row.name, OWNERSHIP_RECORD_HOST),
+    interactiveResolver
+  )
+  const found = result.ok && result.values.includes(ownershipRecord(row.ownershipToken).value)
+  return { result, found }
 }
 
 /** The domain's name in its one spelling, or a typed refusal a person can read. */
@@ -154,13 +167,8 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
   const proven = provenZoneCovering(row.name, zonesBesidesDomain(row, await getProvenZones()))
   if (proven) return { ok: true, via: proven.source }
 
-  // A person is waiting on this, so the lookup gets a second try.
-  const result = await lookupVerificationTxt(
-    `${OWNERSHIP_RECORD_HOST}.${row.name}`,
-    interactiveResolver
-  )
+  const { result, found } = await lookupDomainRecord(row)
   const now = new Date()
-  const found = result.ok && result.values.includes(domainOwnershipValue(row.ownershipToken))
   await db
     .update(domains)
     .set(

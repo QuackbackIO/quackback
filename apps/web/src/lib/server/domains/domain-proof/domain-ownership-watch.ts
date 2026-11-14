@@ -36,19 +36,14 @@ import {
 import type { SQL } from 'drizzle-orm'
 import { logger } from '@/lib/server/logger'
 import { kvDel, kvGet, kvSet } from '@/lib/server/kv/pg-kv'
-import { lookupVerificationTxt } from '@/lib/server/auth/dns-verify'
-import { interactiveResolver } from '@/lib/server/dns/resolver'
-import {
-  OWNERSHIP_RECORD_HOST,
-  ownershipRecord,
-} from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import { ownershipRecord } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import type { OwnershipAnswer } from '@/lib/server/domains/channel-accounts/domain-verification'
 import {
   OWNERSHIP_WARNING_LEASE_MS,
   ownershipGrace,
   ownershipGraceEnds,
 } from '@/lib/server/domains/channel-accounts/ownership-grace'
-import { domainOwnershipValue } from './domains.service'
+import { lookupDomainRecord } from './domains.service'
 import { signInDomainsLosingProof, type LapsingSignInDomain } from './sso-domain-lapse'
 import {
   notifyDomainOwnershipLapsed,
@@ -65,15 +60,9 @@ export const DOMAIN_WATCH_BUDGET_MS = 20_000
 
 /** What the zone says about a domain's own record now. */
 export async function readDomainOwnership(row: Domain): Promise<OwnershipAnswer> {
-  // A verified domain has something to lose, so the lookup gets two tries.
-  const result = await lookupVerificationTxt(
-    `${OWNERSHIP_RECORD_HOST}.${row.name}`,
-    interactiveResolver
-  )
-  if (result.ok) {
-    return result.values.includes(domainOwnershipValue(row.ownershipToken)) ? 'proven' : 'absent'
-  }
-  return result.reason === 'no-record' ? 'absent' : 'unknown'
+  const { result, found } = await lookupDomainRecord(row)
+  if (found) return 'proven'
+  return result.ok || result.reason === 'no-record' ? 'absent' : 'unknown'
 }
 
 /** Start a domain's grace period, once, however many checks see the first miss. */

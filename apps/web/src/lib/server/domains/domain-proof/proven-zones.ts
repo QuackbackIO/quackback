@@ -52,10 +52,15 @@ import { ownershipRecordsOf } from '@/lib/server/domains/channel-accounts/sendin
 import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
 import {
   OWNERSHIP_RECORD_HOST,
-  OWNERSHIP_VALUE_PREFIX,
+  ownershipRecord,
 } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 
 export type { ProvenZoneSource }
+
+/** A domain's own `_quackback` record, as a full name and its exact value. */
+function domainRecord(name: string, token: string): { name: string; value: string } {
+  return { name: recordName(name, OWNERSHIP_RECORD_HOST), value: ownershipRecord(token).value }
+}
 
 export interface ProvenZone {
   /** The proven name, in its ASCII spelling. */
@@ -123,10 +128,7 @@ export function zonesBesidesDomain(
   zones: readonly ProvenZone[]
 ): ProvenZone[] {
   const own = toAsciiDomain(domain.name)
-  const record = {
-    name: recordName(own, OWNERSHIP_RECORD_HOST),
-    value: `${OWNERSHIP_VALUE_PREFIX}${domain.ownershipToken}`,
-  }
+  const record = domainRecord(own, domain.ownershipToken)
   return zones.filter(
     (z) =>
       !(z.source === 'domain' && z.zone === own) &&
@@ -181,10 +183,10 @@ export async function getProvenZones(
   const notVerifiedRecords = new Set(
     domainRows
       .filter((d) => d.status !== 'verified')
-      .map(
-        (d) =>
-          `${recordName(toAsciiDomain(d.name), OWNERSHIP_RECORD_HOST)} ${OWNERSHIP_VALUE_PREFIX}${d.ownershipToken}`
-      )
+      .map((d) => {
+        const record = domainRecord(toAsciiDomain(d.name), d.ownershipToken)
+        return `${record.name} ${record.value}`
+      })
   )
 
   const zones: ProvenZone[] = []
@@ -223,10 +225,7 @@ export async function getProvenZones(
       zone,
       source: 'domain',
       exact: false,
-      record: {
-        name: recordName(zone, OWNERSHIP_RECORD_HOST),
-        value: `${OWNERSHIP_VALUE_PREFIX}${row.ownershipToken}`,
-      },
+      record: domainRecord(zone, row.ownershipToken),
     })
   }
   const identity = parseIdentityProjection(settingsRows[0]?.cloudIdentity)
