@@ -72,6 +72,8 @@ import { CalendarDate, useLocalDateFormatter } from '@/components/ui/local-date'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const RESOLVED_META = {
   label: 'Resolved',
@@ -349,9 +351,12 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
 
   // A conversation's thread request loads these with the thread and seeds
   // them, so they only ask on their own for a ticket or once they go stale.
+  // The portal profile needs people.view; without it the card keeps the
+  // public name and the conversation's email.
+  const canViewPeople = usePermission(PERMISSIONS.PEOPLE_VIEW)
   const { data: detail } = useQuery({
     ...conversationPanelQueries.contact(principalId as PrincipalId),
-    enabled: isVisible && !!principalId,
+    enabled: canViewPeople && isVisible && !!principalId,
   })
   const { data: history } = useQuery({
     ...conversationPanelQueries.history(principalId as PrincipalId),

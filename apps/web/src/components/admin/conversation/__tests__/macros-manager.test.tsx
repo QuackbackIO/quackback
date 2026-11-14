@@ -17,7 +17,7 @@ vi.mock('@/lib/server/functions/conversation-tags', () => ({
   fetchConversationTagsFn: vi.fn(async () => []),
 }))
 vi.mock('@/lib/client/hooks/use-team-members', () => ({
-  useTeamMembers: () => ({ data: [] }),
+  useAdminTeamMembers: () => ({ data: [] }),
 }))
 vi.mock('@/components/admin/conversation/inbox-nav-sidebar', () => ({
   useInboxTeams: () => ({ data: [] }),

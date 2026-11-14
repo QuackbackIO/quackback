@@ -140,11 +140,25 @@ describe('GET /api/v1/tickets/:id', () => {
       params: { ticketId: TICKET_ID },
     })
     expect(res.status).toBe(404)
+    expect((await res.json()).error).toEqual({ code: 'NOT_FOUND', message: 'Ticket not found' })
     expect(mockAssertVisible).toHaveBeenCalledWith(
       TICKET_ID,
       expect.objectContaining({ principalType: 'service', scopePrincipalId: 'principal_creator' })
     )
     expect(mockGetTicket).not.toHaveBeenCalled()
+  })
+
+  it('says the ticket was not found once, whatever id the domain names', async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockAssertVisible.mockRejectedValue(
+      new NotFoundError('TICKET_NOT_FOUND', `Ticket ${TICKET_ID} not found`)
+    )
+    const res = await getHandler(DetailRoute)({
+      request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(res.status).toBe(404)
+    expect((await res.json()).error.message).toBe('Ticket not found')
   })
 
   it('rejects a malformed ticket id before hitting the domain', async () => {

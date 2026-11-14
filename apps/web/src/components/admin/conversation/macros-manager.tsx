@@ -21,7 +21,7 @@ import { useCreateMacro, useUpdateMacro, useDeleteMacro } from '@/lib/client/mut
 import { fetchConversationTagsFn } from '@/lib/server/functions/conversation-tags'
 import { conversationAttributeQueries } from '@/lib/client/queries/conversation-attributes'
 import { AttributeValueInput } from './attribute-value-input'
-import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
+import { useAdminTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { MACRO_VARIABLES } from '@/lib/shared/conversation/macros'
 import { Button } from '@/components/ui/button'
@@ -197,7 +197,7 @@ function MacroEditorDialog({ macro, onClose }: { macro: MacroRow | null; onClose
   const [body, setBody] = useState(macro?.body ?? '')
   const [actions, setActions] = useState<MacroAction[]>(macro?.actions ?? [])
 
-  const { data: members } = useTeamMembers()
+  const { data: members } = useAdminTeamMembers()
   const { data: tags } = useQuery({
     queryKey: ['admin', 'conversation-tags', 'all'],
     queryFn: () => fetchConversationTagsFn(),

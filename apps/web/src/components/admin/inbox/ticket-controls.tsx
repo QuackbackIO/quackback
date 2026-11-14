@@ -23,8 +23,8 @@ import { DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
 import { PriorityDot, PriorityMenuItems } from '@/components/admin/conversation/priority-control'
 import { AssigneeMenuItems } from '@/components/admin/conversation/assignee-control'
-import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
-import { inboxTeamsQueryOptions } from '@/lib/client/queries/inbox-teams'
+import { useAdminTeamMembers } from '@/lib/client/hooks/use-team-members'
+import { useInboxTeams } from '@/lib/client/queries/inbox-teams'
 import { ticketQueries } from '@/lib/client/queries/inbox'
 import {
   useSetTicketStatus,
@@ -131,10 +131,10 @@ export function TicketAssigneeControl({
   ticket: TicketDTO
   onChanged?: () => void
 }) {
-  const { data: members } = useTeamMembers()
-  // The query itself rather than the inbox sidebar's hook: this control also
+  const { data: members } = useAdminTeamMembers()
+  // From the queries module rather than the inbox sidebar: this control also
   // renders in the Try Messenger sheet, which should not load the sidebar.
-  const { data: teams } = useQuery(inboxTeamsQueryOptions())
+  const { data: teams } = useInboxTeams()
   const mutation = useAssignTicket()
   const { assignee } = ticket
 
@@ -399,7 +399,7 @@ function WatcherManagePanel({
   ticketId: TicketId
   watchers: TicketWatcher[]
 }) {
-  const { data: members } = useTeamMembers()
+  const { data: members } = useAdminTeamMembers()
   const addWatcher = useAdminAddTicketWatcher()
   const removeWatcher = useAdminRemoveTicketWatcher()
 

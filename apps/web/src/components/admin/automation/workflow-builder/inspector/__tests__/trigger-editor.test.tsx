@@ -20,7 +20,7 @@ import type { TriggerSettingsDraft } from '../../use-workflow-builder'
 import type { WorkflowClassValue } from '../../../workflow-graph'
 
 vi.mock('@/lib/client/hooks/use-team-members', () => ({
-  useTeamMembers: () => ({ data: [] }),
+  useAdminTeamMembers: () => ({ data: [] }),
 }))
 vi.mock('@/components/admin/conversation/inbox-nav-sidebar', () => ({
   useInboxTeams: () => ({ data: [] }),

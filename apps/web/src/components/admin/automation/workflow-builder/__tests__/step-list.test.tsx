@@ -19,7 +19,7 @@ import { WorkflowEntitiesProvider } from '../entities'
 import { StepList } from '../step-list'
 
 vi.mock('@/lib/client/hooks/use-team-members', () => ({
-  useTeamMembers: () => ({ data: [] }),
+  useAdminTeamMembers: () => ({ data: [] }),
 }))
 vi.mock('@/components/admin/conversation/inbox-nav-sidebar', () => ({
   useInboxTeams: () => ({ data: [] }),

@@ -63,7 +63,11 @@ import {
   type InboxView,
   type InboxNavItem,
 } from '@/lib/client/conversation/inbox-scope'
-import { inboxTeamsQueryOptions, type InboxTeam } from '@/lib/client/queries/inbox-teams'
+import {
+  inboxTeamsQueryOptions,
+  useInboxTeams,
+  type InboxTeam,
+} from '@/lib/client/queries/inbox-teams'
 import { useFeatureFlag } from '@/lib/client/hooks/use-root-context'
 
 // Start with the broad conversation queue, then progressively narrow to the
@@ -179,11 +183,7 @@ export function useConversationViews() {
   })
 }
 
-export { inboxTeamsQueryOptions, type InboxTeam }
-
-export function useInboxTeams(): { data: InboxTeam[] | undefined } {
-  return useQuery(inboxTeamsQueryOptions())
-}
+export { inboxTeamsQueryOptions, useInboxTeams, type InboxTeam }
 
 /** Human label for the active scope, resolving a tag/segment/team/view id. */
 export function scopeLabelFor(

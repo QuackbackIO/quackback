@@ -125,13 +125,18 @@ export const Route = createFileRoute('/admin')({
       isProductEnabled(context.settings?.featureFlags, 'feedback') &&
       (context.permissions ?? []).includes(PERMISSIONS.POST_APPROVE)
 
+    // The plan notice needs member.view, which a custom role may not hold. Every
+    // admin page runs this loader, so a viewer who may not read the notice gets
+    // none, and a failed read never fails the layout.
+    const readPlanNotice = (context.permissions ?? []).includes(PERMISSIONS.MEMBER_VIEW)
+
     const locale = context.acceptLanguageLocale ?? DEFAULT_LOCALE
     const [avatarData, latestRelease, planNotice, messages, launchWindow] = await Promise.all([
       fetchUserAvatar({
         data: { userId: user.id, fallbackImageUrl: user.image },
       }),
       getLatestVersion(),
-      getPlanNotice(),
+      readPlanNotice ? getPlanNotice().catch(() => null) : null,
       loadAdminMessages(locale),
       // Only cloud loads the help launcher, so only cloud asks whether to hide it.
       context.cloudEnabled
