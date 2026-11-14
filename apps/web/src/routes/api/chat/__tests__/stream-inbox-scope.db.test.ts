@@ -149,7 +149,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.service'
 import { conversationToDTO } from '@/lib/server/domains/conversation/conversation.query'
 import { assignTicket } from '@/lib/server/domains/tickets/ticket.service'
-import { setTeamMembers } from '@/lib/server/domains/teams'
+import { addPrincipalToDefaultTeam, setTeamMembers } from '@/lib/server/domains/teams'
 import { setPrincipalRole } from '@/lib/server/domains/principals/principal.factory'
 import { deleteRole, updateRole } from '@/lib/server/domains/roles/role.service'
 import { permissionsForLegacyRole } from '@/lib/server/policy/permissions'
@@ -560,6 +560,34 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     await deleteRole(w.scopedRole, { reassignToRoleId: w.viewAllRole }, editor)
     await settle()
     expect(await probe('reassigned')).toBe(true)
+  })
+
+  it('refreshes the cached scope when the teammate is enrolled in the default team', async () => {
+    const w = await seedWorld()
+    // The default team is the only one flagged; the seeded workspace may have its own.
+    await testDb.update(teams).set({ isDefault: false })
+    await testDb.update(teams).set({ isDefault: true }).where(eq(teams.id, w.teamY))
+    const scoped = await openInbox(w.scoped)
+    const probe = async (at: string) => {
+      publishTicketEvent(w.ticket.y, {
+        kind: 'ticket_read',
+        ticketId: w.ticket.y,
+        side: 'agent',
+        at,
+      })
+      await settle()
+      return scoped
+        .frames()
+        .filter((f) => f.event === 'ticket_read')
+        .map((f) => f.data.at)
+        .includes(at)
+    }
+    expect(await probe('before')).toBe(false)
+
+    await addPrincipalToDefaultTeam(w.scoped)
+    await settle()
+    expect(scoped.frames().map((f) => f.event)).toContain('inbox_scope_changed')
+    expect(await probe('enrolled')).toBe(true)
   })
 
   it('reloads a scope older than 60 seconds before filtering the next frame', async () => {
