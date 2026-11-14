@@ -28,7 +28,7 @@ import {
 } from '@/lib/server/db'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { DomainUse } from '@/lib/shared/domains-permissions'
-import type { ProvenZoneSource } from '@/lib/shared/domain-proof'
+import type { DomainRecordCheck } from '@/lib/shared/domain-proof'
 import { lookupVerificationTxt, type LookupResult } from '@/lib/server/auth/dns-verify'
 import { verifiableDomain } from '@/lib/server/auth/normalize-domain'
 import { interactiveResolver } from '@/lib/server/dns/resolver'
@@ -47,9 +47,7 @@ import { getProvenZones, provenZoneCovering, zonesBesidesDomain } from './proven
 
 export type { Domain }
 
-export type DomainOwnershipCheck =
-  | { ok: true; via: 'dns' | ProvenZoneSource }
-  | { ok: false; reason: 'no-record' | 'lookup-failed' | 'mismatch' }
+export type DomainOwnershipCheck = DomainRecordCheck
 
 /**
  * Look up a domain's own ownership record, with a second try since a person or
