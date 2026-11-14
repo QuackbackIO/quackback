@@ -31,7 +31,12 @@ import {
 import { resolveBlockReply, type BlockReplyInput, type ResolvedBlockReply } from './block-reply'
 import { isTeamMember } from '@/lib/shared/roles'
 import { conversationFilter } from '@/lib/server/policy/conversations'
-import type { ConversationAttachment, ConversationMessageCitation, Team } from '@/lib/server/db'
+import type {
+  ConversationAttachment,
+  ConversationMessageCitation,
+  Team,
+  Transaction,
+} from '@/lib/server/db'
 import { getTeam } from '@/lib/server/domains/teams'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
 import type {
@@ -346,9 +351,15 @@ export async function sendVisitorMessage(
         resolveMessageContent(input.content, safeContentJson),
         attachments.length > 0 || !!fallbackLabel
       )
+  // A stored blockReply only ever comes from the server match above: one a
+  // caller supplies in metadata is dropped, so it cannot pose as a rating or
+  // keep a closed thread closed.
+  const { blockReply: _callerBlockReply, ...callerMetadata } = input.metadata ?? {}
   const messageMetadata: ConversationMessageMetadata | null = resolvedBlockReply
-    ? { ...input.metadata, ...resolvedBlockReply.metadata }
-    : (input.metadata ?? null)
+    ? { ...callerMetadata, ...resolvedBlockReply.metadata }
+    : Object.keys(callerMetadata).length > 0
+      ? callerMetadata
+      : null
 
   let created = false
   // The conversation's status BEFORE this message, so the assistant trigger can
@@ -490,6 +501,19 @@ export async function sendVisitorMessage(
     { visitor: visitorMessage, agent: agentMessage },
     { conversationUpdated: created }
   )
+
+  // A rating given in the thread is recorded now, whether or not a workflow
+  // run waits on the block. It reads the server-matched reply, never the
+  // client payload.
+  const matchedReply = resolvedBlockReply?.metadata.blockReply
+  if (matchedReply?.kind === 'csat') {
+    // Best-effort: a refused or failed rating never fails the message it came with.
+    try {
+      await recordCsat(txResult.conversation.id, matchedReply.rating, matchedReply.comment, actor)
+    } catch (err) {
+      log.warn({ err, conversationId: txResult.conversation.id }, 'csat block rating not recorded')
+    }
+  }
 
   // A brand-new conversation: try auto-routing it to an active agent. Best-
   // effort (never blocks the send), and runs outside the transaction so a store
@@ -2143,10 +2167,19 @@ export async function isPairedWithCustomerTicket(conversationId: ConversationId)
   return !!link
 }
 
+interface AppendAssistantReplyOpts {
+  waiting: boolean
+  onlyIf?: (tx: Transaction) => Promise<boolean>
+  citations?: ConversationMessageCitation[]
+  contentJson?: TiptapContent | null
+  metadata?: ConversationMessageMetadata | null
+}
+
 /**
  * Append a reply authored by the assistant service principal — the message-
  * append primitive for Quinn. Like an agent reply it bumps the last-message
- * preview and reopens a closed thread, but it never claims assignment (Quinn
+ * preview and reopens a closed thread (except a rating ask, which leaves it
+ * closed), but it never claims assignment (Quinn
  * fronts, it does not own) and it never marks the agent side read. `waiting`
  * controls the customer wait clock: an answer stops it; a hand-off restarts it
  * so the team sees a thread waiting on a human. Delivered over the normal
@@ -2160,25 +2193,35 @@ export async function isPairedWithCustomerTicket(conversationId: ConversationId)
  * sites (a plain-text answer, the handover line) are unaffected. Returns the
  * posted message's DTO so a block send can read back its id (stamped onto an
  * InputWaitCursor when the plan parks right after).
+ *
+ * `onlyIf` makes the post conditional: the conversation row is locked first,
+ * and the reply posts only when `onlyIf` returns true on that same
+ * transaction, so two concurrent conditional posts decide one after the
+ * other. A declined post writes and publishes nothing and returns null.
  */
 export async function appendAssistantReply(
   conversationId: ConversationId,
   content: string,
   author: ConversationAuthorInput,
-  opts: {
-    waiting: boolean
-    citations?: ConversationMessageCitation[]
-    contentJson?: TiptapContent | null
-    metadata?: ConversationMessageMetadata | null
-  }
-): Promise<ConversationMessageDTO> {
+  opts: AppendAssistantReplyOpts & { onlyIf: NonNullable<AppendAssistantReplyOpts['onlyIf']> }
+): Promise<ConversationMessageDTO | null>
+export async function appendAssistantReply(
+  conversationId: ConversationId,
+  content: string,
+  author: ConversationAuthorInput,
+  opts: AppendAssistantReplyOpts & { onlyIf?: undefined }
+): Promise<ConversationMessageDTO>
+export async function appendAssistantReply(
+  conversationId: ConversationId,
+  content: string,
+  author: ConversationAuthorInput,
+  opts: AppendAssistantReplyOpts
+): Promise<ConversationMessageDTO | null> {
   const txResult = await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId))
-      .limit(1)
+    const select = tx.select().from(conversations).where(eq(conversations.id, conversationId))
+    const [existing] = opts.onlyIf ? await select.for('update') : await select.limit(1)
     if (!existing) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+    if (opts.onlyIf && !(await opts.onlyIf(tx))) return null
     const [message] = await tx
       .insert(conversationMessages)
       .values({
@@ -2191,10 +2234,16 @@ export async function appendAssistantReply(
         metadata: opts.metadata ?? null,
       })
       .returning()
-    const nextStatus = applyAgentReopenStatus(
-      existing.status,
-      getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
-    )
+    // A rating ask (a csat block) follows the close it rates: it leaves a
+    // closed conversation closed, keeping when it was resolved. Every other
+    // reply reopens as the channel says.
+    const isRatingAsk = opts.metadata?.block?.kind === 'csat'
+    const nextStatus = isRatingAsk
+      ? existing.status
+      : applyAgentReopenStatus(
+          existing.status,
+          getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
+        )
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -2202,13 +2251,16 @@ export async function appendAssistantReply(
         lastMessagePreview: preview(content, []),
         status: nextStatus,
         waitingSince: opts.waiting ? message.createdAt : null,
-        resolvedAt: resolvedAtForStatus(nextStatus, message.createdAt),
+        resolvedAt: isRatingAsk
+          ? existing.resolvedAt
+          : resolvedAtForStatus(nextStatus, message.createdAt),
         updatedAt: message.createdAt,
       })
       .where(eq(conversations.id, conversationId))
       .returning()
     return { conversation: updated, message }
   })
+  if (!txResult) return null
 
   const authored = await resolveAuthorAudiences(author)
   const messageDTO = toMessageDTO(txResult.message, authored.supportAuthor, author.principalId)

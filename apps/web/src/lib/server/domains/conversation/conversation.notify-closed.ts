@@ -1,4 +1,4 @@
-import { db, eq, and, conversations, emailLog, principal, user } from '@/lib/server/db'
+import { db, eq, conversations, principal, user } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import { resolveReplyRecipient } from './conversation.recipient'
 import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/channel-account.service'
@@ -14,6 +14,7 @@ import { visitorConversationLink } from './conversation.notify'
 import { buildHookContext } from '@/lib/server/events/hook-context'
 import { logger } from '@/lib/server/logger'
 import { ensureEmailLogSink } from '@/lib/server/email/email-log.sink'
+import { isCsatRatedOrEmailed } from './csat-request.service'
 
 const log = logger.child({ component: 'conversation-notify-closed' })
 
@@ -76,7 +77,10 @@ export async function notifyConversationClosed(opts: {
     const fromDisplayName = ctx.workspaceName
     const from = resolvedFrom ? formatNamedSendingAddress(resolvedFrom, fromDisplayName) : undefined
 
-    const includeCsat = await shouldAttachCsat(opts.conversationId)
+    // Rating links ride the close email unless the conversation is already
+    // rated or a rating email went out. An unanswered csat block in the thread
+    // does not count: the visitor may have left the widget (csat-request.service).
+    const includeCsat = !(await isCsatRatedOrEmailed(opts.conversationId))
     let ratingUrls: [string, string, string, string, string] | undefined
     if (includeCsat) {
       const { mintCsatEmailToken } = await import('./csat-email-token')
@@ -113,15 +117,4 @@ export async function notifyConversationClosed(opts: {
   } catch (err) {
     log.warn({ err, conversationId: opts.conversationId }, 'notify conversation closed failed')
   }
-}
-
-async function shouldAttachCsat(conversationId: ConversationId): Promise<boolean> {
-  const [existing] = await db
-    .select({ id: emailLog.id })
-    .from(emailLog)
-    .where(
-      and(eq(emailLog.conversationId, conversationId), eq(emailLog.emailType, 'CsatRequestEmail'))
-    )
-    .limit(1)
-  return !existing
 }

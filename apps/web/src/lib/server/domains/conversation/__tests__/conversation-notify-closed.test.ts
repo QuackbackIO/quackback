@@ -8,7 +8,8 @@ const buildHookContext = vi.fn(async () => ({
   portalBaseUrl: 'https://acme.example.com',
   logoUrl: null,
 }))
-let csatRows: Array<Record<string, unknown>> = []
+const isCsatAlreadyRequested = vi.fn(async (_id: unknown) => false)
+const isCsatRatedOrEmailed = vi.fn(async (_id: unknown) => false)
 let limitQueue: Array<Array<Record<string, unknown>>> = []
 
 vi.mock('@quackback/email', () => ({
@@ -55,6 +56,11 @@ vi.mock('@/lib/server/email/email-log.sink', () => ({
   ensureEmailLogSink: () => undefined,
 }))
 
+vi.mock('../csat-request.service', () => ({
+  isCsatAlreadyRequested: (id: unknown) => isCsatAlreadyRequested(id),
+  isCsatRatedOrEmailed: (id: unknown) => isCsatRatedOrEmailed(id),
+}))
+
 vi.mock('../csat-email-token', () => ({
   mintCsatEmailToken: () => 'csat-token',
 }))
@@ -66,7 +72,6 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     c.leftJoin = () => c
     c.where = () => c
     c.limit = async () => (limitQueue.length ? limitQueue.shift()! : [])
-    c.then = (resolve: (v: unknown) => unknown) => resolve(csatRows)
     return c
   }
   return {
@@ -79,7 +84,8 @@ import { notifyConversationClosed } from '../conversation.notify-closed'
 
 beforeEach(() => {
   vi.clearAllMocks()
-  csatRows = []
+  isCsatAlreadyRequested.mockResolvedValue(false)
+  isCsatRatedOrEmailed.mockResolvedValue(false)
   limitQueue = []
   sendConversationClosedEmail.mockResolvedValue({ sent: true })
   enforceEmailBudget.mockResolvedValue(undefined)
@@ -100,7 +106,6 @@ describe('notifyConversationClosed', () => {
       ],
       [{ type: 'user', email: 'priya@x.com', contactEmail: null }],
     ]
-    csatRows = []
 
     await notifyConversationClosed({
       conversationId: 'conversation_1' as ConversationId,
@@ -115,6 +120,11 @@ describe('notifyConversationClosed', () => {
       conversationSubject: 'Billing',
       conversationId: 'conversation_1',
     })
+    expect(isCsatRatedOrEmailed).toHaveBeenCalledWith('conversation_1')
+    const ratingUrls = (sendConversationClosedEmail.mock.calls[0][0] as { ratingUrls?: string[] })
+      .ratingUrls
+    expect(ratingUrls).toHaveLength(5)
+    expect(ratingUrls?.[4]).toBe('https://acme.example.com/csat?token=csat-token&rating=5')
   })
 
   it('is invoked through the email adapter lifecycle seam', async () => {
@@ -190,7 +200,7 @@ describe('notifyConversationClosed', () => {
     expect(sendConversationClosedEmail).not.toHaveBeenCalled()
   })
 
-  it('omits CSAT when a request was already sent for the conversation', async () => {
+  it('omits CSAT when the conversation was already asked or rated', async () => {
     limitQueue = [
       [
         {
@@ -203,9 +213,8 @@ describe('notifyConversationClosed', () => {
         },
       ],
       [{ type: 'user', email: 'priya@x.com', contactEmail: null }],
-      [{ id: 'emaillog_prior' }],
     ]
-    csatRows = [{ id: 'emaillog_prior' }]
+    isCsatRatedOrEmailed.mockResolvedValue(true)
 
     await notifyConversationClosed({
       conversationId: 'conversation_1' as ConversationId,
@@ -220,6 +229,38 @@ describe('notifyConversationClosed', () => {
     expect(
       (sendConversationClosedEmail.mock.calls[0][0] as { ratingUrls?: unknown }).ratingUrls
     ).toBeUndefined()
+  })
+
+  it('carries rating links when only an unanswered csat block sits in the thread', async () => {
+    limitQueue = [
+      [
+        {
+          id: 'conversation_1',
+          channel: 'email',
+          subject: 'Billing',
+          visitorPrincipalId: 'principal_v' as PrincipalId,
+          visitorEmail: 'priya@x.com',
+          endReason: null,
+        },
+      ],
+      [{ type: 'user', email: 'priya@x.com', contactEmail: null }],
+    ]
+    // The thread holds a csat block (a workflow ask), but no rating and no
+    // rating email: the workflow asks are already blocked, the close email is not.
+    isCsatAlreadyRequested.mockResolvedValue(true)
+    isCsatRatedOrEmailed.mockResolvedValue(false)
+
+    await notifyConversationClosed({
+      conversationId: 'conversation_1' as ConversationId,
+      variant: 'closed',
+      closerPrincipalId: 'principal_agent' as PrincipalId,
+    })
+
+    const { ratingUrls } = sendConversationClosedEmail.mock.calls[0][0] as {
+      ratingUrls?: string[]
+    }
+    expect(ratingUrls).toHaveLength(5)
+    expect(ratingUrls?.[4]).toContain('rating=5')
   })
 
   it('still sends close mail when the monthly broadcast budget is exhausted', async () => {

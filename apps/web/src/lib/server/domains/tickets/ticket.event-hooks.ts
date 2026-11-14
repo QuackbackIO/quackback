@@ -8,10 +8,11 @@
  * Today exactly one reaction lives here: a VISITOR `message.created` on a
  * conversation paired with a CUSTOMER ticket reopens that ticket
  * (`autoReopenOnRequesterReply`). Without it a Messenger reply on the
- * conversation would leave the ticket stuck in "Waiting on customer" — the
- * exact incoherence convergence exists to kill (the portal/widget reply path
- * already reopens directly; this hook covers the conversation-native channels
- * and is idempotent against the direct call).
+ * conversation would leave the ticket stuck in "Waiting on customer". The
+ * portal ticket reply path (requester.service) also reopens directly; this
+ * hook covers every reply written on the conversation and is idempotent
+ * against that direct call. A rating (a reply to a csat block) is not the
+ * requester reopening the ticket, so it never reopens it.
  *
  * LOOP SAFETY: the reopen emits `ticket.status_changed`, never
  * `message.created` (system stage notices — re-parented to the conversation or
@@ -21,11 +22,21 @@
  */
 import type { EventData } from '@/lib/server/events/types'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
+import { db, eq, conversations } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { autoReopenOnRequesterReply } from './ticket.service'
 import { resolvePairTicketIdForConversation } from './pair-thread.service'
 
 const log = logger.child({ component: 'ticket-event-hooks' })
+
+async function conversationIsClosed(conversationId: ConversationId): Promise<boolean> {
+  const [row] = await db
+    .select({ status: conversations.status })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  return row?.status === 'closed'
+}
 
 /**
  * Reopen the customer ticket paired with `message.created`'s conversation, if
@@ -38,6 +49,13 @@ export async function autoReopenPairTicketFromEvent(event: EventData): Promise<v
     if (event.type !== 'message.created') return
     if (event.data.message.senderType !== 'visitor') return
     const conversationId = event.data.message.conversationId as ConversationId
+    // A rating answers the ask a resolve made: the ticket stays resolved. Any
+    // other block reply never reopens a closed conversation, so it leaves the
+    // ticket alone while the conversation is closed; on an open or snoozed
+    // conversation it is an ordinary reply and the ticket follows it.
+    const kind = event.data.message.blockReplyKind
+    if (kind === 'csat') return
+    if (kind && (await conversationIsClosed(conversationId))) return
     const ticketId = await resolvePairTicketIdForConversation(conversationId)
     if (!ticketId) return
     // The message author is the requester — threaded through so the reopen's

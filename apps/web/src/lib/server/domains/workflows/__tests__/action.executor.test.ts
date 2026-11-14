@@ -135,6 +135,18 @@ vi.mock('@/lib/server/domains/inbox/inbox.query', () => ({ getLinkedCustomerTick
 const { notifyCsatRequestEmail } = vi.hoisted(() => ({ notifyCsatRequestEmail: vi.fn() }))
 vi.mock('@/lib/server/domains/conversation/conversation.notify', () => ({ notifyCsatRequestEmail }))
 
+// The csat signals read the database; this suite pins the dispatch around them.
+const { isCsatAlreadyRequested, isConversationRated, mayAskForCsat } = vi.hoisted(() => ({
+  isCsatAlreadyRequested: vi.fn(),
+  isConversationRated: vi.fn(),
+  mayAskForCsat: vi.fn(() => async () => true),
+}))
+vi.mock('@/lib/server/domains/conversation/csat-request.service', () => ({
+  isCsatAlreadyRequested,
+  isConversationRated,
+  mayAskForCsat,
+}))
+
 const mockDbSelect = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/server/db')>()
@@ -172,6 +184,8 @@ const ctx: WorkflowContext = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  isCsatAlreadyRequested.mockResolvedValue(false)
+  isConversationRated.mockResolvedValue(false)
   ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
   resolveWorkflowVariables.mockResolvedValue({
     first_name: 'Jane',
@@ -646,39 +660,50 @@ describe('applyAction', () => {
       })
     })
 
-    // CSAT once per pair: conversation.status_changed and
-    // ticket.status_changed are independent triggers with no cross-dedup, so
-    // a workspace authoring CSAT on both axes reaches send_block twice for
-    // one pair — the guard skips the second ask instead of double-prompting.
-    describe('csat once per pair (the guard)', () => {
+    // CSAT once per conversation: a csat block posts on the condition that
+    // the conversation was never asked or rated, checked by the post itself
+    // under the row lock (csat-request.service; the real check is covered
+    // in csat-request.service.test.ts against Postgres).
+    describe('csat once per conversation', () => {
       const csatAction = {
         type: 'send_block' as const,
         nodeId: 'n9',
         block: { kind: 'csat' as const, body, allowTypingInterrupt: true, commentPrompt: '' },
       }
+      const runCtx = { ...ctx, workflowId: 'workflow_1' }
 
-      it('skips (without parking) when the conversation already has a rating on file', async () => {
-        mockDbSelect.mockImplementationOnce(() => selectChainOnce([{ csatRating: 4 }]))
-        const res = await applyAction(csatAction, ctx)
+      it('posts a csat block on the ask condition', async () => {
+        const res = await applyAction(csatAction, runCtx)
+        expect(res.blockMessageId).toBe('conversation_message_block_1')
+        expect(appendAssistantReply.mock.calls[0]![3].onlyIf).toBeTypeOf('function')
+        expect(notifyCsatRequestEmail).toHaveBeenCalledTimes(1)
+      })
+
+      it('skips without parking, emailing or logging when the post declines', async () => {
+        appendAssistantReply.mockResolvedValueOnce(null)
+        const res = await applyAction(csatAction, runCtx)
         expect(res.label).toContain('skipped')
         expect(res.blockMessageId).toBeUndefined()
-        expect(appendAssistantReply).not.toHaveBeenCalled()
+        expect(notifyCsatRequestEmail).not.toHaveBeenCalled()
+        expect(logRunEvent).not.toHaveBeenCalled()
       })
 
-      it('skips when an earlier csat block is already pending on the thread', async () => {
-        mockDbSelect
-          .mockImplementationOnce(() => selectChainOnce([{ csatRating: null }]))
-          .mockImplementationOnce(() => selectChainOnce([{ id: 'conversation_message_prior' }]))
-        const res = await applyAction(csatAction, ctx)
+      it('declines before any setup when the conversation was already asked or rated', async () => {
+        isCsatAlreadyRequested.mockResolvedValue(true)
+        const res = await applyAction(csatAction, runCtx)
         expect(res.label).toContain('skipped')
+        expect(res.blockMessageId).toBeUndefined()
+        expect(isCsatAlreadyRequested).toHaveBeenCalledWith(conversationId)
+        expect(ensureAssistantPrincipal).not.toHaveBeenCalled()
         expect(appendAssistantReply).not.toHaveBeenCalled()
       })
 
-      it('asks normally when the conversation has neither a rating nor a pending ask', async () => {
-        // The default select stub resolves [] for both guard reads.
-        const res = await applyAction(csatAction, ctx)
-        expect(res.blockMessageId).toBe('conversation_message_block_1')
-        expect(appendAssistantReply).toHaveBeenCalledTimes(1)
+      it('posts other blocks unconditionally', async () => {
+        await applyAction(
+          { type: 'send_block', nodeId: 'n10', block: { kind: 'message', body } },
+          runCtx
+        )
+        expect(appendAssistantReply.mock.calls[0]![3]).not.toHaveProperty('onlyIf')
       })
     })
 
@@ -851,6 +876,16 @@ describe('applyAction', () => {
         )
       ).toMatchObject({ label: 'csat recorded' })
       expect(recordCsat).toHaveBeenCalledWith(conversationId, 5, 'Great!', visitorActor)
+    })
+
+    it('does nothing, and does not fail, when the conversation is already rated', async () => {
+      isConversationRated.mockResolvedValue(true)
+      const res = await applyAction(
+        { type: 'record_csat', rating: 5, comment: 'Great!' },
+        { conversationId, actor }
+      )
+      expect(res.label).toBe('csat already recorded')
+      expect(recordCsat).not.toHaveBeenCalled()
     })
   })
 

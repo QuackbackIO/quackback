@@ -10,6 +10,7 @@
  * scrub. Payloads persist ~90 days in the outbox, so keep snapshots minimal.
  */
 import { z } from 'zod'
+import { BLOCK_REPLY_KINDS } from '@/lib/shared/conversation/block-reply-kinds'
 
 const id = z.string()
 const nullableStr = z.string().nullable().optional()
@@ -49,6 +50,10 @@ export const messageData = z.object({
   authorEmail: nullableStr,
   content: z.string(),
   createdAt: z.string(),
+  // The kind of conversation block the message answers ('csat', 'buttons', ...),
+  // null for every other message. Absent on events stored before the field
+  // existed, which reads the same as null.
+  blockReplyKind: z.enum(BLOCK_REPLY_KINDS).nullable().optional(),
 })
 export const ticketRef = z.object({
   id,
