@@ -336,6 +336,7 @@ const {
   mockTicketLink,
   mockTicketStatuses,
   mockProvenanceCount,
+  mockTrackerLinks,
 } = vi.hoisted(() => {
   const mockTicket = {
     id: 'ticket_1',
@@ -400,7 +401,10 @@ const {
   // How many conversations the open ticket was opened from — decides whether
   // the composer offers to share a note at all.
   const mockProvenanceCount = { value: 0 }
+  // A tracker's links: the tickets the viewer can see, and a count of the rest.
+  const mockTrackerLinks = { value: { linked: [] as unknown[], hiddenCount: 0 } }
   return {
+    mockTrackerLinks,
     mockTicket,
     mockTicketThread,
     mockTicketVariants,
@@ -448,6 +452,16 @@ vi.mock('@/lib/client/queries/inbox', async (importOriginal) => ({
       queryKey: ['ticket-provenance-conversations', id],
       queryFn: () => Promise.resolve({ count: mockProvenanceCount.value }),
     }),
+    links: (id: string) => ({
+      queryKey: ['ticket-links', id],
+      queryFn: () =>
+        Promise.resolve({
+          tracker: null,
+          trackerHidden: false,
+          linked: mockTrackerLinks.value.linked,
+          hiddenCount: mockTrackerLinks.value.hiddenCount,
+        }),
+    }),
   },
 }))
 vi.mock('@/lib/client/queries/conversation-inbox', () => ({
@@ -470,10 +484,11 @@ vi.mock('@/lib/client/queries/conversation-inbox', () => ({
 import { AgentConversationThread } from '../agent-conversation-thread'
 import type { ThreadComposerHandle } from '../agent-conversation-thread'
 import { setConversationStatusFn } from '@/lib/server/functions/conversation'
-import { setTicketStatusFn } from '@/lib/server/functions/tickets'
+import { sendTicketMessageFn, setTicketStatusFn } from '@/lib/server/functions/tickets'
 
 afterEach(() => {
   threadProbe.fail = null
+  mockTrackerLinks.value = { linked: [], hiddenCount: 0 }
   mockTicketLink.value = null
   mockTicketStatuses.value = []
   mockProvenanceCount.value = 0
@@ -624,6 +639,118 @@ describe('AgentConversationThread — ticket capability wiring', () => {
     expect(screen.getByTestId('ticket-status-control')).toBeInTheDocument()
     expect(screen.getByTestId('ticket-assignee-control')).toBeInTheDocument()
     expect(screen.getByTestId('ticket-priority-control')).toBeInTheDocument()
+  })
+})
+
+describe('AgentConversationThread — tracker Reply all mode', () => {
+  function renderTracker() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['ticket-detail', 'ticket_tracker'], {
+      ...mockTicket,
+      id: 'ticket_tracker',
+      type: 'tracker',
+    })
+    client.setQueryData(['ticket-thread', 'ticket_tracker'], mockTicketThread)
+    mockTicketVariants.ticket_tracker = { type: 'tracker' }
+    return render(
+      <QueryClientProvider client={client}>
+        <AgentConversationThread
+          item={{ kind: 'ticket', id: 'ticket_tracker' } as never}
+          targetMessageId={null}
+          onChanged={vi.fn()}
+          onBack={vi.fn()}
+          onSelectItem={vi.fn()}
+          onOpenPost={vi.fn()}
+          isVisitorTyping={false}
+          isOtherAgentTyping={false}
+        />
+      </QueryClientProvider>
+    )
+  }
+
+  async function chooseReplyAll() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Note' }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Reply all' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('editor')).not.toHaveAttribute(
+        'placeholder',
+        'Add an internal note for your team…'
+      )
+    )
+  }
+
+  afterEach(() => {
+    delete mockTicketVariants.ticket_tracker
+  })
+
+  it('offers Note (the default) and Reply all to a teammate who may reply', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    renderTracker()
+    const editor = await screen.findByTestId('editor')
+    expect(editor).toHaveAttribute('placeholder', 'Add an internal note for your team…')
+    fireEvent.click(await screen.findByRole('button', { name: 'Note' }))
+    expect(await screen.findByRole('menuitemradio', { name: 'Reply all' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitemradio', { name: 'Reply' })).not.toBeInTheDocument()
+  })
+
+  it('keeps a tracker note-only for a teammate without ticket.reply', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.note']
+    renderTracker()
+    await screen.findByTestId('editor')
+    expect(screen.queryByRole('button', { name: 'Note' })).not.toBeInTheDocument()
+  })
+
+  it('has no attach button in Reply all mode, and keeps it for a note', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    renderTracker()
+    expect(await screen.findByRole('button', { name: 'Attach files' })).toBeInTheDocument()
+    await chooseReplyAll()
+    expect(screen.queryByRole('button', { name: 'Attach files' })).not.toBeInTheDocument()
+  })
+
+  it('says how many linked tickets the reply reaches and how many you cannot access', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    mockTrackerLinks.value = { linked: [{ id: 'ticket_a' }], hiddenCount: 2 }
+    renderTracker()
+    await chooseReplyAll()
+    expect(
+      await screen.findByText("3 linked tickets · includes 2 you can't access")
+    ).toBeInTheDocument()
+  })
+
+  it('shows no count line when every linked ticket is visible', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    mockTrackerLinks.value = { linked: [{ id: 'ticket_a' }], hiddenCount: 0 }
+    renderTracker()
+    await chooseReplyAll()
+    expect(screen.queryByText(/you can't access/)).not.toBeInTheDocument()
+  })
+
+  it('sends a Reply all as a reply-all on the tracker', async () => {
+    routeContextState.permissions = ['ticket.view', 'ticket.reply']
+    vi.mocked(sendTicketMessageFn).mockResolvedValue({
+      message: mockTicketThread.messages[0],
+    } as never)
+    renderTracker()
+    await chooseReplyAll()
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+    act(() =>
+      composerProbe.onChange?.(
+        {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Fixed' }] }],
+        },
+        '<p>Fixed</p>',
+        'Fixed'
+      )
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }))
+    await waitFor(() =>
+      expect(sendTicketMessageFn).toHaveBeenCalledWith({
+        data: expect.objectContaining({ ticketId: 'ticket_tracker', replyAll: true }),
+      })
+    )
   })
 })
 
