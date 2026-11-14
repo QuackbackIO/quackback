@@ -205,7 +205,7 @@ describe('conversation server functions check visibility (real DB, rolled back)'
   // Let it settle inside this test's transaction, so it cannot land in the
   // next test's and abort it.
   afterEach(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, 150))
     await fixture.rollback()
   })
   afterAll(fixture.close)
