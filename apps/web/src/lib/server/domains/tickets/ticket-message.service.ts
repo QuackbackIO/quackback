@@ -110,7 +110,7 @@ import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
-import { ForbiddenError } from '@/lib/shared/errors'
+import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'ticket-message' })
@@ -426,6 +426,11 @@ export async function sendTicketMessage(
   assertCan(actor, PERMISSIONS.TICKET_REPLY, 'reply to this ticket')
   const principalId = requireAgentPrincipal(actor)
   const visible = await assertTicketVisible(input.ticketId, actor)
+  // Reply all carries text only: its copies reach tickets the sender may not
+  // see, so nothing is written, not even on the tracker, when it has files.
+  if (input.replyAll && (input.attachments?.length ?? 0) > 0) {
+    throw new ValidationError('REPLY_ALL_ATTACHMENTS', 'Reply all cannot include attachments')
+  }
   const { message, ticket } = await insertTicketMessage(input, principalId, {
     ticket: visible,
     senderType: 'agent',
