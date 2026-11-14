@@ -38,6 +38,7 @@ import {
   ownershipRecord,
 } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
+import { lockDomainName } from '@/lib/server/domains/channel-accounts/sending-domain-token'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 import { getProvenZones, provenZoneCovering, zonesBesidesDomain } from './proven-zones'
 
@@ -133,9 +134,7 @@ export async function ensureDomain(
  */
 export async function discardUnusedDomain(domain: Domain): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`quackback:domain-token:${domain.name}`}))`
-    )
+    await lockDomainName(tx, domain.name)
     if ((await domainUsesOf(domain.name)).length > 0) return
     await tx.delete(domains).where(and(eq(domains.id, domain.id), eq(domains.status, 'pending')))
   })

@@ -13,10 +13,30 @@
  * check and the claim run under a transaction-scoped lock on the name. A domain
  * added at any other name, even one above this, is never used.
  */
-import { and, db, domains, eq, ne, sql, emailSendingDomains } from '@/lib/server/db'
+import {
+  and,
+  db,
+  domains,
+  eq,
+  ne,
+  sql,
+  emailSendingDomains,
+  type Transaction,
+} from '@/lib/server/db'
 import type { SendingDomainId } from '@quackback/ids'
 import { toAsciiDomain } from '@/lib/server/utils/mail-domain'
 import { mintOwnershipToken, ownershipRecord } from './sending-domain-records'
+
+/**
+ * The transaction-scoped lock on a domain name, in its one spelling, that
+ * issuing its token and discarding an unused domain both take, so neither
+ * sees the other half done.
+ */
+export async function lockDomainName(tx: Transaction, name: string): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`quackback:domain-token:${toAsciiDomain(name)}`}))`
+  )
+}
 
 export async function issueOwnershipToken(row: {
   id: SendingDomainId
@@ -28,9 +48,7 @@ export async function issueOwnershipToken(row: {
   // written onto this row before the lock is released, so a second row being
   // issued at the same moment sees it taken.
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`quackback:domain-token:${name}`}))`
-    )
+    await lockDomainName(tx, name)
     const [added] = await tx
       .select({ token: domains.ownershipToken })
       .from(domains)
