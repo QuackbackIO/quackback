@@ -63,27 +63,15 @@ export async function permissionsForPrincipal(
   legacyRole: Role,
   executor: Database | Transaction = db
 ): Promise<ReadonlySet<PermissionKey>> {
-  const rows = await executor
-    .select({ assignmentId: principalRoleAssignments.id, key: permissions.key })
-    .from(principalRoleAssignments)
-    .leftJoin(rolePermissions, eq(rolePermissions.roleId, principalRoleAssignments.roleId))
-    .leftJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
-    .where(
-      and(
-        eq(principalRoleAssignments.principalId, principalId),
-        isNull(principalRoleAssignments.teamId)
-      )
-    )
-
-  if (rows.length === 0) return permissionsForLegacyRole(legacyRole)
-  return new Set(rows.flatMap((row) => (row.key === null ? [] : [row.key as PermissionKey])))
+  const resolved = await permissionsForPrincipals([{ id: principalId, role: legacyRole }], executor)
+  return resolved.get(principalId)!
 }
 
 /**
- * `permissionsForPrincipal` for many people in one query, for callers that
- * judge a whole set at once (a team-wide bell). Each person gets exactly what
- * the single form gives them: their workspace-wide roles' keys, or their
- * legacy preset when they hold no workspace-wide assignment.
+ * Many people's permissions in one query, for callers that judge a whole set
+ * at once (a team-wide bell); `permissionsForPrincipal` is the one-person form.
+ * Each person gets their workspace-wide roles' keys, or their legacy preset
+ * when they hold no workspace-wide assignment (none, or team-scoped only).
  */
 export async function permissionsForPrincipals(
   people: ReadonlyArray<{ id: PrincipalId; role: Role }>,
