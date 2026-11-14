@@ -88,6 +88,7 @@ import {
   publishTyping,
 } from '@/lib/server/realtime/conversation-channels'
 import type { ScopedRow } from '@/lib/server/policy/row-scope'
+import { conversationScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import {
   validateContent,
   preview,
@@ -1469,14 +1470,6 @@ export async function routeUnassignedConversation(
   return assignRoutedConversation(conversation)
 }
 
-/** A conversation's owner and team as the inbox scope rule reads them. */
-function inboxScopeOf(row: Conversation): ScopedRow {
-  return {
-    assigneePrincipalId: row.assignedAgentPrincipalId ?? null,
-    teamId: row.assignedTeamId ?? null,
-  }
-}
-
 /**
  * `prev` is set by a caller that cleared the assignee just before routing (the
  * offline requeue): the published update then carries it, so the teammate who
@@ -1503,11 +1496,7 @@ async function assignRoutedConversation(
     .returning()
   if (!assigned) return null
   await emitAssignmentSystemMessage(assigned.id, assignedPrincipalId)
-  await publishConversationUpdate(
-    assigned.id,
-    await conversationToDTO(assigned, 'agent'),
-    prev ? { prev } : undefined
-  )
+  await publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'), prev)
   // Auto-routing only ever touches the agent column — the team side reports
   // no change (still-current value as its own "previous").
   void emitConversationAssigned(systemActor(), assigned, null, assigned.assignedTeamId ?? null)
@@ -1555,7 +1544,7 @@ export async function assignConversation(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  await publishConversationUpdate(conversationId, dto, { prev: inboxScopeOf(existing) })
+  await publishConversationUpdate(conversationId, dto, conversationScopeOf(existing))
   if (agentPrincipalId) {
     await emitAssignmentSystemMessage(conversationId, agentPrincipalId, attribution)
   }
@@ -1624,7 +1613,7 @@ export async function assignTeam(
     .returning()
 
   const dto = await conversationToDTO(updated, 'agent')
-  await publishConversationUpdate(conversationId, dto, { prev: inboxScopeOf(existing) })
+  await publishConversationUpdate(conversationId, dto, conversationScopeOf(existing))
 
   if (team) {
     await emitTeamAssignmentSystemMessage(conversationId, team.name)
@@ -1720,7 +1709,10 @@ export async function requeueUnansweredOnAgentOffline(
     for (const conversation of updated) {
       // The offline agent held these; the published update names them as the
       // previous assignee so their inbox stream removes the row.
-      const prev = { assigneePrincipalId: agentPrincipalId, teamId: conversation.assignedTeamId }
+      const prev = conversationScopeOf({
+        ...conversation,
+        assignedAgentPrincipalId: agentPrincipalId,
+      })
       // assignRoutedConversation broadcasts the assigned DTO itself on success.
       if (await assignRoutedConversation(conversation, prev)) continue
       // Not re-routed: broadcast the CURRENT row (re-read), so a reassignment
@@ -1731,9 +1723,7 @@ export async function requeueUnansweredOnAgentOffline(
         .where(eq(conversations.id, conversation.id))
         .limit(1)
       if (current)
-        await publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'), {
-          prev,
-        })
+        await publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'), prev)
     }
   } catch (err) {
     log.warn({ err }, 'requeue unanswered on agent offline failed')
@@ -1973,10 +1963,13 @@ export async function signalTyping(conversationId: ConversationId, actor: Actor)
   const conversation = await assertConversationVisible(conversationId, actor)
   const side = conversationSideFor(conversation, actor)
   // The typist id rides along so the stream layer can drop the typist's own echo.
-  publishTyping(conversationId, side, new Date().toISOString(), actor.principalId, {
-    assigneePrincipalId: conversation.assignedAgentPrincipalId ?? null,
-    teamId: conversation.assignedTeamId ?? null,
-  })
+  publishTyping(
+    conversationId,
+    side,
+    new Date().toISOString(),
+    actor.principalId,
+    conversationScopeOf(conversation)
+  )
 }
 
 /** Mark a conversation read up to now for the actor's side of it. */

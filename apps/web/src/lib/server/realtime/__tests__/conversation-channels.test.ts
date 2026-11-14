@@ -371,7 +371,8 @@ describe('every publisher: the scope envelope rides the inbox copy and nothing e
 
   it('publishConversationUpdate takes its envelope from the DTO, and the previous values from the writer', async () => {
     await publishConversationUpdate(conversationId, agentDto, {
-      prev: { assigneePrincipalId: 'principal_before', teamId: null },
+      assigneePrincipalId: 'principal_before',
+      teamId: null,
     })
     await inboxPublishesSettled()
     expect(readInboxItemScope).not.toHaveBeenCalled()

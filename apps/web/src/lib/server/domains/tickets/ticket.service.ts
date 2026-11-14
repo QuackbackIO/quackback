@@ -67,6 +67,7 @@ import { ticketFtsMatch } from './ticket-search.service'
 import { statusTransition, firstResponseStamp, resolveStage } from './ticket.lifecycle'
 import { resolvePairConversationId } from './pair-thread.service'
 import { createTicketCore, publishTicketUpdated } from './ticket-intake.service'
+import { ticketScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import type {
   CreateTicketInput,
   AssignTicketInput,
@@ -850,12 +851,7 @@ export async function assignTicket(
   // Realtime signal (unified inbox §3.2, M3): unconditional, unlike the
   // webhook below — an inbox row re-render on a no-op re-assign is harmless,
   // while a missed signal on an actual reorder-relevant change is not.
-  const dto = await publishTicketUpdated(updated, {
-    prev: {
-      assigneePrincipalId: existing.assigneePrincipalId ?? null,
-      teamId: existing.assigneeTeamId ?? null,
-    },
-  })
+  const dto = await publishTicketUpdated(updated, ticketScopeOf(existing))
 
   // Only signal when an assignee actually moved (a no-op re-assign must not fire).
   if (

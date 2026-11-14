@@ -23,6 +23,28 @@ export type InboxItemScope = ScopedRow & { prev?: ScopedRow }
 /** The wire envelope: which item, and its scope. */
 export type InboxScopeEnvelope = InboxItemRef & InboxItemScope
 
+/** A conversation's owner and team as the scope rule reads them. */
+export function conversationScopeOf(row: {
+  assignedAgentPrincipalId?: string | null
+  assignedTeamId?: string | null
+}): ScopedRow {
+  return {
+    assigneePrincipalId: row.assignedAgentPrincipalId ?? null,
+    teamId: row.assignedTeamId ?? null,
+  }
+}
+
+/** A ticket's owner and team as the scope rule (and `ticketFilter`) reads them. */
+export function ticketScopeOf(row: {
+  assigneePrincipalId?: string | null
+  assigneeTeamId?: string | null
+}): ScopedRow {
+  return {
+    assigneePrincipalId: row.assigneePrincipalId ?? null,
+    teamId: row.assigneeTeamId ?? null,
+  }
+}
+
 /**
  * Narrow pubsub's opaque `meta` to an inbox envelope, or undefined when it is
  * missing or malformed (which the stream treats as no envelope: dropped).
