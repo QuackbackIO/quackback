@@ -86,10 +86,12 @@ vi.mock('@/lib/server/domains/principals/principal.factory', () => ({
 // The visibility check is the conversation lookup here: it answers the next
 // queued row, or NotFound when there is none. Real scope is covered by
 // conversation-visibility-writes.db.test.ts.
-vi.mock('../conversation.service', async () => {
+vi.mock('../conversation.service', () => ({
+  emitSystemMessage: hoisted.emitSystemMessage,
+}))
+vi.mock('../conversation-visibility', async () => {
   const { NotFoundError } = await import('@/lib/shared/errors')
   return {
-    emitSystemMessage: hoisted.emitSystemMessage,
     assertConversationVisible: vi.fn(async () => {
       const [row] = (hoisted.selectQueue.shift() ?? []) as unknown[]
       if (!row) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')

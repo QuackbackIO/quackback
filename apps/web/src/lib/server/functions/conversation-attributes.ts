@@ -12,6 +12,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { isValidTypeId } from '@quackback/ids'
 import type { ConversationAttributeId, ConversationId, TicketId } from '@quackback/ids'
 import { requireAuth, assertPermission, policyActorFromAuth } from './auth-helpers'
+import { requireVisibleConversation } from './conversation-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ValidationError } from '@/lib/shared/errors'
 import {
@@ -141,10 +142,7 @@ export const setConversationAttributeValueFn = createServerFn({ method: 'POST' }
       }
       assertPermission(ctx, PERMISSIONS.CONVERSATION_SET_ATTRIBUTES)
       // A conversation outside the caller's view is NotFound, never written.
-      const actor = await policyActorFromAuth(ctx)
-      const { assertConversationVisible } =
-        await import('@/lib/server/domains/conversation/conversation.service')
-      await assertConversationVisible(data.conversationId as ConversationId, actor)
+      await requireVisibleConversation(ctx, data.conversationId as ConversationId)
       target = { conversationId: data.conversationId as ConversationId }
     } else {
       if (!data.ticketId || !isValidTypeId(data.ticketId, 'ticket')) {

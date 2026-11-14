@@ -13,7 +13,9 @@ const {
   setConversationStatus,
   attachTag,
   setConversationAttribute,
+  assertConversationVisible,
 } = vi.hoisted(() => ({
+  assertConversationVisible: vi.fn(),
   assignConversation: vi.fn(),
   assignTeam: vi.fn(),
   setConversationPriority: vi.fn(),
@@ -29,6 +31,9 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   setConversationPriority,
   snoozeConversation,
   setConversationStatus,
+}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible,
 }))
 vi.mock('@/lib/server/domains/conversation/conversation-tag.service', () => ({
   attachTag,
@@ -51,6 +56,15 @@ beforeEach(() => {
 })
 
 describe('applyMacroActions', () => {
+  it('checks the conversation for the actor first, and runs nothing when it is hidden', async () => {
+    assertConversationVisible.mockRejectedValueOnce(new Error('Conversation not found'))
+    await expect(
+      applyMacroActions(conversationId, [{ type: 'set_priority', priority: 'high' }], actor)
+    ).rejects.toThrow('Conversation not found')
+    expect(assertConversationVisible).toHaveBeenCalledWith(conversationId, actor)
+    expect(setConversationPriority).not.toHaveBeenCalled()
+  })
+
   it('dispatches each supported action to its conversation service', async () => {
     const actions: MacroAction[] = [
       { type: 'assign_agent', principalId: 'principal_x' },

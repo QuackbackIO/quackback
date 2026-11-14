@@ -10,8 +10,8 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { WorkflowId, WorkflowVersionId, ConversationId } from '@quackback/ids'
-import type { Actor } from '@/lib/server/policy/types'
-import { policyActorFromAuth, requireAuth } from './auth-helpers'
+import { requireAuth } from './auth-helpers'
+import { requireVisibleConversation } from './conversation-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { Workflow, WorkflowClass, WorkflowStatus, WorkflowRunState } from '@/lib/server/db'
 import {
@@ -339,13 +339,6 @@ export const restoreWorkflowVersionFn = createServerFn({ method: 'POST' })
 
 // --- Dry-run preview (support platform §4.6 dry-run preview) ---
 
-/** The conversation the caller may see, or NotFound like a missing one. */
-async function assertVisibleToCaller(conversationId: ConversationId, actor: Actor): Promise<void> {
-  const { assertConversationVisible } =
-    await import('@/lib/server/domains/conversation/conversation.service')
-  await assertConversationVisible(conversationId, actor)
-}
-
 const previewSchema = z.object({ workflowId: z.string(), conversationId: z.string() })
 
 /**
@@ -358,10 +351,7 @@ export const previewWorkflowFn = createServerFn({ method: 'POST' })
   .validator(previewSchema)
   .handler(async ({ data }): Promise<WorkflowPreviewResult> => {
     const ctx = await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
-    await assertVisibleToCaller(
-      data.conversationId as ConversationId,
-      await policyActorFromAuth(ctx)
-    )
+    await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     return previewWorkflow({
       workflowId: data.workflowId as WorkflowId,
       conversationId: data.conversationId as ConversationId,
@@ -458,10 +448,7 @@ export const runWorkflowManuallyFn = createServerFn({ method: 'POST' })
     const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
     // The conversation first: a hidden one is NotFound before any lock or
     // condition read, and no run starts.
-    await assertVisibleToCaller(
-      data.conversationId as ConversationId,
-      await policyActorFromAuth(auth)
-    )
+    await requireVisibleConversation(auth, data.conversationId as ConversationId)
     const workflow = await getWorkflow(data.workflowId as WorkflowId)
     if (!workflow || workflow.status !== 'live') {
       return { ok: false, reason: 'not_live' }

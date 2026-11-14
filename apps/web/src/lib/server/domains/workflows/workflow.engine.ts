@@ -61,7 +61,7 @@ function workflowActor(): Actor {
  *  (amendment 1), and the emitted csat_submitted event needs a human actor so
  *  it can legitimately trigger other workflows. `principalType: 'anonymous'`
  *  is a safe default here (an identified visitor's real type doesn't change
- *  the ownership check either path relies on — see canViewConversation /
+ *  the ownership check either path relies on — see assertConversationVisible /
  *  recordCsat's own `actor.principalId !== conversation.visitorPrincipalId`
  *  check), only `toEventActor` cares that it isn't 'service'. */
 function visitorActor(visitorPrincipalId: PrincipalId | null): Actor {

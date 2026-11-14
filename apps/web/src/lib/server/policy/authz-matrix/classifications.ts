@@ -738,7 +738,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     intent: 'SECONDARY_GATE',
     roleBar: 'team',
     resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
-    why: 'SSE stream: the inbox and presence scopes are team-only; the conversation scope is gated by canViewConversation',
+    why: 'SSE stream: the inbox and presence scopes are team-only; the conversation scope is gated by assertConversationVisible',
   },
   'lib/server/functions/portal-permissions.ts::getMyPortalPermissionsFn::isTeamMember': {
     intent: 'SECONDARY_GATE',

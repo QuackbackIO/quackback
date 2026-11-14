@@ -768,7 +768,7 @@ export async function getActiveConversationForVisitor(
 /**
  * View result for a specific conversation a visitor asked for (history row /
  * ?c= deep link). Returns no conversation when the row is missing or not owned
- * by this visitor — existence is hidden, matching canViewConversation. A closed
+ * by this visitor — existence is hidden, as assertConversationVisible hides it. A closed
  * thread is surfaced read-only, exactly like the active-conversation path.
  */
 export function resolveVisitorConversation(

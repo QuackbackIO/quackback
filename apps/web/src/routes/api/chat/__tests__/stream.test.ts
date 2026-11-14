@@ -104,10 +104,12 @@ vi.mock('@/lib/server/functions/portal-access', () => ({
 // conversations lookup and the decision from mockCanView, so each test drives
 // existence and visibility separately. Real scope is covered by
 // stream-actor-permissions.db.test.ts.
-vi.mock('@/lib/server/domains/conversation/conversation.service', async () => {
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
+  requeueUnansweredOnAgentOffline: vi.fn(),
+}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', async () => {
   const { NotFoundError } = await import('@/lib/shared/errors')
   return {
-    requeueUnansweredOnAgentOffline: vi.fn(),
     assertConversationVisible: async (_id: unknown, actor: unknown) => {
       const row = await mockConversationFindFirst()
       if (!row || !mockCanView(actor, row).allowed) {

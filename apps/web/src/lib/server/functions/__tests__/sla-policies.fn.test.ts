@@ -54,7 +54,8 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 }))
 // The per-item conversation check: visible unless a test says otherwise. Real
 // scope is covered by conversation-visibility-functions.db.test.ts.
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
   assertConversationVisible: hoisted.assertConversationVisible,
 }))
 vi.mock('@/lib/server/domains/sla/sla-policy.service', () => ({

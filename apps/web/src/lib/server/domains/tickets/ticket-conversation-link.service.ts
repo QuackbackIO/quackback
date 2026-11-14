@@ -76,6 +76,7 @@ import {
   type Ticket,
   type ConversationMessageMetadata,
 } from '@/lib/server/db'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
 import { ticketFilter } from '@/lib/server/policy/tickets'
@@ -151,8 +152,6 @@ export async function linkTicketToConversation(
   if (!can(actor, PERMISSIONS.TICKET_CREATE)) {
     throw new ForbiddenError('FORBIDDEN', 'You cannot link a ticket to a conversation')
   }
-  const { assertConversationVisible } =
-    await import('@/lib/server/domains/conversation/conversation.service')
   await assertConversationVisible(conversationId, actor)
 
   let ticket: Ticket

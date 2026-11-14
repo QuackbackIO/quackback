@@ -16,7 +16,6 @@ import {
   isNotNull,
   lte,
   inArray,
-  or,
   sql,
   conversations,
   conversationMessages,
@@ -31,7 +30,6 @@ import {
 } from '@/lib/server/db'
 import { resolveBlockReply, type BlockReplyInput, type ResolvedBlockReply } from './block-reply'
 import { isTeamMember } from '@/lib/shared/roles'
-import { conversationFilter } from '@/lib/server/policy/conversations'
 import type { ConversationAttachment, ConversationMessageCitation, Team } from '@/lib/server/db'
 import { getTeam } from '@/lib/server/domains/teams'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
@@ -53,10 +51,15 @@ import {
   canSendVisitorMessage,
   canStartConversation,
   canActAsAgent,
-  canViewConversation,
+  mayExplainVisitorRefusal,
   canDeleteMessage,
 } from '@/lib/server/policy/conversation'
-import type { Actor } from '@/lib/server/policy/types'
+import type { Actor, SystemCascadeOptions } from '@/lib/server/policy/types'
+import {
+  assertConversationVisible,
+  loadConversationForWrite,
+  loadConversationOr404,
+} from './conversation-visibility'
 import {
   HANDOFF_REASON_LABELS,
   CONVERSATION_SPAM_FILED_BY_LABELS,
@@ -151,78 +154,6 @@ function normalizeEmail(raw: string | undefined): string | undefined {
   return email
 }
 
-async function loadConversationOr404(conversationId: ConversationId): Promise<Conversation> {
-  const [row] = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.id, conversationId))
-    .limit(1)
-  if (!row) {
-    throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-  }
-  return row
-}
-
-/**
- * A conversation the actor may see, or NotFound (never Forbidden). One query:
- * the row is the visitor's own, or `conversationFilter` admits it for the
- * actor, so a scoped teammate gets NotFound for another team's conversation.
- */
-export async function assertConversationVisible(
-  conversationId: ConversationId,
-  actor: Actor
-): Promise<Conversation> {
-  const ownConversation =
-    actor.principalId != null ? eq(conversations.visitorPrincipalId, actor.principalId) : sql`false`
-  const [row] = await db
-    .select()
-    .from(conversations)
-    .where(
-      and(eq(conversations.id, conversationId), or(ownConversation, conversationFilter(actor)))
-    )
-    .limit(1)
-  if (!row) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-  return row
-}
-
-/**
- * Read chokepoint: resolve a conversation the actor is allowed to see, or throw
- * NotFound (never Forbidden) so a non-owner can't probe conversation ids. The
- * same SQL check as `assertConversationVisible`, for every actor.
- */
-export async function assertConversationViewable(
-  conversationId: ConversationId,
-  actor: Actor
-): Promise<Conversation> {
-  return assertConversationVisible(conversationId, actor)
-}
-
-/**
- * Options a conversation writer takes from a caller that has already checked
- * the item. `systemCascade` skips the per-item visibility check and keeps the
- * actor as author: the tracker reply-all into a paired conversation, the
- * read-state delegations of a ticket the caller already checked, and one
- * macro run after its start check. The guard test names every caller that may
- * set it.
- */
-export interface ConversationWriteOptions {
-  systemCascade?: boolean
-}
-
-/**
- * The row an agent write acts on: a conversation the actor may see, or
- * NotFound. Under `systemCascade` the caller has checked the item already, so
- * the row is read as it is.
- */
-async function loadForAgentWrite(
-  conversationId: ConversationId,
-  actor: Actor,
-  opts?: ConversationWriteOptions
-): Promise<Conversation> {
-  if (opts?.systemCascade) return loadConversationOr404(conversationId)
-  return assertConversationVisible(conversationId, actor)
-}
-
 /**
  * Agent action: record a contact email for a conversation's (typically
  * anonymous) visitor so status updates can reach them — e.g. captured inline
@@ -240,7 +171,7 @@ export async function captureVisitorContactEmail(
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
   const email = normalizeEmail(rawEmail)
   if (!email) return { captured: false }
-  const conversation = await assertConversationViewable(conversationId, actor)
+  const conversation = await assertConversationVisible(conversationId, actor)
   await db.transaction(async (tx) => {
     // Reusable contact on the visitor principal (survives across conversations).
     await tx
@@ -398,7 +329,7 @@ export async function sendVisitorMessage(
       const decision = canSendVisitorMessage(actor, existing)
       if (!decision.allowed) {
         // Hide existence from non-owners; surface the real reason otherwise.
-        if (!canViewConversation(actor, existing).allowed) {
+        if (!mayExplainVisitorRefusal(actor, existing).allowed) {
           throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
         }
         throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -763,7 +694,7 @@ export async function sendAgentMessage(
   // it passes the teammate's pre-translation original here so it lands on
   // the new message's own metadata (agent-only, never sent to the visitor).
   extraMetadata?: ConversationMessageMetadata,
-  opts?: ConversationWriteOptions
+  opts?: SystemCascadeOptions
 ): Promise<SendAgentMessageResult> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -967,7 +898,7 @@ export async function addAgentNote(
   // clean tree below.
   const safeContentJson = contentJson ? sanitizeTiptapContent(contentJson) : null
 
-  await loadForAgentWrite(conversationId, actor)
+  await loadConversationForWrite(conversationId, actor)
   // Insert + touch in one transaction so a note can't persist without its
   // updatedAt bump.
   const message = await db.transaction(async (tx) => {
@@ -1043,11 +974,11 @@ export async function setConversationStatus(
   actor: Actor,
   attribution?: SystemNoticeAttribution,
   lifecycle?: 'closed' | 'auto_closed',
-  opts?: ConversationWriteOptions
+  opts?: SystemCascadeOptions
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadForAgentWrite(conversationId, actor, opts)
+  const existing = await loadConversationForWrite(conversationId, actor, opts)
   const previous = existing.status
   const now = new Date()
   const [updated] = await db
@@ -1139,11 +1070,11 @@ export async function snoozeConversation(
   conversationId: ConversationId,
   until: Date | null,
   actor: Actor,
-  opts?: ConversationWriteOptions
+  opts?: SystemCascadeOptions
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadForAgentWrite(conversationId, actor, opts)
+  const existing = await loadConversationForWrite(conversationId, actor, opts)
   const previous = existing.status
   const now = new Date()
   const [updated] = await db
@@ -1212,7 +1143,7 @@ export async function endConversation(
 ): Promise<ConversationDTO> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadForAgentWrite(conversationId, actor)
+  const existing = await loadConversationForWrite(conversationId, actor)
   const previous = existing.status
   const now = new Date()
   const endNote = note?.trim() ? note.trim().slice(0, MAX_END_NOTE_LENGTH) : null
@@ -1271,7 +1202,7 @@ export async function restoreConversationFromSpam(
 ): Promise<ConversationDTO> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadForAgentWrite(conversationId, actor)
+  const existing = await loadConversationForWrite(conversationId, actor)
   if (existing.endReason !== 'spam') {
     throw new ValidationError('VALIDATION_ERROR', 'Conversation is not marked as spam')
   }
@@ -1351,7 +1282,7 @@ export async function deleteConversationPermanently(
 ): Promise<void> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadForAgentWrite(conversationId, actor)
+  const existing = await loadConversationForWrite(conversationId, actor)
   if (existing.endReason !== 'spam') {
     throw new ValidationError('VALIDATION_ERROR', 'Conversation is not marked as spam')
   }
@@ -1568,11 +1499,11 @@ export async function assignConversation(
   agentPrincipalId: PrincipalId | null,
   actor: Actor,
   attribution?: SystemNoticeAttribution,
-  opts?: ConversationWriteOptions
+  opts?: SystemCascadeOptions
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadForAgentWrite(conversationId, actor, opts)
+  const existing = await loadConversationForWrite(conversationId, actor, opts)
   // Re-selecting the current assignee (or unassigning an unassigned thread) is
   // a no-op: no system message, no events, no triage-wake.
   if ((existing.assignedAgentPrincipalId ?? null) === agentPrincipalId) return existing
@@ -1634,11 +1565,11 @@ export async function assignTeam(
   teamId: TeamId | null,
   actor: Actor,
   attribution?: SystemNoticeAttribution,
-  opts?: ConversationWriteOptions
+  opts?: SystemCascadeOptions
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadForAgentWrite(conversationId, actor, opts)
+  const existing = await loadConversationForWrite(conversationId, actor, opts)
   // Re-selecting the current team (or clearing an already-clear one) is a
   // no-op — it does not re-distribute to a member or repeat the system message.
   if ((existing.assignedTeamId ?? null) === teamId) return existing
@@ -1788,11 +1719,11 @@ export async function setConversationPriority(
   conversationId: ConversationId,
   priority: ConversationPriority,
   actor: Actor,
-  opts?: ConversationWriteOptions
+  opts?: SystemCascadeOptions
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadForAgentWrite(conversationId, actor, opts)
+  const existing = await loadConversationForWrite(conversationId, actor, opts)
   // A non-assignee triaging a snoozed thread wakes it back into the open queue.
   const wake = shouldWakeSnoozedOnTriage(
     existing.status,
@@ -1921,7 +1852,7 @@ export async function recordCsat(
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     throw new ValidationError('VALIDATION_ERROR', 'Rating must be between 1 and 5')
   }
-  const conversation = await assertConversationViewable(conversationId, actor)
+  const conversation = await assertConversationVisible(conversationId, actor)
   // Only the visitor who owns the conversation can rate it.
   if (actor.principalId !== conversation.visitorPrincipalId) {
     throw new ForbiddenError('FORBIDDEN', 'Only the visitor can rate this conversation')
@@ -2016,7 +1947,7 @@ function conversationSideFor(conversation: Conversation, actor: Actor): Conversa
 export async function signalTyping(conversationId: ConversationId, actor: Actor): Promise<void> {
   // Same access gate as reading the thread — prevents spoofing typing into a
   // conversation the actor can't see.
-  const conversation = await assertConversationViewable(conversationId, actor)
+  const conversation = await assertConversationVisible(conversationId, actor)
   const side = conversationSideFor(conversation, actor)
   // The typist id rides along so the stream layer can drop the typist's own echo.
   publishTyping(conversationId, side, new Date().toISOString(), actor.principalId)
@@ -2026,9 +1957,9 @@ export async function signalTyping(conversationId: ConversationId, actor: Actor)
 export async function markConversationRead(
   conversationId: ConversationId,
   actor: Actor,
-  opts?: ConversationWriteOptions
+  opts?: SystemCascadeOptions
 ): Promise<void> {
-  const conversation = await loadForAgentWrite(conversationId, actor, opts)
+  const conversation = await loadConversationForWrite(conversationId, actor, opts)
   const side = conversationSideFor(conversation, actor)
   const now = new Date()
   await db
@@ -2076,11 +2007,11 @@ export async function markConversationUnreadAt(
   conversationId: ConversationId,
   anchorCreatedAt: Date,
   actor: Actor,
-  opts?: ConversationWriteOptions
+  opts?: SystemCascadeOptions
 ): Promise<void> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const conversation = await loadForAgentWrite(conversationId, actor, opts)
+  const conversation = await loadConversationForWrite(conversationId, actor, opts)
   await applyAgentUnreadWatermark(conversation, anchorCreatedAt)
 }
 
@@ -2097,11 +2028,11 @@ export async function markConversationUnreadFromMessage(
   conversationId: ConversationId,
   messageId: ConversationMessageId,
   actor: Actor,
-  opts?: ConversationWriteOptions
+  opts?: SystemCascadeOptions
 ): Promise<void> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const conversation = await loadForAgentWrite(conversationId, actor, opts)
+  const conversation = await loadConversationForWrite(conversationId, actor, opts)
   // The anchor must belong to this conversation and not be soft-deleted.
   const [message] = await db
     .select({

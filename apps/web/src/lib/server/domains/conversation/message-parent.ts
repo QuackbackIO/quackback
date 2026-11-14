@@ -1,12 +1,14 @@
 /** Public message actions accept conversation and ticket parents. Private
  * Copilot transcripts stay outside this boundary. */
-import type { ConversationMessage } from '@/lib/server/db'
+import type { Conversation, ConversationMessage } from '@/lib/server/db'
 import type { ConversationId, TicketId } from '@quackback/ids'
-import { NotFoundError } from '@/lib/shared/errors'
+import { NotFoundError, isNotFoundError } from '@/lib/shared/errors'
 import type { Actor } from '@/lib/server/policy/types'
+import { assertConversationVisible } from './conversation-visibility'
 
 export type MessageParent =
-  { kind: 'ticket'; ticketId: TicketId } | { kind: 'conversation'; conversationId: ConversationId }
+  | { kind: 'ticket'; ticketId: TicketId }
+  | { kind: 'conversation'; conversationId: ConversationId; conversation: Conversation }
 
 /**
  * Resolve `message`'s parent and check that the actor can see it: the ticket
@@ -26,7 +28,22 @@ export async function resolveMessageParent(
   }
   // A message has exactly one parent, so conversationId is guaranteed here.
   const conversationId = message.conversationId as ConversationId
-  const { assertConversationVisible } = await import('./conversation.service')
-  await assertConversationVisible(conversationId, actor)
-  return { kind: 'conversation', conversationId }
+  const conversation = await assertConversationVisible(conversationId, actor)
+  return { kind: 'conversation', conversationId, conversation }
+}
+
+/**
+ * `resolveMessageParent` for a path that names the message, not its parent:
+ * a parent the actor cannot see answers as a missing message.
+ */
+export async function assertMessageParentVisible(
+  message: ConversationMessage,
+  actor: Actor
+): Promise<MessageParent> {
+  try {
+    return await resolveMessageParent(message, actor)
+  } catch (err) {
+    if (isNotFoundError(err)) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+    throw err
+  }
 }

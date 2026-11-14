@@ -39,12 +39,8 @@ function requireAgent(actor: Actor): PrincipalId {
 
 /** Load a message that an agent may react to / flag: it must exist, not be
  *  soft-deleted, and not be a system event (status notices aren't content).
- *  Its parent is resolved via `resolveMessageParent`, which for a
- *  ticket-parented message requires the actor to be able to see that ticket
- *  (§2.5) — 404, not 403. Conversation-parented messages get NO equivalent
- *  per-conversation check here: see that helper's doc comment for the
- *  pre-existing gap, left as-is — narrowing it further is out of scope for
- *  this change. */
+ *  Its parent is resolved via `resolveMessageParent`, which requires the actor
+ *  to see that ticket or conversation — 404, not 403. */
 async function loadActionableMessageOr404(
   messageId: ConversationMessageId,
   actor: Actor

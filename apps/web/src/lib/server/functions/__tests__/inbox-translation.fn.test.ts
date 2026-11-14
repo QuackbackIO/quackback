@@ -43,8 +43,7 @@ const hoisted = vi.hoisted(() => ({
   translateIncomingMessage: vi.fn(),
   inboxTranslationOverAllowance: vi.fn(async () => false),
   maybeDetectCustomerLanguage: vi.fn(),
-  assertConversationViewable: vi.fn(),
-  assertConversationVisible: vi.fn(async () => ({})),
+  assertConversationVisible: vi.fn(async (): Promise<Record<string, unknown>> => ({})),
   conversationToDTO: vi.fn(),
   listMessages: vi.fn(),
   enrichMessagesForAgent: vi.fn(),
@@ -81,7 +80,8 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   sendAgentMessage: hoisted.sendAgentMessage,
-  assertConversationViewable: hoisted.assertConversationViewable,
+}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
   assertConversationVisible: hoisted.assertConversationVisible,
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
@@ -91,6 +91,13 @@ vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
 }))
 vi.mock('@/lib/server/domains/conversation/conversation-translation.service', () => ({
   resolveOutgoingReplyTranslation: hoisted.resolveOutgoingReplyTranslation,
+  translationContextOf: (row: {
+    translationEnabled: boolean
+    detectedCustomerLanguage: string | null
+  }) => ({
+    enabled: row.translationEnabled,
+    customerLocale: row.detectedCustomerLanguage,
+  }),
   setInboxTranslationEnabled: hoisted.setInboxTranslationEnabled,
   dismissInboxTranslationSuggestion: hoisted.dismissInboxTranslationSuggestion,
   getInboxTranslationContext: hoisted.getInboxTranslationContext,
@@ -143,7 +150,7 @@ beforeEach(() => {
     conversation: { id: 'conversation_1' },
     message: { id: 'conversation_msg_1', content: 'sent' },
   })
-  hoisted.assertConversationViewable.mockResolvedValue({
+  hoisted.assertConversationVisible.mockResolvedValue({
     id: 'conversation_1',
     detectedCustomerLanguage: null,
   })
@@ -182,6 +189,11 @@ describe('sendAgentMessageFn — inbox translation wiring', () => {
   })
 
   it('translates the reply and attaches translatedFrom metadata', async () => {
+    hoisted.assertConversationVisible.mockResolvedValueOnce({
+      id: 'conversation_1',
+      translationEnabled: true,
+      detectedCustomerLanguage: 'fr',
+    })
     hoisted.resolveOutgoingReplyTranslation.mockResolvedValue({
       content: 'Bonjour',
       contentJson: null,
@@ -197,6 +209,8 @@ describe('sendAgentMessageFn — inbox translation wiring', () => {
       content: 'Hi there',
       contentJson: null,
       teammateUserId: 'user_1',
+      // The checked row's translation state, so the resolver reads nothing again.
+      context: { enabled: true, customerLocale: 'fr' },
     })
     expect(hoisted.sendAgentMessage).toHaveBeenCalledWith(
       'conversation_1',
@@ -281,7 +295,7 @@ describe('sendAgentMessageFn — inbox translation wiring', () => {
 describe('translateConversationMessagesFn', () => {
   it('returns an empty map when translation is not active for the conversation', async () => {
     hoisted.isFeatureEnabled.mockResolvedValue(true)
-    hoisted.assertConversationViewable.mockResolvedValue({ id: 'conversation_1' })
+    hoisted.assertConversationVisible.mockResolvedValue({ id: 'conversation_1' })
     hoisted.getInboxTranslationContext.mockResolvedValue({ enabled: false, customerLocale: 'fr' })
 
     const result = await translateConversationMessagesFn({
@@ -293,7 +307,7 @@ describe('translateConversationMessagesFn', () => {
 
   it('translates the requested messages when active, keyed by message id', async () => {
     hoisted.isFeatureEnabled.mockResolvedValue(true)
-    hoisted.assertConversationViewable.mockResolvedValue({ id: 'conversation_1' })
+    hoisted.assertConversationVisible.mockResolvedValue({ id: 'conversation_1' })
     hoisted.getInboxTranslationContext.mockResolvedValue({ enabled: true, customerLocale: 'fr' })
     hoisted.translateIncomingMessage.mockResolvedValue({ content: 'Hello', cached: false })
 
@@ -309,7 +323,7 @@ describe('translateConversationMessagesFn', () => {
 
   it('still translates past the AI allowance and flags it for the notice', async () => {
     hoisted.isFeatureEnabled.mockResolvedValue(true)
-    hoisted.assertConversationViewable.mockResolvedValue({ id: 'conversation_1' })
+    hoisted.assertConversationVisible.mockResolvedValue({ id: 'conversation_1' })
     hoisted.getInboxTranslationContext.mockResolvedValue({ enabled: true, customerLocale: 'fr' })
     hoisted.translateIncomingMessage.mockResolvedValue({ content: 'Hello', cached: false })
     hoisted.inboxTranslationOverAllowance.mockResolvedValueOnce(true)
@@ -326,7 +340,7 @@ describe('translateConversationMessagesFn', () => {
 
   it('server-side: skips internal / non-visitor / contentJson-bearing messages in a mixed batch', async () => {
     hoisted.isFeatureEnabled.mockResolvedValue(true)
-    hoisted.assertConversationViewable.mockResolvedValue({ id: 'conversation_1' })
+    hoisted.assertConversationVisible.mockResolvedValue({ id: 'conversation_1' })
     hoisted.getInboxTranslationContext.mockResolvedValue({ enabled: true, customerLocale: 'fr' })
     hoisted.translateIncomingMessage.mockResolvedValue({ content: 'Hello', cached: false })
 
@@ -426,7 +440,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 describe('getConversationFn — customer-language detection is fire-and-forget', () => {
   it('does not await detection: resolves even when the detection call never settles', async () => {
     hoisted.isFeatureEnabled.mockResolvedValue(true)
-    hoisted.assertConversationViewable.mockResolvedValue({
+    hoisted.assertConversationVisible.mockResolvedValue({
       id: 'conversation_1',
       detectedCustomerLanguage: null,
     })
@@ -441,7 +455,7 @@ describe('getConversationFn — customer-language detection is fire-and-forget',
   })
 
   it('still runs detection fire-and-forget', async () => {
-    hoisted.assertConversationViewable.mockResolvedValue({
+    hoisted.assertConversationVisible.mockResolvedValue({
       id: 'conversation_1',
       detectedCustomerLanguage: null,
     })
@@ -461,7 +475,7 @@ describe('getConversationFn — customer-language detection is fire-and-forget',
 
   it('logs and swallows a detection failure without failing the request', async () => {
     hoisted.isFeatureEnabled.mockResolvedValue(true)
-    hoisted.assertConversationViewable.mockResolvedValue({
+    hoisted.assertConversationVisible.mockResolvedValue({
       id: 'conversation_1',
       detectedCustomerLanguage: null,
     })

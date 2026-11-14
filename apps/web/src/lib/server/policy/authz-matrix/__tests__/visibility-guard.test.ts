@@ -27,9 +27,7 @@
  * server function outside `functions/widget/` whose input takes a
  * `conversationId`, `conversationIds` or `messageId`, and fails when one is
  * neither named in a real-DB `conversation-visibility*.db.test.ts` matrix nor
- * on the entry-point allowlist with a reason. And every caller of
- * `applyMacroActions` must check the conversation itself, since the macro's
- * actions then skip their own check.
+ * on the entry-point allowlist with a reason.
  */
 import { describe, it, expect } from 'vitest'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -55,8 +53,7 @@ type Rule = 'getTicket' | 'loadTicketOr404' | 'loadConversationOr404' | 'canView
 type Violation = {
   file: string
   fn: string
-  rule:
-    Rule | 'unscopedTicketRead' | 'unscopedConversationRead' | 'systemCascade' | 'macroWithoutCheck'
+  rule: Rule | 'unscopedTicketRead' | 'unscopedConversationRead' | 'systemCascade'
 }
 
 const CALL_RULES: { rule: Rule; pattern: RegExp }[] = [
@@ -84,7 +81,7 @@ const BY_ID_CONVERSATION_READS: Record<string, string> = {
   'lib/server/domains/conversation/conversation.service.ts::sendAgentMessage::unscopedConversationRead':
     're-reads inside the write transaction after the check at the top of the function',
   'lib/server/domains/conversation/conversation.service.ts::recordCsat::unscopedConversationRead':
-    'reads after assertConversationViewable checked the row',
+    'reads after assertConversationVisible checked the row',
   'lib/server/domains/conversation-attributes/set-attribute.service.ts::setConversationAttribute::unscopedConversationRead':
     'builds the change event after the write; every agent caller checked the conversation',
   'lib/server/domains/tickets/ticket-conversation-link.service.ts::linkTicketToConversation::unscopedConversationRead':
@@ -116,7 +113,7 @@ const ALLOWLIST: Record<string, string> = {
     'an inbound email reply, matched to the ticket by its reply token',
   'lib/server/domains/assistant/assistant.runtime.ts::loadTicketGroundingContext::getTicket':
     'the copilot gate has already asserted the ticket for the actor',
-  'lib/server/domains/conversation/conversation.service.ts::loadForAgentWrite::loadConversationOr404':
+  'lib/server/domains/conversation/conversation-visibility.ts::loadConversationForWrite::loadConversationOr404':
     'only under systemCascade: the caller checked the item once',
   'lib/server/domains/conversation/conversation.service.ts::addAgentNote::loadConversationOr404':
     'reloads the row after the checked write, for the published DTO',
@@ -124,8 +121,6 @@ const ALLOWLIST: Record<string, string> = {
     'the spam classifier, a system effect with no teammate behind it',
   'lib/server/domains/conversation/conversation.service.ts::executeAssistantHandoff::loadConversationOr404':
     'the assistant handing over, a system effect with no teammate behind it',
-  'lib/server/domains/conversation/conversation.service.ts::sendVisitorMessage::canViewConversation':
-    'decides only whether a refused visitor send may say why; the owner check runs first',
   // By-id conversation reads in functions that hold an actor, each covered.
   ...BY_ID_CONVERSATION_READS,
 }
@@ -214,19 +209,6 @@ function scanForUnscopedLoads(file: string, source: string): Violation[] {
     out.push({ file, fn: enclosingFunction(lines, line), rule: 'unscopedConversationRead' })
   }
 
-  // A macro's actions skip their own check, so its caller checks first.
-  if (!file.endsWith('macros/macro.actions.ts')) {
-    for (const match of code.matchAll(/(?<![\w.$])applyMacroActions\(/g)) {
-      const line = lineOf(match.index)
-      const start = declarationLine(lines, line)
-      const next = lines.findIndex((l, i) => i > start && DECLARATION.test(l))
-      const body = lines.slice(start, next === -1 ? undefined : next).join('\n')
-      if (!/\bassertConversationVisible\(|\bassertVisibleToCaller\(/.test(body)) {
-        out.push({ file, fn: enclosingFunction(lines, line), rule: 'macroWithoutCheck' })
-      }
-    }
-  }
-
   for (const match of code.matchAll(/systemCascade\s*:\s*true/g)) {
     out.push({ file, fn: enclosingFunction(lines, lineOf(match.index)), rule: 'systemCascade' })
   }
@@ -243,7 +225,6 @@ function allowlistKeyFor(v: Violation): string | null {
 
 function isAllowed(v: Violation): boolean {
   if (v.rule === 'systemCascade') return SYSTEM_CASCADE_ALLOWLIST.has(`${v.file}::${v.fn}`)
-  if (v.rule === 'macroWithoutCheck') return false
   return allowlistKeyFor(v) !== null
 }
 
@@ -298,12 +279,18 @@ function resolveImport(file: string, specifier: string): string | null {
   return [`${base}.ts`, join(base, 'index.ts')].find((p) => existsSync(p)) ?? null
 }
 
+const constantsMemo = new Map<string, Map<string, string>>()
+
 /** The top-level `const` initialisers of a file and, a few hops deep, of its
- *  named imports and the modules it re-exports. */
+ *  named imports and the modules it re-exports. Memoized per file and depth. */
 function constantsOf(file: string, depth = 0): Map<string, string> {
-  const source = stripCommentsAndStrings(readFileSync(file, 'utf8'))
+  const key = `${file}:${depth}`
+  const memo = constantsMemo.get(key)
+  if (memo) return memo
   const raw = readFileSync(file, 'utf8')
+  const source = stripCommentsAndStrings(raw)
   const consts = new Map<string, string>()
+  constantsMemo.set(key, consts)
   for (const m of source.matchAll(
     /^(?:export\s+)?const\s+(\w+)\s*=([\s\S]*?)(?=\n\S|(?![\s\S]))/gm
   )) {
@@ -393,7 +380,8 @@ function uncovered(entryPoints: EntryPoint[], matrices: string): string[] {
     .map((e) => e.key)
 }
 
-/** The source of every real-DB conversation visibility matrix. */
+/** The source of every real-DB conversation visibility matrix. (Not
+ *  `walkSourceFiles`, which skips test files by design.) */
 function matrixSources(dir = SRC_ROOT, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue
@@ -597,24 +585,6 @@ export async function scopedRead(id, actor) {
           fn: 'readIt',
           rule: 'unscopedConversationRead',
         },
-      ])
-    })
-
-    it('a macro run whose caller does not check the conversation first', () => {
-      expect(
-        planted(
-          'lib/server/functions/planted.ts',
-          `export const runFn = createServerFn().handler(async ({ data }) => {
-  await applyMacroActions(data.conversationId, actions, actor)
-})
-
-export const checkedFn = createServerFn().handler(async ({ data }) => {
-  await assertConversationVisible(data.conversationId, actor)
-  await applyMacroActions(data.conversationId, actions, actor)
-})`
-        )
-      ).toEqual([
-        { file: 'lib/server/functions/planted.ts', fn: 'runFn', rule: 'macroWithoutCheck' },
       ])
     })
 

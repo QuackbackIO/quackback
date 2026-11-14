@@ -44,8 +44,7 @@ import {
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
-import { resolveMessageParent } from './message-parent'
-import { assertConversationVisible } from './conversation.service'
+import { assertMessageParentVisible } from './message-parent'
 import { syncConversationMessageMentions } from './sync-conversation-mentions'
 import {
   conversationToDTO,
@@ -159,19 +158,11 @@ export async function editConversationMessage(
   const viewerId = actor.principalId
   if (!viewerId) throw new ForbiddenError('FORBIDDEN', 'A session is required to edit a message')
 
-  if (!message.conversationId) {
-    if (!message.ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    await resolveMessageParent(message, actor)
-  } else {
-    // A conversation the actor cannot see hides its messages too.
-    const visible = await assertConversationVisible(message.conversationId, actor).catch(
-      (err: unknown) => {
-        if (err instanceof NotFoundError) return null
-        throw err
-      }
-    )
-    if (!visible) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+  if (!message.conversationId && !message.ticketId) {
+    throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
   }
+  // A parent the actor cannot see hides its messages too.
+  await assertMessageParentVisible(message, actor)
 
   const decision = canEditMessage(actor, {
     senderType: message.senderType,

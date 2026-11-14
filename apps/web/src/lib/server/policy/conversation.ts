@@ -21,11 +21,11 @@ export interface ConversationShape {
 
 /**
  * Whether a refused visitor send may say why instead of NotFound: the actor
- * owns the conversation, or is a workspace-wide service principal. A teammate
- * sees a conversation through `assertConversationVisible`, the SQL check that
- * follows their team scope; this helper is not that check.
+ * owns the conversation, or is a workspace-wide service principal. This is not
+ * a visibility check: a teammate sees a conversation through
+ * `assertConversationVisible`, the SQL check that follows their team scope.
  */
-export function canViewConversation(actor: Actor, conv: ConversationShape): Decision {
+export function mayExplainVisitorRefusal(actor: Actor, conv: ConversationShape): Decision {
   if (isUnscopedService(actor)) return allowDecision()
   if (actor.principalId && actor.principalId === conv.visitorPrincipalId) return allowDecision()
   return denyDecision('You do not have access to this conversation')

@@ -9,7 +9,7 @@
  * teammate's widget stream reaches its own conversation and no other.
  *
  * Real here: the route, the principal read, the role-assignment resolution,
- * `assertTicketVisible` / `ticketFilter` and `canViewConversation` against
+ * `assertTicketVisible` / `ticketFilter` and `assertConversationVisible` against
  * seeded rows. Stood in for: the stream token signature (a token is
  * `<principalId>.<scope>`), the session read, the feature-flag gate, pub/sub,
  * presence and the activity snapshot, none of which decide visibility.
