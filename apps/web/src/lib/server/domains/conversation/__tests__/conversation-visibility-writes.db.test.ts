@@ -687,18 +687,54 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
       ).rejects.toMatchObject(NOT_FOUND)
     })
 
-    it('read-state delegations of a visible ticket reach its hidden pair', async () => {
+    it("marking a visible ticket read moves its hidden pair's watermark", async () => {
       const w = await seedWorld()
       const pair = await seedPair(w)
       await markTicketReadForAgent(pair.ticketId, w.actor)
-      const read = (await row(pair.conversation.id)).agentLastReadAt
-      expect(read).not.toBeNull()
-      await markTicketUnreadFromMessage(pair.ticketId, pair.conversation.messageId, w.actor)
-      expect((await row(pair.conversation.id)).agentLastReadAt).not.toEqual(read)
+      expect((await row(pair.conversation.id)).agentLastReadAt).not.toBeNull()
       // Directly, the hidden conversation is NotFound.
       await expect(markConversationRead(pair.conversation.id, w.actor)).rejects.toMatchObject(
         NOT_FOUND
       )
+    })
+
+    /** The pair's watermark set to now, so an unread-from-here must move it back. */
+    async function markPairReadNow(id: ConversationId) {
+      const now = new Date()
+      await testDb
+        .update(conversations)
+        .set({ agentLastReadAt: now })
+        .where(eq(conversations.id, id))
+      return now
+    }
+
+    it('unread from a conversation message on a visible ticket rewinds its hidden pair', async () => {
+      const w = await seedWorld()
+      const pair = await seedPair(w)
+      const readAt = await markPairReadNow(pair.conversation.id)
+      await markTicketUnreadFromMessage(pair.ticketId, pair.conversation.messageId, w.actor)
+      const after = (await row(pair.conversation.id)).agentLastReadAt
+      expect(after === null || after < readAt).toBe(true)
+    })
+
+    it('unread from a ticket message on a visible ticket rewinds its hidden pair', async () => {
+      const w = await seedWorld()
+      const pair = await seedPair(w)
+      // A legacy ticket-parented message on the paired ticket.
+      const [anchor] = await testDb
+        .insert(conversationMessages)
+        .values({
+          ticketId: pair.ticketId,
+          principalId: w.visitor,
+          senderType: 'visitor',
+          content: 'Acme legacy reply',
+          createdAt: new Date(Date.now() - 60_000),
+        })
+        .returning()
+      const readAt = await markPairReadNow(pair.conversation.id)
+      await markTicketUnreadFromMessage(pair.ticketId, anchor.id as ConversationMessageId, w.actor)
+      const after = (await row(pair.conversation.id)).agentLastReadAt
+      expect(after === null || after < readAt).toBe(true)
     })
 
     it('a macro finishes after an earlier action moves the conversation out of scope', async () => {
