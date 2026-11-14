@@ -11,14 +11,13 @@ import {
   db,
   eq,
   inArray,
-  isNotNull,
-  ne,
   principal,
   sql,
   user,
   type ServiceMetadata,
 } from '@/lib/server/db'
 import { alias } from 'drizzle-orm/pg-core'
+import { SINGLE_WORKSPACE_NAMESPACE } from '@/lib/server/workspaces/workspace-keyed'
 import type { PrincipalId } from '@quackback/ids'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
@@ -166,11 +165,12 @@ async function showPersonalKeysAsCreator<T extends AuthorRow>(rows: T[]): Promis
       and(
         inArray(apiKeys.principalId, keyIds),
         eq(apiKeys.kind, 'personal'),
-        isNotNull(apiKeys.createdById),
-        ne(apiKeys.createdById, apiKeys.principalId),
-        // Each workspace has its own database, so the row is matched by key alone.
-        sql`${apiKeys.createdAt} >= (select min((value #>> '{}')::timestamptz) from kv_store
-          where key = ${PERSONAL_KEY_CUTOFF_KV_KEY} and expires_at > now())`
+        // The migration writes the cutoff under the single-workspace namespace
+        // in every database (each workspace has its own), so this is a
+        // primary-key lookup. With no row the comparison is null: no key matches.
+        sql`${apiKeys.createdAt} >= (select (value #>> '{}')::timestamptz from kv_store
+          where workspace_key = ${SINGLE_WORKSPACE_NAMESPACE}
+            and key = ${PERSONAL_KEY_CUTOFF_KV_KEY} and expires_at > now())`
       )
     )
   if (creators.length === 0) return rows
