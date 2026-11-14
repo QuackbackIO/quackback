@@ -12,10 +12,10 @@
  *
  * With `itemKind` (`conversation` or `ticket`) and `itemId`, a teammate caller
  * who can see that item gets each teammate who cannot see it marked
- * `noAccess: true`, by the rule notices use (recipient-scope.ts), so the note
- * composer can show them muted and refuse the pick. An item the caller cannot
- * see, a missing one or a malformed id gets the plain list, which says nothing
- * about the item.
+ * `noAccess: true`, by the one rule notices use (recipient-scope.ts), so the
+ * note composer can show them muted and refuse the pick. A caller who cannot
+ * see the item, a missing item or a malformed id gets the plain list, which
+ * says nothing about the item.
  */
 import { createFileRoute } from '@tanstack/react-router'
 import {
@@ -29,12 +29,6 @@ import type { SQL } from 'drizzle-orm'
 import { auth } from '@/lib/server/auth'
 import { db, principal, user, eq, and, inArray, sql } from '@/lib/server/db'
 import type { Role } from '@/lib/shared/roles'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { can } from '@/lib/server/policy/authorize'
-import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
-import type { Actor } from '@/lib/server/policy/types'
-import { visibleConversationIds } from '@/lib/server/domains/conversation/conversation-visibility'
-import { isTicketVisibleTo } from '@/lib/server/domains/tickets/ticket.service'
 import {
   teammateView,
   type ScopedItemRef,
@@ -59,41 +53,15 @@ interface SuggestRow {
   noAccess?: true
 }
 
-/**
- * The item named by `itemKind` and `itemId`, when the caller sees it through
- * the team rule (a view key); otherwise null, and the list carries no marks.
- */
-async function visibleItemFor(
-  params: URLSearchParams,
-  caller: { id: PrincipalId; role: Role }
-): Promise<ScopedItemRef | null> {
+/** The item named by `itemKind` and `itemId`, or null for none or a malformed one. */
+function itemFrom(params: URLSearchParams): ScopedItemRef | null {
   const kind = params.get('itemKind')
   const id = params.get('itemId') ?? ''
-  const item: ScopedItemRef | null =
-    kind === 'conversation' && isValidTypeId(id, 'conversation')
-      ? { kind, id: id as ConversationId }
-      : kind === 'ticket' && isValidTypeId(id, 'ticket')
-        ? { kind, id: id as TicketId }
-        : null
-  if (!item) return null
-
-  const actor: Actor = {
-    principalId: caller.id,
-    role: caller.role,
-    principalType: 'user',
-    segmentIds: new Set(),
-    permissions: await permissionsForPrincipal(caller.id, caller.role),
+  if (kind === 'conversation' && isValidTypeId(id, 'conversation')) {
+    return { kind, id: id as ConversationId }
   }
-  if (item.kind === 'ticket') return (await isTicketVisibleTo(item.id, actor)) ? item : null
-  // The team rule only: a customer sees their own conversation too, but gets
-  // no view of who else can.
-  if (
-    !can(actor, PERMISSIONS.CONVERSATION_VIEW) &&
-    !can(actor, PERMISSIONS.CONVERSATION_VIEW_ALL)
-  ) {
-    return null
-  }
-  return (await visibleConversationIds([item.id], actor)).has(item.id) ? item : null
+  if (kind === 'ticket' && isValidTypeId(id, 'ticket')) return { kind, id: id as TicketId }
+  return null
 }
 
 // Same fallback chain as /api/v1/users/:id/card so the picker and the
@@ -171,16 +139,19 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
     role: r.role as Role,
   }))
 
-  const item = await visibleItemFor(url.searchParams, {
-    id: principalRecord.id as PrincipalId,
-    role: principalRecord.role as Role,
-  })
+  // The caller is judged by the same rule as the people listed: only a
+  // teammate who sees the item learns who else cannot. Anyone else (a
+  // customer, even on their own conversation) gets the plain list.
+  const item = itemFrom(url.searchParams)
   if (item) {
-    const { hidden } = await teammateView(
-      item,
-      result.map((r) => r.principalId as PrincipalId)
-    )
-    for (const row of result) if (hidden.has(row.principalId as PrincipalId)) row.noAccess = true
+    const callerId = principalRecord.id as PrincipalId
+    const { visible, hidden } = await teammateView(item, [
+      { id: callerId, type: principalRecord.type, role: principalRecord.role },
+      ...result.map((r) => ({ id: r.principalId as PrincipalId, type: 'user', role: r.role })),
+    ])
+    if (visible.has(callerId)) {
+      for (const row of result) if (hidden.has(row.principalId as PrincipalId)) row.noAccess = true
+    }
   }
 
   return Response.json(result, { status: 200 })
