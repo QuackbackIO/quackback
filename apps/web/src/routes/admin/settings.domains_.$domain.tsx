@@ -21,6 +21,8 @@ export const Route = createFileRoute('/admin/settings/domains_/$domain')({
   component: DomainPage,
 })
 
+const DOMAIN_ROUTES = new Set<string>([Route.id, '/admin/settings/domains'])
+
 function DomainPage() {
   const { sending, signIn, helpCenterDomain, webAddresses, added, domain } = Route.useLoaderData()
   const params = Route.useParams()
@@ -49,7 +51,10 @@ function DomainPage() {
         visibleUses={visibleDomainUses(permissions)}
         domain={domain}
         canManage={permissions.includes(PERMISSIONS.SETTINGS_MANAGE)}
-        onChanged={() => void router.invalidate()}
+        onChanged={() =>
+          // Only this page and the Domains list (a preload of it may be cached) read a domain.
+          void router.invalidate({ filter: (m) => DOMAIN_ROUTES.has(m.routeId) })
+        }
         onRemoved={() => void navigate({ to: '/admin/settings/domains', replace: true })}
       />
     </SettingsPage>
