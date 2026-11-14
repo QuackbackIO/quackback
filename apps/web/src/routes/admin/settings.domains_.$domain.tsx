@@ -37,18 +37,18 @@ function DomainPage() {
     (r) => r.name === name
   )
   if (!row) return <Navigate to="/admin/settings/domains" replace />
+  const cloudEnabled = !!context.cloudEnabled
+  const helpCenterOn = isProductEnabled(context.settings?.featureFlags, 'helpCenter')
 
   return (
     <SettingsPage title={row.name} crumbs={[{ label: 'Domains', to: '/admin/settings/domains' }]}>
       <DomainView
         row={row}
-        links={domainUseLinks({
-          permissions,
-          cloudEnabled: !!context.cloudEnabled,
-          helpCenterOn: isProductEnabled(context.settings?.featureFlags, 'helpCenter'),
-        })}
+        links={domainUseLinks({ permissions, cloudEnabled, helpCenterOn })}
         helpCenterDomain={helpCenterDomain?.domain ?? null}
-        visibleUses={visibleDomainUses(permissions)}
+        visibleUses={visibleDomainUses(permissions, {
+          takesWebAddresses: cloudEnabled || helpCenterOn,
+        })}
         domain={domain}
         canManage={permissions.includes(PERMISSIONS.SETTINGS_MANAGE)}
         onChanged={() =>

@@ -367,6 +367,7 @@ function UsesCard({
                 key={use}
                 title={USE_COPY[use].title}
                 meta={useDescription(use, link)}
+                wrapMeta
                 trailing={setUpControl(use)}
               />
             )
@@ -376,6 +377,7 @@ function UsesCard({
               key={use}
               title={USE_COPY[use].title}
               meta={meta(status)}
+              wrapMeta
               badges={status.state ? <StateBadge state={status.state} /> : undefined}
               trailing={
                 <>

@@ -462,6 +462,21 @@ describe('domain view permissions', () => {
     expect(screen.queryByRole('link', { name: 'Sign-in settings' })).toBeNull()
   })
 
+  it('lists no custom domain on an install that takes no web address', () => {
+    // Off Cloud with the help center off, nothing can put a site on a domain.
+    const all = [
+      EMAIL_SENDING_PERMISSION,
+      PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+      PERMISSIONS.AUTH_MANAGE,
+    ]
+    expect(visibleDomainUses(all, { takesWebAddresses: false })).toEqual(['email', 'signIn'])
+    expect(visibleDomainUses(all, { takesWebAddresses: true })).toEqual([
+      'email',
+      'customDomain',
+      'signIn',
+    ])
+  })
+
   it('shows the custom domain without a link to a page the viewer cannot open', () => {
     renderView(all(), { permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN] })
     expect(useTitles()).toEqual(['Custom domain'])
