@@ -1406,7 +1406,7 @@ interface RichTextEditorProps {
   editorRef?: React.RefObject<RichTextEditorHandle | null>
   /** The inbox item a note is written on. Mentions then suggest teammates
    * only, and a teammate who cannot see the item shows muted with "No access"
-   * and cannot be picked. */
+   * and cannot be picked. Changing it rebuilds the editor. */
   mentionItem?: MentionItemRef
 }
 
@@ -1433,7 +1433,9 @@ function RichTextEditorBase({
   mentionItem,
 }: RichTextEditorProps) {
   // One extension per item, kept while the item is open, so the extensions
-  // memo below stays stable across renders.
+  // memo below stays stable across renders. The editor itself is keyed on the
+  // same item (see the useEditor deps), so a host that moves this editor to
+  // another item without remounting it gets the new item's typeahead.
   const mentionKind = mentionItem?.kind
   const mentionId = mentionItem?.id
   const mentionExtension = useMemo(
@@ -1543,40 +1545,46 @@ function RichTextEditorBase({
   // useEffect below (value sync).
   const initialContentRef = useRef(value ?? '')
 
-  const editor = useEditor({
-    immediatelyRender: false,
-    // When no toolbar is visible (borderless/widget), skip re-renders on every
-    // ProseMirror transaction for a significant perf win. When the toolbar IS
-    // shown, we need re-renders so MenuBar's active-state indicators stay current.
-    shouldRerenderOnTransaction: toolbarPosition === 'none' ? false : undefined,
-    extensions,
-    content: initialContentRef.current,
-    autofocus,
-    editable: !disabled,
-    onCreate: ({ editor }) => {
-      lastSuccessfulMarkdownRef.current = seedMarkdownFallback(initialContentRef.current, editor)
+  const editor = useEditor(
+    {
+      immediatelyRender: false,
+      // When no toolbar is visible (borderless/widget), skip re-renders on every
+      // ProseMirror transaction for a significant perf win. When the toolbar IS
+      // shown, we need re-renders so MenuBar's active-state indicators stay current.
+      shouldRerenderOnTransaction: toolbarPosition === 'none' ? false : undefined,
+      extensions,
+      content: initialContentRef.current,
+      autofocus,
+      editable: !disabled,
+      onCreate: ({ editor }) => {
+        lastSuccessfulMarkdownRef.current = seedMarkdownFallback(initialContentRef.current, editor)
+      },
+      onUpdate: ({ editor }) => {
+        if (!onDocumentChange) return
+        const edited = editorDocument(editor, {
+          markdownFallback: () => lastSuccessfulMarkdownRef.current,
+          onSerialize: (format, serialized) => {
+            if (latestDocumentRef.current !== edited) return
+            if (format === 'json') {
+              lastEmittedJsonRef.current = serialized
+            } else {
+              lastEmittedMarkdownRef.current = serialized as string
+              lastSuccessfulMarkdownRef.current = serialized as string
+            }
+          },
+        })
+        latestDocumentRef.current = edited
+        lastEmittedJsonRef.current = null
+        lastEmittedMarkdownRef.current = null
+        onDocumentChange(edited)
+      },
+      editorProps,
+      // A new mention item builds a new editor: TipTap does not re-register an
+      // extension's plugins when only the extension list changes, so the old
+      // item's typeahead would otherwise stay.
     },
-    onUpdate: ({ editor }) => {
-      if (!onDocumentChange) return
-      const edited = editorDocument(editor, {
-        markdownFallback: () => lastSuccessfulMarkdownRef.current,
-        onSerialize: (format, serialized) => {
-          if (latestDocumentRef.current !== edited) return
-          if (format === 'json') {
-            lastEmittedJsonRef.current = serialized
-          } else {
-            lastEmittedMarkdownRef.current = serialized as string
-            lastSuccessfulMarkdownRef.current = serialized as string
-          }
-        },
-      })
-      latestDocumentRef.current = edited
-      lastEmittedJsonRef.current = null
-      lastEmittedMarkdownRef.current = null
-      onDocumentChange(edited)
-    },
-    editorProps,
-  })
+    [mentionKind, mentionId]
+  )
 
   // The imperative focus seam. `withLiveEditor` guards the window where the
   // editor is still null or already torn down, so a stale host reference can
