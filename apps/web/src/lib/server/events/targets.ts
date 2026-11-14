@@ -755,7 +755,12 @@ export async function getConversationAssignedTargets(event: EventData): Promise<
   return {
     type: 'notification',
     target: { principalIds: inScope },
-    config: { conversationId: conversation.id, assignedAgentPrincipalId: directAssignee },
+    config: {
+      conversationId: conversation.id,
+      // Named only while they are a recipient (their copy says "you were assigned").
+      assignedAgentPrincipalId:
+        directAssignee && inScope.includes(directAssignee) ? directAssignee : null,
+    },
   }
 }
 
