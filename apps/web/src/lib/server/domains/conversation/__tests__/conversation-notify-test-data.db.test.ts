@@ -23,6 +23,7 @@ vi.mock('@/lib/server/db', async (original) => ({
 }))
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: async () => false,
+  readOnlineAgentIds: async () => [],
   isPrincipalOnline: async (id: PrincipalId) => {
     expect(id).toBeDefined()
     return false

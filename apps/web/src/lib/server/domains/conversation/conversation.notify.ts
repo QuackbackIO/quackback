@@ -48,11 +48,7 @@ import type { ConversationId, ConversationMessageId, PrincipalId } from '@quackb
 import type { JSONContent } from '@tiptap/core'
 import { generateContentHTML } from '@/lib/shared/content-html'
 import { withEmailProxyHint } from '@/lib/server/content/email-image-proxy'
-import {
-  isAnyAgentOnline,
-  isPrincipalOnline,
-  listOnlineAgentIds,
-} from '@/lib/server/realtime/presence'
+import { isPrincipalOnline, readOnlineAgentIds } from '@/lib/server/realtime/presence'
 import { buildHookContext } from '@/lib/server/events/hook-context'
 import { truncate } from '@/lib/shared/utils/string'
 import { resolveReplyRecipient } from './conversation.recipient'
@@ -248,16 +244,6 @@ async function resolveVisitorConversationLink(
 }
 
 /**
- * Whether any of `principalIds` has a live inbox stream. A presence outage
- * lists nobody, so the alert goes out: a possibly-redundant email beats a
- * message nobody sees.
- */
-async function anyOnlineAmong(principalIds: readonly PrincipalId[]): Promise<boolean> {
-  const online = new Set(await listOnlineAgentIds())
-  return principalIds.some((id) => online.has(id))
-}
-
-/**
  * Email the team of a new visitor message when no agent is online to see it
  * live. The in-app team bell for the same event moved to the
  * `message.created` event/hook pipeline (WO-3 slice 5, notificationHook in
@@ -278,17 +264,26 @@ export async function notifyVisitorMessage(opts: {
     const testOwner = await testOwnerOf(opts.conversation.visitorPrincipalId)
 
     // Avoid email spam: email only when nobody who can see the conversation
-    // is around to see it live. Nobody online at all is the fast case; when
-    // someone is, the check below asks whether any of them is a recipient,
-    // because an agent who cannot see the conversation must not silence the
-    // teammates who can.
+    // is around to see it live. Presence is read once. Nobody online skips the
+    // check; otherwise only the online teammates are judged, so an agent who
+    // cannot see the conversation never silences the teammates who can. An
+    // unreadable presence store counts as someone online (no alert), so an
+    // outage cannot turn every message into an email.
     //
     // Deliberate small skew: presence is checked at TWO different moments —
     // here, at request time, for the email; and again inside the notification
     // hook, at worker time, for the bell (its own anti-spam gate, over the
     // same in-scope recipients). Never try to unify them — the bell's check
     // intentionally runs later, off the request path.
-    const anyAgentOnline = await isAnyAgentOnline()
+    const online = await readOnlineAgentIds()
+    if (online === null) return
+    if (online.length > 0) {
+      const watching = await inScopeRecipients(
+        { kind: 'conversation', id: opts.conversation.id },
+        online
+      )
+      if (watching.length > 0) return
+    }
 
     const teammates = await db
       .select({
@@ -320,7 +315,6 @@ export async function notifyVisitorMessage(opts: {
     const team = teammates.filter((t) => inScope.has(t.principalId))
 
     if (team.length === 0) return
-    if (anyAgentOnline && (await anyOnlineAmong(team.map((t) => t.principalId)))) return
 
     const body = previewOf(opts.content)
 

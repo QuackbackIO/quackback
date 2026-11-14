@@ -25,6 +25,7 @@ const onlineAgentIds = vi.fn().mockResolvedValue([])
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: () => isAnyAgentOnlineSpy(),
   listOnlineAgentIds: () => onlineAgentIds(),
+  readOnlineAgentIds: () => onlineAgentIds(),
 }))
 
 import { notificationHook } from '../handlers/notification'
@@ -948,6 +949,17 @@ describe('notificationHook — message.created', () => {
     })
     expect(result.success).toBe(true)
     expect(batchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('gates out a non-first message when presence cannot be read', async () => {
+    onlineAgentIds.mockResolvedValue(null)
+
+    const result = await notificationHook.run(makeEvent(false), target, {
+      ...config,
+      isFirstMessage: false,
+    })
+    expect(result).toEqual({ success: true })
+    expect(batchSpy).not.toHaveBeenCalled()
   })
 
   it('bells the team for a non-first message when no agent is online', async () => {
