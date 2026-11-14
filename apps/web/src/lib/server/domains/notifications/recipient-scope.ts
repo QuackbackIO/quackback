@@ -9,7 +9,8 @@
  * points a person at an item they would get Not found for.
  *
  * One exception: the requester of a CUSTOMER ticket owns it, so when the
- * caller names them they always hear, teammate or not, wherever it is routed.
+ * caller names them they always hear, teammate or not, wherever it is routed,
+ * until the ticket is deleted.
  * A back-office or tracker ticket's requester gets no exception: a teammate is
  * judged by scope like anyone else, and a non-teammate is dropped.
  *
@@ -202,14 +203,18 @@ export async function teammateView(
   return (await judge(item, candidates, false)).view
 }
 
-/** Whether `facts` say the ticket is a customer ticket, whose requester owns it. */
-const isCustomerTicket = (item: ScopedItemRef, facts: Judged['facts']) =>
-  item.kind === 'ticket' && (facts as TicketFacts | null)?.type === 'customer'
+/** Whether `facts` say the ticket is a live customer ticket, whose requester owns it. */
+function isLiveCustomerTicket(item: ScopedItemRef, facts: Judged['facts']): boolean {
+  if (item.kind !== 'ticket' || !facts) return false
+  const ticket = facts as TicketFacts
+  return ticket.type === 'customer' && ticket.deletedAt == null
+}
 
 /**
  * `candidates` cut to the people who may hear about the item, order kept:
  * the teammates whose own scope holds it, plus `requesterPrincipalId` when the
- * caller names the requester of a customer ticket. Everyone else is dropped.
+ * caller names the requester of a customer ticket that is not deleted.
+ * Everyone else is dropped.
  */
 export async function inScopeRecipients(
   item: ScopedItemRef,
@@ -219,7 +224,7 @@ export async function inScopeRecipients(
   if (candidates.length === 0) return []
   const named = opts.requesterPrincipalId ?? null
   const { view, facts } = await judge(item, candidates, named !== null && item.kind === 'ticket')
-  const owner = named !== null && isCustomerTicket(item, facts) ? named : null
+  const owner = named !== null && isLiveCustomerTicket(item, facts) ? named : null
   const unique = [...new Set(candidates.map(idOf))]
   const kept: PrincipalId[] = []
   const dropped: PrincipalId[] = []

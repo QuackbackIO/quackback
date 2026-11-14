@@ -753,6 +753,22 @@ describe('the requester of a ticket', () => {
     expect(recipientsOf(reply)).not.toContain(w.former.id)
   })
 
+  it('the requester of a soft-deleted customer ticket hears nothing', async () => {
+    const w = await seedWorld()
+    const id = await requested(w.requester, 'customer', w.billing)
+    const { tickets } = await import('@/lib/server/db')
+    await testDb.update(tickets).set({ deletedAt: new Date() }).where(eq(tickets.id, id))
+
+    const status = await getTicketStatusChangedTargets(
+      event(w, 'ticket.status_changed', id, 'customer', w.requester)
+    )
+    expect(recipientsOf(status)).not.toContain(w.requester.id)
+    const reply = await getTicketRepliedTargets(
+      event(w, 'ticket.replied', id, 'customer', w.requester)
+    )
+    expect(recipientsOf(reply)).not.toContain(w.requester.id)
+  })
+
   it('a scoped teammate who filed a back-office ticket is judged by scope like any teammate', async () => {
     const w = await seedWorld()
     const id = await requested(w.solo, 'back_office', w.logistics)
