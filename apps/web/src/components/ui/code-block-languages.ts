@@ -1,7 +1,8 @@
 /**
- * The grammars code blocks highlight with. The editor loads this module the
- * first time a document holds a code block (rich-text-editor.tsx), so editors
- * that never show one, like the widget's composers, never download them.
+ * The grammars code blocks highlight with. loadCodeLanguages in
+ * code-block-highlight.ts loads this module the first time an editor's
+ * document holds a code block, so editors that never show one, like the
+ * widget's composers, never download them.
  */
 import type { createLowlight } from 'lowlight'
 import langBash from 'highlight.js/lib/languages/bash'

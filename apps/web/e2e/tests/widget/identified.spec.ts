@@ -63,11 +63,12 @@ test.describe('Identified widget harness', { tag: '@smoke' }, () => {
     await expect(title).toBeVisible()
     const idea = `Widget e2e idea ${Date.now()}`
     await title.fill(idea)
+    // The board picker loads behind a lazy boundary once the composer opens,
+    // so wait for it rather than checking whether it is already there.
     const boardPicker = widget.getByRole('combobox')
-    if (await boardPicker.isVisible()) {
-      await boardPicker.click()
-      await widget.getByRole('option').first().click()
-    }
+    await expect(boardPicker).toBeVisible({ timeout: 10000 })
+    await boardPicker.click()
+    await widget.getByRole('option').first().click()
     const submit = widget.getByRole('button', { name: 'Post', exact: true })
     await expect(submit).toBeEnabled({ timeout: 10000 })
     await submit.click()

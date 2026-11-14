@@ -278,13 +278,19 @@ const preloadBoardSelect = boardSelect.preload
 function BoardSelectPlaceholder({ name }: { name: string | undefined }) {
   const intl = useIntl()
   return (
-    <span className="inline-flex h-6 items-center gap-1 px-1.5 text-xs font-medium whitespace-nowrap text-foreground">
+    <span
+      className={cn(
+        'inline-flex h-6 items-center gap-1 px-1.5 text-xs font-medium whitespace-nowrap',
+        name ? 'text-foreground' : 'text-muted-foreground'
+      )}
+    >
       {name ??
         intl.formatMessage({
           id: 'widget.home.posting.selectBoard',
           defaultMessage: 'Select a board',
         })}
-      <span aria-hidden className="size-3" />
+      {/* The trigger's chevron is size-4. */}
+      <span aria-hidden className="size-4" />
     </span>
   )
 }
