@@ -10,6 +10,9 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 
+// The viewer may read every list these controls load; the permission gates
+// themselves are pinned in components/admin/__tests__/permission-gated-reads.test.tsx.
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 const getPersonBlockStatusFn = vi.fn()
 vi.mock('@/lib/server/functions/blocking', () => ({
   getPersonBlockStatusFn: (...args: unknown[]) => getPersonBlockStatusFn(...args),

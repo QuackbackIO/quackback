@@ -10,7 +10,7 @@
  * several of them fire unconditional queries that would otherwise hit real
  * server functions.
  */
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -84,9 +84,11 @@ vi.mock('@/components/admin/conversation/copilot-panel', () => ({
 const routeContextState: {
   settings: { featureFlags?: FeatureFlags } | undefined
   principal: { role: string } | undefined
+  permissions: string[] | undefined
 } = {
   settings: undefined,
   principal: undefined,
+  permissions: undefined,
 }
 
 vi.mock('@tanstack/react-router', () => ({
@@ -318,8 +320,12 @@ describe('<InboxDetailPanel> GitHub issue people', () => {
 })
 
 describe('<InboxDetailPanel> contact name', () => {
+  beforeEach(() => {
+    routeContextState.permissions = ['conversation.view', 'people.view']
+  })
   afterEach(() => {
     vi.mocked(getPortalUserFn).mockResolvedValue(null)
+    routeContextState.permissions = undefined
     panelShown = false
   })
 
@@ -384,6 +390,22 @@ describe('<InboxDetailPanel> contact name', () => {
 
     expect(await screen.findByText('Quiet Otter')).toBeInTheDocument()
     expect(screen.queryByText('Anonymous')).not.toBeInTheDocument()
+  })
+  it('keeps the public name and email without asking for the profile when the viewer lacks people.view', async () => {
+    routeContextState.principal = undefined
+    routeContextState.permissions = ['conversation.view', 'conversation.reply']
+    showPanel()
+    vi.mocked(getPortalUserFn).mockClear()
+
+    renderPanel(
+      makeConversation({
+        visitor: { principalId: 'principal_visitor', displayName: 'Quiet Otter', avatarUrl: null },
+      })
+    )
+
+    expect(await screen.findByText('Quiet Otter')).toBeInTheDocument()
+    expect(screen.getByText('vic@example.com')).toBeInTheDocument()
+    expect(getPortalUserFn).not.toHaveBeenCalled()
   })
 })
 

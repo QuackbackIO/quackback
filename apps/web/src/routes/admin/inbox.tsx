@@ -108,7 +108,7 @@ import {
   type InboxItemDTO,
   type InboxTriageFacet,
 } from '@/lib/shared/inbox/items'
-import { listCompaniesFn } from '@/lib/server/functions/companies'
+import { inboxCompaniesQueryOptions, useInboxCompanies } from '@/lib/client/queries/inbox-companies'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
@@ -125,6 +125,7 @@ import {
   type FeatureFlags,
 } from '@/lib/shared/types/settings'
 import { useFeatureFlag, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { QuinnViewHeader } from '@/components/admin/conversation/quinn-view-header'
 import { TestViewHeader } from '@/components/admin/conversation/test-view-header'
 
@@ -254,6 +255,7 @@ export const Route = createFileRoute('/admin/inbox')({
     // page — each is caught independently and the component's useQuery still
     // fetches client-side.
     const warm = (p: Promise<unknown>) => p.catch(() => undefined)
+    const canRead = (permission: PermissionKey) => (context.permissions ?? []).includes(permission)
     const ref = search.i ? inboxItemRefFromId(search.i) : null
     let listPrefetch: Promise<unknown> | undefined
     if (skipListPrefetch) {
@@ -304,13 +306,14 @@ export const Route = createFileRoute('/admin/inbox')({
       warm(queryClient.ensureQueryData(conversationInboxQueries.segmentCounts())),
       warm(queryClient.ensureQueryData(conversationInboxQueries.views())),
       warm(queryClient.ensureQueryData(inboxQueries.counts())),
-      warm(queryClient.ensureQueryData(inboxTeamsQueryOptions())),
-      warm(
-        queryClient.ensureQueryData({
-          queryKey: ['admin', 'companies'],
-          queryFn: () => listCompaniesFn(),
-        })
-      ),
+      // The roster and the company picker need permissions an inbox-only
+      // custom role may lack; the server would only refuse them.
+      canRead(PERMISSIONS.MEMBER_VIEW)
+        ? warm(queryClient.ensureQueryData(inboxTeamsQueryOptions()))
+        : undefined,
+      canRead(PERMISSIONS.COMPANY_VIEW)
+        ? warm(queryClient.ensureQueryData(inboxCompaniesQueryOptions()))
+        : undefined,
       warm(queryClient.ensureQueryData(conversationAttributeQueries.live())),
       // The status catalogue backs every ticket-kind row's badge, not just a
       // tickets-scoped view, so it's warmed whenever tickets are on at all.
@@ -598,11 +601,7 @@ function InboxPage() {
 
   // Company refinement: a picker in the list header + the deep-link from the
   // conversation CompanyCard. The picker only appears when companies exist.
-  const { data: companies } = useQuery({
-    queryKey: ['admin', 'companies'],
-    queryFn: () => listCompaniesFn(),
-    staleTime: 60_000,
-  })
+  const { data: companies } = useInboxCompanies()
   // A deep link can carry `?company=` into a scope that cannot filter by it.
   useEffect(() => {
     if (urlCompany && !showRefinements) updateSearch({ company: undefined })

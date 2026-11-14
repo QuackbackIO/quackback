@@ -12,6 +12,8 @@ import {
   getPersonBlockStatusFn,
 } from '@/lib/server/functions/blocking'
 import { toastError } from '@/lib/client/error-notice'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 /** Shared query key so the badge and the button dedupe to one fetch per person. */
 function blockStatusKey(principalId: PrincipalId) {
@@ -22,12 +24,15 @@ function blockStatusKey(principalId: PrincipalId) {
  * Block state for a person. React Query dedupes across every caller with the
  * same principal, so a surface can read this for a "Blocked" badge while the
  * {@link BlockPersonControl} button reads it too, with a single request.
+ * Read only by a viewer holding people.view (what the server requires); for
+ * anyone else the person reads as not blocked and no badge shows.
  */
 export function usePersonBlockStatus(principalId: PrincipalId | undefined) {
+  const canView = usePermission(PERMISSIONS.PEOPLE_VIEW)
   const query = useQuery({
     queryKey: blockStatusKey(principalId as PrincipalId),
     queryFn: () => getPersonBlockStatusFn({ data: { principalId: principalId as PrincipalId } }),
-    enabled: !!principalId,
+    enabled: canView && !!principalId,
     staleTime: 30_000,
   })
   return { blocked: query.data?.blockedAt != null, isLoading: query.isLoading }
