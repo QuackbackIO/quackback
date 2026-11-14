@@ -221,6 +221,8 @@ describe('the inbox scope envelope (`s`)', () => {
       await until(() => seen.length > 0)
       expect(JSON.parse(seen[0][0])).toEqual({ body })
       expect(seen[0][1]).toEqual(scope)
+      // The raw listener is its own connection and can hear it a moment later.
+      await until(() => raw.seen.some((r) => r.includes('"o":')))
       const spilled = raw.seen
         .filter((r) => !r.startsWith('__verify__'))
         .map((r) => JSON.parse(r) as { o?: string; s?: unknown })
@@ -246,6 +248,7 @@ describe('the inbox scope envelope (`s`)', () => {
       await withRealWorkspace(T, () => publishAsync('conversation:visitor-1', { n: 1 }))
       await until(() => seen.length > 0)
       expect(seen[0][1]).toBeUndefined()
+      await until(() => raw.seen.some((r) => r.includes('conversation:visitor-1')))
       const envelopes = raw.seen
         .filter((r) => !r.startsWith('__verify__'))
         .map((r) => JSON.parse(r) as Record<string, unknown>)
