@@ -44,6 +44,33 @@ export function resolveSuggestionListKey(
   return { type: 'none' }
 }
 
+/**
+ * The row to land on when moving from `start` (already the resolved target)
+ * in `step` direction past rows that cannot be picked, wrapping around. -1
+ * when no row can be picked.
+ */
+function nearestPickable<T>(
+  items: readonly T[],
+  start: number,
+  step: 1 | -1,
+  isDisabled: (item: T) => boolean
+): number {
+  const count = items.length
+  for (let n = 0; n < count; n++) {
+    const index = (((start + step * n) % count) + count) % count
+    if (!isDisabled(items[index])) return index
+  }
+  return -1
+}
+
+/** The first row that can be picked, or 0 when none can (nothing confirms then). */
+export function firstPickableIndex<T>(
+  items: readonly T[],
+  isDisabled: (item: T) => boolean
+): number {
+  return Math.max(0, items.length === 0 ? 0 : nearestPickable(items, 0, 1, isDisabled))
+}
+
 export function applySuggestionListKey<T>(
   event: Pick<KeyboardEvent, 'key'>,
   opts: {
@@ -51,6 +78,8 @@ export function applySuggestionListKey<T>(
     selected: number
     onMove: (index: number) => void
     onConfirm: (item: T) => void
+    /** Rows that show but cannot be picked: moves skip them, confirm ignores them. */
+    isDisabled?: (item: T) => boolean
   }
 ): boolean {
   const result = resolveSuggestionListKey(event, {
@@ -58,11 +87,15 @@ export function applySuggestionListKey<T>(
     selected: opts.selected,
   })
   if (result.type === 'none') return false
+  const isDisabled = opts.isDisabled ?? (() => false)
   if (result.type === 'move') {
-    opts.onMove(result.index)
+    // Up and End walk backwards to a pickable row; Down and Home forwards.
+    const step = event.key === 'ArrowUp' || event.key === 'End' ? -1 : 1
+    const index = nearestPickable(opts.items, result.index, step, isDisabled)
+    if (index !== -1) opts.onMove(index)
     return true
   }
   const item = opts.items[opts.selected]
-  if (item !== undefined) opts.onConfirm(item)
+  if (item !== undefined && !isDisabled(item)) opts.onConfirm(item)
   return true
 }
