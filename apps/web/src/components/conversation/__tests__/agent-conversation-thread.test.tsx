@@ -56,6 +56,8 @@ const composerProbe = vi.hoisted(() => ({
 // ride with it in the meantime.
 const threadProbe = vi.hoisted(() => ({
   gate: null as null | Promise<void>,
+  /** When set, the conversation thread read fails with this error. */
+  fail: null as null | Error,
   linkFetches: 0,
   translationEnabled: [] as boolean[],
   overAllowanceNotice: null as string | null,
@@ -454,6 +456,7 @@ vi.mock('@/lib/client/queries/conversation-inbox', () => ({
       queryKey: ['conv-thread', id],
       queryFn: async () => {
         if (threadProbe.gate) await threadProbe.gate
+        if (threadProbe.fail) throw threadProbe.fail
         return {
           hasMore: false,
           conversation: makeConversation({ id: id as ConversationDTO['id'] }),
@@ -470,6 +473,7 @@ import { setConversationStatusFn } from '@/lib/server/functions/conversation'
 import { setTicketStatusFn } from '@/lib/server/functions/tickets'
 
 afterEach(() => {
+  threadProbe.fail = null
   mockTicketLink.value = null
   mockTicketStatuses.value = []
   mockProvenanceCount.value = 0
@@ -631,6 +635,29 @@ describe('AgentConversationThread — conversation kind unaffected', () => {
     expect(await screen.findByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
     expect(screen.getByTestId('inbox-detail-panel')).toBeInTheDocument()
     expect(screen.getByTestId('composer-ai-actions')).toHaveAttribute('data-active-mode', 'reply')
+  })
+})
+
+describe('AgentConversationThread — a conversation the server answers NotFound for', () => {
+  it('shows "Conversation not found" with no Close and no reply box', async () => {
+    threadProbe.fail = Object.assign(new Error('Conversation not found'), {
+      code: 'CONVERSATION_NOT_FOUND',
+      statusCode: 404,
+    })
+    renderThread({ kind: 'conversation', id: 'conversation_hidden' })
+    expect(await screen.findByTestId('empty-state')).toHaveTextContent('Conversation not found')
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument()
+  })
+
+  it('does not show the not-found state for any other failure', async () => {
+    threadProbe.fail = Object.assign(new Error('Something went wrong on our side.'), {
+      reference: 'ABCD-1234',
+    })
+    renderThread({ kind: 'conversation', id: 'conversation_broken' })
+    // Wait for the read to settle, then check the pane did not claim NotFound.
+    await screen.findByRole('button', { name: 'Reply' })
+    expect(screen.queryByText('Conversation not found')).not.toBeInTheDocument()
   })
 })
 
