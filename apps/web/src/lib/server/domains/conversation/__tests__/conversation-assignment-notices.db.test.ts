@@ -68,7 +68,12 @@ vi.mock('../routing', () => ({
 }))
 
 import { assignConversation, assignTeam } from '../conversation.service'
-import { conversationToDTO, countVisitorUnreadMessages, listMessages } from '../conversation.query'
+import {
+  conversationToDTO,
+  countVisitorUnreadMessages,
+  listMessages,
+  listMissedMessagesForBackfill,
+} from '../conversation.query'
 import { listPairThreadMessages } from '@/lib/server/domains/tickets/pair-thread.service'
 
 const fixture = await createDbTestFixture()
@@ -201,7 +206,9 @@ describe('a new assignment notice is team-only', () => {
     expect(customerChannelMessages()).toEqual([])
   })
 
-  it("leaves the customer's preview, updated time and unread count alone", async () => {
+  // Guard, not a behaviour change: system rows never moved these values, and
+  // this pins that the internal notices keep it so.
+  it("guard: the customer's preview, updated time and unread count stay put", async () => {
     const conversationId = await newConversation()
     const before = await conversationToDTO(await loadConversation(conversationId), 'visitor')
 
@@ -272,6 +279,30 @@ describe('assignment notices written public before the change stay hidden from c
     const agent = await listMessages(conversationId, { includeInternal: true })
     expect(contents(agent.messages)).toEqual([
       'My invoice is wrong',
+      'Conversation assigned to the Billing team',
+      'Conversation assigned to Alex',
+      'Conversation ended',
+      'Conversation reopened',
+    ])
+  })
+
+  it('the visitor reconnect backfill skips them; a teammate backfill keeps them', async () => {
+    const conversationId = await newConversation()
+    const [first] = await testDb
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, conversationId))
+    await seedLegacyNotices(conversationId)
+
+    const visitorMissed = await listMissedMessagesForBackfill(conversationId, first!.id, {
+      includeInternal: false,
+    })
+    expect(contents(visitorMissed)).toEqual(['Conversation ended', 'Conversation reopened'])
+
+    const teammateMissed = await listMissedMessagesForBackfill(conversationId, first!.id, {
+      includeInternal: true,
+    })
+    expect(contents(teammateMissed)).toEqual([
       'Conversation assigned to the Billing team',
       'Conversation assigned to Alex',
       'Conversation ended',

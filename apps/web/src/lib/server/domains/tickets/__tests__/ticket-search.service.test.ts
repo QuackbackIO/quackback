@@ -268,6 +268,37 @@ describe.skipIf(!fixture.available)('searchTickets (real DB, rolled back)', () =
     expect(requester).not.toContain(w.mineMsg)
   })
 
+  it("a requester's snippet never comes from a legacy public assignment notice", async () => {
+    const w = await seedWorld()
+    await seedLinkedConversation(w)
+    // The title matches, so the ticket is found either way; the notice must
+    // not be the snippet the requester sees.
+    await testDb
+      .update(tickets)
+      .set({ title: 'Quarterdeck billing question' })
+      .where(eq(tickets.id, w.mineMsg))
+    const [{ conversationId }] = await testDb
+      .select({ conversationId: ticketConversations.conversationId })
+      .from(ticketConversations)
+      .where(eq(ticketConversations.ticketId, w.mineMsg))
+    await testDb.insert(conversationMessages).values({
+      conversationId,
+      principalId: null,
+      senderType: 'system',
+      content: 'Conversation assigned to the Quarterdeck team',
+      isInternal: false,
+    })
+
+    const [agentHit] = await searchTickets(w.agent, { query: 'quarterdeck', audience: 'agent' })
+    expect(agentHit.snippet).toContain('assigned')
+    const [requesterHit] = await searchTickets(requesterActor(w.me), {
+      query: 'quarterdeck',
+      audience: 'requester',
+    })
+    expect(requesterHit.ticket.id).toBe(w.mineMsg)
+    expect(requesterHit.snippet).toBe('Quarterdeck billing question')
+  })
+
   it('snippets come from the linked conversation when only it matches', async () => {
     const w = await seedWorld()
     await seedLinkedConversation(w)

@@ -22,10 +22,7 @@ import type { SQL } from 'drizzle-orm'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TicketId } from '@quackback/ids'
 import { ticketFilter } from '@/lib/server/policy/tickets'
-import {
-  customerVisibleMessageSql,
-  teamOnlySystemNoticeSql,
-} from '@/lib/server/messages/customer-audience'
+import { customerVisibleMessageSql } from '@/lib/server/messages/customer-audience'
 import { buildTicketContext, ticketToDTO } from './ticket.dto'
 import { buildRequesterTicketContext, toRequesterTicketDTO } from './requester-ticket.dto'
 import type { RequesterTicketDTO, TicketDTO } from './ticket.types'
@@ -51,6 +48,14 @@ export interface SearchTicketsOptions {
   limit?: number
 }
 
+/** The customer audience rule against the `cm` alias used below. */
+const CM_CUSTOMER_VISIBLE = customerVisibleMessageSql({
+  isInternal: sql`cm.is_internal`,
+  senderType: sql`cm.sender_type`,
+  content: sql`cm.content`,
+  metadata: sql`cm.metadata`,
+})
+
 /**
  * A message's pair-parent match predicate (CONVERGENCE PHASE 0): the message
  * belongs to the ticket when it hangs off the ticket directly OR off the
@@ -67,16 +72,7 @@ function pairMessageParentSql(tsq: SQL, stripInternal: boolean): SQL {
         SELECT tc.conversation_id FROM ticket_conversations tc
         WHERE tc.ticket_id = ${tickets.id} AND tc.ticket_type = 'customer'
       ))
-      AND cm.search_vector @@ ${tsq} ${stripInternal ? sql`AND cm.is_internal = false AND NOT ${cmTeamOnlyNotice()}` : sql``}`
-}
-
-/** The team-only notice predicate against the `cm` alias used above. */
-function cmTeamOnlyNotice(): SQL {
-  return teamOnlySystemNoticeSql({
-    senderType: sql`cm.sender_type`,
-    content: sql`cm.content`,
-    metadata: sql`cm.metadata`,
-  })
+      AND cm.search_vector @@ ${tsq} ${stripInternal ? sql`AND ${CM_CUSTOMER_VISIBLE}` : sql``}`
 }
 
 /**

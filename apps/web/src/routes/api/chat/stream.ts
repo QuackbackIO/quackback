@@ -1,15 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import {
-  db,
-  eq,
-  and,
-  or,
-  gt,
-  isNull,
-  conversations,
-  conversationMessages,
-  principal,
-} from '@/lib/server/db'
+import { db, eq, conversations, principal } from '@/lib/server/db'
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { verifyStreamToken } from '@/lib/server/realtime/stream-token'
@@ -28,12 +18,7 @@ import { canViewConversation } from '@/lib/server/policy/conversation'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember, toSessionScope, type SessionScope } from '@/lib/shared/roles'
-import {
-  loadAuthors,
-  toMessageDTO,
-  fallbackAuthor,
-  findBackfillCursor,
-} from '@/lib/server/domains/conversation/conversation.query'
+import { listMissedMessagesForBackfill } from '@/lib/server/domains/conversation/conversation.query'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
 import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
@@ -47,7 +32,6 @@ import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspace
 import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { logger } from '@/lib/server/logger'
-import { customerVisibleMessageSql } from '@/lib/server/messages/customer-audience'
 
 const log = logger.child({ component: 'chat-stream' })
 
@@ -373,60 +357,26 @@ export const Route = createFileRoute('/api/chat/stream')({
               ? readActivitySnapshot(backfillConversationId)
               : null
 
-            // Backfill messages the client missed while disconnected. Mirror
-            // the canonical read path: skip soft-deleted rows and use the
-            // composite (created_at, id) keyset so same-microsecond siblings
-            // are not dropped. A backfill failure must not tear down the live
-            // stream, so it's isolated in its own try/catch.
+            // Backfill messages the client missed while disconnected (see
+            // listMissedMessagesForBackfill for the audience and keyset rules).
+            // A backfill failure must not tear down the live stream, so it's
+            // isolated in its own try/catch.
             if (backfillConversationId && lastEventId) {
               try {
-                // Scoped to the authorized conversation — a Last-Event-ID
+                // Scoped to the authorized conversation: a Last-Event-ID
                 // from elsewhere must not shift the backfill window.
-                const cursor = await findBackfillCursor(backfillConversationId, lastEventId)
-                if (cursor) {
-                  const missed = await db
-                    .select()
-                    .from(conversationMessages)
-                    .where(
-                      and(
-                        eq(conversationMessages.conversationId, backfillConversationId),
-                        isNull(conversationMessages.deletedAt),
-                        // Mirror listMessages: internal rows and team-only
-                        // notices are agent-only.
-                        // Visitor (non-team) reconnect backfill must exclude
-                        // them — publish-time channel separation doesn't cover
-                        // this DB read path.
-                        isTeamMember(effectiveRole) ? undefined : customerVisibleMessageSql(),
-                        or(
-                          gt(conversationMessages.createdAt, cursor.createdAt),
-                          and(
-                            eq(conversationMessages.createdAt, cursor.createdAt),
-                            gt(conversationMessages.id, cursor.id)
-                          )
-                        )
-                      )
-                    )
-                    .orderBy(conversationMessages.createdAt, conversationMessages.id)
-                  const authors = await loadAuthors(
-                    missed.map((m) => m.principalId),
-                    {
-                      preferAccountName: isTeamMember(effectiveRole),
-                    }
+                const missed = await listMissedMessagesForBackfill(
+                  backfillConversationId,
+                  lastEventId,
+                  { includeInternal: isTeamMember(effectiveRole) }
+                )
+                for (const dto of missed) {
+                  sentMessageIds.add(dto.id)
+                  sse.send(
+                    'message',
+                    { kind: 'message', conversationId: dto.conversationId, message: dto },
+                    dto.id
                   )
-                  for (const m of missed) {
-                    const dto = toMessageDTO(
-                      m,
-                      m.principalId
-                        ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId))
-                        : null
-                    )
-                    sentMessageIds.add(dto.id)
-                    sse.send(
-                      'message',
-                      { kind: 'message', conversationId: dto.conversationId, message: dto },
-                      dto.id
-                    )
-                  }
                 }
               } catch (err) {
                 log.warn({ err }, 'chat stream backfill failed')
