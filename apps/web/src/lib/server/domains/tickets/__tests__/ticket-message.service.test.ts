@@ -144,11 +144,17 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
     expect(message.senderType).toBe('agent')
     expect((await ticketFirstResponseAt(ticketId))?.toISOString()).toBe(message.createdAt)
     // The change re-renders the ticket in open inboxes, without holding up the reply.
+    // The publish carries the ticket's scope envelope: its owner and team.
+    const [scope] = await testDb
+      .select({ assigneePrincipalId: tickets.assigneePrincipalId, teamId: tickets.assigneeTeamId })
+      .from(tickets)
+      .where(eq(tickets.id, ticketId))
     await vi.waitFor(
       () =>
         expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
           ticketId,
-          expect.objectContaining({ kind: 'ticket_updated' })
+          expect.objectContaining({ kind: 'ticket_updated' }),
+          expect.objectContaining(scope)
         ),
       { timeout: 10_000 }
     )

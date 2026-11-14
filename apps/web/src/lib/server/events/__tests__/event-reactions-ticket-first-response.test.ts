@@ -290,11 +290,17 @@ describe.skipIf(!fixture.available)('ticket first response on an intake pair', (
     await runEventReactions(jobs[0])
     await runEventReactions(jobs[1])
     expect((await firstResponseAt(ticketId))?.toISOString()).toBe(message.createdAt)
+    // The publish carries the ticket's scope envelope: its owner and team.
+    const [scope] = await testDb
+      .select({ assigneePrincipalId: tickets.assigneePrincipalId, teamId: tickets.assigneeTeamId })
+      .from(tickets)
+      .where(eq(tickets.id, ticketId))
     await vi.waitFor(
       () =>
         expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
           ticketId,
-          expect.objectContaining({ kind: 'ticket_updated' })
+          expect.objectContaining({ kind: 'ticket_updated' }),
+          expect.objectContaining(scope)
         ),
       { timeout: 10_000 }
     )
