@@ -80,6 +80,24 @@ vi.mock('@/lib/server/domains/conversation/conversation.webhooks', async () =>
 vi.mock('@/lib/server/domains/conversation/conversation.notify', async () =>
   (await import('@/lib/server/__tests__/conversation-visibility-mocks')).notifyMocks()
 )
+// Work the writers start without awaiting it, stood in so it never outlives a
+// test's transaction (see conversation-visibility-mocks.ts).
+vi.mock('@/lib/server/domains/changelog/changelog-subscription.service', async () =>
+  (
+    await import('@/lib/server/__tests__/conversation-visibility-mocks')
+  ).changelogSubscriptionMocks()
+)
+vi.mock('@/lib/server/domains/channels', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).channelAdapterMocks()
+)
+vi.mock('@/lib/server/domains/conversation-attributes/ai-classification.service', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).attributeClassifierMocks()
+)
+vi.mock('@/lib/server/events/dispatch', async (importOriginal) =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).eventDispatchMocks(
+    await importOriginal<typeof import('@/lib/server/events/dispatch')>()
+  )
+)
 
 /** Conversations are on, so the shared visitor and agent reads reach their
  *  visibility check instead of stopping at the feature gate. */
@@ -106,6 +124,8 @@ vi.mock(
         translation.calls++
         return actual.resolveOutgoingReplyTranslation(...args)
       },
+      // Started without awaiting it when a thread opens.
+      maybeDetectCustomerLanguage: async () => {},
     }
   }
 )
@@ -201,13 +221,9 @@ describe('conversation server functions check visibility (real DB, rolled back)'
     translation.calls = 0
     await fixture.begin()
   })
-  // Writers start fire-and-forget work (events, triage) after they return.
-  // Let it settle inside this test's transaction, so it cannot land in the
-  // next test's and abort it.
-  afterEach(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 150))
-    await fixture.rollback()
-  })
+  // Work the writers start without awaiting it is stood in above, so nothing
+  // outlives this test's transaction.
+  afterEach(fixture.rollback)
   afterAll(fixture.close)
 
   /**
