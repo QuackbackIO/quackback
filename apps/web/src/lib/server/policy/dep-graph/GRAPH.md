@@ -59,7 +59,7 @@ Edges (28):
 ## 3. Server domains (lib/server/domains)
 
 Nodes (55): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (147):
+Edges (150):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -100,6 +100,7 @@ Edges (147):
 - changelog -> embeddings
 - changelog -> settings
 - channel-accounts -> conversation
+- channel-accounts -> domain-proof
 - channel-accounts -> notifications
 - channel-accounts -> settings
 - channel-accounts -> subscriptions
@@ -141,6 +142,7 @@ Edges (147):
 - export -> users
 - files -> principals
 - help-center -> ai
+- help-center -> domain-proof
 - help-center -> principals
 - help-center -> settings
 - import -> principals
@@ -175,6 +177,7 @@ Edges (147):
 - sentiment -> ai
 - sentiment -> settings
 - settings -> ai
+- settings -> domain-proof
 - settings -> platform-credentials
 - settings -> sla
 - settings-registry -> api
@@ -213,6 +216,4 @@ Edges (147):
 
 Strongly connected components with more than one domain. A new entry here is a new cycle and needs an explicit decision.
 
-- ai <-> settings <-> sla
-- assistant <-> channel-accounts <-> channels <-> conversation <-> conversation-attributes <-> inbox <-> tickets <-> workflows
-- changelog <-> embeddings <-> merge-suggestions <-> posts <-> subscriptions
+- activity <-> ai <-> api <-> api-keys <-> assistant <-> boards <-> changelog <-> channel-accounts <-> channels <-> comments <-> conversation <-> conversation-attributes <-> domain-proof <-> embeddings <-> files <-> help-center <-> inbox <-> merge-suggestions <-> posts <-> principals <-> roles <-> settings <-> sla <-> status <-> subscriptions <-> tickets <-> users <-> webhooks <-> workflows

@@ -9,7 +9,9 @@ import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import type { DomainDetail } from '@/lib/server/functions/domains'
 
+const navigate = vi.fn()
 vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => navigate,
   Link: ({
     to,
     search,
@@ -334,20 +336,27 @@ describe('domain view set up', () => {
     addSignIn.mockResolvedValue({ id: 'domain_new', name: 'acme.com' })
     renderView(rowWith({}), { onChanged })
     setUp('Sign-in')
-    expect(addSignIn).toHaveBeenCalledWith({ data: { providerId: 'idp_1', name: 'acme.com' } })
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    expect(addSignIn).toHaveBeenCalledWith({ data: { providerId: 'idp_1', name: 'acme.com' } })
+    expect(navigate).not.toHaveBeenCalled()
   })
 
   it.each([
     ['no', []],
     ['more than one', [{ id: 'idp_1' }, { id: 'idp_2' }]],
-  ])('links to Sign-in settings with %s sign-in provider', (_, providers) => {
-    renderView(rowWith({}), { providers })
-    expect(within(useRow('Sign-in')).getByRole('link', { name: 'Set up' })).toHaveAttribute(
-      'href',
-      '/admin/settings/security/authentication?tab=sign-in'
+  ])('goes to Sign-in settings with %s sign-in provider', async (_, providers) => {
+    const onChanged = vi.fn()
+    renderView(rowWith({}), { providers, onChanged })
+    setUp('Sign-in')
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({
+        to: '/admin/settings/security/authentication',
+        search: { tab: 'sign-in' },
+        hash: undefined,
+      })
     )
     expect(addSignIn).not.toHaveBeenCalled()
+    expect(onChanged).not.toHaveBeenCalled()
   })
 
   it("shows a use's row without Set up to a viewer who cannot set it up", () => {
