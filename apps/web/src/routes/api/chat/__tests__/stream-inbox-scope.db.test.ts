@@ -347,6 +347,22 @@ async function settle(): Promise<void> {
   await new Promise((r) => setTimeout(r, 20))
 }
 
+/** Publish an agent-side `ticket_read` for a ticket, marked `at`. */
+function publishTicketRead(ticketId: TicketId, at: string): void {
+  publishTicketEvent(ticketId, { kind: 'ticket_read', ticketId, side: 'agent', at })
+}
+
+/** Publish a `ticket_read` marked `at`, and say whether this inbox received it. */
+async function ticketReadReaches(
+  inbox: Awaited<ReturnType<typeof openInbox>>,
+  ticketId: TicketId,
+  at: string
+): Promise<boolean> {
+  publishTicketRead(ticketId, at)
+  await settle()
+  return inbox.frames().some((f) => f.event === 'ticket_read' && f.data.at === at)
+}
+
 /** The ids an inbox frame is about, whatever its kind. */
 function itemIdOf(frame: Frame): string | undefined {
   const d = frame.data as Record<string, { id?: string } | string | undefined>
@@ -385,12 +401,7 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
       await publishConversationUpdate(conversationId, await conversationToDTO(row, 'agent'))
     }
     for (const ticketId of [w.ticket.y, w.ticket.x]) {
-      publishTicketEvent(ticketId, {
-        kind: 'ticket_read',
-        ticketId,
-        side: 'agent',
-        at: new Date().toISOString(),
-      })
+      publishTicketRead(ticketId, new Date().toISOString())
     }
     await settle()
 
@@ -489,61 +500,25 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
   it('refreshes the cached scope at once when the teammate joins a team', async () => {
     const w = await seedWorld()
     const scoped = await openInbox(w.scoped)
-    publishTicketEvent(w.ticket.y, {
-      kind: 'ticket_read',
-      ticketId: w.ticket.y,
-      side: 'agent',
-      at: 'a',
-    })
-    await settle()
-    expect(scoped.frames().map(itemIdOf)).not.toContain(w.ticket.y)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'a')).toBe(false)
 
     await setTeamMembers(w.teamY, [w.scoped])
     await settle()
     expect(scoped.frames().map((f) => f.event)).toContain('inbox_scope_changed')
 
-    publishTicketEvent(w.ticket.y, {
-      kind: 'ticket_read',
-      ticketId: w.ticket.y,
-      side: 'agent',
-      at: 'b',
-    })
-    await settle()
-    expect(scoped.frames().map(itemIdOf)).toContain(w.ticket.y)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'b')).toBe(true)
 
     // And leaving the team takes it away again.
     await setTeamMembers(w.teamY, [])
     await settle()
-    const seen = scoped.frames().length
-    publishTicketEvent(w.ticket.y, {
-      kind: 'ticket_read',
-      ticketId: w.ticket.y,
-      side: 'agent',
-      at: 'c',
-    })
-    await settle()
-    expect(scoped.frames().slice(seen).map(itemIdOf)).not.toContain(w.ticket.y)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'c')).toBe(false)
   })
 
   it("refreshes every holder's scope when their role gains or loses keys, or is deleted", async () => {
     const w = await seedWorld()
     const scoped = await openInbox(w.scoped)
     const editor = { principalId: w.admin, permissions: [...permissionsForLegacyRole('admin')] }
-    const probe = async (at: string) => {
-      publishTicketEvent(w.ticket.y, {
-        kind: 'ticket_read',
-        ticketId: w.ticket.y,
-        side: 'agent',
-        at,
-      })
-      await settle()
-      return scoped
-        .frames()
-        .filter((f) => f.event === 'ticket_read')
-        .map((f) => f.data.at)
-        .includes(at)
-    }
-    expect(await probe('before')).toBe(false)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'before')).toBe(false)
 
     await updateRole(
       w.scopedRole,
@@ -551,15 +526,15 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
       editor
     )
     await settle()
-    expect(await probe('granted')).toBe(true)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'granted')).toBe(true)
 
     await updateRole(w.scopedRole, { permissionKeys: SCOPED_KEYS }, editor)
     await settle()
-    expect(await probe('revoked')).toBe(false)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'revoked')).toBe(false)
 
     await deleteRole(w.scopedRole, { reassignToRoleId: w.viewAllRole }, editor)
     await settle()
-    expect(await probe('reassigned')).toBe(true)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'reassigned')).toBe(true)
   })
 
   it('refreshes the cached scope when the teammate is enrolled in the default team', async () => {
@@ -568,26 +543,12 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     await testDb.update(teams).set({ isDefault: false })
     await testDb.update(teams).set({ isDefault: true }).where(eq(teams.id, w.teamY))
     const scoped = await openInbox(w.scoped)
-    const probe = async (at: string) => {
-      publishTicketEvent(w.ticket.y, {
-        kind: 'ticket_read',
-        ticketId: w.ticket.y,
-        side: 'agent',
-        at,
-      })
-      await settle()
-      return scoped
-        .frames()
-        .filter((f) => f.event === 'ticket_read')
-        .map((f) => f.data.at)
-        .includes(at)
-    }
-    expect(await probe('before')).toBe(false)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'before')).toBe(false)
 
     await addPrincipalToDefaultTeam(w.scoped)
     await settle()
     expect(scoped.frames().map((f) => f.event)).toContain('inbox_scope_changed')
-    expect(await probe('enrolled')).toBe(true)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'enrolled')).toBe(true)
   })
 
   it('sends no scope signal for a role write that cannot move scope', async () => {
@@ -619,24 +580,10 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     const scoped = await openInbox(w.scoped)
     // A membership written without any signal: only the backstop can see it.
     await testDb.insert(teamMembers).values({ teamId: w.teamY, principalId: w.scoped })
-    publishTicketEvent(w.ticket.y, {
-      kind: 'ticket_read',
-      ticketId: w.ticket.y,
-      side: 'agent',
-      at: 'a',
-    })
-    await settle()
-    expect(scoped.frames().map(itemIdOf)).not.toContain(w.ticket.y)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'a')).toBe(false)
 
     vi.setSystemTime(Date.now() + 61_000)
-    publishTicketEvent(w.ticket.y, {
-      kind: 'ticket_read',
-      ticketId: w.ticket.y,
-      side: 'agent',
-      at: 'b',
-    })
-    await settle()
-    expect(scoped.frames().map(itemIdOf)).toContain(w.ticket.y)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'b')).toBe(true)
   })
 
   it('drops the frames that waited on a failed reload, and retries on the next frame', async () => {
@@ -644,23 +591,13 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     const scoped = await openInbox(w.scoped)
     teamRead.failNext = 1
     publishInboxScopeChanged([w.scoped])
-    publishTicketEvent(w.ticket.x, {
-      kind: 'ticket_read',
-      ticketId: w.ticket.x,
-      side: 'agent',
-      at: 'lost',
-    })
+    publishTicketRead(w.ticket.x, 'lost')
     await settle()
     // Past the failed reload's slow read.
     await new Promise((r) => setTimeout(r, 100))
     expect(scoped.frames().map(itemIdOf)).not.toContain(w.ticket.x)
 
-    publishTicketEvent(w.ticket.x, {
-      kind: 'ticket_read',
-      ticketId: w.ticket.x,
-      side: 'agent',
-      at: 'kept',
-    })
+    publishTicketRead(w.ticket.x, 'kept')
     await settle()
     const reads = scoped.frames().filter((f) => f.event === 'ticket_read')
     expect(reads.map((f) => f.data.at)).toEqual(['kept'])
@@ -672,14 +609,7 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     await setPrincipalRole({ principalId: w.scoped }, 'user')
     await settle()
     await until(() => scoped.isDone())
-    publishTicketEvent(w.ticket.x, {
-      kind: 'ticket_read',
-      ticketId: w.ticket.x,
-      side: 'agent',
-      at: 'a',
-    })
-    await settle()
-    expect(scoped.frames().map(itemIdOf)).not.toContain(w.ticket.x)
+    expect(await ticketReadReaches(scoped, w.ticket.x, 'a')).toBe(false)
   })
 
   it('keeps the frames for one item in call order, across a reload', async () => {
@@ -738,12 +668,7 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     })
     publishTyping(w.conv.x, 'agent', 'a', w.admin)
     await publishConversationUpdate(w.conv.x, await conversationToDTO(row, 'agent'))
-    publishTicketEvent(w.ticket.x, {
-      kind: 'ticket_read',
-      ticketId: w.ticket.x,
-      side: 'agent',
-      at: 'a',
-    })
+    publishTicketRead(w.ticket.x, 'a')
     await assignTeam(w.conv.x, w.teamY, w.adminActor)
     await settle()
 
