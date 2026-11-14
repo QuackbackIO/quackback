@@ -34,6 +34,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: { select: (...args: unknown[]) => mockSelect(...args) },
 }))
+// The scope rule itself runs over real rows in notification-scope.db.test.ts;
+// here every recipient is in scope, so these cases test only the role and
+// actor rules each builder adds.
+vi.mock('@/lib/server/domains/notifications/recipient-scope', () => ({
+  inScopeRecipients: async (_item: unknown, ids: readonly string[]) => [...ids],
+}))
 
 // --- support flag ---
 const isSupportTicketsEnabled = vi.fn<() => Promise<boolean>>()

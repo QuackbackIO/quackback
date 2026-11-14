@@ -44,6 +44,7 @@ import {
   type NotificationEventType,
 } from '@/lib/server/domains/subscriptions/subscription.service'
 import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
+import { inScopeRecipients } from '@/lib/server/domains/notifications/recipient-scope'
 import type { HookTarget, EmailTarget, NoteMentionEmailConfig } from './hook-types'
 import { truncate } from './hook-utils'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
@@ -731,10 +732,15 @@ export async function getConversationAssignedTargets(event: EventData): Promise<
     }
   }
 
-  if (recipients.size === 0) return null
+  // Each recipient's own scope, against where the conversation is now.
+  const inScope = await inScopeRecipients(
+    { kind: 'conversation', id: conversation.id as ConversationId },
+    [...recipients]
+  )
+  if (inScope.length === 0) return null
   return {
     type: 'notification',
-    target: { principalIds: [...recipients] },
+    target: { principalIds: inScope },
     config: { conversationId: conversation.id, assignedAgentPrincipalId: directAssignee },
   }
 }
@@ -752,12 +758,14 @@ export async function getConversationAssignedTargets(event: EventData): Promise<
 /**
  * The two recipient kinds of a `ticket.assigned` event: the direct assignee
  * (only when the agent actually changed and isn't the actor) and the members of
- * a newly-assigned team (actor-excluded). Shared by the bell builder above and
+ * a newly-assigned team (actor-excluded), each kept only while their own scope
+ * holds the ticket. Shared by the bell builder above and
  * the email builder below so the recipient rule lives in ONE place — the bell
  * derives per-recipient copy by comparing against `assignedPrincipalId`, the
  * email bakes a per-target `kind`, but both start from this same set.
  */
 async function computeTicketAssignmentRecipients(
+  ticketId: TicketId,
   data: {
     assignedPrincipalId: string | null
     previousPrincipalId: string | null
@@ -779,7 +787,17 @@ async function computeTicketAssignmentRecipients(
     const memberIds = await listTeamMemberPrincipalIds(data.assignedTeamId as TeamId)
     teamMemberIds = memberIds.filter((id) => id !== actorPrincipalId)
   }
-  return { directAssignee, teamMemberIds }
+  // Each recipient's own scope, against where the ticket is now.
+  const inScope = new Set(
+    await inScopeRecipients({ kind: 'ticket', id: ticketId }, [
+      ...(directAssignee ? [directAssignee] : []),
+      ...teamMemberIds,
+    ])
+  )
+  return {
+    directAssignee: directAssignee && inScope.has(directAssignee) ? directAssignee : null,
+    teamMemberIds: teamMemberIds.filter((id) => inScope.has(id)),
+  }
 }
 
 export async function getTicketAssignedTargets(event: EventData): Promise<HookTarget | null> {
@@ -788,6 +806,7 @@ export async function getTicketAssignedTargets(event: EventData): Promise<HookTa
     event.data
 
   const { directAssignee, teamMemberIds } = await computeTicketAssignmentRecipients(
+    ticket.id as TicketId,
     { assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId },
     event.actor.principalId
   )
@@ -808,8 +827,9 @@ export async function getTicketAssignedTargets(event: EventData): Promise<HookTa
  * Notification target for `assistant.handed_off`. The payload carries only
  * `{ conversationId, reason }`, so this re-reads the conversation for its
  * current team assignment — the assigned team's members when one is set,
- * else every admin/member principal (the whole agent team). The actor
- * (Quinn's service principal) is always excluded.
+ * else every admin/member principal (the whole agent team), each kept only
+ * while their own scope holds the conversation. The actor (Quinn's service
+ * principal) is always excluded.
  */
 export async function getAssistantHandedOffTargets(event: EventData): Promise<HookTarget | null> {
   if (event.type !== 'assistant.handed_off') return null
@@ -830,7 +850,10 @@ export async function getAssistantHandedOffTargets(event: EventData): Promise<Ho
     recipientIds = (await listAssignableTeammates()).map((t) => t.principalId as PrincipalId)
   }
 
-  const filtered = recipientIds.filter((id) => id !== event.actor.principalId)
+  const filtered = await inScopeRecipients(
+    { kind: 'conversation', id: conversationId as ConversationId },
+    recipientIds.filter((id) => id !== event.actor.principalId)
+  )
   if (filtered.length === 0) return null
   return {
     type: 'notification',
@@ -1634,6 +1657,7 @@ export async function getTicketAssignedEmailTargets(
     event.data
 
   const { directAssignee, teamMemberIds } = await computeTicketAssignmentRecipients(
+    ticket.id as TicketId,
     { assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId },
     event.actor.principalId
   )
@@ -1710,6 +1734,12 @@ export async function getSlaEmailTargets(
   } else {
     return []
   }
+  // A direct assignee is not role-checked, and removing a teammate does not
+  // unassign them, so the scope rule decides who still hears.
+  recipientIds = await inScopeRecipients(
+    { kind: 'conversation', id: conversationId as ConversationId },
+    recipientIds
+  )
   if (recipientIds.length === 0) return []
 
   // The copy kind and the preference matrix key are the same string.
