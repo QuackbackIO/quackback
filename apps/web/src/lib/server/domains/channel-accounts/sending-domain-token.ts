@@ -25,7 +25,11 @@ import {
 } from '@/lib/server/db'
 import type { SendingDomainId } from '@quackback/ids'
 import { toAsciiDomain } from '@/lib/server/utils/mail-domain'
-import { mintOwnershipToken, ownershipRecord } from './sending-domain-records'
+import {
+  carriesOwnershipRecord,
+  mintOwnershipToken,
+  ownershipRecord,
+} from './sending-domain-records'
 
 /**
  * The transaction-scoped lock on a domain name, in its one spelling, that
@@ -55,23 +59,17 @@ export async function issueOwnershipToken(row: {
       .where(eq(domains.name, name))
       .limit(1)
     if (!added?.token) return mintOwnershipToken()
-    const record = ownershipRecord(added.token)
     const [taken] = await tx
       .select({ id: emailSendingDomains.id })
       .from(emailSendingDomains)
-      .where(
-        and(
-          ne(emailSendingDomains.id, row.id),
-          sql`${emailSendingDomains.dnsRecords} @> ${JSON.stringify([{ purpose: record.purpose, value: record.value }])}::jsonb`
-        )
-      )
+      .where(and(ne(emailSendingDomains.id, row.id), carriesOwnershipRecord(added.token)))
       .limit(1)
     if (taken) return mintOwnershipToken()
     // The claim: this row's ownership record, ahead of whatever it held.
     await tx
       .update(emailSendingDomains)
       .set({
-        dnsRecords: sql`${JSON.stringify([record])}::jsonb || COALESCE((SELECT jsonb_agg(r) FROM jsonb_array_elements(${emailSendingDomains.dnsRecords}) r WHERE r->>'purpose' <> 'ownership'), '[]'::jsonb)`,
+        dnsRecords: sql`${JSON.stringify([ownershipRecord(added.token)])}::jsonb || COALESCE((SELECT jsonb_agg(r) FROM jsonb_array_elements(${emailSendingDomains.dnsRecords}) r WHERE r->>'purpose' <> 'ownership'), '[]'::jsonb)`,
       })
       .where(eq(emailSendingDomains.id, row.id))
     return added.token

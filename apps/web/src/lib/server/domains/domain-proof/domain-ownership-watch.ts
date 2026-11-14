@@ -32,11 +32,12 @@ import {
   sql,
   ssoVerifiedDomain,
   type Domain,
+  type Transaction,
 } from '@/lib/server/db'
 import type { SQL } from 'drizzle-orm'
 import { logger } from '@/lib/server/logger'
 import { kvDel, kvGet, kvSet } from '@/lib/server/kv/pg-kv'
-import { ownershipRecord } from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import { carriesOwnershipRecord } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import type { OwnershipAnswer } from '@/lib/server/domains/channel-accounts/domain-verification'
 import {
   GRACE_CLEARED,
@@ -143,14 +144,12 @@ async function deliverWarning(row: Domain): Promise<void> {
   }
 }
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
 /**
  * Take verification off the sign-in domains judged to have lost their proof,
  * each only as it was judged: one whose token was rotated since is left.
  */
 async function unverifySignIn(
-  tx: Tx,
+  tx: Transaction,
   losing: readonly LapsingSignInDomain[]
 ): Promise<LapsingSignInDomain[]> {
   const unverified: LapsingSignInDomain[] = []
@@ -225,7 +224,6 @@ async function demote(row: Domain, since: Date, now: Date): Promise<void> {
       )
       .returning({ id: domains.id })
     if (!moved) return null
-    const shared = ownershipRecord(row.ownershipToken)
     await tx
       .update(emailSendingDomains)
       .set({
@@ -237,7 +235,7 @@ async function demote(row: Domain, since: Date, now: Date): Promise<void> {
         and(
           eq(emailSendingDomains.status, 'verified'),
           isNull(emailSendingDomains.ownershipMissingSince),
-          sql`${emailSendingDomains.dnsRecords} @> ${JSON.stringify([{ purpose: shared.purpose, value: shared.value }])}::jsonb`
+          carriesOwnershipRecord(row.ownershipToken)
         )
       )
     // A sign-in domain left undecided is judged again on later runs.
@@ -270,7 +268,7 @@ const REJUDGE_KEY = 'domain-ownership-watch:rejudge'
 /** `kv_store` rows always expire; this one is rewritten on every run that judges. */
 const REJUDGE_TTL_SECONDS = 10 * 365 * 24 * 60 * 60
 
-async function markForRejudging(tx: Tx, ids: readonly string[]): Promise<void> {
+async function markForRejudging(tx: Transaction, ids: readonly string[]): Promise<void> {
   const held = (await kvGet<string[]>(REJUDGE_KEY, { executor: tx })) ?? []
   const next = [...new Set([...held, ...ids])]
   await kvSet(REJUDGE_KEY, next, REJUDGE_TTL_SECONDS, { executor: tx })
