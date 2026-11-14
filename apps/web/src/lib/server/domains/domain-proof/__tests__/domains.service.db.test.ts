@@ -8,7 +8,14 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TeamId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { domains, emailSendingDomains, settings, ssoVerifiedDomain, teams } from '@/lib/server/db'
+import {
+  domains,
+  emailSendingDomains,
+  eq,
+  settings,
+  ssoVerifiedDomain,
+  teams,
+} from '@/lib/server/db'
 import type { SendingDomainDnsRecord } from '@/lib/server/db'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 
@@ -223,6 +230,36 @@ describe.skipIf(!fixture.available)('domains added by name (real DB, rolled back
       })
       expect(zone.asked).toEqual([])
       // Worked out when read, never written: the row stays as it was.
+      expect((await getDomain('help.acme.com'))?.status).toBe('pending')
+    })
+
+    it('checks a verified domain against its own record, never proving it by itself', async () => {
+      const row = await addDomain('acme.com')
+      published('acme.com', row.ownershipToken)
+      await checkDomainOwnership('acme.com')
+      await testDb
+        .update(domains)
+        .set({ ownershipMissingSince: new Date('2026-11-01T00:00:00Z') })
+        .where(eq(domains.id, row.id))
+      zone.asked.length = 0
+      limiter.refuse = false
+
+      // Its own zone lists it, but a re-check reads the record itself, and a
+      // record found again ends the grace period the watch started.
+      expect(await checkDomainOwnership('acme.com')).toEqual({ ok: true, via: 'dns' })
+      expect(zone.asked).toEqual(['_quackback.acme.com'])
+      expect((await getDomain('acme.com'))?.ownershipMissingSince).toBeNull()
+    })
+
+    it('makes no lookup for a name under a verified domain, and stamps nothing', async () => {
+      const parent = await addDomain('acme.com')
+      published('acme.com', parent.ownershipToken)
+      await checkDomainOwnership('acme.com')
+      await addDomain('help.acme.com')
+      zone.asked.length = 0
+
+      expect(await checkDomainOwnership('help.acme.com')).toEqual({ ok: true, via: 'domain' })
+      expect(zone.asked).toEqual([])
       expect((await getDomain('help.acme.com'))?.status).toBe('pending')
     })
 

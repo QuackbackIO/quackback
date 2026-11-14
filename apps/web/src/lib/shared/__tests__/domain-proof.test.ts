@@ -15,6 +15,7 @@ describe('shownProofSource', () => {
       'web-address'
     )
     expect(shownProofSource('sso', [PERMISSIONS.AUTH_MANAGE])).toBe('sso')
+    expect(shownProofSource('domain', [PERMISSIONS.SETTINGS_MANAGE])).toBe('domain')
   })
 
   it('says only that this workspace proved it to anyone else', () => {
@@ -30,6 +31,10 @@ describe('shownProofSource', () => {
       'workspace'
     )
     expect(shownProofSource('sso', [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])).toBe('workspace')
+    // A domain added by name is shown to whoever may add or remove one.
+    expect(
+      shownProofSource('domain', [PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])
+    ).toBe('workspace')
   })
 })
 
@@ -40,6 +45,7 @@ describe('labels', () => {
     expect(pendingProvenLabel('email-sending')).toBe('Already verified through email sending')
     expect(pendingProvenLabel('workspace')).toBe('Already verified by this workspace')
     expect(pendingProvenLabel('sso')).toBe('Already verified through single sign-on')
+    expect(verifiedThroughLabel('domain')).toBe('Verified through domain ownership')
   })
 })
 

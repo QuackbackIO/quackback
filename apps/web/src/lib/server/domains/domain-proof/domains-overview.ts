@@ -16,7 +16,12 @@ import { shownProofSource, type ShownProofSource } from '@/lib/shared/domain-pro
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { toAsciiDomain } from '@/lib/server/domains/channel-accounts/outbound-identity'
 import { OWNERSHIP_RECORD_HOST } from '@/lib/server/domains/channel-accounts/sending-domain-records'
-import { getProvenZones, provenZoneCovering, sendingRowProvesZone } from './proven-zones'
+import {
+  getProvenZones,
+  provenZoneCovering,
+  sendingRowProvesZone,
+  zonesBesidesDomain,
+} from './proven-zones'
 import { domainOwnershipValue, domainUsesOf, getDomain, listDomains } from './domains.service'
 
 export interface SendingDomainSummary {
@@ -151,7 +156,8 @@ export async function getDomainDetail(
     getProvenZones(),
     domainUsesOf(key),
   ])
-  const covering = provenZoneCovering(key, zones)
+  // Another proof that covers the name; a verified row is its own proof.
+  const covering = provenZoneCovering(key, zonesBesidesDomain(key, zones))
   return {
     name: row?.name ?? key,
     added: row !== null,
