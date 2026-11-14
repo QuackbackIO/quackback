@@ -304,8 +304,8 @@ export async function setPrincipalRole(
     for (const key of result.cacheKeysToBust) await cacheDel(key)
     // After the commit, so the person's open inbox stream reloads the new
     // role (or closes, when they left the team). A caller that brings its own
-    // transaction is promoting a portal user or bootstrapping a workspace:
-    // that person has no inbox stream open, so it needs no signal.
+    // transaction gets `scopeChangedFor` back and publishes it after its own
+    // commit (an invite accepted by an existing teammate does).
     if (result.scopeChangedFor) publishInboxScopeChanged([result.scopeChangedFor])
     return result
   }
