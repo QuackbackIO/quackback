@@ -70,6 +70,7 @@ import {
 } from './conversation.email-attachments'
 import { logger } from '@/lib/server/logger'
 import { testOwnerOf } from '@/lib/server/test-data'
+import { inScopeRecipients } from '@/lib/server/domains/notifications/recipient-scope'
 import { conversationTestDelivery } from './conversation.test-delivery'
 
 const log = logger.child({ component: 'conversation-notify' })
@@ -276,7 +277,7 @@ export async function notifyVisitorMessage(opts: {
     // them — the bell's check intentionally runs later, off the request path.
     if (!opts.isFirstMessage && agentsOnline) return
 
-    const team = await db
+    const teammates = await db
       .select({
         principalId: principal.id,
         email: user.email,
@@ -292,6 +293,16 @@ export async function notifyVisitorMessage(opts: {
           testOwner ? eq(principal.id, testOwner) : undefined
         )
       )
+    // Only the teammates whose scope holds the conversation, read by id:
+    // `opts.conversation` is the row from before routing ran, so a first
+    // message would otherwise miss the teammate routing just chose.
+    const inScope = new Set(
+      await inScopeRecipients(
+        { kind: 'conversation', id: opts.conversation.id },
+        teammates.map((t) => t.principalId)
+      )
+    )
+    const team = teammates.filter((t) => inScope.has(t.principalId))
 
     if (team.length === 0) return
 

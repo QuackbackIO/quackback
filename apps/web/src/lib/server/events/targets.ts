@@ -1146,8 +1146,9 @@ export async function getTicketExternalStatusChangedTargets(
 /**
  * Notification target for `message.created` (WO-3 slice 5, the riskiest
  * move — reproduces `notifyVisitorMessage`'s deleted team-bell block
- * EXACTLY): only a VISITOR-sent message bells the team. Recipients are every
- * admin/member principal — the SAME raw query notifyVisitorMessage used
+ * EXACTLY): only a VISITOR-sent message bells the team. Recipients are the
+ * admin/member principals whose own scope holds the conversation (the
+ * conversation re-read by id) — from the SAME raw query notifyVisitorMessage used
  * (role-only, no `principal.type` filter), not `listAssignableTeammates`,
  * which additionally requires `type: 'user'` and would silently narrow the
  * recipient set. The anti-spam presence gate is NOT applied here — it runs
@@ -1178,12 +1179,19 @@ export async function getMessageCreatedTargets(event: EventData): Promise<HookTa
     .select({ principalId: principal.id })
     .from(principal)
     .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member'])))
-  if (team.length === 0) return null
+  // Only the teammates whose scope holds the conversation. Read by id, not
+  // from the payload: the payload is the conversation as it was before
+  // routing, so a first message would miss the teammate routing just chose.
+  const recipients = await inScopeRecipients(
+    { kind: 'conversation', id: event.data.message.conversationId as ConversationId },
+    team.map((t) => t.principalId as PrincipalId)
+  )
+  if (recipients.length === 0) return null
 
   const authorName = event.data.message.authorName ?? 'A visitor'
   return {
     type: 'notification',
-    target: { principalIds: team.map((t) => t.principalId as PrincipalId) },
+    target: { principalIds: recipients },
     config: {
       conversationId: event.data.conversation.id,
       authorName,
