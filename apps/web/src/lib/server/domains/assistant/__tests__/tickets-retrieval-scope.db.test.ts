@@ -176,3 +176,36 @@ describe('search tool on a copilot turn', () => {
     expect(ctx.ledger.sources.has(teamYTicket)).toBe(false)
   })
 })
+
+describe('search tool on a Home turn', () => {
+  it("gives a team-scoped teammate their own team's summary and not another team's", async () => {
+    const assistantPrincipalId = await seedTeammate()
+    const ctx = makeAssistantToolContext({
+      db: testDb,
+      assistantPrincipalId,
+      role: 'workspace_assistant',
+      agentKind: 'copilot',
+      workspaceThreadKey: 'workspace:tickets-scope-test',
+      audience: 'team',
+      conversationId: null,
+      actor: scoped,
+      viewer: scoped,
+      knowledge: { sources: new Set(['ticket']), status: false },
+    })
+
+    const out = (await ASSISTANT_TOOL_SPECS.search.execute({ query }, ctx)) as {
+      results: { id: string; kind: string }[]
+    }
+
+    expect(out.results.map((r) => r.id)).toEqual([teamXTicket])
+  })
+})
+
+it('matches LIKE wildcards in the keyword query literally', async () => {
+  // `_` matches any one character and `%` any run, so unescaped, this term
+  // would match every seeded summary.
+  const wildcard = await retrieveTicketSummaries(`${query}_login%`, 'team', { viewer: viewAll })
+  expect(wildcard).toEqual([])
+  const literal = await retrieveTicketSummaries(`${query} login`, 'team', { viewer: viewAll })
+  expect(literal).toHaveLength(2)
+})

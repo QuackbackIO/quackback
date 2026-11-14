@@ -330,7 +330,10 @@ export async function resolveKnowledgeSources(
       )
     }
   }
-  if (enabledSet.has('ticket') && allowed(PERMISSIONS.TICKET_VIEW_ALL)) {
+  // No permission gate here: the closed-tickets source scopes itself to the
+  // turn's viewer through ticketFilter and fails closed without one, so a
+  // team-scoped teammate gets their own teams' summaries on every surface.
+  if (enabledSet.has('ticket')) {
     sources.push((await import('./tickets-retrieval')).ticketsKnowledgeSource)
   }
   if (enabledSet.has('changelog')) {

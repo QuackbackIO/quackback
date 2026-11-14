@@ -116,6 +116,13 @@ describe('retrieveTicketSummaries', () => {
     expect(mockTicketFilter.mock.calls).toEqual([[viewer], [viewer]])
   })
 
+  it('matches LIKE wildcards in the query literally on the keyword path', async () => {
+    const { ilike } = await import('@/lib/server/db')
+    mockGenerateEmbedding.mockResolvedValue(null)
+    await retrieveTicketSummaries('100%_off\\', 'team', { viewer })
+    expect(vi.mocked(ilike)).toHaveBeenCalledWith('summary', '%100\\%\\_off\\\\%')
+  })
+
   it('returns [] at the team ceiling without a viewer (never queries)', async () => {
     const result = await retrieveTicketSummaries('sso', 'team')
     expect(result).toEqual([])

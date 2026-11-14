@@ -92,25 +92,36 @@ async function hybridQuery(
   const vectorStr = `[${embedding.join(',')}]`
   const score = sql<number>`1 - (${ticketSummaries.embedding} <=> ${vectorStr}::vector)`
 
-  return db
-    .select({
-      ticketId: ticketSummaries.ticketId,
-      summary: ticketSummaries.summary,
-      score: score.as('score'),
-      createdAt: ticketSummaries.createdAt,
-    })
-    .from(ticketSummaries)
-    .innerJoin(tickets, eq(tickets.id, ticketSummaries.ticketId))
-    .where(
-      and(
-        ticketFilter(viewer),
-        sql`${ticketSummaries.createdAt} >= ${TICKETS_RECENCY_WINDOW_SQL}`,
-        sql`${ticketSummaries.embedding} IS NOT NULL`,
-        sql`1 - (${ticketSummaries.embedding} <=> ${vectorStr}::vector) > ${minScore}`
+  return (
+    db
+      .select({
+        ticketId: ticketSummaries.ticketId,
+        summary: ticketSummaries.summary,
+        score: score.as('score'),
+        createdAt: ticketSummaries.createdAt,
+      })
+      .from(ticketSummaries)
+      .innerJoin(tickets, eq(tickets.id, ticketSummaries.ticketId))
+      .where(
+        and(
+          ticketFilter(viewer),
+          sql`${ticketSummaries.createdAt} >= ${TICKETS_RECENCY_WINDOW_SQL}`,
+          sql`${ticketSummaries.embedding} IS NOT NULL`,
+          sql`1 - (${ticketSummaries.embedding} <=> ${vectorStr}::vector) > ${minScore}`
+        )
       )
-    )
-    .orderBy(sql`score DESC`)
-    .limit(topK)
+      // Ordered by the score alias, not an index-ordered `<=>`, so the scope
+      // filter applies before LIMIT. An HNSW-ordered scan would filter after the
+      // index candidate cut and starve teammates scoped to a few tickets.
+      .orderBy(sql`score DESC`)
+      .limit(topK)
+  )
+}
+
+/** Escape LIKE wildcards (and the escape character itself) so a query term
+ *  matches literally; Postgres LIKE uses backslash as its default escape. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`)
 }
 
 /** Keyword-only fallback when embedding generation is unavailable: a plain
@@ -123,7 +134,7 @@ async function keywordQuery(
   topK: number,
   viewer: Actor
 ): Promise<TicketSummaryRow[]> {
-  const pattern = `%${query}%`
+  const pattern = `%${escapeLike(query)}%`
 
   return db
     .select({
