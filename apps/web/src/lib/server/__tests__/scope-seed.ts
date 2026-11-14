@@ -1,14 +1,18 @@
 /**
- * Real-row seeding for inbox-scope tests: teammates with a real role
- * assignment, teams, conversations and tickets. Writes through `testDb`, so
- * callers run inside the db-test-fixture rollback transaction.
+ * The canonical role seeder for real-DB tests: teammates with a real role
+ * assignment (custom keys through the role tables), teams, conversations and
+ * tickets. Reach for this when a test needs a scoped teammate; the visibility
+ * matrices' world (conversation-visibility-world.ts) seeds only legacy roles.
+ * Writes through `testDb`, so callers run inside the db-test-fixture rollback
+ * transaction.
  *
  * Legacy `admin` and `member` both resolve to a preset with `view_all`, so a
  * scoped teammate needs a custom role through the role tables, which
- * `seedTeammate(..., { keys })` writes.
+ * `seedPerson(..., { keys })` writes.
  */
 import { createId, type PrincipalId, type TeamId, type UserId } from '@quackback/ids'
 import { testDb } from './db-test-fixture'
+import { suffix } from './conversation-visibility-world'
 import {
   conversations,
   permissions,
@@ -24,8 +28,6 @@ import {
   inArray,
 } from '@/lib/server/db'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-
-const suffix = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 
 /** The keys of a custom role that sees only its holder's and their teams' items. */
 export const SCOPED_KEYS: readonly PermissionKey[] = [
