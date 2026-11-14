@@ -409,11 +409,11 @@ describe('getAssistantHandedOffTargets', () => {
 
 // WO-3 slice 3 (ported characterization): replaces the deleted direct
 // createNotificationsBatch call in sync-conversation-mentions.ts. Recipients
-// are trusted straight from the payload (already eligibility-filtered +
-// author-excluded by the emit site) — no DB round-trip, unlike the other
-// resolvers above.
+// come from the payload (already eligibility-filtered + author-excluded by the
+// emit site), cut to each one's scope (stubbed to everyone here; real rows in
+// notification-scope.db.test.ts).
 describe('getConversationNoteMentionedTargets', () => {
-  it('targets exactly the mentioned principals, carrying the note context in config', () => {
+  it('targets exactly the mentioned principals, carrying the note context in config', async () => {
     const event = {
       id: 'evt-12',
       type: 'conversation.note_mentioned',
@@ -428,7 +428,7 @@ describe('getConversationNoteMentionedTargets', () => {
       },
     } as EventData
 
-    const target = getConversationNoteMentionedTargets(event)
+    const target = await getConversationNoteMentionedTargets(event)
     expect(target).toEqual({
       type: 'notification',
       target: { principalIds: ['principal_one', 'principal_two'] },
@@ -441,7 +441,7 @@ describe('getConversationNoteMentionedTargets', () => {
     })
   })
 
-  it('is a no-op when no one is mentioned', () => {
+  it('is a no-op when no one is mentioned', async () => {
     const event = {
       id: 'evt-13',
       type: 'conversation.note_mentioned',
@@ -456,6 +456,6 @@ describe('getConversationNoteMentionedTargets', () => {
       },
     } as EventData
 
-    expect(getConversationNoteMentionedTargets(event)).toBeNull()
+    expect(await getConversationNoteMentionedTargets(event)).toBeNull()
   })
 })

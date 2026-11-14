@@ -882,19 +882,26 @@ export function getPostOwnerAssignedTargets(event: EventData): HookTarget | null
 
 /**
  * Notification target for `conversation.note_mentioned` (WO-3 slice 3):
- * `mentionedPrincipalIds` is already eligibility-filtered (team-only) and
- * author-excluded by the emit site (sync-conversation-mentions.ts), so this
- * resolver trusts the payload outright — no DB round-trip, unlike the other
- * resolvers above. Exported (like its siblings) for direct unit testing.
+ * `mentionedPrincipalIds` is already eligibility-filtered (team-only, in
+ * scope) and author-excluded by the emit site (sync-conversation-mentions.ts).
+ * The scope check runs again here, against where the conversation is when the
+ * notice goes out, so a mention of a teammate it has since moved away from
+ * stays silent. Exported (like its siblings) for direct unit testing.
  */
-export function getConversationNoteMentionedTargets(event: EventData): HookTarget | null {
+export async function getConversationNoteMentionedTargets(
+  event: EventData
+): Promise<HookTarget | null> {
   if (event.type !== 'conversation.note_mentioned') return null
   const { conversationId, conversationMessageId, mentionedPrincipalIds, authorName, preview } =
     event.data
-  if (mentionedPrincipalIds.length === 0) return null
+  const recipients = await inScopeRecipients(
+    { kind: 'conversation', id: conversationId as ConversationId },
+    mentionedPrincipalIds as PrincipalId[]
+  )
+  if (recipients.length === 0) return null
   return {
     type: 'notification',
-    target: { principalIds: mentionedPrincipalIds as PrincipalId[] },
+    target: { principalIds: recipients },
     config: { conversationId, conversationMessageId, authorName, preview },
   }
 }
@@ -904,9 +911,9 @@ export function getConversationNoteMentionedTargets(event: EventData): HookTarge
  * who has a reachable address and allows `chat_mention` mail.
  *
  * A mention is a direct ask, so it is the one internal-note event that reaches
- * a teammate who is not looking at the inbox. The recipient set is taken
- * straight from the payload for the same reason the bell above does: the emit
- * site has already narrowed it to teammates and dropped the author, so a
+ * a teammate who is not looking at the inbox. The recipient set is the payload
+ * cut to each teammate's current scope, as the bell above does: the emit site
+ * has already narrowed it to teammates and dropped the author, so a
  * self-mention never mails itself. `resolveEligibleRecipients` supplies both
  * remaining gates — an address to send to, and the per-type x per-channel
  * preference (which subsumes the global emailMuted kill switch), so muting the
@@ -922,12 +929,13 @@ export async function getConversationNoteMentionedEmailTargets(
 ): Promise<HookTarget[]> {
   if (event.type !== 'conversation.note_mentioned') return []
   const { conversationId, mentionedPrincipalIds, authorName, preview } = event.data
-  if (mentionedPrincipalIds.length === 0) return []
-
-  const { recipients, emailMap } = await resolveEligibleRecipients(
-    mentionedPrincipalIds as PrincipalId[],
-    'chat_mention'
+  const inScope = await inScopeRecipients(
+    { kind: 'conversation', id: conversationId as ConversationId },
+    mentionedPrincipalIds as PrincipalId[]
   )
+  if (inScope.length === 0) return []
+
+  const { recipients, emailMap } = await resolveEligibleRecipients(inScope, 'chat_mention')
   if (recipients.length === 0) return []
 
   const config = {
