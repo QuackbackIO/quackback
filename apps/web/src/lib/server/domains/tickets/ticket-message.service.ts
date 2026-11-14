@@ -401,7 +401,10 @@ async function sendViaPairConversation(
             opts.actor,
             prepared.attachments,
             prepared.contentJson,
-            input.metadata as ConversationMessageMetadata | undefined
+            input.metadata as ConversationMessageMetadata | undefined,
+            // The agent caller checked the ticket, and a tracker reply-all is
+            // a system effect, so the pair's conversation is not checked again.
+            { systemCascade: true }
           )
         ).message
   const message = { ...sent, author: supportAuthor }

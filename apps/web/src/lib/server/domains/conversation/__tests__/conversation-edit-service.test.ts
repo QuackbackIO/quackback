@@ -93,7 +93,9 @@ vi.mock('../conversation.query', () => ({
   ),
 }))
 
-vi.mock('@/lib/server/db', () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  // The real tables the scope filters build their subqueries from.
+  const { teamMembers } = await importOriginal<typeof import('@/lib/server/db')>()
   const conversationRow = {
     id: 'conversation_1',
     visitorPrincipalId: 'principal_visitor',
@@ -142,11 +144,14 @@ vi.mock('@/lib/server/db', () => {
         }),
     },
     eq: vi.fn(),
+    or: vi.fn(),
+    sql: vi.fn(),
     and: vi.fn((...args: unknown[]) => args),
     isNull: vi.fn(),
     desc: vi.fn(),
     ne: (...a: unknown[]) => ne(...a),
     notInArray: vi.fn(),
+    teamMembers,
     conversations: { __name: 'conversations', id: 'id' },
     conversationMessages: { __name: 'conversation_messages', id: 'id', senderType: 'sender_type' },
     conversationMessageMentions: { __name: 'conversation_message_mentions', id: 'id' },

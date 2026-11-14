@@ -7,7 +7,8 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { ConversationTagId, ConversationId } from '@quackback/ids'
-import { requireAuth } from './auth-helpers'
+import type { Actor } from '@/lib/server/policy/types'
+import { policyActorFromAuth, requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   EntityIdSchema,
@@ -133,6 +134,13 @@ export const hardDeleteConversationTagFn = createServerFn({ method: 'POST' })
     return { id: data.id as ConversationTagId }
   })
 
+/** The conversation the caller may see, or NotFound like a missing one. */
+async function assertVisibleToCaller(conversationId: ConversationId, actor: Actor): Promise<void> {
+  const { assertConversationVisible } =
+    await import('@/lib/server/domains/conversation/conversation.service')
+  await assertConversationVisible(conversationId, actor)
+}
+
 /**
  * Add a label to a conversation — by existing id, or by name (find-or-create,
  * the inline-create flow). Returns the conversation's updated tag list.
@@ -142,6 +150,8 @@ export const addConversationTagFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_TAGS })
     const conversationId = data.conversationId as ConversationId
+    // Checked first, so a hidden conversation mints no tag and lists nothing.
+    await assertVisibleToCaller(conversationId, await policyActorFromAuth(auth))
     let tagId = data.tagId as ConversationTagId | undefined
     if (data.name?.trim()) {
       // Inline-create mints new taxonomy, so it additionally requires manage_tags.
@@ -162,6 +172,8 @@ export const addConversationTagFn = createServerFn({ method: 'POST' })
 export const removeConversationTagFn = createServerFn({ method: 'POST' })
   .validator(removeConversationTagSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_TAGS })
-    return detachTag(data.conversationId as ConversationId, data.tagId as ConversationTagId)
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_TAGS })
+    const conversationId = data.conversationId as ConversationId
+    await assertVisibleToCaller(conversationId, await policyActorFromAuth(auth))
+    return detachTag(conversationId, data.tagId as ConversationTagId)
   })

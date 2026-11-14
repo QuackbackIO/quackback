@@ -35,6 +35,7 @@ vi.mock('@tanstack/react-start', () => ({
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   policyActorFromAuth: vi.fn(),
+  assertConversationVisible: vi.fn(),
   assignConversation: vi.fn(),
   assignTeam: vi.fn(),
   setConversationPriority: vi.fn(),
@@ -85,6 +86,7 @@ vi.mock('@/lib/server/functions/auth-helpers', async () => {
 })
 
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
   assignConversation: hoisted.assignConversation,
   assignTeam: hoisted.assignTeam,
   setConversationPriority: hoisted.setConversationPriority,
@@ -133,6 +135,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   hoisted.requireAuth.mockResolvedValue(AUTH)
   hoisted.policyActorFromAuth.mockResolvedValue(ACTOR)
+  // Every id is visible unless a test says otherwise; real scope is covered by
+  // conversation-visibility-functions.db.test.ts.
+  hoisted.assertConversationVisible.mockImplementation(async (id: string) => ({ id }))
   hoisted.assignConversation.mockResolvedValue({})
   hoisted.assignTeam.mockResolvedValue({})
   hoisted.setConversationPriority.mockResolvedValue({})
@@ -160,6 +165,32 @@ beforeEach(() => {
 })
 
 describe('bulkUpdateConversationsFn — per-item isolation', () => {
+  it('checks each id for the acting agent before its action, and skips a hidden one', async () => {
+    hoisted.assertConversationVisible.mockImplementation(async (id: string) => {
+      if (id === 'conversation_c2') throw new Error('Conversation not found')
+      return { id }
+    })
+
+    const result = await call({
+      conversationIds: ['conversation_c1', 'conversation_c2'],
+      action: { type: 'close' },
+    })
+
+    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith('conversation_c1', ACTOR)
+    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith('conversation_c2', ACTOR)
+    expect(result).toEqual({
+      succeeded: ['conversation_c1'],
+      failed: [{ id: 'conversation_c2', reason: 'Conversation not found' }],
+    })
+    // Neither the close guard nor the writer ran for the hidden id.
+    expect(hoisted.assertRequiredAttributesForClose).not.toHaveBeenCalledWith('conversation_c2')
+    expect(hoisted.setConversationStatus).not.toHaveBeenCalledWith(
+      'conversation_c2',
+      'closed',
+      ACTOR
+    )
+  })
+
   it('processes the rest of the batch when a middle item throws and reports it in failed', async () => {
     hoisted.setConversationStatus.mockImplementation(async (id: string) => {
       if (id === 'conversation_c2') throw new Error('boom')

@@ -222,11 +222,48 @@ describe.skipIf(!fixture.available)('/api/chat/stream actor permissions (real Po
       expect(await openStream(teammate, 'dashboard', `conversationId=${conversationId}`)).toBe(404)
     })
 
-    it('opens a dashboard teammate holding conversation.view on any conversation', async () => {
+    it('opens a scoped teammate only on conversations of their own or their team', async () => {
+      const visitor = await seedPrincipal('user')
+      const teammate = await seedPrincipal('member')
+      await assignCustomRole(teammate, [PERMISSIONS.CONVERSATION_VIEW])
+      const teamX = createId('team') as TeamId
+      const teamY = createId('team') as TeamId
+      await testDb.insert(teams).values([
+        { id: teamX, name: `X-${suffix()}` },
+        { id: teamY, name: `Y-${suffix()}` },
+      ])
+      await testDb.insert(teamMembers).values({ teamId: teamX, principalId: teammate })
+      const mine = await seedConversation(visitor)
+      const myTeam = await seedConversation(visitor)
+      const otherTeam = await seedConversation(visitor)
+      const unassigned = await seedConversation(visitor)
+      await testDb
+        .update(conversations)
+        .set({ assignedAgentPrincipalId: teammate })
+        .where(eq(conversations.id, mine))
+      await testDb
+        .update(conversations)
+        .set({ assignedTeamId: teamX })
+        .where(eq(conversations.id, myTeam))
+      await testDb
+        .update(conversations)
+        .set({ assignedTeamId: teamY })
+        .where(eq(conversations.id, otherTeam))
+
+      expect(await openStream(teammate, 'dashboard', `conversationId=${mine}`)).toBe(200)
+      expect(await openStream(teammate, 'dashboard', `conversationId=${myTeam}`)).toBe(200)
+      expect(await openStream(teammate, 'dashboard', `conversationId=${otherTeam}`)).toBe(404)
+      expect(await openStream(teammate, 'dashboard', `conversationId=${unassigned}`)).toBe(404)
+    })
+
+    it('opens any conversation for a teammate holding conversation.view_all', async () => {
       const visitor = await seedPrincipal('user')
       const conversationId = await seedConversation(visitor)
       const teammate = await seedPrincipal('member')
-      await assignCustomRole(teammate, [PERMISSIONS.CONVERSATION_VIEW])
+      await assignCustomRole(teammate, [
+        PERMISSIONS.CONVERSATION_VIEW,
+        PERMISSIONS.CONVERSATION_VIEW_ALL,
+      ])
       expect(await openStream(teammate, 'dashboard', `conversationId=${conversationId}`)).toBe(200)
     })
 

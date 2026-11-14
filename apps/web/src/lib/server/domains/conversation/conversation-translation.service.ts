@@ -68,7 +68,7 @@ import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-midd
 import { getAiBudgetStatus } from '@/lib/server/domains/ai/ai-budget'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { getChatModel } from '@/lib/server/domains/ai/models'
-import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { canActAsAgent } from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TiptapContent } from '@/lib/shared/db-types'
@@ -540,14 +540,13 @@ export async function getInboxTranslationContext(
   return { enabled: row.translationEnabled, customerLocale }
 }
 
-async function loadConversationOr404(conversationId: ConversationId): Promise<Conversation> {
-  const [row] = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.id, conversationId))
-    .limit(1)
-  if (!row) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-  return row
+/** The conversation the actor may see, or NotFound like a missing one. */
+async function loadVisibleConversation(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<Conversation> {
+  const { assertConversationVisible } = await import('./conversation.service')
+  return assertConversationVisible(conversationId, actor)
 }
 
 /** Manual per-conversation activation toggle (ACTIVATION). Turning
@@ -561,7 +560,7 @@ export async function setInboxTranslationEnabled(
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const existing = await loadConversationOr404(conversationId)
+  const existing = await loadVisibleConversation(conversationId, actor)
   const [updated] = await db
     .update(conversations)
     .set({
@@ -585,7 +584,7 @@ export async function dismissInboxTranslationSuggestion(
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  await loadConversationOr404(conversationId)
+  await loadVisibleConversation(conversationId, actor)
   const [updated] = await db
     .update(conversations)
     .set({ translationDismissedAt: new Date(), updatedAt: new Date() })

@@ -41,6 +41,7 @@ vi.mock('@tanstack/react-start', () => ({
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   assertTicketVisible: vi.fn(),
+  assertConversationVisible: vi.fn(),
   setConversationAttribute: vi.fn(),
   log: {
     trace: vi.fn(),
@@ -85,6 +86,10 @@ vi.mock('@/lib/server/functions/auth-helpers', async () => {
 // ticket-visibility-reads.db.test.ts); here it only has to run first.
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   assertTicketVisible: hoisted.assertTicketVisible,
+}))
+
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
 }))
 
 const mockCreateConversationAttribute = vi.fn()
@@ -151,6 +156,10 @@ describe('setConversationAttributeValueFn — conversation target', () => {
   it('writes through with a bare requireAuth + conversation.set_attributes', async () => {
     await call({ conversationId, key: 'plan', value: 'pro' })
     expect(hoisted.requireAuth).toHaveBeenCalledWith()
+    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({ principalId: AUTH.principal.id })
+    )
     expect(hoisted.setConversationAttribute).toHaveBeenCalledWith(
       { conversationId },
       'plan',
@@ -202,7 +211,7 @@ describe('setConversationAttributeValueFn — ticket target', () => {
     expect(hoisted.setConversationAttribute).not.toHaveBeenCalled()
   })
 
-  it('refuses a ticket outside the caller\'s view before writing', async () => {
+  it("refuses a ticket outside the caller's view before writing", async () => {
     const { NotFoundError } = await import('@/lib/shared/errors')
     hoisted.assertTicketVisible.mockRejectedValueOnce(
       new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')

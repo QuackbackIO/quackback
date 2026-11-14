@@ -348,7 +348,9 @@ export async function resolveProvenanceConversationIds(
  * Best-effort per conversation, like the link announcement: the note has
  * already landed on the ticket, so a copy that fails (the conversation was
  * deleted, the author may note tickets but not act as an agent on
- * conversations) is logged, never surfaced to the caller.
+ * conversations, or the conversation is outside the author's scope, which
+ * `addAgentNote` answers NotFound) is logged, never surfaced to the caller.
+ * So a copy goes only to the provenance conversations the author can see.
  */
 export async function crossPostTicketNote(
   ticket: Ticket,

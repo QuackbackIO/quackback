@@ -73,6 +73,20 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'conversation' })
 
 /**
+ * The conversation the caller may see, or NotFound like a missing one. Every
+ * agent path that takes a conversation id runs this before it reads or writes
+ * anything about it.
+ */
+async function assertVisibleToCaller(
+  conversationId: ConversationId,
+  actor: import('@/lib/server/policy/types').Actor
+) {
+  const { assertConversationVisible } =
+    await import('@/lib/server/domains/conversation/conversation.service')
+  return assertConversationVisible(conversationId, actor)
+}
+
+/**
  * The pair's requester-audience ticket for the converged Messages thread
  * header — null when tickets are off, no pair exists, or the ticket isn't the
  * caller's. Never throws: header enrichment must not break the thread load.
@@ -978,7 +992,11 @@ export const fetchAssistantInboxCountsFn = createServerFn({ method: 'GET' }).han
 export const getConversationAssistantActivityFn = createServerFn({ method: 'GET' })
   .validator(z.object({ conversationId: z.string() }))
   .handler(async ({ data }): Promise<ConversationAssistantActivity | null> => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    await assertVisibleToCaller(
+      data.conversationId as ConversationId,
+      await policyActorFromAuth(ctx)
+    )
     const { loadConversationAssistantActivity } = await import('./conversation-panels')
     return loadConversationAssistantActivity(data.conversationId as ConversationId)
   })
@@ -1087,6 +1105,9 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
     const actor = await policyActorFromAuth(ctx)
+    // Checked before the reply is translated, so a hidden conversation costs
+    // no translation and reveals nothing about its customer's language.
+    await assertVisibleToCaller(data.conversationId as ConversationId, actor)
     const { sendAgentMessage } =
       await import('@/lib/server/domains/conversation/conversation.service')
 
@@ -1268,6 +1289,9 @@ export const setConversationStatusFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
     const actor = await policyActorFromAuth(ctx)
+    // Checked before the close guard, which would otherwise name the missing
+    // fields of a conversation the caller cannot see.
+    await assertVisibleToCaller(data.conversationId as ConversationId, actor)
     // Required-to-close applies ONLY here and in the bulk close — the
     // teammate inbox paths. Workflow/AI/API closes call the service directly.
     if (data.status === 'closed') {
@@ -1564,6 +1588,9 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
     const failed: { id: string; reason: string }[] = []
     for (const rawId of data.conversationIds) {
       try {
+        // Each id is checked before its action runs, for every action, so a
+        // hidden id fails exactly as a missing one does and nothing is written.
+        await assertVisibleToCaller(rawId as ConversationId, actor)
         await apply(rawId as ConversationId)
         succeeded.push(rawId)
       } catch (error) {
@@ -1635,11 +1662,15 @@ export const removeConversationParticipantFn = createServerFn({ method: 'POST' }
 export const listConversationParticipantsFn = createServerFn({ method: 'GET' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const actor = await policyActorFromAuth(ctx)
     const { listConversationParticipants } =
       await import('@/lib/server/domains/conversation/conversation-participant.service')
     return {
-      participants: await listConversationParticipants(data.conversationId as ConversationId),
+      participants: await listConversationParticipants(
+        data.conversationId as ConversationId,
+        actor
+      ),
     }
   })
 
@@ -1656,7 +1687,11 @@ export const listFlaggedMessagesFn = createServerFn({ method: 'GET' }).handler(a
 export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    await assertVisibleToCaller(
+      data.conversationId as ConversationId,
+      await policyActorFromAuth(ctx)
+    )
     const { getLinkedPostsForConversation } =
       await import('@/lib/server/domains/conversation/conversation.query')
     return await getLinkedPostsForConversation(data.conversationId as ConversationId)
@@ -1665,10 +1700,11 @@ export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
 export const getLinkedConversationsForPostFn = createServerFn({ method: 'GET' })
   .validator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const actor = await policyActorFromAuth(ctx)
     const { getLinkedConversationsForPost } =
       await import('@/lib/server/domains/conversation/conversation.query')
-    return await getLinkedConversationsForPost(data.postId as PostId)
+    return await getLinkedConversationsForPost(data.postId as PostId, actor)
   })
 
 // ============================================

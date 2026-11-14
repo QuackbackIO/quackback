@@ -24,7 +24,7 @@ import {
 } from '@/lib/server/db'
 import type { ConversationMessageId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
-import { canEditMessage, canViewConversation } from '@/lib/server/policy/conversation'
+import { canEditMessage } from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
@@ -45,6 +45,7 @@ import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
 import { resolveMessageParent } from './message-parent'
+import { assertConversationVisible } from './conversation.service'
 import { syncConversationMessageMentions } from './sync-conversation-mentions'
 import {
   conversationToDTO,
@@ -162,14 +163,14 @@ export async function editConversationMessage(
     if (!message.ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
     await resolveMessageParent(message, actor)
   } else {
-    const [conversation] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, message.conversationId))
-      .limit(1)
-    if (!conversation || !canViewConversation(actor, conversation).allowed) {
-      throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    }
+    // A conversation the actor cannot see hides its messages too.
+    const visible = await assertConversationVisible(message.conversationId, actor).catch(
+      (err: unknown) => {
+        if (err instanceof NotFoundError) return null
+        throw err
+      }
+    )
+    if (!visible) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
   }
 
   const decision = canEditMessage(actor, {

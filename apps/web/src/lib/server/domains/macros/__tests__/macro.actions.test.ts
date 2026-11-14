@@ -64,18 +64,29 @@ describe('applyMacroActions', () => {
 
     // The trailing arg on assignment/status ops is workflow attribution — a
     // macro has no workflow name, so it arrives as undefined.
-    expect(assignConversation).toHaveBeenCalledWith(conversationId, 'principal_x', actor, undefined)
-    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor, undefined)
+    // A macro run is one system effect after its start check: every writer
+    // gets systemCascade, so a later action still applies after an earlier
+    // one moved the conversation out of the actor's scope.
+    const system = { systemCascade: true }
+    expect(assignConversation).toHaveBeenCalledWith(
+      conversationId,
+      'principal_x',
+      actor,
+      undefined,
+      system
+    )
+    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor, undefined, system)
     expect(attachTag).toHaveBeenCalledWith(conversationId, 'ctag_1')
-    expect(setConversationPriority).toHaveBeenCalledWith(conversationId, 'high', actor)
-    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, expect.any(Date), actor)
+    expect(setConversationPriority).toHaveBeenCalledWith(conversationId, 'high', actor, system)
+    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, expect.any(Date), actor, system)
     // The 5th argument is the close lifecycle: an explicit close, not an auto-close.
     expect(setConversationStatus).toHaveBeenCalledWith(
       conversationId,
       'closed',
       actor,
       undefined,
-      'closed'
+      'closed',
+      system
     )
     expect(applied).toEqual([
       'assigned',
@@ -89,7 +100,9 @@ describe('applyMacroActions', () => {
 
   it('snooze until_reply defers with a null wake time', async () => {
     await applyMacroActions(conversationId, [{ type: 'snooze', preset: 'until_reply' }], actor)
-    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, null, actor)
+    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, null, actor, {
+      systemCascade: true,
+    })
   })
 
   it('applies set_attribute as the invoking teammate (macros run as the agent)', async () => {

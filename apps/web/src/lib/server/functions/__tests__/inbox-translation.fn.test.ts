@@ -44,6 +44,7 @@ const hoisted = vi.hoisted(() => ({
   inboxTranslationOverAllowance: vi.fn(async () => false),
   maybeDetectCustomerLanguage: vi.fn(),
   assertConversationViewable: vi.fn(),
+  assertConversationVisible: vi.fn(async () => ({})),
   conversationToDTO: vi.fn(),
   listMessages: vi.fn(),
   enrichMessagesForAgent: vi.fn(),
@@ -81,6 +82,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   sendAgentMessage: hoisted.sendAgentMessage,
   assertConversationViewable: hoisted.assertConversationViewable,
+  assertConversationVisible: hoisted.assertConversationVisible,
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   conversationToDTO: hoisted.conversationToDTO,
@@ -164,6 +166,21 @@ beforeEach(() => {
 })
 
 describe('sendAgentMessageFn — inbox translation wiring', () => {
+  it('checks the conversation before translating, so a hidden one costs no translation', async () => {
+    hoisted.assertConversationVisible.mockRejectedValueOnce(
+      Object.assign(new Error('Conversation not found'), { statusCode: 404 })
+    )
+
+    await expect(
+      sendAgentMessageFn({
+        data: { conversationId: 'conversation_1', content: 'Hi there', contentJson: null },
+      })
+    ).rejects.toMatchObject({ statusCode: 404 })
+
+    expect(hoisted.resolveOutgoingReplyTranslation).not.toHaveBeenCalled()
+    expect(hoisted.sendAgentMessage).not.toHaveBeenCalled()
+  })
+
   it('translates the reply and attaches translatedFrom metadata', async () => {
     hoisted.resolveOutgoingReplyTranslation.mockResolvedValue({
       content: 'Bonjour',

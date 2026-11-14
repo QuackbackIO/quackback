@@ -40,6 +40,7 @@ import {
   type TranslatedFromMetadata,
 } from '@/lib/server/db'
 import {
+  isValidTypeId,
   toUuid,
   type ConversationId,
   type PrincipalId,
@@ -290,13 +291,11 @@ export async function enrichMessageForAgent(
  * flag first, each with a preview + the parent thread it belongs to (a
  * conversation OR a ticket — exactly one of `conversationId`/`ticketId` is set
  * on the DTO) so the list can link straight to it. Soft-deleted messages are
- * skipped. Two branches, unioned in memory and re-sorted by flag time: the
- * conversation branch is unchanged; the ticket branch additionally applies
- * `ticketFilter(actor)` (unlike the conversation branch, which trusts the
- * flag ownership alone — flagging is per-agent already, but a ticket's
- * visibility can narrow further by team/assignment, so a flag on a ticket the
- * viewer no longer has access to quietly drops out of their feed rather than
- * leaking a peek at it).
+ * skipped. Two branches, unioned in memory and re-sorted by flag time, each
+ * scoped by its row filter (`conversationFilter(actor)`, `ticketFilter(actor)`):
+ * flagging is per-agent already, but an item's visibility can narrow by team or
+ * assignment, so a flag on an item the viewer can no longer see quietly drops
+ * out of their feed rather than leaking a peek at it.
  *
  * CONVERGENCE PHASE 3 (justified single-parent branches): this is a
  * per-MESSAGE feed with per-parent provenance, not a thread read — a flagged
@@ -338,7 +337,10 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
           isNull(conversationMessages.deletedAt)
         )
       )
-      .innerJoin(conversations, eq(conversations.id, conversationMessages.conversationId))
+      .innerJoin(
+        conversations,
+        and(eq(conversations.id, conversationMessages.conversationId), conversationFilter(actor))
+      )
       .leftJoin(principal, eq(principal.id, conversationMessages.principalId))
       .leftJoin(user, eq(user.id, principal.userId))
       .where(eq(conversationMessageFlags.principalId, viewerPrincipalId))
@@ -710,21 +712,19 @@ export interface LinkedConversationSummary {
   status: ConversationStatus
 }
 
-/** Conversations linked to a post (the other direction of conversation.convert). */
+/** Conversations linked to a post (the other direction of conversation.convert),
+ *  only those the actor can see. */
 export async function getLinkedConversationsForPost(
-  postId: PostId
+  postId: PostId,
+  actor: Actor
 ): Promise<LinkedConversationSummary[]> {
-  const rows = await db
-    .select({
-      conversationId: conversations.id,
-      subject: conversations.subject,
-      status: conversations.status,
-    })
+  // Deliberately NO join to integrations: a 'live_chat' link has a null
+  // integrationId. The externalId holds the conversation's TypeID as text, so
+  // the links are read first and the conversations then by id (a text column
+  // cannot join the uuid primary key).
+  const links = await db
+    .select({ externalId: postExternalLinks.externalId })
     .from(postExternalLinks)
-    // Deliberately NO innerJoin(integrations): a 'live_chat' link has a null
-    // integrationId, so joining integrations would silently drop every conversation
-    // link. The externalId IS the conversation id for these rows.
-    .innerJoin(conversations, eq(postExternalLinks.externalId, conversations.id))
     .where(
       and(
         eq(postExternalLinks.postId, postId),
@@ -732,6 +732,18 @@ export async function getLinkedConversationsForPost(
         eq(postExternalLinks.status, 'active')
       )
     )
+  const conversationIds = links
+    .map((l) => l.externalId)
+    .filter((id): id is ConversationId => isValidTypeId(id, 'conversation'))
+  if (conversationIds.length === 0) return []
+  const rows = await db
+    .select({
+      conversationId: conversations.id,
+      subject: conversations.subject,
+      status: conversations.status,
+    })
+    .from(conversations)
+    .where(and(inArray(conversations.id, conversationIds), conversationFilter(actor)))
   return rows.map((r) => ({
     conversationId: r.conversationId as ConversationId,
     subject: r.subject,

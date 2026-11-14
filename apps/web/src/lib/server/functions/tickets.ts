@@ -200,6 +200,14 @@ export const createTicketFn = createServerFn({ method: 'POST' })
       customAttributes = Object.keys(result.values).length > 0 ? result.values : undefined
     }
 
+    // The source conversation first: a hidden one is NotFound like a missing
+    // one, so the answer never tells whether it already has a ticket.
+    if (data.conversationId && isValidTypeId(data.conversationId, 'conversation')) {
+      const { assertConversationVisible } =
+        await import('@/lib/server/domains/conversation/conversation.service')
+      await assertConversationVisible(data.conversationId as ConversationId, actor)
+    }
+
     // A conversation has at most one customer ticket. Refuse up front, before
     // a ticket exists, when it already has one, also one the caller cannot
     // open: the link step would refuse it and leave the new ticket orphaned.
