@@ -222,11 +222,12 @@ export async function isAnyAgentOnline(): Promise<boolean> {
 }
 
 /**
- * Principal ids of all team members with a live inbox stream right now. Used by
- * conversation routing to pick an active agent. Fails CLOSED (returns []) so an
- * outage leaves new conversations unassigned rather than mis-routing them.
+ * Principal ids of all team members with a live inbox stream right now, or
+ * null when the presence store cannot be read. Callers that must tell "nobody
+ * online" from "unknown" (the new-message alert gates) read this; the rest use
+ * `listOnlineAgentIds`.
  */
-export async function listOnlineAgentIds(): Promise<PrincipalId[]> {
+export async function readOnlineAgentIds(): Promise<PrincipalId[] | null> {
   try {
     const result = await db.execute(sql`
       SELECT DISTINCT principal_id FROM presence_stream
@@ -239,8 +240,17 @@ export async function listOnlineAgentIds(): Promise<PrincipalId[]> {
     )
   } catch (err) {
     log.warn({ err }, 'list online agents failed')
-    return []
+    return null
   }
+}
+
+/**
+ * Principal ids of all team members with a live inbox stream right now. Used by
+ * conversation routing to pick an active agent. Fails CLOSED (returns []) so an
+ * outage leaves new conversations unassigned rather than mis-routing them.
+ */
+export async function listOnlineAgentIds(): Promise<PrincipalId[]> {
+  return (await readOnlineAgentIds()) ?? []
 }
 
 /**

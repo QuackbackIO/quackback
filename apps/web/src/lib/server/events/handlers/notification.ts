@@ -90,16 +90,16 @@ export const notificationHook: HookHandler = {
     // on the first message of a conversation, or when none of the recipients
     // is around to see it live. The recipients are already cut to the
     // teammates whose scope holds the conversation, so an agent online who
-    // cannot see it never silences the ones who can. This is a deliberate
-    // skew from notifyVisitorMessage's own (request-time) presence check for
-    // the offline email — the two are never unified.
+    // cannot see it never silences the ones who can. An unreadable presence
+    // store counts as someone online, so an outage cannot ping everyone on
+    // every message. This is a deliberate skew from notifyVisitorMessage's own
+    // (request-time) presence check for the offline email — never unified.
     if (event.type === 'message.created' && !cfg.isFirstMessage) {
-      const { isAnyAgentOnline, listOnlineAgentIds } =
-        await import('@/lib/server/realtime/presence')
-      if (await isAnyAgentOnline()) {
-        const online = new Set(await listOnlineAgentIds())
-        if (principalIds.some((id) => online.has(id))) return { success: true }
-      }
+      const { readOnlineAgentIds } = await import('@/lib/server/realtime/presence')
+      const online = await readOnlineAgentIds()
+      if (online === null) return { success: true }
+      const onlineSet = new Set(online)
+      if (principalIds.some((id) => onlineSet.has(id))) return { success: true }
     }
 
     log.debug(

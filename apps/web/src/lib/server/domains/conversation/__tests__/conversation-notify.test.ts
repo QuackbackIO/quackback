@@ -52,6 +52,15 @@ vi.mock('@/lib/server/config', () => ({
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: (...a: []) => isAnyAgentOnline(...a),
   listOnlineAgentIds: (...a: []) => listOnlineAgentIds(...a),
+  // The gates read presence once: nobody when isAnyAgentOnline says so, the
+  // listed agents when someone is, and unknown (null) when the store throws.
+  readOnlineAgentIds: async () => {
+    try {
+      return (await isAnyAgentOnline()) ? await listOnlineAgentIds() : []
+    } catch {
+      return null
+    }
+  },
   isPrincipalOnline: (...a: [PrincipalId]) => isPrincipalOnline(...a),
 }))
 

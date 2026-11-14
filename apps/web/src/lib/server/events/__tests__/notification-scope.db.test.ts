@@ -52,11 +52,14 @@ vi.mock('@quackback/email', async (original) => ({
   sendConversationMessageEmail: sendEmail,
 }))
 /** Who has a live inbox stream; empty unless a test puts someone online. */
-const presence = vi.hoisted(() => ({ online: [] as string[] }))
+const presence = vi.hoisted(() => ({ online: [] as string[], down: false }))
+// Each function fails the way the real one does when the store is down:
+// isAnyAgentOnline open, listOnlineAgentIds closed, readOnlineAgentIds null.
 vi.mock('@/lib/server/realtime/presence', () => ({
-  isAnyAgentOnline: async () => presence.online.length > 0,
-  isPrincipalOnline: async (id: string) => presence.online.includes(id),
-  listOnlineAgentIds: async () => [...presence.online],
+  isAnyAgentOnline: async () => presence.down || presence.online.length > 0,
+  isPrincipalOnline: async (id: string) => !presence.down && presence.online.includes(id),
+  listOnlineAgentIds: async () => (presence.down ? [] : [...presence.online]),
+  readOnlineAgentIds: async () => (presence.down ? null : [...presence.online]),
 }))
 const dispatchMentioned = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/events/dispatch', async (original) => ({
@@ -107,6 +110,7 @@ beforeEach(async () => {
   await fixture.begin()
   sendEmail.mockReset().mockResolvedValue({ sent: true })
   presence.online = []
+  presence.down = false
   dispatchMentioned.mockReset()
 })
 afterEach(fixture.rollback)
@@ -829,6 +833,22 @@ describe('presence gate on a follow-up visitor message', () => {
     expect(emailed).toContain(w.onTeam.email)
 
     expect(await belled(followUp(conversation.id as ConversationId))).toContain(w.onTeam.id)
+  })
+
+  it('a presence outage holds back both, as if someone were online', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    presence.down = true
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'Anyone there?',
+      authorName: 'Visitor',
+      isFirstMessage: false,
+    })
+    expect(sendEmail).not.toHaveBeenCalled()
+
+    expect(await belled(followUp(conversation.id as ConversationId))).toEqual([])
   })
 
   it('an online teammate who can see the conversation still silences both', async () => {
