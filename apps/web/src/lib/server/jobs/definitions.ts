@@ -343,8 +343,9 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     // The daily check that each verified domain added by name still holds its
     // ownership record: a miss starts a grace period with a warning, and a
     // record still missing after it demotes the domain and the sign-in domains
-    // that rested on it. Returns after one query in a workspace with no
-    // verified domain, which is nearly all of them. Its own minute, away from
+    // that rested on it. Returns after two reads (the verified domains and the
+    // marker of lapsed ones still to judge) in a workspace with neither, which
+    // is nearly all of them. Its own minute, away from
     // the sending-domain re-check, and capped across the fleet because each
     // domain costs DNS lookups.
     name: 'domain-ownership-watch',

@@ -132,6 +132,10 @@ export async function setHelpCenterDomain(
   const updated = await updateHelpCenterConfig({
     domain: { domain: normalized, verifiedAt: null },
   })
+  // The same domain on Settings > Domains, made in this one step; never a
+  // reason to report the help center's own write as failed.
+  const { ensureDomainAfterUse } = await import('@/lib/server/domains/domain-proof/ensure-domain')
+  await ensureDomainAfterUse(normalized)
   return updated.domain
 }
 

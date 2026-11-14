@@ -64,6 +64,18 @@ function sendingDetail(domain: SendingDomainSummary): string | undefined {
   return parts.filter(Boolean).join(' · ') || undefined
 }
 
+/** A Cloud web address as the rows read it: where the operator has it. */
+export interface WebAddressSummary {
+  hostname: string
+  readiness: 'pending' | 'ready' | 'failed'
+}
+
+const READINESS_STATE = {
+  ready: null,
+  pending: 'pending',
+  failed: 'attention',
+} as const satisfies Record<WebAddressSummary['readiness'], BadgeState | null>
+
 function signInDetail(d: SignInDomainSummary): string | undefined {
   if (d.verified) return d.provenBy ? verifiedThroughLabel(d.provenBy) : undefined
   return d.provenBy ? 'Already verified. Click Verify to use it.' : undefined
@@ -74,12 +86,15 @@ export function domainRows({
   sending,
   signIn,
   helpCenterDomain,
+  webAddresses = [],
   added = [],
   now = new Date(),
 }: {
   sending: SendingDomainSummary[]
   signIn: SignInDomainSummary[]
   helpCenterDomain: HelpCenterDomainSummary | null
+  /** Cloud's web addresses, each its hostname's custom domain use. */
+  webAddresses?: WebAddressSummary[]
   added?: AddedDomainSummary[]
   now?: Date
 }): DomainRow[] {
@@ -104,6 +119,9 @@ export function domainRows({
       state: helpCenterDomain.verified ? null : 'pending',
       detail: 'Help center',
     })
+  }
+  for (const w of webAddresses) {
+    add(w.hostname, { use: 'customDomain', state: READINESS_STATE[w.readiness] })
   }
   for (const d of signIn) {
     add(d.name, {

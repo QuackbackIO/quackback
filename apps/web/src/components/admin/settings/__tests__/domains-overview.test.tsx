@@ -258,4 +258,24 @@ describe('domain list', () => {
     expect(rowOf('acme.net')).not.toHaveTextContent('Pending')
     expect(rowOf('acme.com')).not.toHaveTextContent('Pending')
   })
+
+  it("rows a Cloud web address as its domain's custom domain use", () => {
+    const rows = domainRows({
+      now: NOW,
+      sending: [],
+      signIn: [],
+      helpCenterDomain: null,
+      webAddresses: [
+        { hostname: 'feedback.acme.com', readiness: 'ready' },
+        { hostname: 'help.acme.com', readiness: 'pending' },
+        { hostname: 'status.acme.com', readiness: 'failed' },
+      ],
+      added: [{ name: 'feedback.acme.com', verified: false }],
+    })
+    expect(rows.map((r) => [r.name, r.uses.map((u) => [u.use, u.state])])).toEqual([
+      ['feedback.acme.com', [['customDomain', null]]],
+      ['help.acme.com', [['customDomain', 'pending']]],
+      ['status.acme.com', [['customDomain', 'attention']]],
+    ])
+  })
 })

@@ -11,12 +11,16 @@
  * name, so a domain is removed only once none of them holds it.
  */
 import {
+  and,
   asc,
   db,
   domains,
   emailSendingDomains,
   eq,
+  isNotNull,
+  or,
   settings,
+  sql,
   ssoVerifiedDomain,
   type Domain,
 } from '@/lib/server/db'
@@ -74,16 +78,54 @@ export async function listDomains(): Promise<Domain[]> {
  * token unchanged, so a second add never invalidates a published record.
  */
 export async function addDomain(input: string): Promise<Domain> {
-  const name = parseName(input)
+  return (await upsertDomain(parseName(input))).domain
+}
+
+/** The row at a name in its one spelling: inserted with a fresh token, or the one already there. */
+async function upsertDomain(name: string): Promise<{ domain: Domain; created: boolean }> {
   const [inserted] = await db
     .insert(domains)
     .values({ name, ownershipToken: mintOwnershipToken() })
     .onConflictDoNothing({ target: domains.name })
     .returning()
-  if (inserted) return inserted
+  if (inserted) return { domain: inserted, created: true }
   const existing = await getDomain(name)
   if (!existing) throw new ConflictError('DOMAIN_ADD_RACE', 'Try adding the domain again.')
-  return existing
+  return { domain: existing, created: false }
+}
+
+/**
+ * The domain a use was just given in context (an address added on Settings >
+ * Email, a sign-in domain, the help center's domain, a Cloud web address), so
+ * it is on Settings > Domains too. Idempotent: a token is minted only for a
+ * new row, and an existing row's token and status are never changed. Not a
+ * server function: each caller is gated by its own use's permission.
+ *
+ * A name that is not a domain anyone can prove (reserved, an IP, one label)
+ * gets no row, and null.
+ */
+export async function ensureDomain(
+  input: string
+): Promise<{ domain: Domain; created: boolean } | null> {
+  const parsed = verifiableDomain.safeParse(input)
+  return parsed.success ? upsertDomain(parsed.data) : null
+}
+
+/**
+ * Take back a domain {@link ensureDomain} created for a use that then did not
+ * happen: only while it is still pending and nothing holds its name. The check
+ * and the delete run under the same lock on the name that issuing its token
+ * to a sending row takes (`sending-domain-token.ts`), so an add of the same
+ * name at that moment is not left holding a removed domain's token.
+ */
+export async function discardUnusedDomain(domain: Domain): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`quackback:domain-token:${domain.name}`}))`
+    )
+    if ((await domainUsesOf(domain.name)).length > 0) return
+    await tx.delete(domains).where(and(eq(domains.id, domain.id), eq(domains.status, 'pending')))
+  })
 }
 
 /**
@@ -127,6 +169,8 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
             status: 'verified',
             verifiedAt: row.verifiedAt ?? now,
             ownershipMissingSince: null,
+            ownershipWarningClaimedAt: null,
+            ownershipWarningSentAt: null,
             lastCheckedAt: now,
             updatedAt: now,
           }
@@ -135,6 +179,44 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
     .where(eq(domains.id, row.id))
   if (found) return { ok: true, via: 'dns' }
   return { ok: false, reason: result.ok ? 'mismatch' : result.reason }
+}
+
+/**
+ * A sending check found its row's own `_quackback` record at a name. When that
+ * row was issued the token of the domain added at the same name (see
+ * `sending-domain-token.ts`), it is the same record, so the domain is verified
+ * by the same finding: moved to verified, or its grace period ended. Only this
+ * workspace's row at exactly that name, holding exactly that token, is
+ * touched; any other value found proves nothing about a domain.
+ */
+export async function verifyDomainOnFoundRecord(
+  name: string,
+  record: { host: string; value: string },
+  now: Date = new Date()
+): Promise<void> {
+  const key = toAsciiDomain(name)
+  if (!key || record.host !== OWNERSHIP_RECORD_HOST) return
+  if (!record.value.startsWith(OWNERSHIP_VALUE_PREFIX)) return
+  const token = record.value.slice(OWNERSHIP_VALUE_PREFIX.length)
+  if (!token) return
+  await db
+    .update(domains)
+    .set({
+      status: 'verified',
+      verifiedAt: sql`COALESCE(${domains.verifiedAt}, ${now.toISOString()}::timestamptz)`,
+      ownershipMissingSince: null,
+      ownershipWarningClaimedAt: null,
+      ownershipWarningSentAt: null,
+      lastCheckedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(domains.name, key),
+        eq(domains.ownershipToken, token),
+        or(eq(domains.status, 'pending'), isNotNull(domains.ownershipMissingSince))
+      )
+    )
 }
 
 function helpCenterDomainOf(raw: string | null): string | null {

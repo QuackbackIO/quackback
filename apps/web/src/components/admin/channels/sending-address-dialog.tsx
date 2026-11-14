@@ -27,9 +27,10 @@ import {
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { addressDomainStanding } from './sending-domain-view'
 
-/** What the dialog is open for: a new address, or renaming one. */
+/** What the dialog is open for: a new address (on a domain, when one is given), or renaming one. */
 export type SendingAddressDialogTarget =
-  { kind: 'add' } | { kind: 'rename'; id: string; address: string; senderName: string | null }
+  | { kind: 'add'; domain?: string }
+  | { kind: 'rename'; id: string; address: string; senderName: string | null }
 
 /** The name as stored: the workspace name, or a blank one, is null. */
 const storedName = (typed: string, workspaceName: string): string | null => {
@@ -40,6 +41,16 @@ const storedName = (typed: string, workspaceName: string): string | null => {
 /** The server's sentence for a failed action, or the generic line. */
 export const errorText = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message ? error.message : fallback
+
+/**
+ * The domains of the platform's own addresses (the workspace's inbox on it and
+ * the address email leaves from by default), which need no setup to send from.
+ */
+export const ownDomains = (...addresses: Array<string | null | undefined>): string[] =>
+  addresses.flatMap((a) => {
+    const domain = /@([^\s<>@]+)>?\s*$/.exec(a ?? '')?.[1]?.toLowerCase()
+    return domain ? [domain] : []
+  })
 
 /** What the dialog needs to read an address's domain as the server will. */
 type DomainContext = {
@@ -59,12 +70,15 @@ export function SendingAddressDialog({
   target,
   workspaceName,
   onClose,
+  onAdded,
   finalFocus,
   ...context
 }: {
   target: SendingAddressDialogTarget | null
   workspaceName: string
   onClose: () => void
+  /** Called once an address is added, before the dialog closes. */
+  onAdded?: () => void
   /**
    * Where focus goes when the dialog closes. Needed when a plain button opened
    * it: nothing else knows to send focus back there, and it lands on the page.
@@ -80,6 +94,7 @@ export function SendingAddressDialog({
             target={target}
             workspaceName={workspaceName}
             onClose={onClose}
+            onAdded={onAdded}
             {...context}
           />
         ) : null}
@@ -115,6 +130,7 @@ function SendingAddressForm({
   target,
   workspaceName,
   onClose,
+  onAdded,
   domains = [],
   setsUpDomains = false,
   ownDomains = [],
@@ -122,10 +138,13 @@ function SendingAddressForm({
   target: SendingAddressDialogTarget
   workspaceName: string
   onClose: () => void
+  onAdded?: () => void
 } & DomainContext) {
   const create = useCreateSendingAddress()
   const rename = useUpdateSendingAddressName()
-  const [address, setAddress] = useState('')
+  const [address, setAddress] = useState(
+    target.kind === 'add' && target.domain ? `@${target.domain}` : ''
+  )
   const [senderName, setSenderName] = useState(
     target.kind === 'rename' ? (target.senderName ?? workspaceName) : workspaceName
   )
@@ -155,6 +174,7 @@ function SendingAddressForm({
             // The one time adding an address changes what email sends from, so
             // it is said rather than left to be noticed.
             if (added.madeDefault) toast.success(`${added.address} is now your default address.`)
+            onAdded?.()
             onClose()
           },
           onError: (e) => setError(errorText(e, "Couldn't add the address.")),
