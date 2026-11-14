@@ -19,6 +19,8 @@
  * - While a reload runs, frames queue behind it in arrival order. A reload
  *   that fails, or does not answer within `reloadTimeoutMs`, drops the queued
  *   frames (fail closed) and the next frame retries.
+ * - Three failed reloads in a row close the stream, so the client
+ *   reconnects rather than staying open and blind.
  * - A reload that finds the principal is no longer a teammate closes the
  *   stream: the inbox gate at connect is otherwise never asked again.
  * - A scope-changed signal also sends one `inbox_scope_changed` event, so the
@@ -39,6 +41,13 @@ export const INBOX_SCOPE_TTL_MS = 60_000
 
 /** How long a reload may take before the frames behind it are dropped. */
 export const INBOX_SCOPE_RELOAD_TIMEOUT_MS = 10_000
+
+/**
+ * Failed reloads in a row after which the stream closes. A load that never
+ * answers would otherwise leave the stream open and blind; closing it makes
+ * the client reconnect and start from a fresh read.
+ */
+export const INBOX_SCOPE_MAX_FAILED_RELOADS = 3
 
 /** The share of the TTL taken off at random per load. */
 const TTL_JITTER = 0.2
@@ -118,6 +127,7 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
   // Set when a reload fails: the frames it dropped may have carried removals,
   // so the next reload that works tells the client to refetch.
   let recovering = false
+  let failedInARow = 0
   const queue: Queued[] = []
 
   const deliver = (item: Queued): void => {
@@ -214,6 +224,17 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       return
     }
     if (result === undefined) {
+      failedInARow += 1
+      if (failedInARow >= INBOX_SCOPE_MAX_FAILED_RELOADS) {
+        closed = true
+        queue.length = 0
+        log.warn(
+          { principal_id: principalId, failed_reloads: failedInARow },
+          'inbox stream closed: its scope could not be read'
+        )
+        opts.close()
+        return
+      }
       // Fail closed: what the scope now is cannot be known, so nothing that
       // waited on it is sent. A scope-changed notice carries no item data and
       // still goes out. The next frame tries again.
@@ -237,6 +258,7 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       void reload()
       return
     }
+    failedInARow = 0
     actor = scopedActor(result.permissions)
     teamIds = result.teamIds
     expiresAt = nextExpiry()
