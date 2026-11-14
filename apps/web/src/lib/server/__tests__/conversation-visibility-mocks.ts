@@ -56,6 +56,30 @@ export function conversationWebhookMocks() {
   }
 }
 
+/*
+ * The writers start work they do not await (a changelog auto-subscribe, a
+ * channel lifecycle notice, the close-time attribute classifier, an attribute
+ * change event, language detection). Left real, it can run after a test's
+ * transaction rolls back and break the next test's queries, so each matrix
+ * stands it in. None of it decides visibility.
+ */
+
+export function changelogSubscriptionMocks() {
+  return { ensureAutoSubscribed: resolved() }
+}
+
+export function channelAdapterMocks() {
+  return { requireChannelAdapter: () => ({ deliverLifecycleEvent: resolved() }) }
+}
+
+export function attributeClassifierMocks() {
+  return { classifyConversationAttributes: resolved() }
+}
+
+export function eventDispatchMocks<T extends object>(actual: T) {
+  return { ...actual, dispatchConversationAttributeChanged: resolved() }
+}
+
 export function notifyMocks() {
   return {
     notifyVisitorMessage: resolved(),
