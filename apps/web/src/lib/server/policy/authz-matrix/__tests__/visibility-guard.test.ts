@@ -283,8 +283,6 @@ const ENTRY_POINT_ALLOWLIST: Record<string, string> = {
     'checks the ticket; the anchor must hang off that ticket or its pair (ticket-visibility tests)',
   'lib/server/functions/tickets.ts::linkTicketToConversationFn':
     'checks both sides; covered by ticket-visibility-links.db.test.ts',
-  'lib/server/functions/tickets.ts::suggestTicketFieldValuesFn':
-    'checks the conversation through assertConversationViewable before any read',
   'lib/server/functions/copilot-events.ts::recordCopilotEventFn':
     'copilot-gated: gateCopilotFn checks the item for the caller',
 }
@@ -294,11 +292,14 @@ function resolveImport(file: string, specifier: string): string | null {
   let base: string
   if (specifier.startsWith('@/')) base = join(SRC_ROOT, specifier.slice(2))
   else if (specifier.startsWith('.')) base = resolve(dirname(file), specifier)
+  else if (specifier.startsWith('@quackback/'))
+    base = join(SRC_ROOT, '../../../packages', specifier.slice('@quackback/'.length), 'src')
   else return null
   return [`${base}.ts`, join(base, 'index.ts')].find((p) => existsSync(p)) ?? null
 }
 
-/** The top-level `const` initialisers of a file and, two hops deep, of its named imports. */
+/** The top-level `const` initialisers of a file and, a few hops deep, of its
+ *  named imports and the modules it re-exports. */
 function constantsOf(file: string, depth = 0): Map<string, string> {
   const source = stripCommentsAndStrings(readFileSync(file, 'utf8'))
   const raw = readFileSync(file, 'utf8')
@@ -308,8 +309,14 @@ function constantsOf(file: string, depth = 0): Map<string, string> {
   )) {
     consts.set(m[1], m[2])
   }
-  if (depth < 2) {
-    for (const m of raw.matchAll(/^import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*'([^']+)'/gm)) {
+  if (depth < 3) {
+    for (const m of raw.matchAll(/^export\s*\*\s*from\s*'([^']+)'/gm)) {
+      const target = resolveImport(file, m[1])
+      if (target) for (const [k, v] of constantsOf(target, depth + 1)) consts.set(k, v)
+    }
+    for (const m of raw.matchAll(
+      /^(?:import|export)\s*(?:type\s*)?\{([^}]*)\}\s*from\s*'([^']+)'/gm
+    )) {
       const target = resolveImport(file, m[2])
       if (!target) continue
       const theirs = constantsOf(target, depth + 1)
@@ -337,29 +344,53 @@ function validatorInput(body: string, consts: Map<string, string>): string | nul
       }
     }
   }
+  // A schema the walk could not trace (an import it cannot resolve, a helper
+  // it cannot read) is a failure, never a silent skip.
+  if (seen.size === 0 && !/\bz\.\w+\(|\w+\s*:/.test(text)) return null
   return text
 }
 
-/** Every server function outside functions/widget/ whose input takes a conversation id. */
-function conversationEntryPoints(): { key: string; unparsed: boolean }[] {
-  const out: { key: string; unparsed: boolean }[] = []
-  const root = join(SRC_ROOT, 'lib/server/functions')
-  for (const abs of walkSourceFiles(root)) {
-    const file = relative(SRC_ROOT, abs).split('\\').join('/')
-    if (file.startsWith('lib/server/functions/widget/')) continue
-    const code = stripCommentsAndStrings(readFileSync(abs, 'utf8'))
-    const consts = constantsOf(abs)
-    for (const m of code.matchAll(
-      /^export const (\w+)\s*=\s*createServerFn[\s\S]*?(?=\n\S|(?![\s\S]))/gm
-    )) {
-      const input = validatorInput(m[0], consts)
-      if (input === 'none') continue
-      if (input === null) out.push({ key: `${file}::${m[1]}`, unparsed: true })
-      else if (CONVERSATION_INPUT.test(input))
-        out.push({ key: `${file}::${m[1]}`, unparsed: false })
+type EntryPoint = { key: string; unparsed: boolean }
+
+/** The server functions in one file whose input takes a conversation id, or
+ *  whose validator the walk cannot read. */
+function entryPointsIn(file: string, source: string, consts: Map<string, string>): EntryPoint[] {
+  const out: EntryPoint[] = []
+  const code = stripCommentsAndStrings(source)
+  for (const m of code.matchAll(
+    /^export const (\w+)\s*=\s*createServerFn[\s\S]*?(?=\n\S|(?![\s\S]))/gm
+  )) {
+    const input = validatorInput(m[0], consts)
+    if (input === 'none') continue
+    if (input === null) out.push({ key: `${file}::${m[1]}`, unparsed: true })
+    else if (CONVERSATION_INPUT.test(input)) out.push({ key: `${file}::${m[1]}`, unparsed: false })
+  }
+  return out
+}
+
+/** Where agent server functions live: every one outside functions/widget/. */
+const ENTRY_POINT_ROOTS = ['lib/server/functions', 'integrations']
+
+/** Every agent server function whose input takes a conversation id. */
+function conversationEntryPoints(): EntryPoint[] {
+  const out: EntryPoint[] = []
+  for (const root of ENTRY_POINT_ROOTS) {
+    for (const abs of walkSourceFiles(join(SRC_ROOT, root))) {
+      const file = relative(SRC_ROOT, abs).split('\\').join('/')
+      if (file.startsWith('lib/server/functions/widget/')) continue
+      out.push(...entryPointsIn(file, readFileSync(abs, 'utf8'), constantsOf(abs)))
     }
   }
   return out
+}
+
+/** Entry points with neither a call in a matrix nor a reason on the allowlist. */
+function uncovered(entryPoints: EntryPoint[], matrices: string): string[] {
+  return entryPoints
+    .filter((e) => !e.unparsed)
+    .filter((e) => !(e.key in ENTRY_POINT_ALLOWLIST))
+    .filter((e) => !new RegExp(`\\b${e.key.split('::')[1]}\\(`).test(matrices))
+    .map((e) => e.key)
 }
 
 /** The source of every real-DB conversation visibility matrix. */
@@ -412,11 +443,39 @@ describe('visibility guard', () => {
     })
 
     it('gives every conversation entry point a real-DB matrix row or a reason', () => {
-      const missing = entryPoints
-        .filter((e) => !(e.key in ENTRY_POINT_ALLOWLIST))
-        .filter((e) => !new RegExp(`\\b${e.key.split('::')[1]}\\(`).test(matrices))
-        .map((e) => e.key)
-      expect(missing).toEqual([])
+      expect(uncovered(entryPoints, matrices)).toEqual([])
+    })
+
+    it('catches a planted server function that takes a conversationId and has no matrix row', () => {
+      const planted = entryPointsIn(
+        'lib/server/functions/planted.ts',
+        `export const plantedFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ conversationId: z.string() }))
+  .handler(async ({ data }) => attachTag(data.conversationId, tagId))
+
+export const otherFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ postId: z.string() }))
+  .handler(async ({ data }) => data)`,
+        new Map()
+      )
+      expect(planted).toEqual([
+        { key: 'lib/server/functions/planted.ts::plantedFn', unparsed: false },
+      ])
+      expect(uncovered(planted, matrices)).toEqual(['lib/server/functions/planted.ts::plantedFn'])
+      expect(uncovered(planted, `${matrices}\nawait plantedFn({ data })`)).toEqual([])
+    })
+
+    it('catches a planted server function whose validator it cannot read', () => {
+      const planted = entryPointsIn(
+        'lib/server/functions/planted.ts',
+        `export const opaqueFn = createServerFn({ method: 'POST' })
+  .validator(schemaFrom(somewhere)).middleware([m])
+  .handler(async ({ data }) => data)`,
+        new Map()
+      )
+      expect(planted).toEqual([
+        { key: 'lib/server/functions/planted.ts::opaqueFn', unparsed: true },
+      ])
     })
 
     it('has no stale entry-point allowlist entry', () => {

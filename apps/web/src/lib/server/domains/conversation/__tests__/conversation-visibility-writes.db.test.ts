@@ -135,6 +135,9 @@ import {
 } from '../conversation-participant.service'
 import { getLinkedConversationsForPost, listFlaggedMessages } from '../conversation.query'
 import { applyMacroActions } from '@/lib/server/domains/macros/macro.actions'
+import { boundedServiceActor } from '@/lib/server/policy/service-actor'
+import { AUTOMATION_PERMISSIONS } from '@/lib/server/domains/workflows/workflow-actor-permissions'
+import { quinnActor } from '@/lib/server/domains/assistant/assistant.actor'
 import { createTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { sendTicketMessage } from '@/lib/server/domains/tickets/ticket-message.service'
 import {
@@ -717,6 +720,22 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
       expect(after.status).toBe('closed')
       // A later direct write by the same teammate is checked as usual.
       await expect(setConversationStatus(c.id, 'open', w.actor)).rejects.toMatchObject(NOT_FOUND)
+    })
+
+    it('the real automation actors still reach a conversation on any team, or none', async () => {
+      const w = await seedWorld()
+      // Workflows, the spam close and the sweeps run as this bounded actor.
+      const automation = boundedServiceActor(AUTOMATION_PERMISSIONS)
+      const byTeam = await w.conversation(w.teamY)
+      const unowned = await w.conversation(null)
+      await setConversationStatus(byTeam.id, 'closed', automation)
+      await setConversationPriority(unowned.id, 'high', automation)
+      expect((await row(byTeam.id)).status).toBe('closed')
+      expect((await row(unowned.id)).priority).toBe('high')
+      // The assistant's own actor.
+      const assistant = quinnActor(await seedPerson('member'))
+      await expect(assertConversationViewable(byTeam.id, assistant)).resolves.toBeTruthy()
+      await expect(assertConversationViewable(unowned.id, assistant)).resolves.toBeTruthy()
     })
 
     it('a workspace-wide service actor writes to any conversation', async () => {
