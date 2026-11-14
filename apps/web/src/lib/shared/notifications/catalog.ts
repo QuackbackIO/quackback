@@ -164,6 +164,13 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     group: 'support',
     surfaces: ['admin'],
   },
+  {
+    type: 'domain_needs_attention',
+    label: 'Domain needs attention',
+    description: "A domain's ownership record is missing, or it stopped verifying",
+    group: 'support',
+    surfaces: ['admin'],
+  },
   // Changelog
   {
     type: 'changelog_published',
