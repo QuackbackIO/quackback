@@ -1,17 +1,7 @@
 import { db, eq, and, conversations, emailLog, principal, user } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import { resolveReplyRecipient } from './conversation.recipient'
-import {
-  formatNamedSendingAddress,
-  resolveConversationSender,
-} from '@/lib/server/domains/channel-accounts/sender-resolver'
-import {
-  inboundReplyToAddress,
-  isEmailInboundConfigured,
-  mintOutboundMessageId,
-} from './conversation.email-channel'
-import { currentMailSlug } from './conversation.mail-slug'
-import { recordOutboundEmail, threadIdsForOutbound } from './conversation.email-store'
+import { conversationEnvelope, recordSent } from './conversation.email-envelope'
 import { visitorConversationLink } from './conversation.notify'
 import { buildHookContext } from '@/lib/server/events/hook-context'
 import { logger } from '@/lib/server/logger'
@@ -66,21 +56,11 @@ export async function notifyConversationClosed(opts: {
       await isPortalSupportEnabled()
     )
 
-    const replyTo = isEmailInboundConfigured()
-      ? (inboundReplyToAddress(opts.conversationId, currentMailSlug()) ?? undefined)
-      : undefined
-    const messageId = mintOutboundMessageId(opts.conversationId)
-    const thread = messageId ? await threadIdsForOutbound(opts.conversationId) : null
-    const inReplyTo = thread?.inbound.at(-1) ?? thread?.outbound.at(-1)
-    const references = thread && thread.merged.length > 0 ? thread.merged : undefined
-
-    const resolved = await resolveConversationSender(opts.conversationId)
-    const resolvedFrom = resolved?.from
     // Automated mail goes under the address's sender name, else the workspace's.
-    const fromDisplayName = resolved?.senderName ?? ctx.workspaceName
-    const from = resolvedFrom ? formatNamedSendingAddress(resolvedFrom, fromDisplayName) : undefined
-
-    const includeCsat = await shouldAttachCsat(opts.conversationId)
+    const [envelope, includeCsat] = await Promise.all([
+      conversationEnvelope(opts.conversationId, ctx.workspaceName),
+      shouldAttachCsat(opts.conversationId),
+    ])
     let ratingUrls: [string, string, string, string, string] | undefined
     if (includeCsat) {
       const { mintCsatEmailToken } = await import('./csat-email-token')
@@ -103,16 +83,10 @@ export async function notifyConversationClosed(opts: {
       conversationSubject: conv.subject ?? undefined,
       viewUrl: ctaUrl,
       ratingUrls,
-      replyTo: replyTo ?? undefined,
-      from: from ?? undefined,
-      messageId: messageId ?? undefined,
-      inReplyTo: inReplyTo ?? undefined,
-      references,
+      ...envelope,
       conversationId: opts.conversationId,
     })
-    const outboundMessageId =
-      result?.messageId === undefined ? messageId : (result.messageId ?? undefined)
-    if (outboundMessageId) await recordOutboundEmail(outboundMessageId, opts.conversationId)
+    await recordSent(opts.conversationId, envelope.messageId, result)
   } catch (err) {
     log.warn({ err, conversationId: opts.conversationId }, 'notify conversation closed failed')
   }

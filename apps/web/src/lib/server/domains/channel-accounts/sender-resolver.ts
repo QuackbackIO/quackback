@@ -9,7 +9,7 @@
  */
 import type { ChannelAccountId, ConversationId, TicketId } from '@quackback/ids'
 import type { SendingIdentity } from '@quackback/email/sender'
-import { parseAddress } from '@quackback/email/ses'
+import { bareAddress } from '@quackback/email/ses'
 import { db, and, eq, isNull, conversations, ticketConversations } from '@/lib/server/db'
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
@@ -21,17 +21,6 @@ import {
   withSendingDisplayName,
   type SendingIdentityContext,
 } from './outbound-identity'
-
-/**
- * RFC 5322 display-name wrapper for a resolved sending address:
- * `Alex from Acme <support@acme.com>`. Does not change address resolution.
- */
-export function formatNamedSendingAddress(
-  address: SendingIdentity,
-  displayName: string
-): SendingIdentity {
-  return withSendingDisplayName(address, displayName)
-}
 
 /** The kinds of customer email that choose their own sender. */
 export type SenderSurface = 'support' | 'feedback' | 'changelog' | 'status'
@@ -49,6 +38,22 @@ export interface ResolvedSender {
    * "<agent> from <that>".
    */
   senderName: string | null
+}
+
+/**
+ * A resolved sender as the From to send: its address under the name it sends
+ * as (its own sender name, else `workspaceName`), passed through `name` for a
+ * caller that adds to it ("Alex from Acme"). Undefined when nothing resolved,
+ * so the send uses the platform default.
+ */
+export function senderFrom(
+  resolved: ResolvedSender | null,
+  workspaceName: string,
+  name: (sendsAs: string) => string = (sendsAs) => sendsAs
+): SendingIdentity | undefined {
+  return resolved
+    ? withSendingDisplayName(resolved.from, name(resolved.senderName ?? workspaceName))
+    : undefined
 }
 
 /**
@@ -201,12 +206,6 @@ async function resolve(input: {
   return answer(null)
 }
 
-/** The bare addr-spec of a From, without any display name; what a thread stores. */
-export function bareSenderAddress(from: SendingIdentity | string): string {
-  const parsed = parseAddress(from)
-  return typeof parsed === 'string' ? parsed : parsed.address
-}
-
 /**
  * The From for an email on a conversation, called by every send that emails the
  * customer about it, with the name to send it under. See {@link resolveSender}
@@ -234,7 +233,7 @@ export async function resolveConversationSender(
 
   const [written] = await db
     .update(conversations)
-    .set({ threadSenderAddress: bareSenderAddress(sender.from) })
+    .set({ threadSenderAddress: bareAddress(sender.from) })
     .where(
       and(
         eq(conversations.id, conversationId),
