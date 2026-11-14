@@ -302,7 +302,7 @@ function UsesCard({
       "Couldn't remove it."
     )
 
-  const useForHelpCenter = () =>
+  const setHelpCenterDomainHere = () =>
     run(
       () => updateHelpCenterDomainFn({ data: { domain: name } }),
       "Couldn't set the help center's domain."
@@ -319,7 +319,7 @@ function UsesCard({
       } else if (helpCenterDomain && helpCenterDomain !== name) {
         setConfirmMove(true)
       } else {
-        void useForHelpCenter()
+        void setHelpCenterDomainHere()
       }
     },
     signIn: () =>
@@ -443,7 +443,7 @@ function UsesCard({
         isPending={busy}
         onConfirm={() => {
           setConfirmMove(false)
-          void useForHelpCenter()
+          void setHelpCenterDomainHere()
         }}
       />
     </SettingsCard>
