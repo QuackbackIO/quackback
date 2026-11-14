@@ -42,6 +42,8 @@ import {
 import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
 import { GRACE_CLEARED } from '@/lib/server/domains/channel-accounts/ownership-grace'
 import { lockDomainName } from '@/lib/server/domains/channel-accounts/sending-domain-token'
+import { parseJsonConfig } from '@/lib/server/domains/settings/settings.helpers'
+import { DEFAULT_HELP_CENTER_CONFIG } from '@/lib/server/domains/settings/settings.types'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 import { getProvenZones, provenZoneCovering, zonesBesidesDomain } from './proven-zones'
 
@@ -223,17 +225,6 @@ export async function verifyDomainOnFoundRecord(
     )
 }
 
-function helpCenterDomainOf(raw: string | null): string | null {
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as { domain?: { domain?: unknown } | null }
-    const domain = parsed.domain?.domain
-    return typeof domain === 'string' ? domain : null
-  } catch {
-    return null
-  }
-}
-
 /** The uses that hold this name, in the order every page lists them. */
 export async function domainUsesOf(
   name: string,
@@ -255,7 +246,7 @@ export async function domainUsesOf(
   const matches = (value: string | null | undefined) => !!value && toAsciiDomain(value) === key
   const row = settingsRows[0]
   const webAddresses = [
-    helpCenterDomainOf(row?.helpCenterConfig ?? null),
+    parseJsonConfig(row?.helpCenterConfig ?? null, DEFAULT_HELP_CENTER_CONFIG).domain?.domain,
     ...(parseIdentityProjection(row?.cloudIdentity)?.customDomains ?? []).map((h) => h.hostname),
   ]
   const uses: DomainUse[] = []
