@@ -82,6 +82,8 @@ import {
   getTicketNoteAddedTargets,
   getTicketRepliedTargets,
   getTicketRepliedEmailTargets,
+  getTicketResolvedEmailTargets,
+  getTicketStatusChangedTargets,
   getMessageCreatedTargets,
   getConversationNoteMentionedTargets,
   getConversationNoteMentionedEmailTargets,
@@ -654,5 +656,93 @@ describe('note mentions', () => {
     expect(recipientsOf(bell)).toEqual([w.manager.id])
     const emails = await getConversationNoteMentionedEmailTargets(event, context)
     expect(emailsOf(emails)).toEqual([w.manager.email])
+  })
+})
+
+// ============================================================================
+// The requester of a ticket
+// ============================================================================
+
+describe('the requester of a ticket', () => {
+  async function requested(
+    requester: SeededPerson,
+    type: 'customer' | 'back_office',
+    team: TeamId
+  ): Promise<TicketId> {
+    const ticket = await seedTicket({ requester: requester.id, team, type })
+    const id = ticket.id as TicketId
+    await testDb
+      .insert(ticketSubscriptions)
+      .values({ ticketId: id, principalId: requester.id, reason: 'requester' })
+    return id
+  }
+
+  const event = (
+    w: World,
+    type: 'ticket.replied' | 'ticket.status_changed',
+    id: TicketId,
+    ticketType: string,
+    requester: SeededPerson
+  ) =>
+    ({
+      id: `evt-${type}`,
+      type,
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: w.actor.id },
+      data: {
+        ticket: { ...ticketRef(id), type: ticketType },
+        messageId: 'conversation_message_1',
+        content: 'Fix is queued.',
+        attachments: null,
+        senderType: 'agent',
+        title: 'Cannot log in',
+        authorName: 'Sarah',
+        previousStatus: 'open',
+        newStatus: 'closed',
+        stage: 'resolved',
+        previousStage: 'received',
+        requesterPrincipalId: requester.id,
+      },
+    }) as unknown as EventData
+
+  it('a scoped teammate who filed a customer ticket hears about it after it moves to another team', async () => {
+    const w = await seedWorld()
+    const id = await requested(w.solo, 'customer', w.logistics)
+
+    const status = await getTicketStatusChangedTargets(
+      event(w, 'ticket.status_changed', id, 'customer', w.solo)
+    )
+    expect(recipientsOf(status)).toContain(w.solo.id)
+    const reply = await getTicketRepliedTargets(event(w, 'ticket.replied', id, 'customer', w.solo))
+    expect(recipientsOf(reply)).toContain(w.solo.id)
+    const resolved = await getTicketResolvedEmailTargets(
+      event(w, 'ticket.status_changed', id, 'customer', w.solo),
+      context
+    )
+    expect(emailsOf(resolved)).toContain(w.solo.email)
+  })
+
+  it('a former teammate who requested a back-office ticket gets no bell', async () => {
+    const w = await seedWorld()
+    const id = await requested(w.former, 'back_office', w.billing)
+
+    const status = await getTicketStatusChangedTargets(
+      event(w, 'ticket.status_changed', id, 'back_office', w.former)
+    )
+    expect(recipientsOf(status)).not.toContain(w.former.id)
+    const reply = await getTicketRepliedTargets(
+      event(w, 'ticket.replied', id, 'back_office', w.former)
+    )
+    expect(recipientsOf(reply)).not.toContain(w.former.id)
+  })
+
+  it('a scoped teammate who filed a back-office ticket is judged by scope like any teammate', async () => {
+    const w = await seedWorld()
+    const id = await requested(w.solo, 'back_office', w.logistics)
+
+    const status = await getTicketStatusChangedTargets(
+      event(w, 'ticket.status_changed', id, 'back_office', w.solo)
+    )
+    expect(recipientsOf(status)).not.toContain(w.solo.id)
   })
 })

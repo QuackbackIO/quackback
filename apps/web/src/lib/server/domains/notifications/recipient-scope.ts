@@ -5,9 +5,13 @@
  * whose own scope holds the item, by the rule the inbox list uses
  * (`rowInScope`, and `canViewTicket` for a ticket, which also hides a deleted
  * one). Anyone who is not a current teammate (a removed teammate now on role
- * `user`, a service principal, another customer) hears only as the item's
- * named requester, and only where the caller names them. So a notice never
+ * `user`, a service principal, another customer) is dropped. So a notice never
  * points a person at an item they would get Not found for.
+ *
+ * One exception: the requester of a CUSTOMER ticket owns it, so when the
+ * caller names them they always hear, teammate or not, wherever it is routed.
+ * A back-office or tracker ticket's requester gets no exception: a teammate is
+ * judged by scope like anyone else, and a non-teammate is dropped.
  *
  * The item's owner and team are read by id here, at resolve time, never taken
  * from an event payload: a payload is a snapshot, and a new conversation's
@@ -46,7 +50,10 @@ const log = logger.child({ component: 'recipient-scope' })
  */
 export type ScopedItemRef =
   | { kind: 'conversation'; id: ConversationId; facts?: ScopedRow }
-  | { kind: 'ticket'; id: TicketId; facts?: TicketVisibilityFacts }
+  | { kind: 'ticket'; id: TicketId; facts?: TicketFacts }
+
+/** A ticket's scope facts, plus its type for the requester exception. */
+type TicketFacts = TicketVisibilityFacts & { type?: string }
 
 /** A person to judge: an id, or the row the caller already holds. */
 export type Candidate = PrincipalId | { id: PrincipalId; type: string; role: string }
@@ -92,6 +99,7 @@ async function readFacts(item: ScopedItemRef): Promise<ScopedItemRef['facts'] | 
       assigneePrincipalId: tickets.assigneePrincipalId,
       assigneeTeamId: tickets.assigneeTeamId,
       deletedAt: tickets.deletedAt,
+      type: tickets.type,
     })
     .from(tickets)
     .where(eq(tickets.id, item.id))
@@ -114,17 +122,22 @@ function canSee(
 const itemTeamOf = (facts: NonNullable<ScopedItemRef['facts']>): TeamId | null =>
   (('teamId' in facts ? facts.teamId : facts.assigneeTeamId) as TeamId | null) ?? null
 
+interface Judged {
+  view: TeammateView
+  facts: ScopedItemRef['facts'] | null
+}
+
 /**
- * Split the teammates among `candidates` by whether each one's own scope holds
- * the item. A missing item, or a deleted ticket, is hidden from every teammate.
- * The item is read only when there is a teammate to judge.
+ * Judge the teammates among `candidates`. The item is read only when there is
+ * a teammate to judge, or when `needFacts` asks for it anyway.
  */
-export async function teammateView(
+async function judge(
   item: ScopedItemRef,
-  candidates: readonly Candidate[]
-): Promise<TeammateView> {
+  candidates: readonly Candidate[],
+  needFacts: boolean
+): Promise<Judged> {
   const view: TeammateView = { visible: new Set(), hidden: new Set() }
-  if (candidates.length === 0) return view
+  if (candidates.length === 0) return { view, facts: null }
 
   const seen = new Set<PrincipalId>()
   const teammates: Array<{ id: PrincipalId; role: Role }> = []
@@ -133,13 +146,14 @@ export async function teammateView(
     seen.add(p.id)
     teammates.push({ id: p.id, role: p.role as Role })
   }
-  if (teammates.length === 0) return view
+  if (teammates.length === 0 && !needFacts) return { view, facts: null }
 
   const facts = await readFacts(item)
   if (!facts) {
     for (const p of teammates) view.hidden.add(p.id)
-    return view
+    return { view, facts: null }
   }
+  if (teammates.length === 0) return { view, facts }
 
   // The item's one team is the only membership the scope rule can ever need.
   const itemTeam = itemTeamOf(facts)
@@ -173,14 +187,29 @@ export async function teammateView(
     const teamIds = new Set<TeamId>(itemTeam && onItemTeam.has(p.id) ? [itemTeam] : [])
     ;(canSee(actor, item, facts, teamIds) ? view.visible : view.hidden).add(p.id)
   }
-  return view
+  return { view, facts }
 }
+
+/**
+ * Split the teammates among `candidates` by whether each one's own scope holds
+ * the item. A missing item, or a deleted ticket, is hidden from every teammate.
+ * The item is read only when there is a teammate to judge.
+ */
+export async function teammateView(
+  item: ScopedItemRef,
+  candidates: readonly Candidate[]
+): Promise<TeammateView> {
+  return (await judge(item, candidates, false)).view
+}
+
+/** Whether `facts` say the ticket is a customer ticket, whose requester owns it. */
+const isCustomerTicket = (item: ScopedItemRef, facts: Judged['facts']) =>
+  item.kind === 'ticket' && (facts as TicketFacts | null)?.type === 'customer'
 
 /**
  * `candidates` cut to the people who may hear about the item, order kept:
  * the teammates whose own scope holds it, plus `requesterPrincipalId` when the
- * caller names the item's requester and they are not a teammate. Every other
- * non-teammate is dropped.
+ * caller names the requester of a customer ticket. Everyone else is dropped.
  */
 export async function inScopeRecipients(
   item: ScopedItemRef,
@@ -188,14 +217,14 @@ export async function inScopeRecipients(
   opts: { requesterPrincipalId?: string | null } = {}
 ): Promise<PrincipalId[]> {
   if (candidates.length === 0) return []
-  const view = await teammateView(item, candidates)
-  const requester = opts.requesterPrincipalId ?? null
+  const named = opts.requesterPrincipalId ?? null
+  const { view, facts } = await judge(item, candidates, named !== null && item.kind === 'ticket')
+  const owner = named !== null && isCustomerTicket(item, facts) ? named : null
   const unique = [...new Set(candidates.map(idOf))]
   const kept: PrincipalId[] = []
   const dropped: PrincipalId[] = []
   for (const id of unique) {
-    const isOther = !view.visible.has(id) && !view.hidden.has(id)
-    ;(view.visible.has(id) || (id === requester && isOther) ? kept : dropped).push(id)
+    ;(view.visible.has(id) || id === owner ? kept : dropped).push(id)
   }
   if (dropped.length > 0) {
     log.debug(

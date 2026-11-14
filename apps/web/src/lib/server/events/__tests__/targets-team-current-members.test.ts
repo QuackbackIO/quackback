@@ -217,11 +217,11 @@ describe.skipIf(!fixture.available)('team notifications reach current members on
     expect([...ids].sort()).toEqual([w.current.id, w.requester.id].sort())
   })
 
-  it('status bell keeps the requester of a back-office ticket', async () => {
+  it('status bell skips the nominal requester of a back-office ticket, as the email does', async () => {
     const w = await seedWorld('back_office')
     const target = await getTicketStatusChangedTargets(closedEvent(w, 'back_office'))
     const ids = (target?.target as { principalIds: string[] }).principalIds
-    expect([...ids].sort()).toEqual([w.current.id, w.requester.id].sort())
+    expect([...ids].sort()).toEqual([w.current.id])
   })
 
   it('a ticket assigned to a team emails current members, not a removed one', async () => {
