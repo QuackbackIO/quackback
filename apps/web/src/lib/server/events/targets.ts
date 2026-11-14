@@ -1175,17 +1175,17 @@ export async function getTicketExternalStatusChangedTargets(
 }
 
 /**
- * Notification target for `message.created` (WO-3 slice 5, the riskiest
- * move — reproduces `notifyVisitorMessage`'s deleted team-bell block
- * EXACTLY): only a VISITOR-sent message bells the team. Recipients are the
- * admin/member principals whose own scope holds the conversation (the
- * conversation re-read by id) — from the SAME raw query notifyVisitorMessage used
- * (role-only, no `principal.type` filter), not `listAssignableTeammates`,
- * which additionally requires `type: 'user'` and would silently narrow the
- * recipient set. The anti-spam presence gate is NOT applied here — it runs
- * in the notification hook itself (events/handlers/notification.ts), since
- * `isAnyAgentOnline` is a single global presence-store check, not a per-recipient one,
- * and the hook is where the config's `isFirstMessage` flag is read back out.
+ * Notification target for `message.created` (WO-3 slice 5): only a
+ * VISITOR-sent message bells the team. Recipients are the teammates (type
+ * `user`, role admin or member) whose own scope holds the conversation, with
+ * the conversation re-read by id, so a first message reaches the teammate
+ * routing just chose. A conversation paired with a customer ticket bells no
+ * one here (the ticket's watcher fan-out replaces it, see below).
+ *
+ * The anti-spam presence gate is NOT applied here: it runs in the
+ * notification hook (events/handlers/notification.ts), which reads the
+ * config's `isFirstMessage` and holds a follow-up back only while one of
+ * these recipients is online, or while presence cannot be read.
  */
 export async function getMessageCreatedTargets(event: EventData): Promise<HookTarget | null> {
   if (event.type !== 'message.created') return null

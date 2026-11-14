@@ -68,9 +68,11 @@ export function notifyMocks() {
  * The recipient scope rule with every teammate in scope, for unit suites that
  * mock the database. Rows the caller passes still go through the teammate
  * check (type `user`, role admin or member); bare ids are taken as teammates.
- * A named `requesterPrincipalId` in the input is kept, for any item: the stub
- * does not know the item's type, so it does not model the real rule's
- * customer-ticket-only requester exception.
+ * A named `requesterPrincipalId` in the input is kept, for any item. The stub
+ * does not know the item, so it does NOT model the real rule's requester
+ * condition (a customer ticket that is not deleted): a unit suite using it
+ * cannot catch a regression there. That condition is covered over real rows
+ * in recipient-scope.db.test.ts and notification-scope.db.test.ts.
  * The rule itself runs over real rows in
  * events/__tests__/notification-scope.db.test.ts and
  * domains/notifications/__tests__/recipient-scope.db.test.ts.
