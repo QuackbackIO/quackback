@@ -235,6 +235,12 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
       'Written only alongside a successful DNS verification, and no sweep polls on it. It is a display companion to verified_at.',
   },
   {
+    column: schema.domains.lastCheckedAt,
+    policy: 'preserve',
+    reason:
+      'Stamped on every ownership check of a domain added by name, for the "Last checked" line. Nothing outbound reads it and no sweep polls on it, so a rewound value only shows an older check time until the next one.',
+  },
+  {
     column: schema.emailSendingDomains.ownershipWarningSentAt,
     policy: 'settle',
     strategy: 'stamp-pending',

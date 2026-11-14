@@ -99,6 +99,16 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   // Email senders: sending is a workspace setting (settings.manage), and whoever
   // runs the support inbox may still choose where support replies come from.
+  // Domains added by name: every Domains page permission reads them, so each
+  // viewer sees a domain's ownership whichever of its uses they manage.
+  'lib/server/functions/domains.ts::getDomainFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.AUTH_MANAGE],
+    'read by the Domains page, which any one of its use permissions opens'
+  ),
+  'lib/server/functions/domains.ts::listDomainsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.AUTH_MANAGE],
+    'read by the Domains page, which any one of its use permissions opens'
+  ),
   'lib/server/functions/channel-accounts.ts::getEmailChannelConfigFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
     'read by the workspace Email page and the support inbox page; either permission opens it'

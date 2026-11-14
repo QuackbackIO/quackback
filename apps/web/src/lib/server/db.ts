@@ -260,6 +260,8 @@ export {
   emailSendingDomains,
   emailSesTenants,
   emailSenders,
+  // Schema tables - domains added by name (Settings > Domains)
+  domains,
   EMAIL_SENDER_SURFACES,
   // Schema tables - office hours + SLA (support platform §4.6)
   officeHoursSchedules,
@@ -554,6 +556,7 @@ export type {
   MacroAction,
 } from '@quackback/db'
 export type { ServiceMetadata } from '@quackback/db'
+export type { Domain, DomainStatus } from '@quackback/db'
 export type { FileRecord, NewFileRecord } from '@quackback/db'
 export type { IdentityProviderClaimMapping, ClaimRoleMapping } from '@quackback/db'
 export type { PermissionKey, PermissionCategory, SystemRoleKey } from '@quackback/db'

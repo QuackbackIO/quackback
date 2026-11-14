@@ -15,7 +15,9 @@ import {
 import { shownProofSource, type ShownProofSource } from '@/lib/shared/domain-proof'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { toAsciiDomain } from '@/lib/server/domains/channel-accounts/outbound-identity'
+import { OWNERSHIP_RECORD_HOST } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import { getProvenZones, provenZoneCovering, sendingRowProvesZone } from './proven-zones'
+import { domainOwnershipValue, domainUsesOf, getDomain, listDomains } from './domains.service'
 
 export interface SendingDomainSummary {
   id: string
@@ -106,4 +108,60 @@ export async function listSignInDomainSummaries(
       provenBy: covering ? shownProofSource(covering.source, viewer) : null,
     }
   })
+}
+
+/** A domain added by name, as the Domains list shows it. */
+export interface AddedDomainSummary {
+  name: string
+  /** Its own record was found, or a zone this workspace proved covers it. */
+  verified: boolean
+}
+
+/** Everything a domain's own page says about the domain itself. */
+export interface DomainDetail {
+  name: string
+  /** Whether the domain was added by name, so it has a record of its own. */
+  added: boolean
+  status: 'pending' | 'verified'
+  /** The ownership record to publish; null for a name only a use holds. */
+  record: { host: string; value: string } | null
+  verifiedAt: string | null
+  lastCheckedAt: string | null
+  /** The proof that already covers the name, as the viewer may see it. */
+  provenBy: ShownProofSource | null
+  /** Whether any use holds the name, whether or not the viewer may see it. */
+  inUse: boolean
+}
+
+export async function listAddedDomainSummaries(): Promise<AddedDomainSummary[]> {
+  const [rows, zones] = await Promise.all([listDomains(), getProvenZones()])
+  return rows.map((r) => ({
+    name: r.name,
+    verified: r.status === 'verified' || provenZoneCovering(r.name, zones) !== null,
+  }))
+}
+
+export async function getDomainDetail(
+  name: string,
+  viewer: readonly PermissionKey[]
+): Promise<DomainDetail> {
+  const key = toAsciiDomain(name)
+  const [row, zones, uses] = await Promise.all([
+    getDomain(key),
+    getProvenZones(),
+    domainUsesOf(key),
+  ])
+  const covering = provenZoneCovering(key, zones)
+  return {
+    name: row?.name ?? key,
+    added: row !== null,
+    status: row?.status ?? 'pending',
+    record: row
+      ? { host: OWNERSHIP_RECORD_HOST, value: domainOwnershipValue(row.ownershipToken) }
+      : null,
+    verifiedAt: row?.verifiedAt?.toISOString() ?? null,
+    lastCheckedAt: row?.lastCheckedAt?.toISOString() ?? null,
+    provenBy: covering ? shownProofSource(covering.source, viewer) : null,
+    inUse: uses.length > 0,
+  }
 }

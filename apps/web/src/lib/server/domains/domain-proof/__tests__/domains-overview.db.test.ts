@@ -4,7 +4,13 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SendingDomainId, TeamId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { channelAccounts, emailSendingDomains, ssoVerifiedDomain, teams } from '@/lib/server/db'
+import {
+  channelAccounts,
+  domains,
+  emailSendingDomains,
+  ssoVerifiedDomain,
+  teams,
+} from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -12,13 +18,19 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import { listSendingDomainSummaries, listSignInDomainSummaries } from '../domains-overview'
+import {
+  getDomainDetail,
+  listAddedDomainSummaries,
+  listSendingDomainSummaries,
+  listSignInDomainSummaries,
+} from '../domains-overview'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
     await db.select({ id: emailSendingDomains.dkimMode }).from(emailSendingDomains).limit(0)
     await db.select({ id: channelAccounts.sendingDomainId }).from(channelAccounts).limit(0)
     await db.select({ id: ssoVerifiedDomain.id }).from(ssoVerifiedDomain).limit(0)
+    await db.select({ id: domains.ownershipToken }).from(domains).limit(0)
   },
 })
 
@@ -121,6 +133,74 @@ describe.skipIf(!fixture.available)('Domains page rows (real DB, rolled back)', 
       'example.net': [false, null],
       'example.org': [true, null],
       'eu.example.org': [false, null],
+    })
+  })
+
+  describe('domains added by name', () => {
+    const ADMIN = [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.AUTH_MANAGE]
+
+    async function seedAdded(name: string, status: 'pending' | 'verified' = 'pending') {
+      await testDb.insert(domains).values({
+        name,
+        ownershipToken: `tok-${name}`,
+        status,
+        verifiedAt: status === 'verified' ? new Date() : null,
+      })
+    }
+
+    it('lists each added domain, verified when its own record or a proven zone says so', async () => {
+      await seedDomain('acme.com', 'verified')
+      await seedAdded('help.acme.com')
+      await seedAdded('acme.io', 'verified')
+      await seedAdded('acme.co.uk')
+      expect(await listAddedDomainSummaries()).toEqual([
+        { name: 'acme.co.uk', verified: false },
+        { name: 'acme.io', verified: true },
+        { name: 'help.acme.com', verified: true },
+      ])
+    })
+
+    it('reads an added domain with no use: its record, and nothing holding it', async () => {
+      await seedAdded('acme.io')
+      expect(await getDomainDetail('ACME.io', ADMIN)).toEqual({
+        name: 'acme.io',
+        added: true,
+        status: 'pending',
+        record: { host: '_quackback', value: 'quackback-domain-verification=tok-acme.io' },
+        verifiedAt: null,
+        lastCheckedAt: null,
+        provenBy: null,
+        inUse: false,
+      })
+    })
+
+    it('reads a domain only a use holds: proven by the zone that covers it, no record', async () => {
+      await seedDomain('acme.com', 'verified')
+      expect(await getDomainDetail('acme.com', ADMIN)).toMatchObject({
+        name: 'acme.com',
+        added: false,
+        record: null,
+        provenBy: 'email-sending',
+        inUse: true,
+      })
+      // A viewer who cannot see sending learns only that a proof exists.
+      expect(await getDomainDetail('acme.com', [PERMISSIONS.AUTH_MANAGE])).toMatchObject({
+        provenBy: 'workspace',
+      })
+    })
+
+    it('says an added domain is in use while a use holds its name', async () => {
+      await seedAdded('acme.com')
+      await testDb.insert(ssoVerifiedDomain).values({ name: 'acme.com', verificationToken: 't1' })
+      expect(await getDomainDetail('acme.com', ADMIN)).toMatchObject({ added: true, inUse: true })
+    })
+
+    it('reads a name never added or used as neither', async () => {
+      expect(await getDomainDetail('acme.net', ADMIN)).toMatchObject({
+        added: false,
+        inUse: false,
+        record: null,
+      })
     })
   })
 })

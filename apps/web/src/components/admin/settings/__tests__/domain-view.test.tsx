@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
+import type { DomainDetail } from '@/lib/server/functions/domains'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -36,6 +37,20 @@ const restartChecks = vi.fn()
 
 vi.mock('@/lib/server/functions/channel-accounts', () => ({
   getEmailChannelConfigFn: vi.fn(),
+}))
+const checkOwnership = vi.fn()
+const removeDomainByName = vi.fn()
+const addDomainByName = vi.fn()
+const removeSignIn = vi.fn()
+const clearHelpCenterDomain = vi.fn()
+vi.mock('@/lib/server/functions/domains', () => ({
+  addDomainFn: addDomainByName,
+  checkDomainOwnershipFn: checkOwnership,
+  removeDomainFn: removeDomainByName,
+}))
+vi.mock('@/lib/server/functions/sso', () => ({ removeVerifiedDomainFn: removeSignIn }))
+vi.mock('@/lib/server/functions/help-center-domain', () => ({
+  updateHelpCenterDomainFn: clearHelpCenterDomain,
 }))
 vi.mock('@/lib/client/mutations/channel-accounts', () => ({
   useDeleteChannelAccount: () => ({ mutate: deleteAccount, isPending: false }),
@@ -123,7 +138,20 @@ function rowWith({
       ? [{ id: 'domain_a', name: 'acme.com', verified: signInVerified, provenBy: null }]
       : [],
     helpCenterDomain: customDomain ? { domain: 'acme.com', verified: false } : null,
+    added: [{ name: 'acme.com', verified: false }],
   })[0]!
+}
+
+/** acme.com as its page reads it: added, pending, its own record to publish. */
+const DETAIL: DomainDetail = {
+  name: 'acme.com',
+  added: true,
+  status: 'pending',
+  record: { host: '_quackback', value: 'quackback-domain-verification=own-token' },
+  verifiedAt: null,
+  lastCheckedAt: null,
+  provenBy: null,
+  inUse: false,
 }
 
 function renderView(
@@ -132,7 +160,9 @@ function renderView(
     permissions = ALL as string[],
     addresses = [address('acct_1', 'help@acme.com')],
     onChanged = vi.fn(),
+    onRemoved = vi.fn(),
     domain = PENDING_DOMAIN,
+    detail = { ...DETAIL, inUse: row.uses.length > 0 } as DomainDetail | null,
   } = {}
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
@@ -154,40 +184,66 @@ function renderView(
         row={row}
         links={domainUseLinks({ permissions, cloudEnabled: false, helpCenterOn: true })}
         visibleUses={visibleDomainUses(permissions)}
+        domain={detail}
+        canManage={permissions.includes(PERMISSIONS.SETTINGS_MANAGE)}
         onChanged={onChanged}
+        onRemoved={onRemoved}
       />
     </QueryClientProvider>
   )
 }
 
-const cardTitles = () =>
-  screen
-    .getAllByRole('heading', { level: 2 })
-    .map((h) => h.textContent)
-    .filter((t) => t !== 'Sending addresses')
-
 const card = (title: string) =>
   screen.getByRole('heading', { level: 2, name: title }).closest('section') as HTMLElement
 
-describe('domain view cards', () => {
-  it('shows one card per use, email first, then custom domain, then sign-in', () => {
+const usesCard = () => card('Used for')
+
+/** The titles of the use rows, in order. */
+const useTitles = () =>
+  [...usesCard().querySelectorAll('[data-slot="settings-list-row"]')].map(
+    (r) => r.querySelector('span.font-medium')?.textContent ?? ''
+  )
+
+const useRow = (title: string) =>
+  within(usesCard())
+    .getByText(title, { selector: 'span.font-medium' })
+    .closest('[data-slot="settings-list-row"]') as HTMLElement
+
+describe('domain view uses', () => {
+  it('lists the three uses in order, each set up or not', () => {
     renderView(rowWith({ email: true, customDomain: true, signIn: true }))
-    expect(cardTitles()).toEqual(['Email sending', 'Custom domain', 'Sign-in'])
+    expect(useTitles()).toEqual(['Email sending', 'Custom domain', 'Sign-in'])
   })
 
-  it('shows both cards of a domain used for email and sign-in, each with its status', () => {
+  it("shows each use's status, and Set up for one that is not on", () => {
     renderView(rowWith({ email: true, signIn: true }))
-    expect(cardTitles()).toEqual(['Email sending', 'Sign-in'])
-    expect(card('Email sending')).toHaveTextContent('Pending')
-    expect(card('Email sending')).toHaveTextContent('help@')
+    expect(useRow('Email sending')).toHaveTextContent('Pending')
+    expect(useRow('Email sending')).toHaveTextContent('help@')
     // A healthy use is quiet: no status word at all.
-    expect(card('Sign-in')).not.toHaveTextContent('Verified')
-    expect(card('Sign-in')).not.toHaveTextContent('Pending')
+    expect(useRow('Sign-in')).not.toHaveTextContent('Verified')
+    expect(useRow('Sign-in')).not.toHaveTextContent('Pending')
+    // Off Cloud the custom domain is the help center's, set up on its page.
+    expect(within(useRow('Custom domain')).getByRole('link', { name: 'Set up' })).toHaveAttribute(
+      'href',
+      '/admin/settings/help-center?tab=domains-languages'
+    )
+    expect(within(useRow('Custom domain')).queryByRole('button', { name: 'Remove' })).toBeNull()
   })
 
-  it('shows the email records and checks them again from the card', () => {
+  it('offers Set up for every use of a domain with none, each on its own page', () => {
+    renderView(rowWith({}))
+    expect(useTitles()).toEqual(['Email sending', 'Custom domain', 'Sign-in'])
+    const href = (title: string) =>
+      within(useRow(title)).getByRole('link', { name: 'Set up' }).getAttribute('href')
+    expect(href('Email sending')).toBe('/admin/settings/email')
+    expect(href('Custom domain')).toBe('/admin/settings/help-center?tab=domains-languages')
+    expect(href('Sign-in')).toBe('/admin/settings/security/authentication?tab=sign-in')
+    expect(within(usesCard()).queryByRole('button', { name: 'Remove' })).toBeNull()
+  })
+
+  it('shows the email records and checks them again from their card', () => {
     renderView(rowWith({ email: true }))
-    const email = card('Email sending')
+    const email = card('Email records')
     expect(email).toHaveTextContent('quackback-domain-verification=abc')
     fireEvent.click(within(email).getByRole('button', { name: 'Check now' }))
     expect(restartChecks).toHaveBeenCalledWith('dom_1', expect.anything())
@@ -195,14 +251,13 @@ describe('domain view cards', () => {
 
   it('links sign-in and custom domain to the page that owns their setup', () => {
     renderView(rowWith({ customDomain: true, signIn: true, signInVerified: false }))
-    expect(card('Sign-in')).toHaveTextContent('Pending')
-    expect(within(card('Sign-in')).getByRole('link', { name: 'Sign-in settings' })).toHaveAttribute(
-      'href',
-      '/admin/settings/security/authentication?tab=sign-in'
-    )
-    expect(card('Custom domain')).toHaveTextContent('Pending')
+    expect(useRow('Sign-in')).toHaveTextContent('Pending')
     expect(
-      within(card('Custom domain')).getByRole('link', { name: 'Help center settings' })
+      within(useRow('Sign-in')).getByRole('link', { name: 'Sign-in settings' })
+    ).toHaveAttribute('href', '/admin/settings/security/authentication?tab=sign-in')
+    expect(useRow('Custom domain')).toHaveTextContent('Pending')
+    expect(
+      within(useRow('Custom domain')).getByRole('link', { name: 'Help center settings' })
     ).toHaveAttribute('href', '/admin/settings/help-center?tab=domains-languages')
   })
 
@@ -211,6 +266,71 @@ describe('domain view cards', () => {
     expect(container.textContent).not.toMatch(/\blive\b/i)
     expect(container.textContent).not.toMatch(/\bmail\b/i)
     expect(container).not.toHaveTextContent('Security')
+  })
+})
+
+describe('domain view ownership', () => {
+  it("shows the domain's own record while pending, and checks it now", async () => {
+    const onChanged = vi.fn()
+    checkOwnership.mockResolvedValue({ ok: true, via: 'dns' })
+    renderView(rowWith({}), { onChanged })
+    const ownership = card('Ownership')
+    expect(ownership).toHaveTextContent('Pending')
+    expect(ownership).toHaveTextContent('_quackback')
+    expect(ownership).toHaveTextContent('quackback-domain-verification=own-token')
+    fireEvent.click(within(ownership).getByRole('button', { name: 'Check now' }))
+    expect(checkOwnership).toHaveBeenCalledWith({ data: { name: 'acme.com' } })
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+  })
+
+  it('says what the check found when the record is not there yet', async () => {
+    checkOwnership.mockResolvedValue({ ok: false, reason: 'no-record' })
+    renderView(rowWith({}))
+    fireEvent.click(within(card('Ownership')).getByRole('button', { name: 'Check now' }))
+    expect(await within(card('Ownership')).findByRole('alert')).toHaveTextContent(
+      "We couldn't find the record yet."
+    )
+  })
+
+  it('shows a verified domain with no badge and no Check now', () => {
+    renderView(rowWith({}), {
+      detail: { ...DETAIL, status: 'verified', verifiedAt: '2026-11-01T00:00:00.000Z' },
+    })
+    const ownership = card('Ownership')
+    expect(ownership).not.toHaveTextContent('Pending')
+    expect(ownership).not.toHaveTextContent('Verified')
+    expect(within(ownership).queryByRole('button', { name: 'Check now' })).toBeNull()
+    // Still shown, so it stays published.
+    expect(ownership).toHaveTextContent('quackback-domain-verification=own-token')
+  })
+
+  it('needs no record under a zone this workspace already proved', () => {
+    renderView(rowWith({}), { detail: { ...DETAIL, provenBy: 'email-sending' } })
+    const ownership = card('Ownership')
+    expect(ownership).toHaveTextContent('Verified through email sending')
+    expect(ownership).not.toHaveTextContent('Pending')
+    expect(ownership).not.toHaveTextContent('own-token')
+    expect(within(ownership).queryByRole('button', { name: 'Check now' })).toBeNull()
+  })
+
+  it('offers no Check now to a viewer who cannot manage the domain', () => {
+    renderView(rowWith({}), { permissions: [PERMISSIONS.AUTH_MANAGE] })
+    expect(card('Ownership')).toHaveTextContent('Pending')
+    expect(within(card('Ownership')).queryByRole('button', { name: 'Check now' })).toBeNull()
+    expect(within(card('Ownership')).queryByRole('button', { name: 'Remove domain' })).toBeNull()
+  })
+
+  it('gives a domain only a use holds a record of its own when asked', async () => {
+    const onChanged = vi.fn()
+    addDomainByName.mockResolvedValue({ name: 'acme.com' })
+    renderView(rowWith({ signIn: true }), {
+      onChanged,
+      detail: { ...DETAIL, added: false, record: null, inUse: true },
+    })
+    expect(card('Ownership')).toHaveTextContent('Not verified yet.')
+    fireEvent.click(within(card('Ownership')).getByRole('button', { name: 'Verify ownership' }))
+    expect(addDomainByName).toHaveBeenCalledWith({ data: { name: 'acme.com' } })
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
 })
 
@@ -224,30 +344,30 @@ describe('domain view permissions', () => {
     expect(visibleDomainUses([PERMISSIONS.HELP_CENTER_MANAGE])).toEqual([])
   })
 
-  it('shows a sign-in manager the sign-in card only', () => {
+  it('shows a sign-in manager the sign-in use only', () => {
     renderView(all(), { permissions: [PERMISSIONS.AUTH_MANAGE] })
-    expect(cardTitles()).toEqual(['Sign-in'])
+    expect(useTitles()).toEqual(['Sign-in'])
     expect(screen.queryByText('Check now')).toBeNull()
     expect(screen.queryByText('help@acme.com')).toBeNull()
   })
 
-  it('shows an email manager the email card only', () => {
+  it('shows an email manager the email use only', () => {
     renderView(all(), { permissions: [EMAIL_SENDING_PERMISSION] })
-    expect(cardTitles()).toEqual(['Email sending'])
+    expect(useTitles()).toEqual(['Email sending'])
     expect(screen.queryByRole('link', { name: 'Sign-in settings' })).toBeNull()
   })
 
-  it('shows the custom domain card without a link to a page the viewer cannot open', () => {
+  it('shows the custom domain without a link to a page the viewer cannot open', () => {
     renderView(all(), { permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN] })
-    expect(cardTitles()).toEqual(['Custom domain'])
+    expect(useTitles()).toEqual(['Custom domain'])
     expect(screen.queryByRole('link')).toBeNull()
   })
 })
 
-describe('domain view uses', () => {
-  const uses = () => card('Sending addresses')
+describe('domain view removal', () => {
+  const addresses = () => card('Sending addresses')
 
-  it('does not name a verified domain again inside its email card', () => {
+  it('does not name a verified domain again inside its email records', () => {
     renderView(rowWith({ email: true }), {
       domain: {
         ...PENDING_DOMAIN,
@@ -257,32 +377,53 @@ describe('domain view uses', () => {
       },
     })
     // The page is titled with the domain; the records need no second heading.
-    expect(within(card('Email sending')).queryByRole('heading', { level: 3 })).toBeNull()
-    expect(card('Email sending')).toHaveTextContent('_quackback')
+    expect(within(card('Email records')).queryByRole('heading', { level: 3 })).toBeNull()
+    expect(card('Email records')).toHaveTextContent('_quackback')
   })
 
-  it('removes one use at a time and offers nothing that removes them all', () => {
+  it('removes one use at a time, and no Remove domain while a use is on', () => {
     renderView(rowWith({ email: true, signIn: true }))
     expect(screen.queryByRole('button', { name: /remove (domain|all|everything)/i })).toBeNull()
-    expect(screen.queryByText(/remove (domain|all|everything)/i)).toBeNull()
 
-    // Email is removed here, an address at a time.
-    expect(within(uses()).getAllByRole('button', { name: 'Remove' })).toHaveLength(1)
-    // Sign-in is removed on the page that owns it, linked once, from its own card.
+    // Email is removed an address at a time.
+    expect(within(addresses()).getAllByRole('button', { name: 'Remove' })).toHaveLength(1)
+    // Sign-in has its own Remove, and its page linked once, from its own row.
+    expect(within(useRow('Sign-in')).getByRole('button', { name: 'Remove' })).toBeInTheDocument()
     const links = screen.getAllByRole('link', { name: 'Sign-in settings' })
     expect(links).toHaveLength(1)
-    expect(card('Sign-in')).toContainElement(links[0]!)
+    expect(useRow('Sign-in')).toContainElement(links[0]!)
     // A domain still being set up keeps its instruction heading.
-    expect(within(card('Email sending')).getByRole('heading', { level: 3 })).toHaveTextContent(
+    expect(within(card('Email records')).getByRole('heading', { level: 3 })).toHaveTextContent(
       'Set up acme.com'
     )
+  })
+
+  it('stops sign-in on the domain from its row', async () => {
+    const onChanged = vi.fn()
+    removeSignIn.mockResolvedValue({ success: true })
+    renderView(rowWith({ signIn: true }), { onChanged })
+    fireEvent.click(within(useRow('Sign-in')).getByRole('button', { name: 'Remove' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Stop using acme.com for sign-in?')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
+    expect(removeSignIn).toHaveBeenCalledWith({ data: { id: 'domain_a' } })
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+  })
+
+  it('stops serving the help center on the domain from its row', async () => {
+    clearHelpCenterDomain.mockResolvedValue({ domain: null, verifiedAt: null })
+    renderView(rowWith({ customDomain: true }))
+    fireEvent.click(within(useRow('Custom domain')).getByRole('button', { name: 'Remove' }))
+    const dialog = screen.getByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
+    expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: null } })
   })
 
   it('removes the last address with the wording Email settings uses, and the domain with it', () => {
     const onChanged = vi.fn()
     renderView(rowWith({ email: true, signIn: true }), { onChanged })
-    expect(uses()).toHaveTextContent('help@acme.com')
-    fireEvent.click(within(uses()).getByRole('button', { name: 'Remove' }))
+    expect(addresses()).toHaveTextContent('help@acme.com')
+    fireEvent.click(within(addresses()).getByRole('button', { name: 'Remove' }))
 
     const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByText('Remove help@acme.com?')).toBeInTheDocument()
@@ -305,16 +446,17 @@ describe('domain view uses', () => {
     renderView(rowWith({ email: true }), {
       addresses: [address('acct_1', 'help@acme.com'), address('acct_2', 'billing@acme.com')],
     })
-    const buttons = within(uses()).getAllByRole('button', { name: 'Remove' })
+    const buttons = within(addresses()).getAllByRole('button', { name: 'Remove' })
     expect(buttons).toHaveLength(2)
     fireEvent.click(buttons[0]!)
     expect(screen.getByRole('alertdialog')).not.toHaveTextContent('stops sending email too')
   })
 
-  it('removes an email domain no address uses', () => {
+  it('stops email on a domain no address uses, from its row', () => {
     renderView(rowWith({ email: true }), { addresses: [] })
-    expect(uses()).toHaveTextContent('No address uses this domain')
-    fireEvent.click(within(uses()).getByRole('button', { name: 'Remove' }))
+    expect(screen.queryByRole('heading', { level: 2, name: 'Sending addresses' })).toBeNull()
+    expect(useRow('Email sending')).toHaveTextContent('No address uses this domain')
+    fireEvent.click(within(useRow('Email sending')).getByRole('button', { name: 'Remove' }))
     const dialog = screen.getByRole('alertdialog')
     // Only email stops: the dialog must not read as removing the whole domain.
     expect(within(dialog).getByText('Stop sending email from acme.com?')).toBeInTheDocument()
@@ -325,10 +467,30 @@ describe('domain view uses', () => {
     expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything())
   })
 
+  it('removes a domain with no use left, once confirmed', async () => {
+    const onRemoved = vi.fn()
+    removeDomainByName.mockResolvedValue({ name: 'acme.com' })
+    renderView(rowWith({}), { onRemoved })
+    fireEvent.click(screen.getByRole('button', { name: 'Remove domain' }))
+    const dialog = screen.getByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove domain' }))
+    expect(removeDomainByName).toHaveBeenCalledWith({ data: { name: 'acme.com' } })
+    await waitFor(() => expect(onRemoved).toHaveBeenCalled())
+  })
+
+  it('keeps Remove domain hidden while a use the viewer cannot see still holds it', () => {
+    renderView(rowWith({}), { detail: { ...DETAIL, inUse: true } })
+    expect(screen.queryByRole('button', { name: 'Remove domain' })).toBeNull()
+  })
+
+  it('offers Remove domain only to a viewer who manages domains', () => {
+    renderView(rowWith({}), { permissions: [PERMISSIONS.AUTH_MANAGE] })
+    expect(screen.queryByRole('button', { name: 'Remove domain' })).toBeNull()
+  })
+
   it('lists only the uses the viewer may see', () => {
     renderView(rowWith({ email: true, signIn: true }), { permissions: [PERMISSIONS.AUTH_MANAGE] })
     expect(screen.queryByRole('heading', { level: 2, name: 'Sending addresses' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull()
     expect(screen.queryByText('help@acme.com')).toBeNull()
   })
 })
