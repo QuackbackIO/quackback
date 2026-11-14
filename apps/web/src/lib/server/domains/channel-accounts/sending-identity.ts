@@ -24,7 +24,9 @@
  *   found. Only it knows that, and its scans are the thing a send is checked
  *   against.
  * - **We** decide whether this WORKSPACE owns the domain, from a record whose
- *   value is minted per row and stored nowhere else. A second workspace adding
+ *   value is minted per row and stored only in this workspace's database (a
+ *   row on the provider's keys may share the token of the domain this
+ *   workspace added at the same name, see `sending-domain-token.ts`). A second workspace adding
  *   the same domain gets a different token and cannot publish it, because
  *   publishing it means writing in a zone it does not control.
  *
@@ -73,7 +75,6 @@ import { generateDkimKey, isKeyRecord } from './dkim-key'
 import { returnPathTarget as operatorReturnPathTarget } from './return-path'
 import {
   OWNERSHIP_VALUE_PREFIX,
-  mintOwnershipToken,
   ownershipRecord,
   ownershipRecordsOf,
   sendingDomainDnsRecords,
@@ -96,6 +97,7 @@ import { enqueueSesTenantReconcile } from './ses-tenant-queue'
 import { saveSendingDomainCheck } from './sending-domain-check-write'
 import { rekeyToHeldSigningKey, sealSigningKey, shouldHoldSigningKey } from './pending-signing-key'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
+import { issueOwnershipToken } from './sending-domain-token'
 import { SendingDomainRefusedError, normalizeSendingDomain } from './sending-domain-name'
 
 export {
@@ -419,7 +421,7 @@ export async function refreshSendingDomain(
   const existing = ownershipRecordsOf(stored.dnsRecords ?? [])
   const ownershipToken = byo
     ? undefined
-    : existing[0]?.value.slice(OWNERSHIP_VALUE_PREFIX.length) || mintOwnershipToken()
+    : existing[0]?.value.slice(OWNERSHIP_VALUE_PREFIX.length) || (await issueOwnershipToken(stored))
   // Only ever this row's own proof records. Anything else in the set is a value
   // published from our instructions and therefore identical for every
   // workspace, which is the definition of a record that proves nothing.
