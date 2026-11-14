@@ -42,31 +42,41 @@ export interface TicketFormFieldsProps {
 function suggestionMarker(
   field: TicketFormField,
   suggestedKeys: ReadonlySet<string> | undefined,
-  suggestionRun: boolean | undefined
+  suggestionRun: boolean | undefined,
+  id: string
 ): ReactNode {
   if (suggestedKeys?.has(field.key)) {
-    return <span className="ms-1 font-normal text-primary">✨ suggested</span>
+    return (
+      <span id={id} className="ms-1 text-xs text-primary">
+        ✨ suggested
+      </span>
+    )
   }
   if (suggestionRun) {
-    return <span className="ms-1 font-normal text-muted-foreground/70">— not suggested</span>
+    return (
+      <span id={id} className="ms-1 text-xs text-muted-foreground/70">
+        — not suggested
+      </span>
+    )
   }
   return null
 }
 
-function FieldLabel({
-  field,
-  htmlFor,
-  marker,
-}: {
-  field: TicketFormField
-  htmlFor: string
-  marker?: ReactNode
-}) {
+/** The visual required mark; the control carries aria-required instead. */
+function RequiredMark({ field }: { field: TicketFormField }) {
+  if (!field.required) return null
+  return (
+    <span aria-hidden className="ms-0.5 text-destructive">
+      *
+    </span>
+  )
+}
+
+function FieldLabel({ field, htmlFor }: { field: TicketFormField; htmlFor: string }) {
   return (
     <label htmlFor={htmlFor} className="text-xs font-medium text-muted-foreground">
       {field.label}
-      {field.required && <span className="ms-0.5 text-destructive">*</span>}
-      {marker}
+      <RequiredMark field={field} />
     </label>
   )
 }
@@ -85,14 +95,26 @@ export function TicketFormFields({
   return (
     <>
       {fields.map((field) => {
-        const marker = suggestionMarker(field, suggestedKeys, suggestionRun)
         const id = `${idPrefix}-${field.key}`
+        // The suggestion state sits beside the label but describes the control,
+        // so it is not read as part of the field's name.
+        const marker = suggestionMarker(field, suggestedKeys, suggestionRun, `${id}-suggestion`)
+        const a11y = {
+          'aria-required': field.required || undefined,
+          'aria-describedby': marker ? `${id}-suggestion` : undefined,
+        }
         return (
           <div key={field.key} className="space-y-1.5">
-            {field.type !== 'checkbox' && <FieldLabel field={field} htmlFor={id} marker={marker} />}
+            {field.type !== 'checkbox' && (
+              <div>
+                <FieldLabel field={field} htmlFor={id} />
+                {marker}
+              </div>
+            )}
             {field.type === 'text' && (
               <Input
                 id={id}
+                {...a11y}
                 value={(values[field.key] as string) ?? ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
               />
@@ -100,6 +122,7 @@ export function TicketFormFields({
             {field.type === 'long_text' && (
               <Textarea
                 id={id}
+                {...a11y}
                 value={(values[field.key] as string) ?? ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 rows={3}
@@ -108,6 +131,7 @@ export function TicketFormFields({
             {field.type === 'number' && (
               <Input
                 id={id}
+                {...a11y}
                 type="number"
                 value={(values[field.key] as string) ?? ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
@@ -116,6 +140,7 @@ export function TicketFormFields({
             {field.type === 'date' && (
               <Input
                 id={id}
+                {...a11y}
                 type="date"
                 value={(values[field.key] as string) ?? ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
@@ -126,7 +151,7 @@ export function TicketFormFields({
                 value={(values[field.key] as string) ?? ''}
                 onValueChange={(v) => onChange(field.key, v)}
               >
-                <SelectTrigger id={id} className="w-full">
+                <SelectTrigger id={id} {...a11y} className="w-full">
                   <SelectValue
                     placeholder={intl.formatMessage({
                       id: 'tickets.fields.selectPlaceholder',
@@ -144,18 +169,21 @@ export function TicketFormFields({
               </Select>
             )}
             {field.type === 'checkbox' && (
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  checked={values[field.key] === true}
-                  onCheckedChange={(v) => onChange(field.key, v === true)}
-                  data-in-label
-                />
-                <span className="text-xs font-medium text-muted-foreground">
-                  {field.label}
-                  {field.required && <span className="ms-0.5 text-destructive">*</span>}
-                  {marker}
-                </span>
-              </label>
+              <div className="flex items-center">
+                <label className="flex items-center gap-2">
+                  <Checkbox
+                    {...a11y}
+                    checked={values[field.key] === true}
+                    onCheckedChange={(v) => onChange(field.key, v === true)}
+                    data-in-label
+                  />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {field.label}
+                    <RequiredMark field={field} />
+                  </span>
+                </label>
+                {marker}
+              </div>
             )}
             {errors?.[field.key] && (
               <p className="text-[11px] text-destructive">{errors[field.key]}</p>
