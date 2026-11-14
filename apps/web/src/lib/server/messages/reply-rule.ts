@@ -27,12 +27,21 @@ import { toUuid, type PrincipalId } from '@quackback/ids'
 export const PERSONAL_KEY_REPLY_CUTOFF_KEY = 'api-keys:personal-reply-cutoff'
 
 /**
+ * The `workspace_key` the migration writes the cutoff under: the
+ * single-workspace namespace. Each workspace has its own database and the
+ * migration runs in each one, so the row is always under this namespace.
+ */
+export const PERSONAL_KEY_REPLY_CUTOFF_NAMESPACE = '_'
+
+/**
  * When this database reached the release that counts personal-key replies as
- * people's. Each workspace has its own database, so the row is matched by key
- * alone. Null when no cutoff is recorded.
+ * people's. Matched on the full primary key `(workspace_key, key)`, so the
+ * read is one index lookup rather than a scan of `kv_store`. Null when no
+ * cutoff is recorded.
  */
 const personalKeyCutoff = sql`(select min((value #>> '{}')::timestamptz) from kv_store
-  where key = ${PERSONAL_KEY_REPLY_CUTOFF_KEY} and expires_at > now())`
+  where workspace_key = ${PERSONAL_KEY_REPLY_CUTOFF_NAMESPACE}
+    and key = ${PERSONAL_KEY_REPLY_CUTOFF_KEY} and expires_at > now())`
 
 /**
  * Service principals that write automated replies: every service principal

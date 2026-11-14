@@ -326,4 +326,16 @@ describe.skipIf(!fixture.available)('SLA clocks and API key replies', () => {
       await isAutomatedAuthor(personalKey, { type: 'service', principalId: personalKey })
     ).toBe(true)
   })
+
+  it('reads the cutoff only under the namespace the migration writes it to', async () => {
+    const personalKey = await seedKey('personal', { createdById: null })
+    await testDb.execute(sql`DELETE FROM kv_store WHERE key = ${PERSONAL_KEY_REPLY_CUTOFF_KEY}`)
+    await testDb.execute(sql`
+      INSERT INTO kv_store (workspace_key, key, value, expires_at)
+      VALUES ('another-workspace', ${PERSONAL_KEY_REPLY_CUTOFF_KEY},
+        to_jsonb('2020-01-01T00:00:00Z'::timestamptz), now() + interval '100 years')`)
+    expect(
+      await isAutomatedAuthor(personalKey, { type: 'service', principalId: personalKey })
+    ).toBe(true)
+  })
 })
