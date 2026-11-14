@@ -101,6 +101,7 @@ import {
 import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
 import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
 import { itemRefId } from '@/lib/client/conversation/inbox-cache'
+import { coalescedJitter } from '@/lib/client/coalesced-jitter'
 import {
   removeInboxItemFromCaches,
   settleOpenItemAfterScopeChange,
@@ -684,6 +685,21 @@ function InboxPage() {
   // is connected, it already keeps both list surfaces current (via
   // `refreshInboxList`/the ticket row-patch below), making a parallel poll
   // redundant load (QC-3).
+  // A scope change refetches the lists and the open item. Spread over a
+  // short random delay so streams told together do not ask together; a
+  // burst of changes runs one refetch; leaving the page cancels it. The open
+  // item is the one open when it runs, since that may be the one that left.
+  const onScopeChanged = useRef(() => {})
+  onScopeChanged.current = () => {
+    refreshInboxAfterReconnect()
+    if (selectedRef) void settleOpenItemAfterScopeChange(queryClient, selectedRef)
+  }
+  const scopeRefetch = useMemo(
+    () => coalescedJitter(() => onScopeChanged.current(), SCOPE_REFETCH_JITTER_MS),
+    []
+  )
+  useEffect(() => () => scopeRefetch.cancel(), [scopeRefetch])
+
   const { connected: streamConnected } = useConversationStream({
     enabled: true,
     buildUrl: async () => '/api/chat/stream?scope=inbox',
@@ -701,13 +717,7 @@ function InboxPage() {
         return
       }
       if (evt.kind === 'inbox_scope_changed') {
-        // Spread the refetch so streams told together do not ask together.
-        const open = selectedRef
-        setTimeout(() => {
-          refreshInboxAfterReconnect()
-          // The open item may be the one that left; a Not found removes it.
-          if (open) void settleOpenItemAfterScopeChange(queryClient, open)
-        }, Math.random() * SCOPE_REFETCH_JITTER_MS)
+        scopeRefetch.schedule()
         return
       }
       refreshIfCompanionLost(evt)
