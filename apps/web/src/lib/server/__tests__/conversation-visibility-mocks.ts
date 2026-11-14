@@ -63,3 +63,35 @@ export function notifyMocks() {
     notifyConversationStarted: resolved(),
   }
 }
+
+/**
+ * The recipient scope rule with every teammate in scope, for unit suites that
+ * mock the database. Rows the caller passes still go through the teammate
+ * check (type `user`, role admin or member); bare ids are taken as teammates.
+ * The rule itself runs over real rows in
+ * events/__tests__/notification-scope.db.test.ts and
+ * domains/notifications/__tests__/recipient-scope.db.test.ts.
+ */
+export function recipientScopePassThrough() {
+  type Candidate = string | { id: string; type: string; role: string }
+  const teammates = (candidates: readonly Candidate[]) => [
+    ...new Set(
+      candidates.flatMap((c) =>
+        typeof c === 'string'
+          ? [c]
+          : c.type === 'user' && (c.role === 'admin' || c.role === 'member')
+            ? [c.id]
+            : []
+      )
+    ),
+  ]
+  return {
+    inScopeRecipients: vi.fn(async (_item: unknown, candidates: readonly Candidate[]) =>
+      teammates(candidates)
+    ),
+    teammateView: vi.fn(async (_item: unknown, candidates: readonly Candidate[]) => ({
+      visible: new Set(teammates(candidates)),
+      hidden: new Set<string>(),
+    })),
+  }
+}

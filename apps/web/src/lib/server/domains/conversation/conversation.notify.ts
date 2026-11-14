@@ -280,6 +280,8 @@ export async function notifyVisitorMessage(opts: {
     const teammates = await db
       .select({
         principalId: principal.id,
+        type: principal.type,
+        role: principal.role,
         email: user.email,
         contactEmail: principal.contactEmail,
         name: user.name,
@@ -299,7 +301,7 @@ export async function notifyVisitorMessage(opts: {
     const inScope = new Set(
       await inScopeRecipients(
         { kind: 'conversation', id: opts.conversation.id },
-        teammates.map((t) => t.principalId)
+        teammates.map((t) => ({ id: t.principalId, type: t.type, role: t.role }))
       )
     )
     const team = teammates.filter((t) => inScope.has(t.principalId))

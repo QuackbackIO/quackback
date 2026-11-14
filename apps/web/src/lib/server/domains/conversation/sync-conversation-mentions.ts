@@ -58,23 +58,16 @@ export async function syncConversationMessageMentions(
   // reject into the note-send success path — but it also writes the rows that
   // power the Mentions view, so swallow loudly rather than silently.
   try {
-    // Server-side eligibility: only teammates (admin/member) can be mentioned in
-    // an internal note. Filter in code (not just the WHERE) as defense-in-depth.
+    // Server-side eligibility: only teammates (admin/member) whose scope holds
+    // the conversation can be mentioned in an internal note.
     const rows = await db
       .select({ id: principal.id, type: principal.type, role: principal.role })
       .from(principal)
       .where(inArray(principal.id, Array.from(mentionedIds)))
 
-    const teammateIds: PrincipalId[] = []
-    for (const r of rows) {
-      if (r.type === 'user' && (r.role === 'admin' || r.role === 'member')) {
-        teammateIds.push(r.id as PrincipalId)
-      }
-    }
-    const eligibleIds = await inScopeRecipients(
-      { kind: 'conversation', id: conversationId },
-      teammateIds
-    )
+    // Teammates whose own scope holds the conversation; every other row
+    // (visitors, service principals, out-of-scope teammates) is dropped.
+    const eligibleIds = await inScopeRecipients({ kind: 'conversation', id: conversationId }, rows)
     if (eligibleIds.length === 0) return
 
     const inserted = (await db

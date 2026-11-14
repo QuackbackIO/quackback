@@ -196,21 +196,70 @@ describe('inScopeRecipients for a ticket', () => {
 })
 
 describe('the ticket watcher form (shared with the watchers feature)', () => {
-  it('splits teammates by sight and passes everyone else through untouched', async () => {
+  it('splits teammates by sight, and lets only the named requester through', async () => {
     const { world, team } = await seedWorld()
     const ticket = await seedTicket({ requester: world.requester.id, team })
 
     const view = await teammateTicketView(ticket.id as TicketId, everyone(world))
     expect([...view.visible].sort()).toEqual([world.manager.id, world.onTeam.id].sort())
     expect([...view.hidden].sort()).toEqual([world.elsewhere.id, world.assignee.id].sort())
-    expect([...view.others].sort()).toEqual(
-      [world.former.id, world.service.id, world.requester.id].sort()
+
+    const input = [world.elsewhere.id, world.requester.id, world.service.id, world.onTeam.id]
+    expect(
+      await withoutTeammatesWhoCannotSee(ticket.id as TicketId, input as PrincipalId[], {
+        requesterPrincipalId: world.requester.id,
+      })
+    ).toEqual([world.requester.id, world.onTeam.id])
+    expect(
+      await withoutTeammatesWhoCannotSee(ticket.id as TicketId, input as PrincipalId[])
+    ).toEqual([world.onTeam.id])
+  })
+
+  it('takes the rows a caller already holds without reading the people again', async () => {
+    const { world, team } = await seedWorld()
+    const ticket = await seedTicket({ requester: world.requester.id, team })
+    queries.length = 0
+
+    const view = await teammateTicketView(ticket.id as TicketId, [
+      { id: world.onTeam.id, type: 'user', role: 'member' },
+      { id: world.elsewhere.id, type: 'user', role: 'member' },
+    ])
+
+    expect([...view.visible]).toEqual([world.onTeam.id])
+    expect([...view.hidden]).toEqual([world.elsewhere.id])
+    expect(queries.filter((q) => /from "principal"/.test(q))).toHaveLength(0)
+  })
+})
+
+describe('reading only what is needed', () => {
+  it('reads no item when nobody in the input is a teammate', async () => {
+    const { world, team } = await seedWorld()
+    const { conversation } = await seedConversation({ team })
+    queries.length = 0
+
+    await inScopeRecipients({ kind: 'conversation', id: conversation.id as ConversationId }, [
+      world.former.id,
+      world.requester.id,
+    ])
+
+    expect(queries.filter((q) => q.includes('"conversations"'))).toHaveLength(0)
+  })
+
+  it('uses the item facts the caller just read instead of reading the row', async () => {
+    const { world, team } = await seedWorld()
+    const { conversation } = await seedConversation({})
+    queries.length = 0
+
+    const kept = await inScopeRecipients(
+      {
+        kind: 'conversation',
+        id: conversation.id as ConversationId,
+        facts: { assigneePrincipalId: null, teamId: team },
+      },
+      [world.onTeam.id, world.elsewhere.id]
     )
 
-    const kept = await withoutTeammatesWhoCannotSee(
-      ticket.id as TicketId,
-      [world.elsewhere.id, world.requester.id, world.onTeam.id] as PrincipalId[]
-    )
-    expect(kept).toEqual([world.requester.id, world.onTeam.id])
+    expect(kept).toEqual([world.onTeam.id])
+    expect(queries.filter((q) => q.includes('"conversations"'))).toHaveLength(0)
   })
 })

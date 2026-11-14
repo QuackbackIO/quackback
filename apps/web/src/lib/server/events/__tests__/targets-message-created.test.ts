@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { EventData } from '../types'
 
-let teamRows: Array<{ principalId: string }> = []
+let teamRows: Array<{ id: string; type: string; role: string }> = []
 // Convergence Phase 1a: the resolver first probes for a customer-ticket link
 // on the message's conversation and suppresses the team-wide bell on a hit.
 let pairRows: Array<{ ticketId: string }> = []
@@ -18,9 +18,9 @@ let pairRows: Array<{ ticketId: string }> = []
 // The scope rule itself runs over real rows in
 // events/__tests__/notification-scope.db.test.ts; here every recipient is in
 // scope, so these cases test only what this module adds.
-vi.mock('@/lib/server/domains/notifications/recipient-scope', () => ({
-  inScopeRecipients: async (_item: unknown, ids: readonly string[]) => [...ids],
-}))
+vi.mock('@/lib/server/domains/notifications/recipient-scope', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).recipientScopePassThrough()
+)
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
@@ -84,7 +84,10 @@ function makeEvent(
 
 describe('getMessageCreatedTargets', () => {
   it('targets every admin/member principal for a visitor message', async () => {
-    teamRows = [{ principalId: 'principal_admin' }, { principalId: 'principal_member' }]
+    teamRows = [
+      { id: 'principal_admin', type: 'user', role: 'member' },
+      { id: 'principal_member', type: 'user', role: 'member' },
+    ]
 
     const target = await getMessageCreatedTargets(makeEvent())
     expect(target).toEqual({
@@ -100,14 +103,14 @@ describe('getMessageCreatedTargets', () => {
   })
 
   it('falls back to "A visitor" when the author has no display name', async () => {
-    teamRows = [{ principalId: 'principal_admin' }]
+    teamRows = [{ id: 'principal_admin', type: 'user', role: 'member' }]
 
     const target = await getMessageCreatedTargets(makeEvent({ authorName: null }))
     expect(target?.config).toMatchObject({ authorName: 'A visitor' })
   })
 
   it('truncates a long message to 140 chars for the preview', async () => {
-    teamRows = [{ principalId: 'principal_admin' }]
+    teamRows = [{ id: 'principal_admin', type: 'user', role: 'member' }]
     const long = 'x'.repeat(300)
 
     const target = await getMessageCreatedTargets(makeEvent({ content: long }))
@@ -115,7 +118,7 @@ describe('getMessageCreatedTargets', () => {
   })
 
   it('is a no-op for an agent-sent message (never bells the team on its own reply)', async () => {
-    teamRows = [{ principalId: 'principal_admin' }]
+    teamRows = [{ id: 'principal_admin', type: 'user', role: 'member' }]
 
     expect(await getMessageCreatedTargets(makeEvent({ senderType: 'agent' }))).toBeNull()
   })
@@ -126,7 +129,7 @@ describe('getMessageCreatedTargets', () => {
   })
 
   it('carries isFirstMessage=false through to config unchanged', async () => {
-    teamRows = [{ principalId: 'principal_admin' }]
+    teamRows = [{ id: 'principal_admin', type: 'user', role: 'member' }]
     const target = await getMessageCreatedTargets(makeEvent({}, false))
     expect(target?.config).toMatchObject({ isFirstMessage: false })
   })
@@ -135,14 +138,17 @@ describe('getMessageCreatedTargets', () => {
   // bell is suppressed for pair conversations — the watcher-scoped
   // `ticket.replied` fan-out replaces it.
   it('suppresses the team-wide bell for a conversation paired with a customer ticket', async () => {
-    teamRows = [{ principalId: 'principal_admin' }, { principalId: 'principal_member' }]
+    teamRows = [
+      { id: 'principal_admin', type: 'user', role: 'member' },
+      { id: 'principal_member', type: 'user', role: 'member' },
+    ]
     pairRows = [{ ticketId: 'ticket_1' }]
 
     expect(await getMessageCreatedTargets(makeEvent())).toBeNull()
   })
 
   it('still bells the team for a pair-less conversation', async () => {
-    teamRows = [{ principalId: 'principal_admin' }]
+    teamRows = [{ id: 'principal_admin', type: 'user', role: 'member' }]
     pairRows = []
 
     const target = await getMessageCreatedTargets(makeEvent())

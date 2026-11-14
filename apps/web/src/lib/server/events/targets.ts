@@ -44,7 +44,11 @@ import {
   type NotificationEventType,
 } from '@/lib/server/domains/subscriptions/subscription.service'
 import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
-import { inScopeRecipients } from '@/lib/server/domains/notifications/recipient-scope'
+import {
+  inScopeRecipients,
+  type Candidate,
+} from '@/lib/server/domains/notifications/recipient-scope'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
 import type { HookTarget, EmailTarget, NoteMentionEmailConfig } from './hook-types'
 import { truncate } from './hook-utils'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
@@ -689,6 +693,19 @@ export async function getMentionTargets(
 // ============================================================================
 
 /**
+ * The candidates who may hear about a conversation: the teammates whose own
+ * scope holds it now (recipient-scope.ts). `facts` is its owner and team when
+ * the builder has just read them, so the row is not read twice.
+ */
+function conversationRecipients(
+  id: string,
+  candidates: readonly Candidate[],
+  facts?: ScopedRow
+): Promise<PrincipalId[]> {
+  return inScopeRecipients({ kind: 'conversation', id: id as ConversationId, facts }, candidates)
+}
+
+/**
  * Notification target for `conversation.assigned`: the newly-assigned agent
  * AND, when the conversation's team assignment changed, that team's members
  * — one combined target (never split recipients across multiple notification
@@ -733,10 +750,7 @@ export async function getConversationAssignedTargets(event: EventData): Promise<
   }
 
   // Each recipient's own scope, against where the conversation is now.
-  const inScope = await inScopeRecipients(
-    { kind: 'conversation', id: conversation.id as ConversationId },
-    [...recipients]
-  )
+  const inScope = await conversationRecipients(conversation.id, [...recipients])
   if (inScope.length === 0) return null
   return {
     type: 'notification',
@@ -836,23 +850,27 @@ export async function getAssistantHandedOffTargets(event: EventData): Promise<Ho
   const { conversationId, reason } = event.data
 
   const [conv] = await db
-    .select({ assignedTeamId: conversations.assignedTeamId })
+    .select({
+      assigneePrincipalId: conversations.assignedAgentPrincipalId,
+      teamId: conversations.assignedTeamId,
+    })
     .from(conversations)
     .where(eq(conversations.id, conversationId as ConversationId))
     .limit(1)
 
   let recipientIds: PrincipalId[]
-  if (conv?.assignedTeamId) {
+  if (conv?.teamId) {
     const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
-    recipientIds = await listTeamMemberPrincipalIds(conv.assignedTeamId as TeamId)
+    recipientIds = await listTeamMemberPrincipalIds(conv.teamId as TeamId)
   } else {
     const { listAssignableTeammates } = await import('@/lib/server/domains/teams')
     recipientIds = (await listAssignableTeammates()).map((t) => t.principalId as PrincipalId)
   }
 
-  const filtered = await inScopeRecipients(
-    { kind: 'conversation', id: conversationId as ConversationId },
-    recipientIds.filter((id) => id !== event.actor.principalId)
+  const filtered = await conversationRecipients(
+    conversationId,
+    recipientIds.filter((id) => id !== event.actor.principalId),
+    conv
   )
   if (filtered.length === 0) return null
   return {
@@ -894,8 +912,8 @@ export async function getConversationNoteMentionedTargets(
   if (event.type !== 'conversation.note_mentioned') return null
   const { conversationId, conversationMessageId, mentionedPrincipalIds, authorName, preview } =
     event.data
-  const recipients = await inScopeRecipients(
-    { kind: 'conversation', id: conversationId as ConversationId },
+  const recipients = await conversationRecipients(
+    conversationId,
     mentionedPrincipalIds as PrincipalId[]
   )
   if (recipients.length === 0) return null
@@ -929,8 +947,8 @@ export async function getConversationNoteMentionedEmailTargets(
 ): Promise<HookTarget[]> {
   if (event.type !== 'conversation.note_mentioned') return []
   const { conversationId, mentionedPrincipalIds, authorName, preview } = event.data
-  const inScope = await inScopeRecipients(
-    { kind: 'conversation', id: conversationId as ConversationId },
+  const inScope = await conversationRecipients(
+    conversationId,
     mentionedPrincipalIds as PrincipalId[]
   )
   if (inScope.length === 0) return []
@@ -1184,16 +1202,13 @@ export async function getMessageCreatedTargets(event: EventData): Promise<HookTa
   if (pairTicketId) return null
 
   const team = await db
-    .select({ principalId: principal.id })
+    .select({ id: principal.id, type: principal.type, role: principal.role })
     .from(principal)
     .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member'])))
   // Only the teammates whose scope holds the conversation. Read by id, not
   // from the payload: the payload is the conversation as it was before
   // routing, so a first message would miss the teammate routing just chose.
-  const recipients = await inScopeRecipients(
-    { kind: 'conversation', id: event.data.message.conversationId as ConversationId },
-    team.map((t) => t.principalId as PrincipalId)
-  )
+  const recipients = await conversationRecipients(event.data.message.conversationId, team)
   if (recipients.length === 0) return null
 
   const authorName = event.data.message.authorName ?? 'A visitor'
@@ -1752,10 +1767,10 @@ export async function getSlaEmailTargets(
   }
   // A direct assignee is not role-checked, and removing a teammate does not
   // unassign them, so the scope rule decides who still hears.
-  recipientIds = await inScopeRecipients(
-    { kind: 'conversation', id: conversationId as ConversationId },
-    recipientIds
-  )
+  recipientIds = await conversationRecipients(conversationId, recipientIds, {
+    assigneePrincipalId: conv.assignedAgentPrincipalId,
+    teamId: conv.assignedTeamId,
+  })
   if (recipientIds.length === 0) return []
 
   // The copy kind and the preference matrix key are the same string.
