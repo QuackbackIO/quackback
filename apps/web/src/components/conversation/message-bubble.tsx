@@ -979,15 +979,16 @@ export function VisitorMessageBubble({
 
       {/* Attribution below the bubble. Peer (team/assistant) shows name · time;
           the assistant's name gets a subtle sparkle + "AI" suffix as one
-          cohesive label. Self (the visitor) shows "You · time" only when a
-          `selfLabel` is supplied (ticket surfaces opt in; the live messenger
+          cohesive label (skipped when the name already ends in "AI": "Acme AI",
+          "Acme ai", "AcmeAI"). Self (the visitor) shows "You · time" only when
+          a `selfLabel` is supplied (ticket surfaces opt in; the live messenger
           leaves its own bubbles bare). */}
       {!self && (authorName || time) && (
         <div className="mt-1 px-1">
           <p className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
             {isAssistant && <SparklesIcon className="h-3 w-3 shrink-0" aria-hidden />}
             {authorName}
-            {isAssistant ? ' AI' : ''}
+            {isAssistant && !/(?:\b[Aa][Ii]|[a-z]AI)$/.test(authorName ?? '') ? ' AI' : ''}
             {time && (
               <>
                 {' · '}

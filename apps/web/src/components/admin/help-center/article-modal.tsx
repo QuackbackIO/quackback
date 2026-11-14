@@ -138,6 +138,11 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
   })
 
   const handleKeyDown = useKeyboardSubmit(handleSubmit)
+  // Keys typed in a portaled child dialog (New category) bubble here through the
+  // React tree; only the article's own DOM may trigger the save shortcut.
+  const handleOwnKeyDown = (e: React.KeyboardEvent) => {
+    if (e.currentTarget.contains(e.target as Node)) handleKeyDown(e)
+  }
 
   if (isLoading || !article || !hasInitialized.current) {
     return (
@@ -169,7 +174,7 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
 
   return (
     <Form {...form}>
-      <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="flex h-full flex-col">
+      <form onSubmit={handleSubmit} onKeyDown={handleOwnKeyDown} className="flex h-full flex-col">
         <ModalHeader
           section="Help center"
           title={article.title}

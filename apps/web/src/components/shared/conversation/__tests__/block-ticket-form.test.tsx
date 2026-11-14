@@ -39,6 +39,26 @@ function renderCard(headers: Record<string, string> = { 'x-widget-session': 'ses
 }
 
 describe('BlockTicketForm (send_ticket_form block card)', () => {
+  it('links each label to its input', () => {
+    renderCard()
+    expect(screen.getByLabelText(/subject/i)).toBe(
+      screen.getByPlaceholderText(/summarize your request/i)
+    )
+    expect(screen.getByLabelText(/details/i)).toBe(
+      screen.getByPlaceholderText(/add anything that helps/i)
+    )
+    expect(screen.getByLabelText(/email/i)).toBe(screen.getByPlaceholderText(/you@example\.com/i))
+  })
+
+  it('names the subject without its asterisk and marks it required', () => {
+    renderCard()
+    expect(screen.getByRole('textbox', { name: 'Subject' })).toHaveAttribute(
+      'aria-required',
+      'true'
+    )
+    expect(screen.getByRole('textbox', { name: 'Details' })).not.toHaveAttribute('aria-required')
+  })
+
   it('keeps Create disabled until a subject is typed', () => {
     renderCard()
     const submit = screen.getByRole('button', { name: /create ticket/i })

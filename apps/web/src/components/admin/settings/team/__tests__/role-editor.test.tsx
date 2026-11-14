@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'react-intl'
 import { ALL_PERMISSIONS, PERMISSIONS } from '@/lib/shared/permissions'
 import { RoleEditor } from '../role-editor'
@@ -132,6 +133,14 @@ describe('RoleEditor', () => {
     }
     expect(payload.data.permissionKeys).toContain(PERMISSIONS.TICKET_VIEW)
     expect(payload.data.permissionKeys).toContain(PERMISSIONS.POST_VIEW_PRIVATE)
+  })
+
+  it('toggles a key when its text is clicked', async () => {
+    renderEditor()
+    const box = screen.getByRole('checkbox', { name: PERMISSIONS.TICKET_VIEW })
+    expect(box.getAttribute('aria-checked')).toBe('false')
+    await userEvent.setup().click(screen.getByText(PERMISSIONS.TICKET_VIEW))
+    expect(box.getAttribute('aria-checked')).toBe('true')
   })
 
   it('renders above-ceiling keys disabled', () => {

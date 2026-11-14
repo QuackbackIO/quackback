@@ -261,8 +261,8 @@ describe('CreateTicketDialog — Phase 4 type picker', () => {
     fireEvent.change(await screen.findByPlaceholderText('Summarize the request…'), {
       target: { value: 'Refund missing' },
     })
-    // The type's required text field renders as a plain input under its label.
-    const orderInput = (await screen.findByText('Order id')).parentElement!.querySelector('input')!
+    // The type's required text field renders as an input labelled by its name.
+    const orderInput = await screen.findByRole('textbox', { name: 'Order id' })
     fireEvent.change(orderInput, { target: { value: 'A-123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }))
 
@@ -433,9 +433,7 @@ describe('CreateTicketDialog — Phase 5 copilot auto-fill', () => {
     await screen.findByText('✨ 3 suggested')
 
     // The agent edits a suggested value before saving — everything stays editable.
-    const stepsInput = (await screen.findByText('Steps to reproduce')).parentElement!.querySelector(
-      'input'
-    )!
+    const stepsInput = await screen.findByRole('textbox', { name: 'Steps to reproduce' })
     fireEvent.change(stepsInput, { target: { value: 'edited repro' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }))
 
