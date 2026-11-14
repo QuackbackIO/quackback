@@ -16,9 +16,11 @@ vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   listMessages: (...a: unknown[]) => mockListMessages(...a),
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: (...a: unknown[]) => mockAssertConversationViewable(...a),
   sendAgentMessage: (...a: unknown[]) => mockSendAgentMessage(...a),
   setConversationStatus: (...a: unknown[]) => mockSetConversationStatus(...a),
+}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: (...a: unknown[]) => mockAssertConversationViewable(...a),
 }))
 
 vi.mock('@/lib/server/domains/conversation/conversation.cards', () => ({
@@ -87,14 +89,10 @@ describe('reply_to_conversation fileIds', () => {
   })
 })
 
-describe('writes check the conversation is in scope first', () => {
-  async function refused() {
-    const { NotFoundError } = await import('@/lib/shared/errors')
-    mockAssertConversationViewable.mockRejectedValueOnce(
-      new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-    )
-  }
-
+describe('writes leave the scope check to the service they call', () => {
+  // The writers check the conversation for the caller themselves (real scope is
+  // covered by conversation-visibility-writes.db.test.ts), so a tool makes no
+  // check of its own and reports the writer's NotFound as a tool error.
   it.each([
     [
       'reply_to_conversation',
@@ -112,13 +110,14 @@ describe('writes check the conversation is in scope first', () => {
       { conversationId: 'conversation_1', boardId: 'board_1', title: 'Idea', content: 'Body' },
       mockSuggestPost,
     ],
-  ] as const)(
-    '%s refuses an out-of-scope conversation without writing',
-    async (tool, args, write) => {
-      await refused()
-      const out = await collect(teamAuth).get(tool)!({ ...args })
-      expect(out.isError).toBe(true)
-      expect(write).not.toHaveBeenCalled()
-    }
-  )
+  ] as const)('%s reports an out-of-scope conversation as not found', async (tool, args, write) => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    write.mockRejectedValueOnce(
+      new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+    )
+    const out = await collect(teamAuth).get(tool)!({ ...args })
+    expect(out.isError).toBe(true)
+    expect(out.content[0]).toMatchObject({ text: expect.stringMatching(/not found/i) })
+    expect(mockAssertConversationViewable).not.toHaveBeenCalled()
+  })
 })

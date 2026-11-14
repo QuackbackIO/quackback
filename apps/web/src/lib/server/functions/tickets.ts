@@ -37,6 +37,7 @@ import type {
   BulkTicketAction,
 } from '@/lib/server/domains/tickets'
 import { requireAuth, policyActorFromAuth, assertPermission } from './auth-helpers'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { HexColorFormatSchema, PageLimitMinOneSchema } from '@/lib/shared/schemas/taxonomy'
 import type { ConversationAttachment } from '@/lib/shared/db-types'
 import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
@@ -203,8 +204,6 @@ export const createTicketFn = createServerFn({ method: 'POST' })
     // The source conversation first: a hidden one is NotFound like a missing
     // one, so the answer never tells whether it already has a ticket.
     if (data.conversationId && isValidTypeId(data.conversationId, 'conversation')) {
-      const { assertConversationVisible } =
-        await import('@/lib/server/domains/conversation/conversation.service')
       await assertConversationVisible(data.conversationId as ConversationId, actor)
     }
 
@@ -552,9 +551,7 @@ export const suggestTicketFieldValuesFn = createServerFn({ method: 'POST' })
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_CREATE })
     const actor = await policyActorFromAuth(ctx)
     const conversationId = data.conversationId as ConversationId
-    const { assertConversationViewable } =
-      await import('@/lib/server/domains/conversation/conversation.service')
-    await assertConversationViewable(conversationId, actor)
+    await assertConversationVisible(conversationId, actor)
     const { suggestTicketFieldValues } =
       await import('@/lib/server/domains/assistant/ticket-field-suggestion.service')
     return suggestTicketFieldValues(conversationId, data.ticketTypeId as TicketTypeId, actor)

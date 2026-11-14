@@ -183,7 +183,6 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
 vi.mock('@/lib/server/domains/assistant/assistant-activity-snapshot', () => ({
   readActivitySnapshot: vi.fn(async () => null),
 }))
-vi.mock('@/lib/server/policy/conversation', () => ({ canViewConversation: vi.fn() }))
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({ assertTicketVisible: vi.fn() }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   loadAuthors: vi.fn(async () => new Map()),

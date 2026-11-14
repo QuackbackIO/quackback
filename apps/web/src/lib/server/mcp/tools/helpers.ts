@@ -359,7 +359,7 @@ export function principalTypeOf(auth: McpAuthContext): 'user' | 'service' {
 
 /**
  * Policy actor for the agent-side conversation tools. The conversation gates
- * (canViewConversation / canActAsAgent) short-circuit on the team role, so
+ * (assertConversationVisible / canActAsAgent) read the role and scope, so
  * segment memberships are never consulted and stay empty. A permission ceiling
  * on the context (an API key's resolved authority) rides along, and so does a
  * personal key's creator, whose row scope the actor follows.

@@ -17,7 +17,7 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import { conversations, teams, teamMembers, principal, user, and, inArray } from '@/lib/server/db'
 import { PERMISSIONS, type PermissionKey } from '@/lib/server/db'
 import { conversationFilter } from '../conversations'
-import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation.service'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'
 
 // The per-item check reads through the app's `db`; point it at the rollback

@@ -28,7 +28,9 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   assignConversation: (...a: unknown[]) => mockAssign(...a),
   setConversationPriority: (...a: unknown[]) => mockSetPriority(...a),
   markConversationRead: (...a: unknown[]) => mockMarkRead(...a),
-  assertConversationViewable: (...a: unknown[]) => {
+}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: (...a: unknown[]) => {
     order.push('assertViewable')
     return mockAssertViewable(...a)
   },

@@ -88,7 +88,8 @@ vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   assertTicketVisible: hoisted.assertTicketVisible,
 }))
 
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
   assertConversationVisible: hoisted.assertConversationVisible,
 }))
 

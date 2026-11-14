@@ -21,6 +21,7 @@ import {
   principal,
   user,
 } from '@/lib/server/db'
+import { assertConversationVisible } from './conversation-visibility'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -80,7 +81,6 @@ export async function addConversationParticipantByEmail(
   opts?: { actorDisplayName?: string | null }
 ): Promise<{ principalId: PrincipalId }> {
   // A conversation the actor cannot see is NotFound, like a missing one.
-  const { assertConversationVisible } = await import('./conversation.service')
   const conversation = await assertConversationVisible(conversationId, actor)
 
   const normalizedEmail = email.trim().toLowerCase()
@@ -119,7 +119,6 @@ export async function removeConversationParticipant(
   actor: Actor,
   opts?: { actorDisplayName?: string | null }
 ): Promise<{ removed: boolean }> {
-  const { assertConversationVisible } = await import('./conversation.service')
   await assertConversationVisible(conversationId, actor)
   // Read the participant's label first so the notice can name who was removed.
   const [participant] = await db
@@ -175,7 +174,6 @@ export async function listConversationParticipants(
   conversationId: ConversationId,
   actor: Actor
 ): Promise<Array<{ principalId: PrincipalId; displayName: string | null; email: string | null }>> {
-  const { assertConversationVisible } = await import('./conversation.service')
   await assertConversationVisible(conversationId, actor)
   const rows = await db
     .select({

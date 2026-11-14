@@ -14,7 +14,7 @@ import {
 import { subscribe } from '@/lib/server/realtime/pubsub'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
 import { readActivitySnapshot } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
-import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation.service'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember, toSessionScope, type SessionScope } from '@/lib/shared/roles'

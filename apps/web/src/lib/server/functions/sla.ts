@@ -12,7 +12,8 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { isValidTypeId } from '@quackback/ids'
 import type { ConversationId, OfficeHoursId, SlaPolicyId } from '@quackback/ids'
-import { policyActorFromAuth, requireAuth } from './auth-helpers'
+import { requireAuth } from './auth-helpers'
+import { requireVisibleConversation } from './conversation-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { slaTargetsSummary } from '@/lib/shared/conversation/sla'
 import type { SlaPolicy, Workflow } from '@/lib/server/db'
@@ -291,12 +292,7 @@ export const removeConversationSlaFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<{ ok: true; removed: boolean }> => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
     // A conversation outside the caller's view is NotFound, and keeps its SLA.
-    const { assertConversationVisible } =
-      await import('@/lib/server/domains/conversation/conversation.service')
-    await assertConversationVisible(
-      data.conversationId as ConversationId,
-      await policyActorFromAuth(ctx)
-    )
+    await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     const row = await removeSlaFromConversation(data.conversationId as ConversationId)
     if (row) {
       // Broadcast the fresh agent DTO so other open inboxes drop the chip; the

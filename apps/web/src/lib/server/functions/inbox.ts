@@ -18,6 +18,7 @@ import { PageLimitMinOneSchema } from '@/lib/shared/schemas/taxonomy'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { requireVisibleConversation } from './conversation-access'
 import { inboxChannelFilterSchema } from '@/lib/shared/channels/inbox-filter'
 
 const ticketTypeSchema = z.enum(TICKET_TYPES)
@@ -123,12 +124,9 @@ export const getConversationTicketLinkFn = createServerFn({ method: 'GET' })
   .validator(z.object({ conversationId: z.string() }))
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-    const actor = await policyActorFromAuth(ctx)
     // The conversation first: a hidden one is NotFound, so the answer never
     // tells whether it has a ticket.
-    const { assertConversationVisible } =
-      await import('@/lib/server/domains/conversation/conversation.service')
-    await assertConversationVisible(data.conversationId as ConversationId, actor)
+    const { actor } = await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     const { getConversationTicketLink } = await import('@/lib/server/domains/inbox/inbox.query')
     return getConversationTicketLink(data.conversationId as ConversationId, actor)
   })

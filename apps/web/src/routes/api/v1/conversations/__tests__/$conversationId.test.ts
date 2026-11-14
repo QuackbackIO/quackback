@@ -10,8 +10,9 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/lib/server/domains/api/auth', () => ({
   withApiKeyAuth: (...a: unknown[]) => mockAuth(...a),
 }))
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: (...a: unknown[]) => mockAssert(...a),
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: (...a: unknown[]) => mockAssert(...a),
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   conversationToDTO: (...a: unknown[]) => mockToDTO(...a),

@@ -10,6 +10,7 @@ import { CONVERSATION_STATUSES } from '@/lib/shared/db-types'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import type { PostId, BoardId, ConversationId, PrincipalId } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import {
   registerTool,
   agentFromMcpAuth,
@@ -114,12 +115,10 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
     scope: 'read:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { assertConversationViewable } =
-        await import('@/lib/server/domains/conversation/conversation.service')
       const { listMessages, conversationToDTO } =
         await import('@/lib/server/domains/conversation/conversation.query')
       const conversationId = args.conversationId as ConversationId
-      const conversation = await assertConversationViewable(conversationId, mcpAgentActor(auth))
+      const conversation = await assertConversationVisible(conversationId, mcpAgentActor(auth))
       const [dto, page] = await Promise.all([
         conversationToDTO(conversation, 'agent'),
         listMessages(conversationId, {
@@ -182,11 +181,11 @@ Example: reply_to_conversation({ conversationId: "conversation_01abc...", conten
     scope: 'write:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { assertConversationViewable, sendAgentMessage } =
+      // sendAgentMessage checks the conversation for the caller.
+      const { sendAgentMessage } =
         await import('@/lib/server/domains/conversation/conversation.service')
       const agent = agentFromMcpAuth(auth)
       const actor = mcpAgentActor(auth)
-      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const result = await sendAgentMessage(
         args.conversationId as ConversationId,
         args.content,
@@ -227,11 +226,9 @@ Example: suggest_post({ conversationId: "conversation_01...", boardId: "board_01
     teamOnly: true,
     handler: async (args) => {
       const { suggestPost } = await import('@/lib/server/domains/conversation/conversation.cards')
-      const { assertConversationViewable } =
-        await import('@/lib/server/domains/conversation/conversation.service')
+      // suggestPost reads the conversation through the caller's scope.
       const agent = agentFromMcpAuth(auth)
       const actor = mcpAgentActor(auth)
-      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const r = await suggestPost(
         {
           conversationId: args.conversationId as ConversationId,
@@ -261,11 +258,9 @@ Example: share_post({ conversationId: "conversation_01...", postId: "post_01..."
     teamOnly: true,
     handler: async (args) => {
       const { sharePost } = await import('@/lib/server/domains/conversation/conversation.cards')
-      const { assertConversationViewable } =
-        await import('@/lib/server/domains/conversation/conversation.service')
+      // sharePost sends through sendAgentMessage, which checks the conversation.
       const agent = agentFromMcpAuth(auth)
       const actor = mcpAgentActor(auth)
-      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const r = await sharePost(
         { conversationId: args.conversationId as ConversationId, postId: args.postId as PostId },
         { agentActor: actor, agentPrincipalId: auth.principalId, agent }
@@ -291,10 +286,10 @@ Example: set_conversation_status({ conversationId: "conversation_01abc...", stat
     scope: 'write:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { assertConversationViewable, setConversationStatus } =
+      // setConversationStatus checks the conversation for the caller.
+      const { setConversationStatus } =
         await import('@/lib/server/domains/conversation/conversation.service')
       const actor = mcpAgentActor(auth)
-      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const updated = await setConversationStatus(
         args.conversationId as ConversationId,
         args.status,

@@ -35,7 +35,7 @@ vi.mock('@tanstack/react-start', () => ({
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   policyActorFromAuth: vi.fn(),
-  assertConversationVisible: vi.fn(),
+  visibleConversationIds: vi.fn(),
   assignConversation: vi.fn(),
   assignTeam: vi.fn(),
   setConversationPriority: vi.fn(),
@@ -86,7 +86,6 @@ vi.mock('@/lib/server/functions/auth-helpers', async () => {
 })
 
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationVisible: hoisted.assertConversationVisible,
   assignConversation: hoisted.assignConversation,
   assignTeam: hoisted.assignTeam,
   setConversationPriority: hoisted.setConversationPriority,
@@ -95,6 +94,9 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   sendAgentMessage: hoisted.sendAgentMessage,
   restoreConversationFromSpam: hoisted.restoreConversationFromSpam,
   deleteConversationPermanently: hoisted.deleteConversationPermanently,
+}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  visibleConversationIds: hoisted.visibleConversationIds,
 }))
 
 vi.mock('@/lib/server/domains/macros', () => ({
@@ -137,7 +139,7 @@ beforeEach(() => {
   hoisted.policyActorFromAuth.mockResolvedValue(ACTOR)
   // Every id is visible unless a test says otherwise; real scope is covered by
   // conversation-visibility-functions.db.test.ts.
-  hoisted.assertConversationVisible.mockImplementation(async (id: string) => ({ id }))
+  hoisted.visibleConversationIds.mockImplementation(async (ids: string[]) => new Set(ids))
   hoisted.assignConversation.mockResolvedValue({})
   hoisted.assignTeam.mockResolvedValue({})
   hoisted.setConversationPriority.mockResolvedValue({})
@@ -165,19 +167,20 @@ beforeEach(() => {
 })
 
 describe('bulkUpdateConversationsFn — per-item isolation', () => {
-  it('checks each id for the acting agent before its action, and skips a hidden one', async () => {
-    hoisted.assertConversationVisible.mockImplementation(async (id: string) => {
-      if (id === 'conversation_c2') throw new Error('Conversation not found')
-      return { id }
-    })
+  it('checks the batch for the acting agent once, and skips a hidden id', async () => {
+    hoisted.visibleConversationIds.mockResolvedValue(new Set(['conversation_c1']))
 
     const result = await call({
       conversationIds: ['conversation_c1', 'conversation_c2'],
       action: { type: 'close' },
     })
 
-    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith('conversation_c1', ACTOR)
-    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith('conversation_c2', ACTOR)
+    // One check for the whole batch, for the acting agent.
+    expect(hoisted.visibleConversationIds).toHaveBeenCalledTimes(1)
+    expect(hoisted.visibleConversationIds).toHaveBeenCalledWith(
+      ['conversation_c1', 'conversation_c2'],
+      ACTOR
+    )
     expect(result).toEqual({
       succeeded: ['conversation_c1'],
       failed: [{ id: 'conversation_c2', reason: 'Conversation not found' }],

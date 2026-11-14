@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   listConversationsForAgent: vi.fn(),
   conversationToDTO: vi.fn(),
   listMessages: vi.fn(),
-  assertConversationViewable: vi.fn(),
+  assertConversationVisible: vi.fn(),
   listTickets: vi.fn(),
   getTicket: vi.fn(),
   listTicketMessages: vi.fn(),
@@ -64,8 +64,9 @@ vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   conversationToDTO: mocks.conversationToDTO,
   listMessages: mocks.listMessages,
 }))
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: mocks.assertConversationViewable,
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: mocks.assertConversationVisible,
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   listTickets: mocks.listTickets,
@@ -717,7 +718,7 @@ describe('author names of teammates who have left the team', () => {
   }
 
   function stubConversation() {
-    mocks.assertConversationViewable.mockResolvedValue({ id: 'conversation_1' })
+    mocks.assertConversationVisible.mockResolvedValue({ id: 'conversation_1' })
     mocks.conversationToDTO.mockResolvedValue({
       id: 'conversation_1',
       status: 'open',
@@ -993,7 +994,7 @@ describe('author names of teammates who have left the team', () => {
 
 describe('get_conversation', () => {
   it('marks the subject, the visitor email, and only the messages a teammate did not send', async () => {
-    mocks.assertConversationViewable.mockResolvedValue({ id: 'conversation_1' })
+    mocks.assertConversationVisible.mockResolvedValue({ id: 'conversation_1' })
     mocks.conversationToDTO.mockResolvedValue({
       id: 'conversation_1',
       status: 'open',

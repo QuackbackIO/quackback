@@ -6,10 +6,10 @@
  * resolution). Wired into `conversation.query.ts`'s `listConversationsForAgent`
  * (UNIFIED-INBOX-SPEC.md §3.1/§6): a deliberate behavior change — a bare
  * `conversation.view` holder now sees assigned-to-me-or-my-team only, not
- * every conversation (previously an unwired seam). The single-row read path
- * (the owning visitor, or a conversation.view holder) stays in
- * policy/conversation.ts `canViewConversation`; this predicate is purely the
- * team-inbox row selection and does not encode the visitor-owner branch.
+ * every conversation (previously an unwired seam). The single-row check
+ * (`assertConversationVisible`, domains/conversation/conversation-visibility.ts)
+ * adds the visitor-owner branch to this predicate; on its own it is the
+ * team-inbox row selection.
  *
  * Unlike tickets, `conversations` has no soft-delete column, so there is no
  * deleted-row exclusion.

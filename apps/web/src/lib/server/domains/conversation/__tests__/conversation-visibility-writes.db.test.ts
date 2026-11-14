@@ -103,7 +103,6 @@ import {
 import type { Actor } from '@/lib/server/policy/types'
 import {
   addAgentNote,
-  assertConversationViewable,
   assignConversation,
   assignTeam,
   deleteConversationMessage,
@@ -120,6 +119,7 @@ import {
   snoozeConversation,
 } from '../conversation.service'
 import { editConversationMessage } from '../conversation.edit'
+import { assertConversationVisible } from '../conversation-visibility'
 import { suggestPost } from '../conversation.cards'
 import { registerConversationTools } from '@/lib/server/mcp/tools/conversations'
 import type { McpAuthContext } from '@/lib/server/mcp/types'
@@ -315,9 +315,7 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
     await expect(setConversationStatus(unassigned.id, 'closed', w.actor)).rejects.toMatchObject(
       NOT_FOUND
     )
-    await expect(assertConversationViewable(unassigned.id, w.actor)).rejects.toMatchObject(
-      NOT_FOUND
-    )
+    await expect(assertConversationVisible(unassigned.id, w.actor)).rejects.toMatchObject(NOT_FOUND)
   })
 
   it('a teammate who moves their own conversation to another team gets success', async () => {
@@ -369,8 +367,8 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
     const hidden = await w.conversation(w.teamY)
     const visible = await w.conversation(w.teamX)
     const key: Actor = { ...workspaceKey, scopePrincipalId: w.teammate }
-    await expect(assertConversationViewable(hidden.id, key)).rejects.toMatchObject(NOT_FOUND)
-    await expect(assertConversationViewable(visible.id, key)).resolves.toBeTruthy()
+    await expect(assertConversationVisible(hidden.id, key)).rejects.toMatchObject(NOT_FOUND)
+    await expect(assertConversationVisible(visible.id, key)).resolves.toBeTruthy()
   })
 
   it('note: NotFound on a hidden conversation and no note is written', async () => {
@@ -412,7 +410,7 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
       segmentIds: new Set(),
       permissions: new Set(),
     }
-    await expect(assertConversationViewable(own.id, visitorActor)).resolves.toBeTruthy()
+    await expect(assertConversationVisible(own.id, visitorActor)).resolves.toBeTruthy()
     await markConversationRead(own.id, visitorActor)
     expect((await row(own.id)).visitorLastReadAt).not.toBeNull()
   })
@@ -770,8 +768,8 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
       expect((await row(unowned.id)).priority).toBe('high')
       // The assistant's own actor.
       const assistant = quinnActor(await seedPerson('member'))
-      await expect(assertConversationViewable(byTeam.id, assistant)).resolves.toBeTruthy()
-      await expect(assertConversationViewable(unowned.id, assistant)).resolves.toBeTruthy()
+      await expect(assertConversationVisible(byTeam.id, assistant)).resolves.toBeTruthy()
+      await expect(assertConversationVisible(unowned.id, assistant)).resolves.toBeTruthy()
     })
 
     it('a workspace-wide service actor writes to any conversation', async () => {
