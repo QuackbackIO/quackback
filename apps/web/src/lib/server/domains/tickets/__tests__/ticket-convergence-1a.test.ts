@@ -369,7 +369,8 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
           }),
           agent: expect.objectContaining({ id: message.id, author: message.author }),
         },
-        { conversationUpdated: true }
+        { conversationUpdated: true },
+        expect.objectContaining({ teamId: null }) // the item scope envelope
       )
       // The seed has an account name but no public name. The widget must not
       // receive the account name even though the team-only ticket copy does.

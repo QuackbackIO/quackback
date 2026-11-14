@@ -188,6 +188,7 @@
   "files.upload.error.blocked": "Dit bestandstype kan niet worden verzonden",
   "files.upload.error.rateLimited": "Te veel uploads. Probeer het over een minuut opnieuw.",
   "admin.inbox.filesSectionTitle": "Bestanden",
+  "admin.inbox.linkedTicketHidden": "Gekoppeld ticket dat je niet kunt openen",
   "admin.inbox.translationOverAllowance": "Het AI-gebruik voor deze periode is op. Vertalen blijft werken. Upgrade je abonnement voor meer.",
   "admin.helpCenter.autoTranslatePaused": "Gepauzeerd: AI-gebruik voor deze periode is op. Upgrade je abonnement voor meer.",
   "admin.billing.aiResets": "Wordt gereset op {date}",

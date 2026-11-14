@@ -44,6 +44,11 @@ import {
   type NotificationEventType,
 } from '@/lib/server/domains/subscriptions/subscription.service'
 import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
+import {
+  inScopeRecipients,
+  type Candidate,
+} from '@/lib/server/domains/notifications/recipient-scope'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
 import type { HookTarget, EmailTarget, NoteMentionEmailConfig } from './hook-types'
 import { truncate } from './hook-utils'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
@@ -688,6 +693,19 @@ export async function getMentionTargets(
 // ============================================================================
 
 /**
+ * The candidates who may hear about a conversation: the teammates whose own
+ * scope holds it now (recipient-scope.ts). `facts` is its owner and team when
+ * the builder has just read them, so the row is not read twice.
+ */
+function conversationRecipients(
+  id: string,
+  candidates: readonly Candidate[],
+  facts?: ScopedRow
+): Promise<PrincipalId[]> {
+  return inScopeRecipients({ kind: 'conversation', id: id as ConversationId, facts }, candidates)
+}
+
+/**
  * Notification target for `conversation.assigned`: the newly-assigned agent
  * AND, when the conversation's team assignment changed, that team's members
  * — one combined target (never split recipients across multiple notification
@@ -731,11 +749,18 @@ export async function getConversationAssignedTargets(event: EventData): Promise<
     }
   }
 
-  if (recipients.size === 0) return null
+  // Each recipient's own scope, against where the conversation is now.
+  const inScope = await conversationRecipients(conversation.id, [...recipients])
+  if (inScope.length === 0) return null
   return {
     type: 'notification',
-    target: { principalIds: [...recipients] },
-    config: { conversationId: conversation.id, assignedAgentPrincipalId: directAssignee },
+    target: { principalIds: inScope },
+    config: {
+      conversationId: conversation.id,
+      // Named only while they are a recipient (their copy says "you were assigned").
+      assignedAgentPrincipalId:
+        directAssignee && inScope.includes(directAssignee) ? directAssignee : null,
+    },
   }
 }
 
@@ -752,12 +777,14 @@ export async function getConversationAssignedTargets(event: EventData): Promise<
 /**
  * The two recipient kinds of a `ticket.assigned` event: the direct assignee
  * (only when the agent actually changed and isn't the actor) and the members of
- * a newly-assigned team (actor-excluded). Shared by the bell builder above and
+ * a newly-assigned team (actor-excluded), each kept only while their own scope
+ * holds the ticket. Shared by the bell builder above and
  * the email builder below so the recipient rule lives in ONE place — the bell
  * derives per-recipient copy by comparing against `assignedPrincipalId`, the
  * email bakes a per-target `kind`, but both start from this same set.
  */
 async function computeTicketAssignmentRecipients(
+  ticketId: TicketId,
   data: {
     assignedPrincipalId: string | null
     previousPrincipalId: string | null
@@ -779,7 +806,17 @@ async function computeTicketAssignmentRecipients(
     const memberIds = await listTeamMemberPrincipalIds(data.assignedTeamId as TeamId)
     teamMemberIds = memberIds.filter((id) => id !== actorPrincipalId)
   }
-  return { directAssignee, teamMemberIds }
+  // Each recipient's own scope, against where the ticket is now.
+  const inScope = new Set(
+    await inScopeRecipients({ kind: 'ticket', id: ticketId }, [
+      ...(directAssignee ? [directAssignee] : []),
+      ...teamMemberIds,
+    ])
+  )
+  return {
+    directAssignee: directAssignee && inScope.has(directAssignee) ? directAssignee : null,
+    teamMemberIds: teamMemberIds.filter((id) => inScope.has(id)),
+  }
 }
 
 export async function getTicketAssignedTargets(event: EventData): Promise<HookTarget | null> {
@@ -788,6 +825,7 @@ export async function getTicketAssignedTargets(event: EventData): Promise<HookTa
     event.data
 
   const { directAssignee, teamMemberIds } = await computeTicketAssignmentRecipients(
+    ticket.id as TicketId,
     { assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId },
     event.actor.principalId
   )
@@ -808,29 +846,37 @@ export async function getTicketAssignedTargets(event: EventData): Promise<HookTa
  * Notification target for `assistant.handed_off`. The payload carries only
  * `{ conversationId, reason }`, so this re-reads the conversation for its
  * current team assignment — the assigned team's members when one is set,
- * else every admin/member principal (the whole agent team). The actor
- * (Quinn's service principal) is always excluded.
+ * else every admin/member principal (the whole agent team), each kept only
+ * while their own scope holds the conversation. The actor (Quinn's service
+ * principal) is always excluded.
  */
 export async function getAssistantHandedOffTargets(event: EventData): Promise<HookTarget | null> {
   if (event.type !== 'assistant.handed_off') return null
   const { conversationId, reason } = event.data
 
   const [conv] = await db
-    .select({ assignedTeamId: conversations.assignedTeamId })
+    .select({
+      assigneePrincipalId: conversations.assignedAgentPrincipalId,
+      teamId: conversations.assignedTeamId,
+    })
     .from(conversations)
     .where(eq(conversations.id, conversationId as ConversationId))
     .limit(1)
 
   let recipientIds: PrincipalId[]
-  if (conv?.assignedTeamId) {
+  if (conv?.teamId) {
     const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
-    recipientIds = await listTeamMemberPrincipalIds(conv.assignedTeamId as TeamId)
+    recipientIds = await listTeamMemberPrincipalIds(conv.teamId as TeamId)
   } else {
     const { listAssignableTeammates } = await import('@/lib/server/domains/teams')
     recipientIds = (await listAssignableTeammates()).map((t) => t.principalId as PrincipalId)
   }
 
-  const filtered = recipientIds.filter((id) => id !== event.actor.principalId)
+  const filtered = await conversationRecipients(
+    conversationId,
+    recipientIds.filter((id) => id !== event.actor.principalId),
+    conv
+  )
   if (filtered.length === 0) return null
   return {
     type: 'notification',
@@ -859,19 +905,26 @@ export function getPostOwnerAssignedTargets(event: EventData): HookTarget | null
 
 /**
  * Notification target for `conversation.note_mentioned` (WO-3 slice 3):
- * `mentionedPrincipalIds` is already eligibility-filtered (team-only) and
- * author-excluded by the emit site (sync-conversation-mentions.ts), so this
- * resolver trusts the payload outright — no DB round-trip, unlike the other
- * resolvers above. Exported (like its siblings) for direct unit testing.
+ * `mentionedPrincipalIds` is already eligibility-filtered (team-only, in
+ * scope) and author-excluded by the emit site (sync-conversation-mentions.ts).
+ * The scope check runs again here, against where the conversation is when the
+ * notice goes out, so a mention of a teammate it has since moved away from
+ * stays silent. Exported (like its siblings) for direct unit testing.
  */
-export function getConversationNoteMentionedTargets(event: EventData): HookTarget | null {
+export async function getConversationNoteMentionedTargets(
+  event: EventData
+): Promise<HookTarget | null> {
   if (event.type !== 'conversation.note_mentioned') return null
   const { conversationId, conversationMessageId, mentionedPrincipalIds, authorName, preview } =
     event.data
-  if (mentionedPrincipalIds.length === 0) return null
+  const recipients = await conversationRecipients(
+    conversationId,
+    mentionedPrincipalIds as PrincipalId[]
+  )
+  if (recipients.length === 0) return null
   return {
     type: 'notification',
-    target: { principalIds: mentionedPrincipalIds as PrincipalId[] },
+    target: { principalIds: recipients },
     config: { conversationId, conversationMessageId, authorName, preview },
   }
 }
@@ -881,9 +934,9 @@ export function getConversationNoteMentionedTargets(event: EventData): HookTarge
  * who has a reachable address and allows `chat_mention` mail.
  *
  * A mention is a direct ask, so it is the one internal-note event that reaches
- * a teammate who is not looking at the inbox. The recipient set is taken
- * straight from the payload for the same reason the bell above does: the emit
- * site has already narrowed it to teammates and dropped the author, so a
+ * a teammate who is not looking at the inbox. The recipient set is the payload
+ * cut to each teammate's current scope, as the bell above does: the emit site
+ * has already narrowed it to teammates and dropped the author, so a
  * self-mention never mails itself. `resolveEligibleRecipients` supplies both
  * remaining gates — an address to send to, and the per-type x per-channel
  * preference (which subsumes the global emailMuted kill switch), so muting the
@@ -899,12 +952,13 @@ export async function getConversationNoteMentionedEmailTargets(
 ): Promise<HookTarget[]> {
   if (event.type !== 'conversation.note_mentioned') return []
   const { conversationId, mentionedPrincipalIds, authorName, preview } = event.data
-  if (mentionedPrincipalIds.length === 0) return []
-
-  const { recipients, emailMap } = await resolveEligibleRecipients(
-    mentionedPrincipalIds as PrincipalId[],
-    'chat_mention'
+  const inScope = await conversationRecipients(
+    conversationId,
+    mentionedPrincipalIds as PrincipalId[]
   )
+  if (inScope.length === 0) return []
+
+  const { recipients, emailMap } = await resolveEligibleRecipients(inScope, 'chat_mention')
   if (recipients.length === 0) return []
 
   const config = {
@@ -1121,16 +1175,17 @@ export async function getTicketExternalStatusChangedTargets(
 }
 
 /**
- * Notification target for `message.created` (WO-3 slice 5, the riskiest
- * move — reproduces `notifyVisitorMessage`'s deleted team-bell block
- * EXACTLY): only a VISITOR-sent message bells the team. Recipients are every
- * admin/member principal — the SAME raw query notifyVisitorMessage used
- * (role-only, no `principal.type` filter), not `listAssignableTeammates`,
- * which additionally requires `type: 'user'` and would silently narrow the
- * recipient set. The anti-spam presence gate is NOT applied here — it runs
- * in the notification hook itself (events/handlers/notification.ts), since
- * `isAnyAgentOnline` is a single global presence-store check, not a per-recipient one,
- * and the hook is where the config's `isFirstMessage` flag is read back out.
+ * Notification target for `message.created` (WO-3 slice 5): only a
+ * VISITOR-sent message bells the team. Recipients are the teammates (type
+ * `user`, role admin or member) whose own scope holds the conversation, with
+ * the conversation re-read by id, so a first message reaches the teammate
+ * routing just chose. A conversation paired with a customer ticket bells no
+ * one here (the ticket's watcher fan-out replaces it, see below).
+ *
+ * The anti-spam presence gate is NOT applied here: it runs in the
+ * notification hook (events/handlers/notification.ts), which reads the
+ * config's `isFirstMessage` and holds a follow-up back only while one of
+ * these recipients is online, or while presence cannot be read.
  */
 export async function getMessageCreatedTargets(event: EventData): Promise<HookTarget | null> {
   if (event.type !== 'message.created') return null
@@ -1152,15 +1207,19 @@ export async function getMessageCreatedTargets(event: EventData): Promise<HookTa
   if (pairTicketId) return null
 
   const team = await db
-    .select({ principalId: principal.id })
+    .select({ id: principal.id, type: principal.type, role: principal.role })
     .from(principal)
     .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member'])))
-  if (team.length === 0) return null
+  // Only the teammates whose scope holds the conversation. Read by id, not
+  // from the payload: the payload is the conversation as it was before
+  // routing, so a first message would miss the teammate routing just chose.
+  const recipients = await conversationRecipients(event.data.message.conversationId, team)
+  if (recipients.length === 0) return null
 
   const authorName = event.data.message.authorName ?? 'A visitor'
   return {
     type: 'notification',
-    target: { principalIds: team.map((t) => t.principalId as PrincipalId) },
+    target: { principalIds: recipients },
     config: {
       conversationId: event.data.conversation.id,
       authorName,
@@ -1634,6 +1693,7 @@ export async function getTicketAssignedEmailTargets(
     event.data
 
   const { directAssignee, teamMemberIds } = await computeTicketAssignmentRecipients(
+    ticket.id as TicketId,
     { assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId },
     event.actor.principalId
   )
@@ -1710,6 +1770,12 @@ export async function getSlaEmailTargets(
   } else {
     return []
   }
+  // A direct assignee is not role-checked, and removing a teammate does not
+  // unassign them, so the scope rule decides who still hears.
+  recipientIds = await conversationRecipients(conversationId, recipientIds, {
+    assigneePrincipalId: conv.assignedAgentPrincipalId,
+    teamId: conv.assignedTeamId,
+  })
   if (recipientIds.length === 0) return []
 
   // The copy kind and the preference matrix key are the same string.

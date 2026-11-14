@@ -86,18 +86,20 @@ export const notificationHook: HookHandler = {
       return { success: true }
     }
 
-    // Anti-spam gate for the new-message team bell (WO-3 slice 5), moved
-    // here from notifyVisitorMessage's request-time check: only ping the
-    // team on the first message of a conversation, or when nobody is around
-    // to see it live. isAnyAgentOnline is a single GLOBAL presence check, not
-    // per-recipient, so it's evaluated once for the whole target. This is a
-    // deliberate skew from notifyVisitorMessage's own (still request-time)
-    // presence check for the offline email — the two are never unified.
+    // Anti-spam gate for the new-message team bell (WO-3 slice 5): only ping
+    // on the first message of a conversation, or when none of the recipients
+    // is around to see it live. The recipients are already cut to the
+    // teammates whose scope holds the conversation, so an agent online who
+    // cannot see it never silences the ones who can. An unreadable presence
+    // store counts as someone online, so an outage cannot ping everyone on
+    // every message. This is a deliberate skew from notifyVisitorMessage's own
+    // (request-time) presence check for the offline email — never unified.
     if (event.type === 'message.created' && !cfg.isFirstMessage) {
-      const { isAnyAgentOnline } = await import('@/lib/server/realtime/presence')
-      if (await isAnyAgentOnline()) {
-        return { success: true }
-      }
+      const { readOnlineAgentIds } = await import('@/lib/server/realtime/presence')
+      const online = await readOnlineAgentIds()
+      if (online === null) return { success: true }
+      const onlineSet = new Set(online)
+      if (principalIds.some((id) => onlineSet.has(id))) return { success: true }
     }
 
     log.debug(

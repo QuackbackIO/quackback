@@ -40,6 +40,7 @@ import {
   type TranslatedFromMetadata,
 } from '@/lib/server/db'
 import {
+  isValidTypeId,
   toUuid,
   type ConversationId,
   type PrincipalId,
@@ -290,13 +291,11 @@ export async function enrichMessageForAgent(
  * flag first, each with a preview + the parent thread it belongs to (a
  * conversation OR a ticket — exactly one of `conversationId`/`ticketId` is set
  * on the DTO) so the list can link straight to it. Soft-deleted messages are
- * skipped. Two branches, unioned in memory and re-sorted by flag time: the
- * conversation branch is unchanged; the ticket branch additionally applies
- * `ticketFilter(actor)` (unlike the conversation branch, which trusts the
- * flag ownership alone — flagging is per-agent already, but a ticket's
- * visibility can narrow further by team/assignment, so a flag on a ticket the
- * viewer no longer has access to quietly drops out of their feed rather than
- * leaking a peek at it).
+ * skipped. Two branches, unioned in memory and re-sorted by flag time, each
+ * scoped by its row filter (`conversationFilter(actor)`, `ticketFilter(actor)`):
+ * flagging is per-agent already, but an item's visibility can narrow by team or
+ * assignment, so a flag on an item the viewer can no longer see quietly drops
+ * out of their feed rather than leaking a peek at it.
  *
  * CONVERGENCE PHASE 3 (justified single-parent branches): this is a
  * per-MESSAGE feed with per-parent provenance, not a thread read — a flagged
@@ -338,7 +337,10 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
           isNull(conversationMessages.deletedAt)
         )
       )
-      .innerJoin(conversations, eq(conversations.id, conversationMessages.conversationId))
+      .innerJoin(
+        conversations,
+        and(eq(conversations.id, conversationMessages.conversationId), conversationFilter(actor))
+      )
       .leftJoin(principal, eq(principal.id, conversationMessages.principalId))
       .leftJoin(user, eq(user.id, principal.userId))
       .where(eq(conversationMessageFlags.principalId, viewerPrincipalId))
@@ -710,21 +712,19 @@ export interface LinkedConversationSummary {
   status: ConversationStatus
 }
 
-/** Conversations linked to a post (the other direction of conversation.convert). */
+/** Conversations linked to a post (the other direction of conversation.convert),
+ *  only those the actor can see. */
 export async function getLinkedConversationsForPost(
-  postId: PostId
+  postId: PostId,
+  actor: Actor
 ): Promise<LinkedConversationSummary[]> {
-  const rows = await db
-    .select({
-      conversationId: conversations.id,
-      subject: conversations.subject,
-      status: conversations.status,
-    })
+  // Deliberately NO join to integrations: a 'live_chat' link has a null
+  // integrationId. The externalId holds the conversation's TypeID as text, so
+  // the links are read first and the conversations then by id (a text column
+  // cannot join the uuid primary key).
+  const links = await db
+    .select({ externalId: postExternalLinks.externalId })
     .from(postExternalLinks)
-    // Deliberately NO innerJoin(integrations): a 'live_chat' link has a null
-    // integrationId, so joining integrations would silently drop every conversation
-    // link. The externalId IS the conversation id for these rows.
-    .innerJoin(conversations, eq(postExternalLinks.externalId, conversations.id))
     .where(
       and(
         eq(postExternalLinks.postId, postId),
@@ -732,6 +732,18 @@ export async function getLinkedConversationsForPost(
         eq(postExternalLinks.status, 'active')
       )
     )
+  const conversationIds = links
+    .map((l) => l.externalId)
+    .filter((id): id is ConversationId => isValidTypeId(id, 'conversation'))
+  if (conversationIds.length === 0) return []
+  const rows = await db
+    .select({
+      conversationId: conversations.id,
+      subject: conversations.subject,
+      status: conversations.status,
+    })
+    .from(conversations)
+    .where(and(inArray(conversations.id, conversationIds), conversationFilter(actor)))
   return rows.map((r) => ({
     conversationId: r.conversationId as ConversationId,
     subject: r.subject,
@@ -756,7 +768,7 @@ export async function getActiveConversationForVisitor(
 /**
  * View result for a specific conversation a visitor asked for (history row /
  * ?c= deep link). Returns no conversation when the row is missing or not owned
- * by this visitor — existence is hidden, matching canViewConversation. A closed
+ * by this visitor — existence is hidden, as assertConversationVisible hides it. A closed
  * thread is surfaced read-only, exactly like the active-conversation path.
  */
 export function resolveVisitorConversation(
@@ -890,12 +902,22 @@ export async function findBackfillCursor(
 
 /**
  * The CUSTOMER ticket linked to a conversation, or null. At most one can
- * exist (0150's partial unique index; 0214's makes the pair 1:1).
+ * exist (0150's partial unique index; 0214's makes the pair 1:1). Only a
+ * ticket the viewer's ticket filter admits counts: a hidden pair's thread,
+ * internal notes included, never merges into the conversation.
  */
-async function resolvePairTicketId(conversationId: ConversationId): Promise<TicketId | null> {
+async function resolveVisiblePairTicketId(
+  conversationId: ConversationId,
+  viewer: Actor
+): Promise<TicketId | null> {
+  const [{ tickets }, { ticketFilter }] = await Promise.all([
+    import('@/lib/server/db'),
+    import('@/lib/server/policy/tickets'),
+  ])
   const [link] = await db
     .select({ ticketId: ticketConversations.ticketId })
     .from(ticketConversations)
+    .innerJoin(tickets, and(eq(tickets.id, ticketConversations.ticketId), ticketFilter(viewer)))
     .where(
       and(
         eq(ticketConversations.conversationId, conversationId),
@@ -942,8 +964,9 @@ function compareMessagesNewestFirst(a: ConversationMessage, b: ConversationMessa
  * pagination, returned oldest-first for rendering. `before` is a message id
  * cursor (fetch messages older than it).
  *
- * CONVERGENCE PHASE 0: agent surfaces pass `includeLinkedTicket` so a linked
- * CUSTOMER ticket's legacy ticket-parented rows render inline — one shared
+ * CONVERGENCE PHASE 0: agent surfaces pass `linkedTicketViewer` so a linked
+ * CUSTOMER ticket's legacy ticket-parented rows render inline, when that
+ * viewer may open the ticket — one shared
  * thread per pair (the agent conversation view of a pair; the ticket-side
  * twin is pair-thread.service.ts's loader, and the merge contract is the
  * same). The ticket parent's page is fetched with the same (created_at, id)
@@ -962,15 +985,16 @@ export async function listMessages(
     before?: string
     limit?: number
     includeInternal?: boolean
-    includeLinkedTicket?: boolean
+    /** Merge the paired customer ticket's rows when this viewer can see it. */
+    linkedTicketViewer?: Actor
     /** Agent surfaces show the account name. Posts and the visitor widget do not. */
     preferAccountName?: boolean
   }
 ): Promise<MessagePage> {
   const limit = Math.min(opts?.limit ?? MESSAGE_PAGE_SIZE, 100)
 
-  const linkedTicketId = opts?.includeLinkedTicket
-    ? await resolvePairTicketId(conversationId)
+  const linkedTicketId = opts?.linkedTicketViewer
+    ? await resolveVisiblePairTicketId(conversationId, opts.linkedTicketViewer)
     : null
 
   // Composite keyset cursor on (created_at, id): two messages can share a
@@ -1612,7 +1636,7 @@ export async function listConversationsForAgent(
   // Keyset cursor = the previous page's last conversation id. Re-read the exact
   // row from the DB rather than trusting a client-supplied string, so the sort's
   // ordering columns (which vary per sort) + ties are handled deterministically
-  // (mirrors listMessages). An unknown id → first page, and a malformed cursor
+  // (mirrors listMessages). An unknown or hidden id → first page, and a malformed cursor
   // can no longer reach a date parse / 500 the list. Relevance-ordered pages
   // additionally need the cursor row's score, recomputed by the same expression.
   let cursor: Conversation | null = null
@@ -1621,7 +1645,9 @@ export async function listConversationsForAgent(
     const [row] = await db
       .select({ row: conversations, relevance: relevance ?? sql<number>`0::float8` })
       .from(conversations)
-      .where(eq(conversations.id, filter.before as ConversationId))
+      // Scoped like the page: a cursor on a conversation the actor cannot see
+      // reads like an unknown one (the first page), and its text is never scored.
+      .where(and(eq(conversations.id, filter.before as ConversationId), conversationFilter(actor)))
       .limit(1)
     if (row) {
       cursor = row.row

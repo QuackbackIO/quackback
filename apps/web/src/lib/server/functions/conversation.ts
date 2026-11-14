@@ -69,6 +69,11 @@ import type { RequesterTicketDTO, ConversationTicketSummary } from '@/lib/server
 import { AI_INBOX_BUCKETS } from '@/lib/server/domains/assistant/assistant.involvement'
 import { ConflictError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
+import {
+  assertConversationVisible,
+  visibleConversationIds,
+} from '@/lib/server/domains/conversation/conversation-visibility'
+import { requireVisibleConversation } from './conversation-access'
 
 const log = logger.child({ component: 'conversation' })
 
@@ -663,15 +668,14 @@ export const runListConversationMessages = createServerOnlyFn(
   async function runListConversationMessages(ctx: AuthContext, data: ListMessagesInput) {
     await assertVisitorConversationAccess(ctx)
     const actor = await policyActorFromAuth(ctx)
-    const { assertConversationViewable } =
-      await import('@/lib/server/domains/conversation/conversation.service')
     const { listMessages, enrichMessagesForAgent } =
       await import('@/lib/server/domains/conversation/conversation.query')
-    await assertConversationViewable(data.conversationId as ConversationId, actor)
+    await assertConversationVisible(data.conversationId as ConversationId, actor)
     const isTeam = isTeamMember(ctx.principal.role)
     // Agents keep seeing internal notes when paging older messages; visitors never do.
     // CONVERGENCE PHASE 0: the team branch also folds the linked customer
-    // ticket's legacy rows into the page (includeLinkedTicket — see
+    // ticket's legacy rows into the page when the caller may open it
+    // (linkedTicketViewer — see
     // listMessages); the visitor branch stays conversation-only in Phase 0.
     // The agent-only `postSuggestions`/`pendingActionPointers`/`translatedFromPointers`
     // maps are pulled out here so they're consumed by the enrichment and never
@@ -681,7 +685,7 @@ export const runListConversationMessages = createServerOnlyFn(
       await listMessages(data.conversationId as ConversationId, {
         before: data.before,
         includeInternal: isTeam,
-        includeLinkedTicket: isTeam,
+        linkedTicketViewer: isTeam ? actor : undefined,
       })
     // Team members get the agent-only reaction/flag/suggestion/pending-action
     // enrichment on older messages too; the visitor path returns the clean base DTOs.
@@ -724,9 +728,7 @@ export const exportConversationTranscriptFn = createServerFn({ method: 'GET' })
     }
     const conversationId = data.conversationId as ConversationId
     const actor = await policyActorFromAuth(ctx)
-    const { assertConversationViewable } =
-      await import('@/lib/server/domains/conversation/conversation.service')
-    const conversation = await assertConversationViewable(conversationId, actor)
+    const conversation = await assertConversationVisible(conversationId, actor)
     const { listMessages } = await import('@/lib/server/domains/conversation/conversation.query')
 
     // Assemble the full history oldest-first. Each page (before-cursor) is a
@@ -977,7 +979,8 @@ export const fetchAssistantInboxCountsFn = createServerFn({ method: 'GET' }).han
 export const getConversationAssistantActivityFn = createServerFn({ method: 'GET' })
   .validator(z.object({ conversationId: z.string() }))
   .handler(async ({ data }): Promise<ConversationAssistantActivity | null> => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     const { loadConversationAssistantActivity } = await import('./conversation-panels')
     return loadConversationAssistantActivity(data.conversationId as ConversationId)
   })
@@ -1020,11 +1023,9 @@ export const getConversationFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(ctx)
-    const { assertConversationViewable } =
-      await import('@/lib/server/domains/conversation/conversation.service')
     const { conversationToDTO, listMessages, enrichMessagesForAgent } =
       await import('@/lib/server/domains/conversation/conversation.query')
-    const conversation = await assertConversationViewable(
+    const conversation = await assertConversationVisible(
       data.conversationId as ConversationId,
       actor
     )
@@ -1053,7 +1054,7 @@ export const getConversationFn = createServerFn({ method: 'GET' })
       listMessages(conversation.id, {
         before: data.before,
         includeInternal: true,
-        includeLinkedTicket: true,
+        linkedTicketViewer: actor,
       }),
       requestedPanels?.length
         ? import('./conversation-panels').then((m) =>
@@ -1085,7 +1086,12 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
   .validator(agentSendSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
-    const actor = await policyActorFromAuth(ctx)
+    // Checked before the reply is translated, so a hidden conversation costs
+    // no translation and reveals nothing about its customer's language.
+    const { actor, conversation } = await requireVisibleConversation(
+      ctx,
+      data.conversationId as ConversationId
+    )
     const { sendAgentMessage } =
       await import('@/lib/server/domains/conversation/conversation.service')
 
@@ -1100,7 +1106,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
     // explicit "Send untranslated" fallback a teammate picks after a
     // TRANSLATION_FAILED error — it bypasses this block entirely.
     if (!data.skipTranslation) {
-      const { resolveOutgoingReplyTranslation } =
+      const { resolveOutgoingReplyTranslation, translationContextOf } =
         await import('@/lib/server/domains/conversation/conversation-translation.service')
       // Any failure here (AI unconfigured, unparseable/empty response)
       // throws TranslationUnavailableError, which propagates out of this
@@ -1110,6 +1116,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
         content,
         contentJson,
         teammateUserId: ctx.user.id,
+        context: translationContextOf(conversation),
       })
       content = resolved.content
       contentJson = resolved.contentJson
@@ -1266,7 +1273,9 @@ export const setConversationStatusFn = createServerFn({ method: 'POST' })
   .validator(setStatusSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
-    const actor = await policyActorFromAuth(ctx)
+    // Checked before the close guard, which would otherwise name the missing
+    // fields of a conversation the caller cannot see.
+    const { actor } = await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     // Required-to-close applies ONLY here and in the bulk close — the
     // teammate inbox paths. Workflow/AI/API closes call the service directly.
     if (data.status === 'closed') {
@@ -1559,9 +1568,17 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
       }
     })()
 
+    // Every id is checked once, up front, for every action: a hidden id fails
+    // exactly as a missing one does and its action never runs. Each write
+    // still checks its own item.
+    const visible = await visibleConversationIds(data.conversationIds, actor)
     const succeeded: string[] = []
     const failed: { id: string; reason: string }[] = []
     for (const rawId of data.conversationIds) {
+      if (!visible.has(rawId as ConversationId)) {
+        failed.push({ id: rawId, reason: 'Conversation not found' })
+        continue
+      }
       try {
         await apply(rawId as ConversationId)
         succeeded.push(rawId)
@@ -1634,11 +1651,15 @@ export const removeConversationParticipantFn = createServerFn({ method: 'POST' }
 export const listConversationParticipantsFn = createServerFn({ method: 'GET' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const actor = await policyActorFromAuth(ctx)
     const { listConversationParticipants } =
       await import('@/lib/server/domains/conversation/conversation-participant.service')
     return {
-      participants: await listConversationParticipants(data.conversationId as ConversationId),
+      participants: await listConversationParticipants(
+        data.conversationId as ConversationId,
+        actor
+      ),
     }
   })
 
@@ -1655,7 +1676,8 @@ export const listFlaggedMessagesFn = createServerFn({ method: 'GET' }).handler(a
 export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    await requireVisibleConversation(ctx, data.conversationId as ConversationId)
     const { getLinkedPostsForConversation } =
       await import('@/lib/server/domains/conversation/conversation.query')
     return await getLinkedPostsForConversation(data.conversationId as ConversationId)
@@ -1664,10 +1686,11 @@ export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
 export const getLinkedConversationsForPostFn = createServerFn({ method: 'GET' })
   .validator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const actor = await policyActorFromAuth(ctx)
     const { getLinkedConversationsForPost } =
       await import('@/lib/server/domains/conversation/conversation.query')
-    return await getLinkedConversationsForPost(data.postId as PostId)
+    return await getLinkedConversationsForPost(data.postId as PostId, actor)
   })
 
 // ============================================
@@ -1686,9 +1709,7 @@ export const translateConversationMessagesFn = createServerFn({ method: 'GET' })
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(ctx)
 
-    const { assertConversationViewable } =
-      await import('@/lib/server/domains/conversation/conversation.service')
-    const conversation = await assertConversationViewable(
+    const conversation = await assertConversationVisible(
       data.conversationId as ConversationId,
       actor
     )

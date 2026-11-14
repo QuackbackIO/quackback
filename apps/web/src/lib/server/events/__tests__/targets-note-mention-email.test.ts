@@ -27,6 +27,12 @@ const mockSelect = vi.fn((..._args: unknown[]) => {
   return chain
 })
 
+// The scope rule itself runs over real rows in
+// events/__tests__/notification-scope.db.test.ts; here every recipient is in
+// scope, so these cases test only what this module adds.
+vi.mock('@/lib/server/domains/notifications/recipient-scope', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).recipientScopePassThrough()
+)
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: { select: (...args: unknown[]) => mockSelect(...args) },

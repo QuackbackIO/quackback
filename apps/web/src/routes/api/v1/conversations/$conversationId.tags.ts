@@ -51,15 +51,15 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/tags
           }
 
           const actor = serviceActorFromApiAuth(auth)
-          const { assertConversationViewable } =
-            await import('@/lib/server/domains/conversation/conversation.service')
+          const { assertConversationVisible } =
+            await import('@/lib/server/domains/conversation/conversation-visibility')
           const { attachTag } =
             await import('@/lib/server/domains/conversation/conversation-tag.service')
 
           // The tag service is deliberately ungated and does no existence check;
           // assert the conversation is real+viewable first so an attach on a
           // missing conversation is a 404, not an FK-violation 500.
-          await assertConversationViewable(result.conversationId, actor)
+          await assertConversationVisible(result.conversationId, actor)
           const tags = await attachTag(result.conversationId, result.tagId)
 
           return successResponse(tags)
@@ -82,14 +82,14 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/tags
           }
 
           const actor = serviceActorFromApiAuth(auth)
-          const { assertConversationViewable } =
-            await import('@/lib/server/domains/conversation/conversation.service')
+          const { assertConversationVisible } =
+            await import('@/lib/server/domains/conversation/conversation-visibility')
           const { detachTag } =
             await import('@/lib/server/domains/conversation/conversation-tag.service')
 
           // Without the viewable assert, detach on a nonexistent conversation
           // returns a misleading 200 — assert existence first so it's a 404.
-          await assertConversationViewable(result.conversationId, actor)
+          await assertConversationVisible(result.conversationId, actor)
           const tags = await detachTag(result.conversationId, result.tagId)
 
           return successResponse(tags)

@@ -74,7 +74,11 @@ async function seedTicketWithAgent() {
   const statusId = createId('ticket_status') as TicketStatusId
   await testDb.insert(ticketStatuses).values({ id: statusId, name: 'New', slug: `tm-${suffix()}` })
   const ticketId = createId('ticket') as TicketId
-  await testDb.insert(tickets).values({ id: ticketId, title: 'T', statusId })
+  // Assigned to the agent: a scoped `ticket.view` agent writes only to
+  // tickets in their scope.
+  await testDb
+    .insert(tickets)
+    .values({ id: ticketId, title: 'T', statusId, assigneePrincipalId: agentP })
 
   const actor: Actor = {
     ...ANONYMOUS_ACTOR,

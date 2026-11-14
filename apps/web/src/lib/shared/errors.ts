@@ -155,6 +155,21 @@ export class RateLimitError extends DomainException {
 }
 
 /**
+ * A refusal below 500 whose own message was hidden in production because it
+ * looked technical (a provider's reply quoted in it, for example). It keeps
+ * the original `code` and `statusCode`, so the client can still act on them,
+ * and carries the plain sentence with its reference as its message.
+ */
+export class HiddenMessageRefusal extends DomainException {
+  readonly statusCode: number
+
+  constructor(code: string, statusCode: number, message: string) {
+    super(code, message)
+    this.statusCode = statusCode
+  }
+}
+
+/**
  * HTTP 503 - something on our side or a provider's failed, and the message was
  * written for the person who hit it ("Couldn't reach the mail provider. Try
  * again in a minute.").
@@ -183,5 +198,19 @@ export function isSafeToShow(error: unknown): boolean {
     error !== null &&
     typeof error === 'object' &&
     (error as { safeToShow?: unknown }).safeToShow === true
+  )
+}
+
+/**
+ * Whether an error is a NotFound answer (deleted, or outside the caller's
+ * view). Read from the typed status, never the message or the class: a typed
+ * error below 500 reaches the browser with its `code` and `statusCode` but
+ * not its class (typed-error-serialization.ts).
+ */
+export function isNotFoundError(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    (error as { statusCode?: unknown }).statusCode === 404
   )
 }

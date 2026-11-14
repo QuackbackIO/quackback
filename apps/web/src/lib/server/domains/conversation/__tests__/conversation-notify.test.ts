@@ -25,6 +25,9 @@ let visitorRows: Array<Record<string, unknown>> = []
 let limitQueue: Array<Record<string, unknown>[]> = []
 
 const isAnyAgentOnline = vi.fn<() => Promise<boolean>>()
+// Who is online when isAnyAgentOnline says someone is: the first team row,
+// unless a case says otherwise.
+const listOnlineAgentIds = vi.fn<() => Promise<string[]>>(async () => ['principal_admin'])
 const isPrincipalOnline = vi.fn<(p: PrincipalId) => Promise<boolean>>()
 const buildHookContext =
   vi.fn<
@@ -35,6 +38,12 @@ const sendCsatRequestEmail = vi.fn<(opts: Record<string, unknown>) => Promise<un
 const mintCsatEmailToken =
   vi.fn<(conversationId: ConversationId, visitorPrincipalId: PrincipalId) => string>()
 
+// The scope rule itself runs over real rows in
+// events/__tests__/notification-scope.db.test.ts; here every recipient is in
+// scope, so these cases test only what this module adds.
+vi.mock('@/lib/server/domains/notifications/recipient-scope', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).recipientScopePassThrough()
+)
 vi.mock('@/lib/server/config', () => ({
   config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
   getBaseUrl: () => 'http://localhost:3000',
@@ -42,6 +51,16 @@ vi.mock('@/lib/server/config', () => ({
 
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: (...a: []) => isAnyAgentOnline(...a),
+  listOnlineAgentIds: (...a: []) => listOnlineAgentIds(...a),
+  // The gates read presence once: nobody when isAnyAgentOnline says so, the
+  // listed agents when someone is, and unknown (null) when the store throws.
+  readOnlineAgentIds: async () => {
+    try {
+      return (await isAnyAgentOnline()) ? await listOnlineAgentIds() : []
+    } catch {
+      return null
+    }
+  },
   isPrincipalOnline: (...a: [PrincipalId]) => isPrincipalOnline(...a),
 }))
 
@@ -226,7 +245,9 @@ describe('notifyVisitorMessage', () => {
   // gate, which now runs in the notification hook's worker instead of here).
   it('sends no email when an agent is online and it is not the first message', async () => {
     isAnyAgentOnline.mockResolvedValue(true)
-    teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+    teamRows = [
+      { principalId: 'principal_admin', type: 'user', role: 'member', email: 'a@x.com', name: 'A' },
+    ]
 
     await notifyVisitorMessage({
       conversation,
@@ -241,8 +262,14 @@ describe('notifyVisitorMessage', () => {
   it('sends no email on the first message while an agent is online', async () => {
     isAnyAgentOnline.mockResolvedValue(true)
     teamRows = [
-      { principalId: 'principal_admin', email: 'a@x.com', name: 'A' },
-      { principalId: 'principal_member', email: 'm@x.com', name: 'M' },
+      { principalId: 'principal_admin', type: 'user', role: 'member', email: 'a@x.com', name: 'A' },
+      {
+        principalId: 'principal_member',
+        type: 'user',
+        role: 'member',
+        email: 'm@x.com',
+        name: 'M',
+      },
     ]
 
     await notifyVisitorMessage({
@@ -258,9 +285,15 @@ describe('notifyVisitorMessage', () => {
   it('emails every team member with an address when no agent is online', async () => {
     isAnyAgentOnline.mockResolvedValue(false)
     teamRows = [
-      { principalId: 'principal_admin', email: 'a@x.com', name: 'A' },
-      { principalId: 'principal_noemail', email: null, name: 'N' },
-      { principalId: 'principal_member', email: 'm@x.com', name: 'M' },
+      { principalId: 'principal_admin', type: 'user', role: 'member', email: 'a@x.com', name: 'A' },
+      { principalId: 'principal_noemail', type: 'user', role: 'member', email: null, name: 'N' },
+      {
+        principalId: 'principal_member',
+        type: 'user',
+        role: 'member',
+        email: 'm@x.com',
+        name: 'M',
+      },
     ]
 
     await notifyVisitorMessage({
@@ -1046,7 +1079,15 @@ describe('conversation email attachments', () => {
 
     it('carries an identified visitor’s own attachment through to the team email', async () => {
       isAnyAgentOnline.mockResolvedValue(false)
-      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+      teamRows = [
+        {
+          principalId: 'principal_admin',
+          type: 'user',
+          role: 'member',
+          email: 'a@x.com',
+          name: 'A',
+        },
+      ]
       visitorRows = [{ type: 'user' }]
       const bytes = new TextEncoder().encode('screenshot-bytes')
       getS3Object.mockResolvedValue({ body: streamOf(bytes), contentType: 'image/png' })
@@ -1067,7 +1108,15 @@ describe('conversation email attachments', () => {
 
     it('never attaches an anonymous visitor’s file to the team alert, links instead', async () => {
       isAnyAgentOnline.mockResolvedValue(false)
-      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+      teamRows = [
+        {
+          principalId: 'principal_admin',
+          type: 'user',
+          role: 'member',
+          email: 'a@x.com',
+          name: 'A',
+        },
+      ]
       visitorRows = [{ type: 'anonymous' }]
       getEmailSafeUrl.mockImplementation((key) => (key ? `https://cdn.test/${key}?email=1` : null))
 
@@ -1087,7 +1136,15 @@ describe('conversation email attachments', () => {
 
     it('never attaches an inbound-email visitor’s file to the team alert, even an identified one', async () => {
       isAnyAgentOnline.mockResolvedValue(false)
-      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+      teamRows = [
+        {
+          principalId: 'principal_admin',
+          type: 'user',
+          role: 'member',
+          email: 'a@x.com',
+          name: 'A',
+        },
+      ]
       // Identified ('user'), but arriving over the email correspondence
       // channel — still unverified for MIME-attachment purposes.
       visitorRows = [{ type: 'user' }]
@@ -1151,7 +1208,15 @@ describe('threading headers (P4.6 regression guard)', () => {
 
     it('threads a team alert under team.<conversation> and stamps conversationId', async () => {
       isAnyAgentOnline.mockResolvedValue(false)
-      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+      teamRows = [
+        {
+          principalId: 'principal_admin',
+          type: 'user',
+          role: 'member',
+          email: 'a@x.com',
+          name: 'A',
+        },
+      ]
 
       await notifyVisitorMessage({
         conversation,

@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { ConversationTagId, ConversationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { requireVisibleConversation } from './conversation-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   EntityIdSchema,
@@ -142,6 +143,8 @@ export const addConversationTagFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_TAGS })
     const conversationId = data.conversationId as ConversationId
+    // Checked first, so a hidden conversation mints no tag and lists nothing.
+    await requireVisibleConversation(auth, conversationId)
     let tagId = data.tagId as ConversationTagId | undefined
     if (data.name?.trim()) {
       // Inline-create mints new taxonomy, so it additionally requires manage_tags.
@@ -162,6 +165,8 @@ export const addConversationTagFn = createServerFn({ method: 'POST' })
 export const removeConversationTagFn = createServerFn({ method: 'POST' })
   .validator(removeConversationTagSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_TAGS })
-    return detachTag(data.conversationId as ConversationId, data.tagId as ConversationTagId)
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_TAGS })
+    const conversationId = data.conversationId as ConversationId
+    await requireVisibleConversation(auth, conversationId)
+    return detachTag(conversationId, data.tagId as ConversationTagId)
   })

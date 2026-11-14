@@ -174,3 +174,90 @@ describe('connection lifecycle', () => {
     }
   })
 })
+
+describe('the inbox scope envelope (`s`)', () => {
+  const scope = {
+    kind: 'conversation' as const,
+    id: 'conversation_1',
+    assigneePrincipalId: 'principal_a',
+    teamId: null,
+  }
+
+  /** Every raw NOTIFY on the realtime channel, as Postgres delivered it. */
+  async function rawNotifies(): Promise<{ seen: string[]; stop: () => Promise<void> }> {
+    const seen: string[] = []
+    const { unlisten } = await testSql().listen('quackback_realtime', (raw) => {
+      seen.push(raw)
+    })
+    return { seen, stop: unlisten }
+  }
+
+  it('reaches the handler beside the payload, and never inside it', async () => {
+    const seen: Array<[string, unknown]> = []
+    const off = await withRealWorkspace(T, () =>
+      subscribe(['conversation:inbox'], (_c, m, s) => seen.push([m, s]))
+    )
+    try {
+      await withRealWorkspace(T, () =>
+        publishAsync('conversation:inbox', { kind: 'message', id: 1 }, scope)
+      )
+      await until(() => seen.length > 0)
+      expect(JSON.parse(seen[0][0])).toEqual({ kind: 'message', id: 1 })
+      expect(seen[0][1]).toEqual(scope)
+    } finally {
+      await off()
+    }
+  })
+
+  it('stays inline in the NOTIFY when the payload spills to a row', async () => {
+    const body = 'x'.repeat(40_000)
+    const seen: Array<[string, unknown]> = []
+    const raw = await rawNotifies()
+    const off = await withRealWorkspace(T, () =>
+      subscribe(['conversation:inbox'], (_c, m, s) => seen.push([m, s]))
+    )
+    try {
+      await withRealWorkspace(T, () => publishAsync('conversation:inbox', { body }, scope))
+      await until(() => seen.length > 0)
+      expect(JSON.parse(seen[0][0])).toEqual({ body })
+      expect(seen[0][1]).toEqual(scope)
+      // The raw listener is its own connection and can hear it a moment later.
+      await until(() => raw.seen.some((r) => r.includes('"o":')))
+      const spilled = raw.seen
+        .filter((r) => !r.startsWith('__verify__'))
+        .map((r) => JSON.parse(r) as { o?: string; s?: unknown })
+        .find((e) => typeof e.o === 'string')
+      expect(spilled?.s).toEqual(scope)
+      const rows = await testSql()<{ payload: unknown }[]>`
+        SELECT payload FROM realtime_overflow WHERE id = ${spilled?.o ?? '0'}
+      `
+      expect(rows[0].payload).toEqual({ body })
+    } finally {
+      await off()
+      await raw.stop()
+    }
+  })
+
+  it('is absent from the wire, and from the handler, for a publish without it', async () => {
+    const seen: Array<[string, unknown]> = []
+    const raw = await rawNotifies()
+    const off = await withRealWorkspace(T, () =>
+      subscribe(['conversation:visitor-1'], (_c, m, s) => seen.push([m, s]))
+    )
+    try {
+      await withRealWorkspace(T, () => publishAsync('conversation:visitor-1', { n: 1 }))
+      await until(() => seen.length > 0)
+      expect(seen[0][1]).toBeUndefined()
+      await until(() => raw.seen.some((r) => r.includes('conversation:visitor-1')))
+      const envelopes = raw.seen
+        .filter((r) => !r.startsWith('__verify__'))
+        .map((r) => JSON.parse(r) as Record<string, unknown>)
+        .filter((e) => e.c === 'conversation:visitor-1')
+      expect(envelopes).toHaveLength(1)
+      expect('s' in envelopes[0]).toBe(false)
+    } finally {
+      await off()
+      await raw.stop()
+    }
+  })
+})

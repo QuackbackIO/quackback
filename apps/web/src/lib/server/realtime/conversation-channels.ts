@@ -14,6 +14,12 @@
  * because a ticket stream is team-member-only in this phase (see
  * routes/api/chat/stream.ts's `ticketId` scope gate): both channels a ticket
  * event reaches are agent audiences, so the full event is safe on both.
+ *
+ * Every inbox copy goes through `publishInboxFrame` (inbox-publish.ts), which
+ * attaches the item's scope envelope on the wire so the inbox stream sends it
+ * only to teammates whose scope holds the item. Each publisher takes the
+ * envelope as an optional trailing parameter; without it the item's owner and
+ * team are read by id. The visitor and per-ticket copies never carry it.
  */
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import type {
@@ -22,23 +28,29 @@ import type {
   ConversationMessageDTO,
   ConversationSide,
 } from '@/lib/shared/conversation/types'
+import { conversationIdOf } from '@/lib/shared/conversation/types'
 import { publish } from './pubsub'
+import { CONVERSATION_INBOX_CHANNEL, publishInboxFrame } from './inbox-publish'
+import { conversationScopeOf, type InboxItemScope } from './inbox-envelope'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
 import { loadAuthors, fallbackAuthor } from '@/lib/server/domains/principals/principal-display'
 
 export function conversationChannel(conversationId: ConversationId): string {
   return `conversation:${conversationId}`
 }
 
-/** Single shared channel all agents listen on for inbox-wide updates. */
-export const CONVERSATION_INBOX_CHANNEL = 'conversation:inbox'
+// Single shared channel all agents listen on for inbox-wide updates; defined
+// beside the one publish that may write to it.
+export { CONVERSATION_INBOX_CHANNEL }
 
 /** Publish a stream event to the conversation channel + the agent inbox. */
 export function publishConversationEvent(
   conversationId: ConversationId,
-  event: ConversationStreamEvent
+  event: ConversationStreamEvent,
+  envelope?: InboxItemScope
 ): void {
   publish(conversationChannel(conversationId), event)
-  publish(CONVERSATION_INBOX_CHANNEL, event)
+  publishInboxFrame({ kind: 'conversation', id: conversationId }, event, envelope)
 }
 
 /**
@@ -53,19 +65,24 @@ export function publishConversationEvent(
 export function publishConversationMessage(
   conversationId: ConversationId,
   messages: { visitor: ConversationMessageDTO; agent?: ConversationMessageDTO },
-  opts?: { conversationUpdated?: boolean }
+  opts?: { conversationUpdated?: boolean },
+  envelope?: InboxItemScope
 ): void {
   publish(conversationChannel(conversationId), {
     kind: 'message',
     conversationId,
     message: messages.visitor,
   })
-  publish(CONVERSATION_INBOX_CHANNEL, {
-    kind: 'message',
-    conversationId,
-    message: messages.agent ?? messages.visitor,
-    ...(opts?.conversationUpdated ? { conversationUpdated: true } : {}),
-  })
+  publishInboxFrame(
+    { kind: 'conversation', id: conversationId },
+    {
+      kind: 'message',
+      conversationId,
+      message: messages.agent ?? messages.visitor,
+      ...(opts?.conversationUpdated ? { conversationUpdated: true } : {}),
+    },
+    envelope
+  )
 }
 
 /**
@@ -81,14 +98,15 @@ export function publishTyping(
   side: ConversationSide,
   at: string,
   // null (no principal to attribute) publishes untagged — delivered to all, suppressed for none.
-  typistPrincipalId: PrincipalId | null
+  typistPrincipalId: PrincipalId | null,
+  envelope?: InboxItemScope
 ): void {
   const base = { kind: 'typing' as const, conversationId, side, at }
   const tagged = typistPrincipalId ? { ...base, typistPrincipalId } : base
   // Agent identities never reach the visitor channel; a visitor-side id is the
   // owner's own, so it can ride along there.
   publish(conversationChannel(conversationId), side === 'agent' ? base : tagged)
-  publish(CONVERSATION_INBOX_CHANNEL, tagged)
+  publishInboxFrame({ kind: 'conversation', id: conversationId }, tagged, envelope)
 }
 
 /** A pub/sub frame parsed for routing decisions; null when unparseable. */
@@ -119,9 +137,19 @@ export function isOwnTyping(frame: ParsedConversationFrame, selfPrincipalId: str
 /**
  * Publish an agent-only event to the inbox channel ONLY (never the
  * conversation channel the visitor subscribes to) — used for internal notes.
+ * The item is the event's conversation; an event that names none (the type
+ * admits ticket kinds) is dropped and logged.
  */
-export function publishAgentConversationEvent(event: ConversationStreamEvent): void {
-  publish(CONVERSATION_INBOX_CHANNEL, event)
+export function publishAgentConversationEvent(
+  event: ConversationStreamEvent,
+  envelope?: InboxItemScope
+): void {
+  const conversationId = conversationIdOf(event)
+  publishInboxFrame(
+    conversationId ? { kind: 'conversation', id: conversationId } : null,
+    event,
+    envelope
+  )
 }
 
 /**
@@ -147,14 +175,27 @@ export function publishConversationOnlyEvent(
  */
 export async function publishConversationUpdate(
   conversationId: ConversationId,
-  agentDto: ConversationDTO
+  agentDto: ConversationDTO,
+  prev?: ScopedRow
 ): Promise<void> {
   // Reuse the public profile loader: agent DTOs may contain account names.
   const authors = await loadAuthors([
     agentDto.visitor.principalId,
     agentDto.assignedAgent?.principalId,
   ])
-  publish(CONVERSATION_INBOX_CHANNEL, { kind: 'conversation', conversation: agentDto })
+  // The DTO is the row just written, so it is its own envelope. A writer that
+  // can move the item out of someone's scope passes what it was before.
+  publishInboxFrame(
+    { kind: 'conversation', id: conversationId },
+    { kind: 'conversation', conversation: agentDto },
+    {
+      ...conversationScopeOf({
+        assignedAgentPrincipalId: agentDto.assignedAgent?.principalId,
+        assignedTeamId: agentDto.assignedTeamId,
+      }),
+      prev,
+    }
+  )
   publish(conversationChannel(conversationId), {
     kind: 'conversation',
     conversation: {
@@ -189,7 +230,11 @@ export function ticketChannel(ticketId: TicketId): string {
  * update from the same push. Unlike `publishConversationEvent` there is no
  * audience-stripped copy — see the file-header note on why that's safe here.
  */
-export function publishTicketEvent(ticketId: TicketId, event: ConversationStreamEvent): void {
+export function publishTicketEvent(
+  ticketId: TicketId,
+  event: ConversationStreamEvent,
+  envelope?: InboxItemScope
+): void {
   publish(ticketChannel(ticketId), event)
-  publish(CONVERSATION_INBOX_CHANNEL, event)
+  publishInboxFrame({ kind: 'ticket', id: ticketId }, event, envelope)
 }

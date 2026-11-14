@@ -22,7 +22,7 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
-import { MentionExtension } from './mention-extension'
+import { MentionExtension, teamMentionExtensionFor, type MentionItemRef } from './mention-extension'
 import { createSuggestionPopup, createSuggestionPositioner } from './suggestion-popup'
 import { applySuggestionListKey } from './suggestion-list-keys'
 import { HighlightQuery, emojiSuggestionLabel } from './highlight-query'
@@ -186,9 +186,11 @@ export function buildExtensions(
     onVideoUpload?: (file: File) => Promise<string>
     /** When set, Enter submits (chat-send) instead of splitting the block. */
     onSubmit?: () => void
+    /** Replaces the default `@` extension (see `RichTextEditorProps.mentionItem`). */
+    mentionExtension?: typeof MentionExtension
   }
 ) {
-  const { placeholder, onImageUpload, onVideoUpload, onSubmit } = options
+  const { placeholder, onImageUpload, onVideoUpload, onSubmit, mentionExtension } = options
   return [
     StarterKit.configure({
       heading: features.headings ? { levels: [1, 2, 3] } : false,
@@ -317,7 +319,7 @@ export function buildExtensions(
     // every existing consumer keeps the `@` menu while visitor-facing composers can
     // drop it. Read-only surfaces render mention nodes via generateContentHTML,
     // which doesn't go through buildExtensions.
-    ...(features.mentions !== false ? [MentionExtension] : []),
+    ...(features.mentions !== false ? [mentionExtension ?? MentionExtension] : []),
     Markdown,
   ]
 }
@@ -1402,6 +1404,10 @@ interface RichTextEditorProps {
   /** Publishes the imperative focus seam. Mutually exclusive editors may share
    * one ref object: whichever instance is mounted owns it. */
   editorRef?: React.RefObject<RichTextEditorHandle | null>
+  /** The inbox item a note is written on. Mentions then suggest teammates
+   * only, and a teammate who cannot see the item shows muted with "No access"
+   * and cannot be picked. Changing it rebuilds the editor. */
+  mentionItem?: MentionItemRef
 }
 
 // ============================================================================
@@ -1424,14 +1430,34 @@ function RichTextEditorBase({
   onVideoUpload,
   onSubmit,
   editorRef,
+  mentionItem,
 }: RichTextEditorProps) {
+  // One extension per item, kept while the item is open, so the extensions
+  // memo below stays stable across renders. A new item remounts the editor
+  // (the `RichTextEditor` wrapper keys it on the item).
+  const mentionKind = mentionItem?.kind
+  const mentionId = mentionItem?.id
+  const mentionExtension = useMemo(
+    () =>
+      mentionKind && mentionId
+        ? teamMentionExtensionFor({ kind: mentionKind, id: mentionId })
+        : undefined,
+    [mentionKind, mentionId]
+  )
   // Memoize extensions keyed on individual feature flags.
   // TipTap v3's useEditor calls editor.setOptions() whenever the extensions
   // array reference changes (uses reference equality via compareOptions).
   // Rebuilding the array on every render causes setOptions→transaction→onUpdate
   // on every keystroke, resulting in 300–400 ms input violations.
   const extensions = useMemo(
-    () => buildExtensions(features, { placeholder, onImageUpload, onVideoUpload, onSubmit }),
+    () =>
+      buildExtensions(features, {
+        placeholder,
+        onImageUpload,
+        onVideoUpload,
+        onSubmit,
+        mentionExtension,
+      }),
 
     [
       features.headings,
@@ -1452,6 +1478,7 @@ function RichTextEditorBase({
       onVideoUpload,
       onSubmit,
       placeholder,
+      mentionExtension,
     ]
   )
 
@@ -1908,7 +1935,7 @@ function sameFeatures(prev: EditorFeatures = {}, next: EditorFeatures = {}): boo
 // Skip re-render when individual feature flags and all other props are unchanged.
 // Compares features by primitive values rather than object reference so callers
 // can safely pass inline objects without triggering unnecessary editor rebuilds.
-export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
+const MemoRichTextEditor = memo(RichTextEditorBase, (prev, next) => {
   if (
     prev.value !== next.value ||
     prev.onDocumentChange !== next.onDocumentChange ||
@@ -1927,6 +1954,19 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     return false
   return sameFeatures(prev.features, next.features)
 })
+
+/**
+ * The editor, remounted when its mention item changes. TipTap does not
+ * re-register an extension's plugins when only the extension list changes, so
+ * a host that moves one editor to another item without remounting it would
+ * keep the old item's typeahead. The new editor seeds from the current
+ * `value`, so the draft carries over. Without a mention item it is never
+ * re-keyed.
+ */
+export function RichTextEditor(props: RichTextEditorProps) {
+  const item = props.mentionItem
+  return <MemoRichTextEditor key={item ? `${item.kind}:${item.id}` : undefined} {...props} />
+}
 
 // ============================================================================
 // Uploaded media handling

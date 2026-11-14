@@ -43,9 +43,17 @@ function ticket(overrides: Partial<TicketDTO> = {}): TicketDTO {
   } as TicketDTO
 }
 
-function renderLinks(t: TicketDTO, links: { tracker: TicketDTO | null; linked: TicketDTO[] }) {
+function renderLinks(
+  t: TicketDTO,
+  links: {
+    tracker: TicketDTO | null
+    linked: TicketDTO[]
+    hiddenCount?: number
+    trackerHidden?: boolean
+  }
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  qc.setQueryData(ticketKeys.links(t.id), links)
+  qc.setQueryData(ticketKeys.links(t.id), { hiddenCount: 0, trackerHidden: false, ...links })
   return render(
     <QueryClientProvider client={qc}>
       <TicketLinks ticket={t} onChanged={vi.fn()} />
@@ -55,6 +63,21 @@ function renderLinks(t: TicketDTO, links: { tracker: TicketDTO | null; linked: T
 
 describe('TicketLinks', () => {
   afterEach(cleanup)
+
+  it('a tracker shows one muted line for the linked tickets I cannot see', () => {
+    const tracker = ticket({ id: 'ticket_tr' as TicketId, type: 'tracker', reference: '#9' })
+    const linked = ticket({ id: 'ticket_c' as TicketId, reference: '#142' })
+    renderLinks(tracker, { tracker: null, linked: [linked], hiddenCount: 2 })
+    expect(screen.getByText('#142')).toBeTruthy()
+    expect(screen.getByText("2 more you can't access")).toBeTruthy()
+  })
+
+  it('a customer ticket whose tracker I cannot see shows No access, not a link picker', () => {
+    const customer = ticket({ id: 'ticket_c' as TicketId, type: 'customer' })
+    renderLinks(customer, { tracker: null, linked: [], trackerHidden: true })
+    expect(screen.getByText('No access')).toBeTruthy()
+    expect(screen.queryByText('Link to tracker')).toBeNull()
+  })
 
   it('a tracker lists the customer tickets it tracks', () => {
     const tracker = ticket({ id: 'ticket_tr' as TicketId, type: 'tracker', reference: '#9' })

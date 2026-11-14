@@ -73,7 +73,7 @@ import { createApiKey } from '@/lib/server/domains/api-keys/api-key.service'
 import { updateMemberRole } from '@/lib/server/domains/principals/principal.service'
 import { assertTicketVisible, createTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { listLinkedTicketIds } from '@/lib/server/domains/tickets/ticket-links.service'
-import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { ticketFilter } from '@/lib/server/policy/tickets'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import type { Actor } from '@/lib/server/policy/types'
@@ -266,9 +266,9 @@ describe.skipIf(!fixture.available)('a personal API key follows its creator row 
     const actor = serviceActorFromApiAuth(await withApiKeyAuth(bearer(world.token)))
 
     await expect(
-      assertConversationViewable(world.conversationIds.mine, actor)
+      assertConversationVisible(world.conversationIds.mine, actor)
     ).resolves.toMatchObject({ id: world.conversationIds.mine })
-    await expect(assertConversationViewable(world.conversationIds.teamY, actor)).rejects.toThrow(
+    await expect(assertConversationVisible(world.conversationIds.teamY, actor)).rejects.toThrow(
       NotFoundError
     )
   })

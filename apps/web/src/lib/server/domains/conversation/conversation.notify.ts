@@ -48,7 +48,7 @@ import type { ConversationId, ConversationMessageId, PrincipalId } from '@quackb
 import type { JSONContent } from '@tiptap/core'
 import { generateContentHTML } from '@/lib/shared/content-html'
 import { withEmailProxyHint } from '@/lib/server/content/email-image-proxy'
-import { isAnyAgentOnline, isPrincipalOnline } from '@/lib/server/realtime/presence'
+import { isPrincipalOnline, readOnlineAgentIds } from '@/lib/server/realtime/presence'
 import { buildHookContext } from '@/lib/server/events/hook-context'
 import { truncate } from '@/lib/shared/utils/string'
 import { resolveReplyRecipient } from './conversation.recipient'
@@ -70,6 +70,7 @@ import {
 } from './conversation.email-attachments'
 import { logger } from '@/lib/server/logger'
 import { testOwnerOf } from '@/lib/server/test-data'
+import { inScopeRecipients } from '@/lib/server/domains/notifications/recipient-scope'
 import { conversationTestDelivery } from './conversation.test-delivery'
 
 const log = logger.child({ component: 'conversation-notify' })
@@ -262,23 +263,33 @@ export async function notifyVisitorMessage(opts: {
     // A test thread alerts only the teammate who owns its test customer.
     const testOwner = await testOwnerOf(opts.conversation.visitorPrincipalId)
 
-    const agentsOnline = await isAnyAgentOnline()
-    // Avoid email spam: only email the team on the first message of a
-    // conversation, or when nobody is around to see it live. This gate is
-    // redundant with the `!agentsOnline` check below for every case except
-    // the fast escape it buys (skip the team query entirely) — kept exactly
-    // as it was before the bell moved out, to not perturb email behavior.
+    // Avoid email spam: email only when nobody who can see the conversation
+    // is around to see it live. Presence is read once. Nobody online skips the
+    // check; otherwise only the online teammates are judged, so an agent who
+    // cannot see the conversation never silences the teammates who can. An
+    // unreadable presence store counts as someone online (no alert), so an
+    // outage cannot turn every message into an email.
     //
-    // Deliberate small skew: presence is now checked at TWO different
-    // moments — here, at request time, for the email; and again inside the
-    // notification hook, at worker time, for the bell (its own anti-spam
-    // gate: `!cfg.isFirstMessage && isAnyAgentOnline()`). Never try to unify
-    // them — the bell's check intentionally runs later, off the request path.
-    if (!opts.isFirstMessage && agentsOnline) return
+    // Deliberate small skew: presence is checked at TWO different moments —
+    // here, at request time, for the email; and again inside the notification
+    // hook, at worker time, for the bell (its own anti-spam gate, over the
+    // same in-scope recipients). Never try to unify them — the bell's check
+    // intentionally runs later, off the request path.
+    const online = await readOnlineAgentIds()
+    if (online === null) return
+    if (online.length > 0) {
+      const watching = await inScopeRecipients(
+        { kind: 'conversation', id: opts.conversation.id },
+        online
+      )
+      if (watching.length > 0) return
+    }
 
-    const team = await db
+    const teammates = await db
       .select({
         principalId: principal.id,
+        type: principal.type,
+        role: principal.role,
         email: user.email,
         contactEmail: principal.contactEmail,
         name: user.name,
@@ -292,59 +303,67 @@ export async function notifyVisitorMessage(opts: {
           testOwner ? eq(principal.id, testOwner) : undefined
         )
       )
+    // Only the teammates whose scope holds the conversation, read by id:
+    // `opts.conversation` is the row from before routing ran, so a first
+    // message would otherwise miss the teammate routing just chose.
+    const inScope = new Set(
+      await inScopeRecipients(
+        { kind: 'conversation', id: opts.conversation.id },
+        teammates.map((t) => ({ id: t.principalId, type: t.type, role: t.role }))
+      )
+    )
+    const team = teammates.filter((t) => inScope.has(t.principalId))
 
     if (team.length === 0) return
 
     const body = previewOf(opts.content)
 
-    // Email the team only when no agent is online to handle it live.
-    if (!agentsOnline) {
-      const ctx = await buildHookContext()
-      if (!ctx) return
-      const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/admin/inbox?i=${opts.conversation.id}`
-      const { sendConversationMessageEmail } = await import('@quackback/email')
-      const { teamThreadRootMessageId, mintTeamOutboundMessageId } =
-        await import('@/lib/server/domains/conversation/conversation.email-channel')
-      const teamRoot = teamThreadRootMessageId(opts.conversation.id)
-      // Contact class: the only link is an /admin/inbox URL, which carries no
-      // capability — the session does. So a teammate reachable only via their
-      // contact address is correctly included, which the old truthiness filter
-      // on the account address would have dropped.
-      // Both address fields came back with the team query, so the recipient is
-      // decided from rows already in hand rather than by a second round trip.
-      const { contactRecipientFrom, mailContact } = await import('@/lib/server/email/recipient')
-      const resolvedBody = await resolvedMessageBody(
-        opts.content,
-        opts.contentJson,
-        opts.attachments,
-        { trustedSender: await isVerifiedVisitorSender(opts.conversation) }
-      )
-      await Promise.allSettled(
-        team
-          .flatMap((t) => {
-            const to = contactRecipientFrom({ accountEmail: t.email, contactEmail: t.contactEmail })
-            return to ? [{ ...t, to }] : []
+    // Email the team: no teammate who can see it is online to handle it live.
+    const ctx = await buildHookContext()
+    if (!ctx) return
+    const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/admin/inbox?i=${opts.conversation.id}`
+    const { sendConversationMessageEmail } = await import('@quackback/email')
+    const { teamThreadRootMessageId, mintTeamOutboundMessageId } =
+      await import('@/lib/server/domains/conversation/conversation.email-channel')
+    const teamRoot = teamThreadRootMessageId(opts.conversation.id)
+    // Contact class: the only link is an /admin/inbox URL, which carries no
+    // capability — the session does. So a teammate reachable only via their
+    // contact address is correctly included, which the old truthiness filter
+    // on the account address would have dropped.
+    // Both address fields came back with the team query, so the recipient is
+    // decided from rows already in hand rather than by a second round trip.
+    const { contactRecipientFrom, mailContact } = await import('@/lib/server/email/recipient')
+    const resolvedBody = await resolvedMessageBody(
+      opts.content,
+      opts.contentJson,
+      opts.attachments,
+      { trustedSender: await isVerifiedVisitorSender(opts.conversation) }
+    )
+    await Promise.allSettled(
+      team
+        .flatMap((t) => {
+          const to = contactRecipientFrom({ accountEmail: t.email, contactEmail: t.contactEmail })
+          return to ? [{ ...t, to }] : []
+        })
+        .map((t) =>
+          mailContact(sendConversationMessageEmail, t.to, {
+            direction: 'visitor_message',
+            senderName: opts.authorName,
+            messagePreview: body,
+            bodyHtml: resolvedBody.bodyHtml,
+            attachments: resolvedBody.attachments,
+            ctaUrl,
+            workspaceName: ctx.workspaceName,
+            logoUrl: ctx.logoUrl ?? undefined,
+            isFirstMessage: opts.isFirstMessage,
+            conversationSubject: opts.conversation.subject,
+            messageId: mintTeamOutboundMessageId(opts.conversation.id) ?? undefined,
+            inReplyTo: teamRoot ?? undefined,
+            references: teamRoot ? [teamRoot] : undefined,
+            conversationId: opts.conversation.id,
           })
-          .map((t) =>
-            mailContact(sendConversationMessageEmail, t.to, {
-              direction: 'visitor_message',
-              senderName: opts.authorName,
-              messagePreview: body,
-              bodyHtml: resolvedBody.bodyHtml,
-              attachments: resolvedBody.attachments,
-              ctaUrl,
-              workspaceName: ctx.workspaceName,
-              logoUrl: ctx.logoUrl ?? undefined,
-              isFirstMessage: opts.isFirstMessage,
-              conversationSubject: opts.conversation.subject,
-              messageId: mintTeamOutboundMessageId(opts.conversation.id) ?? undefined,
-              inReplyTo: teamRoot ?? undefined,
-              references: teamRoot ? [teamRoot] : undefined,
-              conversationId: opts.conversation.id,
-            })
-          )
-      )
-    }
+        )
+    )
   } catch (err) {
     log.warn({ err }, 'notify visitor message failed')
   }

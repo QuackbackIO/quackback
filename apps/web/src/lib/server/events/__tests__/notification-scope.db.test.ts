@@ -1,0 +1,869 @@
+/**
+ * Every inbox notice follows each recipient's own scope, over real rows.
+ *
+ * One world per test: a Billing team, a Logistics team, and teammates of every
+ * shape (a workspace-wide manager, scoped teammates on and off the item's
+ * team, a scoped direct assignee, a removed teammate now on role `user`, a
+ * service principal holding view_all through a leftover assignment) plus the
+ * customer. Each builder is driven with a real event and the assertions are on
+ * the resolved recipients. Only the support flag, stage labels and presence
+ * are stubbed.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
+import type {
+  ConversationId,
+  ConversationMessageId,
+  PrincipalId,
+  TeamId,
+  TicketId,
+} from '@quackback/ids'
+import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import {
+  inAppNotifications,
+  conversationMessageMentions,
+  conversationMessages,
+  conversations,
+  ticketSubscriptions,
+  eq,
+} from '@/lib/server/db'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import {
+  SCOPED_KEYS,
+  seedConversation,
+  seedPerson,
+  seedTeam,
+  seedTicket,
+  type SeededPerson,
+} from '@/lib/server/__tests__/scope-seed'
+
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
+vi.mock('@/lib/server/domains/settings/settings.support', () => ({
+  isSupportTicketsEnabled: async () => true,
+  isPortalSupportEnabled: async () => false,
+}))
+const sendEmail = vi.hoisted(() =>
+  vi.fn<(options: Record<string, unknown>) => Promise<{ sent: boolean }>>()
+)
+vi.mock('@quackback/email', async (original) => ({
+  ...(await original<typeof import('@quackback/email')>()),
+  sendConversationMessageEmail: sendEmail,
+}))
+/** Who has a live inbox stream; empty unless a test puts someone online. */
+const presence = vi.hoisted(() => ({ online: [] as string[], down: false }))
+// Each function fails the way the real one does when the store is down:
+// isAnyAgentOnline open, listOnlineAgentIds closed, readOnlineAgentIds null.
+vi.mock('@/lib/server/realtime/presence', () => ({
+  isAnyAgentOnline: async () => presence.down || presence.online.length > 0,
+  isPrincipalOnline: async (id: string) => !presence.down && presence.online.includes(id),
+  listOnlineAgentIds: async () => (presence.down ? [] : [...presence.online]),
+  readOnlineAgentIds: async () => (presence.down ? null : [...presence.online]),
+}))
+const dispatchMentioned = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/events/dispatch', async (original) => ({
+  ...(await original<typeof import('@/lib/server/events/dispatch')>()),
+  dispatchConversationNoteMentioned: dispatchMentioned,
+}))
+vi.mock('@/lib/server/events/hook-context', () => ({
+  buildHookContext: async () => ({
+    workspaceName: 'W',
+    portalBaseUrl: 'https://p',
+    logoUrl: null,
+  }),
+}))
+vi.mock('@/lib/server/domains/settings/settings.tickets', () => ({
+  getStageLabels: async () => ({ received: 'Received', resolved: 'Resolved' }),
+}))
+
+import type { EventData } from '../types'
+import type { HookContext } from '../hook-context'
+import type { HookTarget } from '../hook-types'
+import {
+  getAssistantHandedOffTargets,
+  getConversationAssignedTargets,
+  getSlaEmailTargets,
+  getTicketAssignedEmailTargets,
+  getTicketAssignedTargets,
+  getTicketNoteAddedTargets,
+  getTicketRepliedTargets,
+  getTicketRepliedEmailTargets,
+  getTicketResolvedEmailTargets,
+  getTicketStatusChangedTargets,
+  getMessageCreatedTargets,
+  getConversationNoteMentionedTargets,
+  getConversationNoteMentionedEmailTargets,
+} from '../targets'
+import { syncConversationMessageMentions } from '@/lib/server/domains/conversation/sync-conversation-mentions'
+import { notifyVisitorMessage } from '@/lib/server/domains/conversation/conversation.notify'
+import { notificationHook } from '../handlers/notification'
+
+const fixture = await createDbTestFixture({
+  probe: async (db) => {
+    await db.select({ id: conversations.id }).from(conversations).limit(0)
+  },
+})
+
+beforeEach(async () => {
+  expect(fixture.available).toBe(true)
+  await fixture.begin()
+  sendEmail.mockReset().mockResolvedValue({ sent: true })
+  presence.online = []
+  presence.down = false
+  dispatchMentioned.mockReset()
+})
+afterEach(fixture.rollback)
+afterAll(fixture.close)
+
+const context = {
+  portalBaseUrl: 'https://p',
+  workspaceName: 'W',
+  logoUrl: null,
+} as unknown as HookContext
+
+interface World {
+  billing: TeamId
+  logistics: TeamId
+  /** Legacy member: the Manager preset, view_all. */
+  manager: SeededPerson
+  /** Scoped, on Billing. */
+  onTeam: SeededPerson
+  /** Scoped, on Logistics. */
+  elsewhere: SeededPerson
+  /** Scoped, on no team: sees only what is assigned to them. */
+  solo: SeededPerson
+  /** On Billing, but a custom role with no inbox keys: sees nothing. */
+  blind: SeededPerson
+  /** Role user: a removed teammate, still on Billing and on old rows. */
+  former: SeededPerson
+  /** Not a teammate, yet holding view_all through a leftover assignment. */
+  service: SeededPerson
+  /** The teammate who acts (never notified). */
+  actor: SeededPerson
+  /** The customer. */
+  requester: SeededPerson
+}
+
+async function seedWorld(): Promise<World> {
+  const manager = await seedPerson('manager', 'member')
+  const onTeam = await seedPerson('on-team', 'member', { keys: SCOPED_KEYS })
+  const elsewhere = await seedPerson('elsewhere', 'member', { keys: SCOPED_KEYS })
+  const solo = await seedPerson('solo', 'member', { keys: SCOPED_KEYS })
+  const blind = await seedPerson('blind', 'member', { keys: [] })
+  const former = await seedPerson('former', 'user')
+  const service = await seedPerson('service', 'member', {
+    type: 'service',
+    keys: [PERMISSIONS.CONVERSATION_VIEW_ALL, PERMISSIONS.TICKET_VIEW_ALL],
+  })
+  const actor = await seedPerson('actor', 'admin')
+  const requester = await seedPerson('requester', 'user')
+  const billing = await seedTeam('Billing', [onTeam.id, blind.id, former.id])
+  const logistics = await seedTeam('Logistics', [elsewhere.id])
+  return {
+    billing,
+    logistics,
+    manager,
+    onTeam,
+    elsewhere,
+    solo,
+    blind,
+    former,
+    service,
+    actor,
+    requester,
+  }
+}
+
+const recipientsOf = (target: HookTarget | null) =>
+  [...((target?.target as { principalIds: string[] } | undefined)?.principalIds ?? [])].sort()
+
+const emailsOf = (targets: HookTarget[]) =>
+  targets.map((t) => (t.target as { email: string }).email).sort()
+
+const sorted = (...ids: string[]) => [...ids].sort()
+
+/** Only the world's people: other committed rows in the database never count. */
+const within = (w: World, ids: string[]) => {
+  const mine = new Set<string>(
+    [
+      w.manager,
+      w.onTeam,
+      w.elsewhere,
+      w.solo,
+      w.blind,
+      w.former,
+      w.service,
+      w.actor,
+      w.requester,
+    ].map((p) => p.id)
+  )
+  return ids.filter((id) => mine.has(id)).sort()
+}
+
+async function moveConversation(
+  id: ConversationId,
+  to: { assignee: PrincipalId | null; team: TeamId | null }
+) {
+  await testDb
+    .update(conversations)
+    .set({ assignedAgentPrincipalId: to.assignee, assignedTeamId: to.team })
+    .where(eq(conversations.id, id))
+}
+
+function ticketRef(id: TicketId) {
+  return { id, number: 1, type: 'customer', priority: 'none', assignedTeamId: null }
+}
+
+// ============================================================================
+// Ticket watchers
+// ============================================================================
+
+describe('ticket watchers hear only about tickets in their scope', () => {
+  async function watchedTicket(w: World) {
+    const ticket = await seedTicket({ requester: w.requester.id, team: w.billing })
+    const id = ticket.id as TicketId
+    await testDb.insert(ticketSubscriptions).values(
+      [w.requester, w.manager, w.onTeam, w.elsewhere, w.solo, w.former].map((p) => ({
+        ticketId: id,
+        principalId: p.id,
+        reason: p === w.requester ? 'requester' : 'manual',
+      }))
+    )
+    return id
+  }
+
+  it('reply bell: in-scope watchers and the requester', async () => {
+    const w = await seedWorld()
+    const id = await watchedTicket(w)
+    const target = await getTicketRepliedTargets({
+      id: 'evt-r',
+      type: 'ticket.replied',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: w.actor.id },
+      data: {
+        ticket: ticketRef(id),
+        messageId: 'conversation_message_1',
+        content: 'Fix is queued.',
+        attachments: null,
+        senderType: 'agent',
+        title: 'Cannot log in',
+        authorName: 'Sarah',
+        requesterPrincipalId: w.requester.id,
+      },
+    } as EventData)
+    expect(recipientsOf(target)).toEqual(sorted(w.manager.id, w.onTeam.id, w.requester.id))
+  })
+
+  it('reply email: in-scope watchers and the requester, never a watcher out of scope', async () => {
+    const w = await seedWorld()
+    const id = await watchedTicket(w)
+    const targets = await getTicketRepliedEmailTargets(
+      {
+        id: 'evt-re',
+        type: 'ticket.replied',
+        timestamp: '2026-01-01T00:00:00Z',
+        actor: { type: 'user', principalId: w.actor.id },
+        data: {
+          ticket: ticketRef(id),
+          messageId: 'conversation_message_1',
+          content: 'Fix is queued.',
+          attachments: null,
+          senderType: 'agent',
+          title: 'Cannot log in',
+          authorName: 'Sarah',
+          requesterPrincipalId: w.requester.id,
+        },
+      } as EventData,
+      context
+    )
+    expect(emailsOf(targets)).toEqual([w.manager.email, w.onTeam.email, w.requester.email].sort())
+  })
+
+  it('note bell: in-scope agent watchers only', async () => {
+    const w = await seedWorld()
+    const id = await watchedTicket(w)
+    const target = await getTicketNoteAddedTargets({
+      id: 'evt-n',
+      type: 'ticket.note_added',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: w.actor.id },
+      data: { ticket: ticketRef(id), content: 'Internal', title: 'Cannot log in', authorName: 'S' },
+    } as unknown as EventData)
+    expect(recipientsOf(target)).toEqual(sorted(w.manager.id, w.onTeam.id))
+  })
+
+  it('a watcher hears again once the ticket comes back to their scope', async () => {
+    const w = await seedWorld()
+    const id = await watchedTicket(w)
+    const { tickets } = await import('@/lib/server/db')
+    await testDb.update(tickets).set({ assigneeTeamId: w.logistics }).where(eq(tickets.id, id))
+    const target = await getTicketNoteAddedTargets({
+      id: 'evt-n2',
+      type: 'ticket.note_added',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: w.actor.id },
+      data: { ticket: ticketRef(id), content: 'Internal', title: 'Cannot log in', authorName: 'S' },
+    } as unknown as EventData)
+    expect(recipientsOf(target)).toEqual(sorted(w.manager.id, w.elsewhere.id))
+  })
+})
+
+// ============================================================================
+// Assignment bells and emails
+// ============================================================================
+
+function conversationAssigned(
+  w: World,
+  conversationId: ConversationId,
+  to: { assignee: PrincipalId | null; team: TeamId | null }
+): EventData {
+  return {
+    id: 'evt-ca',
+    type: 'conversation.assigned',
+    timestamp: '2026-01-01T00:00:00Z',
+    actor: { type: 'user', principalId: w.actor.id },
+    data: {
+      conversation: { id: conversationId },
+      assignedAgentPrincipalId: to.assignee,
+      previousAgentPrincipalId: null,
+      assignedTeamId: to.team,
+      previousTeamId: null,
+    },
+  } as unknown as EventData
+}
+
+function ticketAssigned(
+  w: World,
+  ticketId: TicketId,
+  to: { assignee: PrincipalId | null; team: TeamId | null }
+): EventData {
+  return {
+    id: 'evt-ta',
+    type: 'ticket.assigned',
+    timestamp: '2026-01-01T00:00:00Z',
+    actor: { type: 'user', principalId: w.actor.id },
+    data: {
+      ticket: ticketRef(ticketId),
+      assignedPrincipalId: to.assignee,
+      previousPrincipalId: null,
+      assignedTeamId: to.team,
+      previousTeamId: null,
+    },
+  } as unknown as EventData
+}
+
+describe('conversation assigned bell', () => {
+  it('reaches the scoped assignee and the team members whose scope holds it', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.solo.id, team: w.billing }
+    const { conversation } = await seedConversation(to)
+    const target = await getConversationAssignedTargets(
+      conversationAssigned(w, conversation.id as ConversationId, to)
+    )
+    expect(recipientsOf(target)).toEqual(sorted(w.solo.id, w.onTeam.id))
+  })
+
+  it('never bells a removed teammate who is still the direct assignee', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.former.id, team: null }
+    const { conversation } = await seedConversation(to)
+    const target = await getConversationAssignedTargets(
+      conversationAssigned(w, conversation.id as ConversationId, to)
+    )
+    expect(recipientsOf(target)).toEqual([])
+  })
+
+  it('does not name a dropped assignee in the bell it sends to the team', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.former.id, team: w.billing }
+    const { conversation } = await seedConversation(to)
+    const target = await getConversationAssignedTargets(
+      conversationAssigned(w, conversation.id as ConversationId, to)
+    )
+    expect(recipientsOf(target)).toEqual([w.onTeam.id])
+    expect(target?.config).toMatchObject({ assignedAgentPrincipalId: null })
+  })
+
+  it('reads where the conversation is now, not where the event said it went', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.solo.id, team: null }
+    const { conversation } = await seedConversation(to)
+    await moveConversation(conversation.id as ConversationId, { assignee: null, team: w.logistics })
+    const target = await getConversationAssignedTargets(
+      conversationAssigned(w, conversation.id as ConversationId, to)
+    )
+    expect(recipientsOf(target)).toEqual([])
+  })
+})
+
+describe('ticket assigned bell and email', () => {
+  it('bell: the scoped assignee and the in-scope members of the new team', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.solo.id, team: w.billing }
+    const ticket = await seedTicket({ requester: w.requester.id, ...to })
+    const target = await getTicketAssignedTargets(ticketAssigned(w, ticket.id as TicketId, to))
+    expect(recipientsOf(target)).toEqual(sorted(w.solo.id, w.onTeam.id))
+  })
+
+  it('bell: never a removed teammate who is still the direct assignee', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.former.id, team: null }
+    const ticket = await seedTicket({ requester: w.requester.id, ...to })
+    const target = await getTicketAssignedTargets(ticketAssigned(w, ticket.id as TicketId, to))
+    expect(recipientsOf(target)).toEqual([])
+  })
+
+  it('email: the same people as the bell', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.former.id, team: w.billing }
+    const ticket = await seedTicket({ requester: w.requester.id, ...to })
+    const targets = await getTicketAssignedEmailTargets(
+      ticketAssigned(w, ticket.id as TicketId, to),
+      context
+    )
+    expect(emailsOf(targets)).toEqual([w.onTeam.email])
+  })
+})
+
+describe('assistant hand-off bell', () => {
+  function handedOff(conversationId: ConversationId, actor: PrincipalId): EventData {
+    return {
+      id: 'evt-h',
+      type: 'assistant.handed_off',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'service', principalId: actor },
+      data: { conversationId, reason: 'asked_for_human' },
+    } as unknown as EventData
+  }
+
+  it('with a team: the members whose scope holds it', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    const target = await getAssistantHandedOffTargets(
+      handedOff(conversation.id as ConversationId, w.service.id)
+    )
+    expect(recipientsOf(target)).toEqual([w.onTeam.id])
+  })
+
+  it('without a team: only the teammates who see every conversation', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({})
+    const target = await getAssistantHandedOffTargets(
+      handedOff(conversation.id as ConversationId, w.service.id)
+    )
+    expect(within(w, recipientsOf(target))).toEqual(sorted(w.manager.id, w.actor.id))
+  })
+})
+
+// ============================================================================
+// SLA emails
+// ============================================================================
+
+describe('SLA email', () => {
+  function sla(conversationId: ConversationId): EventData {
+    return {
+      id: 'evt-sla',
+      type: 'sla.breached',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'service' },
+      data: { conversationId, clock: 'first_response', dueAt: '2026-01-01T00:00:00Z' },
+    } as unknown as EventData
+  }
+
+  it('mails a scoped direct assignee', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.solo.id })
+    const targets = await getSlaEmailTargets(sla(conversation.id as ConversationId), context)
+    expect(emailsOf(targets)).toEqual([w.solo.email])
+  })
+
+  it('never mails a removed teammate who is still the direct assignee', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.former.id })
+    const targets = await getSlaEmailTargets(sla(conversation.id as ConversationId), context)
+    expect(emailsOf(targets)).toEqual([])
+  })
+
+  it('mails the team members whose scope holds it', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    const targets = await getSlaEmailTargets(sla(conversation.id as ConversationId), context)
+    expect(emailsOf(targets)).toEqual([w.onTeam.email])
+  })
+})
+
+// ============================================================================
+// New visitor message: the bell and the offline email
+// ============================================================================
+
+describe('new-message bell and email', () => {
+  function messageCreated(
+    conversationId: ConversationId,
+    snapshot: { assignee: PrincipalId | null; team: TeamId | null },
+    isFirstMessage = false
+  ): EventData {
+    return {
+      id: 'evt-m',
+      type: 'message.created',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user' },
+      data: {
+        message: {
+          id: 'conversation_message_1',
+          conversationId,
+          senderType: 'visitor',
+          content: 'Hello',
+          authorName: 'Visitor',
+        },
+        conversation: {
+          id: conversationId,
+          assignedAgentPrincipalId: snapshot.assignee,
+          assignedTeamId: snapshot.team,
+        },
+        isFirstMessage,
+      },
+    } as unknown as EventData
+  }
+
+  async function emailedFor(conversation: typeof conversations.$inferSelect, first: boolean) {
+    await notifyVisitorMessage({
+      conversation,
+      content: 'Hello',
+      authorName: 'Visitor',
+      isFirstMessage: first,
+    })
+    return sendEmail.mock.calls.map(([options]) => options.to as string).sort()
+  }
+
+  it('bell: only the teammates whose scope holds the conversation', async () => {
+    const w = await seedWorld()
+    const to = { assignee: null, team: w.billing }
+    const { conversation } = await seedConversation(to)
+    const target = await getMessageCreatedTargets(
+      messageCreated(conversation.id as ConversationId, to)
+    )
+    expect(within(w, recipientsOf(target))).toEqual(sorted(w.manager.id, w.actor.id, w.onTeam.id))
+  })
+
+  it('bell: an unassigned conversation reaches only teammates who see every conversation', async () => {
+    const w = await seedWorld()
+    const to = { assignee: null, team: null }
+    const { conversation } = await seedConversation(to)
+    const target = await getMessageCreatedTargets(
+      messageCreated(conversation.id as ConversationId, to, true)
+    )
+    expect(within(w, recipientsOf(target))).toEqual(sorted(w.manager.id, w.actor.id))
+  })
+
+  it('first-message bell: a teammate routing just assigned hears, though the event predates routing', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({})
+    await moveConversation(conversation.id as ConversationId, { assignee: w.solo.id, team: null })
+    const target = await getMessageCreatedTargets(
+      messageCreated(conversation.id as ConversationId, { assignee: null, team: null }, true)
+    )
+    expect(within(w, recipientsOf(target))).toEqual(sorted(w.manager.id, w.actor.id, w.solo.id))
+  })
+
+  it('bell: a teammate the conversation has since moved away from does not hear', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.solo.id })
+    await moveConversation(conversation.id as ConversationId, { assignee: null, team: w.logistics })
+    const target = await getMessageCreatedTargets(
+      messageCreated(conversation.id as ConversationId, { assignee: w.solo.id, team: null })
+    )
+    expect(within(w, recipientsOf(target))).toEqual(
+      sorted(w.manager.id, w.actor.id, w.elsewhere.id)
+    )
+  })
+
+  it('email: only the teammates whose scope holds the conversation', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    const emailed = await emailedFor(conversation, true)
+    const mine = [w.manager, w.actor, w.onTeam, w.elsewhere, w.solo, w.blind, w.former]
+    expect(emailed.filter((e) => mine.some((p) => p.email === e))).toEqual(
+      [w.manager.email, w.actor.email, w.onTeam.email].sort()
+    )
+  })
+
+  it('first-message email: reads the row routing just wrote, not the snapshot it was handed', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({})
+    await moveConversation(conversation.id as ConversationId, { assignee: w.solo.id, team: null })
+    const emailed = await emailedFor(conversation, true)
+    const mine = [w.manager, w.actor, w.onTeam, w.elsewhere, w.solo, w.blind, w.former]
+    expect(emailed.filter((e) => mine.some((p) => p.email === e))).toEqual(
+      [w.manager.email, w.actor.email, w.solo.email].sort()
+    )
+  })
+})
+
+// ============================================================================
+// @mentions in a conversation note
+// ============================================================================
+
+describe('note mentions', () => {
+  async function note(conversationId: ConversationId, author: PrincipalId) {
+    const [row] = await testDb
+      .insert(conversationMessages)
+      .values({
+        conversationId,
+        principalId: author,
+        senderType: 'agent',
+        content: 'Internal',
+        isInternal: true,
+      })
+      .returning()
+    return row.id as ConversationMessageId
+  }
+
+  function mentioned(
+    w: World,
+    conversationId: ConversationId,
+    messageId: ConversationMessageId,
+    ids: PrincipalId[]
+  ): EventData {
+    return {
+      id: 'evt-mention',
+      type: 'conversation.note_mentioned',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: w.actor.id },
+      data: {
+        conversationId,
+        conversationMessageId: messageId,
+        mentionedPrincipalIds: ids,
+        authorName: 'Actor',
+        preview: 'Internal',
+      },
+    } as unknown as EventData
+  }
+
+  it('the server drops a mention of a teammate who cannot see the conversation', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    const id = conversation.id as ConversationId
+    const messageId = await note(id, w.actor.id)
+
+    await syncConversationMessageMentions({
+      conversationMessageId: messageId,
+      conversationId: id,
+      mentionedIds: new Set([w.onTeam.id, w.elsewhere.id, w.blind.id, w.manager.id]),
+      authorPrincipalId: w.actor.id,
+      authorName: 'Actor',
+      content: 'Internal',
+    })
+
+    const rows = await testDb
+      .select({ principalId: conversationMessageMentions.principalId })
+      .from(conversationMessageMentions)
+      .where(eq(conversationMessageMentions.conversationMessageId, messageId))
+    expect(rows.map((r) => r.principalId).sort()).toEqual(sorted(w.onTeam.id, w.manager.id))
+    expect(dispatchMentioned).toHaveBeenCalledTimes(1)
+    const payload = dispatchMentioned.mock.calls[0][1] as { mentionedPrincipalIds: string[] }
+    expect([...payload.mentionedPrincipalIds].sort()).toEqual(sorted(w.onTeam.id, w.manager.id))
+  })
+
+  it('bell and email skip a mentioned teammate the conversation moved away from', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    const id = conversation.id as ConversationId
+    const messageId = await note(id, w.actor.id)
+    await moveConversation(id, { assignee: null, team: w.logistics })
+    const event = mentioned(w, id, messageId, [w.onTeam.id, w.manager.id])
+
+    const bell = await getConversationNoteMentionedTargets(event)
+    expect(recipientsOf(bell)).toEqual([w.manager.id])
+    const emails = await getConversationNoteMentionedEmailTargets(event, context)
+    expect(emailsOf(emails)).toEqual([w.manager.email])
+  })
+})
+
+// ============================================================================
+// The requester of a ticket
+// ============================================================================
+
+describe('the requester of a ticket', () => {
+  async function requested(
+    requester: SeededPerson,
+    type: 'customer' | 'back_office',
+    team: TeamId
+  ): Promise<TicketId> {
+    const ticket = await seedTicket({ requester: requester.id, team, type })
+    const id = ticket.id as TicketId
+    await testDb
+      .insert(ticketSubscriptions)
+      .values({ ticketId: id, principalId: requester.id, reason: 'requester' })
+    return id
+  }
+
+  const event = (
+    w: World,
+    type: 'ticket.replied' | 'ticket.status_changed',
+    id: TicketId,
+    ticketType: string,
+    requester: SeededPerson
+  ) =>
+    ({
+      id: `evt-${type}`,
+      type,
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: w.actor.id },
+      data: {
+        ticket: { ...ticketRef(id), type: ticketType },
+        messageId: 'conversation_message_1',
+        content: 'Fix is queued.',
+        attachments: null,
+        senderType: 'agent',
+        title: 'Cannot log in',
+        authorName: 'Sarah',
+        previousStatus: 'open',
+        newStatus: 'closed',
+        stage: 'resolved',
+        previousStage: 'received',
+        requesterPrincipalId: requester.id,
+      },
+    }) as unknown as EventData
+
+  it('a scoped teammate who filed a customer ticket hears about it after it moves to another team', async () => {
+    const w = await seedWorld()
+    const id = await requested(w.solo, 'customer', w.logistics)
+
+    const status = await getTicketStatusChangedTargets(
+      event(w, 'ticket.status_changed', id, 'customer', w.solo)
+    )
+    expect(recipientsOf(status)).toContain(w.solo.id)
+    const reply = await getTicketRepliedTargets(event(w, 'ticket.replied', id, 'customer', w.solo))
+    expect(recipientsOf(reply)).toContain(w.solo.id)
+    const resolved = await getTicketResolvedEmailTargets(
+      event(w, 'ticket.status_changed', id, 'customer', w.solo),
+      context
+    )
+    expect(emailsOf(resolved)).toContain(w.solo.email)
+  })
+
+  it('a former teammate who requested a back-office ticket gets no bell', async () => {
+    const w = await seedWorld()
+    const id = await requested(w.former, 'back_office', w.billing)
+
+    const status = await getTicketStatusChangedTargets(
+      event(w, 'ticket.status_changed', id, 'back_office', w.former)
+    )
+    expect(recipientsOf(status)).not.toContain(w.former.id)
+    const reply = await getTicketRepliedTargets(
+      event(w, 'ticket.replied', id, 'back_office', w.former)
+    )
+    expect(recipientsOf(reply)).not.toContain(w.former.id)
+  })
+
+  it('the requester of a soft-deleted customer ticket hears nothing', async () => {
+    const w = await seedWorld()
+    const id = await requested(w.requester, 'customer', w.billing)
+    const { tickets } = await import('@/lib/server/db')
+    await testDb.update(tickets).set({ deletedAt: new Date() }).where(eq(tickets.id, id))
+
+    const status = await getTicketStatusChangedTargets(
+      event(w, 'ticket.status_changed', id, 'customer', w.requester)
+    )
+    expect(recipientsOf(status)).not.toContain(w.requester.id)
+    const reply = await getTicketRepliedTargets(
+      event(w, 'ticket.replied', id, 'customer', w.requester)
+    )
+    expect(recipientsOf(reply)).not.toContain(w.requester.id)
+  })
+
+  it('a scoped teammate who filed a back-office ticket is judged by scope like any teammate', async () => {
+    const w = await seedWorld()
+    const id = await requested(w.solo, 'back_office', w.logistics)
+
+    const status = await getTicketStatusChangedTargets(
+      event(w, 'ticket.status_changed', id, 'back_office', w.solo)
+    )
+    expect(recipientsOf(status)).not.toContain(w.solo.id)
+  })
+})
+
+// ============================================================================
+// The presence gate on a follow-up message
+// ============================================================================
+
+describe('presence gate on a follow-up visitor message', () => {
+  function followUp(conversationId: ConversationId): EventData {
+    return {
+      id: 'evt-follow-up',
+      type: 'message.created',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user' },
+      data: {
+        message: {
+          id: 'conversation_message_2',
+          conversationId,
+          senderType: 'visitor',
+          content: 'Anyone there?',
+          authorName: 'Visitor',
+        },
+        conversation: { id: conversationId },
+        isFirstMessage: false,
+      },
+    } as unknown as EventData
+  }
+
+  async function belled(event: EventData) {
+    const target = await getMessageCreatedTargets(event)
+    if (target) await notificationHook.run(event, target.target, target.config)
+    const rows = await testDb
+      .select({ principalId: inAppNotifications.principalId })
+      .from(inAppNotifications)
+    return rows.map((r) => r.principalId)
+  }
+
+  it('an agent online who cannot see the conversation does not silence the bell or email', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    presence.online = [w.elsewhere.id]
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'Anyone there?',
+      authorName: 'Visitor',
+      isFirstMessage: false,
+    })
+    const emailed = sendEmail.mock.calls.map(([options]) => options.to as string)
+    expect(emailed).toContain(w.onTeam.email)
+
+    expect(await belled(followUp(conversation.id as ConversationId))).toContain(w.onTeam.id)
+  })
+
+  it('a presence outage holds back both, as if someone were online', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    presence.down = true
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'Anyone there?',
+      authorName: 'Visitor',
+      isFirstMessage: false,
+    })
+    expect(sendEmail).not.toHaveBeenCalled()
+
+    expect(await belled(followUp(conversation.id as ConversationId))).toEqual([])
+  })
+
+  it('an online teammate who can see the conversation still silences both', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    presence.online = [w.onTeam.id]
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'Anyone there?',
+      authorName: 'Visitor',
+      isFirstMessage: false,
+    })
+    expect(sendEmail).not.toHaveBeenCalled()
+
+    expect(await belled(followUp(conversation.id as ConversationId))).toEqual([])
+  })
+})

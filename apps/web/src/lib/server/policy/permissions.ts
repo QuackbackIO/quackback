@@ -9,6 +9,7 @@ import {
   and,
   db,
   eq,
+  inArray,
   isNull,
   permissions,
   principalRoleAssignments,
@@ -62,18 +63,48 @@ export async function permissionsForPrincipal(
   legacyRole: Role,
   executor: Database | Transaction = db
 ): Promise<ReadonlySet<PermissionKey>> {
+  const resolved = await permissionsForPrincipals([{ id: principalId, role: legacyRole }], executor)
+  return resolved.get(principalId)!
+}
+
+/**
+ * Many people's permissions in one query, for callers that judge a whole set
+ * at once (a team-wide bell); `permissionsForPrincipal` is the one-person form.
+ * Each person gets their workspace-wide roles' keys, or their legacy preset
+ * when they hold no workspace-wide assignment (none, or team-scoped only).
+ */
+export async function permissionsForPrincipals(
+  people: ReadonlyArray<{ id: PrincipalId; role: Role }>,
+  executor: Database | Transaction = db
+): Promise<Map<PrincipalId, ReadonlySet<PermissionKey>>> {
+  const result = new Map<PrincipalId, ReadonlySet<PermissionKey>>()
+  if (people.length === 0) return result
   const rows = await executor
-    .select({ assignmentId: principalRoleAssignments.id, key: permissions.key })
+    .select({ principalId: principalRoleAssignments.principalId, key: permissions.key })
     .from(principalRoleAssignments)
     .leftJoin(rolePermissions, eq(rolePermissions.roleId, principalRoleAssignments.roleId))
     .leftJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
     .where(
       and(
-        eq(principalRoleAssignments.principalId, principalId),
+        inArray(
+          principalRoleAssignments.principalId,
+          people.map((p) => p.id)
+        ),
         isNull(principalRoleAssignments.teamId)
       )
     )
 
-  if (rows.length === 0) return permissionsForLegacyRole(legacyRole)
-  return new Set(rows.flatMap((row) => (row.key === null ? [] : [row.key as PermissionKey])))
+  // A person with an assignment has a row even when its role holds no keys
+  // (the left join yields one null key), so presence alone marks "assigned".
+  const assigned = new Map<PrincipalId, Set<PermissionKey>>()
+  for (const row of rows) {
+    const id = row.principalId as PrincipalId
+    let keys = assigned.get(id)
+    if (!keys) assigned.set(id, (keys = new Set()))
+    if (row.key !== null) keys.add(row.key as PermissionKey)
+  }
+  for (const p of people) {
+    result.set(p.id, assigned.get(p.id) ?? permissionsForLegacyRole(p.role))
+  }
+  return result
 }

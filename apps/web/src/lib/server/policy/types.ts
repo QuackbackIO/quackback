@@ -51,6 +51,18 @@ export interface Actor {
   }
 }
 
+/**
+ * Options a write takes when it runs as a system effect of a write the caller
+ * already checked. `systemCascade` skips the per-item visibility check and
+ * keeps the actor as author: the tracker cascade and reply-all, the read-state
+ * delegations of a checked ticket to its pair, and one macro run after its
+ * start check. Never take it from request input; the guard test names every
+ * caller that may set it.
+ */
+export interface SystemCascadeOptions {
+  systemCascade?: boolean
+}
+
 export type Decision = { allowed: true } | { allowed: false; reason: string }
 
 export function allowDecision(): Decision {

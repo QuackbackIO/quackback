@@ -188,6 +188,7 @@
   "files.upload.error.blocked": "無法傳送此類型的檔案",
   "files.upload.error.rateLimited": "上傳次數過多。請一分鐘後再試一次。",
   "admin.inbox.filesSectionTitle": "檔案",
+  "admin.inbox.linkedTicketHidden": "無法開啟的關聯工單",
   "admin.inbox.translationOverAllowance": "本週期的 AI 用量已用盡，翻譯仍可繼續使用。升級方案即可獲得更多。",
   "admin.helpCenter.autoTranslatePaused": "已暫停：本週期的 AI 用量已用盡。升級方案即可獲得更多。",
   "admin.billing.aiResets": "{date} 重設",

@@ -7,6 +7,9 @@
  *  - Mentions are TEAM-ONLY: a note is agent-facing, so only admin/member
  *    principals are eligible. Visitors (role 'user') and service principals are
  *    dropped server-side, defending against a tampered client.
+ *  - A teammate whose own scope does not hold the conversation is dropped too:
+ *    the composer blocks picking them, and a mention that gets past it (an old
+ *    client, a scope change while typing) stores no row and sends no notice.
  *  - Alerts ride the `conversation.note_mentioned` event/hook pipeline and fan
  *    out on two channels: a `chat_mention` in-app notification and an email to
  *    the same teammates. Each channel is gated independently by the
@@ -27,6 +30,7 @@ import type { EventActor } from '@/lib/server/events/types'
 import { truncate } from '@/lib/shared/utils/string'
 import type { ConversationMessageId, ConversationId, PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { inScopeRecipients } from '@/lib/server/domains/notifications/recipient-scope'
 
 const log = logger.child({ component: 'conversation-mentions' })
 
@@ -54,19 +58,16 @@ export async function syncConversationMessageMentions(
   // reject into the note-send success path — but it also writes the rows that
   // power the Mentions view, so swallow loudly rather than silently.
   try {
-    // Server-side eligibility: only teammates (admin/member) can be mentioned in
-    // an internal note. Filter in code (not just the WHERE) as defense-in-depth.
+    // Server-side eligibility: only teammates (admin/member) whose scope holds
+    // the conversation can be mentioned in an internal note.
     const rows = await db
       .select({ id: principal.id, type: principal.type, role: principal.role })
       .from(principal)
       .where(inArray(principal.id, Array.from(mentionedIds)))
 
-    const eligibleIds: PrincipalId[] = []
-    for (const r of rows) {
-      if (r.type === 'user' && (r.role === 'admin' || r.role === 'member')) {
-        eligibleIds.push(r.id as PrincipalId)
-      }
-    }
+    // Teammates whose own scope holds the conversation; every other row
+    // (visitors, service principals, out-of-scope teammates) is dropped.
+    const eligibleIds = await inScopeRecipients({ kind: 'conversation', id: conversationId }, rows)
     if (eligibleIds.length === 0) return
 
     const inserted = (await db

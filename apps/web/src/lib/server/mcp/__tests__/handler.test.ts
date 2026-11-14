@@ -342,9 +342,11 @@ vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   conversationToDTO: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: vi.fn(),
   sendAgentMessage: vi.fn(),
   setConversationStatus: vi.fn(),
+}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.cards', () => ({
   suggestPost: vi.fn(),
@@ -2473,11 +2475,11 @@ describe('MCP HTTP Handler', () => {
 
     it('get_conversation excludes internal notes by default', async () => {
       const handle = await initializeSession()
-      const { assertConversationViewable } =
-        await import('@/lib/server/domains/conversation/conversation.service')
+      const { assertConversationVisible } =
+        await import('@/lib/server/domains/conversation/conversation-visibility')
       const { conversationToDTO, listMessages } =
         await import('@/lib/server/domains/conversation/conversation.query')
-      vi.mocked(assertConversationViewable).mockResolvedValue({ id: 'conversation_1' } as never)
+      vi.mocked(assertConversationVisible).mockResolvedValue({ id: 'conversation_1' } as never)
       vi.mocked(conversationToDTO).mockResolvedValue({
         id: 'conversation_1',
         status: 'open',

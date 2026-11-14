@@ -73,13 +73,15 @@ vi.mock('@/lib/server/domains/assistant/assistant-activity-snapshot', () => ({
 vi.mock('@/lib/server/realtime/pubsub', () => ({
   subscribe: (...a: unknown[]) => mockSubscribe(...a),
 }))
+// The inbox scope's team ids, read once at connect. Its filtering is covered
+// by stream-inbox-scope.db.test.ts.
+vi.mock('@/lib/server/domains/teams', () => ({
+  teamIdsForPrincipal: vi.fn(async () => new Set()),
+}))
 vi.mock('@/lib/server/realtime/presence', () => ({
   markPresent: (...a: unknown[]) => mockMarkPresent(...a),
   refreshPresence: (...a: unknown[]) => mockRefreshPresence(...a),
   clearPresence: (...a: unknown[]) => mockClearPresence(...a),
-}))
-vi.mock('@/lib/server/policy/conversation', () => ({
-  canViewConversation: (...a: unknown[]) => mockCanView(...a),
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   loadAuthors: vi.fn(async () => new Map()),
@@ -103,9 +105,25 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
 vi.mock('@/lib/server/functions/portal-access', () => ({
   resolvePortalAccessForRequest: (...a: unknown[]) => mockPortalAccess(...a),
 }))
+// The per-item check the stream runs: here the row comes from the
+// conversations lookup and the decision from mockCanView, so each test drives
+// existence and visibility separately. Real scope is covered by
+// stream-actor-permissions.db.test.ts.
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   requeueUnansweredOnAgentOffline: vi.fn(),
 }))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', async () => {
+  const { NotFoundError } = await import('@/lib/shared/errors')
+  return {
+    assertConversationVisible: async (_id: unknown, actor: unknown) => {
+      const row = await mockConversationFindFirst()
+      if (!row || !mockCanView(actor, row).allowed) {
+        throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+      }
+      return row
+    },
+  }
+})
 const mockAcquireSlot = vi.fn()
 vi.mock('@/lib/server/realtime/stream-connection-limit', () => ({
   streamLimiter: { acquire: (...a: unknown[]) => mockAcquireSlot(...a) },
@@ -227,7 +245,11 @@ describe('GET /api/chat/stream - inbox scope', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('text/event-stream')
     await settleAndClose(res)
-    expect(mockSubscribe).toHaveBeenCalledWith(['conversation:inbox'], expect.any(Function))
+    // The principal's own channel carries scope changes for the inbox filter.
+    expect(mockSubscribe).toHaveBeenCalledWith(
+      ['conversation:inbox', expect.stringMatching(/^inbox-scope:/)],
+      expect.any(Function)
+    )
   })
 
   it('403s a promoted team role carried on a non-dashboard token', async () => {
