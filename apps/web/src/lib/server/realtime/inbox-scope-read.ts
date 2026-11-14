@@ -7,24 +7,28 @@
  */
 import { db, eq, conversations, tickets } from '@/lib/server/db'
 import type { ScopedRow } from '@/lib/server/policy/row-scope'
+import { conversationScopeOf, ticketScopeOf } from './inbox-envelope'
 import type { InboxItemRef } from '@/lib/shared/inbox/items'
 
 export async function readInboxItemScope(ref: InboxItemRef): Promise<ScopedRow | null> {
   if (ref.kind === 'conversation') {
     const [row] = await db
       .select({
-        assigneePrincipalId: conversations.assignedAgentPrincipalId,
-        teamId: conversations.assignedTeamId,
+        assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
+        assignedTeamId: conversations.assignedTeamId,
       })
       .from(conversations)
       .where(eq(conversations.id, ref.id))
       .limit(1)
-    return row ?? null
+    return row ? conversationScopeOf(row) : null
   }
   const [row] = await db
-    .select({ assigneePrincipalId: tickets.assigneePrincipalId, teamId: tickets.assigneeTeamId })
+    .select({
+      assigneePrincipalId: tickets.assigneePrincipalId,
+      assigneeTeamId: tickets.assigneeTeamId,
+    })
     .from(tickets)
     .where(eq(tickets.id, ref.id))
     .limit(1)
-  return row ?? null
+  return row ? ticketScopeOf(row) : null
 }

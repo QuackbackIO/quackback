@@ -30,7 +30,7 @@ import type {
 } from '@/lib/shared/conversation/types'
 import { publish } from './pubsub'
 import { CONVERSATION_INBOX_CHANNEL, publishInboxFrame } from './inbox-publish'
-import type { InboxItemScope } from './inbox-envelope'
+import { conversationScopeOf, type InboxItemScope } from './inbox-envelope'
 import type { ScopedRow } from '@/lib/server/policy/row-scope'
 import { loadAuthors, fallbackAuthor } from '@/lib/server/domains/principals/principal-display'
 
@@ -179,7 +179,7 @@ export function publishConversationOnlyEvent(
 export async function publishConversationUpdate(
   conversationId: ConversationId,
   agentDto: ConversationDTO,
-  opts?: { prev?: ScopedRow }
+  prev?: ScopedRow
 ): Promise<void> {
   // Reuse the public profile loader: agent DTOs may contain account names.
   const authors = await loadAuthors([
@@ -192,9 +192,11 @@ export async function publishConversationUpdate(
     { kind: 'conversation', id: conversationId },
     { kind: 'conversation', conversation: agentDto },
     {
-      assigneePrincipalId: agentDto.assignedAgent?.principalId ?? null,
-      teamId: agentDto.assignedTeamId ?? null,
-      ...(opts?.prev ? { prev: opts.prev } : {}),
+      ...conversationScopeOf({
+        assignedAgentPrincipalId: agentDto.assignedAgent?.principalId,
+        assignedTeamId: agentDto.assignedTeamId,
+      }),
+      prev,
     }
   )
   publish(conversationChannel(conversationId), {
