@@ -106,6 +106,7 @@ import { assertTicketVisible, loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
+import { ticketScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -327,7 +328,11 @@ export async function insertTicketMessage(
   // note on both the ticket + inbox channels unstripped — both audiences are
   // team-member-only in this phase (routes/api/chat/stream.ts's `ticketId`
   // scope gate), unlike the conversation domain's visitor-facing channel.
-  publishTicketEvent(input.ticketId, { kind: 'ticket_message', ticketId: input.ticketId, message })
+  publishTicketEvent(
+    input.ticketId,
+    { kind: 'ticket_message', ticketId: input.ticketId, message },
+    ticketScopeOf(existing)
+  )
   return { message, ticket: existing }
 }
 
@@ -413,7 +418,11 @@ async function sendViaPairConversation(
     .update(tickets)
     .set({ updatedAt: new Date(message.createdAt) })
     .where(eq(tickets.id, input.ticketId))
-  publishTicketEvent(input.ticketId, { kind: 'ticket_message', ticketId: input.ticketId, message })
+  publishTicketEvent(
+    input.ticketId,
+    { kind: 'ticket_message', ticketId: input.ticketId, message },
+    ticketScopeOf(ticket)
+  )
   return { message, ticket }
 }
 

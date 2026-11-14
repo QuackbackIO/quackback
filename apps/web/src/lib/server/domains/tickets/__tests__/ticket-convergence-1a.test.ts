@@ -369,16 +369,17 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
           }),
           agent: expect.objectContaining({ id: message.id, author: message.author }),
         },
-        { conversationUpdated: true }
+        { conversationUpdated: true },
+        expect.objectContaining({ teamId: null }) // the item scope envelope
       )
       // The seed has an account name but no public name. The widget must not
       // receive the account name even though the team-only ticket copy does.
       expect(message.author?.displayName).toMatch(/^U-/)
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
-        kind: 'ticket_message',
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
         ticketId,
-        message,
-      })
+        { kind: 'ticket_message', ticketId, message },
+        expect.objectContaining({ teamId: null }) // the item scope envelope
+      )
     })
 
     it('keeps an internal note ticket-parented on a linked pair (ticket notes stay ticket-scoped)', async () => {

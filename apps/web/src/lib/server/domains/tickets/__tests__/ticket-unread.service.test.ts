@@ -216,12 +216,16 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
       const after = await ticketReadWatermarks(ticketId)
       const expected = new Date(anchorCreatedAt.getTime() - 1)
       expect(after.assigneeLastReadAt?.toISOString()).toBe(expected.toISOString())
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
-        kind: 'ticket_read',
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
         ticketId,
-        side: 'agent',
-        at: expected.toISOString(),
-      })
+        {
+          kind: 'ticket_read',
+          ticketId,
+          side: 'agent',
+          at: expected.toISOString(),
+        },
+        expect.objectContaining({ teamId: null }) // the item scope envelope
+      )
     })
 
     it('never advances the watermark forward (backward-only, per unreadWatermarkFromAnchor)', async () => {

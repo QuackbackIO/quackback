@@ -304,11 +304,15 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     const ticketId = await seedTicket({ requester: me, statusId: s.firstOpen.id })
     realtime.publishTicketEvent.mockClear()
     const { message } = await appendInboundTicketReply(ticketId, me, { content: 'thanks!' })
-    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
-      kind: 'ticket_message',
+    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
       ticketId,
-      message,
-    })
+      {
+        kind: 'ticket_message',
+        ticketId,
+        message,
+      },
+      expect.objectContaining({ teamId: null }) // the item scope envelope
+    )
   })
 
   it('persists contentJson + attachments and clears an external inline-image src', async () => {

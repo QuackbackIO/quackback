@@ -64,7 +64,8 @@ export function publishConversationEvent(
 export function publishConversationMessage(
   conversationId: ConversationId,
   messages: { visitor: ConversationMessageDTO; agent?: ConversationMessageDTO },
-  opts?: { conversationUpdated?: boolean; envelope?: InboxItemScope }
+  opts?: { conversationUpdated?: boolean },
+  envelope?: InboxItemScope
 ): void {
   publish(conversationChannel(conversationId), {
     kind: 'message',
@@ -79,7 +80,7 @@ export function publishConversationMessage(
       message: messages.agent ?? messages.visitor,
       ...(opts?.conversationUpdated ? { conversationUpdated: true } : {}),
     },
-    opts?.envelope
+    envelope
   )
 }
 
