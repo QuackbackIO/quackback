@@ -16,6 +16,7 @@ import {
 import { assertAnyPermission, requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
+  PRODUCT_SENDER_SURFACES,
   SUPPORT_SENDER_PERMISSIONS,
   SURFACE_SENDER_READ_PERMISSIONS,
 } from '@/lib/shared/email-sending-permissions'
@@ -462,7 +463,7 @@ export const setEmailSenderFn = createServerFn({ method: 'POST' })
  * thread keeps its own sender (see `resolveSender`).
  */
 export const getSurfaceSenderFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ surface: z.enum(['feedback', 'changelog', 'status']) }))
+  .validator(z.object({ surface: z.enum(PRODUCT_SENDER_SURFACES) }))
   .handler(async ({ data }): Promise<{ from: string | null }> => {
     assertAnyPermission(await requireAuth(), SURFACE_SENDER_READ_PERMISSIONS[data.surface])
     const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')

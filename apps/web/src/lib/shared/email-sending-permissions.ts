@@ -29,3 +29,9 @@ export const SURFACE_SENDER_READ_PERMISSIONS = {
 
 /** A kind of email whose product settings page shows its From. */
 export type ProductSenderSurface = keyof typeof SURFACE_SENDER_READ_PERMISSIONS
+
+/** Those kinds of email, as a list a validator can take. */
+export const PRODUCT_SENDER_SURFACES = Object.keys(SURFACE_SENDER_READ_PERMISSIONS) as [
+  ProductSenderSurface,
+  ...ProductSenderSurface[],
+]

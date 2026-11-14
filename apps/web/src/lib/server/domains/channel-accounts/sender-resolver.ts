@@ -14,7 +14,7 @@ import { db, and, eq, isNull, conversations, ticketConversations } from '@/lib/s
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { getChannelAccount } from './channel-account.service'
-import { getEmailSenders, workspaceAddress } from './email-senders'
+import { getEmailSenders, workspaceAddress, type EmailSenderSurface } from './email-senders'
 import {
   permittedSendingIdentity,
   sendingIdentityContext,
@@ -23,7 +23,7 @@ import {
 } from './outbound-identity'
 
 /** The kinds of customer email that choose their own sender. */
-export type SenderSurface = 'support' | 'feedback' | 'changelog' | 'status'
+export type SenderSurface = Exclude<EmailSenderSurface, 'default'>
 
 /** Which step of the chain in {@link resolveSender} produced the From. */
 export type SenderSource = 'thread' | 'inbox' | 'surface' | 'default' | 'platform_inbox'

@@ -34,7 +34,7 @@ import {
   type SendingAddress,
 } from './sending-removal'
 import { SendingPausedNotice } from './sending-paused-notice'
-import { SendFromCard } from './send-from-card'
+import { SendFromCard, type SenderSurfaceKey } from './send-from-card'
 import {
   inboundTarget,
   oldestFirst,
@@ -66,9 +66,6 @@ import { toastError } from '@/lib/client/error-notice'
  * problem into a mystery.
  */
 const reason = (fallback: string) => (error: unknown) => toastError(error, fallback)
-
-/** A kind of email with its own sender, other than the workspace default. */
-export type SenderSurfaceKey = Exclude<keyof EmailSendersDTO, 'default'>
 
 /**
  * Settings → Email: the addresses this workspace sends from, and which of them
