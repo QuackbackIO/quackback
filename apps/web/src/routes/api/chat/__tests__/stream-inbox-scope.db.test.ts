@@ -32,6 +32,7 @@ import {
   rolePermissions,
   roles,
   settings,
+  invitation,
   teamMembers,
   teams,
   tickets,
@@ -93,6 +94,21 @@ vi.mock('@/lib/server/realtime/stream-token', () => ({
   },
 }))
 vi.mock('@/lib/server/auth', () => ({ auth: { api: { getSession: vi.fn(async () => null) } } }))
+// The invite accept is a server function: its builder runs the handler, and
+// the session is whoever a case says it is.
+const session = vi.hoisted(() => ({ current: null as unknown }))
+vi.mock('@tanstack/react-start', () => ({
+  createServerFn: () => {
+    const chain: Record<string, unknown> = {}
+    chain.validator = () => chain
+    chain.handler = (handler: (args: { data?: unknown }) => Promise<unknown>) =>
+      Object.assign((args?: { data?: unknown }) => handler(args ?? {}), chain)
+    return chain
+  },
+}))
+vi.mock('@tanstack/react-start/server', () => ({ getRequestHeaders: () => new Headers() }))
+vi.mock('@/lib/server/auth/session', () => ({ getSession: async () => session.current }))
+vi.mock('@/lib/server/auth/magic-link-mint', () => ({ revokeMagicLinkTokens: async () => {} }))
 vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isConversationsEnabledFor: vi.fn(async () => true),
   isSupportTicketsEnabled: vi.fn(async () => true),
@@ -132,6 +148,7 @@ vi.mock('@/lib/server/domains/teams', async (importOriginal) => {
 })
 
 import { Route } from '../stream'
+import { acceptInvitationFn } from '@/lib/server/functions/invitations'
 import {
   publishAgentConversationEvent,
   publishConversationEvent,
@@ -572,6 +589,48 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     )
     await settle()
     expect(scoped.frames().map((f) => f.event)).toContain('inbox_scope_changed')
+  })
+
+  it('refreshes the scope of a teammate who accepts a scoped role invite while their inbox is open', async () => {
+    const w = await seedWorld()
+    // A Manager: a legacy member with no assignment rides the preset, view_all included.
+    const manager = await seedPrincipal('member')
+    const [account] = await testDb
+      .select({ id: user.id, email: user.email })
+      .from(user)
+      .innerJoin(principal, eq(principal.userId, user.id))
+      .where(eq(principal.id, manager))
+    const inbox = await openInbox(manager)
+    expect(await ticketReadReaches(inbox, w.ticket.y, 'before')).toBe(true)
+
+    const [adminUser] = await testDb
+      .select({ userId: principal.userId })
+      .from(principal)
+      .where(eq(principal.id, w.admin))
+    const email = account.email
+    const inviterId = adminUser.userId
+    if (!email || !inviterId) throw new Error('seeded people have an email and a user')
+    const invitationId = createId('invite')
+    await testDb.insert(invitation).values({
+      id: invitationId,
+      email,
+      status: 'pending',
+      kind: 'team',
+      role: 'member',
+      roleId: w.scopedRole,
+      expiresAt: new Date(Date.now() + 86_400_000),
+      createdAt: new Date(),
+      inviterId,
+    })
+    session.current = {
+      session: { id: 'sess_1' },
+      user: { id: account.id, email, name: 'Manager', createdAt: new Date().toISOString() },
+    }
+    await acceptInvitationFn({ data: { invitationId } })
+    await settle()
+
+    expect(inbox.frames().map((f) => f.event)).toContain('inbox_scope_changed')
+    expect(await ticketReadReaches(inbox, w.ticket.y, 'after')).toBe(false)
   })
 
   it('reloads a scope older than 60 seconds before filtering the next frame', async () => {
