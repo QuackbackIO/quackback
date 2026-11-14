@@ -121,6 +121,7 @@ Edges (149):
 - conversation -> comments
 - conversation -> conversation-attributes
 - conversation -> files
+- conversation -> notifications
 - conversation -> posts
 - conversation -> principals
 - conversation -> settings

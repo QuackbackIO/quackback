@@ -35,6 +35,12 @@ const sendCsatRequestEmail = vi.fn<(opts: Record<string, unknown>) => Promise<un
 const mintCsatEmailToken =
   vi.fn<(conversationId: ConversationId, visitorPrincipalId: PrincipalId) => string>()
 
+// The scope rule itself runs over real rows in
+// events/__tests__/notification-scope.db.test.ts; here every recipient is in
+// scope, so these cases test only what this module adds.
+vi.mock('@/lib/server/domains/notifications/recipient-scope', () => ({
+  inScopeRecipients: async (_item: unknown, ids: readonly string[]) => [...ids],
+}))
 vi.mock('@/lib/server/config', () => ({
   config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
   getBaseUrl: () => 'http://localhost:3000',

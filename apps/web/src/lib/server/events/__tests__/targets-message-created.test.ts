@@ -15,6 +15,12 @@ let teamRows: Array<{ principalId: string }> = []
 // on the message's conversation and suppresses the team-wide bell on a hit.
 let pairRows: Array<{ ticketId: string }> = []
 
+// The scope rule itself runs over real rows in
+// events/__tests__/notification-scope.db.test.ts; here every recipient is in
+// scope, so these cases test only what this module adds.
+vi.mock('@/lib/server/domains/notifications/recipient-scope', () => ({
+  inScopeRecipients: async (_item: unknown, ids: readonly string[]) => [...ids],
+}))
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
