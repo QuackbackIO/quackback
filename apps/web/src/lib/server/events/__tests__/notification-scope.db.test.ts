@@ -370,6 +370,17 @@ describe('conversation assigned bell', () => {
     expect(recipientsOf(target)).toEqual([])
   })
 
+  it('does not name a dropped assignee in the bell it sends to the team', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.former.id, team: w.billing }
+    const { conversation } = await seedConversation(to)
+    const target = await getConversationAssignedTargets(
+      conversationAssigned(w, conversation.id as ConversationId, to)
+    )
+    expect(recipientsOf(target)).toEqual([w.onTeam.id])
+    expect(target?.config).toMatchObject({ assignedAgentPrincipalId: null })
+  })
+
   it('reads where the conversation is now, not where the event said it went', async () => {
     const w = await seedWorld()
     const to = { assignee: w.solo.id, team: null }
