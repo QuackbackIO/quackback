@@ -68,6 +68,9 @@ export function notifyMocks() {
  * The recipient scope rule with every teammate in scope, for unit suites that
  * mock the database. Rows the caller passes still go through the teammate
  * check (type `user`, role admin or member); bare ids are taken as teammates.
+ * A named `requesterPrincipalId` in the input is kept, for any item: the stub
+ * does not know the item's type, so it does not model the real rule's
+ * customer-ticket-only requester exception.
  * The rule itself runs over real rows in
  * events/__tests__/notification-scope.db.test.ts and
  * domains/notifications/__tests__/recipient-scope.db.test.ts.
@@ -86,8 +89,19 @@ export function recipientScopePassThrough() {
     ),
   ]
   return {
-    inScopeRecipients: vi.fn(async (_item: unknown, candidates: readonly Candidate[]) =>
-      teammates(candidates)
+    inScopeRecipients: vi.fn(
+      async (
+        _item: unknown,
+        candidates: readonly Candidate[],
+        opts: { requesterPrincipalId?: string | null } = {}
+      ) => {
+        const kept = new Set(teammates(candidates))
+        const requester = opts.requesterPrincipalId ?? null
+        return candidates
+          .map((c) => (typeof c === 'string' ? c : c.id))
+          .filter((id, i, all) => all.indexOf(id) === i)
+          .filter((id) => kept.has(id) || id === requester)
+      }
     ),
     teammateView: vi.fn(async (_item: unknown, candidates: readonly Candidate[]) => ({
       visible: new Set(teammates(candidates)),

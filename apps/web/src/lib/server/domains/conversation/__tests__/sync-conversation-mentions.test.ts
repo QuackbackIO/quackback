@@ -161,21 +161,28 @@ describe('syncConversationMessageMentions', () => {
     })
   })
 
-  it('drops non-team principals (visitors and service principals) server-side', async () => {
-    // The query returns every mentioned principal; the service itself must drop
-    // the visitor (role 'user') and the service principal (type 'service'),
-    // inserting/dispatching only the genuine teammate.
-    eligibilityRows = [
+  it('hands every mentioned row to the recipient rule for this conversation, and stores only what it keeps', async () => {
+    // The rule (recipient-scope.ts, real rows in notification-scope.db.test.ts)
+    // drops visitors, service principals and teammates out of scope; here it
+    // is stubbed to keep teammates only, so this checks what the sync asks of
+    // it and that it stores and dispatches exactly the answer.
+    const rows = [
       teamRow(P1),
       { id: VISITOR, type: 'user', role: 'user' },
       { id: SERVICE, type: 'service', role: 'admin' },
     ]
+    eligibilityRows = rows
     insertReturning = [{ principalId: P1 }]
 
     await syncConversationMessageMentions(
       defaultInput({ mentionedIds: new Set([P1, VISITOR, SERVICE]) })
     )
 
+    const { inScopeRecipients } = await import('@/lib/server/domains/notifications/recipient-scope')
+    expect(vi.mocked(inScopeRecipients)).toHaveBeenCalledWith(
+      { kind: 'conversation', id: CONVERSATION_ID },
+      rows
+    )
     expect(insertCalls[0].rows).toEqual([{ conversationMessageId: MESSAGE_ID, principalId: P1 }])
     const payloadArg = dispatchConversationNoteMentioned.mock.calls[0][1]
     expect(payloadArg.mentionedPrincipalIds).toEqual([P1])
