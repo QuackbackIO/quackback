@@ -212,6 +212,21 @@ export async function listTeamMemberPrincipalIds(teamId: TeamId): Promise<Princi
   return rows.map((r) => r.principalId)
 }
 
+/**
+ * The ids of every team a principal belongs to, in one query. The reverse of
+ * `listTeamMemberPrincipalIds`, for callers that check many items against one
+ * teammate's scope in memory (`rowInScope`) instead of running the
+ * `teamsForActor` subquery per item. Soft-deleted teams count, as they do in
+ * that subquery.
+ */
+export async function teamIdsForPrincipal(principalId: PrincipalId): Promise<Set<TeamId>> {
+  const rows = await db
+    .select({ teamId: teamMembers.teamId })
+    .from(teamMembers)
+    .where(eq(teamMembers.principalId, principalId))
+  return new Set(rows.map((r) => r.teamId))
+}
+
 /** Replace a team's membership set with exactly `principalIds`. */
 export async function setTeamMembers(teamId: TeamId, principalIds: PrincipalId[]): Promise<void> {
   const desired = Array.from(new Set(principalIds))
