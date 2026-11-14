@@ -131,4 +131,41 @@ describe('createInboxScopeGate', () => {
     await vi.waitFor(() => expect(forwarded).toEqual([next.message]))
     expect(loads).toHaveLength(1)
   })
+
+  it('tells the client to refetch once a reload succeeds after a failed one', async () => {
+    const events: string[] = []
+    let calls = 0
+    const gate = createInboxScopeGate({
+      actor,
+      teamIds: new Set(),
+      load: async () => {
+        calls += 1
+        if (calls === 1) throw new Error('database away')
+        return { permissions: scoped, teamIds: new Set(['team_y']) }
+      },
+      runReload: (body) => body(),
+      forward: () => {},
+      sendEvent: (name) => events.push(name),
+      close: () => {},
+      startStale: true,
+    })
+
+    // The first reload fails: the frame waiting on it, and any removal it
+    // carried, is lost.
+    const lost = frame('team_y', 1)
+    gate.onInboxFrame(lost.message, lost.meta)
+    await vi.waitFor(() => expect(calls).toBe(1))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(events).toEqual([])
+
+    // The next reload works, and the client is told to catch up.
+    const next = frame('team_y', 2)
+    gate.onInboxFrame(next.message, next.meta)
+    await vi.waitFor(() => expect(events).toEqual(['inbox_scope_changed']))
+
+    // Once only: a later reload that works says nothing more.
+    gate.onInboxFrame(next.message, next.meta)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(events).toEqual(['inbox_scope_changed'])
+  })
 })
