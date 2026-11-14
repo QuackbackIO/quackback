@@ -40,6 +40,7 @@ import { SendFromCard, type SenderIdentity } from './send-from-card'
 import {
   errorText,
   SendingAddressDialog,
+  ownDomains,
   type SendingAddressDialogTarget,
 } from './sending-address-dialog'
 import {
@@ -396,16 +397,6 @@ const senderLabel = (a: SendingAddress, workspaceName: string): string => {
   const name = a.senderName ?? workspaceName
   return name ? `${name} <${a.address ?? ''}>` : (a.address ?? '')
 }
-
-/**
- * The domains of the platform's own addresses (the workspace's inbox on it and
- * the address email leaves from by default), which need no setup to send from.
- */
-const ownDomains = (...addresses: Array<string | null | undefined>): string[] =>
-  addresses.flatMap((a) => {
-    const domain = /@([^\s<>@]+)>?\s*$/.exec(a ?? '')?.[1]?.toLowerCase()
-    return domain ? [domain] : []
-  })
 
 /**
  * A row's icon from sm up. On a phone the tile is left out: every row carries

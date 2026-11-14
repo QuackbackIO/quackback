@@ -22,7 +22,7 @@ export const Route = createFileRoute('/admin/settings/domains_/$domain')({
 })
 
 function DomainPage() {
-  const { sending, signIn, helpCenterDomain, added, domain } = Route.useLoaderData()
+  const { sending, signIn, helpCenterDomain, webAddresses, added, domain } = Route.useLoaderData()
   const params = Route.useParams()
   const context = Route.useRouteContext()
   const permissions = context.permissions ?? []
@@ -31,7 +31,9 @@ function DomainPage() {
   const name = (domain?.name ?? params.domain).trim().toLowerCase()
   // An added domain has its page with no use at all; a name only uses hold is
   // shown while one of them the viewer may see still holds it.
-  const row = domainRows({ sending, signIn, helpCenterDomain, added }).find((r) => r.name === name)
+  const row = domainRows({ sending, signIn, helpCenterDomain, webAddresses, added }).find(
+    (r) => r.name === name
+  )
   if (!row) return <Navigate to="/admin/settings/domains" replace />
 
   return (
@@ -43,6 +45,7 @@ function DomainPage() {
           cloudEnabled: !!context.cloudEnabled,
           helpCenterOn: isProductEnabled(context.settings?.featureFlags, 'helpCenter'),
         })}
+        helpCenterDomain={helpCenterDomain?.domain ?? null}
         visibleUses={visibleDomainUses(permissions)}
         domain={domain}
         canManage={permissions.includes(PERMISSIONS.SETTINGS_MANAGE)}
