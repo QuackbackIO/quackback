@@ -23,6 +23,7 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   sendRecoveryCodeUsedEmail: 'account',
   // An operational alert to a teammate's own account address.
   sendSendingDomainAttentionEmail: 'account',
+  sendDomainAttentionEmail: 'account',
 
   // Capability over whoever holds the address: mail exactly what was minted.
   sendMagicLinkEmail: 'sealed',

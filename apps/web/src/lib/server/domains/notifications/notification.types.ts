@@ -31,6 +31,7 @@ export type NotificationType =
   | 'assistant_handed_off'
   | 'sending_domain_live'
   | 'sending_domain_needs_attention'
+  | 'domain_needs_attention'
 
 /**
  * Input for creating a single notification
