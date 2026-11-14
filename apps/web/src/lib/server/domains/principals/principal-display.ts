@@ -5,7 +5,19 @@
  * rule is a principal concern, not a conversation one; the `ConversationAuthorDTO`
  * name is historical.
  */
-import { db, principal, user, eq, inArray, type ServiceMetadata } from '@/lib/server/db'
+import {
+  and,
+  apiKeys,
+  db,
+  eq,
+  inArray,
+  isNotNull,
+  ne,
+  principal,
+  user,
+  type ServiceMetadata,
+} from '@/lib/server/db'
+import { alias } from 'drizzle-orm/pg-core'
 import type { PrincipalId } from '@quackback/ids'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
@@ -105,7 +117,49 @@ async function selectAuthorRows(
     .where(inArray(principal.id, unique))
   // The same read answers whether each author is a test customer.
   for (const row of rows) rememberTestOwner(row)
-  return rows
+  return showPersonalKeysAsCreator(rows)
+}
+
+/**
+ * A personal API key acts as the teammate who created it, so what it writes
+ * shows that teammate's name and avatar rather than the key's own name. Only
+ * the display fields change: the author's `principalId` stays the key's
+ * service principal, which is what the message rows store and what the audit
+ * trail and the reply-timing rules read. A workspace key belongs to nobody and
+ * keeps its own name, as does a personal key whose creator was deleted.
+ * Costs one read, and only when a batch has an API key author in it.
+ */
+async function showPersonalKeysAsCreator<T extends AuthorRow>(rows: T[]): Promise<T[]> {
+  const keyIds = rows.filter((row) => row.serviceMetadata?.kind === 'api_key').map((row) => row.id)
+  if (keyIds.length === 0) return rows
+  const keyCreator = alias(principal, 'key_creator')
+  const creators = await db
+    .select({
+      keyPrincipalId: apiKeys.principalId,
+      displayName: keyCreator.displayName,
+      accountName: user.name,
+      avatarUrl: keyCreator.avatarUrl,
+      avatarKey: keyCreator.avatarKey,
+      userImage: user.image,
+      userImageKey: user.imageKey,
+    })
+    .from(apiKeys)
+    .innerJoin(keyCreator, eq(keyCreator.id, apiKeys.createdById))
+    .leftJoin(user, eq(user.id, keyCreator.userId))
+    .where(
+      and(
+        inArray(apiKeys.principalId, keyIds),
+        eq(apiKeys.kind, 'personal'),
+        isNotNull(apiKeys.createdById),
+        ne(apiKeys.createdById, apiKeys.principalId)
+      )
+    )
+  if (creators.length === 0) return rows
+  const byKey = new Map(creators.map(({ keyPrincipalId, ...display }) => [keyPrincipalId, display]))
+  return rows.map((row) => {
+    const creator = byKey.get(row.id)
+    return creator ? { ...row, ...creator } : row
+  })
 }
 
 /**
