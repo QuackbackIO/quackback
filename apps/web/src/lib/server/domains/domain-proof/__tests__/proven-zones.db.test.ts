@@ -13,7 +13,14 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TeamId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { domains, emailSendingDomains, settings, ssoVerifiedDomain, teams } from '@/lib/server/db'
+import {
+  domains,
+  emailSendingDomains,
+  eq,
+  settings,
+  ssoVerifiedDomain,
+  teams,
+} from '@/lib/server/db'
 import type { SendingDomainDnsRecord } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -355,6 +362,25 @@ describe.skipIf(!fixture.available)('proven zones (real DB, rolled back)', () =>
       expect(await ssoDomainProvenBy('acme.com')).toBe('domain')
       expect(await ssoDomainProvenBy('eu.acme.com')).toBe('domain')
       expect(await ssoDomainProvenBy('notacme.com')).toBeNull()
+    })
+
+    it('counts a sending row issued its token only while the domain is verified', async () => {
+      const row = await seedDomainRow('acme.com', 'verified')
+      const shared: SendingDomainDnsRecord = {
+        type: 'TXT',
+        host: '_quackback',
+        value: `quackback-domain-verification=${row.ownershipToken}`,
+        purpose: 'ownership',
+      }
+      await seedSendingDomain('acme.com', { dnsRecords: [shared] })
+      expect((await getProvenZones()).map((z) => z.source).sort()).toEqual([
+        'domain',
+        'email-sending',
+      ])
+
+      await testDb.update(domains).set({ status: 'pending' }).where(eq(domains.id, row.id))
+      expect(await getProvenZones()).toEqual([])
+      expect(await ssoDomainProvenBy('acme.com')).toBeNull()
     })
 
     it('never proves a name above it', async () => {

@@ -78,6 +78,7 @@ vi.mock('@/lib/server/domains/settings/settings.helpers', async (importOriginal)
 }))
 
 import { watchDomainOwnership } from '../domain-ownership-watch'
+import { ssoDomainProvenBy } from '../proven-zones'
 import {
   OWNERSHIP_GRACE_SLACK_MS,
   ownershipGraceEnds,
@@ -324,20 +325,61 @@ describe.skipIf(!fixture.available)('domain ownership watch (real DB, rolled bac
     expect(await ssoVerified(sso.id)).toBe(false)
   })
 
-  it('waits, keeping everything, when a sign-in domain’s own lookup goes unanswered', async () => {
+  it('demotes anyway when a sign-in domain’s own lookup goes unanswered, and judges it on a later run', async () => {
     const row = await seedDomain('acme.com')
-    const sso = await seedSso('acme.com')
+    const unanswered = await seedSso('acme.com')
+    const judged = await seedSso('eu.acme.com')
     zone.failing.add('_quackback-verify.acme.com')
 
     const since = await lapse(row)
-    expect((await read(row)).status).toBe('verified')
-    expect(await ssoVerified(sso.id)).toBe(true)
-    expect(notices.demoted).toEqual([])
+    // A failed lookup never keeps a lapsed proof alive.
+    expect((await read(row)).status).toBe('pending')
+    expect(await ssoDomainProvenBy('www.acme.com')).toBeNull()
+    expect(await ssoVerified(judged.id)).toBe(false)
+    expect(await ssoVerified(unanswered.id)).toBe(true)
+
+    // Still unanswered: still left alone, still re-judged.
+    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 60_000))
+    expect(await ssoVerified(unanswered.id)).toBe(true)
 
     zone.failing.clear()
-    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 60_000))
+    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 120_000))
+    expect(await ssoVerified(unanswered.id)).toBe(false)
+    expect(notices.demoted.at(-1)).toEqual({ name: 'acme.com', signIn: ['acme.com'] })
+  })
+
+  it('stops counting a sending row that shares the token once the domain is demoted, and starts its grace', async () => {
+    const row = await seedDomain('acme.com')
+    const [team] = await testDb.insert(teams).values({ name: 'Support' }).returning()
+    const [twin] = await testDb
+      .insert(emailSendingDomains)
+      .values({
+        owningTeamId: team.id as TeamId,
+        domain: 'acme.com',
+        status: 'verified',
+        dkimMode: 'easy',
+        verifiedAt: new Date(),
+        dnsRecords: [
+          {
+            type: 'TXT',
+            host: '_quackback',
+            value: ownershipValue(row.ownershipToken),
+            purpose: 'ownership',
+          },
+        ],
+      })
+      .returning()
+
+    const since = await lapse(row)
+
     expect((await read(row)).status).toBe('pending')
-    expect(await ssoVerified(sso.id)).toBe(false)
+    // The twin can no longer prove a new sign-in domain with no record anywhere.
+    expect(await ssoDomainProvenBy('acme.com')).toBeNull()
+    const [after] = await testDb
+      .select()
+      .from(emailSendingDomains)
+      .where(eq(emailSendingDomains.id, twin.id))
+    expect(after.ownershipMissingSince).toEqual(since)
   })
 
   it("never touches another workspace's sign-in domains", async () => {

@@ -263,6 +263,32 @@ describe.skipIf(!fixture.available)('domains added by name (real DB, rolled back
       expect((await getDomain('help.acme.com'))?.status).toBe('pending')
     })
 
+    it('reads its own record even when a sending row shares its token', async () => {
+      const row = await addDomain('acme.com')
+      await testDb
+        .update(domains)
+        .set({ status: 'verified', ownershipMissingSince: new Date('2026-11-01T00:00:00Z') })
+        .where(eq(domains.id, row.id))
+      await testDb.insert(emailSendingDomains).values({
+        owningTeamId: await seedTeam(),
+        domain: 'acme.com',
+        status: 'verified',
+        dkimMode: 'easy',
+        verifiedAt: new Date(),
+        dnsRecords: [
+          {
+            type: 'TXT',
+            host: '_quackback',
+            value: `quackback-domain-verification=${row.ownershipToken}`,
+            purpose: 'ownership',
+          },
+        ],
+      })
+
+      expect(await checkDomainOwnership('acme.com')).toEqual({ ok: false, reason: 'no-record' })
+      expect(zone.asked).toEqual(['_quackback.acme.com'])
+    })
+
     it('is not proven by a pending sending domain at the same name', async () => {
       await seedSendingDomain('acme.com', 'pending')
       await addDomain('acme.com')
@@ -330,6 +356,31 @@ describe.skipIf(!fixture.available)('domains added by name (real DB, rolled back
 
     it('refuses a name that has not been added', async () => {
       await expect(removeDomain('acme.com')).rejects.toBeInstanceOf(NotFoundError)
+    })
+
+    it('refuses while a verified sign-in domain under it rests on it alone', async () => {
+      const row = await addDomain('acme.com')
+      await testDb.update(domains).set({ status: 'verified' }).where(eq(domains.id, row.id))
+      await testDb
+        .insert(ssoVerifiedDomain)
+        .values({ name: 'eu.acme.com', verificationToken: 'T1', verifiedAt: new Date() })
+
+      const refused = removeDomain('acme.com')
+      await expect(refused).rejects.toBeInstanceOf(ConflictError)
+      await expect(removeDomain('acme.com')).rejects.toThrow(/eu\.acme\.com/)
+      expect(await getDomain('acme.com')).not.toBeNull()
+    })
+
+    it('removes it once that sign-in domain holds its own record', async () => {
+      const row = await addDomain('acme.com')
+      await testDb.update(domains).set({ status: 'verified' }).where(eq(domains.id, row.id))
+      await testDb
+        .insert(ssoVerifiedDomain)
+        .values({ name: 'eu.acme.com', verificationToken: 'T1', verifiedAt: new Date() })
+      zone.published.set('_quackback-verify.eu.acme.com', ['qb-domain-verify=T1'])
+
+      await removeDomain('acme.com')
+      expect(await getDomain('acme.com')).toBeNull()
     })
   })
 })

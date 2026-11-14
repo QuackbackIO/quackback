@@ -157,7 +157,7 @@ export async function getDomainDetail(
     domainUsesOf(key),
   ])
   // Another proof that covers the name; a verified row is its own proof.
-  const covering = provenZoneCovering(key, zonesBesidesDomain(key, zones))
+  const covering = provenZoneCovering(key, row ? zonesBesidesDomain(row, zones) : zones)
   return {
     name: row?.name ?? key,
     added: row !== null,

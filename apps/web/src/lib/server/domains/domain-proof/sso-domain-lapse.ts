@@ -16,18 +16,16 @@
  * - nothing: it loses verification.
  *
  * Only verified sign-in domains at or under the lapsed domain are considered.
- * When any one of their own lookups goes unanswered, the answer is
- * `undecided` and nothing is taken away until a run can judge them all.
+ * One whose own lookup goes unanswered is `undecided`: it is left as it is for
+ * now and judged again on a later run, while the others are judged at once. A
+ * failed lookup never keeps the lapsed domain itself proven.
  */
 import { db, isNotNull, ssoVerifiedDomain, type Domain } from '@/lib/server/db'
 import { lookupVerificationTxt } from '@/lib/server/auth/dns-verify'
 import { interactiveResolver } from '@/lib/server/dns/resolver'
 import { SSO_VERIFY_RECORD_HOST, ssoVerifyRecordValue } from '@/lib/shared/domain-proof'
 import { isAtOrUnder, toAsciiDomain } from '@/lib/server/domains/channel-accounts/outbound-identity'
-import { OWNERSHIP_RECORD_HOST } from '@/lib/server/domains/channel-accounts/sending-domain-records'
-import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
-import { domainOwnershipValue } from './domains.service'
-import { getProvenZones, provenZoneCovering } from './proven-zones'
+import { getProvenZones, provenZoneCovering, zonesBesidesDomain } from './proven-zones'
 
 export interface LapsingSignInDomain {
   id: (typeof ssoVerifiedDomain.$inferSelect)['id']
@@ -36,11 +34,19 @@ export interface LapsingSignInDomain {
   verificationToken: string
 }
 
+export interface SignInLapse {
+  /** No proof of any kind covers these now. */
+  losing: LapsingSignInDomain[]
+  /** Their own lookup went unanswered; judged again on a later run. */
+  undecided: string[]
+}
+
 export async function signInDomainsLosingProof(
   domain: Pick<Domain, 'name' | 'ownershipToken'>
-): Promise<LapsingSignInDomain[] | 'undecided'> {
+): Promise<SignInLapse> {
+  const none: SignInLapse = { losing: [], undecided: [] }
   const zone = toAsciiDomain(domain.name)
-  if (!zone) return []
+  if (!zone) return none
   const verified = await db
     .select({
       id: ssoVerifiedDomain.id,
@@ -55,28 +61,26 @@ export async function signInDomainsLosingProof(
       return !!name && isAtOrUnder(name, zone)
     })
     .sort((a, b) => a.name.localeCompare(b.name))
-  if (covered.length === 0) return []
+  if (covered.length === 0) return none
 
-  const lapsed = {
-    name: recordName(zone, OWNERSHIP_RECORD_HOST),
-    value: domainOwnershipValue(domain.ownershipToken),
-  }
-  // Every other proof this workspace holds. Sign-in domains are left out, as
-  // everywhere: one never proves another.
-  const others = (await getProvenZones()).filter(
-    (z) => !(z.record && z.record.name === lapsed.name && z.record.value === lapsed.value)
-  )
+  // Every other proof this workspace holds, less any resting on the lapsed
+  // record. Sign-in domains are left out, as everywhere: one never proves another.
+  const others = zonesBesidesDomain(domain, await getProvenZones())
 
   const losing: LapsingSignInDomain[] = []
+  const undecided: string[] = []
   for (const sso of covered) {
     if (provenZoneCovering(sso.name, others)) continue
     const own = await lookupVerificationTxt(
       `${SSO_VERIFY_RECORD_HOST}.${toAsciiDomain(sso.name)}`,
       interactiveResolver
     )
-    if (!own.ok && own.reason === 'lookup-failed') return 'undecided'
+    if (!own.ok && own.reason === 'lookup-failed') {
+      undecided.push(sso.name)
+      continue
+    }
     if (own.ok && own.values.includes(ssoVerifyRecordValue(sso.verificationToken))) continue
     losing.push(sso)
   }
-  return losing
+  return { losing, undecided }
 }
