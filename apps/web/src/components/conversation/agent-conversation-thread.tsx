@@ -585,40 +585,6 @@ export function AgentConversationThread({
     uploading,
   } = useConversationComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  // Whether the composer is in a tracker's Reply all mode, which carries text
-  // only. Read through a ref: the paste and drop handlers are made before the
-  // mode is known in this render.
-  const replyAllModeRef = useRef(false)
-  // Same as the visitor messenger: paste/drop stages the tray. The editor has
-  // no onImageUpload, so it never inlines a resizableImage into the draft.
-  // Paste still works for an image from the clipboard; drop/paste now accept
-  // any file, same as the paperclip picker.
-  const handleComposerPaste = useCallback(
-    (e: ClipboardEvent<HTMLDivElement>) => {
-      const files = Array.from(e.clipboardData?.files ?? [])
-      if (files.length === 0) return
-      e.preventDefault()
-      if (replyAllModeRef.current) {
-        toast.error(REPLY_ALL_NO_FILES)
-        return
-      }
-      void addFiles(files)
-    },
-    [addFiles]
-  )
-  const handleComposerDrop = useCallback(
-    (e: DragEvent<HTMLDivElement>) => {
-      const files = Array.from(e.dataTransfer?.files ?? [])
-      if (files.length === 0) return
-      e.preventDefault()
-      if (replyAllModeRef.current) {
-        toast.error(REPLY_ALL_NO_FILES)
-        return
-      }
-      void addFiles(files)
-    },
-    [addFiles]
-  )
 
   // Both kind's thread queries are always called (rules of hooks) but only one
   // is ever `enabled` — the conversation adapter is unchanged from before the
@@ -725,17 +691,45 @@ export function AgentConversationThread({
       }
     : CONVERSATION_CAPABILITIES
   const replyAllMode = trackerReplyAll && !noteMode
-  replyAllModeRef.current = replyAllMode
 
   // back_office/tracker tickets are note-only (§2.5) — force the mode once the
-  // ticket's type resolves (it may not be known yet on first render).
+  // ticket's type resolves (it may not be known yet on first render). A
+  // tracker also opens on Note where Reply all is offered.
   useEffect(() => {
-    if (!capabilities.reply) setNoteMode(true)
-  }, [capabilities.reply])
-  // A tracker opens on Note, also where Reply all is offered.
-  useEffect(() => {
-    if (isTracker) setNoteMode(true)
-  }, [isTracker, ticketId])
+    if (!capabilities.reply || isTracker) setNoteMode(true)
+  }, [capabilities.reply, isTracker, ticketId])
+
+  // Every way into the attachment tray (paperclip, paste, drop). A tracker's
+  // Reply all carries text only, so it stages nothing and says why.
+  const stageFiles = useStableCallback((files: File[] | FileList) => {
+    if (replyAllMode) {
+      toast.error(REPLY_ALL_NO_FILES)
+      return
+    }
+    void addFiles(files)
+  })
+  // Same as the visitor messenger: paste/drop stages the tray. The editor has
+  // no onImageUpload, so it never inlines a resizableImage into the draft.
+  // Paste still works for an image from the clipboard; drop/paste now accept
+  // any file, same as the paperclip picker.
+  const handleComposerPaste = useCallback(
+    (e: ClipboardEvent<HTMLDivElement>) => {
+      const files = Array.from(e.clipboardData?.files ?? [])
+      if (files.length === 0) return
+      e.preventDefault()
+      stageFiles(files)
+    },
+    [stageFiles]
+  )
+  const handleComposerDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length === 0) return
+      e.preventDefault()
+      stageFiles(files)
+    },
+    [stageFiles]
+  )
   // How many tickets a Reply all reaches, and how many of them are hidden.
   const { data: trackerLinks } = useQuery({
     ...ticketQueries.links(ticketId ?? INACTIVE_TICKET_ID),
@@ -1857,17 +1851,13 @@ export function AgentConversationThread({
   )
   // A tracker's Reply all carries text only, so files already staged keep the
   // composer in Note until they are removed, and the teammate is told why.
-  const stagedFileCount = attachmentItems.length
-  const setComposerMode = useCallback(
-    (mode: string) => {
-      if (mode !== 'note' && trackerReplyAll && stagedFileCount > 0) {
-        toast.error(`${REPLY_ALL_NO_FILES} Remove them to switch.`)
-        return
-      }
-      setNoteMode(mode === 'note')
-    },
-    [trackerReplyAll, stagedFileCount]
-  )
+  const setComposerMode = useStableCallback((mode: string) => {
+    if (mode !== 'note' && trackerReplyAll && attachmentItems.length > 0) {
+      toast.error(`${REPLY_ALL_NO_FILES} Remove them to switch.`)
+      return
+    }
+    setNoteMode(mode === 'note')
+  })
 
   const activeMode: ComposerMode = noteMode || !capabilities.reply ? 'note' : 'reply'
   // Re-renders the thread only when the active draft turns empty or not.
@@ -1974,29 +1964,22 @@ export function AgentConversationThread({
     )
   }
 
-  // A conversation may 404 (deleted, or outside the viewer's scope): the same
-  // state as a missing ticket, with nothing to close or reply to. Any other
-  // failure keeps the thread as it is.
-  if (!isTicket && isNotFoundError(convError)) {
+  // An item may 404 (deleted, or outside the viewer's scope): one not-found
+  // state, with nothing to close or reply to. A conversation shows it only for
+  // a NotFound answer; any other failure keeps the thread as it is.
+  const notFoundTitle = isTicket
+    ? ticket
+      ? null
+      : 'Ticket not found'
+    : isNotFoundError(convError)
+      ? 'Conversation not found'
+      : null
+  if (notFoundTitle) {
     return (
       <div className="flex h-full flex-1 min-w-0 items-center justify-center">
         <EmptyState
           icon={ChatBubbleLeftRightIcon}
-          title="Conversation not found"
-          description="It may have been deleted or you no longer have access."
-        />
-      </div>
-    )
-  }
-
-  // A ticket may 404 (deleted, or no longer visible) — mirrors the old
-  // ticket-detail.tsx's guard, which this component's ticket path replaces.
-  if (isTicket && !ticket) {
-    return (
-      <div className="flex h-full flex-1 min-w-0 items-center justify-center">
-        <EmptyState
-          icon={ChatBubbleLeftRightIcon}
-          title="Ticket not found"
+          title={notFoundTitle}
           description="It may have been deleted or you no longer have access."
         />
       </div>
@@ -2330,7 +2313,7 @@ export function AgentConversationThread({
                 const files = e.target.files
                 // Reply and note both attach via the shared tray — uploaded and
                 // sent as `attachments`, then rendered below the bubble.
-                if (files && files.length > 0) void addFiles(files)
+                if (files && files.length > 0) stageFiles(files)
                 e.target.value = ''
               }}
             />
