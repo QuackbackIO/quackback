@@ -93,8 +93,8 @@ export function SendFromCard({
   senders,
   identities,
   platformFrom,
-  platformName = 'Quackback address',
-  platformInbox = null,
+  platformName,
+  platformInbox,
   forwardingTarget,
   forwardingTargetPermitted,
   hasInboundRoute,
@@ -110,12 +110,12 @@ export function SendFromCard({
   /** "Workspace <platform address>", or null when this install has none. */
   platformFrom: string | null
   /** What the address email sends from with nothing chosen is called here. */
-  platformName?: string
+  platformName: string
   /**
    * "Workspace <its inbox on the platform>", when it has one: what a reply to
    * an emailed-in conversation falls back to before the platform address.
    */
-  platformInbox?: string | null
+  platformInbox: string | null
   forwardingTarget: string | null
   forwardingTargetPermitted: boolean | null
   /** Whether the workspace receives email, so support can reply from the inbox. */

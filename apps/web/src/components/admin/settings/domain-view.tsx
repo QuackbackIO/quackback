@@ -7,7 +7,7 @@
  * the uses whose permission they hold.
  */
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
   HELP_CENTER_SETTINGS,
@@ -21,10 +21,10 @@ import { DomainSetupPanel } from '@/components/admin/channels/domain-setup-panel
 import { errorText } from '@/lib/client/error-text'
 import { domainPhase } from '@/components/admin/channels/sending-domain-view'
 import {
-  ownDomains,
   SendingAddressDialog,
   type SendingAddressDialogTarget,
 } from '@/components/admin/channels/sending-address-dialog'
+import { oldestFirst, useEmailConfigView } from '@/components/admin/channels/email-config-view'
 import {
   domainOf,
   removalNote,
@@ -40,7 +40,6 @@ import { DnsRecordTable } from '@/components/shared/dns-record-table'
 import { StateBadge } from '@/components/shared/state-badge'
 import { Button } from '@/components/ui/button'
 import { useRestartSendingDomainChecks } from '@/lib/client/mutations/channel-accounts'
-import { emailChannelConfigQuery } from '@/lib/client/queries/channel-accounts'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import {
@@ -94,15 +93,13 @@ function ErrorLine({ children }: { children: string }) {
 
 /** This domain's sending row and the addresses on it, oldest first, from the email config. */
 function useSendingDomain(name: string) {
-  const { data } = useQuery(emailChannelConfigQuery())
-  const domains = data?.domains ?? []
+  const view = useEmailConfigView()
+  const { data, domains } = view
   const domain = domains.find((d) => d.domain.toLowerCase() === name) ?? null
   const addresses = domain
-    ? (data?.sendingAddresses ?? [])
-        .filter((a) => domainOf(a, domains)?.id === domain.id)
-        .sort((x, y) => x.createdAt.localeCompare(y.createdAt))
+    ? oldestFirst(view.addresses.filter((a) => domainOf(a, domains)?.id === domain.id))
     : []
-  return { data, domain, addresses }
+  return { view, data, domain, addresses }
 }
 
 /**
@@ -395,10 +392,10 @@ function UsesCard({
       {error && <ErrorLine>{error}</ErrorLine>}
       <SendingAddressDialog
         target={addressDialog}
-        workspaceName={data?.workspaceName ?? ''}
+        workspaceName={sending.view.workspaceName}
         domains={data?.domains}
-        setsUpDomains={data?.addressMode === 'verified-domains'}
-        ownDomains={ownDomains(data?.platformAddress, data?.defaultFrom)}
+        setsUpDomains={sending.view.addressMode === 'verified-domains'}
+        ownDomains={sending.view.ownDomains}
         onAdded={onChanged}
         onClose={() => setAddressDialog(null)}
       />
@@ -500,9 +497,9 @@ function SendingAddressesCard({
                     alsoDomain: addresses.length === 1 ? domain.domain : null,
                     note: removalNote(
                       a.id,
-                      data.senders,
-                      data.defaultFrom ?? null,
-                      data.addressMode === 'any' ? 'Server default' : 'Quackback address'
+                      sending.view.senders,
+                      sending.view.platformFrom,
+                      sending.view.platformName
                     ),
                   })
                 }

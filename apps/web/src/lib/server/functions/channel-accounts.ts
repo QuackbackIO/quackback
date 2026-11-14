@@ -20,6 +20,7 @@ import {
   SURFACE_SENDER_READ_PERMISSIONS,
 } from '@/lib/shared/email-sending-permissions'
 import { bareAddress } from '@quackback/email/ses'
+import { namedAddress } from '@quackback/email/named-address'
 import { resolveSender } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import {
   defaultTeamId,
@@ -468,9 +469,9 @@ export const getSurfaceSenderFn = createServerFn({ method: 'GET' })
     const workspaceName = (await requireSettingsCached()).name?.trim()
     const resolved = await resolveSender({ surface: data.surface, preview: true })
     if (!resolved) return { from: await platformFromFor(workspaceName) }
-    const name = resolved.senderName?.trim() || workspaceName
-    const address = bareAddress(resolved.from)
-    return { from: name ? `${name} <${address}>` : address }
+    return {
+      from: namedAddress(resolved.senderName?.trim() || workspaceName, bareAddress(resolved.from)),
+    }
   })
 
 export const restartSendingDomainChecksFn = createServerFn({ method: 'POST' })
