@@ -279,6 +279,23 @@
   color: var(--popover-foreground);
 }
 .mention-picker__avatar { width: 1.5rem; height: 1.5rem; flex-shrink: 0; }
+/* A teammate who cannot see the item: shown so the gap is visible, never picked. */
+.mention-picker__row.is-disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.mention-picker__row.is-disabled:hover {
+  background: transparent;
+}
+.mention-picker__no-access {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.mention-picker__lock { width: 0.75rem; height: 0.75rem; }
 .mention-picker__name { font-size: 0.875rem; }
 .mention-picker__team-badge {
   display: inline-flex;
