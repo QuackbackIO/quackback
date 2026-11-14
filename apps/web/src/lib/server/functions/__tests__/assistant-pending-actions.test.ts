@@ -29,7 +29,7 @@ const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   policyActorFromAuth: vi.fn(),
   getPendingActionById: vi.fn(),
-  assertConversationViewable: vi.fn(),
+  assertConversationVisible: vi.fn(),
   assertTicketVisible: vi.fn(),
   log: {
     trace: vi.fn(),
@@ -55,8 +55,9 @@ vi.mock('@/lib/server/domains/assistant/pending-actions.service', () => ({
   getPendingActionById: hoisted.getPendingActionById,
 }))
 
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: hoisted.assertConversationViewable,
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
 }))
 
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
@@ -104,7 +105,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   hoisted.requireAuth.mockResolvedValue(AUTH)
   hoisted.policyActorFromAuth.mockResolvedValue(actorWith([PERMISSIONS.CONVERSATION_VIEW]))
-  hoisted.assertConversationViewable.mockResolvedValue(undefined)
+  hoisted.assertConversationVisible.mockResolvedValue(undefined)
   hoisted.assertTicketVisible.mockResolvedValue(undefined)
 })
 
@@ -115,7 +116,7 @@ describe('getAssistantPendingActionFn', () => {
     await fetchPendingAction({ pendingActionId: 'assistant_action_1' })
 
     expect(hoisted.requireAuth).toHaveBeenCalledWith()
-    expect(hoisted.assertConversationViewable).toHaveBeenCalled()
+    expect(hoisted.assertConversationVisible).toHaveBeenCalled()
   })
 
   it('returns the live row as the settled DTO shape', async () => {
@@ -160,7 +161,7 @@ describe('getAssistantPendingActionFn', () => {
 
       await fetchPendingAction({ pendingActionId: 'assistant_action_1' })
 
-      expect(hoisted.assertConversationViewable).toHaveBeenCalledWith(
+      expect(hoisted.assertConversationVisible).toHaveBeenCalledWith(
         'conversation_1',
         expect.objectContaining({ principalId: 'principal_agent1' })
       )
@@ -177,7 +178,7 @@ describe('getAssistantPendingActionFn', () => {
         'ticket_1',
         expect.objectContaining({ principalId: 'principal_agent1' })
       )
-      expect(hoisted.assertConversationViewable).not.toHaveBeenCalled()
+      expect(hoisted.assertConversationVisible).not.toHaveBeenCalled()
     })
 
     it('404s when the caller holds conversation.view but cannot see this ticket-scoped row', async () => {

@@ -17,15 +17,14 @@ import {
   and,
   isNull,
   sql,
-  conversations,
   conversationParticipants,
   principal,
   user,
 } from '@/lib/server/db'
+import { assertConversationVisible } from './conversation-visibility'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { realEmail } from '@/lib/shared/anonymous-email'
-import { NotFoundError } from '@/lib/shared/errors'
 import {
   ensurePrincipalForUser,
   createPrincipal,
@@ -81,12 +80,8 @@ export async function addConversationParticipantByEmail(
   actor: Actor,
   opts?: { actorDisplayName?: string | null }
 ): Promise<{ principalId: PrincipalId }> {
-  const [conversation] = await db
-    .select({ visitorPrincipalId: conversations.visitorPrincipalId })
-    .from(conversations)
-    .where(eq(conversations.id, conversationId))
-    .limit(1)
-  if (!conversation) throw new NotFoundError('NOT_FOUND', 'Conversation not found')
+  // A conversation the actor cannot see is NotFound, like a missing one.
+  const conversation = await assertConversationVisible(conversationId, actor)
 
   const normalizedEmail = email.trim().toLowerCase()
   const principalId = await resolveCustomerPrincipalByEmail(email)
@@ -124,6 +119,7 @@ export async function removeConversationParticipant(
   actor: Actor,
   opts?: { actorDisplayName?: string | null }
 ): Promise<{ removed: boolean }> {
+  await assertConversationVisible(conversationId, actor)
   // Read the participant's label first so the notice can name who was removed.
   const [participant] = await db
     .select({
@@ -172,11 +168,13 @@ export async function removeConversationParticipant(
 /**
  * The customers an agent has added to a conversation, oldest first, for the
  * agent-side display. `email` is realEmail-sanitized so a synthetic anonymous
- * address never renders.
+ * address never renders. A conversation the actor cannot see is NotFound.
  */
 export async function listConversationParticipants(
-  conversationId: ConversationId
+  conversationId: ConversationId,
+  actor: Actor
 ): Promise<Array<{ principalId: PrincipalId; displayName: string | null; email: string | null }>> {
+  await assertConversationVisible(conversationId, actor)
   const rows = await db
     .select({
       principalId: conversationParticipants.principalId,

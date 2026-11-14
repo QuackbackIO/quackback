@@ -20,15 +20,15 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId')({
             'conversation ID'
           )
 
-          const { assertConversationViewable } =
-            await import('@/lib/server/domains/conversation/conversation.service')
+          const { assertConversationVisible } =
+            await import('@/lib/server/domains/conversation/conversation-visibility')
           const { conversationToDTO } =
             await import('@/lib/server/domains/conversation/conversation.query')
 
-          // team-role API key: canViewConversation short-circuits on role; segments unused
+          // team-role API key: assertConversationVisible reads role and scope; segments unused
           const actor = serviceActorFromApiAuth(auth)
 
-          const conversation = await assertConversationViewable(conversationId, actor)
+          const conversation = await assertConversationVisible(conversationId, actor)
           const dto = await conversationToDTO(conversation, 'agent')
           return successResponse(serializeConversation(dto))
         } catch (error) {

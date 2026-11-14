@@ -34,10 +34,8 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/priority')({
           }
 
           const actor = serviceActorFromApiAuth(auth)
-          // A personal key acts only on tickets its creator can see.
-          const { assertTicketVisible } =
-            await import('@/lib/server/domains/tickets/ticket.service')
-          await assertTicketVisible(ticketId, actor)
+          // The service answers NotFound for a ticket outside the key's
+          // scope (a personal key acts as its creator).
           const { setTicketPriority } = await import('@/lib/server/domains/tickets/ticket.service')
           const dto = await setTicketPriority(ticketId, parsed.data.priority, actor)
 

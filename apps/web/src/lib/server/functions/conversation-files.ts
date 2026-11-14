@@ -8,6 +8,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { isValidTypeId } from '@quackback/ids'
 import type { ConversationId, TicketId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { isTeamMember } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
@@ -25,7 +26,7 @@ const inputSchema = z
  * Gated like `exportConversationTranscriptFn` (lib/server/functions/
  * conversation.ts): CONVERSATION_VIEW plus an explicit team-member check
  * (belt-and-suspenders against a custom role granted the permission), then
- * `assertConversationViewable` for the item-scoped check. A ticket target
+ * `assertConversationVisible` for the item-scoped check. A ticket target
  * gates on TICKET_VIEW + `assertTicketVisible` instead, mirroring
  * `getTicketActivityFn` (lib/server/functions/tickets.ts) — that fn's own
  * existence+visibility fusion already excludes non-team callers, so no
@@ -45,9 +46,7 @@ export const listConversationFilesFn = createServerFn({ method: 'GET' })
         throw new ForbiddenError('FORBIDDEN', 'Only team members can view conversation files')
       }
       const actor = await policyActorFromAuth(ctx)
-      const { assertConversationViewable } =
-        await import('@/lib/server/domains/conversation/conversation.service')
-      await assertConversationViewable(data.conversationId as ConversationId, actor)
+      await assertConversationVisible(data.conversationId as ConversationId, actor)
       return listConversationFiles({ conversationId: data.conversationId as ConversationId })
     }
 

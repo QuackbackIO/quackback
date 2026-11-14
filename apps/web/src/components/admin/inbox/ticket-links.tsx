@@ -102,6 +102,7 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
 
   if (ticket.type === 'tracker') {
     const linked = data?.linked ?? []
+    const hiddenCount = data?.hiddenCount ?? 0
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -115,27 +116,34 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
             onPick={(id) => link.mutate({ trackerTicketId: ticket.id, ticketId: id })}
           />
         </div>
-        {linked.length === 0 ? (
+        {linked.length === 0 && hiddenCount === 0 ? (
           <p className="text-sm text-muted-foreground">No linked tickets</p>
         ) : (
-          <ul className="space-y-0.5">
-            {linked.map((t) => (
-              <li
-                key={t.id}
-                className="group flex items-center justify-between gap-2 rounded-md px-1 py-0.5 hover:bg-muted/50"
-              >
-                <TicketLabel ticket={t} />
-                <button
-                  type="button"
-                  onClick={() => unlink.mutate({ trackerTicketId: ticket.id, ticketId: t.id })}
-                  className="shrink-0 text-muted-foreground opacity-0 transition hover:text-foreground group-hover:opacity-100"
-                  aria-label={`Unlink ${t.reference}`}
+          <>
+            <ul className="space-y-0.5">
+              {linked.map((t) => (
+                <li
+                  key={t.id}
+                  className="group flex items-center justify-between gap-2 rounded-md px-1 py-0.5 hover:bg-muted/50"
                 >
-                  <XMarkIcon className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
+                  <TicketLabel ticket={t} />
+                  <button
+                    type="button"
+                    onClick={() => unlink.mutate({ trackerTicketId: ticket.id, ticketId: t.id })}
+                    className="shrink-0 text-muted-foreground opacity-0 transition hover:text-foreground group-hover:opacity-100"
+                    aria-label={`Unlink ${t.reference}`}
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {hiddenCount > 0 && (
+              <p className="px-1 text-sm text-muted-foreground">
+                {hiddenCount} more you can't access
+              </p>
+            )}
+          </>
         )}
       </div>
     )
@@ -158,6 +166,8 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
             <XMarkIcon className="h-3.5 w-3.5" />
           </button>
         </span>
+      ) : data?.trackerHidden ? (
+        <span className="text-sm text-muted-foreground">No access</span>
       ) : ticket.type === 'customer' ? (
         <TicketPicker
           type="tracker"

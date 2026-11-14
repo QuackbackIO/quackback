@@ -38,8 +38,9 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 }))
 
 const mockAssertConversationViewable = vi.fn()
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: (...args: unknown[]) => mockAssertConversationViewable(...args),
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: (...args: unknown[]) => mockAssertConversationViewable(...args),
 }))
 
 const mockEnforceAiTokenBudget = vi.fn()

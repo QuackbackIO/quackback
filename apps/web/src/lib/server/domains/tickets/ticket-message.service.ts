@@ -102,7 +102,7 @@ import { enrichMessagesForAgent } from '../conversation/conversation.query'
 import { listPairThreadMessages, resolvePairConversationId } from './pair-thread.service'
 import { crossPostTicketNote } from './ticket-conversation-link.service'
 import { firstResponseStamp } from './ticket.lifecycle'
-import { loadTicketOr404 } from './ticket.service'
+import { assertTicketVisible, loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
@@ -110,7 +110,7 @@ import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
-import { ForbiddenError } from '@/lib/shared/errors'
+import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'ticket-message' })
@@ -222,6 +222,9 @@ interface InsertTicketMessageOpts {
    *  reply passed TICKET_REPLY, a requester reply passed ownership). Unused on
    *  the ticket-parented paths. */
   actor: Actor
+  /** The ticket row, when the caller already loaded it (the visibility check),
+   *  so the write does not read it a second time. */
+  ticket?: Ticket
 }
 
 /**
@@ -265,7 +268,7 @@ export async function insertTicketMessage(
 
   // Validate existence + read first_response_at before the write; the stamp is
   // idempotent (set once), so a read-before-update race is harmless.
-  const existing = await loadTicketOr404(input.ticketId)
+  const existing = opts.ticket ?? (await loadTicketOr404(input.ticketId))
 
   // THE PHASE 1a REDIRECT. The internal-note guard comes first (notes stay
   // ticket-scoped whichever parent the pair has), then the pair resolution
@@ -398,7 +401,10 @@ async function sendViaPairConversation(
             opts.actor,
             prepared.attachments,
             prepared.contentJson,
-            input.metadata as ConversationMessageMetadata | undefined
+            input.metadata as ConversationMessageMetadata | undefined,
+            // The agent caller checked the ticket, and a tracker reply-all is
+            // a system effect, so the pair's conversation is not checked again.
+            { systemCascade: true }
           )
         ).message
   const message = { ...sent, author: supportAuthor }
@@ -411,14 +417,23 @@ async function sendViaPairConversation(
   return { message, ticket }
 }
 
-/** Agent reply on a customer ticket thread (customer-visible). */
+/** Agent reply on a customer ticket thread (customer-visible). A ticket the
+ *  actor cannot see is NotFound. */
 export async function sendTicketMessage(
   actor: Actor,
   input: SendTicketMessageInput
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_REPLY, 'reply to this ticket')
   const principalId = requireAgentPrincipal(actor)
+  const visible = await assertTicketVisible(input.ticketId, actor)
+  // A tracker's Reply all carries text only: its copies reach tickets the sender
+  // may not see, so nothing is written, not even on the tracker, when it has
+  // files. Elsewhere the ask is ignored, as the schema says.
+  if (input.replyAll && visible.type === 'tracker' && (input.attachments?.length ?? 0) > 0) {
+    throw new ValidationError('REPLY_ALL_ATTACHMENTS', 'Reply all cannot include attachments')
+  }
   const { message, ticket } = await insertTicketMessage(input, principalId, {
+    ticket: visible,
     senderType: 'agent',
     isInternal: false,
     stampFirstResponse: true,
@@ -453,7 +468,10 @@ export async function sendTicketMessage(
  * already carries the stamp — the stamp outranks the ask, so a copy relayed
  * back onto a tracker cannot bounce the reply between trackers. Per-link
  * best-effort: the tracker's own reply already committed, so one failing link
- * is logged, not fatal. The dynamic import breaks the
+ * is logged, not fatal. The tracker was checked once by `sendTicketMessage`;
+ * the copies are a system effect, so they reach every linked ticket, also ones
+ * the sender cannot see, with the sender as author (`insertTicketMessage`
+ * makes no visibility check). The dynamic import breaks the
  * ticket-message.service <-> ticket-links static cycle (ticket-links imports
  * emitTicketSystemMessage from this module).
  */
@@ -487,14 +505,17 @@ async function cascadeTrackerReplyAll(
   }
 }
 
-/** Agent-only internal note on a ticket thread (never customer-visible). */
+/** Agent-only internal note on a ticket thread (never customer-visible). A
+ *  ticket the actor cannot see is NotFound. */
 export async function addTicketNote(
   actor: Actor,
   input: AddTicketNoteInput
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_NOTE, 'add a note to this ticket')
   const principalId = requireAgentPrincipal(actor)
+  const visible = await assertTicketVisible(input.ticketId, actor)
   const { message, ticket } = await insertTicketMessage(input, principalId, {
+    ticket: visible,
     senderType: 'agent',
     isInternal: true,
     stampFirstResponse: false,

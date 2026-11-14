@@ -36,6 +36,7 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEve
 // shared transaction. Covered in ticket-activity.service.test.ts instead.
 vi.mock('@/lib/server/domains/tickets/ticket-activity.service', () => ({
   recordTicketActivity: vi.fn(),
+  recordTicketActivityAwaited: vi.fn().mockResolvedValue(undefined),
   listTicketActivity: vi.fn().mockResolvedValue([]),
 }))
 

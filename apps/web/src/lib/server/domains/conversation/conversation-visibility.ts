@@ -1,0 +1,102 @@
+/**
+ * The per-item conversation visibility check, in one leaf module that depends
+ * only on the database and the policy filters, so every domain, server
+ * function and route can import it statically.
+ *
+ * A conversation is visible to the visitor who owns it; to a workspace-wide
+ * service principal holding `conversation.view` or `conversation.view_all`; to
+ * a teammate with `conversation.view_all`; and to a scoped teammate for a
+ * conversation assigned to them or one of their teams (`conversationFilter`).
+ * Anyone else gets NotFound, never Forbidden, so a conversation id cannot be
+ * probed.
+ */
+import { and, db, eq, inArray, or, sql, conversations, type Conversation } from '@/lib/server/db'
+import { isValidTypeId, type ConversationId } from '@quackback/ids'
+import { NotFoundError } from '@/lib/shared/errors'
+import { conversationFilter } from '@/lib/server/policy/conversations'
+import { isUnscopedService, type Actor, type SystemCascadeOptions } from '@/lib/server/policy/types'
+import { can } from '@/lib/server/policy/authorize'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+
+/**
+ * Who besides the owning visitor may see a conversation: whoever
+ * `conversationFilter` admits. A workspace-wide service principal also needs
+ * `conversation.view` or `conversation.view_all`, as the inbox queries ask,
+ * which `conversationFilter` does not ask of it, so a key that may only
+ * assign, say, still cannot read a conversation.
+ */
+function teamScope(actor: Actor) {
+  if (
+    isUnscopedService(actor) &&
+    !can(actor, PERMISSIONS.CONVERSATION_VIEW) &&
+    !can(actor, PERMISSIONS.CONVERSATION_VIEW_ALL)
+  ) {
+    return sql`false`
+  }
+  return conversationFilter(actor)
+}
+
+/** The row by id with no visibility check, for system callers only (the guard
+ *  test names each one). */
+export async function loadConversationOr404(conversationId: ConversationId): Promise<Conversation> {
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  if (!row) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+  return row
+}
+
+/**
+ * A conversation the actor may see, or NotFound. One query: the row is the
+ * visitor's own, or `conversationFilter` admits it for the actor.
+ */
+export async function assertConversationVisible(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<Conversation> {
+  const ownConversation =
+    actor.principalId != null ? eq(conversations.visitorPrincipalId, actor.principalId) : sql`false`
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.id, conversationId), or(ownConversation, teamScope(actor))))
+    .limit(1)
+  if (!row) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+  return row
+}
+
+/**
+ * Which of `ids` the actor may see, in one query, by the same rule as
+ * `assertConversationVisible`. An id that is not a conversation id is left
+ * out, like a missing one.
+ */
+export async function visibleConversationIds(
+  ids: readonly string[],
+  actor: Actor
+): Promise<Set<ConversationId>> {
+  const valid = ids.filter((id): id is ConversationId => isValidTypeId(id, 'conversation'))
+  if (valid.length === 0) return new Set()
+  const ownConversation =
+    actor.principalId != null ? eq(conversations.visitorPrincipalId, actor.principalId) : sql`false`
+  const rows = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(inArray(conversations.id, valid), or(ownConversation, teamScope(actor))))
+  return new Set(rows.map((r) => r.id as ConversationId))
+}
+
+/**
+ * The row an agent write acts on: a conversation the actor may see, or
+ * NotFound. Under `systemCascade` the caller has checked the item already, so
+ * the row is read as it is.
+ */
+export async function loadConversationForWrite(
+  conversationId: ConversationId,
+  actor: Actor,
+  opts?: SystemCascadeOptions
+): Promise<Conversation> {
+  if (opts?.systemCascade) return loadConversationOr404(conversationId)
+  return assertConversationVisible(conversationId, actor)
+}

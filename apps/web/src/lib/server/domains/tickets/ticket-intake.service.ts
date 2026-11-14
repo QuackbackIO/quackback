@@ -40,7 +40,7 @@ import { logger } from '@/lib/server/logger'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 import { emitTicketCreated } from './ticket.webhooks'
 import { ticketRowToDTO } from './ticket.dto'
-import { recordTicketActivity } from './ticket-activity.service'
+import { recordTicketActivityAwaited } from './ticket-activity.service'
 import { subscribeToTicket } from './ticket-subscription.service'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { resolveTicketTypeForCreate } from './ticket-type.service'
@@ -415,10 +415,11 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   }
 
   log.info({ ticket_id: created.ticket.id, type: created.ticket.type }, 'ticket created')
-  // Durable timeline record (fire-and-forget, mirrors the post-side
-  // activity log). Written after the transaction commits so a failed
-  // activity insert can never abort the creation itself.
-  recordTicketActivity({
+  // Durable timeline record (mirrors the post-side activity log). Written
+  // after the transaction commits so a failed activity insert can never abort
+  // the creation itself; a failure is only logged. Awaited, because the link
+  // step of a create from a conversation reads the creator from this row.
+  await recordTicketActivityAwaited({
     ticketId: created.ticket.id,
     principalId: actor.principalId,
     type: 'ticket.created',

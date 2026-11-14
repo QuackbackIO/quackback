@@ -18,6 +18,7 @@ import { PageLimitMinOneSchema } from '@/lib/shared/schemas/taxonomy'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { requireVisibleConversation } from './conversation-access'
 import { inboxChannelFilterSchema } from '@/lib/shared/channels/inbox-filter'
 
 const ticketTypeSchema = z.enum(TICKET_TYPES)
@@ -117,12 +118,15 @@ export const fetchInboxCountsFn = createServerFn({ method: 'GET' }).handler(asyn
  * The linked customer ticket for one conversation, or null (unified inbox
  * §M5): the unified detail panel's Ticket card/Links section and the thread
  * header's ticket-status pill read this for a plain conversation item.
- * Gated on conversation.view — the caller already has the conversation open.
+ * Gated on conversation.view and on the caller seeing the conversation.
  */
 export const getConversationTicketLinkFn = createServerFn({ method: 'GET' })
   .validator(z.object({ conversationId: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-    const { getLinkedCustomerTicket } = await import('@/lib/server/domains/inbox/inbox.query')
-    return getLinkedCustomerTicket(data.conversationId as ConversationId)
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    // The conversation first: a hidden one is NotFound, so the answer never
+    // tells whether it has a ticket.
+    const { actor } = await requireVisibleConversation(ctx, data.conversationId as ConversationId)
+    const { getConversationTicketLink } = await import('@/lib/server/domains/inbox/inbox.query')
+    return getConversationTicketLink(data.conversationId as ConversationId, actor)
   })

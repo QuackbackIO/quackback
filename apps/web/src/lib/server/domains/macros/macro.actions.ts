@@ -15,6 +15,7 @@ import type { Actor } from '@/lib/server/policy/types'
 import { tomorrowAt } from '@/lib/shared/utils/date'
 import { logger } from '@/lib/server/logger'
 import { applyAction, type WorkflowAction } from '@/lib/server/domains/workflows/action.executor'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 
 const log = logger.child({ component: 'macro-actions' })
 
@@ -59,19 +60,30 @@ function toWorkflowAction(action: MacroAction): WorkflowAction | null {
  * Run each action against the conversation. Returns the labels of the actions
  * that were actually applied (deferred/failed ones are excluded), so the caller
  * can tell the agent exactly what happened.
+ *
+ * A conversation the actor cannot see is NotFound and no action runs. The
+ * check runs once, here; the actions then run as one system effect: each
+ * writer skips its own per-item check, so a close still applies after an
+ * earlier action of the same macro moved the conversation to a team outside
+ * the actor's scope.
  */
 export async function applyMacroActions(
   conversationId: ConversationId,
   actions: MacroAction[],
   actor: Actor
 ): Promise<string[]> {
+  await assertConversationVisible(conversationId, actor)
   if (actions.length === 0) return []
   const applied: string[] = []
   for (const action of actions) {
     const workflowAction = toWorkflowAction(action)
     if (!workflowAction) continue
     try {
-      const { label } = await applyAction(workflowAction, { conversationId, actor })
+      const { label } = await applyAction(workflowAction, {
+        conversationId,
+        actor,
+        systemCascade: true,
+      })
       if (label) applied.push(label)
     } catch (err) {
       log.error({ err, action: action.type, conversationId }, 'macro action failed')

@@ -241,6 +241,9 @@ export interface InboxDetailPanelProps {
    *  plain conversation (unified inbox §2.1's one-row rule) — undefined/null
    *  when a conversation has no linked ticket. */
   ticket?: TicketDTO | null
+  /** A plain conversation whose paired ticket the viewer cannot open: the
+   *  Ticket card shows one muted line instead of Create ticket. */
+  pairHidden?: boolean
   onChanged: () => void
   /** Navigate to another item (a previous conversation from the contact card,
    *  or the linked ticket row in Links) — a bare TypeID, either kind. */
@@ -281,6 +284,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   item,
   conversation,
   ticket,
+  pairHidden = false,
   onChanged,
   onSelectItem,
   onTrackAsFeedback,
@@ -681,6 +685,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               )
             })}
           </div>
+        ) : showCreateTicketSlot && pairHidden ? (
+          <p className="border-t border-border/30 pt-4 text-sm text-muted-foreground">
+            <FormattedMessage
+              id="admin.inbox.linkedTicketHidden"
+              defaultMessage="Linked ticket you can't open"
+            />
+          </p>
         ) : (
           showCreateTicketSlot && (
             <div className="border-t border-border/30 pt-4">

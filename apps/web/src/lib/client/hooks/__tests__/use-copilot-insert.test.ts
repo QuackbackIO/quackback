@@ -65,4 +65,34 @@ describe('useCopilotInsert', () => {
     expect(result.current.noteMode).toBe(false)
     expect(reply.insertText).toHaveBeenCalledWith('Add this to the reply.')
   })
+
+  it('drops the insert when the switch to reply is refused, so it never lands later', () => {
+    const reply = makeReplyHandle()
+    const { result } = renderHook(() => {
+      const [noteMode, setNoteMode] = useState(true)
+      const [refuse, setRefuse] = useState(true)
+      const replyComposerRef = useRef<ReplyHandle | null>(null)
+      replyComposerRef.current = noteMode ? null : reply
+      // A guarded switch, like the tracker's Reply all with files staged.
+      const guarded = (note: boolean) => {
+        if (!note && refuse) return false
+        setNoteMode(note)
+        return true
+      }
+      const insertFromCopilot = useCopilotInsert({
+        noteMode,
+        setNoteMode: guarded,
+        replyComposerRef,
+      })
+      return { noteMode, insertFromCopilot, setNoteMode, setRefuse }
+    })
+
+    act(() => result.current.insertFromCopilot('Fixed in 1.2.3'))
+    expect(result.current.noteMode).toBe(true)
+
+    // Later the teammate removes the files and switches to Reply all by hand.
+    act(() => result.current.setRefuse(false))
+    act(() => result.current.setNoteMode(false))
+    expect(reply.insertText).not.toHaveBeenCalled()
+  })
 })

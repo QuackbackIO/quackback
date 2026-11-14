@@ -1,15 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import {
-  db,
-  eq,
-  and,
-  or,
-  gt,
-  isNull,
-  conversations,
-  conversationMessages,
-  principal,
-} from '@/lib/server/db'
+import { db, eq, and, or, gt, isNull, conversationMessages, principal } from '@/lib/server/db'
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { verifyStreamToken } from '@/lib/server/realtime/stream-token'
@@ -24,7 +14,7 @@ import {
 import { subscribe } from '@/lib/server/realtime/pubsub'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
 import { readActivitySnapshot } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
-import { canViewConversation } from '@/lib/server/policy/conversation'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember, toSessionScope, type SessionScope } from '@/lib/shared/roles'
@@ -192,12 +182,15 @@ export const Route = createFileRoute('/api/chat/stream')({
               return new Response('Not found', { status: 404 })
             }
           }
-          const conversation = await db.query.conversations.findFirst({
-            where: eq(conversations.id, conversationId),
-          })
-          if (!conversation || !canViewConversation(actor, conversation).allowed) {
-            // Never leak existence to a non-owner.
-            return new Response('Not found', { status: 404 })
+          // The visitor who owns it, or a teammate whose scope holds it. Any
+          // other caller gets 404, never 403, so existence never leaks.
+          try {
+            await assertConversationVisible(conversationId, actor)
+          } catch (err) {
+            if (err instanceof NotFoundError) {
+              return new Response('Not found', { status: 404 })
+            }
+            throw err
           }
           channels.push(conversationChannel(conversationId))
           backfillConversationId = conversationId

@@ -12,7 +12,7 @@ import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 
 // Module-level handles so we can assert calls + drive return values per test.
 const canActAsAgent = vi.fn()
-const assertConversationViewable = vi.fn()
+const assertConversationVisible = vi.fn()
 const sendAgentMessage = vi.fn()
 const addVoteOnBehalf = vi.fn()
 const createPost = vi.fn()
@@ -32,9 +32,11 @@ vi.mock('@/lib/server/policy/conversation', () => ({
 }))
 
 vi.mock('../conversation.service', () => ({
-  assertConversationViewable: (id: ConversationId, actor: Actor) =>
-    assertConversationViewable(id, actor),
   sendAgentMessage: (...args: unknown[]) => sendAgentMessage(...args),
+}))
+vi.mock('../conversation-visibility', () => ({
+  assertConversationVisible: (id: ConversationId, actor: Actor) =>
+    assertConversationVisible(id, actor),
 }))
 
 vi.mock('@/lib/server/test-data', () => ({
@@ -121,7 +123,7 @@ beforeEach(() => {
   onConflictHit = false
   // Sensible defaults; individual tests override as needed.
   canActAsAgent.mockReturnValue({ allowed: true })
-  assertConversationViewable.mockResolvedValue(freshConversation())
+  assertConversationVisible.mockResolvedValue(freshConversation())
   createPost.mockResolvedValue({ id: 'post_new' as PostId, boardSlug: 'feature-requests' })
   addVoteOnBehalf.mockResolvedValue(undefined)
   sendAgentMessage.mockResolvedValue(undefined)
@@ -139,7 +141,7 @@ describe('createPostFromConversation authorization guard', () => {
       createPostFromConversation({ conversationId, boardId, title: 'x' }, ctx)
     ).rejects.toBeInstanceOf(ForbiddenError)
 
-    expect(assertConversationViewable).not.toHaveBeenCalled()
+    expect(assertConversationVisible).not.toHaveBeenCalled()
     expect(createPost).not.toHaveBeenCalled()
     expect(addVoteOnBehalf).not.toHaveBeenCalled()
   })
@@ -154,7 +156,7 @@ describe('createPostFromConversation authorization guard', () => {
 
 describe('createPostFromConversation conversation resolution', () => {
   it('propagates a not-found conversation from the access chokepoint', async () => {
-    assertConversationViewable.mockRejectedValue(new Error('Conversation not found'))
+    assertConversationVisible.mockRejectedValue(new Error('Conversation not found'))
 
     await expect(
       createPostFromConversation({ conversationId, boardId, title: 'x' }, ctx)
@@ -235,7 +237,7 @@ describe('createPostFromConversation create-new path', () => {
   })
 
   it('records a null externalDisplayId when the conversation has no subject', async () => {
-    assertConversationViewable.mockResolvedValue(freshConversation({ subject: undefined }))
+    assertConversationVisible.mockResolvedValue(freshConversation({ subject: undefined }))
     await createPostFromConversation({ conversationId, boardId, title: 'Add dark mode' }, ctx)
     expect(insertedLinks[0].externalDisplayId).toBeNull()
   })
