@@ -11,9 +11,10 @@
  * ends. An unanswered lookup is not evidence either way and changes nothing.
  *
  * Demotion also takes verification off the sign-in domains that rested on this
- * proof alone (`sso-domain-lapse.ts`), in the same transaction, and only when
- * every one of them could be judged. A sign-in domain that holds its own
- * `_quackback-verify` record, or that another proof still covers, keeps it.
+ * proof alone (`sso-domain-lapse.ts`), in the same transaction. One whose own
+ * lookup went unanswered is judged again on later runs; it never holds the
+ * demotion back. A sign-in domain that holds its own `_quackback-verify`
+ * record, or that another proof still covers, keeps it.
  *
  * Everything is read from this workspace's own database: nothing proven in
  * another workspace is ever looked at.
@@ -22,7 +23,9 @@ import {
   and,
   db,
   domains,
+  emailSendingDomains,
   eq,
+  isNotNull,
   isNull,
   lt,
   or,
@@ -33,7 +36,10 @@ import {
 import { logger } from '@/lib/server/logger'
 import { lookupVerificationTxt } from '@/lib/server/auth/dns-verify'
 import { interactiveResolver } from '@/lib/server/dns/resolver'
-import { OWNERSHIP_RECORD_HOST } from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import {
+  OWNERSHIP_RECORD_HOST,
+  ownershipRecord,
+} from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import type { OwnershipAnswer } from '@/lib/server/domains/channel-accounts/domain-verification'
 import {
   OWNERSHIP_WARNING_LEASE_MS,
@@ -129,22 +135,68 @@ async function deliverWarning(row: Domain): Promise<void> {
   }
 }
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/**
+ * Take verification off the sign-in domains judged to have lost their proof,
+ * each only as it was judged: one whose token was rotated since is left.
+ */
+async function unverifySignIn(
+  tx: Tx,
+  losing: readonly LapsingSignInDomain[]
+): Promise<LapsingSignInDomain[]> {
+  const unverified: LapsingSignInDomain[] = []
+  for (const sso of losing) {
+    const [cleared] = await tx
+      .update(ssoVerifiedDomain)
+      .set({ verifiedAt: null })
+      .where(
+        and(
+          eq(ssoVerifiedDomain.id, sso.id),
+          eq(ssoVerifiedDomain.verificationToken, sso.verificationToken),
+          sql`${ssoVerifiedDomain.verifiedAt} IS NOT NULL`
+        )
+      )
+      .returning({ id: ssoVerifiedDomain.id })
+    if (cleared) unverified.push(sso)
+  }
+  if (unverified.length > 0) {
+    const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
+    await bumpAuthConfigVersionInTx(tx)
+  }
+  return unverified
+}
+
+/** After sign-in changed: every pod rebuilds sign-in on its next request. */
+async function signInChanged(): Promise<void> {
+  const { resetAuth } = await import('@/lib/server/auth')
+  const { invalidateSettingsCache } = await import('@/lib/server/domains/settings/settings.helpers')
+  resetAuth()
+  await invalidateSettingsCache()
+}
+
+function logUndecided(row: Domain, undecided: readonly string[]): void {
+  if (undecided.length === 0) return
+  log.warn(
+    { domain: row.name, sign_in_domains: undecided },
+    'a sign-in domain under a lapsed domain could not be checked; judging it again next run'
+  )
+}
+
 /**
  * Demote a domain whose record stayed missing past its grace period, and take
  * verification off the sign-in domains that rested on it alone, in one
  * transaction. Conditional on the period still being the one judged, so a
- * record found again meanwhile (a person's check) cancels it. Returns false
- * when it waited instead: a sign-in domain could not be judged.
+ * record found again meanwhile (a person's check) cancels it.
+ *
+ * Always demotes once the period is over: a sign-in domain whose own lookup
+ * went unanswered is left for a later run to judge
+ * ({@link rejudgeLapsedDomains}), never a reason to keep the lapsed proof. A
+ * sending row issued this domain's token rests on the same record, so its own
+ * grace period is started too, from the same moment, if it had not started.
  */
-async function demote(row: Domain, since: Date, now: Date): Promise<boolean> {
-  const losing = await signInDomainsLosingProof(row)
-  if (losing === 'undecided') {
-    log.warn(
-      { domain: row.name },
-      'domain ownership lapsed, but a sign-in domain under it could not be checked; trying again next run'
-    )
-    return false
-  }
+async function demote(row: Domain, since: Date, now: Date): Promise<void> {
+  const { losing, undecided } = await signInDomainsLosingProof(row)
   const result = await db.transaction(async (tx) => {
     const [moved] = await tx
       .update(domains)
@@ -165,46 +217,68 @@ async function demote(row: Domain, since: Date, now: Date): Promise<boolean> {
       )
       .returning({ id: domains.id })
     if (!moved) return null
-    const unverified: LapsingSignInDomain[] = []
-    for (const sso of losing) {
-      // Only the row as it was judged: one whose token was rotated since is left.
-      const [cleared] = await tx
-        .update(ssoVerifiedDomain)
-        .set({ verifiedAt: null })
-        .where(
-          and(
-            eq(ssoVerifiedDomain.id, sso.id),
-            eq(ssoVerifiedDomain.verificationToken, sso.verificationToken),
-            sql`${ssoVerifiedDomain.verifiedAt} IS NOT NULL`
-          )
+    const shared = ownershipRecord(row.ownershipToken)
+    await tx
+      .update(emailSendingDomains)
+      .set({
+        ownershipMissingSince: since,
+        ownershipWarningClaimedAt: null,
+        ownershipWarningSentAt: null,
+      })
+      .where(
+        and(
+          eq(emailSendingDomains.status, 'verified'),
+          isNull(emailSendingDomains.ownershipMissingSince),
+          sql`${emailSendingDomains.dnsRecords} @> ${JSON.stringify([{ purpose: shared.purpose, value: shared.value }])}::jsonb`
         )
-        .returning({ id: ssoVerifiedDomain.id })
-      if (cleared) unverified.push(sso)
-    }
-    if (unverified.length > 0) {
-      const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
-      await bumpAuthConfigVersionInTx(tx)
-    }
-    return unverified
+      )
+    return unverifySignIn(tx, losing)
   })
-  if (!result) return true
+  if (!result) return
 
   log.warn(
     { domain: row.name, sign_in_domains: result.map((s) => s.name) },
     'domain ownership record stayed missing past the grace period; it is no longer verified'
   )
-  if (result.length > 0) {
-    const { resetAuth } = await import('@/lib/server/auth')
-    const { invalidateSettingsCache } =
-      await import('@/lib/server/domains/settings/settings.helpers')
-    resetAuth()
-    await invalidateSettingsCache()
-  }
+  logUndecided(row, undecided)
+  if (result.length > 0) await signInChanged()
   await notifyDomainOwnershipLapsed(
     row,
     result.map((s) => s.name)
   )
-  return true
+}
+
+/**
+ * Judge again the sign-in domains under every domain that was verified and
+ * has since been demoted. One left alone because its own lookup went
+ * unanswered loses verification here once it can be judged, if nothing proves
+ * it by then.
+ */
+async function rejudgeLapsedDomains(): Promise<void> {
+  const lapsed = await db
+    .select()
+    .from(domains)
+    .where(and(eq(domains.status, 'pending'), isNotNull(domains.verifiedAt)))
+  for (const row of lapsed) {
+    try {
+      const { losing, undecided } = await signInDomainsLosingProof(row)
+      logUndecided(row, undecided)
+      if (losing.length === 0) continue
+      const unverified = await db.transaction((tx) => unverifySignIn(tx, losing))
+      if (unverified.length === 0) continue
+      log.warn(
+        { domain: row.name, sign_in_domains: unverified.map((s) => s.name) },
+        'sign-in domains under a lapsed domain are no longer verified'
+      )
+      await signInChanged()
+      await notifyDomainOwnershipLapsed(
+        row,
+        unverified.map((s) => s.name)
+      )
+    } catch (err) {
+      log.warn({ err, domain: row.name }, 'judging sign-in domains under a lapsed domain failed')
+    }
+  }
 }
 
 /** Check one verified domain and act on what its zone says. */
@@ -235,7 +309,8 @@ async function checkDomain(row: Domain, now: Date): Promise<'kept' | 'warned' | 
     await deliverWarning(started ?? row)
     return 'warned'
   }
-  return (await demote(row, grace.since, now)) ? 'demoted' : 'kept'
+  await demote(row, grace.since, now)
+  return 'demoted'
 }
 
 /**
@@ -268,5 +343,6 @@ export async function watchDomainOwnership(
       log.warn({ err, domain: row.name }, 'domain ownership check failed')
     }
   }
+  await rejudgeLapsedDomains()
   return { checked, demoted }
 }
