@@ -8,6 +8,7 @@ export {
   listTeamMembers,
   listAssignableTeammates,
   listTeamMemberPrincipalIds,
+  teamIdsForPrincipal,
   countTeamMembers,
   setTeamMembers,
   addPrincipalToDefaultTeam,
