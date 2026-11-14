@@ -41,4 +41,19 @@ describe('RichTextEditor mentionItem', () => {
 
     expect(surface(container)).toBe(first)
   })
+
+  it('starts the new editor from the current draft', async () => {
+    const { container, rerender } = render(
+      <RichTextEditor value="Draft note" mentionItem={{ kind: 'ticket', id: 'ticket_a' }} />
+    )
+    await waitFor(() => expect(surface(container)).toHaveTextContent('Draft note'))
+    const first = surface(container)
+
+    rerender(
+      <RichTextEditor value="Draft note, longer" mentionItem={{ kind: 'ticket', id: 'ticket_b' }} />
+    )
+
+    await waitFor(() => expect(surface(container)).not.toBe(first))
+    await waitFor(() => expect(surface(container)).toHaveTextContent('Draft note, longer'))
+  })
 })

@@ -1433,9 +1433,8 @@ function RichTextEditorBase({
   mentionItem,
 }: RichTextEditorProps) {
   // One extension per item, kept while the item is open, so the extensions
-  // memo below stays stable across renders. The editor itself is keyed on the
-  // same item (see the useEditor deps), so a host that moves this editor to
-  // another item without remounting it gets the new item's typeahead.
+  // memo below stays stable across renders. A new item remounts the editor
+  // (the `RichTextEditor` wrapper keys it on the item).
   const mentionKind = mentionItem?.kind
   const mentionId = mentionItem?.id
   const mentionExtension = useMemo(
@@ -1545,46 +1544,40 @@ function RichTextEditorBase({
   // useEffect below (value sync).
   const initialContentRef = useRef(value ?? '')
 
-  const editor = useEditor(
-    {
-      immediatelyRender: false,
-      // When no toolbar is visible (borderless/widget), skip re-renders on every
-      // ProseMirror transaction for a significant perf win. When the toolbar IS
-      // shown, we need re-renders so MenuBar's active-state indicators stay current.
-      shouldRerenderOnTransaction: toolbarPosition === 'none' ? false : undefined,
-      extensions,
-      content: initialContentRef.current,
-      autofocus,
-      editable: !disabled,
-      onCreate: ({ editor }) => {
-        lastSuccessfulMarkdownRef.current = seedMarkdownFallback(initialContentRef.current, editor)
-      },
-      onUpdate: ({ editor }) => {
-        if (!onDocumentChange) return
-        const edited = editorDocument(editor, {
-          markdownFallback: () => lastSuccessfulMarkdownRef.current,
-          onSerialize: (format, serialized) => {
-            if (latestDocumentRef.current !== edited) return
-            if (format === 'json') {
-              lastEmittedJsonRef.current = serialized
-            } else {
-              lastEmittedMarkdownRef.current = serialized as string
-              lastSuccessfulMarkdownRef.current = serialized as string
-            }
-          },
-        })
-        latestDocumentRef.current = edited
-        lastEmittedJsonRef.current = null
-        lastEmittedMarkdownRef.current = null
-        onDocumentChange(edited)
-      },
-      editorProps,
-      // A new mention item builds a new editor: TipTap does not re-register an
-      // extension's plugins when only the extension list changes, so the old
-      // item's typeahead would otherwise stay.
+  const editor = useEditor({
+    immediatelyRender: false,
+    // When no toolbar is visible (borderless/widget), skip re-renders on every
+    // ProseMirror transaction for a significant perf win. When the toolbar IS
+    // shown, we need re-renders so MenuBar's active-state indicators stay current.
+    shouldRerenderOnTransaction: toolbarPosition === 'none' ? false : undefined,
+    extensions,
+    content: initialContentRef.current,
+    autofocus,
+    editable: !disabled,
+    onCreate: ({ editor }) => {
+      lastSuccessfulMarkdownRef.current = seedMarkdownFallback(initialContentRef.current, editor)
     },
-    [mentionKind, mentionId]
-  )
+    onUpdate: ({ editor }) => {
+      if (!onDocumentChange) return
+      const edited = editorDocument(editor, {
+        markdownFallback: () => lastSuccessfulMarkdownRef.current,
+        onSerialize: (format, serialized) => {
+          if (latestDocumentRef.current !== edited) return
+          if (format === 'json') {
+            lastEmittedJsonRef.current = serialized
+          } else {
+            lastEmittedMarkdownRef.current = serialized as string
+            lastSuccessfulMarkdownRef.current = serialized as string
+          }
+        },
+      })
+      latestDocumentRef.current = edited
+      lastEmittedJsonRef.current = null
+      lastEmittedMarkdownRef.current = null
+      onDocumentChange(edited)
+    },
+    editorProps,
+  })
 
   // The imperative focus seam. `withLiveEditor` guards the window where the
   // editor is still null or already torn down, so a stale host reference can
@@ -1942,7 +1935,7 @@ function sameFeatures(prev: EditorFeatures = {}, next: EditorFeatures = {}): boo
 // Skip re-render when individual feature flags and all other props are unchanged.
 // Compares features by primitive values rather than object reference so callers
 // can safely pass inline objects without triggering unnecessary editor rebuilds.
-export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
+const MemoRichTextEditor = memo(RichTextEditorBase, (prev, next) => {
   if (
     prev.value !== next.value ||
     prev.onDocumentChange !== next.onDocumentChange ||
@@ -1956,13 +1949,24 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     prev.borderless !== next.borderless ||
     prev.toolbarPosition !== next.toolbarPosition ||
     prev.className !== next.className ||
-    prev.editorRef !== next.editorRef ||
-    prev.mentionItem?.kind !== next.mentionItem?.kind ||
-    prev.mentionItem?.id !== next.mentionItem?.id
+    prev.editorRef !== next.editorRef
   )
     return false
   return sameFeatures(prev.features, next.features)
 })
+
+/**
+ * The editor, remounted when its mention item changes. TipTap does not
+ * re-register an extension's plugins when only the extension list changes, so
+ * a host that moves one editor to another item without remounting it would
+ * keep the old item's typeahead. The new editor seeds from the current
+ * `value`, so the draft carries over. Without a mention item it is never
+ * re-keyed.
+ */
+export function RichTextEditor(props: RichTextEditorProps) {
+  const item = props.mentionItem
+  return <MemoRichTextEditor key={item ? `${item.kind}:${item.id}` : undefined} {...props} />
+}
 
 // ============================================================================
 // Uploaded media handling
