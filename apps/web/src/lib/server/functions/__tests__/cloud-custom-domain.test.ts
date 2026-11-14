@@ -40,6 +40,8 @@ const h = vi.hoisted(() => ({
   sent: [] as unknown[],
   instructions: [] as unknown[],
   proofReads: 0,
+  ensured: [] as string[],
+  operatorFails: false,
 }))
 
 vi.mock('@/lib/server/db', () => ({
@@ -69,6 +71,7 @@ vi.mock('../auth-helpers', () => ({
 }))
 vi.mock('@/lib/server/control-plane/client', () => ({
   requestWorkspaceIdentityMutation: async (input: unknown) => {
+    if (h.operatorFails) throw new Error('operator refused')
     h.sent.push(input)
     return { projectionToken: 'signed' }
   },
@@ -88,6 +91,13 @@ vi.mock('@/lib/server/domains/domain-proof/hostname-proof', () => ({
   },
 }))
 
+vi.mock('@/lib/server/domains/domain-proof/domains.service', () => ({
+  ensureDomain: async (name: string) => {
+    h.ensured.push(name)
+    return null
+  },
+}))
+
 await import('../cloud-identity')
 const getCustomDomains = handlers[2]!
 const mutateCustomDomain = handlers[4]!
@@ -99,6 +109,8 @@ beforeEach(() => {
   h.sent.length = 0
   h.instructions = []
   h.proofReads = 0
+  h.ensured.length = 0
+  h.operatorFails = false
 })
 afterEach(() => {
   delete process.env[FLAG]
@@ -140,6 +152,22 @@ describe('mutateCloudCustomDomainFn', () => {
     await mutate('add', 'feedback.acme.com')
     expect(h.sent).toEqual([{ customDomain: { action: 'add', hostname: 'feedback.acme.com' } }])
     expect(h.proofReads).toBe(0)
+  })
+})
+
+describe('mutateCloudCustomDomainFn and Settings > Domains', () => {
+  it('puts an added hostname on Settings > Domains in the same step', async () => {
+    await mutate('add', 'feedback.acme.com')
+    expect(h.ensured).toEqual(['feedback.acme.com'])
+  })
+
+  it('adds no domain for any other action, or when the operator refuses the add', async () => {
+    await mutate('refresh', 'feedback.acme.com')
+    await mutate('makePrimary', 'feedback.acme.com')
+    await mutate('remove', 'feedback.acme.com')
+    h.operatorFails = true
+    await expect(mutate('add', 'feedback.acme.com')).rejects.toThrow('operator refused')
+    expect(h.ensured).toEqual([])
   })
 })
 

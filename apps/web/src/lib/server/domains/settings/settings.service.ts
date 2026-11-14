@@ -490,7 +490,7 @@ function generateVerificationToken(): string {
  * but *unlinked* row is adopted by the given provider (a previously
  * global / backfilled domain). A row already owned by another provider is
  * returned untouched — `name` is globally unique, so a domain belongs to
- * exactly one provider.
+ * exactly one provider. The name is put on Settings > Domains too.
  */
 export async function insertVerifiedDomain(
   name: string,
@@ -538,6 +538,9 @@ export async function insertVerifiedDomain(
       await bumpAuthConfigVersionInTx(tx)
       return { row, changed: true }
     })
+    // The same domain on Settings > Domains, made in this one step.
+    const { ensureDomain } = await import('@/lib/server/domains/domain-proof/domains.service')
+    await ensureDomain(name)
     if (inserted.changed) {
       resetAuth()
       await invalidateSettingsCache()

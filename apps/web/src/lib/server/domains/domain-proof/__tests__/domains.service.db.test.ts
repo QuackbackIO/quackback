@@ -55,7 +55,9 @@ vi.mock('@/lib/server/kv/pg-kv', () => ({
 import {
   addDomain,
   checkDomainOwnership,
+  discardUnusedDomain,
   domainUsesOf,
+  ensureDomain,
   getDomain,
   listDomains,
   removeDomain,
@@ -162,6 +164,57 @@ describe.skipIf(!fixture.available)('domains added by name (real DB, rolled back
     it('stores an internationalised name in its A-label form', async () => {
       const row = await addDomain('bücher.de')
       expect(row.name).toBe('xn--bcher-kva.de')
+    })
+  })
+
+  describe('ensureDomain', () => {
+    it('creates the row for a new name, pending, with a token of its own', async () => {
+      const ensured = await ensureDomain(' Acme.COM. ')
+      expect(ensured?.created).toBe(true)
+      expect(ensured?.domain).toMatchObject({ name: 'acme.com', status: 'pending' })
+      expect(ensured?.domain.ownershipToken).toMatch(/^[0-9a-f]{32}$/)
+      expect(await testDb.select().from(domains)).toHaveLength(1)
+    })
+
+    it("is idempotent, and never changes an existing row's token or status", async () => {
+      const row = await addDomain('acme.com')
+      await testDb
+        .update(domains)
+        .set({ status: 'verified', verifiedAt: new Date() })
+        .where(eq(domains.id, row.id))
+
+      const again = await ensureDomain('ACME.com')
+      expect(again?.created).toBe(false)
+      expect(again?.domain.id).toBe(row.id)
+      expect(again?.domain.ownershipToken).toBe(row.ownershipToken)
+      expect(again?.domain.status).toBe('verified')
+      expect(await testDb.select().from(domains)).toHaveLength(1)
+    })
+
+    it('makes nothing of a name that is not a domain anyone can prove', async () => {
+      expect(await ensureDomain('acme.test')).toBeNull()
+      expect(await ensureDomain('192.168.0.1')).toBeNull()
+      expect(await testDb.select().from(domains)).toEqual([])
+    })
+  })
+
+  describe('discardUnusedDomain', () => {
+    it('removes a pending domain no use holds', async () => {
+      const row = await addDomain('acme.com')
+      await discardUnusedDomain(row)
+      expect(await getDomain('acme.com')).toBeNull()
+    })
+
+    it('keeps a domain a use holds, or one already verified', async () => {
+      const held = await addDomain('acme.com')
+      await seedSendingDomain('acme.com', 'pending')
+      await discardUnusedDomain(held)
+      expect(await getDomain('acme.com')).not.toBeNull()
+
+      const verified = await addDomain('acme.io')
+      await testDb.update(domains).set({ status: 'verified' }).where(eq(domains.id, verified.id))
+      await discardUnusedDomain(verified)
+      expect(await getDomain('acme.io')).not.toBeNull()
     })
   })
 

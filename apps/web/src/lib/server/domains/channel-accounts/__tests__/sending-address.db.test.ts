@@ -12,7 +12,16 @@ import type { SesDomainIdentity, SesIdentityCreation } from '@quackback/email/se
 import type { RawEmailOptions } from '@quackback/email'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { eq, isNull, and, teams, emailSendingDomains, channelAccounts } from '@/lib/server/db'
+import {
+  eq,
+  isNull,
+  and,
+  teams,
+  emailSendingDomains,
+  channelAccounts,
+  domains,
+  ssoVerifiedDomain,
+} from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -105,6 +114,7 @@ import {
   addressModeFor,
 } from '../sending-address'
 import { sendingIdentityContext } from '../outbound-identity'
+import { refreshSendingDomain } from '../sending-identity'
 import { deleteSendingDomain, SendingDomainInUseError } from '../channel-account.service'
 
 const identity = (domain: string): SesDomainIdentity => ({
@@ -425,6 +435,67 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
       ).rejects.toThrow()
       expect(await domainsOf(teamId)).toEqual([])
+    })
+
+    describe('the domain on Settings > Domains', () => {
+      const addedDomains = () => testDb.select().from(domains)
+
+      it('leaves exactly one domain for the address, and nothing for any other use', async () => {
+        const teamId = await seedTeam()
+        await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
+
+        expect((await addedDomains()).map((d) => [d.name, d.status])).toEqual([
+          ['acme.com', 'pending'],
+        ])
+        expect(await testDb.select().from(ssoVerifiedDomain)).toEqual([])
+      })
+
+      it('keeps the one domain and its token for a second address on it', async () => {
+        const teamId = await seedTeam()
+        await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
+        const [first] = await addedDomains()
+        await addSendingAddress({ owningTeamId: teamId, address: 'news@acme.com' })
+
+        const after = await addedDomains()
+        expect(after).toHaveLength(1)
+        expect(after[0]!.ownershipToken).toBe(first!.ownershipToken)
+      })
+
+      it('adds the domain before its sending row is set up', async () => {
+        const teamId = await seedTeam()
+        const seen: string[][] = []
+        duringPreflight.mockImplementation(async () => {
+          seen.push((await addedDomains()).map((d) => d.name))
+        })
+        await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
+        expect(seen[0]).toEqual(['acme.com'])
+      })
+
+      it("gives a sending row on the provider's keys the domain's token, so one record proves both", async () => {
+        const teamId = await seedTeam()
+        const [row] = await testDb
+          .insert(emailSendingDomains)
+          .values({ owningTeamId: teamId, domain: 'acme.com', mailFromLabel: 'qb-bounce' })
+          .returning()
+        await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
+        const [domain] = await addedDomains()
+
+        const refreshed = await refreshSendingDomain(row!.id)
+        expect(refreshed?.dnsRecords.find((r) => r.purpose === 'ownership')?.value).toBe(
+          `quackback-domain-verification=${domain!.ownershipToken}`
+        )
+      })
+
+      it('leaves no domain behind when the address is refused', async () => {
+        const teamId = await seedTeam()
+        maxSendingDomains.mockReturnValue(1)
+        await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
+        await expect(
+          addSendingAddress({ owningTeamId: teamId, address: 'help@acme.io' })
+        ).rejects.toThrow(/sending domains/i)
+
+        expect((await addedDomains()).map((d) => d.name)).toEqual(['acme.com'])
+      })
     })
   })
 

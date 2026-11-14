@@ -18,6 +18,12 @@ const hoisted = vi.hoisted(() => ({
   mockGetHelpCenterConfig: vi.fn(),
 }))
 
+// The domain the help center is set to also goes on Settings > Domains; that
+// row is covered by its own database test.
+vi.mock('@/lib/server/domains/domain-proof/domains.service', () => ({
+  ensureDomain: async () => null,
+}))
+
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getWorkspaceSettings: hoisted.mockGetWorkspaceSettings,
   getHelpCenterConfig: hoisted.mockGetHelpCenterConfig,

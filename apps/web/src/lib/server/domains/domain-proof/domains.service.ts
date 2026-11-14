@@ -11,6 +11,7 @@
  * name, so a domain is removed only once none of them holds it.
  */
 import {
+  and,
   asc,
   db,
   domains,
@@ -74,16 +75,46 @@ export async function listDomains(): Promise<Domain[]> {
  * token unchanged, so a second add never invalidates a published record.
  */
 export async function addDomain(input: string): Promise<Domain> {
-  const name = parseName(input)
+  return (await upsertDomain(parseName(input))).domain
+}
+
+/** The row at a name in its one spelling: inserted with a fresh token, or the one already there. */
+async function upsertDomain(name: string): Promise<{ domain: Domain; created: boolean }> {
   const [inserted] = await db
     .insert(domains)
     .values({ name, ownershipToken: mintOwnershipToken() })
     .onConflictDoNothing({ target: domains.name })
     .returning()
-  if (inserted) return inserted
+  if (inserted) return { domain: inserted, created: true }
   const existing = await getDomain(name)
   if (!existing) throw new ConflictError('DOMAIN_ADD_RACE', 'Try adding the domain again.')
-  return existing
+  return { domain: existing, created: false }
+}
+
+/**
+ * The domain a use was just given in context (an address added on Settings >
+ * Email, a sign-in domain, the help center's domain, a Cloud web address), so
+ * it is on Settings > Domains too. Idempotent: a token is minted only for a
+ * new row, and an existing row's token and status are never changed. Not a
+ * server function: each caller is gated by its own use's permission.
+ *
+ * A name that is not a domain anyone can prove (reserved, an IP, one label)
+ * gets no row, and null.
+ */
+export async function ensureDomain(
+  input: string
+): Promise<{ domain: Domain; created: boolean } | null> {
+  const parsed = verifiableDomain.safeParse(input)
+  return parsed.success ? upsertDomain(parsed.data) : null
+}
+
+/**
+ * Take back a domain {@link ensureDomain} created for a use that then did not
+ * happen: only while it is still pending and nothing holds its name.
+ */
+export async function discardUnusedDomain(domain: Domain): Promise<void> {
+  if ((await domainUsesOf(domain.name)).length > 0) return
+  await db.delete(domains).where(and(eq(domains.id, domain.id), eq(domains.status, 'pending')))
 }
 
 /**

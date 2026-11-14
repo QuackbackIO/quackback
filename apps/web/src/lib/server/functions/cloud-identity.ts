@@ -139,6 +139,11 @@ export const mutateCloudCustomDomainFn = createServerFn({ method: 'POST' })
     })
     const verified = await verifyIdentityProjectionToken(response.projectionToken)
     await writeIdentityProjection(verified.workspaceKey, verified.projection)
+    if (data.action === 'add') {
+      // The same domain on Settings > Domains, made in this one step.
+      const { ensureDomain } = await import('@/lib/server/domains/domain-proof/domains.service')
+      await ensureDomain(data.hostname)
+    }
 
     const originChanged = verified.projection.canonicalOrigin !== current.canonicalOrigin
     if (originChanged && !transferToken) {
