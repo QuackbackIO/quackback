@@ -102,6 +102,7 @@ import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cache
 import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
 import { itemRefId } from '@/lib/client/conversation/inbox-cache'
 import { coalescedJitter } from '@/lib/client/coalesced-jitter'
+import { createOwnSendEchoHold } from '@/components/conversation/thread-echo'
 import {
   removeInboxItemFromCaches,
   settleOpenItemAfterScopeChange,
@@ -411,6 +412,9 @@ function patchTicketInInboxLists(queryClient: QueryClient, ticket: TicketDTO): v
   )
 }
 
+/** The longest this tab's own send holds its echo, should it never settle. */
+const THREAD_ECHO_HOLD_MS = 5_000
+
 /** The most a refetch after a scope change is delayed, to spread the load. */
 const SCOPE_REFETCH_JITTER_MS = 2_000
 
@@ -700,6 +704,37 @@ function InboxPage() {
   )
   useEffect(() => () => scopeRefetch.cancel(), [scopeRefetch])
 
+  // This tab's own send reaches the open thread as its response and as the
+  // stream's echo. While the send is in flight, its conversation's echo frames
+  // wait and land after the response, where they change nothing, so the thread
+  // renders once whichever arrives first (see thread-echo.ts).
+  const ownSendEcho = useMemo(
+    () =>
+      createOwnSendEchoHold({
+        isSending: (id) =>
+          queryClient.isMutating({ mutationKey: conversationKeys.agentSend(id) }) > 0,
+        onSendSettled: (id, done) => {
+          const key = conversationKeys.agentSend(id)
+          return queryClient.getMutationCache().subscribe(() => {
+            if (queryClient.isMutating({ mutationKey: key }) === 0) done()
+          })
+        },
+        flush: (id, frames) =>
+          reconcileCachedThread<AgentThreadCache>(
+            queryClient,
+            conversationKeys.agentThread(id),
+            (prev) =>
+              frames.reduce<AgentThreadCache | undefined>(
+                (acc, evt) => applyAgentThreadEvent(acc, evt, id),
+                prev
+              )
+          ),
+        timeoutMs: THREAD_ECHO_HOLD_MS,
+      }),
+    [queryClient]
+  )
+  useEffect(() => () => ownSendEcho.cancel(), [ownSendEcho])
+
   const { connected: streamConnected } = useConversationStream({
     enabled: true,
     buildUrl: async () => '/api/chat/stream?scope=inbox',
@@ -780,11 +815,14 @@ function InboxPage() {
         evt.kind !== 'assistant_activity' &&
         evt.kind !== 'assistant_delta'
       ) {
-        reconcileCachedThread<AgentThreadCache>(
-          queryClient,
-          conversationKeys.agentThread(conversationId),
-          (prev) => applyAgentThreadEvent(prev, evt, conversationId)
-        )
+        // Held while this tab's own send to the conversation is in flight.
+        if (!ownSendEcho.hold(conversationId, evt)) {
+          reconcileCachedThread<AgentThreadCache>(
+            queryClient,
+            conversationKeys.agentThread(conversationId),
+            (prev) => applyAgentThreadEvent(prev, evt, conversationId)
+          )
+        }
         // A new message with files invalidates the detail panel's Files
         // section — same event, no separate read.
         if (evt.kind === 'message' && evt.message.attachments.length > 0) {

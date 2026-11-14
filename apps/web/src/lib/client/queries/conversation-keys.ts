@@ -19,6 +19,10 @@ export const conversationKeys = {
     [...conversationKeys.agentConversations(), scopeKey, status, priority, search] as const,
 
   /** An open admin thread (conversation DTO + loaded messages). */
+  /** The agent's own send to a conversation (a mutation key): the inbox holds
+   *  that conversation's echo frames while it is in flight. */
+  agentSend: (conversationId: ConversationId) =>
+    ['admin', 'inbox', 'send', conversationId] as const,
   agentThread: (conversationId: ConversationId) =>
     ['admin', 'inbox', 'thread', conversationId] as const,
 
