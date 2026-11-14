@@ -143,12 +143,21 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
     }
   }
 
+  // Counts scope-changed signals. A load records the count when it starts, so
+  // an answer read before a later change is never trusted.
+  let changes = 0
+
   // The load still running, if any. A load that timed out stays here until it
   // settles, and the next reload waits on it instead of starting another, so
   // a database that is not answering never gets a pile of reads.
-  let inFlight: Promise<InboxScopeLoad | undefined> | null = null
+  interface Load {
+    done: Promise<InboxScopeLoad | undefined>
+    /** The change count when this load started. */
+    changeSeen: number
+  }
+  let inFlight: Load | null = null
 
-  const startLoad = (): Promise<InboxScopeLoad | undefined> => {
+  const startLoad = (): Load => {
     let result: InboxScopeLoad | undefined
     const load = opts
       .runReload(async () => {
@@ -159,35 +168,43 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
         log.warn({ err, principal_id: principalId }, 'inbox scope reload failed')
         return undefined
       })
-    inFlight = load
+    const entry: Load = { done: load, changeSeen: changes }
+    inFlight = entry
     void load.finally(() => {
-      if (inFlight === load) inFlight = null
+      if (inFlight === entry) inFlight = null
     })
-    return load
+    return entry
   }
 
-  /** Run one load, or give up after the timeout. Undefined means it failed. */
-  const loadOnce = async (): Promise<InboxScopeLoad | undefined> => {
+  /**
+   * Run one load, or give up after the timeout. An undefined result means it
+   * failed; `changeSeen` says which scope change the answer can account for.
+   */
+  const loadOnce = async (): Promise<{
+    result: InboxScopeLoad | undefined
+    changeSeen: number
+  }> => {
     let timer: ReturnType<typeof setTimeout> | undefined
     const timedOut = new Promise<'timeout'>((resolve) => {
       timer = setTimeout(() => resolve('timeout'), reloadTimeoutMs)
     })
-    const outcome = await Promise.race([inFlight ?? startLoad(), timedOut])
+    const load = inFlight ?? startLoad()
+    const outcome = await Promise.race([load.done, timedOut])
     clearTimeout(timer)
     if (outcome === 'timeout') {
       log.warn(
         { principal_id: principalId, timeout_ms: reloadTimeoutMs },
         'inbox scope reload timed out'
       )
-      return undefined
+      return { result: undefined, changeSeen: load.changeSeen }
     }
-    return outcome
+    return { result: outcome, changeSeen: load.changeSeen }
   }
 
   const reload = async (): Promise<void> => {
     reloading = true
     stale = false
-    const result = await loadOnce()
+    const { result, changeSeen } = await loadOnce()
     if (closed) return
     if (result === 'not-teammate') {
       closed = true
@@ -211,6 +228,13 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       stale = true
       recovering = true
       reloading = false
+      return
+    }
+    if (changeSeen < changes) {
+      // The answer was read before the latest change (a load this reload
+      // inherited from one that timed out). Never judge by it: read again,
+      // with the waiting frames still queued.
+      void reload()
       return
     }
     actor = scopedActor(result.permissions)
@@ -248,6 +272,7 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
       accept({ type: 'frame', message, scope: asInboxEnvelope(meta) }),
     onScopeChanged: () => {
       if (closed) return
+      changes += 1
       stale = true
       accept({ type: 'changed' })
     },
