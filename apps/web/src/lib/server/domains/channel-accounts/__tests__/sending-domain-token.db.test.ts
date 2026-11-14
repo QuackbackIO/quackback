@@ -65,6 +65,7 @@ import { OWNERSHIP_VALUE_PREFIX, refreshSendingDomain } from '../sending-identit
 import { issueOwnershipToken } from '../sending-domain-token'
 import { checkDomainOwnership } from '@/lib/server/domains/domain-proof/domains.service'
 import { checkSsoDomainOwnership } from '@/lib/server/domains/domain-proof/sso-domain-check'
+import { getProvenZones, provenZoneCovering } from '@/lib/server/domains/domain-proof/proven-zones'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -225,6 +226,33 @@ describe.skipIf(!fixture.available)('sending row token on a domain added by name
       expect(await checkSsoDomainOwnership(sso)).toEqual({ ok: true, via: 'domain' })
       expect(zone.asked).toEqual([])
       expect((await refreshSendingDomain(row!.id))?.status).toBe('verified')
+    })
+
+    it('verifies the pending domain when the sending check finds the token they share', async () => {
+      await addedDomain('tenant-a.example', TOKEN)
+      const row = await newEasyRow('tenant-a.example')
+      zone.txt.set('_quackback.tenant-a.example', [`${OWNERSHIP_VALUE_PREFIX}${TOKEN}`])
+      provider.identity = verifiedIdentity
+
+      // Nobody presses Check on the domain: the sending check alone finds the record.
+      expect((await refreshSendingDomain(row!.id))?.status).toBe('verified')
+      const [added] = await testDb.select().from(domains)
+      expect(added.status).toBe('verified')
+      expect(added.verifiedAt).not.toBeNull()
+      expect(provenZoneCovering('eu.tenant-a.example', await getProvenZones())?.zone).toBe(
+        'tenant-a.example'
+      )
+    })
+
+    it('leaves the domain pending when the sending row verified on a token of its own', async () => {
+      const row = await newEasyRow('tenant-a.example')
+      await addedDomain('tenant-a.example', TOKEN)
+      zone.txt.set('_quackback.tenant-a.example', [`${tokenOf(row)}`])
+      provider.identity = verifiedIdentity
+
+      expect((await refreshSendingDomain(row!.id))?.status).toBe('verified')
+      const [added] = await testDb.select().from(domains)
+      expect(added.status).toBe('pending')
     })
 
     it("never verifies on another row's token", async () => {

@@ -533,6 +533,15 @@ export async function refreshSendingDomain(
   })
   let updated = written
 
+  // The record found may be the token of the domain added at this name, which
+  // this row was issued: the same finding verifies that domain. Only when the
+  // row holds one proof record, so the record found is known to be that one.
+  if (written && ownershipProven && !byo && proofRecords.length === 1) {
+    const { verifyDomainOnFoundRecord } =
+      await import('@/lib/server/domains/domain-proof/domains.service')
+    await verifyDomainOnFoundRecord(row.domain, proofRecords[0], now)
+  }
+
   if (written && demoted) {
     // Named at warn because it is a live deliverability change for a
     // customer: replies for this domain go out as the platform sender from

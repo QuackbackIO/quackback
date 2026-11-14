@@ -17,7 +17,10 @@ import {
   domains,
   emailSendingDomains,
   eq,
+  isNotNull,
+  or,
   settings,
+  sql,
   ssoVerifiedDomain,
   type Domain,
 } from '@/lib/server/db'
@@ -166,6 +169,44 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
     .where(eq(domains.id, row.id))
   if (found) return { ok: true, via: 'dns' }
   return { ok: false, reason: result.ok ? 'mismatch' : result.reason }
+}
+
+/**
+ * A sending check found its row's own `_quackback` record at a name. When that
+ * row was issued the token of the domain added at the same name (see
+ * `sending-domain-token.ts`), it is the same record, so the domain is verified
+ * by the same finding: moved to verified, or its grace period ended. Only this
+ * workspace's row at exactly that name, holding exactly that token, is
+ * touched; any other value found proves nothing about a domain.
+ */
+export async function verifyDomainOnFoundRecord(
+  name: string,
+  record: { host: string; value: string },
+  now: Date = new Date()
+): Promise<void> {
+  const key = toAsciiDomain(name)
+  if (!key || record.host !== OWNERSHIP_RECORD_HOST) return
+  if (!record.value.startsWith(OWNERSHIP_VALUE_PREFIX)) return
+  const token = record.value.slice(OWNERSHIP_VALUE_PREFIX.length)
+  if (!token) return
+  await db
+    .update(domains)
+    .set({
+      status: 'verified',
+      verifiedAt: sql`COALESCE(${domains.verifiedAt}, ${now.toISOString()}::timestamptz)`,
+      ownershipMissingSince: null,
+      ownershipWarningClaimedAt: null,
+      ownershipWarningSentAt: null,
+      lastCheckedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(domains.name, key),
+        eq(domains.ownershipToken, token),
+        or(eq(domains.status, 'pending'), isNotNull(domains.ownershipMissingSince))
+      )
+    )
 }
 
 function helpCenterDomainOf(raw: string | null): string | null {
