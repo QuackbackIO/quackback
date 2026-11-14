@@ -290,8 +290,9 @@ export const Route = createFileRoute('/api/chat/stream')({
         // The captured scope's pool does not live as long as the stream: under
         // pooled tenancy the pool cache ends a pool that has gone unused, or that
         // its LRU cap pushes out, and a stream checks out only once. So presence
-        // writes after start re-acquire the workspace by key, which replaces an
-        // evicted pool. A single-workspace install runs them as they are.
+        // writes and inbox scope reloads after start re-acquire the workspace by
+        // key, which replaces an evicted pool. A single-workspace install runs
+        // them as they are.
         const pooledWorkspaceKey =
           workspaceScope && isPooledTenancy() ? workspaceScope.workspace.workspaceKey : null
         const withLivePool = async (body: () => Promise<void>): Promise<void> => {
@@ -301,7 +302,7 @@ export const Route = createFileRoute('/api/chat/stream')({
           } catch (err) {
             log.warn(
               { err, stream_id: streamId, workspace_key: pooledWorkspaceKey },
-              'chat stream presence update failed'
+              'chat stream work on the workspace pool failed'
             )
           }
         }
