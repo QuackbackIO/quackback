@@ -213,4 +213,50 @@ describe('createInboxScopeGate', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(forwarded).toEqual([])
   })
+
+  describe('a reload that keeps failing closes the stream, so the client reconnects', () => {
+    function gateCounting(load: () => Promise<InboxScopeLoad>) {
+      const closed = vi.fn()
+      const gate = createInboxScopeGate({
+        actor,
+        teamIds: new Set(),
+        load,
+        runReload: (body) => body(),
+        forward: () => {},
+        sendEvent: () => {},
+        close: closed,
+        startStale: true,
+        reloadTimeoutMs: 10,
+      })
+      return { gate, closed }
+    }
+    const settleFrame = async (gate: ReturnType<typeof gateCounting>['gate'], n: number) => {
+      const f = frame('team_y', n)
+      gate.onInboxFrame(f.message, f.meta)
+      await new Promise((r) => setTimeout(r, 30))
+    }
+
+    it('closes after three reloads in a row against a load that never answers', async () => {
+      const { gate, closed } = gateCounting(() => new Promise<InboxScopeLoad>(() => {}))
+      await settleFrame(gate, 1)
+      await settleFrame(gate, 2)
+      expect(closed).not.toHaveBeenCalled()
+      await settleFrame(gate, 3)
+      expect(closed).toHaveBeenCalledTimes(1)
+    })
+
+    it('counts only failures in a row: a reload that works starts the count again', async () => {
+      const answers = ['fail', 'fail', 'ok', 'fail', 'fail']
+      const { gate, closed } = gateCounting(async () => {
+        if (answers.shift() === 'fail') throw new Error('database away')
+        return { permissions: scoped, teamIds: new Set() }
+      })
+      for (let n = 1; n <= 3; n++) await settleFrame(gate, n)
+      // The working reload set no expiry problem: force the next ones stale.
+      gate.onScopeChanged()
+      await new Promise((r) => setTimeout(r, 30))
+      await settleFrame(gate, 4)
+      expect(closed).not.toHaveBeenCalled()
+    })
+  })
 })
