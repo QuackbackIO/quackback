@@ -237,6 +237,18 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
     expect(await agentMessagesOn(hidden.id)).toHaveLength(1)
   })
 
+  it('a workspace key holding only conversation.view_all sees every conversation', async () => {
+    const w = await seedWorld()
+    const hidden = await w.conversation(w.teamY)
+    const viewAllOnly: Actor = {
+      ...workspaceKey,
+      permissions: new Set([PERMISSIONS.CONVERSATION_VIEW_ALL]),
+    }
+    await expect(assertConversationVisible(hidden.id, viewAllOnly)).resolves.toMatchObject({
+      id: hidden.id,
+    })
+  })
+
   it('a workspace key without conversation.view sees no conversation', async () => {
     const w = await seedWorld()
     const visible = await w.conversation(w.teamX)
@@ -630,6 +642,70 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
       expect(after.content).toBe('My edited Acme reply')
       expect(after.deletedAt).not.toBeNull()
       expect(await testDb.select().from(conversationMessageFlags)).toHaveLength(1)
+    })
+
+    /** Every message action on `reply` answers like a missing message. */
+    async function expectAllMissing(w: W, reply: ConversationMessageId) {
+      await expect(editConversationMessage(reply, 'x', null, w.actor)).rejects.toMatchObject(
+        MESSAGE_NOT_FOUND
+      )
+      await expect(addMessageReaction(reply, '👍', w.actor)).rejects.toMatchObject(
+        MESSAGE_NOT_FOUND
+      )
+      await expect(setMessageFlag(reply, true, w.actor)).rejects.toMatchObject(MESSAGE_NOT_FOUND)
+      await expect(deleteConversationMessage(reply, w.actor)).rejects.toMatchObject(
+        MESSAGE_NOT_FOUND
+      )
+    }
+
+    it('a visible back-office ticket opened from a hidden conversation admits none of its messages', async () => {
+      const w = await seedWorld()
+      const statusId = createId('ticket_status') as TicketStatusId
+      await testDb
+        .insert(ticketStatuses)
+        .values({ id: statusId, name: 'Acme open', slug: `bo-${suffix()}` })
+      const ticketId = createId('ticket') as TicketId
+      await testDb.insert(tickets).values({
+        id: ticketId,
+        title: 'Acme back office',
+        statusId,
+        type: 'back_office',
+        assigneeTeamId: w.teamX,
+      })
+      const conversation = await w.conversation(w.teamY)
+      // A provenance link, not a pair.
+      await testDb
+        .insert(ticketConversations)
+        .values({ ticketId, conversationId: conversation.id, ticketType: 'back_office' })
+      await expectAllMissing(w, await ownReplyOn(w, conversation.id))
+    })
+
+    it("a deleted pair ticket admits none of its hidden conversation's messages", async () => {
+      const w = await seedWorld()
+      const pair = await seedPair(w)
+      await testDb
+        .update(tickets)
+        .set({ deletedAt: new Date() })
+        .where(eq(tickets.id, pair.ticketId))
+      await expectAllMissing(w, await ownReplyOn(w, pair.conversation.id))
+    })
+
+    it('with only ticket keys, my reply stored on a hidden pair is mine to edit and delete', async () => {
+      const w = await seedWorld()
+      const pair = await seedPair(w)
+      const reply = await ownReplyOn(w, pair.conversation.id)
+      const ticketKeysOnly: Actor = {
+        ...w.actor,
+        permissions: new Set([PERMISSIONS.TICKET_VIEW, PERMISSIONS.TICKET_REPLY]),
+      }
+      await editConversationMessage(reply, 'Edited through the ticket', null, ticketKeysOnly)
+      await deleteConversationMessage(reply, ticketKeysOnly)
+      const [after] = await testDb
+        .select()
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, reply))
+      expect(after.content).toBe('Edited through the ticket')
+      expect(after.deletedAt).not.toBeNull()
     })
 
     it('a hidden ticket with a hidden pair still answers like a missing message', async () => {

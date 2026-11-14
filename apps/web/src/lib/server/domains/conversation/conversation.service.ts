@@ -106,7 +106,7 @@ import {
   notifyConversationStarted,
 } from './conversation.notify'
 import { resolveReplyRecipient } from './conversation.recipient'
-import { assertMessageParentVisible } from './message-parent'
+import { assertMessageParentVisible, permissionParentOf } from './message-parent'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   conversationToDTO,
@@ -1832,7 +1832,7 @@ export async function deleteConversationMessage(
   const authored = {
     senderType: message.senderType,
     authorPrincipalId: message.principalId,
-    parent: message.conversationId ? ('conversation' as const) : ('ticket' as const),
+    parent: permissionParentOf(parent),
     isInternal: message.isInternal,
   }
 
