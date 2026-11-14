@@ -195,6 +195,7 @@ Edges (149):
 - summary -> settings
 - tickets -> conversation
 - tickets -> files
+- tickets -> notifications
 - tickets -> principals
 - tickets -> settings
 - tickets -> sla
