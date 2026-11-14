@@ -48,6 +48,8 @@ type TicketStatusId = TypeId<'ticket_status'>
 const bus = vi.hoisted(() => ({
   wire: [] as Array<{ channel: string; payload: unknown; scope: unknown }>,
   handlers: new Map<string, Set<(c: string, m: string, s?: unknown) => void>>(),
+  /** Runs inside subscribe, before the handlers register: the connect window. */
+  beforeSubscribe: null as null | (() => Promise<void>),
 }))
 
 vi.mock('@/lib/server/realtime/pubsub', () => {
@@ -67,6 +69,7 @@ vi.mock('@/lib/server/realtime/pubsub', () => {
       channels: string[],
       onMessage: (c: string, m: string, s?: unknown) => void
     ) => {
+      await bus.beforeSubscribe?.()
       for (const c of channels) {
         let set = bus.handlers.get(c)
         if (!set) bus.handlers.set(c, (set = new Set()))
@@ -189,6 +192,7 @@ if (fixture.available) {
   beforeEach(async () => {
     bus.wire.length = 0
     bus.handlers.clear()
+    bus.beforeSubscribe = null
     teamRead.failNext = 0
     routing.to = null
     await fixture.begin()
@@ -633,10 +637,24 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     expect(await ticketReadReaches(inbox, w.ticket.y, 'after')).toBe(false)
   })
 
+  it('sees a scope change made between the connect reads and the subscribe', async () => {
+    const w = await seedWorld()
+    bus.beforeSubscribe = async () => {
+      bus.beforeSubscribe = null
+      // Joins team Y while the stream is connecting: its signal goes out to no one.
+      await testDb.insert(teamMembers).values({ teamId: w.teamY, principalId: w.scoped })
+      publishInboxScopeChanged([w.scoped])
+    }
+    const scoped = await openInbox(w.scoped)
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'joined')).toBe(true)
+  })
+
   it('reloads a scope older than 60 seconds before filtering the next frame', async () => {
     const w = await seedWorld()
     vi.useFakeTimers({ toFake: ['Date'] })
     const scoped = await openInbox(w.scoped)
+    // The first frame runs the stream's starting reload.
+    expect(await ticketReadReaches(scoped, w.ticket.y, 'connect')).toBe(false)
     // A membership written without any signal: only the backstop can see it.
     await testDb.insert(teamMembers).values({ teamId: w.teamY, principalId: w.scoped })
     expect(await ticketReadReaches(scoped, w.ticket.y, 'a')).toBe(false)

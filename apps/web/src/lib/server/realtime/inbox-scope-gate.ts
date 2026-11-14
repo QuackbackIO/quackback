@@ -69,6 +69,8 @@ export interface InboxScopeGateOptions {
   sendEvent: (name: 'inbox_item_removed' | 'inbox_scope_changed', data: unknown) => void
   /** End the stream. */
   close: () => void
+  /** Load before judging the first frame, rather than trusting `actor` and `teamIds`. */
+  startStale?: boolean
   now?: () => number
   random?: () => number
   ttlMs?: number
@@ -108,7 +110,7 @@ export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGat
   let expiresAt = nextExpiry()
   // Set by a scope-changed signal or a failed reload; a reload clears it when
   // it starts, so one that finds it set again when it ends reads again.
-  let stale = false
+  let stale = opts.startStale ?? false
   let reloading = false
   let closed = false
   const queue: Queued[] = []
