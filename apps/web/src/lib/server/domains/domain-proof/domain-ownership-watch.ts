@@ -29,11 +29,11 @@ import {
   isNotNull,
   isNull,
   lt,
-  or,
   sql,
   ssoVerifiedDomain,
   type Domain,
 } from '@/lib/server/db'
+import type { SQL } from 'drizzle-orm'
 import { logger } from '@/lib/server/logger'
 import { kvDel, kvGet, kvSet } from '@/lib/server/kv/pg-kv'
 import { lookupVerificationTxt } from '@/lib/server/auth/dns-verify'
@@ -96,41 +96,57 @@ async function startGrace(row: Domain, since: Date): Promise<Domain | null> {
   return started ?? null
 }
 
+/** A warning claim given back after a failed delivery: retaken at once, and never rings again. */
+const RELEASED_CLAIM = new Date(0)
+
 /**
  * Warn about the missing record unless that was already delivered for this
  * period: a lease first, so one check sends, confirmed on delivery and given
  * back on failure so the next check tries again. A lease nobody confirmed
- * expires. The same shape as a sending domain's warning.
+ * expires. The same shape as a sending domain's warning, except that the bell
+ * rings only on the first claim of a period: a claim given back keeps a mark
+ * (never null again until the period ends), so a retry only emails.
  */
 async function deliverWarning(row: Domain): Promise<void> {
   const since = row.ownershipMissingSince
   if (row.status !== 'verified' || !since || row.ownershipWarningSentAt) return
   const claimedAt = new Date()
-  const [claimed] = await db
-    .update(domains)
-    .set({ ownershipWarningClaimedAt: claimedAt })
-    .where(
-      and(
-        eq(domains.id, row.id),
-        eq(domains.status, 'verified'),
-        eq(domains.ownershipMissingSince, since),
-        isNull(domains.ownershipWarningSentAt),
-        or(
-          isNull(domains.ownershipWarningClaimedAt),
-          lt(
-            domains.ownershipWarningClaimedAt,
-            new Date(claimedAt.getTime() - OWNERSHIP_WARNING_LEASE_MS)
-          )
+  const claimable = and(
+    eq(domains.id, row.id),
+    eq(domains.status, 'verified'),
+    eq(domains.ownershipMissingSince, since),
+    isNull(domains.ownershipWarningSentAt)
+  )
+  const claim = (free: SQL | undefined) =>
+    db
+      .update(domains)
+      .set({ ownershipWarningClaimedAt: claimedAt })
+      .where(and(claimable, free))
+      .returning()
+  // The first claim of the period rings the bell; any later one (after a
+  // failed delivery, or a lease that expired) only emails.
+  const [first] = await claim(isNull(domains.ownershipWarningClaimedAt))
+  const [retry] = first
+    ? [undefined]
+    : await claim(
+        lt(
+          domains.ownershipWarningClaimedAt,
+          new Date(claimedAt.getTime() - OWNERSHIP_WARNING_LEASE_MS)
         )
       )
-    )
-    .returning()
+  const claimed = first ?? retry
   if (!claimed) return
-  const delivered = await notifyDomainOwnershipMissing(claimed, ownershipGraceEnds(since))
+  const delivered = await notifyDomainOwnershipMissing(claimed, ownershipGraceEnds(since), {
+    ring: !!first,
+  })
   const ours = and(eq(domains.id, row.id), eq(domains.ownershipWarningClaimedAt, claimedAt))
   await db
     .update(domains)
-    .set(delivered ? { ownershipWarningSentAt: new Date() } : { ownershipWarningClaimedAt: null })
+    .set(
+      delivered
+        ? { ownershipWarningSentAt: new Date() }
+        : { ownershipWarningClaimedAt: RELEASED_CLAIM }
+    )
     .where(ours)
   if (!delivered) {
     log.warn({ domain: row.name }, 'domain ownership warning was not delivered; next check retries')

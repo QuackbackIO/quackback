@@ -53,12 +53,18 @@ vi.mock('@/lib/server/dns/resolver', () => {
 
 const notices = vi.hoisted(() => ({
   warned: [] as { name: string; deadline: Date }[],
+  rang: [] as boolean[],
   demoted: [] as { name: string; signIn: string[] }[],
   deliver: true,
 }))
 vi.mock('../domain-ownership-notify', () => ({
-  notifyDomainOwnershipMissing: async (domain: { name: string }, deadline: Date) => {
+  notifyDomainOwnershipMissing: async (
+    domain: { name: string },
+    deadline: Date,
+    opts: { ring: boolean }
+  ) => {
     notices.warned.push({ name: domain.name, deadline })
+    notices.rang.push(opts.ring)
     return notices.deliver
   },
   notifyDomainOwnershipLapsed: async (domain: { name: string }, signIn: string[]) => {
@@ -148,6 +154,7 @@ describe.skipIf(!fixture.available)('domain ownership watch (real DB, rolled bac
     zone.failing.clear()
     zone.asked.length = 0
     notices.warned.length = 0
+    notices.rang.length = 0
     notices.demoted.length = 0
     notices.deliver = true
     auth.resets = 0
@@ -201,6 +208,8 @@ describe.skipIf(!fixture.available)('domain ownership watch (real DB, rolled bac
     await watchDomainOwnership(new Date('2026-11-03T06:00:00Z'))
 
     expect(notices.warned).toHaveLength(2)
+    // The bell rings once per warning; only the email is tried again.
+    expect(notices.rang).toEqual([true, false])
   })
 
   it('counts another row’s token as missing, never as its own', async () => {
