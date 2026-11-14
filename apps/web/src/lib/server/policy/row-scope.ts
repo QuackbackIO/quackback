@@ -28,6 +28,14 @@ export interface ScopedRow {
   teamId: string | null
 }
 
+/** Every key the scope rule reads: a change to any other key cannot move scope. */
+export const SCOPE_VIEW_KEYS: readonly PermissionKey[] = [
+  PERMISSIONS.CONVERSATION_VIEW,
+  PERMISSIONS.CONVERSATION_VIEW_ALL,
+  PERMISSIONS.TICKET_VIEW,
+  PERMISSIONS.TICKET_VIEW_ALL,
+]
+
 const KEYS: Record<ScopedResource, { view: PermissionKey; viewAll: PermissionKey }> = {
   conversation: {
     view: PERMISSIONS.CONVERSATION_VIEW,

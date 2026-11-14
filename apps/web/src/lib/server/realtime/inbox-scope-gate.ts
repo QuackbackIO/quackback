@@ -24,8 +24,8 @@
  * - A scope-changed signal also sends one `inbox_scope_changed` event, so the
  *   client refetches lists the new scope changes.
  */
-import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import { rowInScope } from '@/lib/server/policy/row-scope'
+import type { PermissionKey } from '@/lib/shared/permissions'
+import { rowInScope, SCOPE_VIEW_KEYS } from '@/lib/server/policy/row-scope'
 import type { Actor } from '@/lib/server/policy/types'
 import { asInboxEnvelope, type InboxScopeEnvelope } from './inbox-envelope'
 import { logger } from '@/lib/server/logger'
@@ -40,14 +40,6 @@ export const INBOX_SCOPE_RELOAD_TIMEOUT_MS = 10_000
 
 /** The share of the TTL taken off at random per load. */
 const TTL_JITTER = 0.2
-
-/** The only keys the scope rule reads, so the cache holds nothing else. */
-const INBOX_VIEW_KEYS: readonly PermissionKey[] = [
-  PERMISSIONS.CONVERSATION_VIEW,
-  PERMISSIONS.CONVERSATION_VIEW_ALL,
-  PERMISSIONS.TICKET_VIEW,
-  PERMISSIONS.TICKET_VIEW_ALL,
-]
 
 export interface InboxScopeSnapshot {
   permissions: ReadonlySet<PermissionKey>
@@ -95,7 +87,8 @@ export interface InboxScopeGate {
 export function onlyInboxViewKeys(
   permissions: ReadonlySet<PermissionKey>
 ): ReadonlySet<PermissionKey> {
-  return new Set(INBOX_VIEW_KEYS.filter((k) => permissions.has(k)))
+  // The only keys the scope rule reads, so the cache holds nothing else.
+  return new Set(SCOPE_VIEW_KEYS.filter((k) => permissions.has(k)))
 }
 
 export function createInboxScopeGate(opts: InboxScopeGateOptions): InboxScopeGate {
