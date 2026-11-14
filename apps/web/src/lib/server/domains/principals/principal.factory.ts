@@ -246,20 +246,14 @@ async function resolveUserId(
   return row?.userId ?? null
 }
 
-/** The principal a role write names, for the post-commit inbox scope signal. */
-async function rolePrincipalId(
-  ref: PrincipalRef,
-  exec: Executor
-): Promise<PrincipalId | undefined> {
-  if ('principalId' in ref) return ref.principalId
-  // Capability-gated like the lock in setPrincipalRole: the mocked executors
-  // in the unit suites carry no query builder.
-  if (typeof exec.query?.principal?.findFirst !== 'function') return undefined
-  const row = await exec.query.principal.findFirst({
-    where: eq(principal.userId, ref.userId),
-    columns: { id: true },
-  })
-  return row?.id
+export interface SetRoleResult {
+  /** User-keyed cache entries for a caller inside a transaction to bust on commit. */
+  cacheKeysToBust: readonly string[]
+  /**
+   * The principal whose role or workspace assignment this write changed, so
+   * their open inbox streams reload their scope. Unset when nothing changed.
+   */
+  scopeChangedFor?: PrincipalId
 }
 
 export interface SetRoleOpts extends MutateOpts {
@@ -296,7 +290,7 @@ export async function setPrincipalRole(
   ref: PrincipalRef,
   role: Role,
   opts: SetRoleOpts = {}
-): Promise<{ cacheKeysToBust: readonly string[] }> {
+): Promise<SetRoleResult> {
   // The role column and its workspace assignment must move together, and every
   // demotion/removal is serialized through one transaction-scoped lock, so all
   // writes (promotions included) get a transaction when the caller didn't
@@ -304,18 +298,15 @@ export async function setPrincipalRole(
   // API-key teardown, and future callers without duplicating a TOCTOU-prone
   // count.
   if (!opts.executor && typeof db.transaction === 'function') {
-    let changedPrincipalId: PrincipalId | undefined
-    const result = await db.transaction(async (tx) => {
-      const inner = await setPrincipalRole(ref, role, { ...opts, executor: tx })
-      changedPrincipalId = await rolePrincipalId(ref, tx)
-      return inner
-    })
+    const result = await db.transaction((tx) =>
+      setPrincipalRole(ref, role, { ...opts, executor: tx })
+    )
     for (const key of result.cacheKeysToBust) await cacheDel(key)
     // After the commit, so the person's open inbox stream reloads the new
     // role (or closes, when they left the team). A caller that brings its own
     // transaction is promoting a portal user or bootstrapping a workspace:
     // that person has no inbox stream open, so it needs no signal.
-    if (changedPrincipalId) publishInboxScopeChanged([changedPrincipalId])
+    if (result.scopeChangedFor) publishInboxScopeChanged([result.scopeChangedFor])
     return result
   }
 
@@ -400,7 +391,8 @@ export async function setPrincipalRole(
   }
   const keys = userId ? [CACHE_KEYS.PRINCIPAL_BY_USER(userId)] : []
   if (!opts.executor) for (const k of keys) await cacheDel(k)
-  return { cacheKeysToBust: keys }
+  const scopeChanged = target !== undefined && (target.role !== role || reassign)
+  return { cacheKeysToBust: keys, scopeChangedFor: scopeChanged ? target?.id : undefined }
 }
 
 /**

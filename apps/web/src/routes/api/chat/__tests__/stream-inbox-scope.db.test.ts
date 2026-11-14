@@ -590,6 +590,29 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     expect(await probe('enrolled')).toBe(true)
   })
 
+  it('sends no scope signal for a role write that cannot move scope', async () => {
+    const w = await seedWorld()
+    const scoped = await openInbox(w.scoped)
+    const editor = { principalId: w.admin, permissions: [...permissionsForLegacyRole('admin')] }
+    // A key the scope rule never reads, and a write that keeps the same role.
+    await updateRole(
+      w.scopedRole,
+      { permissionKeys: SCOPED_KEYS.filter((k) => k !== PERMISSIONS.CONVERSATION_REPLY) },
+      editor
+    )
+    await setPrincipalRole({ principalId: w.scoped }, 'member')
+    await settle()
+    expect(scoped.frames().map((f) => f.event)).not.toContain('inbox_scope_changed')
+    // The control: a key the rule reads does signal.
+    await updateRole(
+      w.scopedRole,
+      { permissionKeys: [...SCOPED_KEYS, PERMISSIONS.TICKET_VIEW_ALL] },
+      editor
+    )
+    await settle()
+    expect(scoped.frames().map((f) => f.event)).toContain('inbox_scope_changed')
+  })
+
   it('reloads a scope older than 60 seconds before filtering the next frame', async () => {
     const w = await seedWorld()
     vi.useFakeTimers({ toFake: ['Date'] })
