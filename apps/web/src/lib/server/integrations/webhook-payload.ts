@@ -6,6 +6,8 @@
 import type { EventData } from '@/lib/server/events/types'
 import { stripHtml, truncate, formatStatus } from '@/lib/server/events/hook-utils'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
+import type { SectionOrigins } from '@/lib/shared/section-links'
+import { buildPostUrl } from './message-utils'
 
 interface WebhookPayload {
   event: string
@@ -36,20 +38,20 @@ interface WebhookPayload {
 /**
  * Build a generic JSON payload from an event.
  */
-export function buildWebhookPayload(event: EventData, rootUrl: string): WebhookPayload {
+export function buildWebhookPayload(event: EventData, links: SectionOrigins): WebhookPayload {
   switch (event.type) {
     case 'post.created': {
       const { post } = event.data
       return {
         event: 'post.created',
         timestamp: event.timestamp,
-        portal_url: rootUrl,
+        portal_url: links.primary,
         post: {
           id: post.id,
           title: post.title,
           content: truncate(stripHtml(post.content), 1000),
           board: post.boardSlug,
-          url: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
+          url: buildPostUrl(links, post.boardSlug, post.id),
           author_name: post.authorName,
           author_email: post.authorEmail,
         },
@@ -61,12 +63,12 @@ export function buildWebhookPayload(event: EventData, rootUrl: string): WebhookP
       return {
         event: 'post.status_changed',
         timestamp: event.timestamp,
-        portal_url: rootUrl,
+        portal_url: links.primary,
         post: {
           id: post.id,
           title: post.title,
           board: post.boardSlug,
-          url: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
+          url: buildPostUrl(links, post.boardSlug, post.id),
         },
         status_change: {
           previous: formatStatus(previousStatus),
@@ -80,12 +82,12 @@ export function buildWebhookPayload(event: EventData, rootUrl: string): WebhookP
       return {
         event: 'post.deleted',
         timestamp: event.timestamp,
-        portal_url: rootUrl,
+        portal_url: links.primary,
         post: {
           id: post.id,
           title: post.title,
           board: post.boardSlug,
-          url: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
+          url: buildPostUrl(links, post.boardSlug, post.id),
         },
         deleted_by: deletedBy,
       }
@@ -96,12 +98,12 @@ export function buildWebhookPayload(event: EventData, rootUrl: string): WebhookP
       return {
         event: 'comment.created',
         timestamp: event.timestamp,
-        portal_url: rootUrl,
+        portal_url: links.primary,
         post: {
           id: post.id,
           title: post.title,
           board: post.boardSlug,
-          url: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
+          url: buildPostUrl(links, post.boardSlug, post.id),
         },
         comment: {
           id: comment.id,
@@ -116,7 +118,7 @@ export function buildWebhookPayload(event: EventData, rootUrl: string): WebhookP
       return {
         event: (event as { type: string }).type,
         timestamp: new Date().toISOString(),
-        portal_url: rootUrl,
+        portal_url: links.primary,
         post: { id: '', title: '', board: '', url: '' },
       }
   }

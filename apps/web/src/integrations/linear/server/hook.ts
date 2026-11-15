@@ -9,6 +9,8 @@ import type { EventData } from '@/lib/server/events/types'
 import { buildLinearIssueBody } from '@/integrations/linear/server/message'
 import { linearIssues } from '@/integrations/linear/server/issues'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'linear' })
 
@@ -19,12 +21,13 @@ export interface LinearTarget {
 export interface LinearConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
 }
 
 export const linearHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId: teamId } = target as LinearTarget
-    const { accessToken, rootUrl } = config as LinearConfig
+    const { accessToken, rootUrl, links } = config as LinearConfig
 
     // Only create issues for new feedback
     if (event.type !== 'post.created') {
@@ -33,7 +36,7 @@ export const linearHook: IntegrationHook = {
 
     log.debug({ event_type: event.type, team_id: teamId }, 'creating issue')
 
-    const { title, description } = buildLinearIssueBody(event, rootUrl)
+    const { title, description } = buildLinearIssueBody(event, hookLinks({ rootUrl, links }))
 
     try {
       // The capability owns the GraphQL call + error classification; this

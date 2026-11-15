@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildSlackMessage } from '../message'
 import type { EventData } from '@/lib/server/events/types'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 const ROOT_URL = 'https://feedback.example.com'
 
@@ -67,7 +68,7 @@ function messageCreatedEvent(
 
 describe('buildSlackMessage — conversation.created', () => {
   it('renders visitor, subject and an inbox deep-link', () => {
-    const msg = buildSlackMessage(conversationCreatedEvent(), ROOT_URL)
+    const msg = buildSlackMessage(conversationCreatedEvent(), allOnPrimary(ROOT_URL))
     expect(msg).not.toBeNull()
     const flat = JSON.stringify(msg)
     expect(msg?.text).toContain('vera@example.com')
@@ -79,7 +80,7 @@ describe('buildSlackMessage — conversation.created', () => {
   it('falls back for anonymous visitors and missing subjects', () => {
     const msg = buildSlackMessage(
       conversationCreatedEvent({ subject: null, visitorEmail: null }),
-      ROOT_URL
+      allOnPrimary(ROOT_URL)
     )
     expect(msg).not.toBeNull()
     expect(msg?.text.toLowerCase()).toContain('anonymous')
@@ -88,7 +89,7 @@ describe('buildSlackMessage — conversation.created', () => {
 
 describe('buildSlackMessage — message.created', () => {
   it('renders a visitor message with escaped content and an inbox deep-link', () => {
-    const msg = buildSlackMessage(messageCreatedEvent('visitor'), ROOT_URL)
+    const msg = buildSlackMessage(messageCreatedEvent('visitor'), allOnPrimary(ROOT_URL))
     expect(msg).not.toBeNull()
     const flat = JSON.stringify(msg)
     expect(msg?.text).toContain('Vera')
@@ -99,7 +100,7 @@ describe('buildSlackMessage — message.created', () => {
   })
 
   it('returns null for agent messages so replies never notify', () => {
-    expect(buildSlackMessage(messageCreatedEvent('agent'), ROOT_URL)).toBeNull()
+    expect(buildSlackMessage(messageCreatedEvent('agent'), allOnPrimary(ROOT_URL))).toBeNull()
   })
 })
 
@@ -107,7 +108,7 @@ describe('buildSlackMessage — existing events keep working', () => {
   it('still returns a generic message for unhandled event types', () => {
     const msg = buildSlackMessage(
       { ...envelope, type: 'post.unmerged', data: {} } as unknown as EventData,
-      ROOT_URL
+      allOnPrimary(ROOT_URL)
     )
     expect(msg).not.toBeNull()
   })

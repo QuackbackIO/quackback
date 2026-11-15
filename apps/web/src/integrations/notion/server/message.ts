@@ -6,6 +6,7 @@
 import type { EventData } from '@/lib/server/events/types'
 import { stripHtml, truncate } from '@/lib/server/events/hook-utils'
 import { buildPostUrl, getAuthorName } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 interface NotionBlock {
   object: 'block'
@@ -18,7 +19,7 @@ interface NotionBlock {
  */
 export function buildNotionPage(
   event: EventData,
-  rootUrl: string
+  links: SectionOrigins
 ): {
   title: string
   description: string
@@ -29,7 +30,7 @@ export function buildNotionPage(
   }
 
   const { post } = event.data
-  const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+  const postUrl = buildPostUrl(links, post.boardSlug, post.id)
   const content = truncate(stripHtml(post.content), 2000)
   const author = getAuthorName(post)
 

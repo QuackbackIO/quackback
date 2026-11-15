@@ -9,6 +9,8 @@ import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations
 import type { EventData } from '@/lib/server/events/types'
 import { buildShortcutStoryBody } from '@/integrations/shortcut/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'shortcut' })
 
@@ -21,6 +23,7 @@ export interface ShortcutTarget {
 export interface ShortcutConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
 }
 
 interface ShortcutStoryResponse {
@@ -31,7 +34,7 @@ interface ShortcutStoryResponse {
 export const shortcutHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId: groupId } = target as ShortcutTarget
-    const { accessToken, rootUrl } = config as ShortcutConfig
+    const { accessToken, rootUrl, links } = config as ShortcutConfig
 
     // Only create stories for new feedback
     if (event.type !== 'post.created') {
@@ -40,7 +43,7 @@ export const shortcutHook: IntegrationHook = {
 
     log.debug({ event_type: event.type, group_id: groupId }, 'creating story')
 
-    const { title, description } = buildShortcutStoryBody(event, rootUrl)
+    const { title, description } = buildShortcutStoryBody(event, hookLinks({ rootUrl, links }))
 
     try {
       const response = await integrationFetch(`${SHORTCUT_API}/stories`, {
