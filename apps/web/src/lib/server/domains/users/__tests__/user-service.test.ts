@@ -80,7 +80,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   isNull: vi.fn(),
   desc: vi.fn(),
   asc: vi.fn(),
-  sql: vi.fn(() => ({ kind: 'atomic-metadata-patch' })),
+  sql: Object.assign(
+    vi.fn(() => ({ kind: 'atomic-metadata-patch' })),
+    { join: vi.fn(() => ({ kind: 'sql-join' })) }
+  ),
 }))
 
 vi.mock('@quackback/ids', () => ({
