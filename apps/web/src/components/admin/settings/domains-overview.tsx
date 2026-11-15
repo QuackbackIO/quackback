@@ -1,25 +1,21 @@
 /**
- * The Domains page body: every domain the workspace uses, one row per domain
- * name with a chip for each use, or, with none yet, the uses and where each is
- * set up. Rows are status only. Each opens the domain's own page, and a viewer
- * who can open none of the row's uses sees the row without the link.
+ * The Domains page body: every domain the workspace uses or has added, one row
+ * per domain name with a chip for each use, or, with none yet, one way to add a
+ * domain. Rows are status only. Each opens the domain's own page; a row only a
+ * use holds is linked for a viewer who can open one of its uses.
  */
 import { Fragment } from 'react'
 import { DOMAIN_USE_ORDER, DOMAIN_VIEW_ROUTE } from '@/lib/shared/domain-uses'
-import {
-  HELP_CENTER_SETTINGS,
-  type DomainUse,
-  type DomainUseLinks,
-} from '@/lib/shared/domains-permissions'
-import { Link } from '@tanstack/react-router'
+import type { DomainUse, DomainUseLinks } from '@/lib/shared/domains-permissions'
 import { EnvelopeIcon, GlobeAltIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
 import { StateBadge, type BadgeState } from '@/components/shared/state-badge'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { AddDomainButton } from '@/components/admin/settings/add-domain-dialog'
 import { domainPhase, type DomainPhase } from '@/components/admin/channels/sending-domain-view'
 import { verifiedThroughLabel } from '@/lib/shared/domain-proof'
+import type { AddedDomainSummary } from '@/lib/server/functions/domains'
 import type {
   HelpCenterDomainSummary,
   SendingDomainSummary,
@@ -39,6 +35,8 @@ const USE_LABEL: Record<DomainUse, string> = {
 
 export interface DomainUseStatus {
   use: DomainUse
+  /** The use's own row, where its removal needs it (a sign-in domain). */
+  id?: string
   /** Null when healthy: a normal state shows no badge. */
   state: BadgeState | null
   detail?: string
@@ -47,6 +45,10 @@ export interface DomainUseStatus {
 export interface DomainRow {
   name: string
   uses: DomainUseStatus[]
+  /** Added by name, so it has a page of its own whatever its uses. */
+  added: boolean
+  /** Added and its ownership not yet verified. */
+  ownershipPending: boolean
 }
 
 export const PHASE_STATE = {
@@ -72,18 +74,23 @@ export function domainRows({
   sending,
   signIn,
   helpCenterDomain,
+  added = [],
   now = new Date(),
 }: {
   sending: SendingDomainSummary[]
   signIn: SignInDomainSummary[]
   helpCenterDomain: HelpCenterDomainSummary | null
+  added?: AddedDomainSummary[]
   now?: Date
 }): DomainRow[] {
   const byName = new Map<string, DomainUseStatus[]>()
+  const keyOf = (name: string) => name.trim().toLowerCase()
   const add = (name: string, status: DomainUseStatus) => {
-    const key = name.trim().toLowerCase()
+    const key = keyOf(name)
     byName.set(key, [...(byName.get(key) ?? []), status])
   }
+  const addedByName = new Map(added.map((d) => [keyOf(d.name), d]))
+  for (const name of addedByName.keys()) byName.set(name, byName.get(name) ?? [])
   for (const d of sending) {
     add(d.domain, {
       use: 'email',
@@ -99,18 +106,26 @@ export function domainRows({
     })
   }
   for (const d of signIn) {
-    add(d.name, { use: 'signIn', state: d.verified ? null : 'pending', detail: signInDetail(d) })
+    add(d.name, {
+      use: 'signIn',
+      id: d.id,
+      state: d.verified ? null : 'pending',
+      detail: signInDetail(d),
+    })
   }
   return [...byName.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([name, uses]) => ({
       name,
       uses: uses.sort((a, b) => DOMAIN_USE_ORDER.indexOf(a.use) - DOMAIN_USE_ORDER.indexOf(b.use)),
+      added: addedByName.has(name),
+      ownershipPending: addedByName.get(name)?.verified === false,
     }))
 }
 
-/** Whether the viewer can open the setup of at least one of the row's uses. */
-const opens = (row: DomainRow, links: DomainUseLinks): boolean => row.uses.some((u) => links[u.use])
+/** Whether the viewer can open the row's page: an added domain, or one of its uses. */
+const opens = (row: DomainRow, links: DomainUseLinks): boolean =>
+  row.added || row.uses.some((u) => links[u.use])
 
 export function DomainList({ rows, links }: { rows: DomainRow[]; links: DomainUseLinks }) {
   return (
@@ -125,14 +140,21 @@ export function DomainList({ rows, links }: { rows: DomainRow[]; links: DomainUs
               leading={<RowIcon icon={GlobeAltIcon} />}
               title={row.name}
               meta={meta || undefined}
-              badges={row.uses.map((u) => (
-                <Fragment key={u.use}>
-                  <Badge variant="outline" size="sm">
-                    {USE_LABEL[u.use]}
-                  </Badge>
-                  {u.state && <StateBadge state={u.state} />}
-                </Fragment>
-              ))}
+              badges={
+                // With no use yet, the domain's own ownership is what it waits on.
+                row.uses.length === 0 && row.ownershipPending ? (
+                  <StateBadge state="pending" />
+                ) : (
+                  row.uses.map((u) => (
+                    <Fragment key={u.use}>
+                      <Badge variant="outline" size="sm">
+                        {USE_LABEL[u.use]}
+                      </Badge>
+                      {u.state && <StateBadge state={u.state} />}
+                    </Fragment>
+                  ))
+                )
+              }
               to={linked ? DOMAIN_VIEW_ROUTE : undefined}
               params={linked ? { domain: row.name } : undefined}
             />
@@ -169,37 +191,14 @@ export const USES = [
   description: string
 }[]
 
-/** With no domains yet: each use the viewer may set up, with its own way there. */
-export function DomainsEmptyState({ links }: { links: DomainUseLinks }) {
-  const uses = USES.filter((u) => links[u.use])
-  if (uses.length === 0) return null
+/** With no domains yet: one way to add one, for a viewer who may. */
+export function DomainsEmptyState({ canAdd }: { canAdd: boolean }) {
   return (
-    <SettingsCard flush>
-      <SettingsList>
-        {uses.map((u) => {
-          const link = links[u.use]!
-          // Off Cloud the only web address an install takes is its help center's.
-          const description =
-            u.use === 'customDomain' && link.to === HELP_CENTER_SETTINGS
-              ? 'Put your help center on help.yourcompany.com.'
-              : u.description
-          return (
-            <SettingsListRow
-              key={u.use}
-              leading={<RowIcon icon={u.icon} />}
-              title={u.title}
-              meta={description}
-              trailing={
-                <Button variant="outline" size="sm" asChild>
-                  <Link to={link.to} search={link.search} hash={link.hash}>
-                    Set up
-                  </Link>
-                </Button>
-              }
-            />
-          )
-        })}
-      </SettingsList>
+    <SettingsCard>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[13px] text-muted-foreground">{EMPTY_DESCRIPTION}</p>
+        {canAdd && <AddDomainButton />}
+      </div>
     </SettingsCard>
   )
 }

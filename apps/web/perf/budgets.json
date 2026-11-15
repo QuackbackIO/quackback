@@ -89,7 +89,7 @@
       "serverRequests": 3,
       "requests": 135,
       "jsRequests": 130,
-      "jsKB": 450,
+      "jsKB": 459.2,
       "htmlTransferKB": 18,
       "componentRenders": 203
     },
@@ -282,7 +282,7 @@
       "serverRequests": 2,
       "requests": 100,
       "jsRequests": 95,
-      "jsKB": 484.5,
+      "jsKB": 494.5,
       "htmlTransferKB": 28.3,
       "componentRenders": 330
     },
@@ -573,17 +573,24 @@
       "componentRenders": 431
     },
     "sweep:doc:admin:/admin/settings/domains": {
-      "dbQueries": 11,
+      "dbQueries": 14,
       "htmlKB": 73.0
     },
     "sweep:ui:admin:/admin/settings/domains": {
-      "dbQueries": 11,
+      "dbQueries": 14,
       "serverRequests": 1,
       "requests": 108,
       "jsRequests": 104,
       "jsKB": 404.2,
       "htmlTransferKB": 29.7,
       "componentRenders": 346
+    },
+    "sweep:doc:admin:/admin/settings/domains/acme.com": {
+      "dbQueries": 27
+    },
+    "sweep:ui:admin:/admin/settings/domains/acme.com": {
+      "dbQueries": 27,
+      "jsKB": 431.4
     },
     "sweep:doc:admin:/admin/settings/email": {
       "dbQueries": 13,

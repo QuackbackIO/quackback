@@ -5,6 +5,9 @@ export const BENCH_DATABASE_URL =
   process.env.PERF_DATABASE_URL ??
   'postgresql://postgres:password@localhost:5432/quackback_perf_bench'
 
+/** The domain the bench seed adds by name, whose own page the sweep loads. */
+export const BENCH_DOMAIN = 'acme.com'
+
 export const BENCH_PORT = Number(process.env.PERF_PORT ?? 3190)
 
 export const BENCH_URL = `http://localhost:${BENCH_PORT}`
