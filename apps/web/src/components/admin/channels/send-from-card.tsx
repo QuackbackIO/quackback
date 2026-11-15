@@ -34,6 +34,8 @@ const OVERRIDES: Array<{ surface: Exclude<Surface, 'default'>; label: string }> 
   { surface: 'status', label: 'Status page' },
 ]
 
+const ALL_ROWS: readonly Surface[] = ['default', ...OVERRIDES.map((o) => o.surface)]
+
 const PLATFORM = '__platform'
 const SAME_AS_DEFAULT = '__default'
 const INBOX = '__inbox'
@@ -58,6 +60,10 @@ export function SendFromCard({
   forwardingTarget,
   forwardingTargetPermitted,
   hasInboundRoute,
+  rows = ALL_ROWS,
+  title = 'Send from',
+  description = 'The address each kind of email comes from.',
+  action,
   onError,
 }: {
   senders: EmailSendersDTO
@@ -68,6 +74,15 @@ export function SendFromCard({
   forwardingTargetPermitted: boolean | null
   /** Whether the workspace receives email, so support can reply from the inbox. */
   hasInboundRoute: boolean
+  /**
+   * The rows to show, in their usual order: the workspace page shows the
+   * default and the products that are on; the support inbox page shows only
+   * support. A row left out keeps its choice.
+   */
+  rows?: readonly Surface[]
+  title?: string
+  description?: string
+  action?: React.ReactNode
   onError: (error: unknown) => void
 }) {
   const setSender = useSetEmailSender()
@@ -100,36 +115,43 @@ export function SendFromCard({
       ? `${forwardingTarget} isn't verified yet, so replies come from ${resolvedDefault}.`
       : undefined
 
+  const showDefault = rows.includes('default')
+  // Beside the default row "Same as default" is enough. Alone, the row's
+  // description says which address that is, since the select is too narrow.
+  const sameAsDefault = showDefault ? 'Same as default' : 'Workspace default'
+
   return (
-    <SettingsCard title="Send from" description="The address each kind of email comes from.">
+    <SettingsCard title={title} description={description} action={action}>
       <SettingRows>
-        <SettingRow
-          label="Default"
-          htmlFor="send-from-default"
-          description={defaultHint}
-          control={
-            <Select
-              value={valueOf(defaultChoice, 'default')}
-              disabled={setSender.isPending}
-              onValueChange={(v) => choose('default', String(v))}
-            >
-              <SelectTrigger id="send-from-default" className="w-72" aria-label="Default">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {optionsFor('default').map((i) => (
-                  <SelectItem key={i.id} value={i.id}>
-                    {i.label}
+        {showDefault && (
+          <SettingRow
+            label="Default"
+            htmlFor="send-from-default"
+            description={defaultHint}
+            control={
+              <Select
+                value={valueOf(defaultChoice, 'default')}
+                disabled={setSender.isPending}
+                onValueChange={(v) => choose('default', String(v))}
+              >
+                <SelectTrigger id="send-from-default" className="w-72" aria-label="Default">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {optionsFor('default').map((i) => (
+                    <SelectItem key={i.id} value={i.id}>
+                      {i.label}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={PLATFORM}>
+                    {platformFrom ? `Quackback address (${platformFrom})` : 'Quackback address'}
                   </SelectItem>
-                ))}
-                <SelectItem value={PLATFORM}>
-                  {platformFrom ? `Quackback address (${platformFrom})` : 'Quackback address'}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          }
-        />
-        {OVERRIDES.map(({ surface, label }) => {
+                </SelectContent>
+              </Select>
+            }
+          />
+        )}
+        {OVERRIDES.filter(({ surface }) => rows.includes(surface)).map(({ surface, label }) => {
           const id = `send-from-${surface}`
           const offerInbox = surface === 'support' && hasInboundRoute
           // Support without an inbound route has no inbox to reply from.
@@ -142,7 +164,12 @@ export function SendFromCard({
               key={surface}
               label={label}
               htmlFor={id}
-              description={surface === 'support' ? supportHint : undefined}
+              description={
+                (surface === 'support' ? supportHint : undefined) ??
+                (!showDefault && value === SAME_AS_DEFAULT && resolvedDefault
+                  ? `Sends from ${resolvedDefault}.`
+                  : undefined)
+              }
               control={
                 <Select
                   value={value}
@@ -156,7 +183,7 @@ export function SendFromCard({
                     {offerInbox && (
                       <SelectItem value={INBOX}>Address the customer wrote to</SelectItem>
                     )}
-                    <SelectItem value={SAME_AS_DEFAULT}>Same as default</SelectItem>
+                    <SelectItem value={SAME_AS_DEFAULT}>{sameAsDefault}</SelectItem>
                     {optionsFor(surface).map((i) => (
                       <SelectItem key={i.id} value={i.id}>
                         {i.label}

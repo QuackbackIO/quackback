@@ -167,8 +167,8 @@ export async function resolveSendingAddress(
   return (await resolveSender({ surface, teamId: assignedTeamId }))?.from ?? null
 }
 
-/** The bare addr-spec of a resolved identity, which is what a thread stores. */
-function bareSenderAddress(from: SendingIdentity): string {
+/** The bare addr-spec of a From, without any display name; what a thread stores. */
+export function bareSenderAddress(from: SendingIdentity | string): string {
   const parsed = parseAddress(from)
   return typeof parsed === 'string' ? parsed : parsed.address
 }

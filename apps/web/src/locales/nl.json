@@ -1410,6 +1410,7 @@
   "ask.destination.settings_ticket-statuses": "Ticketstatussen",
   "ask.destination.settings_general": "Algemeen",
   "ask.destination.settings_domains": "Domeinen",
+  "ask.destination.settings_email": "E-mail",
   "ask.destination.settings_widget": "Widget",
   "ask.destination.settings_members": "Leden en teams",
   "ask.destination.settings_security_authentication": "Toegang en beveiliging",

@@ -13,8 +13,16 @@ import {
   type ChannelAccount,
   type EmailSendingDomain,
 } from '@/lib/server/db'
-import { requireAuth } from './auth-helpers'
+import { assertAnyPermission, requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import {
+  SUPPORT_SENDER_PERMISSIONS,
+  SURFACE_SENDER_READ_PERMISSIONS,
+} from '@/lib/shared/email-sending-permissions'
+import {
+  bareSenderAddress,
+  resolveSender,
+} from '@/lib/server/domains/channel-accounts/sender-resolver'
 import {
   defaultTeamId,
   getInboundRoute,
@@ -271,7 +279,8 @@ async function requireDefaultTeam(): Promise<TeamId> {
 
 export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<EmailChannelConfigDTO> => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    // Read by the workspace Email page and the support inbox page alike.
+    assertAnyPermission(await requireAuth(), SUPPORT_SENDER_PERMISSIONS)
     const platformAddress = platformInboxAddress(currentMailSlug())
     const defaultFrom = await defaultFromAddress()
     const addressMode = await sendingAddressMode()
@@ -354,7 +363,7 @@ const senderNameSchema = z.string().max(100).nullable().optional()
 export const createSendingAddressFn = createServerFn({ method: 'POST' })
   .validator(z.object({ address: z.string().email(), senderName: senderNameSchema }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const teamId = await requireDefaultTeam()
     // An address on a domain this workspace has not verified brings that
     // domain with it and sends from the default until the domain is live; the
@@ -374,7 +383,7 @@ export const createSendingAddressFn = createServerFn({ method: 'POST' })
 export const updateSendingAddressNameFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string(), senderName: senderNameSchema }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     return toAccount(
       await updateSendingAddressName({
         id: data.id as ChannelAccountId,
@@ -396,7 +405,12 @@ export const setEmailSenderFn = createServerFn({ method: 'POST' })
     })
   )
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    // A support lead chooses where support replies come from; every other
+    // sender is a workspace setting (EMAIL_SENDING_PERMISSION, written out so
+    // the authorization scan can read it).
+    if (data.surface === 'support')
+      assertAnyPermission(await requireAuth(), SUPPORT_SENDER_PERMISSIONS)
+    else await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { choice } = data
     await setEmailSender(
       data.surface,
@@ -409,10 +423,29 @@ export const setEmailSenderFn = createServerFn({ method: 'POST' })
     return { surface: data.surface }
   })
 
+/**
+ * The From a kind of email goes out under right now, as an inbox shows it, for
+ * the settings page of the product that sends it. Not for a conversation: a
+ * thread keeps its own sender (see `resolveSender`).
+ */
+export const getSurfaceSenderFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ surface: z.enum(['feedback', 'changelog', 'status']) }))
+  .handler(async ({ data }): Promise<{ from: string | null }> => {
+    assertAnyPermission(await requireAuth(), SURFACE_SENDER_READ_PERMISSIONS[data.surface])
+    const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
+    const workspaceName = (await requireSettingsCached()).name?.trim()
+    const resolved = await resolveSender({ surface: data.surface })
+    const from = resolved?.from ?? (await defaultFromAddress())
+    if (!from) return { from: null }
+    const name = resolved?.senderName?.trim() || workspaceName
+    const address = bareSenderAddress(from)
+    return { from: name ? `${name} <${address}>` : address }
+  })
+
 export const restartSendingDomainChecksFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     // "Verify": a fresh 72 hour window of automatic checks, and one check
     // now, for a domain whose window ran out before its records appeared.
     return withDomainActionMessage('verify', async () => {
@@ -425,7 +458,7 @@ export const restartSendingDomainChecksFn = createServerFn({ method: 'POST' })
 export const deleteSendingDomainFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     // Removes our row and the plan slot it held. The identity on the shared
     // provider account is deliberately left for an operator to reap; see
     // `deleteSendingDomain` for why nothing here is allowed to delete one.
@@ -459,7 +492,7 @@ export const clearInboundForwardingFn = createServerFn({ method: 'POST' }).handl
 export const deleteChannelAccountFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     // The domain the last address on it was using, so the page can offer to
     // remove that too and free its plan slot.
     const { lastOnDomain } = await removeSendingAddress(data.id as ChannelAccountId)
@@ -469,7 +502,7 @@ export const deleteChannelAccountFn = createServerFn({ method: 'POST' })
 export const sendTestEmailFn = createServerFn({ method: 'POST' })
   .validator(z.object({ addressId: z.string() }))
   .handler(async ({ data }) => {
-    const { user } = await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    const { user } = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     // To the person asking and nobody else: the recipient is their own
     // account address, never something the request names.
     const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')

@@ -50,6 +50,7 @@ export const SETTINGS_PAGE_ICONS: Record<
   '/admin/settings/channels': ChatBubbleLeftRightIcon,
   '/admin/settings/channels/messenger': ChatBubbleLeftRightIcon,
   '/admin/settings/channels/email': EnvelopeIcon,
+  '/admin/settings/email': EnvelopeIcon,
   '/admin/settings/channels/github': GitHubIcon,
   '/admin/settings/macros': DocumentDuplicateIcon,
   '/admin/settings/office-hours': ClockIcon,

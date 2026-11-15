@@ -1404,6 +1404,7 @@
   "ask.destination.settings_workflows": "工作流",
   "ask.destination.settings_general": "常规",
   "ask.destination.settings_domains": "域名",
+  "ask.destination.settings_email": "邮箱",
   "ask.destination.settings_notifications": "通知",
   "ask.destination.settings_portal": "门户",
   "ask.destination.settings_widget": "小组件",

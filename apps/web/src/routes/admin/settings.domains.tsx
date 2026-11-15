@@ -1,3 +1,4 @@
+import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 import { useState } from 'react'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
@@ -44,7 +45,7 @@ export const Route = createFileRoute('/admin/settings/domains')({
 
     const [operator, sending, signIn, helpCenterDomain] = await Promise.all([
       cloudEnabled && webAddresses ? loadOperatorHostnames(context) : null,
-      can(PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)
+      can(EMAIL_SENDING_PERMISSION)
         ? getSendingDomainSummariesFn().catch(() => [] as SendingDomainSummary[])
         : ([] as SendingDomainSummary[]),
       can(PERMISSIONS.AUTH_MANAGE)

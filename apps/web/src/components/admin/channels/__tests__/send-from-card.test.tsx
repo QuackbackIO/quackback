@@ -68,6 +68,7 @@ function renderCard(
     hasInboundRoute: boolean
     forwardingTarget: string | null
     forwardingTargetPermitted: boolean | null
+    rows: Array<keyof EmailSendersDTO>
   }> = {}
 ) {
   return render(
@@ -78,6 +79,7 @@ function renderCard(
       forwardingTarget={over.forwardingTarget ?? null}
       forwardingTargetPermitted={over.forwardingTargetPermitted ?? null}
       hasInboundRoute={over.hasInboundRoute ?? false}
+      rows={over.rows}
       onError={() => undefined}
     />
   )
@@ -212,5 +214,36 @@ describe('support', () => {
       ...over,
     } as Parameters<typeof renderCard>[0])
     expect(screen.queryByText(/isn't verified yet/)).toBeNull()
+  })
+})
+
+describe('showing only some rows', () => {
+  const rowNames = () => screen.getAllByRole('combobox').map((s) => s.getAttribute('aria-label'))
+
+  it('shows only the kinds of email asked for', () => {
+    renderCard({ rows: ['default', 'feedback', 'changelog'] })
+    expect(rowNames()).toEqual(['Default', 'Feedback board', 'Changelog'])
+  })
+
+  it('says which address the default is when the default row is not shown', () => {
+    renderCard({ rows: ['support'], senders: { default: { mode: 'address', id: HELLO.id } } })
+    expect(rowNames()).toEqual(['Support'])
+    expect(options('Support')[0]).toBe('Workspace default')
+    expect(screen.getByText(`Sends from ${HELLO.label}.`)).toBeTruthy()
+  })
+
+  it('names the Quackback address as that default when none is chosen', () => {
+    renderCard({ rows: ['support'] })
+    expect(screen.getByText(`Sends from ${PLATFORM}.`)).toBeTruthy()
+  })
+
+  it('says nothing more once the row has its own address', () => {
+    renderCard({ rows: ['support'], senders: { support: { mode: 'address', id: NEWS.id } } })
+    expect(screen.queryByText(/Sends from/)).toBeNull()
+  })
+
+  it('keeps the short wording beside the default row', () => {
+    renderCard({ rows: ['default', 'support'] })
+    expect(options('Support')[0]).toBe('Same as default')
   })
 })

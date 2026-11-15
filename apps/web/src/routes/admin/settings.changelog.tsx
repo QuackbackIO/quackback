@@ -25,9 +25,13 @@ export const Route = createFileRoute('/admin/settings/changelog')({
   },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.CHANGELOG_MANAGE)
+    // Loaded here, not imported above, so it stays out of every page's script.
+    const { surfaceSenderQuery } = await import('@/lib/client/queries/channel-accounts')
     const ensure = readBatch(context.queryClient)
     await Promise.all([
       ensure(changelogSettingsQueries.get()),
+      // The Email card's "Sent from" line, so it renders from the document.
+      warmQuery(ensure, surfaceSenderQuery('changelog')),
       ensure(changelogCategoryQueries.list()),
       // A segment-gated label shows its segments by name, read under
       // segment.view; without it the names fall back to ids, as before.

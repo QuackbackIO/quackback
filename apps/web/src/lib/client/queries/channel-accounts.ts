@@ -1,11 +1,17 @@
 import { queryOptions } from '@tanstack/react-query'
 import {
   getEmailChannelConfigFn,
+  getSurfaceSenderFn,
   type EmailChannelConfigDTO,
 } from '@/lib/server/functions/channel-accounts'
 
+import type { ProductSenderSurface } from '@/lib/shared/email-sending-permissions'
+
 export const emailChannelKeys = {
   config: () => ['email-channel-config'] as const,
+  /** Under the config key, so every sender change refreshes it too. */
+  surfaceSender: (surface: ProductSenderSurface) =>
+    ['email-channel-config', 'sender', surface] as const,
 }
 
 /** How often the card re-reads while a domain is being checked automatically. */
@@ -33,4 +39,12 @@ export const emailChannelConfigQuery = () =>
     queryFn: () => getEmailChannelConfigFn(),
     staleTime: 60 * 1000,
     refetchInterval: (query) => (autoChecking(query.state.data) ? AUTO_CHECK_POLL_MS : false),
+  })
+
+/** The From one kind of email goes out under now, for its product's settings page. */
+export const surfaceSenderQuery = (surface: ProductSenderSurface) =>
+  queryOptions({
+    queryKey: emailChannelKeys.surfaceSender(surface),
+    queryFn: () => getSurfaceSenderFn({ data: { surface } }),
+    staleTime: 60 * 1000,
   })

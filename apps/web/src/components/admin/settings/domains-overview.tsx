@@ -73,7 +73,7 @@ export function EmailSendingSection({
             title={d.domain}
             meta={sendingMeta(d)}
             badges={<PhaseBadge phase={domainPhase(d, now)} />}
-            to={canOpen ? '/admin/settings/channels/email' : undefined}
+            to={canOpen ? '/admin/settings/email' : undefined}
           />
         ))}
       </SettingsList>
@@ -114,7 +114,7 @@ export function SignInSection({
 export function NoDomains() {
   return (
     <p className="text-sm text-muted-foreground">
-      No domains yet. Add one from Email, Help center or Security.
+      No domains yet. Add one from Email, Help Center or Access &amp; Security.
     </p>
   )
 }

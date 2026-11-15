@@ -78,6 +78,7 @@ const KEYWORDS: Record<string, string[]> = {
   '/admin/settings/widget/install': ['install', 'snippet', 'website', 'embed'],
   '/admin/settings/portal': ['branding', 'logo', 'color', 'theme', 'header'],
   '/admin/settings/general': ['modules', 'workspace', 'name'],
+  '/admin/settings/email': ['sender', 'from address', 'sending domain', 'dkim', 'reply address'],
 }
 
 function destination(href: string, label: string): AskDestination {

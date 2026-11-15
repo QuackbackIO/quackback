@@ -12,6 +12,7 @@ vi.mock('@tanstack/react-router', () => ({
     <a href={to}>{children}</a>
   ),
 }))
+vi.mock('@/lib/client/hooks/use-root-context', () => ({ useHasPermission: () => true }))
 vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/settings')>()),
   updateEmailAutoAckFn: (...a: unknown[]) => updateAck(...a),
@@ -103,24 +104,12 @@ describe('EmailChannelPage', () => {
     expect(screen.queryByRole('heading', { name: 'Reopen on reply' })).toBeNull()
   })
 
-  it('renders the transport rows without status dots', () => {
-    const { container } = renderPage()
-    expect(screen.getByText('SMTP')).toBeTruthy()
-    expect(screen.getByText('mail.acme.io')).toBeTruthy()
-    expect(container.querySelector('.bg-emerald-500')).toBeNull()
-    expect(container.querySelector('span.size-2.rounded-full')).toBeNull()
-  })
-
-  it('names each outbound provider', () => {
-    for (const [provider, label] of [
-      ['ses', 'Amazon SES'],
-      ['resend', 'Resend'],
-      ['console', 'Not configured'],
-    ]) {
-      renderPage(3, provider)
-      expect(screen.getByText(label), provider).toBeTruthy()
-      cleanup()
-    }
+  it('leaves the transport and the sending addresses to Settings → Email', () => {
+    renderPage()
+    expect(screen.queryByText('Transport')).toBeNull()
+    expect(screen.queryByText('SMTP')).toBeNull()
+    expect(screen.queryByText('Sending addresses')).toBeNull()
+    expect(screen.getByText('Support inbox')).toBeTruthy()
   })
 
   it('drops the default note from Auto-acknowledgement', () => {

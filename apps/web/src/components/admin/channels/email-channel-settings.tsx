@@ -1,11 +1,14 @@
 /**
- * Email channel settings: the support inbox (its forwarding address and what
- * happens to unverified senders), the sending addresses, and which of them each
- * kind of email is sent from. An address on a domain that is not live yet
+ * Email settings, in two parts. The workspace part (Settings → Email) holds the
+ * sending addresses and which of them each kind of email is sent from, because
+ * feedback, changelog and status email send whether or not Support is on. The
+ * support part (Support → Channels → Email) holds the support inbox and where
+ * support replies come from. An address on a domain that is not live yet
  * carries that domain's setup panel under it.
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { EnvelopeIcon, GlobeAltIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -66,12 +69,12 @@ const NO_SENDERS: EmailSendersDTO = {
  */
 const reason = (fallback: string) => (error: unknown) => toastError(error, fallback)
 
-export function EmailChannelSettings() {
+/** The email config as both pages read it: addresses named and checked. */
+function useEmailConfigView() {
   const { data } = useQuery(emailChannelConfigQuery())
   const workspaceName = data?.workspaceName ?? ''
   const addresses = data?.sendingAddresses ?? []
   const domains = data?.domains ?? []
-  const senders = data?.senders ?? NO_SENDERS
   const defaultFrom = data?.defaultFrom ?? null
   const platformFrom = defaultFrom
     ? workspaceName
@@ -87,6 +90,61 @@ export function EmailChannelSettings() {
       live: domain ? domainPhase(domain, now) === 'live' : true,
     }
   })
+  return {
+    data,
+    workspaceName,
+    addresses,
+    domains,
+    senders: data?.senders ?? NO_SENDERS,
+    platformFrom,
+    identities,
+  }
+}
+
+/** A kind of email with its own sender, other than the workspace default. */
+export type SenderSurfaceKey = Exclude<keyof EmailSendersDTO, 'default'>
+
+/**
+ * Settings → Email: the addresses this workspace sends from, and which of them
+ * the default and each product that is on uses.
+ */
+export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly SenderSurfaceKey[] }) {
+  const view = useEmailConfigView()
+  const { data } = view
+  return (
+    <div className="space-y-6">
+      <SendingPausedNotice paused={data?.sendingPaused ?? null} />
+      <SendingAddressesSection
+        addresses={view.addresses}
+        domains={view.domains}
+        senders={view.senders}
+        workspaceName={view.workspaceName}
+        platformFrom={view.platformFrom}
+        available={data?.addressMode !== 'unavailable'}
+        guardPermitsAny={data?.addressMode === 'any'}
+      />
+      <SendFromCard
+        senders={view.senders}
+        identities={view.identities}
+        platformFrom={view.platformFrom}
+        forwardingTarget={inboundTarget(data?.inboundRoute)}
+        forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
+        hasInboundRoute={!!data?.inboundRoute}
+        rows={['default', ...surfaces]}
+        onError={reason("Couldn't change where email is sent from.")}
+      />
+    </div>
+  )
+}
+
+/**
+ * Support → Channels → Email: the support inbox, and the one sender a support
+ * lead may choose, where support replies come from. The addresses themselves
+ * are managed on Settings → Email.
+ */
+export function SupportInboxSettings({ canManageSending }: { canManageSending: boolean }) {
+  const view = useEmailConfigView()
+  const { data } = view
   return (
     <div className="space-y-6">
       <SendingPausedNotice paused={data?.sendingPaused ?? null} />
@@ -95,23 +153,24 @@ export function EmailChannelSettings() {
         platformAddress={data?.platformAddress ?? null}
         inboundTrust={data?.inboundRoute?.inboundTrust ?? 'strict'}
       />
-      <SendingAddressesSection
-        addresses={addresses}
-        domains={domains}
-        senders={senders}
-        workspaceName={workspaceName}
-        platformFrom={platformFrom}
-        available={data?.addressMode !== 'unavailable'}
-        guardPermitsAny={data?.addressMode === 'any'}
-      />
       <SendFromCard
-        senders={senders}
-        identities={identities}
-        platformFrom={platformFrom}
+        senders={view.senders}
+        identities={view.identities}
+        platformFrom={view.platformFrom}
         forwardingTarget={inboundTarget(data?.inboundRoute)}
         forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
         hasInboundRoute={!!data?.inboundRoute}
-        onError={reason("Couldn't change where email is sent from.")}
+        rows={['support']}
+        title="Replies"
+        description="The address support replies come from."
+        action={
+          canManageSending ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/settings/email">Manage sending addresses</Link>
+            </Button>
+          ) : undefined
+        }
+        onError={reason("Couldn't change where support replies come from.")}
       />
     </div>
   )
