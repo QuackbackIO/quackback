@@ -27,6 +27,16 @@ export function useBaseUrl() {
   return useRouteContext({ from: '__root__', select: (context) => context.baseUrl })
 }
 
+/** Where each portal section is linked: its own host, or the primary origin. */
+export function useSectionOrigins() {
+  return useRouteContext({ from: '__root__', select: (context) => context.sectionOrigins ?? null })
+}
+
+/** The origin this page is served at: a section's own host, or the primary origin. */
+export function useHostOrigin() {
+  return useRouteContext({ from: '__root__', select: (context) => context.hostOrigin ?? null })
+}
+
 /** Whether this deployment sells plans: false on every self-hosted install. */
 export function useBillingEnabled(): boolean {
   return useRouteContext({ from: '__root__', select: (context) => !!context.billingEnabled })

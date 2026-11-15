@@ -2,7 +2,7 @@ import { nameInitial } from '@/lib/shared/utils/initial'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
-import { isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
+import { crossHostTabHref, isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
 import { usePortalNavItems } from './use-portal-nav-items'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useIntl, FormattedMessage } from 'react-intl'
@@ -43,7 +43,12 @@ import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-s
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
-import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import {
+  useHostOrigin,
+  useSectionOrigins,
+  useSessionContext,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 
 interface PortalHeaderProps {
   orgName: string
@@ -407,30 +412,43 @@ type BuiltInNavItem = Extract<PortalNavItem, { kind: 'builtin' }>
 const NavTab = memo(
   function NavTab({ item, unread }: { item: BuiltInNavItem; unread: number }) {
     const intl = useIntl()
-    const isActive = useRouterState({ select: (s) => isTabActive(item.to, s.location.pathname) })
-    return (
-      <Link to={item.to} className={navItemClass(isActive)}>
-        {item.label ??
-          intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
-        {unread > 0 && (
-          <span
-            className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground"
-            aria-label={intl.formatMessage(
-              {
-                id: 'portal.support.unreadBadge',
-                defaultMessage: '{count} unread',
-              },
-              { count: unread }
-            )}
-          >
-            {unread > 99 ? '99+' : unread}
-          </span>
+    // A tab for a section served on another host (help.acme.com) is a plain
+    // link there: a client-side navigation would never reach the server.
+    const crossHostHref = crossHostTabHref(item.type, item.to, useSectionOrigins(), useHostOrigin())
+    const isActive = useRouterState({
+      select: (s) => !crossHostHref && isTabActive(item.to, s.location.pathname),
+    })
+    const label =
+      item.label ?? intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })
+    const badge = unread > 0 && (
+      <span
+        className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground"
+        aria-label={intl.formatMessage(
+          {
+            id: 'portal.support.unreadBadge',
+            defaultMessage: '{count} unread',
+          },
+          { count: unread }
         )}
+      >
+        {unread > 99 ? '99+' : unread}
+      </span>
+    )
+    return crossHostHref ? (
+      <a href={crossHostHref} className={navItemClass(false)}>
+        {label}
+        {badge}
+      </a>
+    ) : (
+      <Link to={item.to} className={navItemClass(isActive)}>
+        {label}
+        {badge}
       </Link>
     )
   },
   (prev, next) =>
     prev.unread === next.unread &&
+    prev.item.type === next.item.type &&
     prev.item.to === next.item.to &&
     prev.item.label === next.item.label &&
     prev.item.messageId === next.item.messageId &&

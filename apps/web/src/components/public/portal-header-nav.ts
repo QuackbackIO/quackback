@@ -8,6 +8,7 @@
  */
 import type { PortalNavConfig, PortalNavItemConfig } from '@/lib/shared/types/settings'
 import type { PortalSection } from '@/lib/shared/custom-domains'
+import { sectionUrl, type SectionOrigins } from '@/lib/shared/section-links'
 
 /** Built-in tab types (everything except admin-defined links): the portal's sections. */
 export type PortalBuiltInNavType = PortalSection
@@ -170,4 +171,20 @@ export function isTabActive(to: string, pathname: string): boolean {
   if (to === '/') return pathname === '/' || /^\/b\/[^/]+\/posts\//.test(pathname)
   if (to === '/hc') return isHelpPath(pathname)
   return pathname.startsWith(to)
+}
+
+/**
+ * The address a tab goes to when its section is served on another host than
+ * this page's (help.acme.com for the help center), else null for a
+ * client-side link. A client-side navigation never reaches the server, so a
+ * tab that crosses hosts must be a plain link to the other host.
+ */
+export function crossHostTabHref(
+  type: PortalBuiltInNavType,
+  to: string,
+  origins: SectionOrigins | null | undefined,
+  hostOrigin: string | null | undefined
+): string | null {
+  if (!origins || !hostOrigin || origins[type] === hostOrigin) return null
+  return sectionUrl(type, to, origins)
 }

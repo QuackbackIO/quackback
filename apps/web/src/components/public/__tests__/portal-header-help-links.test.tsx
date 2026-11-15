@@ -82,12 +82,18 @@ const HEADER_LINKS = [
   { label: 'Status', url: '/status' },
 ]
 
-function renderHeader(pathname: string, headerLinks: { label: string; url: string }[] | undefined) {
+function renderHeader(
+  pathname: string,
+  headerLinks: { label: string; url: string }[] | undefined,
+  hosts: { sectionOrigins?: Record<string, string>; hostOrigin?: string } = {},
+  featureFlags: Record<string, boolean> = { helpCenter: true }
+) {
   mockPathname.value = pathname
   mockGetRouteContext.mockReturnValue({
+    ...hosts,
     session: null,
     settings: {
-      featureFlags: { helpCenter: true },
+      featureFlags,
       helpCenterConfig: { enabled: true, headerLinks },
     },
     registeredAuthProviders: [],
@@ -127,5 +133,40 @@ describe('PortalHeader — help center header links', () => {
   it('tolerates a legacy config without the headerLinks field', () => {
     renderHeader('/hc', undefined)
     expect(screen.queryByRole('link', { name: 'Community' })).toBeNull()
+  })
+})
+
+describe('PortalHeader — tabs for sections on their own host', () => {
+  afterEach(() => cleanup())
+
+  const PRIMARY = 'https://acme.example.com'
+  const FLAGS = { feedback: true, helpCenter: true }
+  const sectionOrigins = {
+    primary: PRIMARY,
+    feedback: PRIMARY,
+    roadmap: PRIMARY,
+    changelog: PRIMARY,
+    help: 'https://help.acme.com',
+    support: PRIMARY,
+    status: PRIMARY,
+  }
+
+  it("links the help center's tab to its own host from the primary domain", () => {
+    renderHeader('/', [], { sectionOrigins, hostOrigin: PRIMARY }, FLAGS)
+    expect(screen.getByRole('link', { name: 'Help Center' })).toHaveAttribute(
+      'href',
+      'https://help.acme.com/'
+    )
+    // A tab on this host stays a client-side link.
+    expect(screen.getByRole('link', { name: 'Feedback' })).toHaveAttribute('href', '/')
+  })
+
+  it("links the other sections' tabs to the primary domain from the help center's host", () => {
+    renderHeader('/hc', [], { sectionOrigins, hostOrigin: 'https://help.acme.com' }, FLAGS)
+    expect(screen.getByRole('link', { name: 'Feedback' })).toHaveAttribute(
+      'href',
+      'https://acme.example.com/'
+    )
+    expect(screen.getByRole('link', { name: 'Help Center' })).toHaveAttribute('href', '/hc')
   })
 })

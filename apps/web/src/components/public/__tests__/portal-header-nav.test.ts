@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  crossHostTabHref,
   isTabActive,
   resolvePortalNavItems,
   seedNavEditorItems,
@@ -7,6 +8,7 @@ import {
   type PortalNavItem,
 } from '../portal-header-nav'
 import type { PortalNavConfig } from '@/lib/shared/types/settings'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 function gates(overrides: Partial<PortalNavGates> = {}): PortalNavGates {
   return {
@@ -236,5 +238,36 @@ describe('isTabActive', () => {
     expect(isTabActive('/roadmap', '/roadmap')).toBe(true)
     expect(isTabActive('/hc', '/hc/getting-started')).toBe(true)
     expect(isTabActive('/hc', '/hcx')).toBe(false)
+  })
+})
+
+describe('crossHostTabHref', () => {
+  const PRIMARY = 'https://acme.example.com'
+  const origins = {
+    ...allOnPrimary(PRIMARY),
+    help: 'https://help.acme.com',
+    status: 'https://status.acme.com',
+  }
+
+  it('keeps a tab on this host a client-side link', () => {
+    expect(crossHostTabHref('roadmap', '/roadmap', origins, PRIMARY)).toBeNull()
+    expect(crossHostTabHref('help', '/hc', origins, 'https://help.acme.com')).toBeNull()
+  })
+
+  it("sends the primary domain's tab for a section on its own host there, home as /", () => {
+    expect(crossHostTabHref('help', '/hc', origins, PRIMARY)).toBe('https://help.acme.com/')
+  })
+
+  it("sends a section host's tabs for other sections to their host or the primary domain", () => {
+    const here = 'https://help.acme.com'
+    expect(crossHostTabHref('status', '/status', origins, here)).toBe('https://status.acme.com/')
+    expect(crossHostTabHref('roadmap', '/roadmap', origins, here)).toBe(
+      'https://acme.example.com/roadmap'
+    )
+    expect(crossHostTabHref('feedback', '/', origins, here)).toBe('https://acme.example.com/')
+  })
+
+  it('keeps every tab a client-side link when the origins are unknown', () => {
+    expect(crossHostTabHref('help', '/hc', null, PRIMARY)).toBeNull()
   })
 })

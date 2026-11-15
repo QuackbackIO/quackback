@@ -180,4 +180,31 @@ describe('getBootstrapData response', () => {
     hoisted.host = 'help.acme.com'
     expect((await getBootstrapData()).sectionHome).toBe('/hc')
   })
+
+  it('tells the browser where each section is linked, on every host', async () => {
+    const settings = workspaceSettings(setupState())
+    hoisted.getWorkspaceSettings.mockResolvedValue({
+      ...settings,
+      portalConfig: {
+        ...settings.portalConfig,
+        sectionDomains: {
+          help: { hostname: 'help.acme.com', verifiedAt: '2026-11-01T00:00:00.000Z' },
+          // Not verified: links stay on the primary domain.
+          status: { hostname: 'status.acme.com', verifiedAt: null },
+        },
+      },
+      featureFlags: { feedback: true, helpCenter: true, statusPage: true },
+      statusConfig: { enabled: true },
+    })
+
+    const { sectionOrigins, hostOrigin } = await getBootstrapData()
+    expect(sectionOrigins.help).toBe('https://help.acme.com')
+    expect(sectionOrigins.status).toBe('https://feedback.example')
+    expect(sectionOrigins.primary).toBe('https://feedback.example')
+    // The page is on the primary domain.
+    expect(hostOrigin).toBe('https://feedback.example')
+
+    hoisted.host = 'help.acme.com'
+    expect((await getBootstrapData()).hostOrigin).toBe('https://help.acme.com')
+  })
 })
