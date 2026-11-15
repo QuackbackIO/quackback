@@ -19,6 +19,7 @@ import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters'
+import { pageCanonical } from '@/lib/shared/section-links'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -116,12 +117,13 @@ export const Route = createFileRoute('/_portal/')({
       // suspense query) since the feed query is no longer awaited here.
       workspaceName: org.name,
       baseUrl: context.baseUrl ?? '',
+      canonicalUrl: pageCanonical('feedback', '/', context),
       showPoweredBy,
     }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
-    const { workspaceName, baseUrl } = loaderData
+    const { workspaceName, canonicalUrl } = loaderData
     const title = `Feedback - ${workspaceName}`
     const description = `Submit and vote on feature requests for ${workspaceName}. Help shape what gets built next.`
     return {
@@ -130,11 +132,11 @@ export const Route = createFileRoute('/_portal/')({
         { name: 'description', content: description },
         { property: 'og:title', content: title },
         { property: 'og:description', content: description },
-        ...(baseUrl ? [{ property: 'og:url', content: baseUrl }] : []),
+        ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
         { name: 'twitter:title', content: title },
         { name: 'twitter:description', content: description },
       ],
-      links: baseUrl ? [{ rel: 'canonical', href: baseUrl }] : [],
+      links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }
   },
   component: PublicPortalPage,

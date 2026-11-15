@@ -27,7 +27,8 @@ export const Route = createFileRoute('/_portal/u/$principalId')({
     return {
       profile,
       workspaceName: context.settings?.name ?? 'Quackback',
-      baseUrl: context.baseUrl ?? '',
+      // A profile is on every host; its canonical is the primary domain's.
+      baseUrl: context.sectionOrigins?.primary ?? context.baseUrl ?? '',
     }
   },
   head: ({ loaderData }) => {

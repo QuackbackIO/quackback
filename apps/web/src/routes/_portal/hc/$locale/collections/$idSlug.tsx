@@ -12,11 +12,12 @@ import { buildCollectionPageJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/j
 import { CategoryIcon } from '@/components/help-center/category-icon'
 import { Avatar } from '@/components/ui/avatar'
 import { hcArticlePath, hcCollectionPath } from '@/lib/shared/help-center-url'
+import { helpCenterHeadPortal } from '@/components/help-center/help-center-head'
 import {
-  helpCenterAbsoluteUrl,
-  helpCenterHeadPortal,
-} from '@/components/help-center/help-center-head'
-import { useBaseUrl, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+  useBaseUrl,
+  useSectionOrigins,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 
 const MAX_ARTICLES_SHOWN = 8
 const AUTHOR_COLORS = [
@@ -54,11 +55,10 @@ export const Route = createFileRoute('/_portal/hc/$locale/collections/$idSlug')(
   head: ({ loaderData, params, matches }) => {
     if (!loaderData) return {}
     const { category } = loaderData
-    const { workspaceName, baseUrl } = helpCenterHeadPortal(matches)
+    const { workspaceName, helpUrl } = helpCenterHeadPortal(matches)
     const pageTitle = `${category.name} - ${workspaceName}`
     const description = category.description || undefined
-    const canonicalUrl = helpCenterAbsoluteUrl(
-      baseUrl,
+    const canonicalUrl = helpUrl(
       hcCollectionPath({
         locale: params.locale,
         urlId: category.urlId,
@@ -149,7 +149,9 @@ function CollectionPage() {
   const { locale } = Route.useParams()
   const { category, articles, allCategories, subcategories } = Route.useLoaderData()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
-  const baseUrl = useBaseUrl()
+  // Structured data names the help center's own host once it has one.
+  const requestBaseUrl = useBaseUrl()
+  const baseUrl = useSectionOrigins()?.help ?? requestBaseUrl
   const settings = useWorkspaceSettings()
   const askAiEnabled = !!settings?.featureFlags?.helpCenter
 

@@ -25,6 +25,7 @@ import {
   statusIncidentDate,
 } from '@/components/portal/status'
 import type { StatusUptimeDay } from '@/components/portal/status'
+import { pageCanonical } from '@/lib/shared/section-links'
 
 export const Route = createFileRoute('/_portal/status/')({
   loader: async ({ context }) => {
@@ -47,15 +48,15 @@ export const Route = createFileRoute('/_portal/status/')({
     return {
       workspaceName: context.settings?.name ?? 'Quackback',
       baseUrl: context.baseUrl ?? '',
+      canonicalUrl: pageCanonical('status', '/status', context),
       messages: await messagesPromise,
     }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
-    const { workspaceName, baseUrl } = loaderData
+    const { workspaceName, canonicalUrl } = loaderData
     const title = `Status - ${workspaceName}`
     const description = `Live status and incident history for ${workspaceName}.`
-    const canonicalUrl = baseUrl ? `${baseUrl}/status` : ''
     return {
       meta: [
         { title },

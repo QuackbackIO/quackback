@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   allOnPrimary,
+  pageCanonical,
   portalPageUrl,
   sectionOrigins,
   sectionServedAt,
@@ -146,5 +147,22 @@ describe('sectionServedAt', () => {
     // Mapped but not verified: the host is not linked, so it serves nothing of its own.
     expect(sectionServedAt('news.acme.com', origins())).toBeNull()
     expect(sectionServedAt(null, origins())).toBeNull()
+  })
+})
+
+describe('pageCanonical', () => {
+  it("builds a page's canonical URL on its section's origin", () => {
+    const context = { baseUrl: 'https://help.acme.com', sectionOrigins: origins() }
+    expect(pageCanonical('feedback', '/b/ideas/posts/p1', context)).toBe(
+      'https://acme.example.com/b/ideas/posts/p1'
+    )
+    expect(pageCanonical('status', '/status', context)).toBe('https://status.acme.com/')
+  })
+
+  it('falls back to the base URL before the origins are known, and to nothing without one', () => {
+    expect(pageCanonical('changelog', '/changelog', { baseUrl: PRIMARY })).toBe(
+      'https://acme.example.com/changelog'
+    )
+    expect(pageCanonical('changelog', '/changelog', {})).toBe('')
   })
 })

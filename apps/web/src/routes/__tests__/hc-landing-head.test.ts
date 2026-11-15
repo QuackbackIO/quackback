@@ -115,4 +115,34 @@ describe('help center landing canonicals', () => {
     expect(home.links).toEqual([])
     expect(locale.links).toEqual([])
   })
+
+  it("canonicalises the landing to / on the help center's own host", () => {
+    const onHelpHost = {
+      routeId: '/_portal',
+      loaderData: { workspaceName: 'Acme' },
+      context: {
+        baseUrl: 'https://feedback.example.com',
+        sectionOrigins: {
+          primary: 'https://feedback.example.com',
+          feedback: 'https://feedback.example.com',
+          roadmap: 'https://feedback.example.com',
+          changelog: 'https://feedback.example.com',
+          help: 'https://help.acme.com',
+          support: 'https://feedback.example.com',
+          status: 'https://feedback.example.com',
+        },
+      },
+    }
+    const home = headOf(Landing)({
+      loaderData: { helpCenterConfig: null, workspaceName: 'Acme', logoUrl: null },
+      matches: [polishLayout, onHelpHost],
+    })
+    expect(home.links).toContainEqual({ rel: 'canonical', href: 'https://help.acme.com/' })
+    const german = headOf(LocaleLanding)({
+      loaderData: { title: null, description: null, workspaceName: 'Acme', logoUrl: null },
+      params: { locale: 'de' },
+      matches: [polishLayout, onHelpHost],
+    })
+    expect(german.links).toContainEqual({ rel: 'canonical', href: 'https://help.acme.com/hc/de' })
+  })
 })

@@ -75,6 +75,20 @@ export function sectionUrl(section: PortalSection, path: string, origins: Sectio
   return `${origins[section]}${ownHost && clean === SECTION_HOME[section] ? '/' : clean}`
 }
 
+/**
+ * A page's canonical URL from the route context: on its section's origin, else
+ * on the request's base URL, else empty (a relative canonical would resolve
+ * against whichever host the crawler fetched).
+ */
+export function pageCanonical(
+  section: PortalSection,
+  path: string,
+  context: { sectionOrigins?: SectionOrigins | null; baseUrl?: string | null }
+): string {
+  if (context.sectionOrigins) return sectionUrl(section, path, context.sectionOrigins)
+  return context.baseUrl ? `${context.baseUrl}${path}` : ''
+}
+
 /** An absolute URL for any portal path, on the host its section is linked at. */
 export function portalPageUrl(path: string, origins: SectionOrigins): string {
   const section = sectionForPath(path)

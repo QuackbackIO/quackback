@@ -105,6 +105,8 @@ async function getBootstrapData() {
     settings: { name: string; settings: object; statusConfig: object } | null
     onboarding: { complete: boolean; needsSetupWizard: boolean }
     sectionHome: string | null
+    sectionOrigins: Record<string, string>
+    hostOrigin: string
   }
 }
 
