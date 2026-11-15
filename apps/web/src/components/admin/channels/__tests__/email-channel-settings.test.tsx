@@ -624,7 +624,7 @@ describe('the two signing modes', () => {
       ] as SendingDomainDTO['dnsRecords'],
     })
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [easy] })
-    expect(labels()).toEqual(['Ownership', 'DKIM', 'DKIM', 'DKIM', 'Return path', 'Return path'])
+    expect(labels()).toEqual(['Verification', 'DKIM', 'DKIM', 'DKIM', 'Return path', 'Return path'])
   })
 })
 
@@ -656,7 +656,7 @@ describe('a domain whose identity already had a key (shared)', () => {
     )
   const MUTED = 'Signing uses a key already set up for acme.com.'
 
-  it('labels its own key Ownership and the provider CNAMEs DKIM', () => {
+  it('labels its own key Verification and the provider CNAMEs DKIM', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com')],
       domains: [
@@ -675,7 +675,7 @@ describe('a domain whose identity already had a key (shared)', () => {
         }),
       ],
     })
-    expect(labels()).toEqual(['Ownership', 'DKIM', 'Return path', 'Return path'])
+    expect(labels()).toEqual(['Verification', 'DKIM', 'Return path', 'Return path'])
     expect(screen.queryByText(MUTED)).toBeNull()
   })
 
@@ -689,7 +689,7 @@ describe('a domain whose identity already had a key (shared)', () => {
         }),
       ],
     })
-    expect(labels()).toEqual(['Ownership', 'Return path', 'Return path'])
+    expect(labels()).toEqual(['Verification', 'Return path', 'Return path'])
     expect(screen.getByText(MUTED)).toBeTruthy()
   })
 
@@ -757,7 +757,7 @@ describe('the record table', () => {
       ],
     })
     const rows = document.querySelectorAll('[data-slot="dns-record"]')
-    expect(rows[0].textContent).toContain('Found: Ownership')
+    expect(rows[0].textContent).toContain('Found: Verification')
     expect(rows[1].textContent).toContain('Needs a fix: DKIM')
     expect(rows[2].textContent).toContain('Needs a fix: Return path')
     expect(screen.getByText('MX 10')).toBeTruthy()

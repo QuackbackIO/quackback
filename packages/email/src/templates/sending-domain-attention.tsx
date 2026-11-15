@@ -39,7 +39,7 @@ export interface SendingDomainAttentionEmailProps {
 }
 
 const PURPOSE_LABEL: Record<SendingDomainAttentionRecord['purpose'], string> = {
-  ownership: 'ownership record',
+  ownership: 'verification record',
   dkim: 'DKIM record',
   'mail-from': 'return path record',
 }

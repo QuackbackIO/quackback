@@ -119,7 +119,7 @@ describe.skipIf(!fixture.available)('domain ownership notices (real DB, rolled b
       [
         admin,
         'acme.com needs attention',
-        'The ownership record (TXT _quackback.acme.com) is missing. Add it back by November 8, 2026 to keep acme.com verified.',
+        'The verification record (TXT _quackback.acme.com) is missing. Add it back by November 8, 2026 to keep acme.com verified.',
       ],
     ])
     expect(sent.emails).toHaveLength(1)
@@ -172,7 +172,7 @@ describe.skipIf(!fixture.available)('domain ownership notices (real DB, rolled b
     expect(bells.map((b) => [b.title, b.body])).toEqual([
       [
         'acme.com is no longer verified',
-        'The ownership record (TXT _quackback.acme.com) is still missing. Sign-in is no longer verified for acme.com, eu.acme.com.',
+        'The verification record (TXT _quackback.acme.com) is still missing. Sign-in is no longer verified for acme.com, eu.acme.com.',
       ],
     ])
     expect(sent.emails[0]).toMatchObject({ signInDomains: ['acme.com', 'eu.acme.com'] })

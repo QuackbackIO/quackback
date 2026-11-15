@@ -1,6 +1,6 @@
 /**
  * One domain's page body: its ownership, then its three uses (Email sending,
- * Custom domain, Sign-in), each set up from its row until it is on, then shown
+ * Web addresses, Sign-in), each set up from its row until it is on, then shown
  * with where it stands and removed on its own. Email's records and
  * addresses follow, checked and removed with the pieces Settings → Email uses.
  * The domain itself is removed only once no use holds it. A viewer sees only
@@ -52,7 +52,13 @@ import {
 import { addProviderDomainFn, removeVerifiedDomainFn } from '@/lib/server/functions/sso'
 import { updateHelpCenterDomainFn } from '@/lib/server/functions/help-center-domain'
 import { mutateCloudCustomDomainFn } from '@/lib/server/functions/cloud-identity'
-import { USE_COPY, type DomainRow, type DomainUseStatus } from './domains-overview'
+import {
+  USE_COPY,
+  customDomainLine,
+  type DomainRow,
+  type DomainUseStatus,
+} from './domains-overview'
+import { AddCustomDomainDialog, type AddCustomDomainTarget } from './add-custom-domain-dialog'
 
 /** The name of the page a use is set up on, as its link reads. */
 function pageName(use: DomainUse, link: UseLink): string {
@@ -65,7 +71,7 @@ function pageName(use: DomainUse, link: UseLink): string {
 function useDescription(use: DomainUse, link: UseLink | undefined): string {
   // Off Cloud the only web address an install takes is its help center's.
   if (use === 'customDomain' && link?.to === HELP_CENTER_SETTINGS) {
-    return 'Put your help center on this domain.'
+    return 'Use this domain for your help center.'
   }
   return USE_COPY[use].description
 }
@@ -164,7 +170,11 @@ function OwnershipCard({
     }, "Couldn't remove the domain.")
 
   return (
-    <SettingsCard title="Ownership" action={verified ? null : <StateBadge state="pending" />} flush>
+    <SettingsCard
+      title="Domain verification"
+      action={verified ? null : <StateBadge state="pending" />}
+      flush
+    >
       <div className="space-y-3 px-4 py-3 sm:px-6">
         {domain.provenBy ? (
           <p className="text-[13px] text-muted-foreground">
@@ -174,7 +184,7 @@ function OwnershipCard({
           <DnsRecordTable
             records={[
               {
-                label: 'Ownership',
+                label: 'Verification',
                 type: 'TXT',
                 name: domain.record.host,
                 value: domain.record.value,
@@ -194,7 +204,7 @@ function OwnershipCard({
                 </Button>
               ) : (
                 <Button size="sm" variant="outline" disabled={busy} onClick={addRecord}>
-                  Verify ownership
+                  Verify domain
                 </Button>
               ))}
             {domain.added && !domain.inUse && (
@@ -215,7 +225,7 @@ function OwnershipCard({
         open={confirmRemove}
         onOpenChange={setConfirmRemove}
         title={`Remove ${domain.name}?`}
-        description="Its ownership record can be deleted afterwards."
+        description="Its verification record can be deleted afterwards."
         confirmLabel="Remove domain"
         variant="destructive"
         isPending={busy}
@@ -228,12 +238,12 @@ function OwnershipCard({
   )
 }
 
-/** Removing a sign-in domain or the help center's domain, from its row. */
-type OtherRemoval = { use: 'signIn'; id: string } | { use: 'customDomain' }
+/** Removing a sign-in domain or the help center's address, from its row. */
+type OtherRemoval = { use: 'signIn'; id: string } | { use: 'customDomain'; hostname: string }
 
 const OTHER_REMOVAL_TITLE: Record<OtherRemoval['use'], (name: string) => string> = {
   signIn: (name) => `Stop using ${name} for sign-in?`,
-  customDomain: (name) => `Stop serving the help center on ${name}?`,
+  customDomain: (hostname) => `Stop serving the help center on ${hostname}?`,
 }
 
 const OTHER_REMOVAL_NOTE: Record<OtherRemoval['use'], string> = {
@@ -244,9 +254,10 @@ const OTHER_REMOVAL_NOTE: Record<OtherRemoval['use'], string> = {
 /**
  * The three uses, each a row: Set up until it is on, then where it stands and
  * a Remove of its own. Set up runs here, for a viewer who may set that use up:
- * email opens Add address on this domain; a custom domain is added as a Cloud
- * web address, or becomes the help center's domain (confirmed first when that
- * moves the help center off another one); sign-in goes to the one identity
+ * email opens Add address on this domain; a custom domain is named on the domain
+ * (help.acme.com) and added as a Cloud web address, or becomes the help
+ * center's address (confirmed first when that moves the help center off
+ * another one); sign-in goes to the one identity
  * provider, or to Sign-in settings to pick one (the providers are read on the
  * click, not with the page). Email with addresses on it is
  * removed an address at a time, in the list below.
@@ -271,7 +282,8 @@ function UsesCard({
   const [domainTarget, setDomainTarget] = useState<DomainRemoval | null>(null)
   const [other, setOther] = useState<OtherRemoval | null>(null)
   const [addressDialog, setAddressDialog] = useState<SendingAddressDialogTarget | null>(null)
-  const [confirmMove, setConfirmMove] = useState(false)
+  const [webDialog, setWebDialog] = useState<AddCustomDomainTarget | null>(null)
+  const [moveTo, setMoveTo] = useState<string | null>(null)
   const { busy, error, setError, run } = useDomainAction(onChanged)
   const { data, domain, addresses } = sending
   const helpCenter = links.customDomain?.to === HELP_CENTER_SETTINGS
@@ -287,26 +299,30 @@ function UsesCard({
       "Couldn't remove it."
     )
 
-  const setHelpCenterDomainHere = () =>
+  const setHelpCenterAddress = (hostname: string) =>
     run(
-      () => updateHelpCenterDomainFn({ data: { domain: name } }),
-      "Couldn't set the help center's domain."
+      () => updateHelpCenterDomainFn({ data: { domain: hostname } }),
+      "Couldn't set the help center's address."
     )
+
+  /** The hostname typed in Add custom domain: a Cloud custom domain, or the help center's. */
+  const addWebAddress = (hostname: string) => {
+    setWebDialog(null)
+    if (!helpCenter) {
+      void run(
+        () => mutateCloudCustomDomainFn({ data: { action: 'add', hostname } }),
+        "Couldn't add the custom domain."
+      )
+    } else if (helpCenterDomain && helpCenterDomain !== hostname) {
+      setMoveTo(hostname)
+    } else {
+      void setHelpCenterAddress(hostname)
+    }
+  }
 
   const setUp: Record<DomainUse, () => void> = {
     email: () => setAddressDialog({ kind: 'add', domain: name }),
-    customDomain: () => {
-      if (!helpCenter) {
-        void run(
-          () => mutateCloudCustomDomainFn({ data: { action: 'add', hostname: name } }),
-          "Couldn't add the domain."
-        )
-      } else if (helpCenterDomain && helpCenterDomain !== name) {
-        setConfirmMove(true)
-      } else {
-        void setHelpCenterDomainHere()
-      }
-    },
+    customDomain: () => setWebDialog({ prefix: helpCenter ? 'help' : 'feedback' }),
     signIn: () =>
       void run(async () => {
         const providers = await queryClient.fetchQuery(settingsQueries.identityProviders())
@@ -344,13 +360,23 @@ function UsesCard({
       const id = status.id
       return id ? removeButton(() => setOther({ use: 'signIn', id })) : null
     }
-    // Only the help center's own domain is cleared from here; Cloud's are on their card.
-    return helpCenter ? removeButton(() => setOther({ use: 'customDomain' })) : null
+    // Only the help center's own address is cleared from here; Cloud's are on their card.
+    if (!helpCenter) return null
+    const hostname =
+      status.addresses?.find((a) => a.usedFor === 'help')?.hostname ?? helpCenterDomain ?? name
+    return removeButton(() => setOther({ use: 'customDomain', hostname }))
   }
 
   const meta = (status: DomainUseStatus) => {
     if (status.use === 'email' && data && domain && addresses.length === 0) {
       return 'No address uses this domain'
+    }
+    if (status.addresses?.length) {
+      return status.addresses.map((a) => (
+        <span key={a.hostname} className="block">
+          {customDomainLine(a, '')}
+        </span>
+      ))
     }
     return status.detail
   }
@@ -378,9 +404,20 @@ function UsesCard({
               title={USE_COPY[use].title}
               meta={meta(status)}
               wrapMeta
+              stackTrailing
               badges={status.state ? <StateBadge state={status.state} /> : undefined}
               trailing={
                 <>
+                  {use === 'customDomain' && link && !helpCenter && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => setWebDialog({ prefix: '' })}
+                    >
+                      Add custom domain
+                    </Button>
+                  )}
                   {use !== 'email' && link && (
                     <LinkButton link={link}>{pageName(use, link)}</LinkButton>
                   )}
@@ -411,7 +448,11 @@ function UsesCard({
       <ConfirmDialog
         open={other !== null}
         onOpenChange={(open) => !open && setOther(null)}
-        title={other ? OTHER_REMOVAL_TITLE[other.use](name) : ''}
+        title={
+          other
+            ? OTHER_REMOVAL_TITLE[other.use](other.use === 'customDomain' ? other.hostname : name)
+            : ''
+        }
         description={other ? OTHER_REMOVAL_NOTE[other.use] : undefined}
         confirmLabel="Remove"
         variant="destructive"
@@ -421,16 +462,25 @@ function UsesCard({
           setOther(null)
         }}
       />
+      <AddCustomDomainDialog
+        target={webDialog}
+        domain={name}
+        usedFor={helpCenter ? 'help' : 'portal'}
+        busy={busy}
+        onAdd={addWebAddress}
+        onClose={() => setWebDialog(null)}
+      />
       <ConfirmDialog
-        open={confirmMove}
-        onOpenChange={setConfirmMove}
-        title={`Move the help center to ${name}?`}
+        open={moveTo !== null}
+        onOpenChange={(open) => !open && setMoveTo(null)}
+        title={`Move the help center to ${moveTo}?`}
         description={`${helpCenterDomain} will stop serving the help center.`}
         confirmLabel="Move help center"
         isPending={busy}
         onConfirm={() => {
-          setConfirmMove(false)
-          void setHelpCenterDomainHere()
+          const target = moveTo
+          setMoveTo(null)
+          if (target) void setHelpCenterAddress(target)
         }}
       />
     </SettingsCard>

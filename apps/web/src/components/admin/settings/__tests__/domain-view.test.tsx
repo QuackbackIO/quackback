@@ -152,7 +152,7 @@ function rowWith({
     signIn: signIn
       ? [{ id: 'domain_a', name: 'acme.com', verified: signInVerified, provenBy: null }]
       : [],
-    helpCenterDomain: customDomain ? { domain: 'acme.com', verified: false } : null,
+    helpCenterDomain: customDomain ? { domain: 'help.acme.com', verified: false } : null,
     added: [{ name: 'acme.com', verified: false }],
   })[0]!
 }
@@ -232,7 +232,7 @@ const useRow = (title: string) =>
 describe('domain view uses', () => {
   it('lists the three uses in order, each set up or not', () => {
     renderView(rowWith({ email: true, customDomain: true, signIn: true }))
-    expect(useTitles()).toEqual(['Email sending', 'Custom domain', 'Sign-in'])
+    expect(useTitles()).toEqual(['Email sending', 'Custom domains', 'Sign-in'])
   })
 
   it("shows each use's status, and Set up for one that is not on", () => {
@@ -242,14 +242,14 @@ describe('domain view uses', () => {
     // A healthy use is quiet: no status word at all.
     expect(useRow('Sign-in')).not.toHaveTextContent('Verified')
     expect(useRow('Sign-in')).not.toHaveTextContent('Pending')
-    expect(within(useRow('Custom domain')).getByRole('button', { name: 'Set up' })).toBeVisible()
-    expect(within(useRow('Custom domain')).queryByRole('button', { name: 'Remove' })).toBeNull()
+    expect(within(useRow('Custom domains')).getByRole('button', { name: 'Set up' })).toBeVisible()
+    expect(within(useRow('Custom domains')).queryByRole('button', { name: 'Remove' })).toBeNull()
   })
 
   it('offers Set up for every use of a domain with none, each run on this page', () => {
     renderView(rowWith({}))
-    expect(useTitles()).toEqual(['Email sending', 'Custom domain', 'Sign-in'])
-    for (const title of ['Email sending', 'Custom domain', 'Sign-in']) {
+    expect(useTitles()).toEqual(['Email sending', 'Custom domains', 'Sign-in'])
+    for (const title of ['Email sending', 'Custom domains', 'Sign-in']) {
       expect(within(useRow(title)).getByRole('button', { name: 'Set up' })).toBeVisible()
     }
     expect(within(usesCard()).queryByRole('link')).toBeNull()
@@ -270,9 +270,9 @@ describe('domain view uses', () => {
     expect(
       within(useRow('Sign-in')).getByRole('link', { name: 'Sign-in settings' })
     ).toHaveAttribute('href', '/admin/settings/security/authentication?tab=sign-in')
-    expect(useRow('Custom domain')).toHaveTextContent('Pending')
+    expect(useRow('Custom domains')).toHaveTextContent('Pending')
     expect(
-      within(useRow('Custom domain')).getByRole('link', { name: 'Help center settings' })
+      within(useRow('Custom domains')).getByRole('link', { name: 'Help center settings' })
     ).toHaveAttribute('href', '/admin/settings/help-center?tab=domains-languages')
   })
 
@@ -296,39 +296,106 @@ describe('domain view set up', () => {
     expect(within(dialog).getByLabelText('Email address')).toHaveValue('@acme.com')
   })
 
-  it('adds the domain as a web address on Cloud', async () => {
+  /** The Add custom domain dialog, its address typed as asked, then Add. */
+  const addWebAddressAs = (prefix?: string) => {
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('heading', { name: 'Add custom domain' })).toBeVisible()
+    if (prefix !== undefined) {
+      fireEvent.change(within(dialog).getByLabelText('Domain'), { target: { value: prefix } })
+    }
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
+  }
+
+  it('adds a web address under the domain on Cloud, opening the whole portal', async () => {
     const onChanged = vi.fn()
     addWebAddress.mockResolvedValue({ projection: {}, transferToken: null })
     renderView(rowWith({}), { cloud: true, onChanged })
-    setUp('Custom domain')
-    expect(addWebAddress).toHaveBeenCalledWith({ data: { action: 'add', hostname: 'acme.com' } })
+    setUp('Custom domains')
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByLabelText('Domain')).toHaveValue('feedback')
+    expect(dialog).toHaveTextContent('.acme.com')
+    expect(dialog).toHaveTextContent('Used for your portal.')
+    expect(addWebAddress).not.toHaveBeenCalled()
+    addWebAddressAs()
+    expect(addWebAddress).toHaveBeenCalledWith({
+      data: { action: 'add', hostname: 'feedback.acme.com' },
+    })
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
 
-  it('puts the help center on the domain when it has none', async () => {
+  it('puts the help center on help.<domain> when it has none', async () => {
     const onChanged = vi.fn()
-    clearHelpCenterDomain.mockResolvedValue({ domain: 'acme.com', verifiedAt: null })
+    clearHelpCenterDomain.mockResolvedValue({ domain: 'help.acme.com', verifiedAt: null })
     renderView(rowWith({}), { onChanged })
-    setUp('Custom domain')
+    setUp('Custom domains')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Used for your help center.')
+    expect(within(screen.getByRole('dialog')).getByLabelText('Domain')).toHaveValue('help')
+    addWebAddressAs()
     expect(screen.queryByRole('alertdialog')).toBeNull()
-    expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: 'acme.com' } })
+    expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: 'help.acme.com' } })
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
 
-  it('names the current help center domain and changes nothing until confirmed', async () => {
+  it('takes the domain itself when the address is left empty', () => {
     clearHelpCenterDomain.mockResolvedValue({ domain: 'acme.com', verifiedAt: null })
+    renderView(rowWith({}))
+    setUp('Custom domains')
+    addWebAddressAs('')
+    expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: 'acme.com' } })
+  })
+
+  it('refuses an address that is not a name, and changes nothing', () => {
+    renderView(rowWith({}))
+    setUp('Custom domains')
+    addWebAddressAs('help desk')
+    expect(within(screen.getByRole('dialog')).getByRole('alert')).toHaveTextContent(
+      'Use letters, numbers and hyphens'
+    )
+    expect(clearHelpCenterDomain).not.toHaveBeenCalled()
+  })
+
+  it('names the current help center address and changes nothing until confirmed', async () => {
+    clearHelpCenterDomain.mockResolvedValue({ domain: 'help.acme.com', verifiedAt: null })
     renderView(rowWith({}), { helpCenterDomain: 'help.acme.io' })
 
-    setUp('Custom domain')
+    setUp('Custom domains')
+    addWebAddressAs()
     let dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Move the help center to help.acme.com?')
     expect(dialog).toHaveTextContent('help.acme.io will stop serving the help center.')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(clearHelpCenterDomain).not.toHaveBeenCalled()
 
-    setUp('Custom domain')
+    setUp('Custom domains')
+    addWebAddressAs()
     dialog = screen.getByRole('alertdialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Move help center' }))
-    expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: 'acme.com' } })
+    expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: 'help.acme.com' } })
+  })
+
+  it('lists each web address on the domain with what it opens', () => {
+    renderView(
+      domainRows({
+        now: NOW,
+        sending: [],
+        signIn: [],
+        helpCenterDomain: null,
+        webAddresses: [
+          { hostname: 'feedback.acme.com', readiness: 'ready' },
+          { hostname: 'help.acme.com', readiness: 'pending' },
+        ],
+        added: [{ name: 'acme.com', verified: true }],
+      })[0]!,
+      { cloud: true }
+    )
+    const row = useRow('Custom domains')
+    expect(row).toHaveTextContent('feedback.acme.com')
+    expect(row).toHaveTextContent('help.acme.com')
+    expect(row).toHaveTextContent('Portal')
+    expect(row).toHaveTextContent('Pending')
+    // Cloud takes more than one: another is added from the row.
+    fireEvent.click(within(row).getByRole('button', { name: 'Add custom domain' }))
+    expect(within(screen.getByRole('dialog')).getByLabelText('Domain')).toHaveValue('')
   })
 
   it('adds the domain to the one sign-in provider', async () => {
@@ -363,7 +430,7 @@ describe('domain view set up', () => {
     // The custom domain's permission alone reads the use; the help center is
     // set up by whoever manages it.
     renderView(rowWith({}), { permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN] })
-    expect(useTitles()).toEqual(['Custom domain'])
+    expect(useTitles()).toEqual(['Custom domains'])
     expect(within(usesCard()).queryByRole('button', { name: 'Set up' })).toBeNull()
   })
 
@@ -379,7 +446,7 @@ describe('domain view ownership', () => {
     const onChanged = vi.fn()
     checkOwnership.mockResolvedValue({ ok: true, via: 'dns' })
     renderView(rowWith({}), { onChanged })
-    const ownership = card('Ownership')
+    const ownership = card('Domain verification')
     expect(ownership).toHaveTextContent('Pending')
     expect(ownership).toHaveTextContent('_quackback')
     expect(ownership).toHaveTextContent('quackback-domain-verification=own-token')
@@ -391,8 +458,8 @@ describe('domain view ownership', () => {
   it('says what the check found when the record is not there yet', async () => {
     checkOwnership.mockResolvedValue({ ok: false, reason: 'no-record' })
     renderView(rowWith({}))
-    fireEvent.click(within(card('Ownership')).getByRole('button', { name: 'Check now' }))
-    expect(await within(card('Ownership')).findByRole('alert')).toHaveTextContent(
+    fireEvent.click(within(card('Domain verification')).getByRole('button', { name: 'Check now' }))
+    expect(await within(card('Domain verification')).findByRole('alert')).toHaveTextContent(
       "We couldn't find the record yet."
     )
   })
@@ -401,7 +468,7 @@ describe('domain view ownership', () => {
     renderView(rowWith({}), {
       detail: { ...DETAIL, status: 'verified', verifiedAt: '2026-11-01T00:00:00.000Z' },
     })
-    const ownership = card('Ownership')
+    const ownership = card('Domain verification')
     expect(ownership).not.toHaveTextContent('Pending')
     expect(ownership).not.toHaveTextContent('Verified')
     expect(within(ownership).queryByRole('button', { name: 'Check now' })).toBeNull()
@@ -411,7 +478,7 @@ describe('domain view ownership', () => {
 
   it('needs no record under a zone this workspace already proved', () => {
     renderView(rowWith({}), { detail: { ...DETAIL, provenBy: 'email-sending' } })
-    const ownership = card('Ownership')
+    const ownership = card('Domain verification')
     expect(ownership).toHaveTextContent('Verified through email sending')
     expect(ownership).not.toHaveTextContent('Pending')
     expect(ownership).not.toHaveTextContent('own-token')
@@ -420,9 +487,13 @@ describe('domain view ownership', () => {
 
   it('offers no Check now to a viewer who cannot manage the domain', () => {
     renderView(rowWith({}), { permissions: [PERMISSIONS.AUTH_MANAGE] })
-    expect(card('Ownership')).toHaveTextContent('Pending')
-    expect(within(card('Ownership')).queryByRole('button', { name: 'Check now' })).toBeNull()
-    expect(within(card('Ownership')).queryByRole('button', { name: 'Remove domain' })).toBeNull()
+    expect(card('Domain verification')).toHaveTextContent('Pending')
+    expect(
+      within(card('Domain verification')).queryByRole('button', { name: 'Check now' })
+    ).toBeNull()
+    expect(
+      within(card('Domain verification')).queryByRole('button', { name: 'Remove domain' })
+    ).toBeNull()
   })
 
   it('gives a domain only a use holds a record of its own when asked', async () => {
@@ -432,8 +503,10 @@ describe('domain view ownership', () => {
       onChanged,
       detail: { ...DETAIL, added: false, record: null, inUse: true },
     })
-    expect(card('Ownership')).toHaveTextContent('Not verified yet.')
-    fireEvent.click(within(card('Ownership')).getByRole('button', { name: 'Verify ownership' }))
+    expect(card('Domain verification')).toHaveTextContent('Not verified yet.')
+    fireEvent.click(
+      within(card('Domain verification')).getByRole('button', { name: 'Verify domain' })
+    )
     expect(addDomainByName).toHaveBeenCalledWith({ data: { name: 'acme.com' } })
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
@@ -479,7 +552,7 @@ describe('domain view permissions', () => {
 
   it('shows the custom domain without a link to a page the viewer cannot open', () => {
     renderView(all(), { permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN] })
-    expect(useTitles()).toEqual(['Custom domain'])
+    expect(useTitles()).toEqual(['Custom domains'])
     expect(screen.queryByRole('link')).toBeNull()
   })
 })
@@ -533,8 +606,9 @@ describe('domain view removal', () => {
   it('stops serving the help center on the domain from its row', async () => {
     clearHelpCenterDomain.mockResolvedValue({ domain: null, verifiedAt: null })
     renderView(rowWith({ customDomain: true }))
-    fireEvent.click(within(useRow('Custom domain')).getByRole('button', { name: 'Remove' }))
+    fireEvent.click(within(useRow('Custom domains')).getByRole('button', { name: 'Remove' }))
     const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Stop serving the help center on help.acme.com?')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
     expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: null } })
   })

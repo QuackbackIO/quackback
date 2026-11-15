@@ -101,7 +101,7 @@ describe('ssoTxtRecord', () => {
   it('asks for the verify TXT and waits until Verify fails', async () => {
     const { ssoTxtRecord } = await import('../domains-section')
     expect(ssoTxtRecord(pending, null)).toEqual({
-      label: 'Ownership',
+      label: 'Verification',
       type: 'TXT',
       name: '_quackback-verify',
       value: 'qb-domain-verify=tok-a',

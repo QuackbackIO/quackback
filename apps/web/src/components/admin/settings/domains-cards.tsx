@@ -105,7 +105,7 @@ export function hostnameRecords(domain: HostnameRow): DnsRecordRow[] {
   const provenZone = !reportsOwnership && domain.ownership === 'proven-zone'
   if (!provenZone && isTxtRecord(domain.ownershipProof)) {
     records.push({
-      label: 'Ownership',
+      label: 'Verification',
       type: 'TXT',
       name: domain.ownershipProof.name,
       value: domain.ownershipProof.value,

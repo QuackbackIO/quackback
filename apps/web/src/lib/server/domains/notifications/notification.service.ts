@@ -266,7 +266,7 @@ export async function markAsRead(
     { principal_id: principalId, notification_id: notificationId },
     'mark notification as read'
   )
-  // Verify ownership and update in single query
+  // Verify domain and update in single query
   const result = await db
     .update(inAppNotifications)
     .set({ readAt: new Date() })

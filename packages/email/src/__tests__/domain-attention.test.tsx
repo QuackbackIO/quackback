@@ -33,7 +33,7 @@ describe('DomainAttentionEmail', () => {
       )
     )
     expect(text).toContain('acme.com needs attention')
-    expect(text).toContain('The ownership record (TXT _quackback.acme.com) is missing.')
+    expect(text).toContain('The verification record (TXT _quackback.acme.com) is missing.')
     expect(text).toContain('Value: quackback-domain-verification=abc123')
     expect(text).toContain('Add it back by November 8, 2026 to keep acme.com verified.')
     expect(text).toContain('Open domain settings')
@@ -51,13 +51,13 @@ describe('DomainAttentionEmail', () => {
       )
     )
     expect(text).toContain('acme.com is no longer verified')
-    expect(text).toContain('The ownership record (TXT _quackback.acme.com) is still missing.')
+    expect(text).toContain('The verification record (TXT _quackback.acme.com) is still missing.')
     expect(text).toContain('Sign-in is no longer verified for acme.com, eu.acme.com.')
   })
 
   it('leaves sign-in out when nothing rested on the domain', () => {
     expect(
       domainAttentionMessage({ domain: 'acme.com', recordName: record.name, signInDomains: [] })
-    ).toBe('The ownership record (TXT _quackback.acme.com) is still missing.')
+    ).toBe('The verification record (TXT _quackback.acme.com) is still missing.')
   })
 })

@@ -49,6 +49,7 @@ vi.mock('@/lib/server/domains/domain-proof/domains.service', async (importOrigin
 
 import { insertVerifiedDomain } from '@/lib/server/domains/settings/settings.service'
 import { setHelpCenterDomain } from '@/lib/server/domains/help-center/help-center-domain.service'
+import { addDomain } from '@/lib/server/domains/domain-proof/domains.service'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -172,6 +173,27 @@ describe.skipIf(!fixture.available)('in-context entry points (real DB, rolled ba
     it('adds no domain when the help center domain is cleared', async () => {
       await setHelpCenterDomain(null)
       expect(await addedDomains()).toEqual([])
+    })
+
+    it('adds no second domain for an address under a domain already added', async () => {
+      await addDomain('acme.com')
+      const [parent] = await addedDomains()
+      await setHelpCenterDomain('help.acme.com')
+
+      const after = await addedDomains()
+      expect(after.map((d) => d.name)).toEqual(['acme.com'])
+      expect(after[0]!.ownershipToken).toBe(parent!.ownershipToken)
+      expect((await useRecords()).helpCenter).toBe('help.acme.com')
+    })
+
+    it('adds its own domain for an address that only shares a suffix with one added', async () => {
+      await addDomain('acme.com')
+      await setHelpCenterDomain('help.notacme.com')
+
+      expect((await addedDomains()).map((d) => d.name).sort()).toEqual([
+        'acme.com',
+        'help.notacme.com',
+      ])
     })
   })
 })

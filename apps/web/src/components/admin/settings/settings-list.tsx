@@ -105,6 +105,8 @@ interface SettingsListRowProps {
   /** Only for non-default state (StateBadge). */
   badges?: ReactNode
   trailing?: ReactNode
+  /** On a phone, put the trailing controls on their own line under the text, for a row with more than one. */
+  stackTrailing?: boolean
   actions?: RowActionItem[]
   /** Accessible name for the actions menu when `title` is not a string. */
   actionsLabel?: string
@@ -126,6 +128,7 @@ export function SettingsListRow({
   wrapMeta = false,
   badges,
   trailing,
+  stackTrailing = false,
   actions,
   actionsLabel,
   to,
@@ -155,7 +158,12 @@ export function SettingsListRow({
           {badges}
         </div>
         {meta && (
-          <div className={cn('mt-px text-[13px] text-muted-foreground', !wrapMeta && 'truncate')}>
+          <div
+            className={cn(
+              'mt-px text-[13px] text-muted-foreground',
+              wrapMeta ? 'wrap-anywhere' : 'truncate'
+            )}
+          >
             {meta}
           </div>
         )}
@@ -163,7 +171,10 @@ export function SettingsListRow({
       {trailing && (
         <div
           onClick={onClick ? (e) => e.stopPropagation() : undefined}
-          className="flex shrink-0 items-center gap-2.5 text-[13px] text-muted-foreground tabular-nums"
+          className={cn(
+            'flex shrink-0 items-center gap-2.5 text-[13px] text-muted-foreground tabular-nums',
+            stackTrailing && 'max-sm:basis-full'
+          )}
         >
           {trailing}
         </div>
@@ -178,7 +189,12 @@ export function SettingsListRow({
         params={params}
         search={search}
         data-slot="settings-list-row"
-        className={cn(ROW_BASE, height, 'transition-colors hover:bg-muted/40')}
+        className={cn(
+          ROW_BASE,
+          height,
+          stackTrailing && 'max-sm:flex-wrap',
+          'transition-colors hover:bg-muted/40'
+        )}
       >
         {body}
         <ChevronRightIcon
@@ -193,7 +209,12 @@ export function SettingsListRow({
   return (
     <div
       data-slot="settings-list-row"
-      className={cn(ROW_BASE, height, onClick && 'cursor-pointer hover:bg-muted/40')}
+      className={cn(
+        ROW_BASE,
+        height,
+        stackTrailing && 'max-sm:flex-wrap',
+        onClick && 'cursor-pointer hover:bg-muted/40'
+      )}
       onClick={onClick}
       onKeyDown={
         onClick

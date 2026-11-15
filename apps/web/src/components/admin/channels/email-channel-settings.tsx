@@ -339,7 +339,7 @@ function pendingMeta(
 ): string | null {
   if (phase === 'live') {
     const warning = first ? ownershipWarning(domain) : null
-    return warning ? `The ownership record is missing. ${warning}` : null
+    return warning ? `The verification record is missing. ${warning}` : null
   }
   if (!first) return `Waiting for ${domain.domain} to be verified`
   if (signingKeyFailing(domain, phase)) return `${signingKeyProblem(domain.domain)}${fallback}`

@@ -249,4 +249,38 @@ describe('SettingsListRow meta', () => {
     expect(screen.getByText('one line')).toHaveClass('truncate')
     expect(screen.getByText('a whole sentence')).not.toHaveClass('truncate')
   })
+
+  it('breaks a long wrapped meta anywhere, so a hostname never runs under the controls', () => {
+    render(
+      <SettingsList>
+        <SettingsListRow title="b" meta="help.a-very-long-hostname.example.com" wrapMeta />
+      </SettingsList>
+    )
+    expect(screen.getByText('help.a-very-long-hostname.example.com')).toHaveClass('wrap-anywhere')
+  })
+
+  it('puts the trailing controls under the text on a phone only when asked', () => {
+    render(
+      <SettingsList>
+        <SettingsListRow title="a" trailing={<button type="button">One</button>} />
+        <SettingsListRow
+          title="b"
+          stackTrailing
+          trailing={
+            <>
+              <button type="button">Two</button>
+              <button type="button">Three</button>
+            </>
+          }
+        />
+      </SettingsList>
+    )
+    const rowOf = (name: string) =>
+      screen.getByRole('button', { name }).closest('[data-slot="settings-list-row"]')!
+    const trailingOf = (name: string) => screen.getByRole('button', { name }).parentElement!
+    expect(rowOf('One')).not.toHaveClass('max-sm:flex-wrap')
+    expect(trailingOf('One')).not.toHaveClass('max-sm:basis-full')
+    expect(rowOf('Two')).toHaveClass('max-sm:flex-wrap')
+    expect(trailingOf('Two')).toHaveClass('max-sm:basis-full')
+  })
 })

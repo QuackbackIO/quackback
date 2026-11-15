@@ -45,7 +45,7 @@ describe('labels', () => {
     expect(pendingProvenLabel('email-sending')).toBe('Already verified through email sending')
     expect(pendingProvenLabel('workspace')).toBe('Already verified by this workspace')
     expect(pendingProvenLabel('sso')).toBe('Already verified through single sign-on')
-    expect(verifiedThroughLabel('domain')).toBe('Verified through domain ownership')
+    expect(verifiedThroughLabel('domain')).toBe('Verified through domain verification')
   })
 })
 

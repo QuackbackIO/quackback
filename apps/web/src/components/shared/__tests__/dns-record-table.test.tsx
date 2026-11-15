@@ -18,7 +18,7 @@ describe('<DnsRecordTable>', () => {
             problem: 'not shown while found',
           },
           {
-            label: 'Ownership',
+            label: 'Verification',
             type: 'TXT',
             name: '_quackback-verify.acme.com',
             value: 'qb-domain-verify=abc',
@@ -39,7 +39,7 @@ describe('<DnsRecordTable>', () => {
     const rows = document.querySelectorAll('[data-slot="dns-record"]')
     expect([...rows].map((r) => r.textContent)).toEqual([
       'Found: Routinghelp.acme.comCNAMEapp.example.com',
-      'Needs a fix: Ownership_quackback-verify.acme.comTXTqb-domain-verify=abc',
+      'Needs a fix: Verification_quackback-verify.acme.comTXTqb-domain-verify=abc',
       'Waiting: DKIMqb._domainkeyTXTv=DKIM1; p=xyz',
     ])
     const fixes = document.querySelectorAll('[data-slot="dns-record-fix"]')
