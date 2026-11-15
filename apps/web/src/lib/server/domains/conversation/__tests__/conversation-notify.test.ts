@@ -192,6 +192,9 @@ beforeEach(() => {
   visitorRows = []
   limitQueue = []
   vi.clearAllMocks()
+  // clearAllMocks keeps implementations, so a case that set a From would leak
+  // it into every later case without this.
+  resolveConversationFrom.mockReset().mockResolvedValue(null)
   // Silence the fire-and-forget warning logs.
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   buildHookContext.mockResolvedValue(ctx)
@@ -753,6 +756,9 @@ describe('conversation email send retry', () => {
 // rating-request email, since the in-app emoji row is inert in an email client.
 describe('notifyCsatRequestEmail', () => {
   const visitorPrincipalId = 'principal_visitor' as PrincipalId
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
 
   it('does not send an email when the conversation channel is not email', async () => {
     limitQueue = [[{ channel: 'messenger', visitorPrincipalId }]]
@@ -805,8 +811,43 @@ describe('notifyCsatRequestEmail', () => {
       workspaceName: 'Acme',
       logoUrl: undefined,
       from: undefined,
+      fromDisplayName: 'Acme',
+      conversationSubject: undefined,
+      replyTo: undefined,
+      // No sending domain configured, so there is nothing to mint an id on.
+      messageId: undefined,
+      inReplyTo: undefined,
+      references: undefined,
       conversationId,
     })
+  })
+
+  it('threads the rating request into the conversation, like the closing notice', async () => {
+    vi.stubEnv('EMAIL_FROM', 'Platform <noreply@mail.example>')
+    limitQueue = [
+      [{ channel: 'email', visitorPrincipalId, subject: 'Help with billing' }],
+      [{ type: 'user', email: 'visitor@example.com', contactEmail: null }],
+    ]
+    mintCsatEmailToken.mockReturnValue('signed-token')
+    sendCsatRequestEmail.mockResolvedValue({ sent: true })
+    threadIdsForOutbound.mockResolvedValue({
+      inbound: ['cust-inbound@mail.example'],
+      outbound: ['c.1.aaa@mail.example'],
+      merged: ['cust-inbound@mail.example', 'c.1.aaa@mail.example'],
+    })
+
+    await notifyCsatRequestEmail(conversationId, 'How did we do?')
+
+    const call = sendCsatRequestEmail.mock.calls[0][0]
+    expect(call).toMatchObject({
+      conversationSubject: 'Help with billing',
+      inReplyTo: 'cust-inbound@mail.example',
+      references: ['cust-inbound@mail.example', 'c.1.aaa@mail.example'],
+      fromDisplayName: 'Acme',
+    })
+    // The id that went out is recorded, so a reply quoting it routes home.
+    expect(call.messageId).toEqual(expect.any(String))
+    expect(recordOutboundEmail).toHaveBeenCalledWith(call.messageId, conversationId)
   })
 
   it('asks the rating from the address the thread is already being answered from', async () => {
@@ -826,7 +867,10 @@ describe('notifyCsatRequestEmail', () => {
 
     expect(resolveConversationFrom).toHaveBeenCalledWith(conversationId)
     expect(sendCsatRequestEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ from: 'support@tenant-a.example' })
+      expect.objectContaining({
+        from: 'Acme <support@tenant-a.example>',
+        fromDisplayName: undefined,
+      })
     )
   })
 
@@ -1212,6 +1256,41 @@ describe('threading headers (P4.6 regression guard)', () => {
       const call = sendConversationMessageEmail.mock.calls[0][0]
       expect(call.references).toEqual(prior)
       expect(call.inReplyTo).toBe('c.1.bbb@tenaevexeo.resend.app')
+    })
+
+    it('names a messenger reply after the agent and the workspace', async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+
+      await notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Alex',
+        channel: 'messenger',
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.from).toBeUndefined()
+      expect(call.fromDisplayName).toBe('Alex from Acme')
+    })
+
+    it("names a messenger reply sent from the thread's own address", async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      resolveConversationFrom.mockResolvedValueOnce('help@home.example')
+
+      await notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Alex',
+        channel: 'messenger',
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.from).toBe('Alex from Acme <help@home.example>')
+      expect(call.fromDisplayName).toBeUndefined()
     })
 
     it('forwards the stored conversation subject to the sender', async () => {

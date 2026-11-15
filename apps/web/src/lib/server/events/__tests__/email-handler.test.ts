@@ -623,6 +623,27 @@ describe('emailHook — ticket + SLA lifecycle', () => {
     expect(mockTicketEventEmail).toHaveBeenCalledWith(expect.objectContaining({ from: undefined }))
   })
 
+  it("keeps the workspace's display name through the send-time re-check", async () => {
+    // Named on both sides of the guard: on the address it permits, and on the
+    // platform sender it falls back to when it refuses.
+    for (const answer of ['support@tenant-a.example', null]) {
+      mockTicketEventEmail.mockClear()
+      permittedSendingIdentity.mockResolvedValue(answer)
+      await emailHook.run(
+        evt('ticket.created'),
+        baseTarget,
+        ticketConfig({
+          kind: 'created',
+          from: 'support@tenant-a.example',
+          fromDisplayName: 'Acme',
+        })
+      )
+      expect(mockTicketEventEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ from: answer ?? undefined, fromDisplayName: 'Acme' })
+      )
+    }
+  })
+
   it('still rejects a genuinely unsupported type', async () => {
     const result = await emailHook.run(
       { id: 'x', type: 'post.created', timestamp: '', actor: { type: 'user' } } as EventData,

@@ -30,7 +30,8 @@ export interface CsatDeliveryCtx {
   ratingUrls: [string, string, string, string, string]
   workspaceName: string
   logoUrl: string | null
-  from?: string
+  /** Stored `conversations.subject`, so the request's subject matches the thread. */
+  conversationSubject?: string | null
 }
 
 export interface LifecycleDeliveryCtx {
