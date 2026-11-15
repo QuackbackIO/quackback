@@ -22,6 +22,10 @@ vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   setTicketPriority: (...a: unknown[]) => mockSetPriority(...a),
   assertTicketVisible: (...a: unknown[]) => mockAssertVisible(...a),
 }))
+const mockGetTicketType = vi.fn()
+vi.mock('@/lib/server/domains/tickets/ticket-type.service', () => ({
+  getTicketType: (...a: unknown[]) => mockGetTicketType(...a),
+}))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   sendTicketMessage: (...a: unknown[]) => mockSendMessage(...a),
   addTicketNote: (...a: unknown[]) => mockAddNote(...a),
@@ -177,6 +181,57 @@ describe('POST /api/v1/tickets (create)', () => {
     })
     expect(bad.status).toBe(400)
     expect(mockCreateTicket).not.toHaveBeenCalled()
+  })
+
+  describe('field values', () => {
+    const TYPE_ID = 'ticket_type_01h455vb4pex5vsknk084sn02q'
+    const field = (key: string, visibleToCustomer: boolean) => ({
+      key,
+      label: key,
+      type: 'text',
+      required: false,
+      visibleToCustomer,
+    })
+    const create = (body: Record<string, unknown>) =>
+      post(ListRoute)({
+        request: jsonReq('https://x.test/api/v1/tickets', { title: 'Bug', ...body }),
+        params: {},
+      })
+
+    beforeEach(() => {
+      mockCreateTicket.mockResolvedValue(ticketDTO)
+      mockGetTicketType.mockResolvedValue({
+        id: TYPE_ID,
+        // An API key acts as the team, so internal fields are writable too.
+        fields: [field('page_url', true), field('imara_customer_id', false)],
+      })
+    })
+
+    it('passes validated fields as customAttributes', async () => {
+      const res = await create({
+        ticketTypeId: TYPE_ID,
+        fields: { page_url: 'https://app/x', imara_customer_id: 'c-1' },
+      })
+      expect(res.status).toBe(201)
+      expect(mockGetTicketType).toHaveBeenCalledWith(TYPE_ID)
+      expect(mockCreateTicket.mock.calls[0][0].customAttributes).toEqual({
+        page_url: 'https://app/x',
+        imara_customer_id: 'c-1',
+      })
+    })
+
+    it('rejects fields without ticketTypeId', async () => {
+      const res = await create({ fields: { page_url: 'https://app/x' } })
+      expect(res.status).toBe(400)
+      expect(mockCreateTicket).not.toHaveBeenCalled()
+    })
+
+    it('rejects an unknown field key instead of dropping it', async () => {
+      const res = await create({ ticketTypeId: TYPE_ID, fields: { pageurl: 'typo' } })
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.message).toContain('pageurl')
+      expect(mockCreateTicket).not.toHaveBeenCalled()
+    })
   })
 })
 

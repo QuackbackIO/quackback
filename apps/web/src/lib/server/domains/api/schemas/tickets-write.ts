@@ -60,6 +60,14 @@ const CreateTicketBodySchema = createRequestBodySchema({
   requesterPrincipalId: z.string().optional().meta({ description: 'Requester principal ID' }),
   companyId: z.string().optional().meta({ description: 'Associated company ID' }),
   attachments: z.array(TicketWriteAttachmentSchema).optional(),
+  fields: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .meta({
+      description:
+        "Values for the ticket type's fields, keyed by field key. Requires ticketTypeId; unknown keys are rejected (400).",
+      example: { page_url: 'https://app.example.com/settings' },
+    }),
 })
 
 const TicketMessageBodySchema = createRequestBodySchema({

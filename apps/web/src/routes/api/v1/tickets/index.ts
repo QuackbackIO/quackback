@@ -13,6 +13,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { TICKET_TYPES } from '@/lib/shared/db-types'
 import { coerceTicketTypeId } from '@/lib/shared/tickets'
 import { serializeTicket } from './-serialize'
+import { resolveApiTicketFields } from './-fields'
 import {
   priorityEnum,
   attachmentsSchema,
@@ -35,6 +36,8 @@ const createTicketSchema = z.object({
   requesterPrincipalId: z.string().optional(),
   companyId: z.string().optional(),
   attachments: attachmentsSchema,
+  // Values for the ticket type's fields, keyed by field key (requires ticketTypeId).
+  fields: z.record(z.string(), z.unknown()).optional(),
 })
 
 export const Route = createFileRoute('/api/v1/tickets/')({
@@ -115,6 +118,7 @@ export const Route = createFileRoute('/api/v1/tickets/')({
             'ticket_type',
             'ticket type ID'
           )
+          const customAttributes = await resolveApiTicketFields(ticketTypeId, parsed.data.fields)
 
           const actor = serviceActorFromApiAuth(auth)
           const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
@@ -133,6 +137,7 @@ export const Route = createFileRoute('/api/v1/tickets/')({
               requesterPrincipalId,
               companyId,
               attachments: toAttachments(parsed.data.attachments),
+              customAttributes,
               // CONVERGENCE PHASE 1b: a customer-intake path — a CUSTOMER ticket
               // created WITH a requester gets its backing conversation + link in
               // the same transaction (createTicketCore's doc carries the
