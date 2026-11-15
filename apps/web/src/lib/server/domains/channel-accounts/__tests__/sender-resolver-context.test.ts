@@ -58,13 +58,14 @@ const inboundAccount = vi.hoisted(() => ({ current: null as unknown }))
 
 vi.mock('../email-senders', () => ({
   getEmailSenders: async () => senders.current,
-  senderNameForAddress: async () => null,
+  // Every address asked about is one the workspace still has.
+  workspaceAddress: async () => ({ known: true, senderName: null }),
 }))
 vi.mock('../channel-account.service', () => ({
   getChannelAccount: async () => inboundAccount.current,
 }))
 
-const { resolveSender } = await import('../sender-resolver')
+const { resolveConversationSender, resolveSender } = await import('../sender-resolver')
 
 beforeEach(() => {
   contexts.mockClear()
@@ -121,5 +122,19 @@ describe('resolveSender', () => {
     conversationRow.current = { channelAccountId: 'ca_route', threadSenderAddress: null }
     inboundAccount.current = { address: null, config: { forwardingTarget: 'b@pending.example' } }
     expect(await resolveSender({ conversationId: 'conversation_1' as ConversationId })).toBeNull()
+  })
+})
+
+describe('resolveConversationSender', () => {
+  it('does not store the platform inbox, so the thread moves once its own address can send', async () => {
+    // The database double has no update: storing anything here would throw.
+    conversationRow.current = { channelAccountId: 'ca_route', threadSenderAddress: null }
+    inboundAccount.current = { address: null, config: { forwardingTarget: 'b@pending.example' } }
+    senders.current = new Map<string, unknown>([['support', { mode: 'inbox', account: null }]])
+    expect(await resolveConversationSender('conversation_1' as ConversationId)).toEqual({
+      from: 'acme@in.platform.example',
+      source: 'platform_inbox',
+      senderName: null,
+    })
   })
 })

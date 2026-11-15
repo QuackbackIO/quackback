@@ -706,6 +706,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'different From addresses. Null falls through to EMAIL_FROM, which is the self-host path.',
   },
   {
+    file: 'packages/email/src/default-from.ts',
+    name: 'shared',
+    category: 'process-lifetime',
+    reason:
+      'Holds a function pointer installed at boot that answers one question about the process: ' +
+      'whether it serves many workspaces. The answer is the same for every workspace in it, and ' +
+      'nothing about a workspace is kept in here.',
+  },
+  {
     file: 'packages/email/src/index.ts',
     name: 'smtpTransporter',
     category: 'fleet-wide',

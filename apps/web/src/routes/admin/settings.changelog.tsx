@@ -30,8 +30,10 @@ export const Route = createFileRoute('/admin/settings/changelog')({
     const ensure = readBatch(context.queryClient)
     await Promise.all([
       ensure(changelogSettingsQueries.get()),
-      // The Email card's "Sent from" line, so it renders from the document.
-      warmQuery(ensure, surfaceSenderQuery('changelog')),
+      // The Email card's "Sent from" line, so it renders from the document. On
+      // its own rather than through the batch, which cannot answer a read that
+      // takes an argument.
+      warmQuery(context.queryClient, surfaceSenderQuery('changelog')),
       ensure(changelogCategoryQueries.list()),
       // A segment-gated label shows its segments by name, read under
       // segment.view; without it the names fall back to ids, as before.

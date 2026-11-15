@@ -220,6 +220,19 @@ describe('formatAddress', () => {
     expect(formatAddress('Support <support@acme.test>')).toBe('Support <support@acme.test>')
     expect(formatAddress('  support@acme.test ')).toBe('support@acme.test')
   })
+
+  it('gives the same header however many times a name with quotes passes through', () => {
+    // A From is formatted where the name is applied and again at the transport
+    // boundary, so a second pass must not escape the first pass's escapes.
+    for (const name of ['Acme "Support"', 'Acme \\ Co, Inc', 'Doe, Jane']) {
+      const once = formatAddress(`${name} <hi@acme.test>`)
+      expect(formatAddress(once)).toBe(once)
+      expect(parseAddress(once)).toEqual({ address: 'hi@acme.test', name })
+    }
+    expect(formatAddress('Acme "Support" <hi@acme.test>')).toBe(
+      '"Acme \\"Support\\"" <hi@acme.test>'
+    )
+  })
 })
 
 describe('addressDomain', () => {

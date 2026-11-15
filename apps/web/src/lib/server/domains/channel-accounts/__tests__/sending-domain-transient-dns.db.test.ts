@@ -422,6 +422,11 @@ describe.skipIf(!fixture.available)('sending domain checks on unanswered DNS', (
   it('tells the managers once when the Verify action finds a verified domain no longer verifies', async () => {
     const row = await verifiedDomain()
     providerState.set('a.example', { ...verifiedIdentity('a.example'), verifiedForSending: false })
+    // Long enough after the last check that asking again is a new check.
+    await testDb
+      .update(emailSendingDomains)
+      .set({ lastCheckedAt: new Date(Date.now() - MINUTE) })
+      .where(eq(emailSendingDomains.id, row.id))
 
     expect((await restartSendingDomainChecks(row.id))?.status).toBe('pending')
     expect(await attentionBells(admin)).toHaveLength(1)

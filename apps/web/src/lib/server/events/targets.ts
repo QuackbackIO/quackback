@@ -1388,7 +1388,7 @@ async function requesterFacingConfig(
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   const { currentMailSlug } =
     await import('@/lib/server/domains/conversation/conversation.mail-slug')
-  const sender = await resolveTicketSender(params.ticketId, params.assignedTeamId)
+  const sender = await resolveTicketSender(params.ticketId)
   // The mail slug names this workspace in the address, which is what lets a
   // shared inbound domain route the reply back. With none to mint under there is
   // no routable address: the ticket email then carries no Reply-To and its

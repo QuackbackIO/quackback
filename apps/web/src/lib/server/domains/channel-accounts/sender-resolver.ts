@@ -7,14 +7,14 @@
  * and status mail. Which address each of those sends from is chosen in settings
  * (`email-senders.ts`).
  */
-import type { ChannelAccountId, ConversationId, TeamId, TicketId } from '@quackback/ids'
+import type { ChannelAccountId, ConversationId, TicketId } from '@quackback/ids'
 import type { SendingIdentity } from '@quackback/email/sender'
 import { parseAddress } from '@quackback/email/ses'
 import { db, and, asc, eq, isNull, conversations, ticketConversations } from '@/lib/server/db'
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { getChannelAccount } from './channel-account.service'
-import { getEmailSenders, senderNameForAddress } from './email-senders'
+import { getEmailSenders, workspaceAddress } from './email-senders'
 import {
   permittedSendingIdentity,
   sendingIdentityContext,
@@ -58,16 +58,18 @@ export interface ResolvedSender {
  *
  * 0. `thread`: for a conversation, the address its first customer email went
  *    out from (`conversations.thread_sender_address`, written by
- *    {@link resolveConversationFrom}). One thread keeps one sender, whatever is
- *    chosen in settings later. Like every other step it must pass the send
- *    guard: a stored address whose domain has since been demoted gives way to
- *    the rest of the chain.
+ *    {@link resolveConversationSender}). One thread keeps one sender, whatever
+ *    is chosen in settings later, for as long as the workspace still has that
+ *    address. Like every other step it must pass the send guard: a stored
+ *    address whose domain has since been demoted gives way to the rest of the
+ *    chain.
  * 1. `inbox`: support only, and only while support is set to reply from the
  *    address the customer wrote to (`email_senders` mode `inbox`). For a
  *    conversation that arrived through a front door, the forwarded support
  *    address. A customer who wrote to `support@theircompany.com` hears back
  *    from it, or the thread visibly changes identity halfway through.
- * 2. `surface`: the identity chosen for this surface, when one is.
+ * 2. `surface`: the identity chosen for this surface, when one is. For support
+ *    in inbox mode that is the address behind the inbox, when it has one.
  * 3. `default`: the workspace's default sender, when one is chosen.
  * 4. `platform_inbox`: in inbox mode, for a front-door conversation, the
  *    workspace's own platform inbox address. Last, because it is the address a
@@ -83,15 +85,37 @@ export interface ResolvedSender {
  * shares, so a row naming a domain this workspace never proved would be an
  * impersonation the provider would carry out.
  *
- * `teamId` is accepted for existing callers and ignored: addresses were only
- * ever added on the default team, and per-team senders will come back as a
- * scope on `email_senders` rather than as team matching here.
+ * `preview` is for a page that shows what a send would use: the same answer,
+ * with a refused candidate not logged as a refused send.
  */
 export async function resolveSender(input: {
   surface?: SenderSurface
-  teamId?: TeamId | null
   conversationId?: ConversationId
+  preview?: boolean
 }): Promise<ResolvedSender | null> {
+  return (await resolve(input)).sender
+}
+
+/** A resolution with what {@link resolveConversationSender} needs to store it. */
+interface Resolution {
+  sender: ResolvedSender | null
+  /**
+   * The conversation's stored sender, and whether the workspace still has that
+   * address. Null when nothing is stored (or there is no conversation).
+   */
+  stored: { address: string; known: boolean } | null
+  /**
+   * True when `sender` is the default only because the address this surface
+   * chose could not send: a stand-in, not the thread's own sender.
+   */
+  standIn: boolean
+}
+
+async function resolve(input: {
+  surface?: SenderSurface
+  conversationId?: ConversationId
+  preview?: boolean
+}): Promise<Resolution> {
   const surface = input.surface ?? 'support'
   // The guard's context, gathered at most once per resolution and only when a
   // candidate needs checking: it loads every verified domain, and this runs on
@@ -99,8 +123,9 @@ export async function resolveSender(input: {
   let gathered: Promise<SendingIdentityContext> | undefined
   const ctx = () => (gathered ??= sendingIdentityContext())
   const permitted = async (address: string | null | undefined) =>
-    address ? permittedSendingIdentity(address, await ctx()) : null
+    address ? permittedSendingIdentity(address, await ctx(), { quiet: input.preview }) : null
   let channelAccountId: ChannelAccountId | null = null
+  let stored: Resolution['stored'] = null
 
   if (input.conversationId) {
     const [conv] = await db
@@ -112,11 +137,26 @@ export async function resolveSender(input: {
       .where(eq(conversations.id, input.conversationId))
       .limit(1)
     channelAccountId = conv?.channelAccountId ?? null
-    const stored = conv?.threadSenderAddress ?? null
-    const from = await permitted(stored)
-    if (from && stored)
-      return { from, source: 'thread', senderName: await senderNameForAddress(stored) }
+    const address = conv?.threadSenderAddress ?? null
+    if (address) {
+      // Reused only while it is still one of the workspace's addresses, so
+      // removing an address moves its threads to whatever is chosen now.
+      const own = await workspaceAddress(address)
+      stored = { address, known: own.known }
+      if (own.known) {
+        const from = await permitted(address)
+        if (from) {
+          const sender = { from, source: 'thread' as const, senderName: own.senderName }
+          return { sender, stored, standIn: false }
+        }
+      }
+    }
   }
+  const answer = (sender: ResolvedSender | null, standIn = false): Resolution => ({
+    sender,
+    stored,
+    standIn,
+  })
 
   const senders = await getEmailSenders()
   const choice = senders.get(surface)
@@ -133,38 +173,32 @@ export async function resolveSender(input: {
     const inboxAddress = account?.address ?? account?.config?.forwardingTarget ?? null
     const from = await permitted(inboxAddress)
     if (from && inboxAddress) {
-      return { from, source: 'inbox', senderName: await senderNameForAddress(inboxAddress) }
+      const { senderName } = await workspaceAddress(inboxAddress)
+      return answer({ from, source: 'inbox', senderName })
     }
   }
 
-  if (choice?.mode === 'address') {
+  // The address this surface chose: its own, or the one behind the inbox.
+  let chosenRefused = false
+  if (choice?.account) {
     const from = await permitted(choice.account.address)
-    if (from) return { from, source: 'surface', senderName: choice.account.senderName }
+    if (from) return answer({ from, source: 'surface', senderName: choice.account.senderName })
+    chosenRefused = true
   }
   const fallback = senders.get('default')
   if (fallback?.mode === 'address') {
     const from = await permitted(fallback.account.address)
-    if (from) return { from, source: 'default', senderName: fallback.account.senderName }
+    if (from) {
+      const sender = { from, source: 'default' as const, senderName: fallback.account.senderName }
+      return answer(sender, chosenRefused)
+    }
   }
 
   if (frontDoor) {
     const from = await permitted(platformInboxAddress(currentMailSlug()))
-    if (from) return { from, source: 'platform_inbox', senderName: null }
+    if (from) return answer({ from, source: 'platform_inbox', senderName: null })
   }
-  return null
-}
-
-/**
- * The From for an email that belongs to no conversation (feedback, changelog
- * and status mail, a ticket with no linked conversation): the surface's chosen
- * address, else the default, else null for the platform default. The team is
- * accepted and ignored; see {@link resolveSender}.
- */
-export async function resolveSendingAddress(
-  assignedTeamId: TeamId | null,
-  surface: SenderSurface = 'support'
-): Promise<SendingIdentity | null> {
-  return (await resolveSender({ surface, teamId: assignedTeamId }))?.from ?? null
+  return answer(null)
 }
 
 /** The bare addr-spec of a From, without any display name; what a thread stores. */
@@ -180,38 +214,40 @@ export function bareSenderAddress(from: SendingIdentity | string): string {
  *
  * The first answer is stored as the thread's sender, so every later email on
  * the conversation leaves from the same address whatever is chosen in settings
- * by then. Stored only while the column is empty: two first sends racing each
- * other converge on whichever wrote first, and a sender that falls through the
- * guard for a while is not overwritten, so the thread returns to it when its
- * domain is verified again. Nothing is stored for the platform default, which
- * is the address a thread has before anything is configured rather than one it
- * chose.
+ * by then. Two first sends racing each other converge on whichever wrote first.
+ *
+ * Only an answer that is the thread's own is stored. Not the platform default
+ * or the platform inbox, which are addresses a thread has before the workspace
+ * can send as its own. Not a default reached only because the address support
+ * chose could not send, which stands in for that address until it can. And a
+ * stored sender that is refused for a while (its domain unverified) is not
+ * overwritten, so the thread returns to it; one the workspace has removed is
+ * replaced by the current answer.
  */
 export async function resolveConversationSender(
   conversationId: ConversationId,
   surface: SenderSurface = 'support'
 ): Promise<ResolvedSender | null> {
-  const resolved = await resolveSender({ surface, conversationId })
-  if (!resolved || resolved.source === 'thread') return resolved
+  const { sender, stored, standIn } = await resolve({ surface, conversationId })
+  if (!sender || sender.source === 'thread' || sender.source === 'platform_inbox') return sender
+  if (standIn || stored?.known) return sender
 
-  const [stored] = await db
+  const [written] = await db
     .update(conversations)
-    .set({ threadSenderAddress: bareSenderAddress(resolved.from) })
-    .where(and(eq(conversations.id, conversationId), isNull(conversations.threadSenderAddress)))
+    .set({ threadSenderAddress: bareSenderAddress(sender.from) })
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        stored
+          ? eq(conversations.threadSenderAddress, stored.address)
+          : isNull(conversations.threadSenderAddress)
+      )
+    )
     .returning({ id: conversations.id })
-  if (stored) return resolved
-  // Either another send stored the thread's sender between the read and this
-  // write, or the stored one is refused for now. Asking again returns the
-  // former and falls through the same way for the latter.
+  if (written) return sender
+  // Another send stored the thread's sender between the read and this write.
+  // Asking again returns it.
   return resolveSender({ surface, conversationId })
-}
-
-/** {@link resolveConversationSender}, for callers that only need the address. */
-export async function resolveConversationFrom(
-  conversationId: ConversationId,
-  surface: SenderSurface = 'support'
-): Promise<SendingIdentity | null> {
-  return (await resolveConversationSender(conversationId, surface))?.from ?? null
 }
 
 /**
@@ -224,10 +260,7 @@ export async function resolveConversationFrom(
  * first one linked decides. A ticket with no linked conversation sends as
  * support does.
  */
-export async function resolveTicketSender(
-  ticketId: TicketId,
-  assignedTeamId: TeamId | null
-): Promise<ResolvedSender | null> {
+export async function resolveTicketSender(ticketId: TicketId): Promise<ResolvedSender | null> {
   const [link] = await db
     .select({ conversationId: ticketConversations.conversationId })
     .from(ticketConversations)
@@ -235,13 +268,5 @@ export async function resolveTicketSender(
     .orderBy(asc(ticketConversations.createdAt), asc(ticketConversations.conversationId))
     .limit(1)
   if (link) return resolveConversationSender(link.conversationId, 'support')
-  return resolveSender({ surface: 'support', teamId: assignedTeamId })
-}
-
-/** {@link resolveTicketSender}, for callers that only need the address. */
-export async function resolveTicketFrom(
-  ticketId: TicketId,
-  assignedTeamId: TeamId | null
-): Promise<SendingIdentity | null> {
-  return (await resolveTicketSender(ticketId, assignedTeamId))?.from ?? null
+  return resolveSender({ surface: 'support' })
 }

@@ -45,6 +45,7 @@ vi.mock('@/lib/client/mutations/channel-accounts', () => {
 })
 
 const { WorkspaceEmailSettings, SupportInboxSettings } = await import('../email-channel-settings')
+const { SEND_FROM_ANCHOR } = await import('../surface-sender-row')
 const { emailChannelConfigQuery } = await import('@/lib/client/queries/channel-accounts')
 
 const HOUR = 60 * 60 * 1000
@@ -111,10 +112,13 @@ function address(
   id: string,
   addr: string,
   domainId: string | null = 'dom_1',
-  senderName: string | null = null
+  senderName: string | null = null,
+  /** The server's answer, when a case needs one the fixtures would not give. */
+  sendable?: boolean
 ) {
   added += 1
   return {
+    sendable,
     id,
     address: addr,
     senderName,
@@ -153,7 +157,16 @@ function renderSettings({
     forwardingTargetPermitted,
     inboundRoute,
     platformAddress: null,
-    sendingAddresses: addresses,
+    // `sendable` is the server's answer from the send guard. Stood in for
+    // here by the rule the fixtures need: any address on a single-workspace
+    // server, else one whose domain row (if it has one) is verified.
+    sendingAddresses: addresses.map((a) => {
+      const row =
+        domains.find((d) => d.id === a.sendingDomainId) ??
+        domains.find((d) => a.address.endsWith(`@${d.domain}`))
+      const sendable = a.sendable ?? (addressMode === 'any' || !row || row.status === 'verified')
+      return { ...a, sendable }
+    }),
     domains,
     addressMode,
     defaultFrom: 'Acme <notifications@example.com>',
@@ -183,6 +196,18 @@ async function openMenu(title: string) {
 
 const clipboard = vi.fn<(text: string) => Promise<void>>()
 
+const useClipboardMock = () =>
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: clipboard },
+    configurable: true,
+  })
+
+async function copyInstructions() {
+  fireEvent.click(screen.getByRole('button', { name: 'Copy instructions' }))
+  await waitFor(() => expect(clipboard).toHaveBeenCalled())
+  return clipboard.mock.calls[0][0]
+}
+
 beforeEach(() => {
   for (const fn of [
     deleteAccount,
@@ -201,10 +226,7 @@ beforeEach(() => {
     fn.mockReset()
   }
   clipboard.mockReset().mockResolvedValue()
-  Object.defineProperty(navigator, 'clipboard', {
-    value: { writeText: clipboard },
-    configurable: true,
-  })
+  useClipboardMock()
 })
 afterEach(cleanup)
 
@@ -239,9 +261,21 @@ describe('address rows', () => {
     expect(within(r).getByText('Pending').getAttribute('data-slot')).toBe('badge')
     expect(within(r).queryByText('Needs attention')).toBeNull()
     expect(screen.getByText('Set up acme.com')).toBeTruthy()
-    const footer = screen.getByText("Checking automatically. We'll let you know when it's live.")
-    expect(footer.getAttribute('title')).toBe('Last checked less than a minute ago')
-    expect(screen.queryByRole('button', { name: 'Verify' })).toBeNull()
+    // When it was last looked at is said, not left to a tooltip.
+    expect(
+      screen.getByText(
+        "We check automatically and will let you know when it's verified. Last checked less than a minute ago."
+      )
+    ).toBeTruthy()
+  })
+
+  it('lets someone who just published the records check now, without waiting', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain({ dnsRecords: records({ ownership: found }) })],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Check now' }))
+    expect(restartChecks).toHaveBeenCalledWith('dom_1', expect.anything())
   })
 
   it('treats a pending domain with no check window yet as pending', () => {
@@ -264,7 +298,7 @@ describe('address rows', () => {
     expect(within(row('Acme <news@acme.com>')).getByText('Pending')).toBeTruthy()
   })
 
-  it('flags records not found after 72 hours and offers Verify', () => {
+  it('flags records not found after 72 hours and offers Check now', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com')],
       domains: [NOT_FOUND],
@@ -273,10 +307,10 @@ describe('address rows', () => {
     expect(within(r).getByText('Needs attention')).toBeTruthy()
     expect(within(r).queryByText('Pending')).toBeNull()
     expect(r.textContent).toContain(
-      'Records not found after 72 hours. Email sends from the default address.'
+      "Records not found after 72 hours. Email comes from your default address until it's fixed."
     )
-    expect(screen.getByText("We couldn't find these records yet.")).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
+    expect(screen.getByText("We haven't found these records yet.")).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check now' }))
     expect(restartChecks).toHaveBeenCalledWith('dom_1', expect.anything())
   })
 
@@ -285,7 +319,7 @@ describe('address rows', () => {
     const r = row('Acme <help@acme.com>')
     expect(within(r).getByText('Needs attention')).toBeTruthy()
     expect(r.textContent).toContain(
-      'The return path record is missing. Email sends from the default address.'
+      "The return path record is missing. Email comes from your default address until it's fixed."
     )
     const panel = panels()[0] as HTMLElement
     expect(
@@ -303,7 +337,7 @@ describe('address rows', () => {
     })
     const r = row('Acme <help@acme.com>')
     expect(r.textContent).toContain('Records not found after 72 hours.')
-    expect(r.textContent).not.toContain('Email sends from the default address.')
+    expect(r.textContent).not.toContain("Email comes from your default address until it's fixed.")
     expect(r.textContent).toContain('may land in spam')
   })
 
@@ -343,7 +377,7 @@ describe('address rows', () => {
     )
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
     fireEvent.click(within(row('Acme <help@acme.com>')).getByRole('button', { name: 'Send test' }))
-    expect(toastSuccess).toHaveBeenCalledWith('Test sent to admin@example.com')
+    expect(toastSuccess).toHaveBeenCalledWith('Test email sent to admin@example.com')
   })
 
   it('edits the sender name from the row menu', async () => {
@@ -382,7 +416,7 @@ describe('address rows', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
     const user = await openMenu('Acme <help@acme.com>')
     await user.click(screen.getByRole('menuitem', { name: 'DNS records' }))
-    expect(screen.getByText('Keep these published.')).toBeTruthy()
+    expect(screen.getByText('Keep these records in place.')).toBeTruthy()
   })
 })
 
@@ -415,7 +449,7 @@ describe('rows on a domain with several addresses', () => {
     expect(helpRow.parentElement?.contains(panel)).toBe(true)
   })
 
-  it('lists addresses oldest first, so the newest sits by the Add button', () => {
+  it('lists addresses oldest first', () => {
     const older = address('a1', 'help@acme.com')
     const newer = address('a2', 'news@acme.com')
     renderSettings({ addresses: [newer, older], domains: [NOT_FOUND] })
@@ -439,13 +473,13 @@ describe('a domain that broke after it was live', () => {
   it('keeps the first-time wording for a domain never live', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [NOT_FOUND] })
     expect(screen.getByText('Set up acme.com')).toBeTruthy()
-    expect(screen.getByText("We couldn't find these records yet.")).toBeTruthy()
+    expect(screen.getByText("We haven't found these records yet.")).toBeTruthy()
   })
 })
 
 describe('what happens to email meanwhile', () => {
-  const SPAM = 'Email still sends from this address but may land in spam until this is fixed.'
-  const FALLBACK = 'Email sends from the default address.'
+  const SPAM = 'Email is still sent from this address, but it may land in spam until this is fixed.'
+  const FALLBACK = "Email comes from your default address until it's fixed."
 
   it.each([
     ['not found', NOT_FOUND],
@@ -547,9 +581,7 @@ describe('the two signing modes', () => {
     })
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [byo] })
     expect(labels()).toEqual(['DKIM', 'Return path', 'Return path'])
-    fireEvent.click(screen.getByRole('button', { name: 'Copy instructions' }))
-    await waitFor(() => expect(clipboard).toHaveBeenCalled())
-    const lines = clipboard.mock.calls[0][0].split('\n').filter((l) => /^(TXT|MX)/.test(l))
+    const lines = (await copyInstructions()).split('\n').filter((l) => /^(TXT|MX)/.test(l))
     expect(lines).toEqual([
       'TXT  qb1a2b3c4d._domainkey  v=DKIM1; k=rsa; p=PUBLICKEY',
       'MX 10  qb-bounce  feedback-smtp.example.com',
@@ -737,28 +769,116 @@ describe('the record table', () => {
     expect(document.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(0)
   })
 
-  it('leaves out DMARC, pre-flight badges and host tips', () => {
-    renderSettings({
-      addresses: [address('a1', 'help@acme.com')],
-      domains: [
-        domain({
-          preflight: { dmarc: { found: false }, dnsHost: 'cloudflare', mailFromFree: true },
-        }),
-      ],
-    })
-    const panel = panels()[0] as HTMLElement
-    expect(panel.textContent).not.toMatch(/DMARC|Cloudflare|is free|Enter names/)
-    expect(panel.querySelectorAll('[data-slot="dns-record"]')).toHaveLength(3)
-  })
-
   it('copies instructions as plain text with relative names', async () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [domain()] })
-    fireEvent.click(screen.getByRole('button', { name: 'Copy instructions' }))
-    await waitFor(() => expect(clipboard).toHaveBeenCalled())
-    const text = clipboard.mock.calls[0][0]
+    const text = await copyInstructions()
     expect(text).toContain('TXT  _quackback  quackback-domain-verification=abc')
     expect(text).toContain('MX 10  qb-bounce  feedback-smtp.example.com')
     expect(text).not.toContain('_quackback.acme.com')
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy()
+  })
+})
+
+describe('guidance while records are wanted', () => {
+  const panel = () => panels()[0] as HTMLElement
+
+  it('says how many of the records were found', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain({ dnsRecords: records({ ownership: found, dkim: missing }) })],
+    })
+    expect(within(panel()).getByText('1 of 3 records found')).toBeTruthy()
+  })
+
+  it('does not count on a live domain, where there is nothing left to find', async () => {
+    renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
+    const user = await openMenu('Acme <help@acme.com>')
+    await user.click(await screen.findByRole('menuitem', { name: 'DNS records' }))
+    expect(panel().textContent).not.toMatch(/records found/)
+  })
+
+  it('names the DNS host, what to watch for there, and a way to it', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain({ preflight: { dnsHost: 'cloudflare', zone: 'acme.com' } })],
+    })
+    expect(panel().querySelector('[data-slot="dns-host"]')?.textContent).toBe(
+      'Your DNS is at Cloudflare. Add each CNAME as DNS only, not proxied. Open Cloudflare'
+    )
+    const link = within(panel()).getByRole('link', { name: 'Open Cloudflare' })
+    expect(link.getAttribute('href')).toMatch(/^https:\/\/dash\.cloudflare\.com\//)
+    expect(link.getAttribute('target')).toBe('_blank')
+  })
+
+  it('names a host with nothing to watch for in as few words', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain({ preflight: { dnsHost: 'godaddy', zone: 'acme.com' } })],
+    })
+    expect(panel().querySelector('[data-slot="dns-host"]')?.textContent).toBe(
+      'Your DNS is at GoDaddy. Open GoDaddy'
+    )
+  })
+
+  it('says nothing about a host it does not recognise', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain({ preflight: { dnsHost: 'other', zone: 'acme.com' } })],
+    })
+    expect(panel().querySelector('[data-slot="dns-host"]')).toBeNull()
+    expect(panel().textContent).not.toMatch(/Your DNS is at/)
+  })
+
+  it('shows names as the parent zone expects them for a subdomain', async () => {
+    renderSettings({
+      addresses: [address('a1', 'news@updates.acme.com')],
+      domains: [
+        domain({
+          domain: 'updates.acme.com',
+          preflight: { dnsHost: 'route53', zone: 'acme.com' },
+        }),
+      ],
+    })
+    expect(within(panel()).getByText('_quackback.updates')).toBeTruthy()
+    expect(within(panel()).getByText('qb-bounce.updates')).toBeTruthy()
+    const text = await copyInstructions()
+    expect(text).toContain(
+      'Add these DNS records to acme.com so email can be sent from updates.acme.com.'
+    )
+    expect(text).toContain('TXT  _quackback.updates  quackback-domain-verification=abc')
+  })
+
+  it('offers the DMARC record to a domain with none, shown on request', () => {
+    renderSettings({
+      addresses: [address('a1', 'news@updates.acme.com')],
+      domains: [
+        domain({
+          domain: 'updates.acme.com',
+          preflight: { dmarc: { found: false }, zone: 'acme.com' },
+        }),
+      ],
+    })
+    expect(panel().querySelector('[data-slot="dmarc-advisory"]')?.textContent).toContain(
+      'No DMARC record on acme.com.'
+    )
+    // Not among the records to publish: it is optional.
+    expect(panel().querySelectorAll('[data-slot="dns-record"]')).toHaveLength(3)
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Show the record' }))
+    expect(within(panel()).getByText('_dmarc')).toBeTruthy()
+    expect(within(panel()).getByText('v=DMARC1; p=none')).toBeTruthy()
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Hide the record' }))
+    expect(within(panel()).queryByText('_dmarc')).toBeNull()
+  })
+
+  it.each([
+    ['has one', { dmarc: { found: true, policy: 'none' as const } }],
+    ['was not read', {}],
+  ])('says nothing about DMARC when the domain %s', (_label, preflight) => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain({ preflight })],
+    })
+    expect(panel().textContent).not.toMatch(/DMARC/)
   })
 })
 
@@ -768,7 +888,7 @@ describe('removing a sending address', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     fireEvent.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', {
-        name: 'Delete address',
+        name: 'Remove address',
       })
     )
   }
@@ -779,7 +899,9 @@ describe('removing a sending address', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     expect(deleteAccount).not.toHaveBeenCalled()
     const dialog = await screen.findByRole('alertdialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete address' }))
+    // Names what is being removed, in the menu's own word for it.
+    expect(within(dialog).getByText('Remove help@acme.com?')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
     await waitFor(() => expect(deleteAccount).toHaveBeenCalledWith('a1', expect.anything()))
   })
 
@@ -792,7 +914,7 @@ describe('removing a sending address', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByText(/acme\.com will be removed too\./)).toBeTruthy()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete address' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
     await waitFor(() => expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything()))
     expect(screen.queryAllByRole('alertdialog')).toHaveLength(0)
   })
@@ -809,7 +931,7 @@ describe('removing a sending address', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(dialog.textContent).not.toContain('will be removed too')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete address' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
     await waitFor(() => expect(deleteAccount).toHaveBeenCalled())
     expect(deleteDomain).not.toHaveBeenCalled()
   })
@@ -832,7 +954,7 @@ describe('removing a sending address', () => {
     })
     const dialog = await removeDialog('Acme <news@acme.com>')
     expect(dialog.textContent).toContain(
-      'Changelog and Status page email will send from the default address.'
+      'Changelog and Status page email will come from your default address instead.'
     )
   })
 
@@ -844,8 +966,56 @@ describe('removing a sending address', () => {
     })
     const dialog = await removeDialog('Acme <hello@acme.com>')
     expect(dialog.textContent).toContain(
-      "It's the default address, so email sent from it will send from Acme <notifications@example.com>."
+      "It's your default address, so email will come from Acme <notifications@example.com> instead."
     )
+  })
+
+  it('counts the address behind the support inbox as one support uses', async () => {
+    renderSettings({
+      addresses: [address('a1', 'hello@acme.com'), address('a2', 'help@acme.com')],
+      domains: [LIVE],
+      inboundRoute: { id: 'r1', config: { forwardingTarget: 'support@acme.com' } },
+      senders: {
+        default: { mode: 'address', id: 'a1' },
+        support: { mode: 'inbox', fallbackId: 'a2' },
+      },
+    })
+    const dialog = await removeDialog('Acme <help@acme.com>')
+    expect(dialog.textContent).toContain(
+      'Support email will come from your default address instead.'
+    )
+  })
+
+  it('does not offer an address the server says cannot send, even with no domain row', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@gone.example', null, null, false)],
+      domains: [],
+      senders: { default: { mode: 'address', id: 'a1' } },
+    })
+    expect(document.body.textContent).toContain(
+      "help@gone.example isn't verified yet, so email comes from Acme <notifications@example.com> for now."
+    )
+  })
+
+  it('says a domain that stopped verifying is no longer verified, not "not yet"', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'dom_1', null, false)],
+      domains: [DEMOTED],
+      senders: { default: { mode: 'address', id: 'a1' } },
+    })
+    expect(document.body.textContent).toContain(
+      "help@acme.com is no longer verified, so email comes from Acme <notifications@example.com> until it's fixed."
+    )
+  })
+
+  it('treats an address as usable on a server that sends from any address', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [NOT_FOUND],
+      addressMode: 'any',
+      senders: { default: { mode: 'address', id: 'a1' } },
+    })
+    expect(document.body.textContent).not.toContain("isn't verified yet")
   })
 
   it('keeps the plain sentence for an address nothing sends from', async () => {
@@ -983,17 +1153,139 @@ describe('adding an address', () => {
     ).toBe(true)
   })
 
+  /** Type an address and press the dialog's submit, whatever it is called for that address. */
+  function submit(dialog: HTMLElement, value = 'help@acme.com') {
+    fireEvent.change(within(dialog).getByLabelText('Email address'), { target: { value } })
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: /^Add (address|and show records)$/ })
+    )
+  }
+
+  it('says a new domain brings DNS records next, and names the button for it', async () => {
+    renderSettings({ view: 'workspace' })
+    const dialog = await openAdd()
+    expect(dialog.textContent).not.toMatch(/is new here|is verified/)
+    fireEvent.change(within(dialog).getByLabelText('Email address'), {
+      target: { value: 'hello@newbrand.com' },
+    })
+    expect(
+      within(dialog).getByText(
+        "newbrand.com is new here. Next you'll add its DNS records, and email keeps coming from your current address until they're found."
+      )
+    ).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Add and show records' })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Add address' })).toBeNull()
+  })
+
+  it('says an address on a verified domain can send right away', async () => {
+    renderSettings({
+      view: 'workspace',
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE],
+    })
+    const dialog = await openAdd()
+    fireEvent.change(within(dialog).getByLabelText('Email address'), {
+      target: { value: 'billing@mail.acme.com' },
+    })
+    expect(
+      within(dialog).getByText('acme.com is verified, so it can send right away.')
+    ).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Add address' })).toBeTruthy()
+  })
+
+  it('says an address on a domain still being set up waits for it', async () => {
+    renderSettings({
+      view: 'workspace',
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain()],
+    })
+    const dialog = await openAdd()
+    fireEvent.change(within(dialog).getByLabelText('Email address'), {
+      target: { value: 'billing@acme.com' },
+    })
+    expect(
+      within(dialog).getByText(
+        'acme.com is still being verified. This address can send once it is.'
+      )
+    ).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Add address' })).toBeTruthy()
+  })
+
+  it('does not treat a subdomain of a domain still being set up as covered by it', async () => {
+    renderSettings({
+      view: 'workspace',
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain()],
+    })
+    const dialog = await openAdd()
+    fireEvent.change(within(dialog).getByLabelText('Email address'), {
+      target: { value: 'billing@mail.acme.com' },
+    })
+    expect(within(dialog).getByText(/^mail\.acme\.com is new here\./)).toBeTruthy()
+  })
+
+  it('promises no records where an address sends without its domain being set up', async () => {
+    renderSettings({ view: 'workspace', addressMode: 'any' })
+    const dialog = await openAdd()
+    fireEvent.change(within(dialog).getByLabelText('Email address'), {
+      target: { value: 'hello@newbrand.com' },
+    })
+    expect(dialog.textContent).not.toMatch(/is new here|DNS records/)
+    expect(within(dialog).getByRole('button', { name: 'Add address' })).toBeTruthy()
+  })
+
+  it('says nothing about the domain of the address email already comes from', async () => {
+    renderSettings({ view: 'workspace' })
+    const dialog = await openAdd()
+    fireEvent.change(within(dialog).getByLabelText('Email address'), {
+      target: { value: 'hello@example.com' },
+    })
+    expect(dialog.textContent).not.toMatch(/is new here/)
+    expect(within(dialog).getByRole('button', { name: 'Add address' })).toBeTruthy()
+  })
+
+  it('shows the sender line a recipient will see, as it is typed', async () => {
+    renderSettings({ view: 'workspace' })
+    const dialog = await openAdd()
+    expect(dialog.textContent).not.toMatch(/Recipients see/)
+    fireEvent.change(within(dialog).getByLabelText('Email address'), {
+      target: { value: 'billing@acme.com' },
+    })
+    expect(within(dialog).getByText('Acme <billing@acme.com>')).toBeTruthy()
+    fireEvent.change(within(dialog).getByLabelText('Sender name'), {
+      target: { value: 'Acme Billing' },
+    })
+    expect(within(dialog).getByText('Acme Billing <billing@acme.com>')).toBeTruthy()
+  })
+
   it('adds the address, keeping the workspace name as no name of its own', async () => {
     renderSettings()
     const dialog = await openAdd()
-    fireEvent.change(within(dialog).getByLabelText('Email address'), {
-      target: { value: ' help@acme.com ' },
-    })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Add address' }))
+    submit(dialog, ' help@acme.com ')
     expect(createAddress).toHaveBeenCalledWith(
       { address: 'help@acme.com', senderName: null },
       expect.anything()
     )
+  })
+
+  it('says so when the address added became the default sender', async () => {
+    createAddress.mockImplementation((_input: unknown, opts: { onSuccess: (r: unknown) => void }) =>
+      opts.onSuccess({ address: 'help@acme.com', madeDefault: true })
+    )
+    renderSettings()
+    const dialog = await openAdd()
+    submit(dialog)
+    expect(toastSuccess).toHaveBeenCalledWith('help@acme.com is now your default address.')
+  })
+
+  it('says nothing when the address added changed no sender', async () => {
+    createAddress.mockImplementation((_input: unknown, opts: { onSuccess: (r: unknown) => void }) =>
+      opts.onSuccess({ address: 'help@acme.com', madeDefault: false })
+    )
+    renderSettings()
+    const dialog = await openAdd()
+    submit(dialog)
+    expect(toastSuccess).not.toHaveBeenCalled()
   })
 
   it('adds the address under a sender name of its own', async () => {
@@ -1005,7 +1297,7 @@ describe('adding an address', () => {
     fireEvent.change(within(dialog).getByLabelText('Sender name'), {
       target: { value: 'Acme Support' },
     })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Add address' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add and show records' }))
     expect(createAddress).toHaveBeenCalledWith(
       { address: 'help@acme.com', senderName: 'Acme Support' },
       expect.anything()
@@ -1019,20 +1311,21 @@ describe('adding an address', () => {
     )
     renderSettings()
     const dialog = await openAdd()
-    fireEvent.change(within(dialog).getByLabelText('Email address'), {
-      target: { value: 'help@acme.com' },
-    })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Add address' }))
+    submit(dialog)
     const alert = await within(dialog).findByRole('alert')
     expect(alert.textContent).toBe('Your plan allows 3 sending domains.')
     expect(toastError).not.toHaveBeenCalled()
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Add address' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add and show records' }))
     await waitFor(() => expect(within(dialog).queryByRole('alert')).toBeNull())
   })
 
   it('is disabled with one line on a shared server that cannot set up domains', () => {
-    renderSettings({ addressMode: 'unavailable' })
+    renderSettings({
+      addressMode: 'unavailable',
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE],
+    })
     expect(
       screen.getByText("Custom sending addresses aren't available on this server.")
     ).toBeTruthy()
@@ -1081,22 +1374,92 @@ describe('a paused workspace', () => {
   it('shows the line without a reason when none is kept', () => {
     renderSettings({ view: 'support', sendingPaused: { cause: null } })
     expect(screen.getByText(LINE).textContent).toBe(
-      'Sending is paused by the email provider because of bounces or complaints.'
+      'Sending is paused by the email provider because of bounces or complaints. Contact support to resume. Sign-in email is not affected.'
+    )
+  })
+
+  it('points a workspace on its own server to its administrator', () => {
+    renderSettings({ view: 'support', sendingPaused: { cause: null }, addressMode: 'any' })
+    expect(screen.getByText(LINE).textContent).toBe(
+      'Sending is paused by the email provider because of bounces or complaints. Your administrator can resume it with the provider. Sign-in email is not affected.'
     )
   })
 })
 
+describe('a workspace with no sending address', () => {
+  it('says what email comes from and offers the one next step, with nothing to choose', () => {
+    renderSettings({ view: 'workspace' })
+    expect(screen.getByText('No sending addresses yet')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Email comes from Acme <notifications@example.com>. Add an address to send from your own domain.'
+      )
+    ).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Add address' })).toHaveLength(1)
+    // No dropdowns with a single option each.
+    expect(screen.queryByText('Send from')).toBeNull()
+    expect(screen.queryByLabelText('Default')).toBeNull()
+  })
+
+  it('says custom addresses are not available where they are not', () => {
+    renderSettings({ view: 'workspace', addressMode: 'unavailable' })
+    expect(
+      screen.getByText("Custom sending addresses aren't available on this server.")
+    ).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Add address' })).toBeNull()
+  })
+
+  it('shows Send from as soon as there is an address to choose', () => {
+    renderSettings({
+      view: 'workspace',
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE],
+    })
+    expect(screen.queryByText('No sending addresses yet')).toBeNull()
+    expect(screen.getByText('Send from')).toBeTruthy()
+  })
+})
+
 describe('where each part lives', () => {
-  it('the workspace page has the addresses and every sender, but no support inbox', () => {
-    renderSettings({ view: 'workspace', surfaces: ['feedback', 'changelog'] })
+  it('the workspace page has the addresses and the default, but no support inbox', async () => {
+    renderSettings({
+      view: 'workspace',
+      surfaces: ['feedback', 'changelog'],
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE],
+    })
     expect(screen.getByText('Sending addresses')).toBeTruthy()
     expect(screen.getByText('Send from')).toBeTruthy()
     expect(screen.queryByText('Support inbox')).toBeNull()
     expect(screen.getByLabelText('Default')).toBeTruthy()
-    expect(screen.getByLabelText('Feedback board')).toBeTruthy()
+    // Nothing differs from the default yet, so no other row is listed.
+    expect(screen.queryByLabelText('Feedback board')).toBeNull()
+    // The products that are on can each be given an address of their own.
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Use a different address for' }))
+    const offered = (await screen.findAllByRole('menuitem')).map((i) => i.textContent)
+    expect(offered).toEqual(['Feedback board', 'Changelog'])
+  })
+
+  it('the workspace page lists a product that sends from its own address', () => {
+    renderSettings({
+      view: 'workspace',
+      surfaces: ['feedback', 'changelog'],
+      addresses: [address('a1', 'help@acme.com'), address('a2', 'news@acme.com')],
+      domains: [LIVE],
+      senders: { changelog: { mode: 'address', id: 'a2' } },
+    })
     expect(screen.getByLabelText('Changelog')).toBeTruthy()
-    expect(screen.queryByLabelText('Support')).toBeNull()
-    expect(screen.queryByLabelText('Status page')).toBeNull()
+    expect(screen.queryByLabelText('Feedback board')).toBeNull()
+  })
+
+  it('gives the Send from card the anchor a product page links to', () => {
+    renderSettings({
+      view: 'workspace',
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE],
+    })
+    expect(document.getElementById(SEND_FROM_ANCHOR)?.textContent).toContain('Send from')
   })
 
   it('the support page has the inbox and the support sender only', () => {
@@ -1104,7 +1467,7 @@ describe('where each part lives', () => {
     expect(screen.getByText('Support inbox')).toBeTruthy()
     expect(screen.getByText('Replies')).toBeTruthy()
     expect(screen.queryByText('Sending addresses')).toBeNull()
-    expect(screen.getByLabelText('Support')).toBeTruthy()
+    expect(screen.getByLabelText('Reply from')).toBeTruthy()
     expect(screen.queryByLabelText('Default')).toBeNull()
     expect(screen.queryByLabelText('Changelog')).toBeNull()
   })
@@ -1119,5 +1482,17 @@ describe('where each part lives', () => {
   it('offers no link to someone who cannot manage sending', () => {
     renderSettings({ view: 'support', canManageSending: false })
     expect(screen.queryByRole('link', { name: 'Manage sending addresses' })).toBeNull()
+  })
+
+  it('tells someone who cannot manage sending where addresses are added', () => {
+    renderSettings({ view: 'support', canManageSending: false })
+    expect(
+      screen.getByText('An admin adds sending addresses in Settings > Email.', { exact: false })
+    ).toBeTruthy()
+  })
+
+  it('does not tell an admin to ask an admin', () => {
+    renderSettings({ view: 'support' })
+    expect(screen.queryByText('An admin adds sending addresses', { exact: false })).toBeNull()
   })
 })

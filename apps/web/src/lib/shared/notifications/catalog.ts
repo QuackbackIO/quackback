@@ -152,15 +152,15 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
   },
   {
     type: 'sending_domain_live',
-    label: 'Sending domain live',
-    description: 'A sending domain is verified and mail sends from it',
+    label: 'Sending domain verified',
+    description: 'A sending domain is verified and ready to send',
     group: 'support',
     surfaces: ['admin'],
   },
   {
     type: 'sending_domain_needs_attention',
     label: 'Sending domain needs attention',
-    description: 'A sending domain stops verifying and replies use the default address',
+    description: 'A sending domain stops verifying, so its email comes from your default address',
     group: 'support',
     surfaces: ['admin'],
   },

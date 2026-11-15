@@ -367,7 +367,75 @@ describe('an install with no workspace name (self-hosted EMAIL_FROM)', () => {
     expect(sentFrom()).toBe('Acme Support <support@acme.test>')
   })
 
-  it("names the workspace over the operator's name once it has one", async () => {
+  it.each(Object.entries(workspaceSenders))(
+    "%s keeps the operator's EMAIL_FROM name over the workspace name",
+    async (_name, send) => {
+      await send('Acme Widgets')
+      expect(sentFrom()).toBe('Acme Support <support@acme.test>')
+    }
+  )
+
+  it('still names an agent reply after the agent', () => {
+    expect(
+      platformDisplayName('ConversationReplyEmail', 'Acme', {
+        operatorNamed: true,
+        callerName: 'Alex from Acme',
+      })
+    ).toBe('Alex from Acme')
+  })
+})
+
+describe('a shared server with no From for the workspace in scope', () => {
+  // The platform's own EMAIL_FROM is not an operator speaking for one
+  // workspace, so its name must not reach that workspace's people.
+  beforeEach(() => {
+    process.env.EMAIL_FROM = REGISTRY_FROM
+    email.setDefaultFromShared(() => true)
+  })
+
+  it('still names the workspace over the platform', async () => {
+    await email.sendPasswordResetEmail({ to, resetLink: 'https://x.test', workspaceName: 'Acme' })
+    expect(sentFrom()).toBe(`Acme <${PLATFORM_ADDRESS}>`)
+  })
+
+  it('previews the same From for a settings page', () => {
+    expect(email.platformFromPreview('Acme')).toBe(`Acme <${PLATFORM_ADDRESS}>`)
+  })
+})
+
+describe('the From a settings page shows for the platform address', () => {
+  it("keeps the operator's own name, as the send does", () => {
+    process.env.EMAIL_FROM = 'Acme Support <support@acme.test>'
+    expect(email.platformFromPreview('Acme Widgets')).toBe('Acme Support <support@acme.test>')
+  })
+
+  it('names a bare address for the workspace, and leaves it bare with no name', () => {
+    process.env.EMAIL_FROM = 'support@acme.test'
+    expect(email.platformFromPreview('Acme')).toBe('Acme <support@acme.test>')
+    expect(email.platformFromPreview('  ')).toBe('support@acme.test')
+  })
+
+  it('shows an encoded or quoted name the way an inbox does', () => {
+    process.env.EMAIL_FROM = '"Acme, Inc" <support@acme.test>'
+    expect(email.platformFromPreview(null)).toBe('Acme, Inc <support@acme.test>')
+  })
+
+  it('is null when no address is configured', () => {
+    expect(email.platformFromPreview('Acme')).toBeNull()
+  })
+
+  it('names the workspace on the registry From', () => {
+    email.setDefaultFromResolver(() => REGISTRY_FROM)
+    expect(email.platformFromPreview('Acme')).toBe(`Acme <${PLATFORM_ADDRESS}>`)
+  })
+})
+
+describe('an install whose EMAIL_FROM is a bare address', () => {
+  beforeEach(() => {
+    process.env.EMAIL_FROM = 'support@acme.test'
+  })
+
+  it('names the workspace', async () => {
     await email.sendPasswordResetEmail({ to, resetLink: 'https://x.test', workspaceName: 'Acme' })
     expect(sentFrom()).toBe('Acme <support@acme.test>')
   })

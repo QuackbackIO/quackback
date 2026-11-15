@@ -13,7 +13,7 @@ vi.mock('@/lib/server/functions/channel-accounts', () => ({ listRecentEmailLogFn
 const { EmailTransportCard } = await import('../email-transport-card')
 const { channelSettingsQueries } = await import('@/lib/client/queries/channel-settings')
 
-function renderCard(customDomains: 'available' | 'unavailable') {
+function renderCard(customDomains: 'available' | 'unavailable', ownServer = true) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
   client.setQueryData(channelSettingsQueries.emailStatus().queryKey, {
     provider: 'ses',
@@ -21,6 +21,7 @@ function renderCard(customDomains: 'available' | 'unavailable') {
     inboundConfigured: true,
     inboundDomain: 'mail.example.com',
     customDomains,
+    ownServer,
   } as never)
   return render(
     <QueryClientProvider client={client}>
@@ -41,6 +42,12 @@ describe('EmailTransportCard', () => {
     renderCard('available')
     expect(screen.getByText('Custom sending domains')).toBeTruthy()
     expect(screen.getByText('Available')).toBeTruthy()
+  })
+
+  it('shows nothing on a server shared by many workspaces, which is not theirs to read', () => {
+    const { container } = renderCard('available', false)
+    expect(container.textContent).toBe('')
+    expect(screen.queryByText('Transport')).toBeNull()
   })
 
   it('reports custom sending domains as not available', () => {

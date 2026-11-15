@@ -15,6 +15,7 @@ import {
   eq,
   and,
   or,
+  ne,
   isNull,
   isNotNull,
   inArray,
@@ -416,7 +417,7 @@ export async function clearInboundForwarding(owningTeamId: TeamId): Promise<Chan
  *  typed it into a settings form. */
 export class ChannelAddressInUseError extends ConflictError {
   constructor(readonly address: string) {
-    super('ADDRESS_IN_USE', `${address} is already in use by this workspace's inbound route.`)
+    super('ADDRESS_IN_USE', `${address} is already used by your support inbox.`)
   }
 }
 
@@ -472,13 +473,25 @@ export async function createSendingAddress(input: {
     })
     .returning()
   if (!row) throw new ChannelAddressInUseError(address)
-  await db
-    .insert(emailSenders)
-    .values({ surface: 'default', channelAccountId: row.id })
-    .onConflictDoNothing({
-      target: [emailSenders.surface, emailSenders.scopeType],
-      where: sql`scope_id IS NULL`,
-    })
+  // The first sending address a workspace ever has becomes its default, so a
+  // new setup sends from it without a second step. Never after that: a
+  // workspace that has had an address (one it still has, or one it removed) has
+  // made its choices, and adding another never changes what any email sends
+  // from.
+  const [earlier] = await db
+    .select({ id: channelAccounts.id })
+    .from(channelAccounts)
+    .where(and(eq(channelAccounts.role, 'sending'), ne(channelAccounts.id, row.id)))
+    .limit(1)
+  if (!earlier) {
+    await db
+      .insert(emailSenders)
+      .values({ surface: 'default', channelAccountId: row.id })
+      .onConflictDoNothing({
+        target: [emailSenders.surface, emailSenders.scopeType],
+        where: sql`scope_id IS NULL`,
+      })
+  }
   return row
 }
 

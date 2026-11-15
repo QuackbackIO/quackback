@@ -60,11 +60,7 @@ export function EmailSendingSection({
   now?: Date
 }) {
   return (
-    <SettingsCard
-      title="Email sending"
-      description="Domains replies and announcements are sent from."
-      flush
-    >
+    <SettingsCard title="Email sending" description="Domains your email is sent from." flush>
       <SettingsList>
         {domains.map((d) => (
           <SettingsListRow

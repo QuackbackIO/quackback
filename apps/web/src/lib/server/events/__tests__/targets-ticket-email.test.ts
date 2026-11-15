@@ -206,12 +206,12 @@ describe('getTicketCreatedEmailTargets', () => {
     expect(targets[0].target).toMatchObject({ email: 'real@x.com' })
   })
 
-  it('carries the per-team From and signed reply-to when configured', async () => {
+  it("carries the ticket's From and signed reply-to when configured", async () => {
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
     resolveTicketSender.mockResolvedValue(sender('support@team.example'))
     inboundTicketReplyToAddress.mockReturnValue('reply+tkt-1.sig@inbound.example')
     const targets = await getTicketCreatedEmailTargets(createdEvent(), context)
-    expect(resolveTicketSender).toHaveBeenCalledWith('ticket_1', null)
+    expect(resolveTicketSender).toHaveBeenCalledWith('ticket_1')
     expect(targets[0].config).toMatchObject({
       from: 'support@team.example',
       replyTo: 'reply+tkt-1.sig@inbound.example',

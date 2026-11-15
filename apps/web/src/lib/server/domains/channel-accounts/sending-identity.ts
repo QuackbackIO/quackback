@@ -37,7 +37,6 @@
  * carries no delete. See `@quackback/email/ses-identity` for what that
  * credential needs and why deletion is excluded from it.
  */
-import { ValidationError } from '@/lib/shared/errors'
 import {
   createSesDomainIdentity,
   getSesDomainIdentity,
@@ -69,7 +68,7 @@ import {
 import { checkSendingDomainOwnership, type ZoneReader } from './domain-verification'
 import { interactiveResolver, systemResolver } from '@/lib/server/dns/resolver'
 import { checkRecords } from './record-check'
-import { readDmarc, runPreflight } from './preflight'
+import { readDmarc, readHostedZone, runPreflight } from './preflight'
 import { generateDkimKey, isKeyRecord } from './dkim-key'
 import { returnPathTarget as operatorReturnPathTarget } from './return-path'
 import {
@@ -97,7 +96,13 @@ import { enqueueSesTenantReconcile } from './ses-tenant-queue'
 import { saveSendingDomainCheck } from './sending-domain-check-write'
 import { rekeyToHeldSigningKey, sealSigningKey, shouldHoldSigningKey } from './pending-signing-key'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
-import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
+import { SendingDomainRefusedError, normalizeSendingDomain } from './sending-domain-name'
+
+export {
+  SendingDomainRefusedError,
+  domainsOverlap,
+  normalizeSendingDomain,
+} from './sending-domain-name'
 
 const log = logger.child({
   component: 'sending-identity',
@@ -123,13 +128,6 @@ export const LEGACY_MAIL_FROM_LABEL = 'bounce'
 
 /** How long a new or restarted domain is checked automatically. */
 export const AUTO_CHECK_WINDOW_MS = 72 * 60 * 60 * 1000
-
-/** Thrown when a domain cannot be added at all, with a reason for the operator. */
-export class SendingDomainRefusedError extends ValidationError {
-  constructor(message: string) {
-    super('SENDING_DOMAIN_REFUSED', message)
-  }
-}
 
 /** The one line a person sees when this server cannot provision a domain at all. */
 export const CUSTOM_DOMAINS_UNAVAILABLE_MESSAGE =
@@ -159,67 +157,6 @@ export function customSendingDomainsAvailable(env: NodeJS.ProcessEnv = process.e
 /** The MAIL FROM subdomain for a domain, under the label its row stores. */
 export function mailFromDomainFor(domain: string, label: string): string {
   return `${label}.${domain}`
-}
-
-/**
- * Is `candidate` the same as, under, or above `domain`?
- *
- * Both directions matter. A workspace claiming a subdomain of a platform domain
- * would be claiming addresses the platform mints for other workspaces; a
- * workspace claiming a PARENT of one would be worse, because a verified parent
- * domain covers every subdomain under it at the provider.
- */
-export function domainsOverlap(candidate: string, domain: string): boolean {
-  const a = toAsciiDomain(candidate)
-  const b = toAsciiDomain(domain)
-  if (!a || !b) return false
-  // The same dot-anchored test the send guard applies, run both ways round. One
-  // reading of "is this domain under that one", so the two cannot drift.
-  return isAtOrUnder(a, b) || isAtOrUnder(b, a)
-}
-
-/**
- * Normalise and refuse a domain that must never become a sending identity.
- *
- * The platform check is a security boundary, not tidiness. The platform's own
- * domains are already verified on the shared provider account, so a workspace
- * that got one of them into its table would be handed a verified identity it
- * never proved anything about — and the platform's inbound domain is where every
- * other workspace's reply addresses live.
- */
-export function normalizeSendingDomain(
-  input: string,
-  env: NodeJS.ProcessEnv = process.env
-): string {
-  const typed = input
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/\/.*$/, '')
-    .replace(/\.$/, '')
-  if (typed.includes('@')) {
-    throw new SendingDomainRefusedError('Enter a domain, not an email address.')
-  }
-  // Stored in the A-label form, because that is the form DNS resolves, the form
-  // the provider registers an identity under, and the form the send-time guard
-  // compares against. Normalising at the door means a customer who typed their
-  // domain in its own script and a reply addressed in ASCII are the same domain
-  // rather than two that never match.
-  const domain = toAsciiDomain(typed)
-  // The shared rule, not a copy of it: what a customer may claim and what the
-  // platform may be configured with are the same question, and two spellings of
-  // the answer are two answers waiting to drift.
-  if (!MAIL_DOMAIN_RE.test(domain)) {
-    throw new SendingDomainRefusedError(`${input.trim()} is not a valid domain name.`)
-  }
-  for (const platform of platformSendingDomains(env)) {
-    if (domainsOverlap(domain, platform)) {
-      throw new SendingDomainRefusedError(
-        `${domain} cannot be added: it is part of the platform's own mail domain.`
-      )
-    }
-  }
-  return domain
 }
 
 /**
@@ -560,10 +497,13 @@ export async function refreshSendingDomain(
     row.dnsRecords ?? []
   )
   // DMARC is read on every check because it is one lookup and the owner may
-  // add one while setting up; a failed read keeps what was there.
-  const [dnsRecords, dmarc] = await Promise.all([
-    checkRecords(row.domain, composed, resolver, now),
+  // add one while setting up; a failed read keeps what was there. The zone is
+  // read until it is known, which a domain set up before it was kept is not:
+  // its record names are shown relative to the zone from then on.
+  const [dnsRecords, dmarc, zone] = await Promise.all([
+    checkRecords(row.domain, composed, resolver, now, row.preflight?.zone),
     readDmarc(row.domain, resolver),
+    row.preflight?.zone ? undefined : readHostedZone(row.domain, resolver),
   ])
   // Every field but the move to verified, which is made below on its own. A
   // demotion is reported by the one check that made it (see the module).
@@ -574,7 +514,9 @@ export async function refreshSendingDomain(
     now,
     fields: {
       dnsRecords,
-      ...(dmarc ? { preflight: { ...row.preflight, dmarc } } : {}),
+      ...(dmarc || zone
+        ? { preflight: { ...row.preflight, ...zone, ...(dmarc ? { dmarc } : {}) } }
+        : {}),
       // Found again: the clock for a missing record starts over.
       ...(ownershipProven
         ? {
@@ -644,19 +586,39 @@ export async function refreshSendingDomain(
 }
 
 /**
- * Open a fresh automatic check window on a domain and check it now: the
- * "Verify" action, for a domain whose window ran out before its records
- * were published.
+ * How soon after a check a person asking for another is given that check's
+ * answer. The provider's management API is shared by every workspace on the
+ * server, so pressing the button repeatedly must not cost it a call each time.
+ */
+const MANUAL_CHECK_COOLDOWN_MS = 30_000
+
+/**
+ * Check a domain now, because a person asked: "Check now" while it is being
+ * set up, "Verify" once its window ran out or it stopped verifying.
+ *
+ * A window that ran out (or never opened) is opened afresh, so the automatic
+ * checks resume. One still open keeps its deadline: asking early is not a
+ * reason to be checked for longer. A domain checked within the last moments,
+ * inside an open window, is answered from that check.
  */
 export async function restartSendingDomainChecks(
   id: SendingDomainId
 ): Promise<EmailSendingDomain | null> {
-  const [row] = await db
-    .update(emailSendingDomains)
-    .set({ autoCheckUntil: new Date(Date.now() + AUTO_CHECK_WINDOW_MS), updatedAt: new Date() })
-    .where(eq(emailSendingDomains.id, id))
-    .returning({ id: emailSendingDomains.id })
-  if (!row) return null
+  const stored = await getSendingDomain(id)
+  if (!stored) return null
+  const now = Date.now()
+  const windowOpen = stored.autoCheckUntil !== null && stored.autoCheckUntil.getTime() > now
+  if (!windowOpen) {
+    await db
+      .update(emailSendingDomains)
+      .set({ autoCheckUntil: new Date(now + AUTO_CHECK_WINDOW_MS), updatedAt: new Date() })
+      .where(eq(emailSendingDomains.id, id))
+  } else if (
+    stored.lastCheckedAt &&
+    now - stored.lastCheckedAt.getTime() < MANUAL_CHECK_COOLDOWN_MS
+  ) {
+    return stored
+  }
   return refreshSendingDomain(id)
 }
 
