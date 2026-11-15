@@ -52,7 +52,12 @@ import {
 import { addProviderDomainFn, removeVerifiedDomainFn } from '@/lib/server/functions/sso'
 import { updateHelpCenterDomainFn } from '@/lib/server/functions/help-center-domain'
 import { mutateCloudCustomDomainFn } from '@/lib/server/functions/cloud-identity'
-import { USE_COPY, webAddressLine, type DomainRow, type DomainUseStatus } from './domains-overview'
+import {
+  USE_COPY,
+  customDomainLine,
+  type DomainRow,
+  type DomainUseStatus,
+} from './domains-overview'
 import { AddCustomDomainDialog, type AddCustomDomainTarget } from './add-custom-domain-dialog'
 
 /** The name of the page a use is set up on, as its link reads. */
@@ -249,7 +254,7 @@ const OTHER_REMOVAL_NOTE: Record<OtherRemoval['use'], string> = {
 /**
  * The three uses, each a row: Set up until it is on, then where it stands and
  * a Remove of its own. Set up runs here, for a viewer who may set that use up:
- * email opens Add address on this domain; a web address is named on the domain
+ * email opens Add address on this domain; a custom domain is named on the domain
  * (help.acme.com) and added as a Cloud web address, or becomes the help
  * center's address (confirmed first when that moves the help center off
  * another one); sign-in goes to the one identity
@@ -358,7 +363,7 @@ function UsesCard({
     // Only the help center's own address is cleared from here; Cloud's are on their card.
     if (!helpCenter) return null
     const hostname =
-      status.addresses?.find((a) => a.opens === 'help')?.hostname ?? helpCenterDomain ?? name
+      status.addresses?.find((a) => a.usedFor === 'help')?.hostname ?? helpCenterDomain ?? name
     return removeButton(() => setOther({ use: 'customDomain', hostname }))
   }
 
@@ -369,7 +374,7 @@ function UsesCard({
     if (status.addresses?.length) {
       return status.addresses.map((a) => (
         <span key={a.hostname} className="block">
-          {webAddressLine(a, '')}
+          {customDomainLine(a, '')}
         </span>
       ))
     }
@@ -459,7 +464,7 @@ function UsesCard({
       <AddCustomDomainDialog
         target={webDialog}
         domain={name}
-        opens={helpCenter ? 'help' : 'portal'}
+        usedFor={helpCenter ? 'help' : 'portal'}
         busy={busy}
         onAdd={addWebAddress}
         onClose={() => setWebDialog(null)}

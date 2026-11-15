@@ -134,8 +134,9 @@ export async function setHelpCenterDomain(
   })
   // The same domain on Settings > Domains, made in this one step; never a
   // reason to report the help center's own write as failed.
-  const { ensureWebAddressDomain } = await import('@/lib/server/domains/domain-proof/ensure-domain')
-  await ensureWebAddressDomain(normalized)
+  const { ensureDomainForCustomDomain } =
+    await import('@/lib/server/domains/domain-proof/ensure-domain')
+  await ensureDomainForCustomDomain(normalized)
   return updated.domain
 }
 

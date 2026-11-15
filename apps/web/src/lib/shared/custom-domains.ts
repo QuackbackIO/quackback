@@ -1,18 +1,18 @@
 /**
- * Web addresses: the hostnames people open the portal at, and what each one
- * opens. Today a Cloud web address opens the whole portal and a self-hosted
- * server's one address opens its help center. The sections are the portal
- * nav's own, so an address can later open one section of the portal.
+ * Custom domains: the hostnames people reach the portal at, and what each one
+ * is used for. Today a Cloud custom domain is used for the whole portal and a
+ * self-hosted server's one custom domain for its help center. The sections are
+ * the portal nav's own, so a custom domain can later serve one section.
  */
 import type { PortalNavItemType } from './types/settings'
 
 /** A section of the portal: one of the nav's built-in tabs. */
 export type PortalSection = Exclude<PortalNavItemType, 'link'>
 
-/** What a web address opens: one section, or the whole portal. */
-export type WebAddressOpens = PortalSection | 'portal'
+/** What a custom domain is used for: one section, or the whole portal. */
+export type CustomDomainUsedFor = PortalSection | 'portal'
 
-const OPENS_LABEL: Record<WebAddressOpens, string> = {
+const USED_FOR_LABEL: Record<CustomDomainUsedFor, string> = {
   portal: 'Portal',
   feedback: 'Feedback',
   roadmap: 'Roadmap',
@@ -22,9 +22,9 @@ const OPENS_LABEL: Record<WebAddressOpens, string> = {
   status: 'Status',
 }
 
-/** What an address opens, as the admin pages name it. */
-export function opensLabel(opens: WebAddressOpens): string {
-  return OPENS_LABEL[opens]
+/** What a custom domain is used for, as the admin pages name it. */
+export function usedForLabel(usedFor: CustomDomainUsedFor): string {
+  return USED_FOR_LABEL[usedFor]
 }
 
 /**

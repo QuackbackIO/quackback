@@ -278,8 +278,8 @@ describe('domain list', () => {
     const [web] = rows[0]!.uses
     expect(web).toMatchObject({ use: 'customDomain', state: 'pending' })
     expect(web!.addresses).toEqual([
-      { hostname: 'help.acme.com', opens: 'portal', state: 'pending' },
-      { hostname: 'status.acme.com', opens: 'portal', state: null },
+      { hostname: 'help.acme.com', usedFor: 'portal', state: 'pending' },
+      { hostname: 'status.acme.com', usedFor: 'portal', state: null },
     ])
     render(<DomainList rows={rows} links={linksFor(ALL, { cloudEnabled: true })} />)
     expect(rowOf('acme.com')).toHaveTextContent('help.acme.com · Portal')
@@ -296,7 +296,7 @@ describe('domain list', () => {
     })
     expect(rows.map((r) => r.name)).toEqual(['acme.com'])
     expect(rows[0]!.uses[0]!.addresses).toEqual([
-      { hostname: 'help.acme.com', opens: 'help', state: null },
+      { hostname: 'help.acme.com', usedFor: 'help', state: null },
     ])
     expect(rows[0]!.uses[0]!.detail).toBe('help.acme.com · Help center')
   })

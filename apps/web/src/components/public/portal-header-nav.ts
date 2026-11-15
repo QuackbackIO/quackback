@@ -7,7 +7,7 @@
  * resolves to the default tab order, preserving pre-setting behavior.
  */
 import type { PortalNavConfig, PortalNavItemConfig } from '@/lib/shared/types/settings'
-import type { PortalSection } from '@/lib/shared/web-addresses'
+import type { PortalSection } from '@/lib/shared/custom-domains'
 
 /** Built-in tab types (everything except admin-defined links): the portal's sections. */
 export type PortalBuiltInNavType = PortalSection

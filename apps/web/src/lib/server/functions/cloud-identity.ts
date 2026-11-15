@@ -142,9 +142,9 @@ export const mutateCloudCustomDomainFn = createServerFn({ method: 'POST' })
     if (data.action === 'add') {
       // The same domain on Settings > Domains, made in this one step; never a
       // reason to report the operator's accepted add as failed.
-      const { ensureWebAddressDomain } =
+      const { ensureDomainForCustomDomain } =
         await import('@/lib/server/domains/domain-proof/ensure-domain')
-      await ensureWebAddressDomain(data.hostname)
+      await ensureDomainForCustomDomain(data.hostname)
     }
 
     const originChanged = verified.projection.canonicalOrigin !== current.canonicalOrigin

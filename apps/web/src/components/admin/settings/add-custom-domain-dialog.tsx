@@ -1,6 +1,6 @@
 /**
  * Add custom domain on a domain: a name typed in front of the domain, and
- * what the address opens. What it opens is fixed by the server for now (the
+ * what it is used for. What it is used for is fixed by the server for now (the
  * whole portal on Cloud, the help center on a self-hosted server).
  */
 import { useState } from 'react'
@@ -14,15 +14,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { opensLabel, type WebAddressOpens } from '@/lib/shared/web-addresses'
+import { usedForLabel, type CustomDomainUsedFor } from '@/lib/shared/custom-domains'
 
 /** Dot-separated labels of letters, numbers and inner hyphens; empty means the domain itself. */
 const PREFIX = /^([a-z0-9]([a-z0-9-]*[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/
 
-function opensLine(opens: WebAddressOpens): string {
-  if (opens === 'portal') return 'Used for your portal.'
-  if (opens === 'help') return 'Used for your help center.'
-  return `Used for ${opensLabel(opens)}.`
+function usedForLine(usedFor: CustomDomainUsedFor): string {
+  if (usedFor === 'portal') return 'Used for your portal.'
+  if (usedFor === 'help') return 'Used for your help center.'
+  return `Used for ${usedForLabel(usedFor)}.`
 }
 
 /** The address a typed prefix makes on the domain, or null when it is not a name. */
@@ -40,14 +40,14 @@ export interface AddCustomDomainTarget {
 export function AddCustomDomainDialog({
   target,
   domain,
-  opens,
+  usedFor,
   busy,
   onAdd,
   onClose,
 }: {
   target: AddCustomDomainTarget | null
   domain: string
-  opens: WebAddressOpens
+  usedFor: CustomDomainUsedFor
   busy: boolean
   onAdd: (hostname: string) => void
   onClose: () => void
@@ -63,7 +63,7 @@ export function AddCustomDomainDialog({
             key={target.prefix}
             start={target.prefix}
             domain={domain}
-            opens={opens}
+            usedFor={usedFor}
             busy={busy}
             onAdd={onAdd}
             onCancel={onClose}
@@ -77,14 +77,14 @@ export function AddCustomDomainDialog({
 function AddCustomDomainForm({
   start,
   domain,
-  opens,
+  usedFor,
   busy,
   onAdd,
   onCancel,
 }: {
   start: string
   domain: string
-  opens: WebAddressOpens
+  usedFor: CustomDomainUsedFor
   busy: boolean
   onAdd: (hostname: string) => void
   onCancel: () => void
@@ -121,7 +121,7 @@ function AddCustomDomainForm({
           />
           <span className="shrink-0 pe-3 text-sm text-muted-foreground">.{domain}</span>
         </div>
-        <p className="text-[13px] text-muted-foreground">{opensLine(opens)}</p>
+        <p className="text-[13px] text-muted-foreground">{usedForLine(usedFor)}</p>
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}

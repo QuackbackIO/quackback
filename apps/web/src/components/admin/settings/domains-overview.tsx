@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { AddDomainButton } from '@/components/admin/settings/add-domain-dialog'
 import { domainPhase, type DomainPhase } from '@/components/admin/channels/sending-domain-view'
 import { verifiedThroughLabel } from '@/lib/shared/domain-proof'
-import { coveringName, opensLabel, type WebAddressOpens } from '@/lib/shared/web-addresses'
+import { coveringName, usedForLabel, type CustomDomainUsedFor } from '@/lib/shared/custom-domains'
 import type { AddedDomainSummary } from '@/lib/server/functions/domains'
 import type {
   HelpCenterDomainSummary,
@@ -47,10 +47,10 @@ export const USE_COPY: Record<DomainUse, { chip: string; title: string; descript
   },
 }
 
-/** A web address on or under a domain, and what it opens. */
-export interface WebAddressEntry {
+/** A custom domain on or under a domain, and what it is used for. */
+export interface CustomDomainEntry {
   hostname: string
-  opens: WebAddressOpens
+  usedFor: CustomDomainUsedFor
   /** Null when healthy. */
   state: BadgeState | null
 }
@@ -63,7 +63,7 @@ export interface DomainUseStatus {
   state: BadgeState | null
   detail?: string
   /** The web addresses on or under the domain (its web address use only), by hostname. */
-  addresses?: WebAddressEntry[]
+  addresses?: CustomDomainEntry[]
 }
 
 export interface DomainRow {
@@ -101,14 +101,14 @@ const READINESS_STATE = {
 } as const satisfies Record<WebAddressSummary['readiness'], BadgeState | null>
 
 /** The state a set of addresses shows as one: attention first, then pending. */
-function worstState(entries: WebAddressEntry[]): BadgeState | null {
+function worstState(entries: CustomDomainEntry[]): BadgeState | null {
   const states = entries.map((e) => e.state)
   return states.find((s) => s === 'attention') ?? states.find((s) => s !== null) ?? null
 }
 
-/** An address as a row reads it: what it opens, named when it is not the row's own name. */
-export function webAddressLine(entry: WebAddressEntry, rowName: string): string {
-  const label = opensLabel(entry.opens)
+/** A custom domain as a row reads it: what it is used for, named when it is not the row's own name. */
+export function customDomainLine(entry: CustomDomainEntry, rowName: string): string {
+  const label = usedForLabel(entry.usedFor)
   return entry.hostname === rowName ? label : `${entry.hostname} · ${label}`
 }
 
@@ -150,27 +150,27 @@ export function domainRows({
     })
   }
   // A web address under a domain added by name is listed on that domain.
-  const web = new Map<string, WebAddressEntry[]>()
-  const addWeb = (entry: WebAddressEntry) => {
+  const web = new Map<string, CustomDomainEntry[]>()
+  const addWeb = (entry: CustomDomainEntry) => {
     const key = coveringName(entry.hostname, addedByName.keys()) ?? keyOf(entry.hostname)
     web.set(key, [...(web.get(key) ?? []), { ...entry, hostname: keyOf(entry.hostname) }])
   }
   if (helpCenterDomain) {
     addWeb({
       hostname: helpCenterDomain.domain,
-      opens: 'help',
+      usedFor: 'help',
       state: helpCenterDomain.verified ? null : 'pending',
     })
   }
   for (const w of webAddresses) {
-    addWeb({ hostname: w.hostname, opens: 'portal', state: READINESS_STATE[w.readiness] })
+    addWeb({ hostname: w.hostname, usedFor: 'portal', state: READINESS_STATE[w.readiness] })
   }
   for (const [name, entries] of web) {
     const addresses = entries.sort((a, b) => (a.hostname < b.hostname ? -1 : 1))
     add(name, {
       use: 'customDomain',
       state: worstState(addresses),
-      detail: addresses.map((a) => webAddressLine(a, name)).join(', '),
+      detail: addresses.map((a) => customDomainLine(a, name)).join(', '),
       addresses,
     })
   }

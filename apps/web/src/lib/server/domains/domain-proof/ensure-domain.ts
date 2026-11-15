@@ -8,7 +8,7 @@
  * own cache and sign-in resets, so those always happen.
  */
 import { logger } from '@/lib/server/logger'
-import { coveringName } from '@/lib/shared/web-addresses'
+import { coveringName } from '@/lib/shared/custom-domains'
 import { ensureDomain, listDomains } from './domains.service'
 
 const log = logger.child({ component: 'domains' })
@@ -22,16 +22,16 @@ export async function ensureDomainAfterUse(name: string): Promise<void> {
 }
 
 /**
- * The same for a web address (the help center's domain, a Cloud web
- * address): one under a domain already added belongs to that domain and is
+ * The same for a custom domain (the help center's domain, a Cloud custom
+ * domain): one under a domain already added belongs to that domain and is
  * listed on its page, so it gets no domain of its own.
  */
-export async function ensureWebAddressDomain(hostname: string): Promise<void> {
+export async function ensureDomainForCustomDomain(hostname: string): Promise<void> {
   try {
     const names = (await listDomains()).map((d) => d.name)
     if (coveringName(hostname, names)) return
   } catch (err) {
-    log.warn({ err, domain: hostname }, 'could not read the added domains for a web address')
+    log.warn({ err, domain: hostname }, 'could not read the added domains for a custom domain')
     return
   }
   await ensureDomainAfterUse(hostname)

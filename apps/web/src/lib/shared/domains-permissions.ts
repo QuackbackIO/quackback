@@ -58,6 +58,12 @@ export function domainUseLinks({
     if (cloudEnabled) {
       links.customDomain = { to: '/admin/settings/domains', hash: CUSTOM_DOMAINS_ANCHOR }
     } else if (helpCenterOn && can(PERMISSIONS.HELP_CENTER_MANAGE)) {
+      // For now a self-hosted help center domain is written on Help center
+      // settings, behind help center access too. When custom domains are set
+      // per section, every write moves to Settings > Domains behind
+      // settings.custom_domain alone, on Cloud and self-hosted, and this
+      // link goes to the Custom domains card like Cloud's. Product pages then
+      // show their custom domain read-only, with a link here.
       links.customDomain = {
         to: HELP_CENTER_SETTINGS,
         search: { tab: 'domains-languages' },
