@@ -10,6 +10,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const listStatusFeedFn = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/functions/status', () => ({ listStatusFeedFn }))
 vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://acme.example.com' } }))
+const links = vi.hoisted(() => ({ statusOrigin: 'https://acme.example.com' }))
+vi.mock('@/lib/server/domains/settings/section-links', () => ({
+  getSectionOrigins: async () => ({
+    primary: 'https://acme.example.com',
+    feedback: 'https://acme.example.com',
+    roadmap: 'https://acme.example.com',
+    changelog: 'https://acme.example.com',
+    help: 'https://acme.example.com',
+    support: 'https://acme.example.com',
+    status: links.statusOrigin,
+  }),
+}))
 vi.mock('@/lib/server/settings-utils', () => ({
   getSettingsBrandingData: vi.fn().mockResolvedValue({ name: 'Acme' }),
 }))
@@ -67,7 +79,10 @@ function itemsOf(xml: string) {
   }))
 }
 
-beforeEach(() => listStatusFeedFn.mockReset())
+beforeEach(() => {
+  listStatusFeedFn.mockReset()
+  links.statusOrigin = 'https://acme.example.com'
+})
 
 describe('GET /status/feed', () => {
   it('gives every update its own item, newest first, so none is missed between polls', async () => {
@@ -339,5 +354,16 @@ describe('GET /status/feed', () => {
     const xml = await (await GET()).text()
     expect(xml).toContain('<rss version="2.0"')
     expect(itemsOf(xml)).toEqual([])
+  })
+
+  it("links the page and every update at the status page's own host", async () => {
+    links.statusOrigin = 'https://status.acme.com'
+    listStatusFeedFn.mockResolvedValue([item({})])
+    const xml = await (await GET()).text()
+    expect(itemsOf(xml)[0].guid).toBe(
+      'https://status.acme.com/status/status_incident_1#status_update_1'
+    )
+    expect(xml).toContain('<link>https://status.acme.com/</link>')
+    expect(xml).not.toContain('https://acme.example.com')
   })
 })

@@ -6,6 +6,17 @@ import type { SitemapUrl, SitemapAlternate } from '@/lib/server/sitemap'
 import { hcArticlePath, hcCollectionPath, localizedHcPath } from './help-center-url'
 import { DEFAULT_LOCALE } from './i18n'
 
+/**
+ * Where the URLs are built: an origin to put each path on, or a function that
+ * makes a path absolute (`sectionUrl` for the help center, which writes the
+ * home as `/` on the help center's own host).
+ */
+export type SitemapBase = string | ((path: string) => string)
+
+function urlMaker(base: SitemapBase): (path: string) => string {
+  return typeof base === 'function' ? base : (path) => `${base}${path}`
+}
+
 export interface SitemapCategory {
   id: string
   urlId: number
@@ -30,27 +41,28 @@ export interface SitemapArticle {
  * - Each article page (with lastmod from updatedAt)
  */
 export function buildHelpCenterSitemapUrls(
-  baseUrl: string,
+  baseUrl: SitemapBase,
   categories: SitemapCategory[],
   articles: SitemapArticle[],
   locale: string = DEFAULT_LOCALE
 ): SitemapUrl[] {
   const urls: SitemapUrl[] = []
+  const at = urlMaker(baseUrl)
 
   // Landing page
-  urls.push({ loc: `${baseUrl}/hc` })
+  urls.push({ loc: at('/hc') })
 
   // Collection pages
   for (const cat of categories) {
     urls.push({
-      loc: `${baseUrl}${hcCollectionPath({ locale, urlId: cat.urlId, slug: cat.slug })}`,
+      loc: at(hcCollectionPath({ locale, urlId: cat.urlId, slug: cat.slug })),
     })
   }
 
   // Article pages
   for (const article of articles) {
     urls.push({
-      loc: `${baseUrl}${hcArticlePath({ locale, urlId: article.urlId, slug: article.slug })}`,
+      loc: at(hcArticlePath({ locale, urlId: article.urlId, slug: article.slug })),
       lastmod: article.updatedAt.split('T')[0],
     })
   }
@@ -103,14 +115,15 @@ function buildAlternates(
  * predicate, not translation-based).
  */
 export function buildHelpCenterSitemapUrlsMultiLocale(
-  baseUrl: string,
+  baseUrl: SitemapBase,
   defaultLocale: string,
   perLocale: LocaleSitemapEntry[]
 ): SitemapUrl[] {
   const urls: SitemapUrl[] = []
+  const at = urlMaker(baseUrl)
 
   const landingByLocale = new Map(
-    perLocale.map(({ locale }) => [locale, `${baseUrl}${localizedHcPath(locale, '/hc')}`])
+    perLocale.map(({ locale }) => [locale, at(localizedHcPath(locale, '/hc'))])
   )
   for (const locale of landingByLocale.keys()) {
     urls.push({
@@ -122,7 +135,7 @@ export function buildHelpCenterSitemapUrlsMultiLocale(
   const categoryPathsById = new Map<string, Map<string, string>>()
   for (const { locale, categories } of perLocale) {
     for (const cat of categories) {
-      const path = `${baseUrl}${hcCollectionPath({ locale, urlId: cat.urlId, slug: cat.slug })}`
+      const path = at(hcCollectionPath({ locale, urlId: cat.urlId, slug: cat.slug }))
       if (!categoryPathsById.has(cat.id)) categoryPathsById.set(cat.id, new Map())
       categoryPathsById.get(cat.id)!.set(locale, path)
     }
@@ -137,7 +150,7 @@ export function buildHelpCenterSitemapUrlsMultiLocale(
   const articlesById = new Map<string, Map<string, { path: string; lastmod: string }>>()
   for (const { locale, articles } of perLocale) {
     for (const article of articles) {
-      const path = `${baseUrl}${hcArticlePath({ locale, urlId: article.urlId, slug: article.slug })}`
+      const path = at(hcArticlePath({ locale, urlId: article.urlId, slug: article.slug }))
       if (!articlesById.has(article.id)) articlesById.set(article.id, new Map())
       articlesById.get(article.id)!.set(locale, { path, lastmod: article.updatedAt.split('T')[0] })
     }

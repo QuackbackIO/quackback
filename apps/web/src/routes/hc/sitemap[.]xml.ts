@@ -6,27 +6,21 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
     handlers: {
       GET: async ({ request }) => {
         const [
-          { config },
           { isFeatureEnabled, getHelpCenterConfig },
           { listPublicCategories, listPublicArticles },
           { listPublicCategoriesForLocale, listPublicArticlesForCategoryLocale },
           { buildHelpCenterSitemapUrls, buildHelpCenterSitemapUrlsMultiLocale },
-          { resolveHelpCenterBaseUrl },
           { renderSitemap },
-          { getSectionDomains },
-          { helpDomainConfig },
-          { requestWorkspaceHost },
+          { getSectionOrigins },
+          { sectionUrl },
         ] = await Promise.all([
-          import('@/lib/server/config'),
           import('@/lib/server/domains/settings/settings.service'),
           import('@/lib/server/domains/help-center/help-center.service'),
           import('@/lib/server/domains/help-center/help-center-locale.query'),
           import('@/lib/shared/help-center-sitemap'),
-          import('@/lib/shared/help-center-domain'),
           import('@/lib/server/sitemap'),
-          import('@/lib/server/domains/settings/section-domains.service'),
-          import('@/lib/shared/section-domains'),
-          import('@/lib/server/workspaces/saas-edge-host'),
+          import('@/lib/server/domains/settings/section-links'),
+          import('@/lib/shared/section-links'),
         ])
 
         if (!(await isFeatureEnabled('helpCenter'))) {
@@ -43,18 +37,13 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
 
         const url = new URL(request.url)
 
-        // The default host's sitemap is sent to a verified custom domain by
-        // the section host middleware before it gets here.
-        //
         // The request reaches the app over http behind the TLS proxy, so its
-        // origin is not the public one. Use the same base the canonical links
-        // use: the verified custom domain when the request arrived on it, else
-        // the configured base URL.
-        const baseUrl = resolveHelpCenterBaseUrl({
-          domainConfig: helpDomainConfig(await getSectionDomains()),
-          currentHost: requestWorkspaceHost(request),
-          fallback: config.baseUrl,
-        })
+        // origin is not the public one. Every URL is on the help center's own
+        // host once it has one (the primary domain's sitemap is sent there by
+        // the section host middleware), else on the configured base URL.
+        const origins = await getSectionOrigins()
+        const baseUrl = origins.help
+        const helpUrl = (path: string) => sectionUrl('help', path, origins)
         const pageParam = url.searchParams.get('page')
         const page = pageParam ? parseInt(pageParam, 10) : null
 
@@ -85,7 +74,7 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
           }))
 
           allUrls = buildHelpCenterSitemapUrls(
-            baseUrl,
+            helpUrl,
             categories.map((c) => ({ id: c.id, urlId: c.urlId, slug: c.slug })),
             articles,
             defaultLocale
@@ -123,7 +112,7 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
               ),
             })
           }
-          allUrls = buildHelpCenterSitemapUrlsMultiLocale(baseUrl, defaultLocale, perLocale)
+          allUrls = buildHelpCenterSitemapUrlsMultiLocale(helpUrl, defaultLocale, perLocale)
         }
 
         const xml = renderSitemap(allUrls, baseUrl, isNaN(page as number) ? null : page)

@@ -12,6 +12,8 @@
 import type { PortalSection } from './custom-domains'
 import {
   PORTAL_SECTIONS,
+  SECTION_HOME,
+  normalizeHost,
   routableSectionHost,
   sectionForPath,
   type SectionDomainMap,
@@ -62,9 +64,15 @@ export function allOnPrimary(primaryOrigin: string): SectionOrigins {
   })
 }
 
-/** An absolute URL for a path in one section. Paths keep their prefix on a section host. */
+/**
+ * An absolute URL for a path in one section. Paths keep their prefix on a
+ * section's own host, except its home, which is `/` there, as the router
+ * writes it (help.acme.com/ for /hc, but help.acme.com/hc/articles/x).
+ */
 export function sectionUrl(section: PortalSection, path: string, origins: SectionOrigins): string {
-  return `${origins[section]}${path.startsWith('/') ? path : `/${path}`}`
+  const clean = path.startsWith('/') ? path : `/${path}`
+  const ownHost = origins[section] !== origins.primary
+  return `${origins[section]}${ownHost && clean === SECTION_HOME[section] ? '/' : clean}`
 }
 
 /** An absolute URL for any portal path, on the host its section is linked at. */
@@ -76,4 +84,19 @@ export function portalPageUrl(path: string, origins: SectionOrigins): string {
 /** The sections the primary domain serves itself, in nav order. */
 export function sectionsOnPrimary(origins: SectionOrigins): PortalSection[] {
   return PORTAL_SECTIONS.filter((section) => origins[section] === origins.primary)
+}
+
+/** The section a host is linked for, or null for the primary domain or a host not in use. */
+export function sectionServedAt(
+  host: string | null | undefined,
+  origins: SectionOrigins
+): PortalSection | null {
+  const clean = normalizeHost(host)
+  if (!clean) return null
+  for (const section of PORTAL_SECTIONS) {
+    if (origins[section] !== origins.primary && origins[section] === `https://${clean}`) {
+      return section
+    }
+  }
+  return null
 }

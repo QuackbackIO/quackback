@@ -3,6 +3,7 @@ import {
   allOnPrimary,
   portalPageUrl,
   sectionOrigins,
+  sectionServedAt,
   sectionUrl,
   sectionsOnPrimary,
   type SectionOrigins,
@@ -84,6 +85,18 @@ describe('sectionUrl', () => {
     )
   })
 
+  it("writes a section's home as / on its own host, as the router does", () => {
+    expect(sectionUrl('help', '/hc', origins())).toBe('https://help.acme.com/')
+    expect(sectionUrl('status', '/status', origins())).toBe('https://status.acme.com/')
+  })
+
+  it("keeps a section's home path on the primary domain", () => {
+    expect(sectionUrl('changelog', '/changelog', origins())).toBe(
+      'https://acme.example.com/changelog'
+    )
+    expect(sectionUrl('feedback', '/', origins())).toBe('https://acme.example.com/')
+  })
+
   it('adds the leading slash a path left out', () => {
     expect(sectionUrl('status', 'status/inc_1', origins())).toBe(
       'https://status.acme.com/status/inc_1'
@@ -94,7 +107,7 @@ describe('sectionUrl', () => {
 describe('portalPageUrl', () => {
   it("finds a page's section from its path", () => {
     expect(portalPageUrl('/status/inc_1', origins())).toBe('https://status.acme.com/status/inc_1')
-    expect(portalPageUrl('/hc', origins())).toBe('https://help.acme.com/hc')
+    expect(portalPageUrl('/hc', origins())).toBe('https://help.acme.com/')
   })
 
   it('keeps a path every host shares on the primary domain', () => {
@@ -119,5 +132,19 @@ describe('allOnPrimary', () => {
 describe('sectionsOnPrimary', () => {
   it('lists the sections the primary domain serves itself', () => {
     expect(sectionsOnPrimary(origins())).toEqual(['feedback', 'roadmap', 'changelog', 'support'])
+  })
+})
+
+describe('sectionServedAt', () => {
+  it('names the section a host is linked for', () => {
+    expect(sectionServedAt('help.acme.com', origins())).toBe('help')
+    expect(sectionServedAt('STATUS.acme.com:443', origins())).toBe('status')
+  })
+
+  it('names none for the primary domain or a host not in use', () => {
+    expect(sectionServedAt('acme.example.com', origins())).toBeNull()
+    // Mapped but not verified: the host is not linked, so it serves nothing of its own.
+    expect(sectionServedAt('news.acme.com', origins())).toBeNull()
+    expect(sectionServedAt(null, origins())).toBeNull()
   })
 })

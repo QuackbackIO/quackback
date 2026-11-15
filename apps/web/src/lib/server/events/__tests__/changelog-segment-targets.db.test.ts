@@ -258,7 +258,8 @@ describe.skipIf(!dbAvailable)('changelog segment targeting (execution-level)', (
     expect(emails.length).toBeGreaterThan(0)
     for (const t of emails) {
       expect((t.config as { changelogUrl: string }).changelogUrl).toBe(
-        'https://news.acme.com/changelog'
+        // The changelog's home is / on its own host.
+        'https://news.acme.com/'
       )
     }
   })

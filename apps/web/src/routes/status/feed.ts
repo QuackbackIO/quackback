@@ -12,15 +12,24 @@ export const Route = createFileRoute('/status/feed')({
        * still gets a valid, empty feed" shape as `routes/changelog/feed.ts`.
        */
       GET: async () => {
-        const [{ config }, { getSettingsBrandingData }, { listStatusFeedFn }, labels] =
-          await Promise.all([
-            import('@/lib/server/config'),
-            import('@/lib/server/settings-utils'),
-            import('@/lib/server/functions/status'),
-            import('@/lib/server/domains/status/status.labels'),
-          ])
+        const [
+          { getSectionOrigins },
+          { sectionUrl },
+          { getSettingsBrandingData },
+          { listStatusFeedFn },
+          labels,
+        ] = await Promise.all([
+          import('@/lib/server/domains/settings/section-links'),
+          import('@/lib/shared/section-links'),
+          import('@/lib/server/settings-utils'),
+          import('@/lib/server/functions/status'),
+          import('@/lib/server/domains/status/status.labels'),
+        ])
 
-        const baseUrl = config.baseUrl
+        // On the status page's own host once it has one, so a reader never
+        // leans on the redirect from the primary domain.
+        const origins = await getSectionOrigins()
+        const baseUrl = origins.status
         const branding = await getSettingsBrandingData()
         const siteName = branding?.name || 'Status'
 
@@ -42,7 +51,7 @@ export const Route = createFileRoute('/status/feed')({
         const rssXml = buildRssFeed({
           title: `${siteName} Status`,
           description: `Incidents and maintenance for ${siteName}`,
-          link: `${baseUrl}/status`,
+          link: sectionUrl('status', '/status', origins),
           feedUrl: `${baseUrl}/status/feed`,
           entries: pickFeedEntries(items.map((item) => toFeedEntries(item, baseUrl, labels))),
         })

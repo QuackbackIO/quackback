@@ -29,6 +29,19 @@ vi.mock('@/lib/server/config', () => ({
   config: { baseUrl: 'https://t.example' },
 }))
 
+const links = vi.hoisted(() => ({ changelogOrigin: 'https://t.example' }))
+vi.mock('@/lib/server/domains/settings/section-links', () => ({
+  getSectionOrigins: async () => ({
+    primary: 'https://t.example',
+    feedback: 'https://t.example',
+    roadmap: 'https://t.example',
+    changelog: links.changelogOrigin,
+    help: 'https://t.example',
+    support: 'https://t.example',
+    status: 'https://t.example',
+  }),
+}))
+
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   and: (...conditions: unknown[]) => ({ and: conditions }),
@@ -103,6 +116,7 @@ async function fetchFeed(): Promise<string> {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  links.changelogOrigin = 'https://t.example'
   mockIsFeatureEnabled.mockResolvedValue(true)
   mockResolvePortalAccess.mockResolvedValue({ granted: true })
   mockAudienceGranted.mockResolvedValue(true)
@@ -167,5 +181,15 @@ describe('changelog RSS feed — existing gates still hold', () => {
 
     expect(xml).not.toContain('<item>')
     expect(mockWhere).not.toHaveBeenCalled()
+  })
+})
+
+describe('changelog RSS feed links', () => {
+  it("links the changelog and each entry at the changelog's own host", async () => {
+    links.changelogOrigin = 'https://news.acme.com'
+    const xml = await fetchFeed()
+    expect(xml).toContain('<link>https://news.acme.com/</link>')
+    expect(xml).toContain(`https://news.acme.com/changelog/${ENTRY_A}`)
+    expect(xml).not.toContain('https://t.example')
   })
 })

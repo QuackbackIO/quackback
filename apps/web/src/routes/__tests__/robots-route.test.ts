@@ -1,14 +1,18 @@
 // @vitest-environment node
 /**
- * robots.txt advertises the help center sitemap where it lives. Once a custom
- * domain is verified, the default host's /hc/sitemap.xml redirects there, so
- * the advertised link points at the custom domain directly, whichever host
- * served robots.txt. The help center's domain is its entry in the section map.
+ * robots.txt points at the sitemaps of the host that served it. The primary
+ * domain advertises its own sitemap, and the help center's while the help
+ * center lives there. A section on its own host (help.acme.com) advertises
+ * that section's sitemap, on that host, and nothing else.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { allOnPrimary, type SectionOrigins } from '@/lib/shared/section-links'
+
+const PRIMARY = 'https://feedback.example.com'
 
 const state = vi.hoisted(() => ({
-  sectionDomains: {} as Record<string, { hostname: string; verifiedAt: string | null }>,
+  origins: null as SectionOrigins | null,
+  indexable: true,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -21,15 +25,11 @@ vi.mock('@/lib/server/config', () => ({
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: async () => true,
-  getHelpCenterConfig: async () => ({
-    seo: { indexable: true },
-    // The setting the map replaced, still stored: the map wins over it.
-    domain: { domain: 'old-help.acme.com', verifiedAt: '2026-09-01T00:00:00.000Z' },
-  }),
+  getHelpCenterConfig: async () => ({ seo: { indexable: state.indexable } }),
 }))
 
-vi.mock('@/lib/server/domains/settings/section-domains.service', () => ({
-  getSectionDomains: async () => state.sectionDomains,
+vi.mock('@/lib/server/domains/settings/section-links', () => ({
+  getSectionOrigins: async () => state.origins,
 }))
 
 import { Route } from '../robots[.]txt'
@@ -38,44 +38,56 @@ type Handlers = { GET: (args: { request: Request }) => Promise<Response> }
 const { GET } = (Route as unknown as { options: { server: { handlers: Handlers } } }).options.server
   .handlers
 
-async function sitemapLines(requestUrl: string): Promise<string[]> {
+async function robots(requestUrl: string): Promise<string[]> {
   const response = await GET({ request: new Request(requestUrl) })
-  const body = await response.text()
-  return body.split('\n').filter((line) => line.startsWith('Sitemap: '))
+  expect(response.headers.get('vary')).toBe('Host')
+  return (await response.text()).split('\n')
 }
 
-const verified = { help: { hostname: 'help.acme.com', verifiedAt: '2026-10-01T00:00:00.000Z' } }
+async function sitemapLines(requestUrl: string): Promise<string[]> {
+  return (await robots(requestUrl)).filter((line) => line.startsWith('Sitemap: '))
+}
+
+beforeEach(() => {
+  state.origins = allOnPrimary(PRIMARY)
+  state.indexable = true
+})
 
 describe('robots.txt sitemap lines', () => {
-  it('advertises the help center sitemap on the base URL without a custom domain', async () => {
-    state.sectionDomains = {}
+  it('advertises both sitemaps on the primary domain while no section has a host', async () => {
     expect(await sitemapLines('https://feedback.example.com/robots.txt')).toEqual([
       'Sitemap: https://feedback.example.com/sitemap.xml',
       'Sitemap: https://feedback.example.com/hc/sitemap.xml',
     ])
   })
 
-  it('keeps the base URL while the custom domain is not verified', async () => {
-    state.sectionDomains = { help: { hostname: 'help.acme.com', verifiedAt: null } }
+  it("leaves the help center's sitemap off the primary domain once it has its own host", async () => {
+    state.origins = { ...allOnPrimary(PRIMARY), help: 'https://help.acme.com' }
     expect(await sitemapLines('https://feedback.example.com/robots.txt')).toEqual([
       'Sitemap: https://feedback.example.com/sitemap.xml',
-      'Sitemap: https://feedback.example.com/hc/sitemap.xml',
     ])
   })
 
-  it('advertises the verified custom domain when robots.txt is served on the default host', async () => {
-    state.sectionDomains = verified
-    expect(await sitemapLines('https://feedback.example.com/robots.txt')).toEqual([
-      'Sitemap: https://feedback.example.com/sitemap.xml',
-      'Sitemap: https://help.acme.com/hc/sitemap.xml',
-    ])
-  })
-
-  it('advertises the verified custom domain when robots.txt is served on it', async () => {
-    state.sectionDomains = verified
+  it("advertises only the help center's sitemap on the help center's host", async () => {
+    state.origins = { ...allOnPrimary(PRIMARY), help: 'https://help.acme.com' }
     expect(await sitemapLines('https://help.acme.com/robots.txt')).toEqual([
-      'Sitemap: https://feedback.example.com/sitemap.xml',
       'Sitemap: https://help.acme.com/hc/sitemap.xml',
     ])
+  })
+
+  it("advertises a section host's own sitemap there", async () => {
+    state.origins = { ...allOnPrimary(PRIMARY), changelog: 'https://news.acme.com' }
+    expect(await sitemapLines('https://news.acme.com/robots.txt')).toEqual([
+      'Sitemap: https://news.acme.com/sitemap.xml',
+    ])
+  })
+
+  it('keeps crawlers off a help center host whose help center is not indexed', async () => {
+    state.origins = { ...allOnPrimary(PRIMARY), help: 'https://help.acme.com' }
+    state.indexable = false
+    const lines = await robots('https://help.acme.com/robots.txt')
+    expect(lines).toContain('Disallow: /')
+    expect(lines).not.toContain('Allow: /')
+    expect(lines.filter((line) => line.startsWith('Sitemap: '))).toEqual([])
   })
 })
