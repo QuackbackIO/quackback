@@ -63,7 +63,7 @@ describe('SendingDomainAttentionEmail', () => {
       )
     )
     expect(text).toContain(
-      'The ownership record (TXT _quackback.acme.com) has a different value: quackback-domain-verification=old.'
+      'The verification record (TXT _quackback.acme.com) has a different value: quackback-domain-verification=old.'
     )
   })
 
@@ -102,7 +102,7 @@ describe('SendingDomainAttentionEmail', () => {
         })
       )
     )
-    expect(text).toContain('The ownership record (TXT _quackback.acme.com) is missing.')
+    expect(text).toContain('The verification record (TXT _quackback.acme.com) is missing.')
     expect(text).toContain('Value: quackback-domain-verification=abc')
     expect(text).toContain('Add it back by 17 November 2026 to keep sending from acme.com.')
     // Still sending from the domain, so it does not say replies have fallen back.

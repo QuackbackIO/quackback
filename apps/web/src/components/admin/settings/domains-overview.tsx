@@ -23,7 +23,7 @@ import type {
   SignInDomainSummary,
 } from '@/lib/server/functions/domains-overview'
 
-export const WEB_ADDRESSES_TITLE = 'Web addresses'
+export const WEB_ADDRESSES_TITLE = 'Custom domains'
 export const WEB_ADDRESSES_DESCRIPTION = 'Where people reach your portal and help center.'
 
 export const EMPTY_DESCRIPTION = 'Use your own domain for email, web addresses and sign-in.'
@@ -36,9 +36,9 @@ export const USE_COPY: Record<DomainUse, { chip: string; title: string; descript
     description: 'Send replies and announcements from your own address.',
   },
   customDomain: {
-    chip: 'Web addresses',
-    title: 'Web addresses',
-    description: 'Open your portal at an address on this domain.',
+    chip: 'Custom domain',
+    title: 'Custom domains',
+    description: 'Use this domain for your portal.',
   },
   signIn: {
     chip: 'Sign-in',
@@ -84,7 +84,7 @@ export const PHASE_STATE = {
 
 function sendingDetail(domain: SendingDomainSummary): string | undefined {
   const parts = [domain.localParts.join(', ')]
-  if (domain.ownershipProven) parts.push('Ownership verified')
+  if (domain.ownershipProven) parts.push('Domain verified')
   return parts.filter(Boolean).join(' · ') || undefined
 }
 

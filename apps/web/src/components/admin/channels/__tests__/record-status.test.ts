@@ -128,7 +128,7 @@ describe('a live domain whose ownership record went missing', () => {
       dkimMode: 'easy',
       dnsRecords: [ownership],
     } as SendingDomainDTO
-    expect(failingRecordName(domain)).toBe('ownership record')
+    expect(failingRecordName(domain)).toBe('verification record')
   })
 
   it('knows which records prove ownership', () => {

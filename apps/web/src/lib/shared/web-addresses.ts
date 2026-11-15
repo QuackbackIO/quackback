@@ -13,7 +13,7 @@ export type PortalSection = Exclude<PortalNavItemType, 'link'>
 export type WebAddressOpens = PortalSection | 'portal'
 
 const OPENS_LABEL: Record<WebAddressOpens, string> = {
-  portal: 'Whole portal',
+  portal: 'Portal',
   feedback: 'Feedback',
   roadmap: 'Roadmap',
   changelog: 'Changelog',

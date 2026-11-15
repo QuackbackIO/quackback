@@ -102,7 +102,7 @@ describe('<DomainsCard>', () => {
     const rows = [...document.querySelectorAll('[data-slot="dns-record"]')]
     expect(rows.map((r) => r.textContent)).toEqual([
       'Waiting: Routingfeedback.example.comCNAMEedge.example.net',
-      'Waiting: Ownership_quackback-challenge.feedback.example.comTXTproof-1',
+      'Waiting: Verification_quackback-challenge.feedback.example.comTXTproof-1',
     ])
     expect(document.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(0)
     // The hostname's zone is not known, so names are shown in full and the card says so.
@@ -155,7 +155,7 @@ describe('<DomainsCard>', () => {
     renderCard([{ ...challenged(null), routing: 'ready', ownershipVerified: false }])
     expect(rowTexts()).toEqual([
       'Found: Routingfeedback.example.comCNAMEedge.example.net',
-      'Waiting: Ownership_quackback-challenge.feedback.example.comTXTproof-1',
+      'Waiting: Verification_quackback-challenge.feedback.example.comTXTproof-1',
     ])
     expect(screen.queryByText(/Already verified/)).toBeNull()
   })
@@ -164,7 +164,7 @@ describe('<DomainsCard>', () => {
     renderCard([challenged('email-sending')])
     expect(rowTexts()).toEqual([
       'Waiting: Routingfeedback.example.comCNAMEedge.example.net',
-      'Waiting: Ownership_quackback-challenge.feedback.example.comTXTproof-1',
+      'Waiting: Verification_quackback-challenge.feedback.example.comTXTproof-1',
     ])
   })
 
@@ -184,7 +184,7 @@ describe('<DomainsCard>', () => {
     renderCard([challenged(null)])
     expect(rowTexts()).toEqual([
       'Waiting: Routingfeedback.example.comCNAMEedge.example.net',
-      'Waiting: Ownership_quackback-challenge.feedback.example.comTXTproof-1',
+      'Waiting: Verification_quackback-challenge.feedback.example.comTXTproof-1',
     ])
     cleanup()
     renderCard([{ ...challenged(null), readiness: 'failed' }])
@@ -215,12 +215,12 @@ describe('<DomainsCard>', () => {
     expect(screen.queryByText(/Already verified/)).toBeNull()
   })
 
-  it('calls the card Web addresses, the field Domain and the re-check Verify', () => {
+  it('calls the card Custom domains, the field Domain and the re-check Verify', () => {
     renderCard([challenged(null)])
-    expect(screen.getByText('Web addresses')).toBeTruthy()
+    expect(screen.getByText('Custom domains')).toBeTruthy()
     expect(screen.getByLabelText('Domain')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Verify' })).toBeTruthy()
-    expect(screen.queryByText('Custom domains')).toBeNull()
+    expect(screen.queryByText('Web addresses')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
   })
 
@@ -239,7 +239,7 @@ describe('<DomainsCard>', () => {
     const records = hostnameRecords({ ...challenged(null), readiness: 'ready' })
     expect(records.map((r) => [r.label, r.state])).toEqual([
       ['Routing', 'found'],
-      ['Ownership', 'found'],
+      ['Verification', 'found'],
     ])
   })
 

@@ -51,7 +51,7 @@ const SOURCE_LABEL: Record<ProvenZoneSource, string> = {
   'email-sending': 'email sending',
   sso: 'single sign-on',
   'web-address': 'a web address',
-  domain: 'domain ownership',
+  domain: 'domain verification',
 }
 
 /** "Verified through email sending" and the like. */

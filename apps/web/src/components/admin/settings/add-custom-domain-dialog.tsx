@@ -1,5 +1,5 @@
 /**
- * Add a web address on a domain: a name typed in front of the domain, and
+ * Add custom domain on a domain: a name typed in front of the domain, and
  * what the address opens. What it opens is fixed by the server for now (the
  * whole portal on Cloud, the help center on a self-hosted server).
  */
@@ -20,9 +20,9 @@ import { opensLabel, type WebAddressOpens } from '@/lib/shared/web-addresses'
 const PREFIX = /^([a-z0-9]([a-z0-9-]*[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/
 
 function opensLine(opens: WebAddressOpens): string {
-  if (opens === 'portal') return 'Opens your whole portal.'
-  if (opens === 'help') return 'Opens your help center.'
-  return `Opens ${opensLabel(opens)}.`
+  if (opens === 'portal') return 'Used for your portal.'
+  if (opens === 'help') return 'Used for your help center.'
+  return `Used for ${opensLabel(opens)}.`
 }
 
 /** The address a typed prefix makes on the domain, or null when it is not a name. */
@@ -32,12 +32,12 @@ export function webAddressOn(prefix: string, domain: string): string | null {
   return PREFIX.test(clean) ? `${clean}.${domain}` : null
 }
 
-export interface AddWebAddressTarget {
+export interface AddCustomDomainTarget {
   /** The name filled in to start with. */
   prefix: string
 }
 
-export function AddWebAddressDialog({
+export function AddCustomDomainDialog({
   target,
   domain,
   opens,
@@ -45,7 +45,7 @@ export function AddWebAddressDialog({
   onAdd,
   onClose,
 }: {
-  target: AddWebAddressTarget | null
+  target: AddCustomDomainTarget | null
   domain: string
   opens: WebAddressOpens
   busy: boolean
@@ -56,10 +56,10 @@ export function AddWebAddressDialog({
     <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add a web address</DialogTitle>
+          <DialogTitle>Add custom domain</DialogTitle>
         </DialogHeader>
         {target && (
-          <AddWebAddressForm
+          <AddCustomDomainForm
             key={target.prefix}
             start={target.prefix}
             domain={domain}
@@ -74,7 +74,7 @@ export function AddWebAddressDialog({
   )
 }
 
-function AddWebAddressForm({
+function AddCustomDomainForm({
   start,
   domain,
   opens,
@@ -103,10 +103,10 @@ function AddWebAddressForm({
   return (
     <form onSubmit={submit}>
       <div className="space-y-2 py-4">
-        <Label htmlFor="web-address-prefix">Address</Label>
+        <Label htmlFor="custom-domain-prefix">Domain</Label>
         <div className="flex h-9 items-center border border-input bg-transparent shadow-xs transition-[color,box-shadow] outline-none focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px] dark:bg-input/30 [border-radius:calc(var(--radius)*0.8)]">
           <Input
-            id="web-address-prefix"
+            id="custom-domain-prefix"
             value={prefix}
             onChange={(e) => {
               setPrefix(e.target.value)

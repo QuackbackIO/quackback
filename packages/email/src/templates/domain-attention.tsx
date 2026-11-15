@@ -34,7 +34,7 @@ export function domainAttentionMessage(args: {
   signInDomains?: readonly string[] | null
 }): string {
   const { domain, recordName, deadline, signInDomains } = args
-  const named = `The ownership record (TXT ${recordName})`
+  const named = `The verification record (TXT ${recordName})`
   if (!signInDomains) {
     return deadline
       ? `${named} is missing. Add it back by ${deadline} to keep ${domain} verified.`

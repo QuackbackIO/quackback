@@ -71,7 +71,7 @@ describe('empty state', () => {
     expect(screen.getByRole('button', { name: 'Add domain' })).toBeInTheDocument()
     expect(screen.queryByRole('link')).toBeNull()
     expect(container).toHaveTextContent(EMPTY_DESCRIPTION)
-    for (const use of ['Email sending', 'Web addresses', 'Sign-in']) {
+    for (const use of ['Email sending', 'Custom domains', 'Sign-in']) {
       expect(container).not.toHaveTextContent(use)
     }
   })
@@ -176,7 +176,7 @@ describe('domain list', () => {
       'help.acme.com',
     ])
 
-    expect(rowOf('acme.com')).toHaveTextContent('Ownership verified')
+    expect(rowOf('acme.com')).toHaveTextContent('Domain verified')
     expect(rowOf('acme.co.uk')).toHaveTextContent('Pending')
     expect(rowOf('example.org')).toHaveTextContent('Needs attention')
 
@@ -189,7 +189,7 @@ describe('domain list', () => {
     expect(rowOf('example.io')).not.toHaveTextContent('Pending')
 
     const help = rowOf('help.acme.com')
-    expect(help).toHaveTextContent('Web addresses')
+    expect(help).toHaveTextContent('Custom domain')
     expect(help).toHaveTextContent('Help center')
     expect(help).toHaveTextContent('Pending')
     expect(help).toHaveAttribute('href', '/admin/settings/domains/help.acme.com')
@@ -282,7 +282,7 @@ describe('domain list', () => {
       { hostname: 'status.acme.com', opens: 'portal', state: null },
     ])
     render(<DomainList rows={rows} links={linksFor(ALL, { cloudEnabled: true })} />)
-    expect(rowOf('acme.com')).toHaveTextContent('help.acme.com · Whole portal')
+    expect(rowOf('acme.com')).toHaveTextContent('help.acme.com · Portal')
     expect(rowOf('acme.com')).toHaveTextContent('Pending')
   })
 

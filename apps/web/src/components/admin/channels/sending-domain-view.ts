@@ -40,7 +40,7 @@ export function lastCheckedAt(domain: SendingDomainDTO): Date | null {
 }
 
 const PURPOSE_NAME: Record<string, string> = {
-  ownership: 'ownership record',
+  ownership: 'verification record',
   dkim: 'DKIM record',
   'mail-from': 'return path record',
 }
@@ -87,7 +87,7 @@ export function recordTypeLabel(record: Pick<DnsRecordDTO, 'type' | 'priority'>)
 }
 
 const RECORD_LABEL: Record<string, string> = {
-  ownership: 'Ownership',
+  ownership: 'Verification',
   dkim: 'DKIM',
   'mail-from': 'Return path',
 }
@@ -112,7 +112,7 @@ export function recordLabel(
   dkimMode?: SendingDomainDTO['dkimMode']
 ): string {
   if (dkimMode === 'shared' && record.purpose === 'dkim' && record.type === 'TXT') {
-    return 'Ownership'
+    return 'Verification'
   }
   return RECORD_LABEL[record.purpose] ?? record.purpose
 }

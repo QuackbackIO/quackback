@@ -53,20 +53,20 @@ import { addProviderDomainFn, removeVerifiedDomainFn } from '@/lib/server/functi
 import { updateHelpCenterDomainFn } from '@/lib/server/functions/help-center-domain'
 import { mutateCloudCustomDomainFn } from '@/lib/server/functions/cloud-identity'
 import { USE_COPY, webAddressLine, type DomainRow, type DomainUseStatus } from './domains-overview'
-import { AddWebAddressDialog, type AddWebAddressTarget } from './add-web-address-dialog'
+import { AddCustomDomainDialog, type AddCustomDomainTarget } from './add-custom-domain-dialog'
 
 /** The name of the page a use is set up on, as its link reads. */
 function pageName(use: DomainUse, link: UseLink): string {
   if (use === 'email') return 'Email settings'
   if (use === 'signIn') return 'Sign-in settings'
-  return link.to === HELP_CENTER_SETTINGS ? 'Help center settings' : 'Web addresses'
+  return link.to === HELP_CENTER_SETTINGS ? 'Help center settings' : 'Custom domains'
 }
 
 /** What a use is for, on a row where it is not on yet. */
 function useDescription(use: DomainUse, link: UseLink | undefined): string {
   // Off Cloud the only web address an install takes is its help center's.
   if (use === 'customDomain' && link?.to === HELP_CENTER_SETTINGS) {
-    return 'Open your help center at an address on this domain.'
+    return 'Use this domain for your help center.'
   }
   return USE_COPY[use].description
 }
@@ -165,7 +165,11 @@ function OwnershipCard({
     }, "Couldn't remove the domain.")
 
   return (
-    <SettingsCard title="Ownership" action={verified ? null : <StateBadge state="pending" />} flush>
+    <SettingsCard
+      title="Domain verification"
+      action={verified ? null : <StateBadge state="pending" />}
+      flush
+    >
       <div className="space-y-3 px-4 py-3 sm:px-6">
         {domain.provenBy ? (
           <p className="text-[13px] text-muted-foreground">
@@ -175,7 +179,7 @@ function OwnershipCard({
           <DnsRecordTable
             records={[
               {
-                label: 'Ownership',
+                label: 'Verification',
                 type: 'TXT',
                 name: domain.record.host,
                 value: domain.record.value,
@@ -195,7 +199,7 @@ function OwnershipCard({
                 </Button>
               ) : (
                 <Button size="sm" variant="outline" disabled={busy} onClick={addRecord}>
-                  Verify ownership
+                  Verify domain
                 </Button>
               ))}
             {domain.added && !domain.inUse && (
@@ -216,7 +220,7 @@ function OwnershipCard({
         open={confirmRemove}
         onOpenChange={setConfirmRemove}
         title={`Remove ${domain.name}?`}
-        description="Its ownership record can be deleted afterwards."
+        description="Its verification record can be deleted afterwards."
         confirmLabel="Remove domain"
         variant="destructive"
         isPending={busy}
@@ -273,7 +277,7 @@ function UsesCard({
   const [domainTarget, setDomainTarget] = useState<DomainRemoval | null>(null)
   const [other, setOther] = useState<OtherRemoval | null>(null)
   const [addressDialog, setAddressDialog] = useState<SendingAddressDialogTarget | null>(null)
-  const [webDialog, setWebDialog] = useState<AddWebAddressTarget | null>(null)
+  const [webDialog, setWebDialog] = useState<AddCustomDomainTarget | null>(null)
   const [moveTo, setMoveTo] = useState<string | null>(null)
   const { busy, error, setError, run } = useDomainAction(onChanged)
   const { data, domain, addresses } = sending
@@ -296,13 +300,13 @@ function UsesCard({
       "Couldn't set the help center's address."
     )
 
-  /** The address typed in Add a web address: a Cloud web address, or the help center's. */
+  /** The hostname typed in Add custom domain: a Cloud custom domain, or the help center's. */
   const addWebAddress = (hostname: string) => {
     setWebDialog(null)
     if (!helpCenter) {
       void run(
         () => mutateCloudCustomDomainFn({ data: { action: 'add', hostname } }),
-        "Couldn't add the web address."
+        "Couldn't add the custom domain."
       )
     } else if (helpCenterDomain && helpCenterDomain !== hostname) {
       setMoveTo(hostname)
@@ -405,7 +409,7 @@ function UsesCard({
                       disabled={busy}
                       onClick={() => setWebDialog({ prefix: '' })}
                     >
-                      Add web address
+                      Add custom domain
                     </Button>
                   )}
                   {use !== 'email' && link && (
@@ -452,7 +456,7 @@ function UsesCard({
           setOther(null)
         }}
       />
-      <AddWebAddressDialog
+      <AddCustomDomainDialog
         target={webDialog}
         domain={name}
         opens={helpCenter ? 'help' : 'portal'}
