@@ -87,4 +87,21 @@ describe('TicketTypesManager', () => {
     renderManager(<TicketTypesManager creating onCreatingChange={() => {}} />)
     expect(await screen.findByRole('heading', { name: 'New type' })).toBeTruthy()
   })
+
+  // The field dialog's form sits inside the type form in the React tree (portals
+  // still bubble), so its submit used to save the type without the new field
+  // and close the type dialog.
+  it('adding a field keeps the type dialog open and does not save the type', async () => {
+    const { createTicketTypeFn } = await import('@/lib/server/functions/ticket-types')
+    const user = userEvent.setup()
+    renderManager(<TicketTypesManager creating onCreatingChange={() => {}} />)
+    await screen.findByRole('heading', { name: 'New type' })
+    await user.type(screen.getByLabelText('Name'), 'Bug report')
+    await user.click(screen.getByRole('button', { name: /Add field/ }))
+    await user.type(await screen.findByLabelText('Field name'), 'Page URL')
+    await user.click(screen.getAllByRole('button', { name: 'Add field' }).at(-1)!)
+    expect(createTicketTypeFn).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'New type' })).toBeTruthy()
+    expect(await screen.findByText('Page URL')).toBeTruthy()
+  })
 })

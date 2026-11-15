@@ -310,6 +310,10 @@ function FieldDialog({
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
+    // This form renders inside the ticket-type form's React tree (the dialog is a
+    // portal, and React events bubble through portals): without this, adding a
+    // field also submits the type form with the stale field list and closes it.
+    e.stopPropagation()
     const options =
       fieldType === 'select'
         ? optionsText
