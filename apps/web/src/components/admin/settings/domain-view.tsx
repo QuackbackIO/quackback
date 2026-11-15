@@ -54,13 +54,9 @@ function PageLink({ use, link }: { use: DomainUse; link: UseLink }) {
   )
 }
 
-/** Where a use stands. A use with nothing wrong is verified. */
+/** Where a use stands. A use with nothing wrong says nothing. */
 function UseStatus({ state }: { state: BadgeState | null }) {
-  return state ? (
-    <StateBadge state={state} />
-  ) : (
-    <span className="text-[13px] text-muted-foreground">Verified</span>
-  )
+  return state ? <StateBadge state={state} /> : null
 }
 
 function ErrorLine({ children }: { children: string }) {
@@ -116,6 +112,7 @@ function EmailCard({
       </div>
       {domain && phase && (
         <DomainSetupPanel
+          hideName
           domain={domain}
           phase={phase}
           checking={restart.isPending}
@@ -158,12 +155,10 @@ function LinkedUseCard({ use, link }: { use: DomainUseStatus; link: UseLink | un
  */
 function UsesCard({
   uses,
-  links,
   sending,
   onChanged,
 }: {
   uses: DomainUseStatus[]
-  links: DomainUseLinks
   sending: ReturnType<typeof useSendingDomain>
   onChanged: () => void
 }) {
@@ -179,21 +174,12 @@ function UsesCard({
   )
 
   return (
-    <SettingsCard title="Uses" flush>
+    <SettingsCard title="Sending addresses" flush>
       <SettingsList>
         {uses.flatMap((use) => {
+          // The other uses are removed on the page their own card links to.
+          if (use.use !== 'email' || !data || !domain) return []
           const title = USE_TITLE[use.use]
-          const link = links[use.use]
-          if (use.use !== 'email' || !data || !domain) {
-            return [
-              <SettingsListRow
-                key={use.use}
-                title={title}
-                meta={link ? `Remove it in ${pageName(use.use, link)}` : undefined}
-                trailing={link ? <PageLink use={use.use} link={link} /> : undefined}
-              />,
-            ]
-          }
           if (addresses.length === 0) {
             return [
               <SettingsListRow
@@ -210,7 +196,6 @@ function UsesCard({
             <SettingsListRow
               key={a.id}
               title={a.address ?? ''}
-              meta={title}
               trailing={removeButton(() =>
                 setAddressTarget({
                   id: a.id,
@@ -238,7 +223,6 @@ function UsesCard({
         onRemoved={onChanged}
       />
       <RemoveDomainDialog
-        emailOnly
         target={domainTarget}
         onClose={() => setDomainTarget(null)}
         onStart={() => setError(null)}
@@ -279,7 +263,9 @@ export function DomainView({
           <LinkedUseCard key={use.use} use={use} link={links[use.use]} />
         )
       )}
-      <UsesCard uses={uses} links={links} sending={sending} onChanged={onChanged} />
+      {uses.some((u) => u.use === 'email') && sending.data && sending.domain && (
+        <UsesCard uses={uses} sending={sending} onChanged={onChanged} />
+      )}
     </>
   )
 }

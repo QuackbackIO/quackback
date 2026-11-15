@@ -65,6 +65,23 @@ describe('SettingRow', () => {
     )
   })
 
+  it('sits label and control side by side unless asked to stack', () => {
+    render(<SettingRow label="Label" control={<span>c</span>} />)
+    const classes = document.querySelector('[data-slot="setting-row"]')!.className.split(' ')
+    expect(classes).toContain('items-center')
+    expect(classes).not.toContain('flex-col')
+  })
+
+  it('stacks the label over a wide control on a phone when asked, side by side from sm up', () => {
+    render(<SettingRow label="Label" stackOnPhone control={<span>c</span>} />)
+    const classes = document.querySelector('[data-slot="setting-row"]')!.className.split(' ')
+    expect(classes).toContain('flex-col')
+    expect(classes).toContain('sm:flex-row')
+    expect(classes).toContain('sm:items-center')
+    // Stacked, the control takes the row's width rather than being centred.
+    expect(classes).not.toContain('items-center')
+  })
+
   it('SettingRows stacks rows with dividers', () => {
     render(
       <SettingRows>

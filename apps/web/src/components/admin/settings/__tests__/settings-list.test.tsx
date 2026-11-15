@@ -44,6 +44,27 @@ describe('SettingsListRow', () => {
     expect(screen.getByText('42')).toBeTruthy()
   })
 
+  it('wraps a long title on a phone, with the badges dropping under it, and cuts it only from sm up', () => {
+    render(
+      <SettingsList>
+        <SettingsListRow
+          title="Acme Corp <hello@oldbrand.example>"
+          badges={<span>Needs attention</span>}
+          trailing={<button>Send test</button>}
+        />
+      </SettingsList>
+    )
+    const title = screen.getByText('Acme Corp <hello@oldbrand.example>')
+    const classes = title.className.split(' ')
+    // Cut to one line only where there is room for what identifies the row.
+    expect(classes).not.toContain('truncate')
+    expect(classes).toContain('sm:truncate')
+    expect(classes).toContain('wrap-anywhere')
+    const line = title.parentElement!.className.split(' ')
+    expect(line).toContain('flex-wrap')
+    expect(line).toContain('sm:flex-nowrap')
+  })
+
   it('is 52px with a meta line and 44px without', () => {
     render(
       <SettingsList>

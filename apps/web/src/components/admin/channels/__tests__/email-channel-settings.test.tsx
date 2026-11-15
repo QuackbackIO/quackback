@@ -243,6 +243,19 @@ describe('address rows', () => {
     expect(row('Acme Updates <news@acme.com>')).toBeTruthy()
   })
 
+  it('drops the row icon on a phone, leaving its width to the address', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE, domain({ id: 'dom_unused', domain: 'unused.example' })],
+    })
+    for (const title of ['Acme <help@acme.com>', 'unused.example']) {
+      const icon = row(title).querySelector('[data-slot="row-icon"]')!
+      expect(icon.parentElement!.className.split(' ')).toEqual(
+        expect.arrayContaining(['hidden', 'sm:block'])
+      )
+    }
+  })
+
   it('shows no badge and no status line on a live address', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
     const r = row('Acme <help@acme.com>')
@@ -467,7 +480,10 @@ describe('a domain that broke after it was live', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [DEMOTED] })
     expect(screen.getByText('Fix acme.com')).toBeTruthy()
     expect(screen.queryByText('Set up acme.com')).toBeNull()
-    expect(screen.getByText("We can't find these records any more.")).toBeTruthy()
+    // The line also says when we last looked, which is what Check now changes.
+    expect(
+      screen.getByText(/^We can't find these records any more\. Last checked .+\.$/)
+    ).toBeTruthy()
   })
 
   it('keeps the first-time wording for a domain never live', () => {
@@ -535,7 +551,7 @@ describe('domains no address uses', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     expect(deleteDomain).not.toHaveBeenCalled()
     const dialog = await screen.findByRole('alertdialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove domain' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Stop sending email' }))
     await waitFor(() => expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything()))
   })
 
@@ -913,7 +929,7 @@ describe('removing a sending address', () => {
     const user = await openMenu('Acme <help@acme.com>')
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     const dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText(/acme\.com will be removed too\./)).toBeTruthy()
+    expect(within(dialog).getByText(/acme\.com stops sending email too\./)).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
     await waitFor(() => expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything()))
     expect(screen.queryAllByRole('alertdialog')).toHaveLength(0)
@@ -930,7 +946,7 @@ describe('removing a sending address', () => {
     const user = await openMenu('Acme <help@acme.com>')
     await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
     const dialog = await screen.findByRole('alertdialog')
-    expect(dialog.textContent).not.toContain('will be removed too')
+    expect(dialog.textContent).not.toContain('stops sending email too')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove address' }))
     await waitFor(() => expect(deleteAccount).toHaveBeenCalled())
     expect(deleteDomain).not.toHaveBeenCalled()
@@ -1059,28 +1075,37 @@ describe('the support inbox', () => {
     expect(screen.getByText('Unverified senders')).toBeTruthy()
     expect(screen.queryByText('Sender trust')).toBeNull()
     expect(screen.getByText(/fails authentication/).textContent).not.toMatch(/\u2014/)
-    expect(screen.getByRole('button', { name: 'Quarantine' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'Quarantine' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'Accept' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /strict|lenient/i })).toBeNull()
+  })
+
+  it('says which unverified senders choice is on, to a screen reader as well', () => {
+    renderSettings({ inboundRoute: route })
+    const group = screen.getByRole('radiogroup', { name: 'Unverified senders' })
+    const checked = within(group)
+      .getAllByRole('radio')
+      .filter((r) => r.getAttribute('aria-checked') === 'true')
+    expect(checked).toHaveLength(1)
   })
 
   it('stores Accept as lenient and Quarantine as strict', () => {
     renderSettings({ inboundRoute: route })
-    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Accept' }))
     expect(updateTrust).toHaveBeenLastCalledWith('lenient', expect.anything())
-    fireEvent.click(screen.getByRole('button', { name: 'Quarantine' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Quarantine' }))
     expect(updateTrust).toHaveBeenLastCalledWith('strict', expect.anything())
   })
 
   it('shows a refused change inline, not as a toast, until the next attempt', () => {
     updateTrust.mockImplementation(refused(''))
     renderSettings({ inboundRoute: route })
-    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Accept' }))
     expect(screen.getByRole('alert').textContent).toBe("Couldn't change unverified senders.")
     expect(toastError).not.toHaveBeenCalled()
 
     updateTrust.mockReset()
-    fireEvent.click(screen.getByRole('button', { name: 'Quarantine' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Quarantine' }))
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -1494,5 +1519,54 @@ describe('where each part lives', () => {
   it('does not tell an admin to ask an admin', () => {
     renderSettings({ view: 'support' })
     expect(screen.queryByText('An admin adds sending addresses', { exact: false })).toBeNull()
+  })
+})
+
+describe('where focus goes when the Add address dialog closes', () => {
+  const addButton = () => screen.getByRole('button', { name: 'Add address' })
+  const open = async () => {
+    const user = userEvent.setup()
+    addButton().focus()
+    await user.keyboard('{Enter}')
+    await screen.findByRole('dialog')
+    return user
+  }
+  const closed = () => waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+  it('returns to the Add address button on Escape', async () => {
+    renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
+    const user = await open()
+    await user.keyboard('{Escape}')
+    await closed()
+    await waitFor(() => expect(document.activeElement).toBe(addButton()))
+  })
+
+  it('returns to the Add address button on Cancel', async () => {
+    renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
+    const user = await open()
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+    await closed()
+    await waitFor(() => expect(document.activeElement).toBe(addButton()))
+  })
+
+  it('returns to the empty card’s Add address button too', async () => {
+    renderSettings({ view: 'workspace' })
+    const user = await open()
+    await user.keyboard('{Escape}')
+    await closed()
+    await waitFor(() => expect(document.activeElement).toBe(addButton()))
+  })
+
+  it('still returns to the row menu after Edit name', async () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'dom_1', 'Acme Help')],
+      domains: [LIVE],
+    })
+    const user = await openMenu('Acme Help <help@acme.com>')
+    await user.click(screen.getByRole('menuitem', { name: 'Edit name' }))
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+    await closed()
+    await waitFor(() => expect(document.activeElement).not.toBe(addButton()))
   })
 })

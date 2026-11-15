@@ -33,17 +33,22 @@ export function DomainSetupPanel({
   phase,
   onCheckAgain,
   checking = false,
+  hideName = false,
 }: {
   domain: SendingDomainDTO
   phase: DomainPhase
   onCheckAgain: () => void
   checking?: boolean
+  /** On a page already titled with the domain: a verified panel does not name it again. */
+  hideName?: boolean
 }) {
   // Was live once and is not now: the records were there, so this is a fix.
   const broken = phase === 'attention' && domain.verifiedAt !== null
   const checked = lastCheckedAt(domain)
   const checkedAgo = checked ? formatDistanceToNow(checked, { addSuffix: true }) : null
   const checkedTitle = checkedAgo ? `Last checked ${checkedAgo}` : undefined
+  // Said in the line while records are wanted: it is what a press of Check now changes.
+  const lastChecked = checkedAgo ? ` Last checked ${checkedAgo}.` : ''
   const { found, total } = recordsFound(domain)
   const host = phase === 'live' ? null : dnsHostGuide(domain)
 
@@ -52,20 +57,22 @@ export function DomainSetupPanel({
       data-slot="domain-setup-panel"
       className="space-y-3 border-t border-border/50 bg-muted/20 px-4 py-3 sm:px-6"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="text-sm font-medium">
-          {phase === 'live'
-            ? domain.domain
-            : broken
-              ? `Fix ${domain.domain}`
-              : `Set up ${domain.domain}`}
-        </h3>
-        {phase !== 'live' && total > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {found} of {total} records found
-          </p>
-        )}
-      </div>
+      {!(hideName && phase === 'live') && (
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h3 className="text-sm font-medium">
+            {phase === 'live'
+              ? domain.domain
+              : broken
+                ? `Fix ${domain.domain}`
+                : `Set up ${domain.domain}`}
+          </h3>
+          {phase !== 'live' && total > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {found} of {total} records found
+            </p>
+          )}
+        </div>
+      )}
       {host && (
         <p data-slot="dns-host" className="text-[13px] text-muted-foreground">
           Your DNS is at {host.name}.{host.tip ? ` ${host.tip}` : ''}
@@ -100,15 +107,15 @@ export function DomainSetupPanel({
             line wraps within its own space, so the actions stay side by side. */}
         <span
           className="mr-auto min-w-48 flex-1"
-          title={phase === 'setting-up' ? undefined : checkedTitle}
+          title={phase === 'live' ? checkedTitle : undefined}
         >
           {phase === 'live'
             ? 'Keep these records in place.'
             : phase === 'setting-up'
-              ? `We check automatically and will let you know when it's verified.${checkedAgo ? ` Last checked ${checkedAgo}.` : ''}`
+              ? `We check automatically and will let you know when it's verified.${lastChecked}`
               : broken
-                ? "We can't find these records any more."
-                : "We haven't found these records yet."}
+                ? `We can't find these records any more.${lastChecked}`
+                : `We haven't found these records yet.${lastChecked}`}
         </span>
         {phase !== 'live' && (
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -139,7 +146,7 @@ function DmarcAdvisory({ domain }: { domain: SendingDomainDTO }) {
           size="sm"
           aria-expanded={shown}
           onClick={() => setShown((s) => !s)}
-          className="h-auto p-0 text-xs"
+          className="h-auto p-0 text-xs font-medium text-foreground"
         >
           {shown ? 'Hide the record' : 'Show the record'}
         </Button>
