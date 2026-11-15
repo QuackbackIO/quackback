@@ -190,6 +190,20 @@ export function sectionHomeForHost({
   return home === '/' ? null : home
 }
 
+/**
+ * The host a section is served at, when visitors are sent there: its
+ * hostname is verified and the section is on. Null keeps it on the primary
+ * domain. The map is the routable one (`routableSectionDomains` on the server).
+ */
+export function routableSectionHost(
+  section: PortalSection,
+  map: SectionDomainMap,
+  sectionEnabled: Record<PortalSection, boolean>
+): string | null {
+  const entry = map[section]
+  return entry?.verifiedAt && sectionEnabled[section] ? normalizeHost(entry.hostname) : null
+}
+
 export type SectionHostRoute =
   | { kind: 'pass' }
   /** Serve `home` in place of `/`; the address bar keeps `/`. */
@@ -235,10 +249,7 @@ export function resolveSectionHostRoute({
   if (!pathSection) return PASS
 
   const primary = primaryOrigin.replace(/\/$/, '')
-  const routableHost = (section: PortalSection): string | null => {
-    const entry = map[section]
-    return entry?.verifiedAt && sectionEnabled[section] ? normalizeHost(entry.hostname) : null
-  }
+  const routableHost = (section: PortalSection) => routableSectionHost(section, map, sectionEnabled)
 
   const hostSection = sectionOfHost(host, map)
   if (hostSection) {
