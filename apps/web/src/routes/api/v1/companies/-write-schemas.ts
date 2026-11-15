@@ -15,7 +15,5 @@ export const createCompanySchema = z.object({
   customAttributes: z.record(z.string(), z.unknown()).optional(),
 })
 
-/** Body of PATCH /api/v1/companies/:companyId — every field optional, at least one required. */
-export const updateCompanySchema = createCompanySchema
-  .partial()
-  .refine((body) => Object.keys(body).length > 0, { message: 'Provide at least one field' })
+/** Body of PATCH /api/v1/companies/:companyId — every field optional (empty = no change). */
+export const updateCompanySchema = createCompanySchema.partial()

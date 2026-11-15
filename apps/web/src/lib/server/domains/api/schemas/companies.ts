@@ -168,7 +168,7 @@ const CreateCompanyBodySchema = createRequestBodySchema(
 )
 const UpdateCompanyBodySchema = createRequestBodySchema(
   { name: z.string().min(1).max(200).optional(), ...companyWriteFields },
-  'Fields to update; at least one'
+  'Fields to update'
 )
 const companyIdParam = {
   name: 'companyId',
@@ -177,10 +177,7 @@ const companyIdParam = {
   schema: { type: 'string' as const },
   description: 'Company ID',
 }
-const conflict = {
-  description: 'externalId or domain already in use',
-  content: { 'application/json': { schema: ValidationErrorSchema } },
-}
+const conflict = { description: 'externalId or domain already in use' }
 const unauthorized = {
   description: 'Unauthorized',
   content: { 'application/json': { schema: UnauthorizedErrorSchema } },
