@@ -215,12 +215,12 @@ describe('<DomainsCard>', () => {
     expect(screen.queryByText(/Already verified/)).toBeNull()
   })
 
-  it('calls the card Custom domains, the field Domain and the re-check Verify', () => {
+  it('calls the card Web addresses, the field Domain and the re-check Verify', () => {
     renderCard([challenged(null)])
-    expect(screen.getByText('Custom domains')).toBeTruthy()
+    expect(screen.getByText('Web addresses')).toBeTruthy()
     expect(screen.getByLabelText('Domain')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Verify' })).toBeTruthy()
-    expect(screen.queryByText('Web addresses')).toBeNull()
+    expect(screen.queryByText('Custom domains')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
   })
 

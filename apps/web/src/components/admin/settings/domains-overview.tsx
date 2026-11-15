@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { AddDomainButton } from '@/components/admin/settings/add-domain-dialog'
 import { domainPhase, type DomainPhase } from '@/components/admin/channels/sending-domain-view'
 import { verifiedThroughLabel } from '@/lib/shared/domain-proof'
+import { coveringName, opensLabel, type WebAddressOpens } from '@/lib/shared/web-addresses'
 import type { AddedDomainSummary } from '@/lib/server/functions/domains'
 import type {
   HelpCenterDomainSummary,
@@ -22,7 +23,7 @@ import type {
   SignInDomainSummary,
 } from '@/lib/server/functions/domains-overview'
 
-export const WEB_ADDRESSES_TITLE = 'Custom domains'
+export const WEB_ADDRESSES_TITLE = 'Web addresses'
 export const WEB_ADDRESSES_DESCRIPTION = 'Where people reach your portal and help center.'
 
 export const EMPTY_DESCRIPTION = 'Use your own domain for email, web addresses and sign-in.'
@@ -35,15 +36,23 @@ export const USE_COPY: Record<DomainUse, { chip: string; title: string; descript
     description: 'Send replies and announcements from your own address.',
   },
   customDomain: {
-    chip: 'Custom domain',
-    title: 'Custom domain',
-    description: 'Put your portal on feedback.yourcompany.com.',
+    chip: 'Web addresses',
+    title: 'Web addresses',
+    description: 'Open your portal at an address on this domain.',
   },
   signIn: {
     chip: 'Sign-in',
     title: 'Sign-in',
     description: 'Let everyone with an address at your domain sign in with SSO.',
   },
+}
+
+/** A web address on or under a domain, and what it opens. */
+export interface WebAddressEntry {
+  hostname: string
+  opens: WebAddressOpens
+  /** Null when healthy. */
+  state: BadgeState | null
 }
 
 export interface DomainUseStatus {
@@ -53,6 +62,8 @@ export interface DomainUseStatus {
   /** Null when healthy: a normal state shows no badge. */
   state: BadgeState | null
   detail?: string
+  /** The web addresses on or under the domain (its web address use only), by hostname. */
+  addresses?: WebAddressEntry[]
 }
 
 export interface DomainRow {
@@ -88,6 +99,18 @@ const READINESS_STATE = {
   pending: 'pending',
   failed: 'attention',
 } as const satisfies Record<WebAddressSummary['readiness'], BadgeState | null>
+
+/** The state a set of addresses shows as one: attention first, then pending. */
+function worstState(entries: WebAddressEntry[]): BadgeState | null {
+  const states = entries.map((e) => e.state)
+  return states.find((s) => s === 'attention') ?? states.find((s) => s !== null) ?? null
+}
+
+/** An address as a row reads it: what it opens, named when it is not the row's own name. */
+export function webAddressLine(entry: WebAddressEntry, rowName: string): string {
+  const label = opensLabel(entry.opens)
+  return entry.hostname === rowName ? label : `${entry.hostname} · ${label}`
+}
 
 function signInDetail(d: SignInDomainSummary): string | undefined {
   if (d.verified) return d.provenBy ? verifiedThroughLabel(d.provenBy) : undefined
@@ -126,15 +149,30 @@ export function domainRows({
       detail: sendingDetail(d),
     })
   }
+  // A web address under a domain added by name is listed on that domain.
+  const web = new Map<string, WebAddressEntry[]>()
+  const addWeb = (entry: WebAddressEntry) => {
+    const key = coveringName(entry.hostname, addedByName.keys()) ?? keyOf(entry.hostname)
+    web.set(key, [...(web.get(key) ?? []), { ...entry, hostname: keyOf(entry.hostname) }])
+  }
   if (helpCenterDomain) {
-    add(helpCenterDomain.domain, {
-      use: 'customDomain',
+    addWeb({
+      hostname: helpCenterDomain.domain,
+      opens: 'help',
       state: helpCenterDomain.verified ? null : 'pending',
-      detail: 'Help center',
     })
   }
   for (const w of webAddresses) {
-    add(w.hostname, { use: 'customDomain', state: READINESS_STATE[w.readiness] })
+    addWeb({ hostname: w.hostname, opens: 'portal', state: READINESS_STATE[w.readiness] })
+  }
+  for (const [name, entries] of web) {
+    const addresses = entries.sort((a, b) => (a.hostname < b.hostname ? -1 : 1))
+    add(name, {
+      use: 'customDomain',
+      state: worstState(addresses),
+      detail: addresses.map((a) => webAddressLine(a, name)).join(', '),
+      addresses,
+    })
   }
   for (const d of signIn) {
     add(d.name, {

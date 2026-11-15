@@ -6,14 +6,11 @@
  * per-item visibility, label overrides, custom links). Absent config
  * resolves to the default tab order, preserving pre-setting behavior.
  */
-import type {
-  PortalNavConfig,
-  PortalNavItemConfig,
-  PortalNavItemType,
-} from '@/lib/shared/types/settings'
+import type { PortalNavConfig, PortalNavItemConfig } from '@/lib/shared/types/settings'
+import type { PortalSection } from '@/lib/shared/web-addresses'
 
-/** Built-in tab types (everything except admin-defined links). */
-export type PortalBuiltInNavType = Exclude<PortalNavItemType, 'link'>
+/** Built-in tab types (everything except admin-defined links): the portal's sections. */
+export type PortalBuiltInNavType = PortalSection
 
 interface BuiltInNavDefinition {
   to: string

@@ -71,7 +71,7 @@ describe('empty state', () => {
     expect(screen.getByRole('button', { name: 'Add domain' })).toBeInTheDocument()
     expect(screen.queryByRole('link')).toBeNull()
     expect(container).toHaveTextContent(EMPTY_DESCRIPTION)
-    for (const use of ['Email sending', 'Custom domain', 'Sign-in']) {
+    for (const use of ['Email sending', 'Web addresses', 'Sign-in']) {
       expect(container).not.toHaveTextContent(use)
     }
   })
@@ -189,7 +189,8 @@ describe('domain list', () => {
     expect(rowOf('example.io')).not.toHaveTextContent('Pending')
 
     const help = rowOf('help.acme.com')
-    expect(help).toHaveTextContent('Custom domain')
+    expect(help).toHaveTextContent('Web addresses')
+    expect(help).toHaveTextContent('Help center')
     expect(help).toHaveTextContent('Pending')
     expect(help).toHaveAttribute('href', '/admin/settings/domains/help.acme.com')
   })
@@ -257,6 +258,47 @@ describe('domain list', () => {
     // Verified is the normal state: no badge.
     expect(rowOf('acme.net')).not.toHaveTextContent('Pending')
     expect(rowOf('acme.com')).not.toHaveTextContent('Pending')
+  })
+
+  it('lists web addresses under a domain already added on that domain, each with what it opens', () => {
+    const rows = domainRows({
+      now: NOW,
+      sending: [],
+      signIn: [],
+      helpCenterDomain: null,
+      webAddresses: [
+        { hostname: 'status.acme.com', readiness: 'ready' },
+        { hostname: 'help.acme.com', readiness: 'pending' },
+        // Shares a suffix only: its own row.
+        { hostname: 'help.notacme.com', readiness: 'ready' },
+      ],
+      added: [{ name: 'acme.com', verified: true }],
+    })
+    expect(rows.map((r) => r.name)).toEqual(['acme.com', 'help.notacme.com'])
+    const [web] = rows[0]!.uses
+    expect(web).toMatchObject({ use: 'customDomain', state: 'pending' })
+    expect(web!.addresses).toEqual([
+      { hostname: 'help.acme.com', opens: 'portal', state: 'pending' },
+      { hostname: 'status.acme.com', opens: 'portal', state: null },
+    ])
+    render(<DomainList rows={rows} links={linksFor(ALL, { cloudEnabled: true })} />)
+    expect(rowOf('acme.com')).toHaveTextContent('help.acme.com · Whole portal')
+    expect(rowOf('acme.com')).toHaveTextContent('Pending')
+  })
+
+  it("lists the help center's address under the domain it sits on", () => {
+    const rows = domainRows({
+      now: NOW,
+      sending: [],
+      signIn: [],
+      helpCenterDomain: { domain: 'help.acme.com', verified: true },
+      added: [{ name: 'acme.com', verified: true }],
+    })
+    expect(rows.map((r) => r.name)).toEqual(['acme.com'])
+    expect(rows[0]!.uses[0]!.addresses).toEqual([
+      { hostname: 'help.acme.com', opens: 'help', state: null },
+    ])
+    expect(rows[0]!.uses[0]!.detail).toBe('help.acme.com · Help center')
   })
 
   it("rows a Cloud web address as its domain's custom domain use", () => {
