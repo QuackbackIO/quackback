@@ -501,9 +501,9 @@
     "sweep:ui:admin:/admin/settings/channels/email": {
       "dbQueries": 13,
       "serverRequests": 1,
-      "requests": 130,
-      "jsRequests": 126,
-      "jsKB": 431.5,
+      "requests": 131,
+      "jsRequests": 127,
+      "jsKB": 440.7,
       "htmlTransferKB": 32.5,
       "componentRenders": 464
     },
@@ -579,8 +579,8 @@
     "sweep:ui:admin:/admin/settings/domains": {
       "dbQueries": 11,
       "serverRequests": 1,
-      "requests": 107,
-      "jsRequests": 103,
+      "requests": 108,
+      "jsRequests": 104,
       "jsKB": 404.2,
       "htmlTransferKB": 29.7,
       "componentRenders": 346
