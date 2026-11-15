@@ -33,7 +33,7 @@ import {
   OWNERSHIP_VALUE_PREFIX,
 } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
-import { getProvenZones, provenZoneCovering } from './proven-zones'
+import { getProvenZones, provenZoneCovering, zonesBesidesDomain } from './proven-zones'
 
 export type { Domain }
 
@@ -108,7 +108,8 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
   if (!row) throw new NotFoundError('DOMAIN_NOT_FOUND', 'That domain has not been added.')
   await assertCheckRateLimit(row.id)
 
-  const proven = provenZoneCovering(row.name, await getProvenZones())
+  // A verified row is re-checked against its own record, never proven by itself.
+  const proven = provenZoneCovering(row.name, zonesBesidesDomain(row, await getProvenZones()))
   if (proven) return { ok: true, via: proven.source }
 
   // A person is waiting on this, so the lookup gets a second try.
@@ -175,7 +176,11 @@ export async function domainUsesOf(name: string): Promise<DomainUse[]> {
   return uses
 }
 
-/** Remove a domain, refused while any use still holds its name. */
+/**
+ * Remove a domain, refused while any use still holds its name, and while a
+ * verified domain is the only proof left for a verified sign-in domain under
+ * it: removing it would leave that sign-in domain verified on nothing.
+ */
 export async function removeDomain(name: string): Promise<void> {
   const row = await getDomain(name)
   if (!row) throw new NotFoundError('DOMAIN_NOT_FOUND', 'That domain has not been added.')
@@ -184,6 +189,17 @@ export async function removeDomain(name: string): Promise<void> {
       'DOMAIN_IN_USE',
       'Remove what this domain is used for first, then remove the domain.'
     )
+  }
+  if (row.status === 'verified') {
+    const { signInDomainsLosingProof } = await import('./sso-domain-lapse')
+    const { losing, undecided } = await signInDomainsLosingProof(row)
+    const resting = [...losing.map((s) => s.name), ...undecided]
+    if (resting.length > 0) {
+      throw new ConflictError(
+        'DOMAIN_PROVES_SIGN_IN',
+        `Sign-in for ${resting.join(', ')} is verified through this domain. Add its own record or remove it from Sign-in first.`
+      )
+    }
   }
   await db.delete(domains).where(eq(domains.id, row.id))
 }

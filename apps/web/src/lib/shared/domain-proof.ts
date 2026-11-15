@@ -14,8 +14,10 @@ import { EMAIL_SENDING_PERMISSION } from './email-sending-permissions'
  *   sign-on domain.
  * - `web-address`: an operator-managed hostname that is ready. It proves that
  *   exact hostname and nothing under or above it.
+ * - `domain`: a domain added by name on Settings > Domains, verified by its own
+ *   ownership record. It proves the domain and the names under it.
  */
-export type ProvenZoneSource = 'email-sending' | 'sso' | 'web-address'
+export type ProvenZoneSource = 'email-sending' | 'sso' | 'web-address' | 'domain'
 
 /**
  * A source as a viewer may see it: named when they may see what proved it,
@@ -28,6 +30,7 @@ const SOURCE_PERMISSION: Record<ProvenZoneSource, PermissionKey> = {
   'email-sending': EMAIL_SENDING_PERMISSION,
   sso: PERMISSIONS.AUTH_MANAGE,
   'web-address': PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+  domain: PERMISSIONS.SETTINGS_MANAGE,
 }
 
 export function shownProofSource(
@@ -41,6 +44,7 @@ const SOURCE_LABEL: Record<ProvenZoneSource, string> = {
   'email-sending': 'email sending',
   sso: 'single sign-on',
   'web-address': 'a web address',
+  domain: 'domain ownership',
 }
 
 /** "Verified through email sending" and the like. */
