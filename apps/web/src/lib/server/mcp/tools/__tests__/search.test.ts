@@ -18,6 +18,17 @@ vi.mock('@/lib/server/domains/changelog/changelog.service', () => ({
 vi.mock('@/lib/server/domains/changelog/changelog.query', () => ({
   listChangelogs: vi.fn(),
 }))
+vi.mock('@/lib/server/domains/settings/section-links', () => ({
+  getSectionOrigins: async () => ({
+    primary: 'https://acme.example.com',
+    feedback: 'https://ideas.acme.com',
+    roadmap: 'https://acme.example.com',
+    changelog: 'https://acme.example.com',
+    help: 'https://acme.example.com',
+    support: 'https://acme.example.com',
+    status: 'https://acme.example.com',
+  }),
+}))
 vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
   listArticles: vi.fn(),
   getArticleById: vi.fn(),
@@ -103,5 +114,30 @@ describe('search MCP tool', () => {
     expect(mockListInboxPosts).toHaveBeenCalledWith(
       expect.objectContaining({ authorEmail: 'ada@acme.com' })
     )
+  })
+
+  it("links each post at the feedback section's own host", async () => {
+    mockListInboxPosts.mockResolvedValue({
+      items: [
+        {
+          id: 'post_1',
+          title: 'Dark mode',
+          content: '',
+          board: { slug: 'ideas', name: 'Ideas' },
+          voteCount: 0,
+          commentCount: 0,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    })
+    const result = await collect(teamAuth).get('search')!({
+      entity: 'posts',
+      sort: 'newest',
+      showDeleted: false,
+      limit: 20,
+    })
+    const text = (result.content[0] as { text: string }).text
+    expect(text).toContain('https://ideas.acme.com/b/ideas/posts/post_1')
   })
 })
