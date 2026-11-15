@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 
 import { DomainsCard, hostnameRecords } from '../domains-cards'
+import { CUSTOM_DOMAINS_ANCHOR } from '@/lib/shared/domains-permissions'
 import { FULL_NAMES_NOTE } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import type { ShownProofSource } from '@/lib/shared/domain-proof'
@@ -38,6 +39,11 @@ const base = {
 } as const
 
 describe('<DomainsCard>', () => {
+  it('carries the anchor the empty state Custom domain action lands on', () => {
+    const { container } = renderCard([])
+    expect(container.querySelector(`section#${CUSTOM_DOMAINS_ANCHOR}`)).not.toBeNull()
+  })
+
   it('shows the ownership TXT record next to the CNAME for a pending domain', () => {
     renderCard([
       {
