@@ -404,6 +404,7 @@ function UsesCard({
               title={USE_COPY[use].title}
               meta={meta(status)}
               wrapMeta
+              stackTrailing
               badges={status.state ? <StateBadge state={status.state} /> : undefined}
               trailing={
                 <>
