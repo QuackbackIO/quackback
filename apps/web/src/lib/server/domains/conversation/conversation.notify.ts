@@ -36,7 +36,7 @@ import {
 import {
   formatNamedSendingAddress,
   resolveConversationFrom,
-} from '@/lib/server/domains/channel-accounts/channel-account.service'
+} from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { randomUUID } from 'node:crypto'
 import { agentReplyDisplayName, assembleOutboundThreading } from '@quackback/email'
 import { withEmailIdempotencyKey } from '@quackback/email/idempotency'

@@ -93,8 +93,8 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
 // conversation answered from the customer's own support address is a thread
 // that changes identity halfway through.
 const resolveConversationFrom = vi.fn<(...a: unknown[]) => Promise<string | null>>(async () => null)
-vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', async (orig) => ({
-  ...(await orig<typeof import('@/lib/server/domains/channel-accounts/channel-account.service')>()),
+vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', async (orig) => ({
+  ...(await orig<typeof import('@/lib/server/domains/channel-accounts/sender-resolver')>()),
   resolveConversationFrom: (...a: unknown[]) => resolveConversationFrom(...a),
 }))
 
@@ -1263,7 +1263,7 @@ describe('threading headers (P4.6 regression guard)', () => {
       // fromDisplayName so dispatch can wrap EMAIL_FROM.
       expect(
         [call.from, call.fromDisplayName].some(
-          (value) => typeof value === 'string' && value.includes('Agent (Acme)')
+          (value) => typeof value === 'string' && value.includes('Agent from Acme')
         )
       ).toBe(true)
     })

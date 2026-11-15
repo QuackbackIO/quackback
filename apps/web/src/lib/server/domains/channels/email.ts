@@ -1,4 +1,4 @@
-import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { deliverAgentMessageOnChannel } from './deliver-agent-message'
 import type { ChannelAdapter } from './types'
 

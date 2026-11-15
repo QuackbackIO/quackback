@@ -1138,7 +1138,7 @@ interface SendConversationMessageEmailParams {
   correspondence?: boolean
   /** Immediately previous message, quoted one level on the human template. */
   quotedPrevious?: { date: Date | string; name: string; text: string }
-  /** Display name for the From header (`Alex (Acme)`). */
+  /** Display name for the From header (`Alex from Acme`). */
   fromDisplayName?: string
   conversationId?: string | null
   /** Real files to carry as MIME attachments. */

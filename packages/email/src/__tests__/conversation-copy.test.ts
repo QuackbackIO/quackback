@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  agentReplyDisplayName,
   assembleOutboundThreading,
   conversationMessageCopy,
   conversationReplySubject,
@@ -149,5 +150,11 @@ describe('assembleOutboundThreading', () => {
         inboundIds: ['cust-1@x'],
       })
     ).toEqual({})
+  })
+})
+
+describe('agentReplyDisplayName', () => {
+  it('reads as a person from the workspace', () => {
+    expect(agentReplyDisplayName('Alex', 'Acme')).toBe('Alex from Acme')
   })
 })

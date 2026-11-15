@@ -1359,7 +1359,7 @@ async function requesterFacingConfig(
   params: BaseTicketConfigParams & { ticketId: TicketId; assignedTeamId: TeamId | null }
 ): Promise<Record<string, unknown>> {
   const { resolveSendingAddress } =
-    await import('@/lib/server/domains/channel-accounts/channel-account.service')
+    await import('@/lib/server/domains/channel-accounts/sender-resolver')
   const { inboundTicketReplyToAddress } =
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   const { currentMailSlug } =
@@ -1770,7 +1770,7 @@ export async function getChangelogSubscriberTargets(
   } = await import('@/lib/server/db')
   const { getChangelogSettings } = await import('@/lib/server/domains/settings/settings.changelog')
   const { resolveSendingAddress } =
-    await import('@/lib/server/domains/channel-accounts/channel-account.service')
+    await import('@/lib/server/domains/channel-accounts/sender-resolver')
   const { batchGenerateChangelogUnsubscribeTokens } =
     await import('@/lib/server/domains/subscriptions/subscription.service')
 
