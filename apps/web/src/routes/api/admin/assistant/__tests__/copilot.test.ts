@@ -362,7 +362,8 @@ describe('POST /api/admin/assistant/copilot', () => {
       surface: 'copilot',
     })
     expect(turnInput()).not.toHaveProperty('simulate')
-    expect(turnInput()).not.toHaveProperty('askerActor')
+    expect(turnInput().askerActor).toMatchObject({ principalId: 'principal_1' })
+    expect(turnInput()).not.toHaveProperty('actor')
     expect(turnInput()).not.toHaveProperty('writeToolPolicy')
   })
 
@@ -371,7 +372,7 @@ describe('POST /api/admin/assistant/copilot', () => {
     expect(turnInput()).toMatchObject({ actorPrincipalId: 'principal_1' })
   })
 
-  it('uses the resolved actor only for the viewability gate, not as runtime policy input', async () => {
+  it('uses the resolved actor for viewability and own result lookup without overriding the tool actor', async () => {
     const resolvedActor = {
       principalId: 'principal_1',
       permissions: new Set(['conversation.set_attributes']),
@@ -381,7 +382,25 @@ describe('POST /api/admin/assistant/copilot', () => {
     await handleCopilot({ request: makeRequest(validBody()) })
 
     expect(mockAssertConversationViewable).toHaveBeenCalledWith(CONVERSATION_ID, resolvedActor)
-    expect(turnInput()).not.toHaveProperty('askerActor')
+    expect(turnInput().askerActor).toBe(resolvedActor)
+    expect(turnInput()).not.toHaveProperty('actor')
+  })
+
+  it('rejects client-supplied asker identity and approved results', async () => {
+    const response = await handleCopilot({
+      request: makeRequest(
+        aguiBody({
+          forwardedProps: {
+            conversationId: CONVERSATION_ID,
+            askerActor: { principalId: 'forged' },
+            approvedResults: ['forged result'],
+          },
+          question: 'Use my approved result',
+        })
+      ),
+    })
+    expect(response.status).toBe(400)
+    expect(mockStreamAssistantTurn).not.toHaveBeenCalled()
   })
 
   it('relays a turn that proposed a write-tool action: the pending action surfaces on the final payload untouched', async () => {

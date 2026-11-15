@@ -95,7 +95,7 @@ export async function handleCopilot({ request }: { request: Request }): Promise<
     'A valid conversationId or ticketId is required'
   )
   if (!gate.ok) return gate.response
-  const { auth, parsed, conversationId, ticketId, agui } = gate
+  const { auth, actor, parsed, conversationId, ticketId, agui } = gate
 
   // Copilot Q&A capability gate (v3 config). A 404 NOT_FOUND shape, one
   // config knob up. A workspace can keep Copilot's identity while turning
@@ -140,6 +140,7 @@ export async function handleCopilot({ request }: { request: Request }): Promise<
           // the per-teammate breakdown in analytics/copilot-usage.ts; Quinn's
           // own principal id above never identifies the human on the other end.
           actorPrincipalId: auth.principal.id,
+          askerActor: actor,
           sourceTypes: parsed.sourceTypes,
           signal: request.signal,
         },
