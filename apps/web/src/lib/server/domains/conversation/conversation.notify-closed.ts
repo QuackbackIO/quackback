@@ -4,6 +4,7 @@ import { resolveReplyRecipient } from './conversation.recipient'
 import { conversationEnvelope, recordSent } from './conversation.email-envelope'
 import { visitorConversationLink } from './conversation.notify'
 import { buildHookContext } from '@/lib/server/events/hook-context'
+import { hookOrigins } from '@/lib/server/events/hook-origins'
 import { logger } from '@/lib/server/logger'
 import { ensureEmailLogSink } from '@/lib/server/email/email-log.sink'
 import { isCsatRatedOrEmailed } from './csat-request.service'
@@ -52,7 +53,7 @@ export async function notifyConversationClosed(opts: {
     const { isPortalSupportEnabled } =
       await import('@/lib/server/domains/settings/settings.support')
     const ctaUrl = visitorConversationLink(
-      ctx.portalBaseUrl,
+      hookOrigins(ctx),
       opts.conversationId,
       await isPortalSupportEnabled()
     )

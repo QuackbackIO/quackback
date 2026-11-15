@@ -53,6 +53,8 @@ import type { HookTarget, EmailTarget, NoteMentionEmailConfig } from './hook-typ
 import { truncate } from './hook-utils'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { type HookContext } from './hook-context'
+import { hookOrigins } from './hook-origins'
+import { sectionUrl, type SectionOrigins } from '@/lib/shared/section-links'
 import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
 import { logger } from '@/lib/server/logger'
 import { isTestEvent } from './test-event'
@@ -315,7 +317,7 @@ async function buildEmailTargets(
   postId: PostId,
   context: HookContext
 ): Promise<HookTarget[]> {
-  const eventConfig = await buildEmailEventConfig(event, context.portalBaseUrl)
+  const eventConfig = await buildEmailEventConfig(event, hookOrigins(context))
   if (!eventConfig) return []
 
   // Batch get notification preferences (single query instead of N queries)
@@ -448,8 +450,8 @@ async function isActorTeamMember(actor: EventActor): Promise<boolean> {
 /**
  * Build a post URL from base URL and post reference.
  */
-function buildPostUrl(rootUrl: string, post: { boardSlug: string; id: string }): string {
-  return `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+function buildPostUrl(origins: SectionOrigins, post: { boardSlug: string; id: string }): string {
+  return sectionUrl('feedback', `/b/${post.boardSlug}/posts/${post.id}`, origins)
 }
 
 /**
@@ -464,13 +466,13 @@ function resolveCommenterName(comment: { authorName?: string; authorEmail?: stri
  */
 async function buildEmailEventConfig(
   event: EventData,
-  rootUrl: string
+  origins: SectionOrigins
 ): Promise<Record<string, unknown> | null> {
   if (event.type === 'post.status_changed') {
     const { post, previousStatus, newStatus } = event.data
     return {
       postTitle: post.title,
-      postUrl: buildPostUrl(rootUrl, post),
+      postUrl: buildPostUrl(origins, post),
       previousStatus,
       newStatus,
     }
@@ -480,7 +482,7 @@ async function buildEmailEventConfig(
     const { comment, post } = event.data
     return {
       postTitle: post.title,
-      postUrl: `${buildPostUrl(rootUrl, post)}#comment-${comment.id}`,
+      postUrl: `${buildPostUrl(origins, post)}#comment-${comment.id}`,
       commenterName: resolveCommenterName(comment),
       commentPreview: truncate(commentPlainText(comment), 200),
       isTeamMember: await isActorTeamMember(event.actor),
@@ -498,7 +500,7 @@ async function buildNotificationTarget(
   subscribers: Subscriber[],
   context: HookContext
 ): Promise<HookTarget | null> {
-  const config = await buildNotificationConfig(event, context.portalBaseUrl)
+  const config = await buildNotificationConfig(event, hookOrigins(context))
   if (!config) return null
 
   return {
@@ -515,7 +517,7 @@ async function buildNotificationTarget(
  */
 async function buildNotificationConfig(
   event: EventData,
-  rootUrl: string
+  origins: SectionOrigins
 ): Promise<Record<string, unknown> | null> {
   if (event.type === 'post.status_changed') {
     const { post, previousStatus, newStatus } = event.data
@@ -523,7 +525,7 @@ async function buildNotificationConfig(
       postId: post.id,
       postTitle: post.title,
       boardSlug: post.boardSlug,
-      postUrl: buildPostUrl(rootUrl, post),
+      postUrl: buildPostUrl(origins, post),
       previousStatus,
       newStatus,
     }
@@ -535,7 +537,7 @@ async function buildNotificationConfig(
       postId: post.id,
       postTitle: post.title,
       boardSlug: post.boardSlug,
-      postUrl: `${buildPostUrl(rootUrl, post)}#comment-${comment.id}`,
+      postUrl: `${buildPostUrl(origins, post)}#comment-${comment.id}`,
       commentId: comment.id,
       commenterName: resolveCommenterName(comment),
       commentPreview: truncate(commentPlainText(comment), 200),
@@ -1289,9 +1291,9 @@ async function pairConversationId(ticketId: TicketId): Promise<string | null> {
  * the converged Messages surface (there is no standalone requester ticket
  * page).
  */
-async function requesterTicketUrl(portalBaseUrl: string, ticketId: TicketId): Promise<string> {
+async function requesterTicketUrl(origins: SectionOrigins, ticketId: TicketId): Promise<string> {
   const conversationId = await pairConversationId(ticketId)
-  return conversationId ? `${portalBaseUrl}/support/${conversationId}` : `${portalBaseUrl}/support`
+  return sectionUrl('support', conversationId ? `/support/${conversationId}` : '/support', origins)
 }
 
 /** Agent inbox deep link (tickets + conversations both select by `?i=`). */
@@ -1512,7 +1514,7 @@ async function buildRequesterOrAgentTargets(params: {
       requesterPrincipalId != null && id === requesterPrincipalId
         ? await requesterFacingConfig({
             ...facts,
-            ctaUrl: await requesterTicketUrl(context.portalBaseUrl, params.ticketId),
+            ctaUrl: await requesterTicketUrl(hookOrigins(context), params.ticketId),
             assignedTeamId: params.assignedTeamId,
             context,
           })
@@ -1573,7 +1575,7 @@ export async function getTicketCreatedEmailTargets(
     ticketId,
     ticketLabel: formatTicketNumber(t.number),
     title,
-    ctaUrl: await requesterTicketUrl(context.portalBaseUrl, ticketId),
+    ctaUrl: await requesterTicketUrl(hookOrigins(context), ticketId),
     assignedTeamId: (assignedTeamId as TeamId | null) ?? null,
     context,
   })
@@ -1978,7 +1980,7 @@ export async function getChangelogSubscriberTargets(
   const targets: HookTarget[] = []
 
   // Build changelog URL
-  const changelogUrl = `${context.portalBaseUrl}/changelog`
+  const changelogUrl = sectionUrl('changelog', '/changelog', hookOrigins(context))
 
   // Email targets — gated on the per-principal notification matrix
   // (changelog_published/email, which subsumes emailMuted) and the
@@ -2204,7 +2206,7 @@ export async function getStatusSubscriberTargets(
   if (eligible.length === 0) return []
 
   const targets: HookTarget[] = []
-  const incidentUrl = `${context.portalBaseUrl}/status/${incident.id}`
+  const incidentUrl = sectionUrl('status', `/status/${incident.id}`, hookOrigins(context))
 
   // The publish payload doesn't carry the first update body; fetch the
   // earliest update (the one written at create time) for the email body.
