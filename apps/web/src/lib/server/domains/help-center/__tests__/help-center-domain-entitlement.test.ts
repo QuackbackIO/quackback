@@ -14,20 +14,17 @@ import { HC_DOMAIN_CLOUD_MANAGED } from '../help-center-domain.service'
 
 const hoisted = vi.hoisted(() => ({
   mockGetWorkspaceSettings: vi.fn(),
-  mockUpdateHelpCenterConfig: vi.fn(),
-  mockGetHelpCenterConfig: vi.fn(),
-}))
-
-// The domain the help center is set to also goes on Settings > Domains; that
-// row is covered by its own database test.
-vi.mock('@/lib/server/domains/domain-proof/domains.service', () => ({
-  ensureDomain: async () => null,
+  mockSetSectionDomain: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getWorkspaceSettings: hoisted.mockGetWorkspaceSettings,
-  getHelpCenterConfig: hoisted.mockGetHelpCenterConfig,
-  updateHelpCenterConfig: hoisted.mockUpdateHelpCenterConfig,
+}))
+
+// The write itself (the help entry in the section map) is covered by the
+// section domains database test; this file is about the gate in front of it.
+vi.mock('@/lib/server/domains/settings/section-domains.service', () => ({
+  setSectionDomain: hoisted.mockSetSectionDomain,
 }))
 
 const { setHelpCenterDomain } = await import('../help-center-domain.service')
@@ -38,10 +35,13 @@ function withCloud(cloud: unknown) {
 
 beforeEach(() => {
   hoisted.mockGetWorkspaceSettings.mockReset()
-  hoisted.mockUpdateHelpCenterConfig.mockReset()
-  hoisted.mockUpdateHelpCenterConfig.mockResolvedValue({
-    domain: { domain: 'help.acme.com', verifiedAt: null },
-  })
+  hoisted.mockSetSectionDomain.mockReset()
+  hoisted.mockSetSectionDomain.mockImplementation(
+    async (_section: string, hostname: string | null) => ({
+      ok: true,
+      sectionDomains: hostname ? { help: { hostname, verifiedAt: null } } : {},
+    })
+  )
 })
 
 describe('setHelpCenterDomain — unconfigured install', () => {
@@ -54,7 +54,7 @@ describe('setHelpCenterDomain — unconfigured install', () => {
       domain: 'help.acme.com',
       verifiedAt: null,
     })
-    expect(hoisted.mockUpdateHelpCenterConfig).toHaveBeenCalledOnce()
+    expect(hoisted.mockSetSectionDomain).toHaveBeenCalledExactlyOnceWith('help', 'help.acme.com')
   })
 })
 
@@ -67,7 +67,7 @@ describe('setHelpCenterDomain — cloud amputates the local writer', () => {
         code: HC_DOMAIN_CLOUD_MANAGED,
         statusCode: 403,
       })
-      expect(hoisted.mockUpdateHelpCenterConfig).not.toHaveBeenCalled()
+      expect(hoisted.mockSetSectionDomain).not.toHaveBeenCalled()
     }
   )
 
@@ -81,9 +81,6 @@ describe('setHelpCenterDomain — cloud amputates the local writer', () => {
 
   it('still lets a cloud workspace clear a leftover domain', async () => {
     withCloud({ enabled: true, plan: 'free' })
-    hoisted.mockUpdateHelpCenterConfig.mockResolvedValue({
-      domain: { domain: null, verifiedAt: null },
-    })
     await expect(setHelpCenterDomain(null)).resolves.toEqual({ domain: null, verifiedAt: null })
     await expect(setHelpCenterDomain('   ')).resolves.toEqual({ domain: null, verifiedAt: null })
   })

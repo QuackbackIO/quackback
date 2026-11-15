@@ -12,7 +12,7 @@ import {
   verifyHelpCenterDomain,
   checkHelpCenterDomainStatus,
 } from '@/lib/server/domains/help-center/help-center-domain.service'
-import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
+import { getSectionDomains } from '@/lib/server/domains/settings/section-domains.service'
 import { getBaseUrl } from '@/lib/server/config'
 
 export const updateHelpCenterDomainFn = createServerFn({ method: 'POST' })
@@ -34,9 +34,9 @@ export const getHelpCenterDomainStatusFn = createServerFn({ method: 'GET' })
   .validator(z.object({}))
   .handler(async () => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const config = await getHelpCenterConfig()
-    if (!config.domain?.domain) return null
-    const status = await checkHelpCenterDomainStatus(config.domain.domain)
+    const help = (await getSectionDomains()).help
+    if (!help) return null
+    const status = await checkHelpCenterDomainStatus(help.hostname)
     return { ...status, cnameTarget: instanceHostname() }
   })
 
