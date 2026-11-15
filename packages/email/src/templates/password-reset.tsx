@@ -5,11 +5,16 @@ import { typography, button, utils } from './shared-styles'
 interface PasswordResetEmailProps {
   resetLink: string
   logoUrl?: string
+  /** Names the account's workspace in the inbox preview; Quackback without one. */
+  workspaceName?: string
 }
 
-export function PasswordResetEmail({ resetLink, logoUrl }: PasswordResetEmailProps) {
+export function PasswordResetEmail({ resetLink, logoUrl, workspaceName }: PasswordResetEmailProps) {
   return (
-    <EmailLayout preview="Reset your Quackback password" logoUrl={logoUrl}>
+    <EmailLayout
+      preview={`Reset your ${workspaceName?.trim() || 'Quackback'} password`}
+      logoUrl={logoUrl}
+    >
       {/* Content */}
       <Heading style={{ ...typography.h1, textAlign: 'center' }}>Reset your password</Heading>
       <Text style={{ ...typography.text, textAlign: 'center' }}>

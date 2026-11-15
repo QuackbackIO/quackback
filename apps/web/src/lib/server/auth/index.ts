@@ -208,7 +208,7 @@ async function createAuth() {
     twoFactor: twoFactorTable,
     eq,
   } = await import('@/lib/server/db')
-  const { sendPasswordResetEmail, isEmailConfigured } = await import('@quackback/email')
+  const { sendPasswordResetLink } = await import('./password-reset-email')
   const { getPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders, socialProviderConfig } = await import('./auth-providers')
@@ -520,29 +520,7 @@ async function createAuth() {
       maxPasswordLength: 128,
       autoSignIn: true,
       async sendResetPassword({ user, url }) {
-        if (!isEmailConfigured()) {
-          log.warn(
-            { user_id: user.id },
-            'password reset requested but email is not configured; link not delivered'
-          )
-          return
-        }
-        // Account class: the reset link is a capability over THIS account, so
-        // the recipient is looked up by id and can never be a contact address
-        // somebody else supplied.
-        const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
-        const to = await resolveAccountRecipient(user.id as UserId)
-        if (!to) {
-          log.warn(
-            { user_id: user.id },
-            'password reset requested but the account has no deliverable address'
-          )
-          return
-        }
-        const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-        const settings = await db.query.settings.findFirst({ columns: { logoKey: true } })
-        const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
-        await sendPasswordResetEmail({ to, resetLink: url, logoUrl })
+        await sendPasswordResetLink(user, url)
       },
       resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24 hours
       // Completing a reset proves inbox ownership (the user received and
