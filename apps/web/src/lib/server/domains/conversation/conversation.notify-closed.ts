@@ -105,7 +105,6 @@ export async function notifyConversationClosed(opts: {
       ratingUrls,
       replyTo: replyTo ?? undefined,
       from: from ?? undefined,
-      fromDisplayName: from ? undefined : fromDisplayName,
       messageId: messageId ?? undefined,
       inReplyTo: inReplyTo ?? undefined,
       references,

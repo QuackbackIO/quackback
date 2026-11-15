@@ -813,10 +813,11 @@ describe('notifyCsatRequestEmail', () => {
         'https://acme.example.com/csat?token=signed-token&rating=4',
         'https://acme.example.com/csat?token=signed-token&rating=5',
       ],
+      // No name of its own for the platform address: the email package names
+      // it for `workspaceName` (platform-display-name.test.ts).
       workspaceName: 'Acme',
       logoUrl: undefined,
       from: undefined,
-      fromDisplayName: 'Acme',
       conversationSubject: undefined,
       replyTo: undefined,
       // No sending domain configured, so there is nothing to mint an id on.
@@ -848,8 +849,9 @@ describe('notifyCsatRequestEmail', () => {
       conversationSubject: 'Help with billing',
       inReplyTo: 'cust-inbound@mail.example',
       references: ['cust-inbound@mail.example', 'c.1.aaa@mail.example'],
-      fromDisplayName: 'Acme',
+      workspaceName: 'Acme',
     })
+    expect(call.fromDisplayName).toBeUndefined()
     // The id that went out is recorded, so a reply quoting it routes home.
     expect(call.messageId).toEqual(expect.any(String))
     expect(recordOutboundEmail).toHaveBeenCalledWith(call.messageId, conversationId)
@@ -874,7 +876,6 @@ describe('notifyCsatRequestEmail', () => {
     expect(sendCsatRequestEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         from: 'Acme <support@tenant-a.example>',
-        fromDisplayName: undefined,
       })
     )
   })

@@ -1,8 +1,8 @@
 /**
- * Email channel settings: inbound route (edit/remove + sender trust), the
- * sending addresses, and which of them each kind of email is sent from. An
- * address on a domain that is not live yet carries that domain's setup panel
- * under it.
+ * Email channel settings: the support inbox (its forwarding address and what
+ * happens to unverified senders), the sending addresses, and which of them each
+ * kind of email is sent from. An address on a domain that is not live yet
+ * carries that domain's setup panel under it.
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -21,7 +21,6 @@ import {
   useSendTestEmail,
   useUpdateInboundTrust,
   useClearInboundForwarding,
-  useUpdateSendingAddressSmtp,
 } from '@/lib/client/mutations/channel-accounts'
 import type { EmailSendersDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { DomainSetupPanel } from './domain-setup-panel'
@@ -39,15 +38,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { cn } from '@/lib/shared/utils'
 import { toastError } from '@/lib/client/error-notice'
 
@@ -66,8 +56,6 @@ const NO_SENDERS: EmailSendersDTO = {
   changelog: null,
   status: null,
 }
-
-const fail = (msg: string) => () => toast.error(msg)
 
 /**
  * Show what the server actually refused, falling back to the generic line.
@@ -136,6 +124,12 @@ function inboundTarget(
   return typeof t === 'string' ? t : null
 }
 
+/** How the two inbound trust settings are offered. */
+const TRUST_OPTIONS = [
+  { value: 'strict', label: 'Quarantine' },
+  { value: 'lenient', label: 'Accept' },
+] as const
+
 function InboundRouteSection({
   forwardingTarget,
   platformAddress,
@@ -148,16 +142,20 @@ function InboundRouteSection({
   const [value, setValue] = useState('')
   const [editing, setEditing] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  // One inline line for the last failed action, as on the Sending addresses card.
+  const [actionError, setActionError] = useState<string | null>(null)
   const create = useCreateInboundRoute()
   const clear = useClearInboundForwarding()
   const trust = useUpdateInboundTrust()
+  const showError = (fallback: string) => (error: unknown) =>
+    setActionError(errorText(error, fallback))
 
   const showEditor = !forwardingTarget || editing
 
   return (
     <SettingsCard
-      title="Inbound route"
-      description="Forward your support inbox here so replies become conversations."
+      title="Support inbox"
+      description="Forward your support address here so its email becomes conversations."
     >
       {platformAddress && (
         <p className="mb-4 text-[13px] text-muted-foreground">
@@ -211,17 +209,18 @@ function InboundRouteSection({
           <Button
             variant="outline"
             disabled={!value.trim() || create.isPending}
-            onClick={() =>
+            onClick={() => {
+              setActionError(null)
               create.mutate(value.trim(), {
                 onSuccess: () => {
                   setValue('')
                   setEditing(false)
                 },
-                onError: fail('Could not set the route'),
+                onError: showError("Couldn't save the forwarding address."),
               })
-            }
+            }}
           >
-            {forwardingTarget ? 'Save' : 'Set route'}
+            Save
           </Button>
           {editing && (
             <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
@@ -233,43 +232,54 @@ function InboundRouteSection({
 
       <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4">
         <div className="pr-4">
-          <p className="text-sm font-medium">Sender trust</p>
+          <p className="text-sm font-medium">Unverified senders</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Strict quarantines mail that fails authentication. Lenient accepts it with an unverified
-            badge.
+            Quarantine moves email that fails authentication to Spam. Accept lets it in, marked
+            unverified.
           </p>
         </div>
         <div className="inline-flex shrink-0 rounded-lg border border-border p-0.5">
-          {(['strict', 'lenient'] as const).map((option) => (
+          {TRUST_OPTIONS.map((option) => (
             <button
-              key={option}
+              key={option.value}
               type="button"
               disabled={trust.isPending}
-              onClick={() =>
-                trust.mutate(option, { onError: reason('Could not update sender trust') })
-              }
+              onClick={() => {
+                setActionError(null)
+                trust.mutate(option.value, {
+                  onError: showError("Couldn't change unverified senders."),
+                })
+              }}
               className={cn(
-                'rounded-md px-2.5 py-1 text-[13px] font-medium capitalize transition-colors',
-                inboundTrust === option
+                'rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors',
+                inboundTrust === option.value
                   ? 'bg-primary/10 text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              {option}
+              {option.label}
             </button>
           ))}
         </div>
       </div>
+      {actionError && (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {actionError}
+        </p>
+      )}
       <ConfirmDialog
         open={confirmClear}
         onOpenChange={setConfirmClear}
-        title="Delete inbound route?"
-        description="Forwarded email stops becoming conversations until you set a route again."
-        confirmLabel="Delete route"
+        title="Remove the forwarding address?"
+        description="Forwarded email stops becoming conversations until you set an address again."
+        confirmLabel="Remove"
         variant="destructive"
         isPending={clear.isPending}
         onConfirm={() => {
-          clear.mutate(undefined, { onError: reason('Could not remove the route') })
+          setActionError(null)
+          clear.mutate(undefined, {
+            onError: showError("Couldn't remove the forwarding address."),
+          })
           setConfirmClear(false)
         }}
       />
@@ -286,8 +296,6 @@ type SendingAddress = {
   sendingDomain: { domain: string; status: string } | null
   createdAt?: string
 }
-
-type SmtpConfig = { host?: string; port?: number; secure?: boolean; user?: string }
 
 /** The bare address inside a `Name <address>` From, or the string as given. */
 const bareAddress = (from: string): string => /<([^>]+)>/.exec(from)?.[1] ?? from
@@ -393,9 +401,6 @@ function SendingAddressesSection({
   guardPermitsAny: boolean
 }) {
   const [dialog, setDialog] = useState<SendingAddressDialogTarget | null>(null)
-  const [smtpFor, setSmtpFor] = useState<{ id: string; address: string; smtp?: SmtpConfig } | null>(
-    null
-  )
   const [domainRemoveTarget, setDomainRemoveTarget] = useState<{
     id: string
     domain: string
@@ -459,7 +464,6 @@ function SendingAddressesSection({
     <SettingsCard title="Sending addresses" description="Addresses email can be sent from." flush>
       <SettingsList>
         {rows.map(({ a, domain, phase }) => {
-          const smtp = a.config.smtp as SmtpConfig | undefined
           const first = firstOnDomain.has(a.id)
           // A live domain whose ownership record went missing still needs a record.
           const warned = !!domain && first && ownershipWarning(domain) !== null
@@ -467,7 +471,9 @@ function SendingAddressesSection({
           const open = domain ? phase !== 'live' || (expanded[domain.id] ?? warned) : false
           const address = a.address ?? ''
           const title = senderLabel(a, workspaceName)
-          const verified = !!domain && phase === 'live'
+          // Testable wherever real sends would use the address: a live domain,
+          // or any address on a server whose guard permits every From.
+          const testable = guardPermitsAny || (!!domain && phase === 'live')
           const items = [
             {
               label: 'Edit name',
@@ -482,10 +488,6 @@ function SendingAddressesSection({
                   },
                 ]
               : []),
-            {
-              label: 'SMTP override',
-              onSelect: () => setSmtpFor({ id: a.id, address, smtp }),
-            },
             {
               label: 'Remove',
               destructive: true,
@@ -510,7 +512,7 @@ function SendingAddressesSection({
                 wrapMeta={phase !== 'live' || warned}
                 badges={<PhaseBadge phase={phase} />}
                 trailing={
-                  verified ? (
+                  testable ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -518,12 +520,7 @@ function SendingAddressesSection({
                       onClick={() => {
                         setActionError(null)
                         sendTest.mutate(a.id, {
-                          onSuccess: (r) =>
-                            toast.success(
-                              bareAddress(r.from) === address
-                                ? `Test sent to ${r.to}`
-                                : `Test sent to ${r.to} from ${bareAddress(r.from)}`
-                            ),
+                          onSuccess: (r) => toast.success(`Test sent to ${r.to}`),
                           onError: showError("Couldn't send the test email."),
                         })
                       }}
@@ -588,7 +585,6 @@ function SendingAddressesSection({
         workspaceName={workspaceName}
         onClose={() => setDialog(null)}
       />
-      <SmtpOverrideDialog target={smtpFor} onClose={() => setSmtpFor(null)} />
       <ConfirmDialog
         open={removeTarget !== null}
         onOpenChange={(open) => !open && setRemoveTarget(null)}
@@ -641,123 +637,6 @@ function SendingAddressesSection({
         }}
       />
     </SettingsCard>
-  )
-}
-
-function SmtpOverrideDialog({
-  target,
-  onClose,
-}: {
-  target: {
-    id: string
-    address: string
-    smtp?: { host?: string; port?: number; secure?: boolean; user?: string }
-  } | null
-  onClose: () => void
-}) {
-  return (
-    <Dialog open={!!target} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
-        {target ? <SmtpOverrideForm key={target.id} target={target} onClose={onClose} /> : null}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function SmtpOverrideForm({
-  target,
-  onClose,
-}: {
-  target: {
-    id: string
-    address: string
-    smtp?: { host?: string; port?: number; secure?: boolean; user?: string }
-  }
-  onClose: () => void
-}) {
-  const save = useUpdateSendingAddressSmtp()
-  const [host, setHost] = useState(target.smtp?.host ?? '')
-  const [port, setPort] = useState(String(target.smtp?.port ?? 587))
-  const [user, setUser] = useState(target.smtp?.user ?? '')
-  const [secure, setSecure] = useState(target.smtp?.secure ?? true)
-
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>SMTP override</DialogTitle>
-        <DialogDescription>
-          Send from {target.address} through a dedicated SMTP server.
-        </DialogDescription>
-      </DialogHeader>
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="smtp-host">Host</Label>
-          <Input
-            id="smtp-host"
-            value={host}
-            onChange={(e) => setHost(e.target.value)}
-            placeholder="smtp.example.com"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="smtp-port">Port</Label>
-            <Input
-              id="smtp-port"
-              inputMode="numeric"
-              value={port}
-              onChange={(e) => setPort(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="smtp-user">Username</Label>
-            <Input id="smtp-user" value={user} onChange={(e) => setUser(e.target.value)} />
-          </div>
-        </div>
-        <div className="flex items-center justify-between py-1">
-          <Label htmlFor="smtp-secure">Use TLS</Label>
-          <Switch id="smtp-secure" checked={secure} onCheckedChange={setSecure} />
-        </div>
-      </div>
-      <DialogFooter>
-        {target.smtp && (
-          <Button
-            variant="ghost"
-            disabled={save.isPending}
-            onClick={() =>
-              save.mutate(
-                { id: target.id, smtp: null },
-                {
-                  onSuccess: onClose,
-                  onError: reason('Could not clear the override'),
-                }
-              )
-            }
-          >
-            Clear
-          </Button>
-        )}
-        <Button
-          disabled={!host.trim() || !user.trim() || save.isPending}
-          onClick={() => {
-            const parsedPort = Number(port)
-            if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
-              toast.error('Enter a valid port.')
-              return
-            }
-            save.mutate(
-              {
-                id: target.id,
-                smtp: { host: host.trim(), port: parsedPort, secure, user: user.trim() },
-              },
-              { onSuccess: onClose, onError: reason('Could not save the override') }
-            )
-          }}
-        >
-          Save
-        </Button>
-      </DialogFooter>
-    </>
   )
 }
 

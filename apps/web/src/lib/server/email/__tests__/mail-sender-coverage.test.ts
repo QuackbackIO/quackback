@@ -70,11 +70,6 @@ const MAIL_FROM_CLASS: Record<string, 'platform' | 'workspace-identity'> = {
   sendTicketEventEmail: 'workspace-identity',
   sendChangelogPublishedEmail: 'workspace-identity',
   sendRawEmail: 'workspace-identity',
-
-  // Exported with no production caller. Classified rather than deleted so the
-  // decision to remove them is a separate, deliberate change.
-  sendWelcomeEmail: 'platform',
-  sendFeedbackLinkedEmail: 'platform',
 }
 
 const SENDER_MODULE = path.resolve(__dirname, '../../../../../../../packages/email/src/index.ts')

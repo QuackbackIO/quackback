@@ -533,7 +533,10 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
   })
 
   describe('sendTestEmail', () => {
-    it('sends from the address to the person asking, and says which From went out', async () => {
+    const test = (addressId: ChannelAccountId, workspaceName = 'Acme') =>
+      sendTestEmail({ addressId, userId: 'user_admin' as UserId, workspaceName })
+
+    it('sends from the address to the person asking, named as a real send names it', async () => {
       const teamId = await seedTeam()
       await seedDomain(teamId, 'acme.com', 'verified')
       const account = await addSendingAddress({
@@ -543,17 +546,43 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       accountEmails.set('user_admin', 'admin@example.com')
       accountEmails.set('user_other', 'other@example.com')
 
-      const result = await sendTestEmail({
-        addressId: account.id,
-        userId: 'user_admin' as UserId,
-      })
+      const result = await test(account.id)
 
       expect(sent).toHaveBeenCalledTimes(1)
       expect(sent.mock.calls[0][0]).toMatchObject({
-        from: 'help@acme.com',
+        from: 'Acme <help@acme.com>',
         to: 'admin@example.com',
       })
-      expect(result).toEqual({ from: 'help@acme.com', to: 'admin@example.com' })
+      expect(result).toEqual({ from: 'Acme <help@acme.com>', to: 'admin@example.com' })
+    })
+
+    it('names the From with the address its own sender name', async () => {
+      const teamId = await seedTeam()
+      await seedDomain(teamId, 'acme.com', 'verified')
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@acme.com',
+        senderName: 'Acme Support',
+      })
+      accountEmails.set('user_admin', 'admin@example.com')
+
+      await test(account.id)
+
+      expect(sent.mock.calls[0][0].from).toBe('Acme Support <help@acme.com>')
+    })
+
+    it('sends the bare address when there is no name to give it', async () => {
+      const teamId = await seedTeam()
+      await seedDomain(teamId, 'acme.com', 'verified')
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@acme.com',
+      })
+      accountEmails.set('user_admin', 'admin@example.com')
+
+      await test(account.id, '')
+
+      expect(sent.mock.calls[0][0].from).toBe('help@acme.com')
     })
 
     it('refuses while the domain is not live', async () => {
@@ -563,13 +592,29 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         address: 'help@acme.com',
       })
       accountEmails.set('user_admin', 'admin@example.com')
-      await expect(
-        sendTestEmail({ addressId: account.id, userId: 'user_admin' as UserId })
-      ).rejects.toThrow(/acme\.com/)
+      await expect(test(account.id)).rejects.toThrow(/acme\.com/)
       expect(sent).not.toHaveBeenCalled()
     })
 
-    it('goes through the send guard, and reports the default address when it falls back', async () => {
+    it('sends from an unverified domain on a single-workspace server, as real sends do', async () => {
+      // One workspace: the send guard permits any From, so replies already
+      // leave as this address. A test that refused it would disagree with them.
+      vi.stubEnv('QUACKBACK_TENANCY', '')
+      const teamId = await seedTeam()
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@acme.com',
+      })
+      expect((await domainsOf(teamId))[0]).toMatchObject({ status: 'pending' })
+      accountEmails.set('user_admin', 'admin@example.com')
+
+      const result = await test(account.id)
+
+      expect(sent.mock.calls[0][0].from).toBe('Acme <help@acme.com>')
+      expect(result.from).toBe('Acme <help@acme.com>')
+    })
+
+    it('goes through the send guard, and sends nothing from another address when it refuses', async () => {
       const teamId = await seedTeam()
       await seedDomain(teamId, 'acme.com', 'verified')
       const account = await addSendingAddress({
@@ -579,11 +624,10 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       accountEmails.set('user_admin', 'admin@example.com')
       guardRefuses.add('help@acme.com')
 
-      const result = await sendTestEmail({ addressId: account.id, userId: 'user_admin' as UserId })
+      await expect(test(account.id)).rejects.toThrow(/acme\.com/)
 
       expect(guardAsked).toHaveBeenCalledWith('help@acme.com')
-      expect(sent.mock.calls[0][0].from).toBe('Quackback <notifications@mail.platform.test>')
-      expect(result.from).toBe('Quackback <notifications@mail.platform.test>')
+      expect(sent).not.toHaveBeenCalled()
     })
 
     it('refuses an id that is not a sending address', async () => {
@@ -591,6 +635,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         sendTestEmail({
           addressId: 'channel_account_missing' as ChannelAccountId,
           userId: 'u' as UserId,
+          workspaceName: 'Acme',
         })
       ).rejects.toThrow()
       expect(sent).not.toHaveBeenCalled()
