@@ -58,6 +58,11 @@ import {
   type StatusIncidentId,
 } from '@quackback/ids'
 import { getStatusSubscriberTargets } from '../targets'
+import {
+  createSendingAddress,
+  defaultTeamId,
+} from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { setEmailSender } from '@/lib/server/domains/channel-accounts/email-senders'
 import type { EventData } from '../types'
 import type { HookContext } from '../hook-context'
 
@@ -218,6 +223,39 @@ describe.skipIf(!fixture.available)('status incident emails (execution-level)', 
       .filter((id) => id === P_MEMBER || id === P_OUTSIDER || id === P_PICKER)
       .sort()
     expect(notified).toEqual([P_MEMBER, P_OUTSIDER].sort())
+  })
+
+  it("sends from the status page's address under its sender name", async () => {
+    // One workspace, so the send guard permits these addresses unverified; the
+    // guard's own rules are pinned in sender-resolver.db.test.ts.
+    const team = await defaultTeamId()
+    expect(team).toBeTruthy()
+    await createSendingAddress({ owningTeamId: team!, address: 'hello@acme.example' })
+    const alerts = await createSendingAddress({
+      owningTeamId: team!,
+      address: 'alerts@acme.example',
+      senderName: 'Acme Status',
+    })
+    await setEmailSender('status', { mode: 'address', channelAccountId: alerts.id })
+
+    const emails = (await getStatusSubscriberTargets(incidentCreated, context)).filter(
+      (t) => t.type === 'email'
+    )
+    expect(emails.length).toBeGreaterThan(0)
+    for (const t of emails) {
+      expect(t.config).toMatchObject({
+        from: 'alerts@acme.example',
+        fromDisplayName: 'Acme Status',
+      })
+    }
+  })
+
+  it('sends from the platform before any address is chosen', async () => {
+    const emails = (await getStatusSubscriberTargets(incidentCreated, context)).filter(
+      (t) => t.type === 'email'
+    )
+    expect(emails.length).toBeGreaterThan(0)
+    for (const t of emails) expect((t.config as Record<string, unknown>).from).toBeUndefined()
   })
 
   it('tells each recipient the impact of the components they can see', async () => {

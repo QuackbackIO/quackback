@@ -495,11 +495,11 @@
       "componentRenders": 414
     },
     "sweep:doc:admin:/admin/settings/channels/email": {
-      "dbQueries": 12,
-      "htmlKB": 90.5
+      "dbQueries": 13,
+      "htmlKB": 95.2
     },
     "sweep:ui:admin:/admin/settings/channels/email": {
-      "dbQueries": 12,
+      "dbQueries": 13,
       "serverRequests": 1,
       "requests": 128,
       "jsRequests": 124,

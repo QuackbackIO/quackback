@@ -3,7 +3,7 @@ import type { ConversationId, PrincipalId } from '@quackback/ids'
 import { resolveReplyRecipient } from './conversation.recipient'
 import {
   formatNamedSendingAddress,
-  resolveConversationFrom,
+  resolveConversationSender,
 } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import {
   inboundReplyToAddress,
@@ -74,8 +74,10 @@ export async function notifyConversationClosed(opts: {
     const inReplyTo = thread?.inbound.at(-1) ?? thread?.outbound.at(-1)
     const references = thread && thread.merged.length > 0 ? thread.merged : undefined
 
-    const resolvedFrom = (await resolveConversationFrom(opts.conversationId)) ?? undefined
-    const fromDisplayName = ctx.workspaceName
+    const resolved = await resolveConversationSender(opts.conversationId)
+    const resolvedFrom = resolved?.from
+    // Automated mail goes under the address's sender name, else the workspace's.
+    const fromDisplayName = resolved?.senderName ?? ctx.workspaceName
     const from = resolvedFrom ? formatNamedSendingAddress(resolvedFrom, fromDisplayName) : undefined
 
     const includeCsat = await shouldAttachCsat(opts.conversationId)

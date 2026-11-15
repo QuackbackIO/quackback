@@ -287,6 +287,21 @@ export async function getSubscriberTargets(
 }
 
 /**
+ * The From a kind of email is sent from and its sender name, resolved once per
+ * event and carried on every target for the email hook to re-check at send
+ * time (see `checkedSender` in handlers/email.ts). Empty: the platform default
+ * under the workspace name.
+ */
+async function surfaceSender(
+  surface: 'feedback' | 'changelog' | 'status'
+): Promise<{ from?: string; fromDisplayName?: string }> {
+  const { resolveSender } = await import('@/lib/server/domains/channel-accounts/sender-resolver')
+  const resolved = await resolveSender({ surface })
+  if (!resolved) return {}
+  return { from: resolved.from, fromDisplayName: resolved.senderName ?? undefined }
+}
+
+/**
  * Build email hook targets from pre-filtered subscribers.
  */
 async function buildEmailTargets(
@@ -309,6 +324,8 @@ async function buildEmailTargets(
     return prefs && notificationType && shouldNotify(prefs, notificationType, 'email')
   })
   if (eligibleSubscribers.length === 0) return []
+
+  const sender = await surfaceSender('feedback')
 
   // Batch generate unsubscribe tokens (single insert instead of N inserts)
   const tokenMap = await batchGenerateUnsubscribeTokens(
@@ -339,6 +356,7 @@ async function buildEmailTargets(
           logoUrl: context.logoUrl ?? undefined,
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           ...eventConfig,
+          ...sender,
         }
       ),
     ]
@@ -675,6 +693,7 @@ export async function getMentionTargets(
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           eventType: 'post.mentioned',
           mentionerName,
+          ...(await surfaceSender('feedback')),
         })
       )
     }
@@ -1350,9 +1369,9 @@ function baseTicketConfig(params: BaseTicketConfigParams): Record<string, unknow
 }
 
 /**
- * Requester-facing config: the ticket's From (resolveTicketFrom: the linked
- * conversation's thread sender, else the team's address) under the workspace
- * name, and, when an inbound-capable email channel is configured, a signed
+ * Requester-facing config: the ticket's From (resolveTicketSender: the linked
+ * conversation's thread sender, else support's address) under its sender name
+ * or the workspace name, and, when an inbound-capable email channel is configured, a signed
  * per-ticket Reply-To for reply-by-email (D8/D9). Both are null-safe: absent
  * means branded EMAIL_FROM and a portal-only footer.
  *
@@ -1363,13 +1382,13 @@ function baseTicketConfig(params: BaseTicketConfigParams): Record<string, unknow
 async function requesterFacingConfig(
   params: BaseTicketConfigParams & { ticketId: TicketId; assignedTeamId: TeamId | null }
 ): Promise<Record<string, unknown>> {
-  const { resolveTicketFrom } =
+  const { resolveTicketSender } =
     await import('@/lib/server/domains/channel-accounts/sender-resolver')
   const { inboundTicketReplyToAddress } =
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   const { currentMailSlug } =
     await import('@/lib/server/domains/conversation/conversation.mail-slug')
-  const from = (await resolveTicketFrom(params.ticketId, params.assignedTeamId)) ?? undefined
+  const sender = await resolveTicketSender(params.ticketId, params.assignedTeamId)
   // The mail slug names this workspace in the address, which is what lets a
   // shared inbound domain route the reply back. With none to mint under there is
   // no routable address: the ticket email then carries no Reply-To and its
@@ -1377,8 +1396,8 @@ async function requesterFacingConfig(
   const replyTo = inboundTicketReplyToAddress(params.ticketId, currentMailSlug()) ?? undefined
   return {
     ...baseTicketConfig(params),
-    from,
-    fromDisplayName: params.context.workspaceName,
+    from: sender?.from,
+    fromDisplayName: sender?.senderName ?? params.context.workspaceName,
     replyTo,
   }
 }
@@ -1779,8 +1798,6 @@ export async function getChangelogSubscriberTargets(
     eq: eqOp,
   } = await import('@/lib/server/db')
   const { getChangelogSettings } = await import('@/lib/server/domains/settings/settings.changelog')
-  const { resolveSendingAddress } =
-    await import('@/lib/server/domains/channel-accounts/sender-resolver')
   const { batchGenerateChangelogUnsubscribeTokens } =
     await import('@/lib/server/domains/subscriptions/subscription.service')
 
@@ -1910,7 +1927,7 @@ export async function getChangelogSubscriberTargets(
       })()
 
   if (eligibleSubscribers.length > 0) {
-    const from = (await resolveSendingAddress(null, 'changelog')) ?? undefined
+    const sender = await surfaceSender('changelog')
     const tokenMap = await batchGenerateChangelogUnsubscribeTokens(
       eligibleSubscribers.map((s) => s.principalId)
     )
@@ -1936,7 +1953,7 @@ export async function getChangelogSubscriberTargets(
             contentPreview: event.data.changelog.contentPreview,
             contentHtml: event.data.changelog.contentHtml,
             eventType: 'changelog.published',
-            from,
+            ...sender,
           }
         )
       )
@@ -2177,6 +2194,7 @@ export async function getStatusSubscriberTargets(
         const tokenMap = await batchGenerateStatusUnsubscribeTokens(
           emailable.map((p) => p.id as PrincipalId)
         )
+        const sender = await surfaceSender('status')
         for (const p of emailable) {
           targets.push(
             emailTarget(
@@ -2199,6 +2217,7 @@ export async function getStatusSubscriberTargets(
                 scheduledEndLabel: incident.scheduledEndAt
                   ? formatStatusDate(incident.scheduledEndAt)
                   : null,
+                ...sender,
               }
             )
           )

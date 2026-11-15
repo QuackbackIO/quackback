@@ -96,7 +96,12 @@ const resolveConversationFrom = vi.fn<(...a: unknown[]) => Promise<string | null
 vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', async (orig) => ({
   ...(await orig<typeof import('@/lib/server/domains/channel-accounts/sender-resolver')>()),
   resolveConversationFrom: (...a: unknown[]) => resolveConversationFrom(...a),
+  resolveConversationSender: async (...a: unknown[]) => {
+    const from = await resolveConversationFrom(...a)
+    return from ? { from, source: 'surface', senderName: senderName.current } : null
+  },
 }))
+const senderName = vi.hoisted(() => ({ current: null as string | null }))
 
 // The group-thread fan-out (§4.8): which added customers a reply goes out to.
 // Default none — the pre-group-thread assertions below keep their call counts.
@@ -1291,6 +1296,28 @@ describe('threading headers (P4.6 regression guard)', () => {
       const call = sendConversationMessageEmail.mock.calls[0][0]
       expect(call.from).toBe('Alex from Acme <help@home.example>')
       expect(call.fromDisplayName).toBeUndefined()
+    })
+
+    it("names the reply after the address's sender name when it has one", async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      resolveConversationFrom.mockResolvedValueOnce('help@home.example')
+      senderName.current = 'Acme Support'
+
+      try {
+        await notifyAgentReply({
+          conversationId,
+          visitorPrincipalId,
+          content: 'answer',
+          agentName: 'Alex',
+          channel: 'messenger',
+        })
+      } finally {
+        senderName.current = null
+      }
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.from).toBe('Alex from Acme Support <help@home.example>')
     })
 
     it('forwards the stored conversation subject to the sender', async () => {
