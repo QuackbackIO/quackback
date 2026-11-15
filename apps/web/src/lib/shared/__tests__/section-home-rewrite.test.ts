@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { rewriteToSectionHome, sectionHomeFromDocument } from '../section-home-rewrite'
+import {
+  rewriteFromSectionHome,
+  rewriteToSectionHome,
+  sectionHomeFromDocument,
+} from '../section-home-rewrite'
 
 describe('rewriteToSectionHome', () => {
   it("shows the section's home in place of /, keeping the query", () => {
@@ -22,6 +26,21 @@ describe('rewriteToSectionHome', () => {
     const url = new URL('https://help.acme.com/')
     rewriteToSectionHome(url, '/hc')
     expect(url.pathname).toBe('/')
+  })
+})
+
+describe('rewriteFromSectionHome', () => {
+  it("writes the section's home as /, so links and the server's canonical check agree", () => {
+    expect(rewriteFromSectionHome(new URL('https://help.acme.com/hc?q=1'), '/hc')?.href).toBe(
+      'https://help.acme.com/?q=1'
+    )
+  })
+
+  it('keeps deeper paths and every path off a section host', () => {
+    expect(rewriteFromSectionHome(new URL('https://help.acme.com/hc/articles/x'), '/hc')).toBe(
+      undefined
+    )
+    expect(rewriteFromSectionHome(new URL('https://acme.example.com/hc'), null)).toBe(undefined)
   })
 })
 

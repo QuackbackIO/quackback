@@ -86,8 +86,15 @@ describe('handleSectionHost', () => {
     expect(context).toEqual({ sectionHome: '/hc' })
   })
 
-  it('hands the help pages on its host to the app as they are', async () => {
+  it('hands the help pages on its host to the app, telling it which page is home', async () => {
+    // The router writes links to the home as / on this host, on every page.
     const { response, context } = await send('https://help.acme.com/hc/articles/x')
+    expect(response).toBe(PASSED)
+    expect(context).toEqual({ sectionHome: '/hc' })
+  })
+
+  it('tells the app nothing on the primary domain', async () => {
+    const { response, context } = await send('https://acme.example.com/roadmap')
     expect(response).toBe(PASSED)
     expect(context).toBeUndefined()
   })
@@ -140,8 +147,14 @@ describe('handleSectionHost', () => {
     expect(context).toBeUndefined()
   })
 
-  it('does not read the settings for a path every host shares', async () => {
-    for (const path of ['/api/health', '/_serverFn/abc', '/assets/main.js', '/admin']) {
+  it('tells a shared page on a section host which page is home too', async () => {
+    const { response, context } = await send('https://help.acme.com/settings/profile')
+    expect(response).toBe(PASSED)
+    expect(context).toEqual({ sectionHome: '/hc' })
+  })
+
+  it('does not read the settings for a request that is not a page', async () => {
+    for (const path of ['/api/health', '/_serverFn/abc', '/assets/main.js', '/favicon.ico']) {
       expect((await send(`https://help.acme.com${path}`)).response).toBe(PASSED)
     }
     expect(state.settingsReads).toBe(0)

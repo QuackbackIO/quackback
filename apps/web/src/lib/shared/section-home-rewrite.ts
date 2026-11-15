@@ -1,6 +1,7 @@
 /**
  * The router's URL rewrite for a portal section on its own hostname: `/` on
- * help.acme.com shows the help center's home while the address bar keeps `/`.
+ * help.acme.com shows the help center's home while the address bar keeps `/`,
+ * and links to the home are written as `/` there.
  *
  * The server learns the home from the section host middleware, through the
  * request context. The browser reads it from the `data-section-home` mark the
@@ -17,6 +18,18 @@ export function rewriteToSectionHome(url: URL, home: string | null): URL | undef
   if (!home || url.pathname !== '/') return undefined
   const rewritten = new URL(url)
   rewritten.pathname = home
+  return rewritten
+}
+
+/**
+ * The URL to show for `url`: the section's home is written as `/`. Without
+ * it, the server's canonical check would send `/` (matched as the home) back
+ * to the home's own path.
+ */
+export function rewriteFromSectionHome(url: URL, home: string | null): URL | undefined {
+  if (!home || url.pathname !== home) return undefined
+  const rewritten = new URL(url)
+  rewritten.pathname = '/'
   return rewritten
 }
 
@@ -40,4 +53,5 @@ const currentSectionHome = createIsomorphicFn()
 
 export const sectionHomeRewrite = {
   input: ({ url }: { url: URL }) => rewriteToSectionHome(url, currentSectionHome()),
+  output: ({ url }: { url: URL }) => rewriteFromSectionHome(url, currentSectionHome()),
 }

@@ -7,14 +7,15 @@
  *
  *  - `redirect`: answered here, with `Vary: Host`, since the same path answers
  *    differently on each host.
- *  - `rewrite-home`: `/` on a section's host. The app is told the section's
+ *  - `rewrite-home` and `pass`: the app answers, and the response it makes is
+ *    handed back untouched. On a section's host the app is told the section's
  *    home through the request context, and the router's URL rewrite
- *    (section-home-rewrite.ts) shows that page in place of `/`.
- *  - `pass`: the app answers. The response it makes is handed back untouched.
+ *    (section-home-rewrite.ts) shows that page at `/` and writes links to it
+ *    as `/`.
  *
  * The host is the one the edge vouches for (`requestWorkspaceHost`), never a
- * forwarded header. Paths every host shares (the API, server functions,
- * assets, sign-in, admin) skip the settings read altogether. A client-side
+ * forwarded header. Requests that are not pages (the API, server functions,
+ * files) skip the settings read altogether. A client-side
  * navigation never reaches this; links that cross sections are the links'
  * job.
  */
@@ -30,12 +31,23 @@ import {
   portalSectionsEnabled,
   resolveSectionHostRoute,
   sectionForPath,
+  sectionHomeForHost,
 } from '@/lib/shared/section-domains'
 
 /** What this middleware tells the app about the request. */
 export interface SectionHostContext {
-  /** The page to show in place of `/`, on a section's host. */
+  /** On a section's host, its home: shown at `/`, and written as `/` in links. */
   sectionHome?: string
+}
+
+const NOT_A_PAGE_PREFIXES = ['/api/', '/_serverFn/', '/assets/', '/.well-known/']
+
+/** A request no section owns and no page answers: the API, server functions, files. */
+function isNotAPage(path: string): boolean {
+  if (NOT_A_PAGE_PREFIXES.some((prefix) => path.startsWith(prefix))) return true
+  // A file, unless a section owns the path (/hc/sitemap.xml, a slug with a dot).
+  const last = path.slice(path.lastIndexOf('/') + 1)
+  return last.includes('.') && !sectionForPath(path)
 }
 
 interface NextResult {
@@ -50,7 +62,7 @@ export async function handleSectionHost<T extends NextResult>({
   next: (opts?: { context: SectionHostContext }) => Promise<T>
 }): Promise<T | Response> {
   const url = new URL(request.url)
-  if (!sectionForPath(url.pathname)) return next()
+  if (isNotAPage(url.pathname)) return next()
 
   const settings = await getWorkspaceSettings()
   if (!settings) return next()
@@ -64,21 +76,26 @@ export async function handleSectionHost<T extends NextResult>({
   )
   if (Object.keys(map).length === 0) return next()
 
+  const host = requestWorkspaceHost(request)
+  const sectionEnabled = portalSectionsEnabled(settings)
   const route = resolveSectionHostRoute({
-    host: requestWorkspaceHost(request),
+    host,
     path: url.pathname,
     search: url.search,
     method: request.method,
     map,
-    sectionEnabled: portalSectionsEnabled(settings),
+    sectionEnabled,
     primaryOrigin: config.baseUrl,
   })
 
   switch (route.kind) {
     case 'pass':
-      return next()
-    case 'rewrite-home':
-      return next({ context: { sectionHome: route.home } })
+    case 'rewrite-home': {
+      // Every page on a section's host is told its home, so the router writes
+      // links to it as `/` on the server as the browser does.
+      const sectionHome = sectionHomeForHost({ host, map, sectionEnabled })
+      return sectionHome ? next({ context: { sectionHome } }) : next()
+    }
     case 'redirect':
       return new Response(null, {
         status: route.status,
