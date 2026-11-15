@@ -73,6 +73,13 @@ export interface CreateTicketInput {
    *  create_ticket tool — leave this unset and stay standalone/explicitly
    *  linked exactly as before. */
   withBackingConversation?: boolean
+  /** API v1 only: an integration relays the requester's own words (an in-app
+   *  form). The opening message is the requester's (senderType 'visitor'), and
+   *  the creating key does not become the default assignee. Needs a requester. */
+  filedByRequester?: boolean
+  /** false: the caller already acknowledged the requester, so the
+   *  `ticket.created` confirmation email is skipped. Default true. */
+  notifyRequester?: boolean
 }
 
 /** Polymorphic, independent assignment: an absent key leaves that side as-is. */

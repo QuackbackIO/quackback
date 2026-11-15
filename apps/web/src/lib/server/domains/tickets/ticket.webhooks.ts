@@ -91,10 +91,11 @@ function messageAttachments(m: ConversationMessageDTO): EventTicketMessageAttach
 export async function emitTicketCreated(
   actor: Actor,
   ticket: Ticket,
-  status: { category: 'open' | 'pending' | 'closed'; stage: string | null }
+  status: { category: 'open' | 'pending' | 'closed'; stage: string | null },
+  opts?: { skipRequesterAck?: boolean }
 ): Promise<void> {
   await safe('ticket.created', () =>
-    dispatchTicketCreated(toEventActor(actor), ticketData(ticket, status))
+    dispatchTicketCreated(toEventActor(actor), ticketData(ticket, status), opts)
   )
 }
 

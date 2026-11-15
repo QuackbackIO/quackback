@@ -725,6 +725,9 @@ export interface MessageUpdatedEvent extends EventBase<'message.updated'> {
 }
 export interface TicketCreatedEvent extends EventBase<'ticket.created'> {
   data: TicketCreatedPayload
+  /** Internal, outside `data` so webhooks never carry it: the creating caller
+   *  already acknowledged the requester, so skip the confirmation email. */
+  skipRequesterAck?: boolean
 }
 export interface TicketStatusChangedEvent extends EventBase<'ticket.status_changed'> {
   data: TicketStatusChangedPayload

@@ -60,6 +60,14 @@ const CreateTicketBodySchema = createRequestBodySchema({
   requesterPrincipalId: z.string().optional().meta({ description: 'Requester principal ID' }),
   companyId: z.string().optional().meta({ description: 'Associated company ID' }),
   attachments: z.array(TicketWriteAttachmentSchema).optional(),
+  filedByRequester: z.boolean().optional().meta({
+    description:
+      "The description is the requester's own words, relayed by an integration (for example an in-app form): it opens the thread as their message, and the key does not become the assignee. Requires requesterPrincipalId.",
+  }),
+  notifyRequester: z.boolean().optional().meta({
+    description:
+      'Set false when your system already acknowledged the requester, to skip the "we received your ticket" email. Defaults to true.',
+  }),
 })
 
 const TicketMessageBodySchema = createRequestBodySchema({

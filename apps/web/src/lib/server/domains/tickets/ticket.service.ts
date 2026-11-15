@@ -372,7 +372,9 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
   }
   // A personal API key assigns to its creator, so the ticket stays inside the
   // scope the key reads with; the key itself stays the author for attribution.
-  const defaultAssignee = rowScopePrincipalId(actor)
+  // A relayed requester filing (filedByRequester) is not the key's own work,
+  // so the key does not take it: it waits unassigned for the team.
+  const defaultAssignee = input.filedByRequester ? null : rowScopePrincipalId(actor)
   if (!assigneePrincipalId && defaultAssignee) {
     const [creator] = await db
       .select({ role: principal.role })

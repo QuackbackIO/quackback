@@ -640,6 +640,49 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(assistant.runAssistantTurnForConversation).not.toHaveBeenCalled()
     })
 
+    it("filedByRequester: the opening is the requester's, the key takes nothing, no ack email", async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+      const agentP = await seedPrincipal({ role: 'member', type: 'service' })
+
+      const dto = await createTicket(
+        {
+          type: 'customer',
+          title: 'Export breaks',
+          description: 'Clicking export shows an error.',
+          requesterPrincipalId: requesterP,
+          withBackingConversation: true,
+          filedByRequester: true,
+          notifyRequester: false,
+        },
+        serviceActor(agentP)
+      )
+
+      const link = await readPairLink(dto.id as TicketId)
+      const conversation = await readConversation(link!.conversationId)
+      // Ticket-parented (the conversation send refuses a service actor posting
+      // as the visitor); the union loader reads it like a conversation row.
+      const messages = await testDb
+        .select()
+        .from(conversationMessages)
+        .where(eq(conversationMessages.ticketId, dto.id as TicketId))
+      expect(messages).toHaveLength(1)
+      expect(messages[0].senderType).toBe('visitor')
+      expect(messages[0].principalId).toBe(requesterP)
+      // Nobody owns it yet: the team picks it up, not the relaying key.
+      expect(conversation.assignedAgentPrincipalId).toBeNull()
+      expect((await readTicket(dto.id as TicketId)).assigneePrincipalId).toBeNull()
+      // The requester is not emailed their own words back as an agent reply...
+      expect(convNotify.notifyAgentReply).not.toHaveBeenCalled()
+      // ...nor sent the created acknowledgement.
+      expect(ticketEmit.emitTicketCreated).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        { skipRequesterAck: true }
+      )
+    })
+
     it('customer + NO requester + flag stays standalone (requester-less API create)', async () => {
       await seedDefaultStatus()
       const agentP = await seedPrincipal({ role: 'member', type: 'service' })

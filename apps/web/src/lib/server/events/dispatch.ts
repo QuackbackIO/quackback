@@ -548,12 +548,14 @@ export async function dispatchMessageUpdated(
 
 export async function dispatchTicketCreated(
   actor: EventActor,
-  ticket: EventTicketData
+  ticket: EventTicketData,
+  opts?: { skipRequesterAck?: boolean }
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.created',
     data: { ticket },
+    ...(opts?.skipRequesterAck ? { skipRequesterAck: true } : {}),
   })
 }
 

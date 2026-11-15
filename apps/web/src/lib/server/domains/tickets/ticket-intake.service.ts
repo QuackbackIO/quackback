@@ -163,8 +163,10 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // ahead of the transaction — it's pure validation, no I/O.
   // The description is the requester's own ask when they file the ticket
   // themselves — their inline images may only reference our own storage.
+  // ...or when an integration relays their own words (`filedByRequester`, API v1).
   const filedByRequester =
-    !!actor.principalId && actor.principalId === (input.requesterPrincipalId ?? null)
+    !!input.requesterPrincipalId &&
+    (input.filedByRequester === true || actor.principalId === input.requesterPrincipalId)
   const openingAttachments = await resolveAttachments(input.attachments, {
     principalId: actor.principalId ?? null,
     canAttachAnyFile: canActAsAgent(actor).allowed,
@@ -194,8 +196,15 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // actor; every real API/MCP actor resolves one) can't be attributed by the
   // redirect's delegates, so it keeps the legacy in-transaction ticket-parented
   // insert, which the union loader reads identically.
+  // A relayed filing (API `filedByRequester`, the actor is a key, not the
+  // requester) also keeps the in-transaction insert: the conversation send
+  // refuses a visitor message from a service actor, by design.
+  const relayedByService = filedByRequester && actor.principalId !== input.requesterPrincipalId
   const openingViaRedirect =
-    wantsBackingConversation && hasOpeningMessage && (filedByRequester || !!actor.principalId)
+    wantsBackingConversation &&
+    hasOpeningMessage &&
+    !relayedByService &&
+    (filedByRequester || !!actor.principalId)
 
   const created = await db.transaction(async (tx) => {
     // PHASE 1b (1/3): the backing conversation FIRST, so the pair is
@@ -268,7 +277,7 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
         .insert(conversationMessages)
         .values({
           ticketId: ticket.id,
-          principalId: actor.principalId,
+          principalId: filedByRequester ? input.requesterPrincipalId! : actor.principalId,
           senderType: filedByRequester ? 'visitor' : 'agent',
           content: validateContent(
             resolvedDescription,
@@ -373,7 +382,7 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
               .insert(conversationMessages)
               .values({
                 ticketId: created.ticket.id,
-                principalId: actor.principalId,
+                principalId: filedByRequester ? input.requesterPrincipalId! : actor.principalId,
                 senderType: filedByRequester ? 'visitor' : 'agent',
                 content: validateContent(
                   resolvedDescription,
@@ -428,10 +437,12 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // the backing conversation's side effects above — a ticket.created dispatch
   // now always finds the link, closing the ordering race
   // workflows/event-trigger.ts's TICKET_CREATED_LINK_POLL worked around.
-  void emitTicketCreated(actor, created.ticket, {
-    category: defaultStatus.category,
-    stage: resolveStage(defaultStatus),
-  })
+  void emitTicketCreated(
+    actor,
+    created.ticket,
+    { category: defaultStatus.category, stage: resolveStage(defaultStatus) },
+    { skipRequesterAck: input.notifyRequester === false }
+  )
   // Realtime signal (unified inbox §3.2, M3): a fresh ticket is a new inbox
   // row, so the same 'ticket_updated' kind the update paths use below also
   // covers creation, mirroring how the conversation domain's 'conversation'
