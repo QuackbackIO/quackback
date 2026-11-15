@@ -25,6 +25,13 @@ export type ProvenZoneSource = 'email-sending' | 'sso' | 'web-address' | 'domain
  */
 export type ShownProofSource = ProvenZoneSource | 'workspace'
 
+/**
+ * What a check of a domain's own record found: verified by the record (`dns`)
+ * or by a proof that already covers the name, or why not.
+ */
+export type DomainRecordCheck<Via extends string = ProvenZoneSource> =
+  { ok: true; via: 'dns' | Via } | { ok: false; reason: 'no-record' | 'lookup-failed' | 'mismatch' }
+
 /** The permission that shows each kind of proof. */
 const SOURCE_PERMISSION: Record<ProvenZoneSource, PermissionKey> = {
   'email-sending': EMAIL_SENDING_PERMISSION,

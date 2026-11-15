@@ -7,7 +7,6 @@
  * carries that domain's setup panel under it.
  */
 import { useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { EnvelopeIcon, GlobeAltIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
@@ -16,7 +15,6 @@ import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/setti
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { PhaseBadge } from './phase-badge'
-import { emailChannelConfigQuery } from '@/lib/client/queries/channel-accounts'
 import {
   useCreateInboundRoute,
   useRestartSendingDomainChecks,
@@ -36,12 +34,16 @@ import {
   type SendingAddress,
 } from './sending-removal'
 import { SendingPausedNotice } from './sending-paused-notice'
-import { SendFromCard, type SenderIdentity } from './send-from-card'
+import { SendFromCard, type SenderSurfaceKey } from './send-from-card'
 import {
-  errorText,
-  SendingAddressDialog,
-  type SendingAddressDialogTarget,
-} from './sending-address-dialog'
+  inboundTarget,
+  oldestFirst,
+  senderLabel,
+  useEmailConfigView,
+  type AddressMode,
+} from './email-config-view'
+import { errorText } from '@/lib/client/error-text'
+import { SendingAddressDialog, type SendingAddressDialogTarget } from './sending-address-dialog'
 import {
   domainPhase,
   failingRecordName,
@@ -56,14 +58,6 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/shared/utils'
 import { toastError } from '@/lib/client/error-notice'
 
-const NO_SENDERS: EmailSendersDTO = {
-  default: null,
-  support: null,
-  feedback: null,
-  changelog: null,
-  status: null,
-}
-
 /**
  * Show what the server actually refused, falling back to the generic line.
  *
@@ -72,50 +66,6 @@ const NO_SENDERS: EmailSendersDTO = {
  * problem into a mystery.
  */
 const reason = (fallback: string) => (error: unknown) => toastError(error, fallback)
-
-/** The email config as both pages read it: addresses named and checked. */
-function useEmailConfigView() {
-  const { data } = useQuery(emailChannelConfigQuery())
-  const workspaceName = data?.workspaceName ?? ''
-  const addresses = data?.sendingAddresses ?? []
-  const domains = data?.domains ?? []
-  // Named by the server, the way the send itself names it.
-  const platformFrom = data?.defaultFrom ?? null
-  // One workspace on its own server falls back to that server's own address.
-  const platformName = data?.addressMode === 'any' ? 'Server default' : 'Quackback address'
-  // The workspace's own inbox on the platform, which a reply to an emailed-in
-  // conversation falls back to before the platform's general address.
-  const platformInbox = data?.platformAddress
-    ? workspaceName
-      ? `${workspaceName} <${data.platformAddress}>`
-      : data.platformAddress
-    : null
-  // Whether an address can send is the send guard's answer, from the server.
-  const now = new Date()
-  const identities: SenderIdentity[] = oldestFirst(addresses).map((a) => {
-    const domain = domainOf(a, domains)
-    return {
-      id: a.id,
-      label: senderLabel(a, workspaceName),
-      live: a.sendable,
-      lapsed: !a.sendable && !!domain && domainPhase(domain, now) === 'attention',
-    }
-  })
-  return {
-    data,
-    workspaceName,
-    addresses,
-    domains,
-    senders: data?.senders ?? NO_SENDERS,
-    platformFrom,
-    platformName,
-    platformInbox,
-    identities,
-  }
-}
-
-/** A kind of email with its own sender, other than the workspace default. */
-export type SenderSurfaceKey = Exclude<keyof EmailSendersDTO, 'default'>
 
 /**
  * Settings → Email: the addresses this workspace sends from, and which of them
@@ -137,24 +87,15 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
         workspaceName={view.workspaceName}
         platformFrom={view.platformFrom}
         platformName={view.platformName}
-        available={data?.addressMode !== 'unavailable'}
-        guardPermitsAny={data?.addressMode === 'any'}
-        setsUpDomains={data?.addressMode === 'verified-domains'}
-        ownDomains={ownDomains(data?.platformAddress, data?.defaultFrom)}
+        addressMode={view.addressMode}
+        ownDomains={view.ownDomains}
         loaded={data !== undefined}
       />
       {/* With no address there is nothing to choose between, so the card
           waits for one rather than showing a row of single-option selects. */}
       {view.addresses.length > 0 && (
         <SendFromCard
-          senders={view.senders}
-          identities={view.identities}
-          platformFrom={view.platformFrom}
-          platformName={view.platformName}
-          platformInbox={view.platformInbox}
-          forwardingTarget={inboundTarget(data?.inboundRoute)}
-          forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
-          hasInboundRoute={!!data?.inboundRoute}
+          {...view.sendFrom}
           rows={['default', ...surfaces]}
           // Where "Change" on a product's page lands: `SEND_FROM_ANCHOR` in
           // surface-sender-row.tsx, repeated here because importing that row
@@ -187,14 +128,7 @@ export function SupportInboxSettings({ canManageSending }: { canManageSending: b
         inboundTrust={data?.inboundRoute?.inboundTrust ?? 'strict'}
       />
       <SendFromCard
-        senders={view.senders}
-        identities={view.identities}
-        platformFrom={view.platformFrom}
-        platformName={view.platformName}
-        platformInbox={view.platformInbox}
-        forwardingTarget={inboundTarget(data?.inboundRoute)}
-        forwardingTargetPermitted={data?.forwardingTargetPermitted ?? null}
-        hasInboundRoute={!!data?.inboundRoute}
+        {...view.sendFrom}
         rows={['support']}
         title="Replies"
         description={
@@ -213,13 +147,6 @@ export function SupportInboxSettings({ canManageSending }: { canManageSending: b
       />
     </div>
   )
-}
-
-function inboundTarget(
-  route: { config: Record<string, unknown> } | null | undefined
-): string | null {
-  const t = route?.config?.forwardingTarget
-  return typeof t === 'string' ? t : null
 }
 
 /** How the two inbound trust settings are offered. */
@@ -391,22 +318,6 @@ function InboundRouteSection({
   )
 }
 
-/** "Sender name <address>", the sender name being the workspace's when unset. */
-const senderLabel = (a: SendingAddress, workspaceName: string): string => {
-  const name = a.senderName ?? workspaceName
-  return name ? `${name} <${a.address ?? ''}>` : (a.address ?? '')
-}
-
-/**
- * The domains of the platform's own addresses (the workspace's inbox on it and
- * the address email leaves from by default), which need no setup to send from.
- */
-const ownDomains = (...addresses: Array<string | null | undefined>): string[] =>
-  addresses.flatMap((a) => {
-    const domain = /@([^\s<>@]+)>?\s*$/.exec(a ?? '')?.[1]?.toLowerCase()
-    return domain ? [domain] : []
-  })
-
 /**
  * A row's icon from sm up. On a phone the tile is left out: every row carries
  * the same one, and its width is what lets an address sit on one line.
@@ -418,10 +329,6 @@ function PhoneHiddenIcon({ icon }: { icon: typeof EnvelopeIcon }) {
     </div>
   )
 }
-
-/** Oldest first: the order the page lists addresses and offers them in. */
-const oldestFirst = <T extends SendingAddress>(addresses: T[]): T[] =>
-  [...addresses].sort((x, y) => (x.createdAt ?? '').localeCompare(y.createdAt ?? ''))
 
 /** The meta line of a row whose domain is not live yet, or is live with its ownership record missing. */
 function pendingMeta(
@@ -461,9 +368,7 @@ function SendingAddressesSection({
   workspaceName,
   platformFrom,
   platformName,
-  available,
-  guardPermitsAny,
-  setsUpDomains,
+  addressMode,
   ownDomains: platformDomains,
   loaded,
 }: {
@@ -473,16 +378,19 @@ function SendingAddressesSection({
   workspaceName: string
   platformFrom: string | null
   platformName: string
-  available: boolean
-  /** One workspace: email still leaves as the address, so nothing falls back. */
-  guardPermitsAny: boolean
-  /** Shared, and domains can be set up: a new domain brings records to add. */
-  setsUpDomains: boolean
+  /**
+   * `unavailable`: no custom addresses here. `any`: one workspace, so email
+   * still leaves as the address and nothing falls back. `verified-domains`:
+   * shared, and a new domain brings records to add.
+   */
+  addressMode: AddressMode | undefined
   /** The platform's own domains, which an address needs no setup to send from. */
   ownDomains: readonly string[]
   /** Whether the config has arrived, so an empty list really is empty. */
   loaded: boolean
 }) {
+  const available = addressMode !== 'unavailable'
+  const guardPermitsAny = addressMode === 'any'
   const [dialog, setDialog] = useState<SendingAddressDialogTarget | null>(null)
   // The Add address button on show (the card's, or the empty card's), and
   // whether it opened the dialog: focus goes back to it when the dialog
@@ -710,7 +618,7 @@ function SendingAddressesSection({
         target={dialog}
         workspaceName={workspaceName}
         domains={domains}
-        setsUpDomains={setsUpDomains}
+        setsUpDomains={addressMode === 'verified-domains'}
         ownDomains={platformDomains}
         onClose={() => setDialog(null)}
         finalFocus={() => (openedByAdd.current ? addButton.current : true)}

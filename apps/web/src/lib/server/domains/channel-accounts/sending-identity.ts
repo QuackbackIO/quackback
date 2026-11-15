@@ -92,7 +92,12 @@ export {
   withPreviousChecks,
 } from './sending-domain-records'
 import { notifySendingDomainLive, notifySendingDomainNeedsAttention } from './sending-domain-notify'
-import { deliverOwnershipWarning, ownershipGrace, startOwnershipGrace } from './ownership-grace'
+import {
+  deliverOwnershipWarning,
+  GRACE_CLEARED,
+  ownershipGrace,
+  startOwnershipGrace,
+} from './ownership-grace'
 import { enqueueSesTenantReconcile } from './ses-tenant-queue'
 import { saveSendingDomainCheck } from './sending-domain-check-write'
 import { rekeyToHeldSigningKey, sealSigningKey, shouldHoldSigningKey } from './pending-signing-key'
@@ -520,18 +525,21 @@ export async function refreshSendingDomain(
         ? { preflight: { ...row.preflight, ...zone, ...(dmarc ? { dmarc } : {}) } }
         : {}),
       // Found again: the clock for a missing record starts over.
-      ...(ownershipProven
-        ? {
-            ownershipMissingSince: null,
-            ownershipWarningClaimedAt: null,
-            ownershipWarningSentAt: null,
-          }
-        : {}),
+      ...(ownershipProven ? GRACE_CLEARED : {}),
       lastCheckedAt: now,
       updatedAt: now,
     },
   })
   let updated = written
+
+  // The record found may be the token of the domain added at this name, which
+  // this row was issued: the same finding verifies that domain. Only when the
+  // row holds one proof record, so the record found is known to be that one.
+  if (written && ownershipProven && !byo && proofRecords.length === 1) {
+    const { verifyDomainOnFoundRecord } =
+      await import('@/lib/server/domains/domain-proof/domains.service')
+    await verifyDomainOnFoundRecord(row.domain, proofRecords[0], now)
+  }
 
   if (written && demoted) {
     // Named at warn because it is a live deliverability change for a

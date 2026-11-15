@@ -53,12 +53,18 @@ vi.mock('@/lib/server/dns/resolver', () => {
 
 const notices = vi.hoisted(() => ({
   warned: [] as { name: string; deadline: Date }[],
+  rang: [] as boolean[],
   demoted: [] as { name: string; signIn: string[] }[],
   deliver: true,
 }))
 vi.mock('../domain-ownership-notify', () => ({
-  notifyDomainOwnershipMissing: async (domain: { name: string }, deadline: Date) => {
+  notifyDomainOwnershipMissing: async (
+    domain: { name: string },
+    deadline: Date,
+    opts: { ring: boolean }
+  ) => {
     notices.warned.push({ name: domain.name, deadline })
+    notices.rang.push(opts.ring)
     return notices.deliver
   },
   notifyDomainOwnershipLapsed: async (domain: { name: string }, signIn: string[]) => {
@@ -77,7 +83,7 @@ vi.mock('@/lib/server/domains/settings/settings.helpers', async (importOriginal)
   invalidateSettingsCache: async () => {},
 }))
 
-import { watchDomainOwnership } from '../domain-ownership-watch'
+import { DOMAIN_WATCH_BUDGET_MS, watchDomainOwnership } from '../domain-ownership-watch'
 import { ssoDomainProvenBy } from '../proven-zones'
 import {
   OWNERSHIP_GRACE_SLACK_MS,
@@ -148,6 +154,7 @@ describe.skipIf(!fixture.available)('domain ownership watch (real DB, rolled bac
     zone.failing.clear()
     zone.asked.length = 0
     notices.warned.length = 0
+    notices.rang.length = 0
     notices.demoted.length = 0
     notices.deliver = true
     auth.resets = 0
@@ -201,6 +208,8 @@ describe.skipIf(!fixture.available)('domain ownership watch (real DB, rolled bac
     await watchDomainOwnership(new Date('2026-11-03T06:00:00Z'))
 
     expect(notices.warned).toHaveLength(2)
+    // The bell rings once per warning; only the email is tried again.
+    expect(notices.rang).toEqual([true, false])
   })
 
   it('counts another row’s token as missing, never as its own', async () => {
@@ -348,7 +357,45 @@ describe.skipIf(!fixture.available)('domain ownership watch (real DB, rolled bac
     expect(notices.demoted.at(-1)).toEqual({ name: 'acme.com', signIn: ['acme.com'] })
   })
 
-  it('stops counting a sending row that shares the token once the domain is demoted, and starts its grace', async () => {
+  it('stops judging a lapsed domain once every sign-in domain under it was decided', async () => {
+    const row = await seedDomain('acme.com')
+    const sso = await seedSso('eu.acme.com')
+    zone.published.set('_quackback-verify.eu.acme.com', [
+      `qb-domain-verify=${sso.verificationToken}`,
+    ])
+    const since = await lapse(row)
+    expect((await read(row)).status).toBe('pending')
+
+    zone.asked.length = 0
+    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 60_000))
+    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 120_000))
+
+    expect(zone.asked).toEqual([])
+    expect(await ssoVerified(sso.id)).toBe(true)
+  })
+
+  it('judges lapsed domains again only inside the run’s time budget', async () => {
+    const row = await seedDomain('acme.com')
+    const unanswered = await seedSso('acme.com')
+    zone.failing.add('_quackback-verify.acme.com')
+    const since = await lapse(row)
+    expect(await ssoVerified(unanswered.id)).toBe(true)
+    zone.failing.clear()
+
+    // Every reading of the clock is a whole budget later: the run is out of time.
+    let ticks = 0
+    const late = () => (ticks += DOMAIN_WATCH_BUDGET_MS)
+    zone.asked.length = 0
+    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 60_000), { clock: late })
+    expect(zone.asked).toEqual([])
+    expect(await ssoVerified(unanswered.id)).toBe(true)
+
+    // The domain left over is judged on the next run that has time.
+    await watchDomainOwnership(new Date(afterGrace(since).getTime() + 120_000))
+    expect(await ssoVerified(unanswered.id)).toBe(false)
+  })
+
+  it('stops counting a sending row that shares the token once the domain is demoted, and starts its own grace from then', async () => {
     const row = await seedDomain('acme.com')
     const [team] = await testDb.insert(teams).values({ name: 'Support' }).returning()
     const [twin] = await testDb
@@ -379,7 +426,9 @@ describe.skipIf(!fixture.available)('domain ownership watch (real DB, rolled bac
       .select()
       .from(emailSendingDomains)
       .where(eq(emailSendingDomains.id, twin.id))
-    expect(after.ownershipMissingSince).toEqual(since)
+    // Its own grace starts at the demotion, so it gets its own warning and period.
+    expect(after.ownershipMissingSince).toEqual(afterGrace(since))
+    expect(after.status).toBe('verified')
   })
 
   it("never touches another workspace's sign-in domains", async () => {

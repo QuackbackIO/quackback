@@ -5,55 +5,63 @@
  * the sign-in domains that stopped with it.
  *
  * Recipients are every teammate holding `settings.manage`, the permission that
- * adds and removes a domain. A bell for each, respecting their in-app
+ * adds and removes a domain and also manages sending, so they are the sending
+ * domain managers. A bell for each, respecting their in-app
  * preference, and an email, respecting their email preference. A failure here
  * is logged and never undoes what it reports; the warning says whether it was
  * delivered, so the watch can try again.
  */
-import type { PrincipalId, UserId } from '@quackback/ids'
-import { db, and, eq, inArray, principal, type Domain } from '@/lib/server/db'
+import type { Domain } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
-import { batchGetNotificationPreferences } from '@/lib/server/domains/subscriptions/subscription.service'
-import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
 import {
+  emailEachManager,
   formatDeadline,
   ringManagers,
+  sendingDomainManagers,
+  type Manager,
 } from '@/lib/server/domains/channel-accounts/sending-domain-notify'
-import { OWNERSHIP_RECORD_HOST } from '@/lib/server/domains/channel-accounts/sending-domain-records'
-import { domainOwnershipValue } from './domains.service'
+import {
+  OWNERSHIP_RECORD_HOST,
+  ownershipRecord,
+} from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
 
 const log = logger.child({ component: 'domain-ownership-notify' })
 
 const TYPE = 'domain_needs_attention' as const
 
-interface Manager {
-  principalId: PrincipalId
-  userId: UserId | null
+type NotifiedDomain = Pick<Domain, 'name' | 'ownershipToken'>
+
+/** What the notice says beyond the domain and its record. */
+interface AttentionContent {
+  deadline?: string
+  signInDomains?: string[]
 }
 
-/** Every teammate who may add or remove the workspace's domains. */
-async function domainManagers(): Promise<Manager[]> {
-  const people = await db
-    .select({ id: principal.id, role: principal.role, userId: principal.userId })
-    .from(principal)
-    .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member'])))
-  const managers: Manager[] = []
-  for (const person of people) {
-    const held = await permissionsForPrincipal(person.id, person.role as 'admin' | 'member')
-    if (held.has(PERMISSIONS.SETTINGS_MANAGE)) {
-      managers.push({ principalId: person.id, userId: person.userId as UserId | null })
-    }
-  }
-  return managers
-}
-
-function recordOf(domain: Pick<Domain, 'name' | 'ownershipToken'>) {
+function recordOf(domain: NotifiedDomain) {
   return {
-    name: `${OWNERSHIP_RECORD_HOST}.${domain.name}`,
-    value: domainOwnershipValue(domain.ownershipToken),
+    name: recordName(domain.name, OWNERSHIP_RECORD_HOST),
+    value: ownershipRecord(domain.ownershipToken).value,
   }
+}
+
+/** Ring the bell for every manager whose preference allows it. */
+async function ring(
+  managers: Manager[],
+  domain: NotifiedDomain,
+  title: string,
+  content: AttentionContent
+): Promise<void> {
+  const { domainAttentionMessage } = await import('@quackback/email')
+  await ringManagers(managers, TYPE, {
+    title,
+    body: domainAttentionMessage({
+      domain: domain.name,
+      recordName: recordOf(domain).name,
+      ...content,
+    }),
+    metadata: { domain: domain.name, audience: 'admin' },
+  })
 }
 
 /**
@@ -62,28 +70,15 @@ function recordOf(domain: Pick<Domain, 'name' | 'ownershipToken'>) {
  */
 async function emailManagers(
   managers: Manager[],
-  domain: Pick<Domain, 'name' | 'ownershipToken'>,
-  content: { deadline?: string; signInDomains?: string[] }
+  domain: NotifiedDomain,
+  content: AttentionContent
 ): Promise<boolean> {
-  const { sendDomainAttentionEmail, isEmailConfigured } = await import('@quackback/email')
-  if (!isEmailConfigured()) return true
-  const prefs = await batchGetNotificationPreferences(managers.map((m) => m.principalId))
-  const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
-  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
-  const { getBaseUrl } = await import('@/lib/server/config')
-  const workspace = await getWorkspaceSettings()
-  const base = getBaseUrl().replace(/\/$/, '')
-  let due = 0
-  let sent = 0
-  for (const manager of managers) {
-    const p = prefs.get(manager.principalId)
-    if (p && !shouldNotify(p, TYPE, 'email')) continue
-    if (!manager.userId) continue
-    const to = await resolveAccountRecipient(manager.userId)
-    if (!to) continue
-    due += 1
-    try {
-      await sendDomainAttentionEmail({
+  const { sendDomainAttentionEmail } = await import('@quackback/email')
+  return emailEachManager(
+    managers,
+    TYPE,
+    (to, { base, workspaceName }) =>
+      sendDomainAttentionEmail({
         to,
         domain: domain.name,
         record: recordOf(domain),
@@ -91,42 +86,28 @@ async function emailManagers(
         settingsUrl: base
           ? `${base}/admin/settings/domains/${encodeURIComponent(domain.name)}`
           : null,
-        workspaceName: workspace?.settings?.name,
-      })
-      sent += 1
-    } catch (err) {
-      log.warn(
-        { err, domain: domain.name, principal_id: manager.principalId },
-        'domain attention email failed'
-      )
-    }
-  }
-  return due === 0 || sent > 0
+        workspaceName,
+      }),
+    { logContext: { domain: domain.name }, message: 'domain attention email failed' }
+  )
 }
 
 /**
  * The record went missing: a bell per manager and an email with the date it
- * has to be back by. Resolves true once the bell rang and at least one email
- * went out (or none was due).
+ * has to be back by. The bell rings only with `ring`, which the watch sets on
+ * the first try for a warning, so an email tried again does not ring it again.
+ * Resolves true once at least one email went out (or none was due).
  */
 export async function notifyDomainOwnershipMissing(
-  domain: Pick<Domain, 'name' | 'ownershipToken'>,
-  deadline: Date
+  domain: NotifiedDomain,
+  deadline: Date,
+  opts: { ring: boolean }
 ): Promise<boolean> {
   try {
-    const managers = await domainManagers()
+    const managers = await sendingDomainManagers()
     if (managers.length === 0) return true
     const by = formatDeadline(deadline)
-    const { domainAttentionMessage } = await import('@quackback/email')
-    await ringManagers(managers, TYPE, {
-      title: `${domain.name} needs attention`,
-      body: domainAttentionMessage({
-        domain: domain.name,
-        recordName: recordOf(domain).name,
-        deadline: by,
-      }),
-      metadata: { domain: domain.name, audience: 'admin' },
-    })
+    if (opts.ring) await ring(managers, domain, `${domain.name} needs attention`, { deadline: by })
     return await emailManagers(managers, domain, { deadline: by })
   } catch (err) {
     log.warn({ err, domain: domain.name }, 'domain ownership warning notification failed')
@@ -136,22 +117,13 @@ export async function notifyDomainOwnershipMissing(
 
 /** The record stayed missing and the domain is no longer verified. */
 export async function notifyDomainOwnershipLapsed(
-  domain: Pick<Domain, 'name' | 'ownershipToken'>,
+  domain: NotifiedDomain,
   signInDomains: string[]
 ): Promise<void> {
   try {
-    const managers = await domainManagers()
+    const managers = await sendingDomainManagers()
     if (managers.length === 0) return
-    const { domainAttentionMessage } = await import('@quackback/email')
-    await ringManagers(managers, TYPE, {
-      title: `${domain.name} is no longer verified`,
-      body: domainAttentionMessage({
-        domain: domain.name,
-        recordName: recordOf(domain).name,
-        signInDomains,
-      }),
-      metadata: { domain: domain.name, audience: 'admin' },
-    })
+    await ring(managers, domain, `${domain.name} is no longer verified`, { signInDomains })
     await emailManagers(managers, domain, { signInDomains })
   } catch (err) {
     log.warn({ err, domain: domain.name }, 'domain ownership lapse notification failed')

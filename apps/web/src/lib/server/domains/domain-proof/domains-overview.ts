@@ -7,22 +7,27 @@ import {
   asc,
   channelAccounts,
   db,
+  domains as domainsTable,
   emailSendingDomains,
   eq,
   isNull,
+  settings,
   ssoVerifiedDomain,
+  type Domain,
 } from '@/lib/server/db'
 import { shownProofSource, type ShownProofSource } from '@/lib/shared/domain-proof'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { toAsciiDomain } from '@/lib/server/domains/channel-accounts/outbound-identity'
-import { OWNERSHIP_RECORD_HOST } from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import { ownershipRecord } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 import {
   getProvenZones,
   provenZoneCovering,
+  provenZonesFrom,
   sendingRowProvesZone,
   zonesBesidesDomain,
+  type ProvenZone,
 } from './proven-zones'
-import { domainOwnershipValue, domainUsesOf, getDomain, listDomains } from './domains.service'
+import { domainUsesFrom, type DomainUseRows } from './domains.service'
 
 export interface SendingDomainSummary {
   id: string
@@ -138,9 +143,51 @@ export interface DomainDetail {
   inUse: boolean
 }
 
+/**
+ * The added domains and the zones this workspace has proven, read once: the
+ * domains, the sending domains and the settings row, plus the sign-in domains
+ * when a domain's uses are wanted too. Everything else is derived from them.
+ */
+async function loadDomainRows(opts: { signIn: boolean }): Promise<{
+  domains: Domain[]
+  zones: ProvenZone[]
+  useRows: DomainUseRows
+}> {
+  const [domainRows, sending, settingsRows, signIn] = await Promise.all([
+    db.select().from(domainsTable).orderBy(asc(domainsTable.name)),
+    db
+      .select({
+        domain: emailSendingDomains.domain,
+        status: emailSendingDomains.status,
+        dkimMode: emailSendingDomains.dkimMode,
+        dnsRecords: emailSendingDomains.dnsRecords,
+      })
+      .from(emailSendingDomains),
+    db
+      .select({
+        helpCenterConfig: settings.helpCenterConfig,
+        cloudIdentity: settings.cloudIdentity,
+      })
+      .from(settings)
+      .limit(1),
+    opts.signIn ? db.select({ name: ssoVerifiedDomain.name }).from(ssoVerifiedDomain) : [],
+  ])
+  const settingsRow = settingsRows[0]
+  return {
+    domains: domainRows,
+    zones: provenZonesFrom({
+      sending,
+      sso: [],
+      cloudIdentity: settingsRow?.cloudIdentity,
+      domains: domainRows,
+    }),
+    useRows: { sending, signIn, settings: settingsRow },
+  }
+}
+
 export async function listAddedDomainSummaries(): Promise<AddedDomainSummary[]> {
-  const [rows, zones] = await Promise.all([listDomains(), getProvenZones()])
-  return rows.map((r) => ({
+  const { domains, zones } = await loadDomainRows({ signIn: false })
+  return domains.map((r) => ({
     name: r.name,
     verified: r.status === 'verified' || provenZoneCovering(r.name, zones) !== null,
   }))
@@ -151,23 +198,19 @@ export async function getDomainDetail(
   viewer: readonly PermissionKey[]
 ): Promise<DomainDetail> {
   const key = toAsciiDomain(name)
-  const [row, zones, uses] = await Promise.all([
-    getDomain(key),
-    getProvenZones(),
-    domainUsesOf(key),
-  ])
+  const { domains, zones, useRows } = await loadDomainRows({ signIn: true })
+  const row = (key && domains.find((d) => d.name === key)) || null
+  const record = row ? ownershipRecord(row.ownershipToken) : null
   // Another proof that covers the name; a verified row is its own proof.
   const covering = provenZoneCovering(key, row ? zonesBesidesDomain(row, zones) : zones)
   return {
     name: row?.name ?? key,
     added: row !== null,
     status: row?.status ?? 'pending',
-    record: row
-      ? { host: OWNERSHIP_RECORD_HOST, value: domainOwnershipValue(row.ownershipToken) }
-      : null,
+    record: record ? { host: record.host, value: record.value } : null,
     verifiedAt: row?.verifiedAt?.toISOString() ?? null,
     lastCheckedAt: row?.lastCheckedAt?.toISOString() ?? null,
     provenBy: covering ? shownProofSource(covering.source, viewer) : null,
-    inUse: uses.length > 0,
+    inUse: domainUsesFrom(key, useRows).length > 0,
   }
 }

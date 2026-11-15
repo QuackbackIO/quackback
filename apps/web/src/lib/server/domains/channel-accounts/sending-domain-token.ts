@@ -13,10 +13,34 @@
  * check and the claim run under a transaction-scoped lock on the name. A domain
  * added at any other name, even one above this, is never used.
  */
-import { and, db, domains, eq, ne, sql, emailSendingDomains } from '@/lib/server/db'
+import {
+  and,
+  db,
+  domains,
+  eq,
+  ne,
+  sql,
+  emailSendingDomains,
+  type Transaction,
+} from '@/lib/server/db'
 import type { SendingDomainId } from '@quackback/ids'
 import { toAsciiDomain } from '@/lib/server/utils/mail-domain'
-import { mintOwnershipToken, ownershipRecord } from './sending-domain-records'
+import {
+  carriesOwnershipRecord,
+  mintOwnershipToken,
+  ownershipRecord,
+} from './sending-domain-records'
+
+/**
+ * The transaction-scoped lock on a domain name, in its one spelling, that
+ * issuing its token and discarding an unused domain both take, so neither
+ * sees the other half done.
+ */
+export async function lockDomainName(tx: Transaction, name: string): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`quackback:domain-token:${toAsciiDomain(name)}`}))`
+  )
+}
 
 export async function issueOwnershipToken(row: {
   id: SendingDomainId
@@ -28,32 +52,24 @@ export async function issueOwnershipToken(row: {
   // written onto this row before the lock is released, so a second row being
   // issued at the same moment sees it taken.
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`quackback:domain-token:${name}`}))`
-    )
+    await lockDomainName(tx, name)
     const [added] = await tx
       .select({ token: domains.ownershipToken })
       .from(domains)
       .where(eq(domains.name, name))
       .limit(1)
     if (!added?.token) return mintOwnershipToken()
-    const record = ownershipRecord(added.token)
     const [taken] = await tx
       .select({ id: emailSendingDomains.id })
       .from(emailSendingDomains)
-      .where(
-        and(
-          ne(emailSendingDomains.id, row.id),
-          sql`${emailSendingDomains.dnsRecords} @> ${JSON.stringify([{ purpose: record.purpose, value: record.value }])}::jsonb`
-        )
-      )
+      .where(and(ne(emailSendingDomains.id, row.id), carriesOwnershipRecord(added.token)))
       .limit(1)
     if (taken) return mintOwnershipToken()
     // The claim: this row's ownership record, ahead of whatever it held.
     await tx
       .update(emailSendingDomains)
       .set({
-        dnsRecords: sql`${JSON.stringify([record])}::jsonb || COALESCE((SELECT jsonb_agg(r) FROM jsonb_array_elements(${emailSendingDomains.dnsRecords}) r WHERE r->>'purpose' <> 'ownership'), '[]'::jsonb)`,
+        dnsRecords: sql`${JSON.stringify([ownershipRecord(added.token)])}::jsonb || COALESCE((SELECT jsonb_agg(r) FROM jsonb_array_elements(${emailSendingDomains.dnsRecords}) r WHERE r->>'purpose' <> 'ownership'), '[]'::jsonb)`,
       })
       .where(eq(emailSendingDomains.id, row.id))
     return added.token

@@ -16,13 +16,13 @@ import {
 import { assertAnyPermission, requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
+  PRODUCT_SENDER_SURFACES,
   SUPPORT_SENDER_PERMISSIONS,
   SURFACE_SENDER_READ_PERMISSIONS,
 } from '@/lib/shared/email-sending-permissions'
-import {
-  bareSenderAddress,
-  resolveSender,
-} from '@/lib/server/domains/channel-accounts/sender-resolver'
+import { bareAddress } from '@quackback/email/ses'
+import { namedAddress } from '@quackback/email/named-address'
+import { resolveSender } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import {
   defaultTeamId,
   getInboundRoute,
@@ -306,14 +306,17 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
     // One read of the guard's context answers every "may this be sent as"
     // question on the page. The pure rule, not the send-time check: a page
     // read is not a refused send, and must not log one.
-    const guard = await sendingIdentityContext()
-    const addressMode = addressModeFor(guard)
-    const sendingPaused = await sesTenantPausedNotice()
-    const teamId = await defaultTeamId()
     const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
-    const workspaceName = (await requireSettingsCached()).name
+    const [guard, sendingPaused, teamId, settingsRow, choices] = await Promise.all([
+      sendingIdentityContext(),
+      sesTenantPausedNotice(),
+      defaultTeamId(),
+      requireSettingsCached(),
+      getEmailSenders(),
+    ])
+    const addressMode = addressModeFor(guard)
+    const workspaceName = settingsRow.name
     const defaultFrom = await platformFromFor(workspaceName)
-    const choices = await getEmailSenders()
     const senders = Object.fromEntries(
       EMAIL_SENDER_SURFACES.map((surface) => {
         const choice = choices.get(surface)
@@ -463,16 +466,19 @@ export const setEmailSenderFn = createServerFn({ method: 'POST' })
  * thread keeps its own sender (see `resolveSender`).
  */
 export const getSurfaceSenderFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ surface: z.enum(['feedback', 'changelog', 'status']) }))
+  .validator(z.object({ surface: z.enum(PRODUCT_SENDER_SURFACES) }))
   .handler(async ({ data }): Promise<{ from: string | null }> => {
     assertAnyPermission(await requireAuth(), SURFACE_SENDER_READ_PERMISSIONS[data.surface])
     const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
-    const workspaceName = (await requireSettingsCached()).name?.trim()
-    const resolved = await resolveSender({ surface: data.surface, preview: true })
+    const [settingsRow, resolved] = await Promise.all([
+      requireSettingsCached(),
+      resolveSender({ surface: data.surface, preview: true }),
+    ])
+    const workspaceName = settingsRow.name?.trim()
     if (!resolved) return { from: await platformFromFor(workspaceName) }
-    const name = resolved.senderName?.trim() || workspaceName
-    const address = bareSenderAddress(resolved.from)
-    return { from: name ? `${name} <${address}>` : address }
+    return {
+      from: namedAddress(resolved.senderName?.trim() || workspaceName, bareAddress(resolved.from)),
+    }
   })
 
 export const restartSendingDomainChecksFn = createServerFn({ method: 'POST' })

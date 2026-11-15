@@ -34,7 +34,7 @@ import {
   conversationMessages,
 } from '@/lib/server/db'
 import {
-  formatNamedSendingAddress,
+  senderFrom,
   resolveConversationSender,
 } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { randomUUID } from 'node:crypto'
@@ -477,12 +477,8 @@ export async function sendVisitorConversationEmail(opts: {
   // every channel: a widget or messenger reply that reaches the customer's inbox
   // is still a person answering them, and an unnamed address reads as a robot.
   const resolved = await resolveConversationSender(opts.conversationId)
-  const resolvedFrom = resolved?.from
-  const fromDisplayName = agentReplyDisplayName(
-    opts.senderName,
-    resolved?.senderName ?? opts.ctx.workspaceName
-  )
-  const from = resolvedFrom ? formatNamedSendingAddress(resolvedFrom, fromDisplayName) : undefined
+  const asAgent = (sendsAs: string) => agentReplyDisplayName(opts.senderName, sendsAs)
+  const from = senderFrom(resolved, opts.ctx.workspaceName, asAgent)
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const resolvedBody = await resolvedMessageBody(opts.content, opts.contentJson, opts.attachments)
   // One key for every attempt of this send, opened outside the retry loop for
@@ -505,7 +501,8 @@ export async function sendVisitorConversationEmail(opts: {
         logoUrl: opts.ctx.logoUrl ?? undefined,
         replyTo,
         from,
-        fromDisplayName: from ? undefined : fromDisplayName,
+        // No resolved sender: the platform default, under the agent and workspace.
+        fromDisplayName: from ? undefined : asAgent(opts.ctx.workspaceName),
         channel,
         conversationSubject: mailCtx.subject,
         correspondence,

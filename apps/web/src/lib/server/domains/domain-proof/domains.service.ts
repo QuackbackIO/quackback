@@ -11,19 +11,25 @@
  * name, so a domain is removed only once none of them holds it.
  */
 import {
+  and,
   asc,
   db,
   domains,
   emailSendingDomains,
   eq,
+  isNotNull,
+  or,
   settings,
+  sql,
   ssoVerifiedDomain,
+  type Database,
   type Domain,
+  type Transaction,
 } from '@/lib/server/db'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { DomainUse } from '@/lib/shared/domains-permissions'
-import type { ProvenZoneSource } from '@/lib/shared/domain-proof'
-import { lookupVerificationTxt } from '@/lib/server/auth/dns-verify'
+import type { DomainRecordCheck } from '@/lib/shared/domain-proof'
+import { lookupVerificationTxt, type LookupResult } from '@/lib/server/auth/dns-verify'
 import { verifiableDomain } from '@/lib/server/auth/normalize-domain'
 import { interactiveResolver } from '@/lib/server/dns/resolver'
 import { toAsciiDomain } from '@/lib/server/utils/mail-domain'
@@ -31,19 +37,34 @@ import {
   mintOwnershipToken,
   OWNERSHIP_RECORD_HOST,
   OWNERSHIP_VALUE_PREFIX,
+  ownershipRecord,
 } from '@/lib/server/domains/channel-accounts/sending-domain-records'
+import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
+import { GRACE_CLEARED } from '@/lib/server/domains/channel-accounts/ownership-grace'
+import { lockDomainName } from '@/lib/server/domains/channel-accounts/sending-domain-token'
+import { parseJsonConfig } from '@/lib/server/domains/settings/settings.helpers'
+import { DEFAULT_HELP_CENTER_CONFIG } from '@/lib/server/domains/settings/settings.types'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 import { getProvenZones, provenZoneCovering, zonesBesidesDomain } from './proven-zones'
 
 export type { Domain }
 
-export type DomainOwnershipCheck =
-  | { ok: true; via: 'dns' | ProvenZoneSource }
-  | { ok: false; reason: 'no-record' | 'lookup-failed' | 'mismatch' }
+export type DomainOwnershipCheck = DomainRecordCheck
 
-/** The value this domain's ownership record must hold. */
-export function domainOwnershipValue(token: string): string {
-  return `${OWNERSHIP_VALUE_PREFIX}${token}`
+/**
+ * Look up a domain's own ownership record, with a second try since a person or
+ * a verified domain is waiting on the answer: the lookup's result, and whether
+ * it holds the row's own token.
+ */
+export async function lookupDomainRecord(
+  row: Pick<Domain, 'name' | 'ownershipToken'>
+): Promise<{ result: LookupResult; found: boolean }> {
+  const result = await lookupVerificationTxt(
+    recordName(row.name, OWNERSHIP_RECORD_HOST),
+    interactiveResolver
+  )
+  const found = result.ok && result.values.includes(ownershipRecord(row.ownershipToken).value)
+  return { result, found }
 }
 
 /** The domain's name in its one spelling, or a typed refusal a person can read. */
@@ -74,16 +95,52 @@ export async function listDomains(): Promise<Domain[]> {
  * token unchanged, so a second add never invalidates a published record.
  */
 export async function addDomain(input: string): Promise<Domain> {
-  const name = parseName(input)
+  return (await upsertDomain(parseName(input))).domain
+}
+
+/** The row at a name in its one spelling: inserted with a fresh token, or the one already there. */
+async function upsertDomain(name: string): Promise<{ domain: Domain; created: boolean }> {
   const [inserted] = await db
     .insert(domains)
     .values({ name, ownershipToken: mintOwnershipToken() })
     .onConflictDoNothing({ target: domains.name })
     .returning()
-  if (inserted) return inserted
+  if (inserted) return { domain: inserted, created: true }
   const existing = await getDomain(name)
   if (!existing) throw new ConflictError('DOMAIN_ADD_RACE', 'Try adding the domain again.')
-  return existing
+  return { domain: existing, created: false }
+}
+
+/**
+ * The domain a use was just given in context (an address added on Settings >
+ * Email, a sign-in domain, the help center's domain, a Cloud web address), so
+ * it is on Settings > Domains too. Idempotent: a token is minted only for a
+ * new row, and an existing row's token and status are never changed. Not a
+ * server function: each caller is gated by its own use's permission.
+ *
+ * A name that is not a domain anyone can prove (reserved, an IP, one label)
+ * gets no row, and null.
+ */
+export async function ensureDomain(
+  input: string
+): Promise<{ domain: Domain; created: boolean } | null> {
+  const parsed = verifiableDomain.safeParse(input)
+  return parsed.success ? upsertDomain(parsed.data) : null
+}
+
+/**
+ * Take back a domain {@link ensureDomain} created for a use that then did not
+ * happen: only while it is still pending and nothing holds its name. The check
+ * and the delete run under the same lock on the name that issuing its token
+ * to a sending row takes (`sending-domain-token.ts`), so an add of the same
+ * name at that moment is not left holding a removed domain's token.
+ */
+export async function discardUnusedDomain(domain: Domain): Promise<void> {
+  await db.transaction(async (tx) => {
+    await lockDomainName(tx, domain.name)
+    if ((await domainUsesOf(domain.name, tx)).length > 0) return
+    await tx.delete(domains).where(and(eq(domains.id, domain.id), eq(domains.status, 'pending')))
+  })
 }
 
 /**
@@ -112,13 +169,8 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
   const proven = provenZoneCovering(row.name, zonesBesidesDomain(row, await getProvenZones()))
   if (proven) return { ok: true, via: proven.source }
 
-  // A person is waiting on this, so the lookup gets a second try.
-  const result = await lookupVerificationTxt(
-    `${OWNERSHIP_RECORD_HOST}.${row.name}`,
-    interactiveResolver
-  )
+  const { result, found } = await lookupDomainRecord(row)
   const now = new Date()
-  const found = result.ok && result.values.includes(domainOwnershipValue(row.ownershipToken))
   await db
     .update(domains)
     .set(
@@ -126,7 +178,7 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
         ? {
             status: 'verified',
             verifiedAt: row.verifiedAt ?? now,
-            ownershipMissingSince: null,
+            ...GRACE_CLEARED,
             lastCheckedAt: now,
             updatedAt: now,
           }
@@ -137,25 +189,59 @@ export async function checkDomainOwnership(name: string): Promise<DomainOwnershi
   return { ok: false, reason: result.ok ? 'mismatch' : result.reason }
 }
 
-function helpCenterDomainOf(raw: string | null): string | null {
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as { domain?: { domain?: unknown } | null }
-    const domain = parsed.domain?.domain
-    return typeof domain === 'string' ? domain : null
-  } catch {
-    return null
-  }
+/**
+ * A sending check found its row's own `_quackback` record at a name. When that
+ * row was issued the token of the domain added at the same name (see
+ * `sending-domain-token.ts`), it is the same record, so the domain is verified
+ * by the same finding: moved to verified, or its grace period ended. Only this
+ * workspace's row at exactly that name, holding exactly that token, is
+ * touched; any other value found proves nothing about a domain.
+ */
+export async function verifyDomainOnFoundRecord(
+  name: string,
+  record: { host: string; value: string },
+  now: Date = new Date()
+): Promise<void> {
+  const key = toAsciiDomain(name)
+  if (!key || record.host !== OWNERSHIP_RECORD_HOST) return
+  if (!record.value.startsWith(OWNERSHIP_VALUE_PREFIX)) return
+  const token = record.value.slice(OWNERSHIP_VALUE_PREFIX.length)
+  if (!token) return
+  await db
+    .update(domains)
+    .set({
+      status: 'verified',
+      verifiedAt: sql`COALESCE(${domains.verifiedAt}, ${now.toISOString()}::timestamptz)`,
+      ...GRACE_CLEARED,
+      lastCheckedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(domains.name, key),
+        eq(domains.ownershipToken, token),
+        or(eq(domains.status, 'pending'), isNotNull(domains.ownershipMissingSince))
+      )
+    )
+}
+
+/** The rows a domain's uses are worked out from. */
+export interface DomainUseRows {
+  sending: readonly { domain: string }[]
+  signIn: readonly { name: string }[]
+  settings: { helpCenterConfig: string | null; cloudIdentity: unknown } | undefined
 }
 
 /** The uses that hold this name, in the order every page lists them. */
-export async function domainUsesOf(name: string): Promise<DomainUse[]> {
-  const key = toAsciiDomain(name)
-  if (!key) return []
+export async function domainUsesOf(
+  name: string,
+  executor: Database | Transaction = db
+): Promise<DomainUse[]> {
+  if (!toAsciiDomain(name)) return []
   const [sending, signIn, settingsRows] = await Promise.all([
-    db.select({ domain: emailSendingDomains.domain }).from(emailSendingDomains),
-    db.select({ name: ssoVerifiedDomain.name }).from(ssoVerifiedDomain),
-    db
+    executor.select({ domain: emailSendingDomains.domain }).from(emailSendingDomains),
+    executor.select({ name: ssoVerifiedDomain.name }).from(ssoVerifiedDomain),
+    executor
       .select({
         helpCenterConfig: settings.helpCenterConfig,
         cloudIdentity: settings.cloudIdentity,
@@ -163,16 +249,25 @@ export async function domainUsesOf(name: string): Promise<DomainUse[]> {
       .from(settings)
       .limit(1),
   ])
+  return domainUsesFrom(name, { sending, signIn, settings: settingsRows[0] })
+}
+
+/** The uses that hold this name among rows already read, in the order every page lists them. */
+export function domainUsesFrom(name: string, rows: DomainUseRows): DomainUse[] {
+  const key = toAsciiDomain(name)
+  if (!key) return []
   const matches = (value: string | null | undefined) => !!value && toAsciiDomain(value) === key
-  const row = settingsRows[0]
   const webAddresses = [
-    helpCenterDomainOf(row?.helpCenterConfig ?? null),
-    ...(parseIdentityProjection(row?.cloudIdentity)?.customDomains ?? []).map((h) => h.hostname),
+    parseJsonConfig(rows.settings?.helpCenterConfig ?? null, DEFAULT_HELP_CENTER_CONFIG).domain
+      ?.domain,
+    ...(parseIdentityProjection(rows.settings?.cloudIdentity)?.customDomains ?? []).map(
+      (h) => h.hostname
+    ),
   ]
   const uses: DomainUse[] = []
-  if (sending.some((s) => matches(s.domain))) uses.push('email')
+  if (rows.sending.some((s) => matches(s.domain))) uses.push('email')
   if (webAddresses.some(matches)) uses.push('customDomain')
-  if (signIn.some((s) => matches(s.name))) uses.push('signIn')
+  if (rows.signIn.some((s) => matches(s.name))) uses.push('signIn')
   return uses
 }
 

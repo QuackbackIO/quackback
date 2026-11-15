@@ -1,20 +1,15 @@
 import { SettingsPage } from '@/components/admin/settings/settings-page'
-import {
-  WorkspaceEmailSettings,
-  type SenderSurfaceKey,
-} from '@/components/admin/channels/email-channel-settings'
+import { WorkspaceEmailSettings } from '@/components/admin/channels/email-channel-settings'
+import { SENDER_SURFACES, type SenderSurfaceKey } from '@/components/admin/channels/send-from-card'
 import { EmailTransportCard } from '@/components/admin/channels/email-transport-card'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
-
-/** The kinds of email that belong to a product; each has a row while it is on. */
-const SURFACES: readonly SenderSurfaceKey[] = ['support', 'feedback', 'changelog', 'status']
 
 /** The kinds of email with a row of their own: one per product that is on. */
 export function senderSurfacesFor(
   flags: Partial<FeatureFlags> | null | undefined
 ): SenderSurfaceKey[] {
-  return SURFACES.filter((surface) => isProductEnabled(flags, surface))
+  return SENDER_SURFACES.filter((surface) => isProductEnabled(flags, surface))
 }
 
 export function WorkspaceEmailPage() {

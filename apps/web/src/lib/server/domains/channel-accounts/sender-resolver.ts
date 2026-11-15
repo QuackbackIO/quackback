@@ -9,12 +9,12 @@
  */
 import type { ChannelAccountId, ConversationId, TicketId } from '@quackback/ids'
 import type { SendingIdentity } from '@quackback/email/sender'
-import { parseAddress } from '@quackback/email/ses'
+import { bareAddress } from '@quackback/email/ses'
 import { db, and, eq, isNull, conversations, ticketConversations } from '@/lib/server/db'
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { getChannelAccount } from './channel-account.service'
-import { getEmailSenders, workspaceAddress } from './email-senders'
+import { getEmailSenders, workspaceAddress, type EmailSenderSurface } from './email-senders'
 import {
   permittedSendingIdentity,
   sendingIdentityContext,
@@ -22,19 +22,8 @@ import {
   type SendingIdentityContext,
 } from './outbound-identity'
 
-/**
- * RFC 5322 display-name wrapper for a resolved sending address:
- * `Alex from Acme <support@acme.com>`. Does not change address resolution.
- */
-export function formatNamedSendingAddress(
-  address: SendingIdentity,
-  displayName: string
-): SendingIdentity {
-  return withSendingDisplayName(address, displayName)
-}
-
 /** The kinds of customer email that choose their own sender. */
-export type SenderSurface = 'support' | 'feedback' | 'changelog' | 'status'
+export type SenderSurface = Exclude<EmailSenderSurface, 'default'>
 
 /** Which step of the chain in {@link resolveSender} produced the From. */
 export type SenderSource = 'thread' | 'inbox' | 'surface' | 'default' | 'platform_inbox'
@@ -49,6 +38,22 @@ export interface ResolvedSender {
    * "<agent> from <that>".
    */
   senderName: string | null
+}
+
+/**
+ * A resolved sender as the From to send: its address under the name it sends
+ * as (its own sender name, else `workspaceName`), passed through `name` for a
+ * caller that adds to it ("Alex from Acme"). Undefined when nothing resolved,
+ * so the send uses the platform default.
+ */
+export function senderFrom(
+  resolved: ResolvedSender | null,
+  workspaceName: string,
+  name: (sendsAs: string) => string = (sendsAs) => sendsAs
+): SendingIdentity | undefined {
+  return resolved
+    ? withSendingDisplayName(resolved.from, name(resolved.senderName ?? workspaceName))
+    : undefined
 }
 
 /**
@@ -140,8 +145,10 @@ async function resolve(input: {
     const address = conv?.threadSenderAddress ?? null
     if (address) {
       // Reused only while it is still one of the workspace's addresses, so
-      // removing an address moves its threads to whatever is chosen now.
-      const own = await workspaceAddress(address)
+      // removing an address moves its threads to whatever is chosen now. The
+      // guard's context is gathered meanwhile, which this step or a later one
+      // will check against.
+      const [own] = await Promise.all([workspaceAddress(address), ctx()])
       stored = { address, known: own.known }
       if (own.known) {
         const from = await permitted(address)
@@ -173,7 +180,12 @@ async function resolve(input: {
     const inboxAddress = account?.address ?? account?.config?.forwardingTarget ?? null
     const from = await permitted(inboxAddress)
     if (from && inboxAddress) {
-      const { senderName } = await workspaceAddress(inboxAddress)
+      // A sending row already carries its name; a forwarded address takes the
+      // name of the sending address it matches, if any.
+      const senderName =
+        account?.role === 'sending'
+          ? account.senderName
+          : (await workspaceAddress(inboxAddress)).senderName
       return answer({ from, source: 'inbox', senderName })
     }
   }
@@ -199,12 +211,6 @@ async function resolve(input: {
     if (from) return answer({ from, source: 'platform_inbox', senderName: null })
   }
   return answer(null)
-}
-
-/** The bare addr-spec of a From, without any display name; what a thread stores. */
-export function bareSenderAddress(from: SendingIdentity | string): string {
-  const parsed = parseAddress(from)
-  return typeof parsed === 'string' ? parsed : parsed.address
 }
 
 /**
@@ -234,7 +240,7 @@ export async function resolveConversationSender(
 
   const [written] = await db
     .update(conversations)
-    .set({ threadSenderAddress: bareSenderAddress(sender.from) })
+    .set({ threadSenderAddress: bareAddress(sender.from) })
     .where(
       and(
         eq(conversations.id, conversationId),

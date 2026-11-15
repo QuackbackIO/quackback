@@ -52,10 +52,15 @@ import { ownershipRecordsOf } from '@/lib/server/domains/channel-accounts/sendin
 import { recordName } from '@/lib/server/domains/channel-accounts/record-check'
 import {
   OWNERSHIP_RECORD_HOST,
-  OWNERSHIP_VALUE_PREFIX,
+  ownershipRecord,
 } from '@/lib/server/domains/channel-accounts/sending-domain-records'
 
 export type { ProvenZoneSource }
+
+/** A domain's own `_quackback` record, as a full name and its exact value. */
+function domainRecord(name: string, token: string): { name: string; value: string } {
+  return { name: recordName(name, OWNERSHIP_RECORD_HOST), value: ownershipRecord(token).value }
+}
 
 export interface ProvenZone {
   /** The proven name, in its ASCII spelling. */
@@ -123,10 +128,7 @@ export function zonesBesidesDomain(
   zones: readonly ProvenZone[]
 ): ProvenZone[] {
   const own = toAsciiDomain(domain.name)
-  const record = {
-    name: recordName(own, OWNERSHIP_RECORD_HOST),
-    value: `${OWNERSHIP_VALUE_PREFIX}${domain.ownershipToken}`,
-  }
+  const record = domainRecord(own, domain.ownershipToken)
   return zones.filter(
     (z) =>
       !(z.source === 'domain' && z.zone === own) &&
@@ -136,6 +138,16 @@ export function zonesBesidesDomain(
 
 export function isCoveredByProvenZone(name: string, zones: readonly ProvenZone[]): boolean {
   return provenZoneCovering(name, zones) !== null
+}
+
+/** The rows the proven zones are worked out from, each read from this workspace's database. */
+export interface ProvenZoneRows {
+  /** Sending-domain rows; any that is not verified is skipped. */
+  sending: readonly (SendingRowProofInput & { domain: string })[]
+  /** Verified single sign-on domains, when they count. */
+  sso: readonly { name: string; verificationToken: string }[]
+  cloudIdentity: unknown
+  domains: readonly { name: string; ownershipToken: string; status: string }[]
 }
 
 /**
@@ -173,22 +185,31 @@ export async function getProvenZones(
       })
       .from(domains),
   ])
+  return provenZonesFrom({
+    sending,
+    sso,
+    cloudIdentity: settingsRows[0]?.cloudIdentity,
+    domains: domainRows,
+  })
+}
 
+/** The zones proven by rows already read, in the order {@link getProvenZones} gives them. */
+export function provenZonesFrom(rows: ProvenZoneRows): ProvenZone[] {
   // The `_quackback` record of every domain added by name that is not
   // verified. A sending row issued that domain's token rests on the same
   // record, so it proves nothing while the domain does not: once the domain is
   // demoted for a missing record, the twin cannot keep the zone proven.
   const notVerifiedRecords = new Set(
-    domainRows
+    rows.domains
       .filter((d) => d.status !== 'verified')
-      .map(
-        (d) =>
-          `${recordName(toAsciiDomain(d.name), OWNERSHIP_RECORD_HOST)} ${OWNERSHIP_VALUE_PREFIX}${d.ownershipToken}`
-      )
+      .map((d) => {
+        const record = domainRecord(toAsciiDomain(d.name), d.ownershipToken)
+        return `${record.name} ${record.value}`
+      })
   )
 
   const zones: ProvenZone[] = []
-  for (const row of sending) {
+  for (const row of rows.sending) {
     const proof = sendingRowProofRecord(row)
     const zone = toAsciiDomain(row.domain)
     const name = proof && zone ? recordName(zone, proof.host) : ''
@@ -201,7 +222,7 @@ export async function getProvenZones(
       })
     }
   }
-  for (const row of sso) {
+  for (const row of rows.sso) {
     const zone = toAsciiDomain(row.name)
     if (!zone) continue
     zones.push({
@@ -214,7 +235,7 @@ export async function getProvenZones(
       },
     })
   }
-  for (const row of domainRows) {
+  for (const row of rows.domains) {
     if (row.status !== 'verified') continue
     const zone = toAsciiDomain(row.name)
     // A row with no token has nothing of its own to have been verified by.
@@ -223,13 +244,10 @@ export async function getProvenZones(
       zone,
       source: 'domain',
       exact: false,
-      record: {
-        name: recordName(zone, OWNERSHIP_RECORD_HOST),
-        value: `${OWNERSHIP_VALUE_PREFIX}${row.ownershipToken}`,
-      },
+      record: domainRecord(zone, row.ownershipToken),
     })
   }
-  const identity = parseIdentityProjection(settingsRows[0]?.cloudIdentity)
+  const identity = parseIdentityProjection(rows.cloudIdentity)
   for (const hostname of identity?.customDomains ?? []) {
     if (hostname.readiness === 'ready') {
       zones.push({

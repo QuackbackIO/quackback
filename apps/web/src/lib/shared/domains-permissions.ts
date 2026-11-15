@@ -1,6 +1,15 @@
 import { PERMISSIONS, type PermissionKey } from './permissions'
 import { EMAIL_SENDING_PERMISSION } from './email-sending-permissions'
 
+export type DomainUse = 'email' | 'customDomain' | 'signIn'
+
+/** The permission that owns each use of a domain: its holder may read that use. */
+export const DOMAIN_USE_PERMISSION = {
+  email: EMAIL_SENDING_PERMISSION,
+  customDomain: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+  signIn: PERMISSIONS.AUTH_MANAGE,
+} as const satisfies Record<DomainUse, PermissionKey>
+
 /**
  * Who can open the Domains page: a holder of any permission that owns one of
  * the kinds of domain it lists (web addresses, email sending, sign-in).
@@ -8,17 +17,15 @@ import { EMAIL_SENDING_PERMISSION } from './email-sending-permissions'
  * pulling the page registry into the app entry.
  */
 export const DOMAINS_PAGE_PERMISSIONS = [
-  PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-  EMAIL_SENDING_PERMISSION,
-  PERMISSIONS.AUTH_MANAGE,
+  DOMAIN_USE_PERMISSION.customDomain,
+  DOMAIN_USE_PERMISSION.email,
+  DOMAIN_USE_PERMISSION.signIn,
 ] as const satisfies readonly PermissionKey[]
 
 /** The Custom domains card on this page (Cloud), where the empty state's Custom domain action lands. */
 export const CUSTOM_DOMAINS_ANCHOR = 'custom-domains'
 
 export const HELP_CENTER_SETTINGS = '/admin/settings/help-center'
-
-export type DomainUse = 'email' | 'customDomain' | 'signIn'
 
 export interface UseLink {
   to: string

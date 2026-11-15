@@ -49,7 +49,7 @@ vi.mock('../conversation.email-store', () => ({
 vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
   resolveConversationFrom: async () => null,
   resolveConversationSender: async () => null,
-  formatNamedSendingAddress: (addr: string, name: string) => `"${name}" <${addr}>`,
+  senderFrom: () => undefined,
 }))
 
 vi.mock('@/lib/server/email/email-log.sink', () => ({

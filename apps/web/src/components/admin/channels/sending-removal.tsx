@@ -9,7 +9,7 @@ import {
   useDeleteSendingDomain,
 } from '@/lib/client/mutations/channel-accounts'
 import type { EmailSendersDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
-import { SENDER_SURFACE_NAMES } from './send-from-card'
+import { SENDER_SURFACE_NAMES, SENDER_SURFACES } from './send-from-card'
 
 export type SendingAddress = {
   id: string
@@ -61,9 +61,7 @@ export function removalNote(
   if (senders.default?.mode === 'address' && senders.default.id === id) {
     return `It's your default address, so email will come from ${platformFrom ?? `the ${platformName.toLowerCase()}`} instead.`
   }
-  const using = (
-    Object.keys(SENDER_SURFACE_NAMES) as Array<keyof typeof SENDER_SURFACE_NAMES>
-  ).filter((s) => {
+  const using = SENDER_SURFACES.filter((s) => {
     const choice = senders[s]
     return (
       (choice?.mode === 'address' && choice.id === id) ||

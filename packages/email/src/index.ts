@@ -17,6 +17,7 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
+import { namedAddress } from './named-address'
 import {
   applyDisplayName,
   parseAddress,
@@ -93,7 +94,7 @@ export {
 import { createElement } from 'react'
 import { EmailPoweredByProvider, resolveEmailPoweredBy } from './powered-by'
 import { defaultFromIsShared, resolvedDefaultFrom } from './default-from'
-import { platformDisplayName } from './platform-name'
+import { platformDisplayName, QUACKBACK_DISPLAY_NAME } from './platform-name'
 export { platformDisplayName, QUACKBACK_DISPLAY_NAME } from './platform-name'
 
 /**
@@ -139,7 +140,7 @@ export function platformFromPreview(workspaceName: string | null | undefined): s
   const name =
     platformDisplayName('RawEmail', workspaceName, { operatorNamed: isOperatorNamed(from) }) ??
     (typeof written === 'string' ? '' : written.name)
-  return name ? `${name} <${address}>` : address
+  return namedAddress(name, address)
 }
 
 /**
@@ -871,7 +872,7 @@ export async function sendSignupNotAllowedEmail(
   log.debug('sending sign-in refusal email')
   return sendEmail({
     to,
-    subject: `About your ${workspaceName?.trim() || 'Quackback'} sign-in request`,
+    subject: `About your ${workspaceName?.trim() || QUACKBACK_DISPLAY_NAME} sign-in request`,
     react: SignupNotAllowedEmail({ workspaceName, logoUrl }),
     emailType: 'SignupNotAllowedEmail',
     workspaceName,
@@ -898,7 +899,7 @@ export async function sendPasswordResetEmail(
   log.debug('sending password reset email')
   return sendEmail({
     to,
-    subject: `Reset your ${workspaceName?.trim() || 'Quackback'} password`,
+    subject: `Reset your ${workspaceName?.trim() || QUACKBACK_DISPLAY_NAME} password`,
     react: PasswordResetEmail({ resetLink, logoUrl, workspaceName }),
     emailType: 'PasswordResetEmail',
     workspaceName,

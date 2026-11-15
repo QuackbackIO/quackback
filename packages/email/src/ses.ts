@@ -131,18 +131,21 @@ export function plainAddress(value: string): string | { name: string; address: s
   return { name, address: parsed.address }
 }
 
+/** The bare addr-spec of an `addr` or `Name <addr>` value, without any display name. */
+export function bareAddress(value: string): string {
+  const parsed = parseAddress(value)
+  return typeof parsed === 'string' ? parsed : parsed.address
+}
+
 /** Replace (or add) the display name on an addr-spec or `Name <addr>` value. */
 export function applyDisplayName(from: string, displayName: string): string {
-  const parsed = parseAddress(from)
-  const address = typeof parsed === 'string' ? parsed : parsed.address
-  return formatAddress(`${displayName} <${address}>`)
+  return formatAddress(`${displayName} <${bareAddress(from)}>`)
 }
 
 /** The domain of an `addr` or `Name <addr>` value, lower-cased, or null. */
 export function addressDomain(value: string | undefined): string | null {
   if (!value) return null
-  const parsed = parseAddress(value)
-  const bare = typeof parsed === 'string' ? parsed : parsed.address
+  const bare = bareAddress(value)
   const at = bare.lastIndexOf('@')
   if (at === -1) return null
   const domain = bare

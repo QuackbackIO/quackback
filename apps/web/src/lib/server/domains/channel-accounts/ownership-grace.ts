@@ -39,6 +39,13 @@ const GRACE_MS = SENDING_DOMAIN_OWNERSHIP_GRACE_DAYS * 24 * 60 * 60 * 1000
  */
 export const OWNERSHIP_GRACE_SLACK_MS = 60 * 60 * 1000
 
+/** The fields that end a grace period: no record missing, no warning claimed or sent. */
+export const GRACE_CLEARED = {
+  ownershipMissingSince: null,
+  ownershipWarningClaimedAt: null,
+  ownershipWarningSentAt: null,
+} as const
+
 /** When a verified row whose ownership record went missing at `since` is demoted. */
 export function ownershipGraceEnds(since: Date): Date {
   return new Date(since.getTime() + GRACE_MS)

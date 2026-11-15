@@ -1,7 +1,3 @@
-import {
-  formatNamedSendingAddress,
-  resolveConversationSender,
-} from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { deliverAgentMessageOnChannel } from './deliver-agent-message'
 import type { ChannelAdapter } from './types'
 
@@ -31,25 +27,9 @@ export const emailAdapter: ChannelAdapter = {
   // rating request that arrived as a fresh message from another address would
   // read as a different sender and land outside the thread being rated.
   async deliverCsatRequest(ctx) {
-    const { inboundReplyToAddress, isEmailInboundConfigured, mintOutboundMessageId } =
-      await import('@/lib/server/domains/conversation/conversation.email-channel')
-    const { currentMailSlug } =
-      await import('@/lib/server/domains/conversation/conversation.mail-slug')
-    const { recordOutboundEmail, threadIdsForOutbound } =
-      await import('@/lib/server/domains/conversation/conversation.email-store')
-
-    const replyTo = isEmailInboundConfigured()
-      ? (inboundReplyToAddress(ctx.conversationId, currentMailSlug()) ?? undefined)
-      : undefined
-    const messageId = mintOutboundMessageId(ctx.conversationId)
-    const thread = messageId ? await threadIdsForOutbound(ctx.conversationId) : null
-    const inReplyTo = thread?.inbound.at(-1) ?? thread?.outbound.at(-1)
-    const references = thread && thread.merged.length > 0 ? thread.merged : undefined
-
-    const resolved = await resolveConversationSender(ctx.conversationId)
-    const from = resolved
-      ? formatNamedSendingAddress(resolved.from, resolved.senderName ?? ctx.workspaceName)
-      : undefined
+    const { conversationEnvelope, recordSent } =
+      await import('@/lib/server/domains/conversation/conversation.email-envelope')
+    const envelope = await conversationEnvelope(ctx.conversationId, ctx.workspaceName)
 
     const { sendCsatRequestEmail } = await import('@quackback/email')
     const result = await sendCsatRequestEmail({
@@ -58,16 +38,10 @@ export const emailAdapter: ChannelAdapter = {
       ratingUrls: ctx.ratingUrls,
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl ?? undefined,
-      from,
       conversationSubject: ctx.conversationSubject ?? undefined,
-      replyTo,
-      messageId: messageId ?? undefined,
-      inReplyTo,
-      references,
+      ...envelope,
       conversationId: ctx.conversationId,
     })
-    const outboundMessageId =
-      result?.messageId === undefined ? messageId : (result.messageId ?? undefined)
-    if (outboundMessageId) await recordOutboundEmail(outboundMessageId, ctx.conversationId)
+    await recordSent(ctx.conversationId, envelope.messageId, result)
   },
 }

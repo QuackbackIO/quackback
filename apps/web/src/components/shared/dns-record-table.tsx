@@ -103,7 +103,7 @@ export function DnsRecordTable({ records }: { records: DnsRecordRow[] }) {
               <Fragment key={`${r.type} ${r.name} ${r.value}`}>
                 <tr
                   data-slot="dns-record"
-                  className="border-t border-border/50 align-top @max-xl:block @max-xl:py-2"
+                  className="border-t border-border/50 align-top @max-xl:block @max-xl:py-2 @max-xl:first:border-t-0"
                 >
                   <td className="py-1.5 pr-3 whitespace-nowrap @max-xl:block @max-xl:pt-0 @max-xl:font-medium">
                     <span className="flex items-center gap-1.5">

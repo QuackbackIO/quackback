@@ -12,11 +12,14 @@ import {
   SES_MAIL_FROM_SPF_VALUE,
 } from '@quackback/email/ses-identity'
 import type { SesDomainIdentity } from '@quackback/email/ses-identity'
-import type {
-  SendingDomainDkimMode,
-  SendingDomainDnsRecord,
-  SendingDomainKeyRecord,
-  SendingDomainOwnershipRecord,
+import type { SQL } from 'drizzle-orm'
+import {
+  emailSendingDomains,
+  sql,
+  type SendingDomainDkimMode,
+  type SendingDomainDnsRecord,
+  type SendingDomainKeyRecord,
+  type SendingDomainOwnershipRecord,
 } from '@/lib/server/db'
 
 /**
@@ -44,6 +47,12 @@ export function ownershipRecord(token: string): SendingDomainOwnershipRecord {
     value: `${OWNERSHIP_VALUE_PREFIX}${token}`,
     purpose: 'ownership',
   }
+}
+
+/** Matches a sending row whose stored records carry the ownership record for `token`. */
+export function carriesOwnershipRecord(token: string): SQL {
+  const { purpose, value } = ownershipRecord(token)
+  return sql`${emailSendingDomains.dnsRecords} @> ${JSON.stringify([{ purpose, value }])}::jsonb`
 }
 
 /**

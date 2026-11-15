@@ -490,18 +490,19 @@ function generateVerificationToken(): string {
  * but *unlinked* row is adopted by the given provider (a previously
  * global / backfilled domain). A row already owned by another provider is
  * returned untouched — `name` is globally unique, so a domain belongs to
- * exactly one provider.
+ * exactly one provider. The name is put on Settings > Domains too.
  */
 export async function insertVerifiedDomain(
   name: string,
   providerId?: IdentityProviderId
 ): Promise<VerifiedDomain> {
   log.info({ name, providerId }, 'insert verified domain')
+  let inserted: { row: typeof ssoVerifiedDomain.$inferSelect; changed: boolean }
   try {
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
 
-    const inserted = await db.transaction(async (tx) => {
+    inserted = await db.transaction(async (tx) => {
       const existing = await tx
         .select()
         .from(ssoVerifiedDomain)
@@ -542,11 +543,15 @@ export async function insertVerifiedDomain(
       resetAuth()
       await invalidateSettingsCache()
     }
-    return rowToVerifiedDomain(inserted.row)
   } catch (error) {
     log.error({ err: error }, 'insert verified domain failed')
     wrapDbError('insert verified domain', error)
   }
+  // The same domain on Settings > Domains, made in this one step. After the
+  // write and the resets, and never a reason to report the write as failed.
+  const { ensureDomainAfterUse } = await import('@/lib/server/domains/domain-proof/ensure-domain')
+  await ensureDomainAfterUse(name)
+  return rowToVerifiedDomain(inserted.row)
 }
 
 /** Remove a verified-domain row by id. No-op if the row doesn't exist. */

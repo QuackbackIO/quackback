@@ -9,7 +9,11 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
-import { shownProofSource, type ShownProofSource } from '@/lib/shared/domain-proof'
+import {
+  shownProofSource,
+  type DomainRecordCheck,
+  type ShownProofSource,
+} from '@/lib/shared/domain-proof'
 import { assertAnyPermission, requireAuth } from './auth-helpers'
 import type {
   AddedDomainSummary,
@@ -18,9 +22,7 @@ import type {
 
 export type { AddedDomainSummary, DomainDetail }
 
-export type DomainOwnershipResult =
-  | { ok: true; via: 'dns' | ShownProofSource }
-  | { ok: false; reason: 'no-record' | 'lookup-failed' | 'mismatch' }
+export type DomainOwnershipResult = DomainRecordCheck<ShownProofSource>
 
 const nameInput = z.object({ name: z.string().max(253) })
 
