@@ -15,6 +15,8 @@ import { db, events, eq } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
 import { writeEventToOutbox, extractEntityId } from '../outbox-dispatch'
 import type { EventData } from '../types'
+import { hydrateEvent } from '../outbox'
+import { toLegacyEvent } from '../to-legacy-event'
 
 /**
  * WO-4 — the legacy dispatch bridge writes a real EventData to the outbox via
@@ -127,5 +129,45 @@ describe('writeEventToOutbox (WO-4 bridge)', () => {
     const rows = await db.select().from(events).where(eq(events.entityId, postId))
     expect(rows).toHaveLength(1)
     expect(rows[0].dedupeKey).toBeNull()
+  })
+
+  // notifyRequester:false on the API must survive the outbox to the email
+  // targets, without entering the webhook-visible payload.
+  it('carries skipRequesterAck through the outbox, outside the payload', async () => {
+    const ticketCreated = (ticketId: string, skip: boolean) =>
+      ({
+        id: createId('event'),
+        type: 'ticket.created',
+        timestamp: new Date().toISOString(),
+        actor: { type: 'service', principalId: createId('principal') },
+        data: {
+          ticket: {
+            id: ticketId,
+            number: 1,
+            type: 'customer',
+            priority: 'none',
+            title: 'Bug',
+            status: 'open',
+            stage: 'received',
+            requesterPrincipalId: createId('principal'),
+            assignedTeamId: null,
+            companyId: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            resolvedAt: null,
+          },
+        },
+        ...(skip ? { skipRequesterAck: true } : {}),
+      }) as unknown as EventData
+
+    const relayed = async (skip: boolean) => {
+      const ticketId = createId('ticket')
+      expect(await writeEventToOutbox(ticketCreated(ticketId, skip))).toBe(true)
+      const [row] = await db.select().from(events).where(eq(events.entityId, ticketId))
+      expect(JSON.stringify(row.payload)).not.toContain('skipRequesterAck')
+      return toLegacyEvent(hydrateEvent(row)) as EventData & { skipRequesterAck?: boolean }
+    }
+    expect((await relayed(true)).skipRequesterAck).toBe(true)
+    expect((await relayed(false)).skipRequesterAck).toBeUndefined()
   })
 })

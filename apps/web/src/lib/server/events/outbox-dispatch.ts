@@ -91,7 +91,13 @@ export async function writeEventToOutbox(event: EventData, executor?: DbOrTx): P
       payload: event.data as unknown as Record<string, unknown>,
       actor: mapActor(event.actor),
       entityId: extractEntityId(event),
-      context: { source: event.actor.service, correlationId: event.id },
+      context: {
+        source: event.actor.service,
+        correlationId: event.id,
+        ...(event.type === 'ticket.created' && event.skipRequesterAck
+          ? { skipRequesterAck: true }
+          : {}),
+      },
       dedupeKey,
     })
   if (executor) {

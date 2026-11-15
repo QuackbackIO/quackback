@@ -26,6 +26,9 @@ export interface EventContext {
   depth: number
   /** Provenance: 'api' | 'admin' | 'widget' | 'scheduler' | 'workflow' | 'import' | ... */
   source?: string
+  /** ticket.created only: the creating caller already acknowledged the requester
+   *  (API notifyRequester: false). Here, not in the payload, so webhooks never see it. */
+  skipRequesterAck?: boolean
 }
 
 /** The canonical in-memory event, hydrated from an `events` row. */
