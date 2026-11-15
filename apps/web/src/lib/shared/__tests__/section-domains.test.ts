@@ -4,6 +4,7 @@ import {
   portalSectionsEnabled,
   resolveSectionHostRoute,
   sectionForPath,
+  sectionHomeForHost,
   sectionOfHost,
   type SectionDomainMap,
   type SectionHostRoute,
@@ -356,5 +357,33 @@ describe('portalSectionsEnabled', () => {
       support: false,
       status: false,
     })
+  })
+})
+
+describe('sectionHomeForHost', () => {
+  it("is the section's home on its host", () => {
+    expect(sectionHomeForHost({ host: 'help.acme.com', map: MAP, sectionEnabled: ALL_ON })).toBe(
+      '/hc'
+    )
+  })
+
+  it('is null on any other host, on a feedback host, and while the section is off', () => {
+    expect(
+      sectionHomeForHost({ host: 'acme.example.com', map: MAP, sectionEnabled: ALL_ON })
+    ).toBeNull()
+    expect(
+      sectionHomeForHost({
+        host: 'ideas.acme.com',
+        map: { feedback: { hostname: 'ideas.acme.com', verifiedAt: VERIFIED } },
+        sectionEnabled: ALL_ON,
+      })
+    ).toBeNull()
+    expect(
+      sectionHomeForHost({
+        host: 'help.acme.com',
+        map: MAP,
+        sectionEnabled: { ...ALL_ON, help: false },
+      })
+    ).toBeNull()
   })
 })

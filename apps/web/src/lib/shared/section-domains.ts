@@ -171,6 +171,25 @@ export function portalSectionsEnabled({
   }
 }
 
+/**
+ * The page `/` shows on this host, when that is not the feedback home: the
+ * mark the document carries so the browser's router matches the server's.
+ */
+export function sectionHomeForHost({
+  host,
+  map,
+  sectionEnabled,
+}: {
+  host: string | null
+  map: SectionDomainMap
+  sectionEnabled: Record<PortalSection, boolean>
+}): string | null {
+  const section = sectionOfHost(host, map)
+  if (!section || !sectionEnabled[section]) return null
+  const home = SECTION_HOME[section]
+  return home === '/' ? null : home
+}
+
 export type SectionHostRoute =
   | { kind: 'pass' }
   /** Serve `home` in place of `/`; the address bar keeps `/`. */

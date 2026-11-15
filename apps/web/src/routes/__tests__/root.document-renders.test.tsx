@@ -143,6 +143,22 @@ describe('root document renders', () => {
   })
 })
 
+describe("a portal section's own hostname", () => {
+  it('marks the document with the page / shows there, for the browser router', async () => {
+    bootstrap('dark')
+    doc.bootstrap = { ...doc.bootstrap, sectionHome: '/hc' }
+    await mount()
+    expect(document.documentElement.getAttribute('data-section-home')).toBe('/hc')
+  })
+
+  it('leaves the mark off everywhere else', async () => {
+    bootstrap('dark')
+    doc.bootstrap = { ...doc.bootstrap, sectionHome: null }
+    await mount()
+    expect(document.documentElement.hasAttribute('data-section-home')).toBe(false)
+  })
+})
+
 describe('the RSS feed the document advertises', () => {
   const statusPageMatches = (settings: Record<string, unknown>) => [
     { routeId: '__root__', context: { settings } },
