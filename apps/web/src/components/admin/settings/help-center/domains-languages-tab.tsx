@@ -422,7 +422,7 @@ function CreateRedirectRuleForm() {
         </Select>
         <Select value={targetId} onValueChange={setTargetId}>
           <SelectTrigger>
-            <SelectValue placeholder={`Choose ${targetType}...`} />
+            <SelectValue placeholder={`Choose ${targetType}…`} />
           </SelectTrigger>
           <SelectContent>
             {options.map((o) => (
