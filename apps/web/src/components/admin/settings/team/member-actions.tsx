@@ -172,9 +172,7 @@ export function MemberActions({
           </DropdownMenuItem>
           {customRoles.length > 0 && (
             <>
-              <DropdownMenuLabel className="uppercase tracking-wider text-muted-foreground">
-                Custom
-              </DropdownMenuLabel>
+              <DropdownMenuLabel className="text-muted-foreground">Custom</DropdownMenuLabel>
               {customRoles.map((r) => (
                 <DropdownMenuItem
                   key={r.id}

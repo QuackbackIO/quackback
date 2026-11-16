@@ -443,7 +443,7 @@ export function MergeOthersDialog({
           {/* AI Suggested section */}
           {hasAiSuggestions && (
             <>
-              <div className="px-4 py-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-wider bg-muted/20">
+              <div className="px-4 py-2 text-xs font-medium text-muted-foreground/60 bg-muted/20">
                 AI Suggested
               </div>
               <div className="divide-y divide-border/50">
@@ -471,7 +471,7 @@ export function MergeOthersDialog({
           {hasSearchResults && (
             <>
               {(hasAiSuggestions || searchQuery.length >= 3) && (
-                <div className="px-4 py-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-wider bg-muted/20">
+                <div className="px-4 py-2 text-xs font-medium text-muted-foreground/60 bg-muted/20">
                   Search results
                 </div>
               )}

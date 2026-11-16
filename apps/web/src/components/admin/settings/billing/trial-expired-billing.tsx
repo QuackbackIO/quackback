@@ -100,9 +100,7 @@ export function TrialExpiredBilling(props: {
         <div className="space-y-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                1 Configure plan
-              </p>
+              <p className="text-[11px] font-medium text-muted-foreground">1 Configure plan</p>
               <h2 className="mt-1 text-base font-semibold">Billing cycle</h2>
             </div>
             <PeriodToggle
@@ -179,9 +177,7 @@ export function TrialExpiredBilling(props: {
         </div>
 
         <aside className="space-y-3 lg:pt-8">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            2 Payment
-          </p>
+          <p className="text-[11px] font-medium text-muted-foreground">2 Payment</p>
           <div data-settings-card="" className="rounded-xl border bg-card p-5">
             <h3 className="text-sm font-semibold">Order summary</h3>
             {paidSelected ? (

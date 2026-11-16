@@ -639,9 +639,7 @@ function RoutingTable<TChannel extends Channel>({
           className="grid items-end bg-muted/40 border-b border-border/50"
           style={tableGridStyle(events.length)}
         >
-          <div className="px-4 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-            Channel
-          </div>
+          <div className="px-4 py-2 text-[11px] font-medium text-muted-foreground">Channel</div>
           {events.map((event) => (
             <div
               key={event.id}

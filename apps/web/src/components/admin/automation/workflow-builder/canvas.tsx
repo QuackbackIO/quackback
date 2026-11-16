@@ -191,7 +191,7 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
         {data.startTag && (
           <span
             className={cn(
-              'absolute -top-[21px] left-3.5 rounded-t-md px-2.5 py-0.5 text-[10.5px] font-bold tracking-wide uppercase',
+              'absolute -top-[21px] left-3.5 rounded-t-md px-2.5 py-0.5 text-[10.5px] font-bold',
               START_TAG
             )}
           >
@@ -211,9 +211,7 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
             <Icon className="size-4" />
           </span>
           <div className="min-w-0">
-            <div className="text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">
-              {data.eyebrow}
-            </div>
+            <div className="text-[10.5px] font-bold text-muted-foreground">{data.eyebrow}</div>
             <div className="mt-0.5 truncate text-sm font-semibold">{data.title}</div>
           </div>
         </div>
@@ -222,7 +220,7 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
             {data.sections ? (
               data.sections.map((section) => (
                 <div key={section.label} className="flex flex-col gap-1">
-                  <span className="text-[10.5px] font-bold tracking-wide text-muted-foreground uppercase">
+                  <span className="text-[10.5px] font-bold text-muted-foreground">
                     {section.label}
                   </span>
                   <div className="flex flex-wrap gap-1.5">
@@ -335,7 +333,7 @@ const AddNode = memo(function AddNode({ data }: NodeProps<Node<AddNodeData, 'add
 const EndNode = memo(function EndNode(_props: NodeProps<Node<EndNodeData, 'end'>>) {
   return (
     <div className="relative flex w-[300px] items-center justify-center">
-      <span className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
         <span className="size-2 rounded-full bg-border" /> End
       </span>
       <Handle type="target" position={Position.Top} style={HIDDEN_HANDLE} isConnectable={false} />

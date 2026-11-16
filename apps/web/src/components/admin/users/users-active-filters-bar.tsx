@@ -388,7 +388,7 @@ export function UsersFilterButton({
             {availableCustomAttrs.length > 0 && (
               <>
                 <div className="border-b border-border/30 my-1" />
-                <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
                   Custom attributes
                 </div>
                 {availableCustomAttrs.map((attr) => (

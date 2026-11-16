@@ -349,9 +349,7 @@ function DeletedItemsView() {
 
       {/* Deleted categories */}
       <section className="px-3 pb-4">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-          Deleted categories
-        </h2>
+        <h2 className="text-[11px] font-semibold text-muted-foreground mb-2">Deleted categories</h2>
         {categoriesLoading ? (
           <div className="flex justify-center py-8">
             <Spinner />
@@ -392,9 +390,7 @@ function DeletedItemsView() {
 
       {/* Deleted articles */}
       <section className="px-3 pb-4">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-          Deleted articles
-        </h2>
+        <h2 className="text-[11px] font-semibold text-muted-foreground mb-2">Deleted articles</h2>
         {articlesLoading ? (
           <div className="flex justify-center py-8">
             <Spinner />

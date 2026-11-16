@@ -1,7 +1,7 @@
 /**
  * Left outline rail (support platform §4.6 fullscreen builder): a flat,
  * top-to-bottom list derived from the same tree the canvas renders — the
- * trigger, then each step, with an uppercase section label ("Path A ·
+ * trigger, then each step, with a sentence-case section label ("Path A ·
  * Billing") ahead of a branch's paths. Clicking a row selects that node (the
  * canvas scrolls it into view, the inspector shows its editor); a small
  * warning icon flags a step with an unresolved issue.
@@ -32,9 +32,7 @@ export function OutlineRail({
       className="flex w-60 shrink-0 flex-col border-r border-border/50 bg-background"
     >
       <div className="flex items-center justify-between px-3 pt-3 pb-2">
-        <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-          Outline
-        </span>
+        <span className="text-[11px] font-semibold text-muted-foreground">Outline</span>
         <span className="text-[11px] tabular-nums text-muted-foreground">
           {stepCount} step{stepCount === 1 ? '' : 's'}
         </span>
@@ -44,7 +42,7 @@ export function OutlineRail({
           entry.kind === 'path-header' ? (
             <div
               key={`path-${i}`}
-              className="mt-2 mb-1 flex items-center gap-1.5 px-2 text-[11px] font-semibold tracking-wide text-muted-foreground/80 uppercase"
+              className="mt-2 mb-1 flex items-center gap-1.5 px-2 text-[11px] font-semibold text-muted-foreground/80"
               style={{ paddingLeft: `${entry.depth * 12 + 8}px` }}
             >
               {entry.label}

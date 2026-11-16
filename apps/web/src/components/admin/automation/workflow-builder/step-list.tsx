@@ -148,7 +148,7 @@ function StepCard({
         {data.startTag && (
           <span
             className={cn(
-              'absolute -top-[21px] left-3.5 rounded-t-md px-2.5 py-0.5 text-[11px] font-bold tracking-wide uppercase',
+              'absolute -top-[21px] left-3.5 rounded-t-md px-2.5 py-0.5 text-[11px] font-bold',
               START_TAG
             )}
           >
@@ -346,7 +346,7 @@ function StepListItems({
         return (
           <div key={`end-${i}`} className="flex flex-col items-center">
             <LineConnector />
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
               <span className="size-2 rounded-full bg-border" /> {endLabel}
             </span>
           </div>

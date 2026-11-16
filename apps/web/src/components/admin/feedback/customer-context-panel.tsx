@@ -27,9 +27,7 @@ export function CustomerContextPanel({ email }: CustomerContextPanelProps) {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        Customer context
-      </h3>
+      <h3 className="text-[11px] font-medium text-muted-foreground">Customer context</h3>
       <div className="space-y-2">
         {cards.map((card) => (
           <ContextCard key={card.provider} card={card} />
