@@ -227,6 +227,29 @@
   box-shadow: var(--focus-halo);
 }
 
+/* Text fields take a quieter focus: their own edge becomes a 2px ink edge, with no offset
+   outline and no halo. The full ring stacked on a bordered field read as three rings, and a
+   duck glow over the dark sheet turned olive. Buttons and links keep the ink-and-duck ring. */
+:root:has([data-admin-shell])
+  :is(
+    input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit']),
+    textarea,
+    select,
+    [data-slot='select-trigger']
+  ):focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 1px var(--ring);
+}
+
+/* Fields with no edge of their own (the command palette's search, the editor body) sit
+   inside a panel that already shows where focus is. */
+:root:has([data-admin-shell])
+  :is([data-slot='command-input'], [contenteditable='true']):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 /* Page, panel and dialog titles in the display face. Row titles (the h3 in a post list)
    stay in the body face, as the kit's ListRow does. */
 :root:has([data-admin-shell])
