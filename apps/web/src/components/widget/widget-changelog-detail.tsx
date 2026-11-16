@@ -4,7 +4,8 @@ import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { widgetGetPublicChangelogFn } from '@/lib/server/functions/widget/changelog'
 import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { appendWidgetOtt } from './build-portal-url'
+import { widgetChangelogUrl } from './build-portal-url'
+import { useSectionLinks } from '@/lib/client/hooks/use-root-context'
 import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
@@ -22,6 +23,7 @@ interface WidgetChangelogDetailProps {
 
 export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   const { isIdentified, canPortalHandoff, sessionVersion } = useWidgetAuth()
+  const sectionLinks = useSectionLinks()
   const { data: entry, isLoading } = useQuery({
     queryKey: widgetQueryKeys.changelogDetail.byId(entryId, sessionVersion),
     queryFn: () =>
@@ -43,13 +45,15 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   const handleViewOnPortal = useCallback(async () => {
     if (!changelogEntryId) return
     const ott = isIdentified && canPortalHandoff ? await generateOneTimeToken() : null
-    const url = appendWidgetOtt(
-      `${window.location.origin}/changelog/${changelogEntryId}`,
-      isIdentified && canPortalHandoff,
-      ott
-    )
+    const url = widgetChangelogUrl({
+      origin: window.location.origin,
+      entryId: changelogEntryId,
+      origins: sectionLinks?.origins,
+      isIdentified: isIdentified && canPortalHandoff,
+      ott,
+    })
     sendToHost({ type: 'quackback:navigate', url })
-  }, [changelogEntryId, isIdentified, canPortalHandoff])
+  }, [changelogEntryId, isIdentified, canPortalHandoff, sectionLinks])
 
   if (isLoading) {
     return <WidgetArticleSkeleton />
