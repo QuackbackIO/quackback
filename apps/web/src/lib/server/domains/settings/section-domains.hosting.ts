@@ -5,7 +5,11 @@
  * middleware can use it without the database.
  */
 import { parseIdentityProjection, type IdentityProjection } from './cloud/identity-projection'
-import { PORTAL_SECTIONS, type SectionDomainMap } from '@/lib/shared/section-domains'
+import {
+  PORTAL_SECTIONS,
+  UNCONFIRMED_GRACE_MS,
+  type SectionDomainMap,
+} from '@/lib/shared/section-domains'
 
 export interface Hosting {
   cloud: boolean
@@ -30,10 +34,25 @@ export function readyOnCloud(projection: IdentityProjection | null, hostname: st
 /**
  * The map as routing should use it. On Cloud a hostname counts as verified
  * only while its custom domain is ready, so a domain removed or failing on the
- * control plane stops receiving visitors at once.
+ * control plane stops receiving visitors at once. On a self-hosted server a
+ * verification kept without an answer lasts UNCONFIRMED_GRACE_MS at most.
  */
-export function routableSectionDomains(map: SectionDomainMap, hosting: Hosting): SectionDomainMap {
-  if (!hosting.cloud) return map
+export function routableSectionDomains(
+  map: SectionDomainMap,
+  hosting: Hosting,
+  now: number = Date.now()
+): SectionDomainMap {
+  if (!hosting.cloud) {
+    const routable: SectionDomainMap = {}
+    for (const section of PORTAL_SECTIONS) {
+      const entry = map[section]
+      if (!entry) continue
+      const since = entry.unconfirmedSince ? Date.parse(entry.unconfirmedSince) : NaN
+      const lapsed = !!entry.unconfirmedSince && !(now - since <= UNCONFIRMED_GRACE_MS)
+      routable[section] = lapsed ? { ...entry, verifiedAt: null } : entry
+    }
+    return routable
+  }
   const routable: SectionDomainMap = {}
   for (const section of PORTAL_SECTIONS) {
     const entry = map[section]

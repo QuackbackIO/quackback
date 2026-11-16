@@ -34,7 +34,10 @@ function workspace({
   helpCenter = true,
   cloud,
 }: {
-  sectionDomains?: Record<string, { hostname: string; verifiedAt: string | null }>
+  sectionDomains?: Record<
+    string,
+    { hostname: string; verifiedAt: string | null; unconfirmedSince?: string }
+  >
   legacyHelpDomain?: { domain: string | null; verifiedAt: string | null }
   helpCenter?: boolean
   cloud?: { cloud: unknown; cloudIdentity: unknown }
@@ -77,6 +80,20 @@ describe('authTrustedOrigins on a single-workspace install', () => {
   it('does not trust a host that is mapped but not verified', async () => {
     state.settings = workspace({
       sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: null } },
+    })
+    expect(await authTrustedOrigins()).not.toContain('https://help.acme.com')
+  })
+
+  it('does not trust a host whose verification is only kept because its lookups go unanswered', async () => {
+    // A lapsed or dangling domain may belong to someone else now.
+    state.settings = workspace({
+      sectionDomains: {
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          unconfirmedSince: new Date().toISOString(),
+        },
+      },
     })
     expect(await authTrustedOrigins()).not.toContain('https://help.acme.com')
   })

@@ -21,7 +21,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   },
 }))
 
-const { getSectionOrigins } = await import('../section-links')
+const { getSectionOrigins, getSignInSectionOrigins } = await import('../section-links')
 
 const VERIFIED = '2026-11-01T00:00:00.000Z'
 const PRIMARY = 'https://acme.example.com'
@@ -31,7 +31,10 @@ function workspace({
   legacyHelpDomain = { domain: null, verifiedAt: null },
   cloud,
 }: {
-  sectionDomains?: Record<string, { hostname: string; verifiedAt: string | null }>
+  sectionDomains?: Record<
+    string,
+    { hostname: string; verifiedAt: string | null; unconfirmedSince?: string }
+  >
   legacyHelpDomain?: { domain: string | null; verifiedAt: string | null }
   cloud?: { cloud: unknown; cloudIdentity: unknown }
 }) {
@@ -96,5 +99,39 @@ describe('getSectionOrigins', () => {
       },
     })
     expect((await getSectionOrigins()).help).toBe(PRIMARY)
+  })
+})
+
+describe('a kept verification on a self-hosted server', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  function keptSince(msAgo: number) {
+    return workspace({
+      sectionDomains: {
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          unconfirmedSince: new Date(Date.now() - msAgo).toISOString(),
+        },
+      },
+    })
+  }
+
+  it('still routes and links there within the grace', async () => {
+    state.settings = keptSince(DAY)
+    expect((await getSectionOrigins()).help).toBe('https://help.acme.com')
+  })
+
+  it('stops routing and linking there once the grace of 7 days is over', async () => {
+    state.settings = keptSince(8 * DAY)
+    expect((await getSectionOrigins()).help).toBe(PRIMARY)
+  })
+
+  it('is never a host sign-in is carried to or trusted from', async () => {
+    state.settings = keptSince(DAY)
+    expect((await getSignInSectionOrigins()).help).toBe(PRIMARY)
+  })
+
+  it('a confirmed host is one sign-in may use', async () => {
+    expect((await getSignInSectionOrigins()).help).toBe('https://help.acme.com')
   })
 })

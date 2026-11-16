@@ -179,6 +179,7 @@ export async function verifySectionDomain(
   if (!entry) return refuse('SECTION_DOMAIN_NOT_SET', 'Set a domain before verifying it.')
 
   let verifiedAt: string | null
+  let unconfirmedSince: string | null = null
   let status: HelpCenterDomainStatus | null = null
   if (hosting.cloud) {
     const ready = readyOnCloud(hosting.projection, entry.hostname)
@@ -190,13 +191,21 @@ export async function verifySectionDomain(
     status = probe.status
     const kept = !status.verified && !probe.dnsAnswered ? entry.verifiedAt : null
     verifiedAt = status.verified ? new Date().toISOString() : kept
+    // A kept verification is marked from the first unanswered check: routing
+    // keeps its grace for a bounded time, and sign-in is never carried to it
+    // (section-domains.ts, `confirmedSectionDomains`).
+    if (kept) unconfirmedSince = entry.unconfirmedSince ?? new Date().toISOString()
     log.info(
       { section, hostname: entry.hostname, status, dns_answered: probe.dnsAnswered },
       'section domain verify check'
     )
   }
 
-  const next: SectionDomainMap = { ...current, [section]: { ...entry, verifiedAt } }
+  const { unconfirmedSince: _previous, ...rest } = entry
+  const next: SectionDomainMap = {
+    ...current,
+    [section]: { ...rest, verifiedAt, ...(unconfirmedSince ? { unconfirmedSince } : {}) },
+  }
   await writeSectionDomains(next, hosting)
   return { ok: true, sectionDomains: next, status }
 }

@@ -19,6 +19,31 @@ import { isPortalSupportSurfaceEnabled } from './support-surfaces'
 export interface SectionDomain {
   hostname: string
   verifiedAt: string | null
+  /**
+   * Self-hosted only: since when the verification has been kept without an
+   * answer (the DNS lookup went unanswered). Absent while the hostname is
+   * confirmed. Routing keeps a bounded grace; sign-in is never carried there.
+   */
+  unconfirmedSince?: string | null
+}
+
+/** How long routing keeps a verification whose lookups go unanswered: the domain ownership grace. */
+export const UNCONFIRMED_GRACE_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * The map as sign-in may use it: a hostname whose verification is only kept
+ * (its lookups go unanswered) counts as unverified. A lapsed or dangling
+ * domain may be someone else's now, and a session must never be carried to
+ * it, nor a sign-in posted from it trusted.
+ */
+export function confirmedSectionDomains(map: SectionDomainMap): SectionDomainMap {
+  const confirmed: SectionDomainMap = {}
+  for (const section of PORTAL_SECTIONS) {
+    const entry = map[section]
+    if (!entry) continue
+    confirmed[section] = entry.unconfirmedSince ? { ...entry, verifiedAt: null } : entry
+  }
+  return confirmed
 }
 
 /** The hostname each section is served at. A section without an entry uses the primary domain. */

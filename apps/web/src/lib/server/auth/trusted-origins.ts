@@ -10,7 +10,7 @@
  * Every routable section host (help.acme.com for the help center) is added on
  * top, on a single-workspace install and on Cloud alike: a sign-in posted from
  * that host, and a callback URL back to it, must pass. Only the hosts links and
- * routing would send a visitor to count (`getSectionOrigins`): verified and
+ * routing would send a visitor to count (`getSignInSectionOrigins`): verified and
  * on, and on Cloud a custom domain that is ready.
  *
  * Process-wide TRUSTED_ORIGINS is only for a single-workspace install.
@@ -102,8 +102,8 @@ export async function authTrustedOrigins(
 ): Promise<string[]> {
   const base = workspaceAuthTrustedOrigins(request, env)
   try {
-    const { getSectionOrigins } = await import('@/lib/server/domains/settings/section-links')
-    const origins = await getSectionOrigins()
+    const { getSignInSectionOrigins } = await import('@/lib/server/domains/settings/section-links')
+    const origins = await getSignInSectionOrigins()
     return [...new Set([...base, ...Object.values(origins)])]
   } catch (err) {
     logger

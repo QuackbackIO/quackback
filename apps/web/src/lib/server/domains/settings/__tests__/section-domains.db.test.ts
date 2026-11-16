@@ -210,10 +210,36 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
       side.dnsAnswered = false
       await verifySectionDomain('help')
 
+      // Kept, but marked as unconfirmed: sign-in is not carried to it.
       expect((await getSectionDomains()).help).toEqual({
         hostname: 'help.acme.com',
         verifiedAt: NOW,
+        unconfirmedSince: expect.any(String),
       })
+    })
+
+    it('keeps the first unconfirmed time across checks, so the grace has an end', async () => {
+      await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
+      side.status = { dnsResolved: false, instanceReachable: false, verified: false }
+      side.dnsAnswered = false
+      await verifySectionDomain('help')
+      const first = (await getSectionDomains()).help?.unconfirmedSince
+      expect(first).toEqual(expect.any(String))
+      await verifySectionDomain('help')
+      expect((await getSectionDomains()).help?.unconfirmedSince).toBe(first)
+    })
+
+    it('clears the unconfirmed mark once the hostname answers again', async () => {
+      await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
+      side.status = { dnsResolved: false, instanceReachable: false, verified: false }
+      side.dnsAnswered = false
+      await verifySectionDomain('help')
+      side.status = { dnsResolved: true, instanceReachable: true, verified: true }
+      side.dnsAnswered = true
+      await verifySectionDomain('help')
+      const entry = (await getSectionDomains()).help
+      expect(entry?.verifiedAt).toEqual(expect.any(String))
+      expect(entry && 'unconfirmedSince' in entry).toBe(false)
     })
 
     it('does not verify a never-verified hostname whose lookup goes unanswered', async () => {

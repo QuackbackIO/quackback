@@ -12,7 +12,7 @@
  * handoff back to the section host (lib/shared/section-handoff.ts). Every
  * caller of `signIn.social` gets this for free.
  */
-import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import { getSignInSectionOrigins } from '@/lib/server/domains/settings/section-links'
 import { logger } from '@/lib/server/logger'
 import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
 import { normalizeHost } from '@/lib/shared/section-domains'
@@ -55,7 +55,7 @@ export async function sectionSignInMove(ctx: {
   if (body.idToken || typeof body.provider !== 'string' || !body.provider) return null
 
   const host = normalizeHost(requestWorkspaceHost(ctx.request))
-  const origins = await getSectionOrigins()
+  const origins = await getSignInSectionOrigins()
   const section = sectionServedAt(host, origins)
   if (!host || !section) return null
 
@@ -94,7 +94,7 @@ function redirect(location: string, cookies: string[] = []): Response {
  */
 export async function startSectionSignIn(request: Request): Promise<Response> {
   const url = new URL(request.url)
-  const origins = await getSectionOrigins()
+  const origins = await getSignInSectionOrigins()
   const host = normalizeHost(requestWorkspaceHost(request))
   const primaryHost = normalizeHost(new URL(origins.primary).host)
   const section = sectionServedAt(url.searchParams.get('to'), origins)
