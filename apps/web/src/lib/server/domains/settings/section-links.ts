@@ -10,7 +10,12 @@ import { getWorkspaceSettings } from './settings.service'
 import { hostingOf, routableSectionDomains } from './section-domains.hosting'
 import type { WorkspaceSettings } from './settings.types'
 import { effectiveSectionDomains, portalSectionsEnabled } from '@/lib/shared/section-domains'
-import { allOnPrimary, sectionOrigins, type SectionOrigins } from '@/lib/shared/section-links'
+import {
+  allOnPrimary,
+  sectionOrigins,
+  sectionServedAt,
+  type SectionOrigins,
+} from '@/lib/shared/section-links'
 
 /** The origins from settings already read, as the bootstrap and middleware have them. */
 export function sectionOriginsOf(
@@ -38,4 +43,16 @@ export function sectionOriginsOf(
 /** The origins for this request or job. Call it once and pass the result down. */
 export async function getSectionOrigins(): Promise<SectionOrigins> {
   return sectionOriginsOf(await getWorkspaceSettings(), getBaseUrl())
+}
+
+/**
+ * The origin of the routable section host `host` (https://help.acme.com), or
+ * null for the primary domain and for any host this workspace does not route
+ * a section to. `host` must be the one the edge vouches for
+ * (`requestWorkspaceHost`), never a forwarded header.
+ */
+export async function sectionHostOrigin(host: string | null): Promise<string | null> {
+  const origins = await getSectionOrigins()
+  const section = sectionServedAt(host, origins)
+  return section ? origins[section] : null
 }

@@ -4,8 +4,25 @@ import { checkMagicLinkSendRateLimit } from '@/lib/server/auth/signin-rate-limit
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { AUTH_BLOCK_MESSAGES } from '@/lib/shared/auth-block-messages'
 import { logger } from '@/lib/server/logger'
+import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
 
 const log = logger.child({ component: 'portal-signin' })
+
+/**
+ * The section host this sign-in was asked for on, so the emailed link signs
+ * in there (sessions are host-only cookies). Undefined for the primary domain,
+ * or when the section map cannot be read: the link then signs in on the
+ * primary domain, as it always has.
+ */
+async function linkOriginOf(request: Request): Promise<string | undefined> {
+  try {
+    const { sectionHostOrigin } = await import('@/lib/server/domains/settings/section-links')
+    return (await sectionHostOrigin(requestWorkspaceHost(request))) ?? undefined
+  } catch (err) {
+    log.warn({ err }, 'section host not read; the sign-in link uses the primary domain')
+    return undefined
+  }
+}
 
 interface PortalSigninBody {
   email?: unknown
@@ -110,7 +127,7 @@ export async function handlePortalSignin(request: Request): Promise<Response> {
   }
 
   try {
-    await requestEmailSignin({ email, callbackURL })
+    await requestEmailSignin({ email, callbackURL, linkOrigin: await linkOriginOf(request) })
     return Response.json({ ok: true })
   } catch (err) {
     // Domain-level, so it says nothing about whether the address holds an

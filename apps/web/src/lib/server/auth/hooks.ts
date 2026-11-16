@@ -492,6 +492,14 @@ export const hooksBefore = createAuthMiddleware(async (ctx) => {
   await handleRefreshGraceHeal(ctx)
   await handleSignInPreCheck(ctx as Parameters<typeof handleSignInPreCheck>[0])
   await handleWidgetAccountMutationGate(ctx)
+  // Provider sign-in asked for on a section host runs on the primary domain,
+  // where its callback and state cookie live (section-sign-in.ts). Last, so
+  // every gate above has already passed on it.
+  if (ctx.path === '/sign-in/social' && ctx.request) {
+    const { sectionSignInMove } = await import('./section-sign-in')
+    const moved = await sectionSignInMove(ctx)
+    if (moved) return ctx.json(moved)
+  }
 })
 
 /**
