@@ -94,7 +94,8 @@ const features = tableFeatures({
 function roleBadge(r: TeamRow, role: string, extra = '') {
   const assigned = r.type === 'member' ? r.assignedRole : null
   const inviteRoleName = r.type === 'invitation' ? r.roleName : null
-  const label = assigned?.name ?? inviteRoleName ?? role
+  // The legacy role key (admin, member) reads as a name: sentence case.
+  const label = assigned?.name ?? inviteRoleName ?? role.charAt(0).toUpperCase() + role.slice(1)
   return (
     <Badge variant="secondary" className={extra}>
       {label}
