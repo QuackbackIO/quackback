@@ -1,7 +1,7 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useSectionLinks } from '@/lib/client/hooks/use-root-context'
-import { teamPageHref } from '@/lib/shared/section-links'
+import { teamPageHref } from '@/lib/shared/team-page-href'
 
 type TeamPagePath = '/admin' | '/admin/feedback/moderation'
 
