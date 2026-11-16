@@ -57,7 +57,7 @@ export function ottVerifyRequest(ott: string, headers?: Headers): Request {
   })
 }
 
-async function verifyOttCookies(
+export async function verifyOttCookies(
   ott: string,
   returnTo: string,
   headers?: Headers
