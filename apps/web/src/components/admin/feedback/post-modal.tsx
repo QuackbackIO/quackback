@@ -437,7 +437,7 @@ export const PostModalContent = memo(function PostModalContent({
               <RichTextEditor
                 value={contentJson || ''}
                 onDocumentChange={handleContentChange}
-                placeholder="Add more details... Type / for commands"
+                placeholder="Add more details… Type / for commands"
                 minHeight="200px"
                 disabled={updatePost.isPending}
                 borderless

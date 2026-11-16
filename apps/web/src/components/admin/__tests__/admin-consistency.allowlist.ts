@@ -38,4 +38,15 @@ export const ALLOWLIST: Record<RuleName, string[]> = {
     // Per-provider brand tints for integration badges.
     'components/admin/settings/integrations/integration-ui.tsx',
   ],
+  ellipsis: [
+    // Also edited by the open portal builder stack; fixed after it merges.
+    'components/admin/conversation/copilot-panel.tsx',
+    'components/admin/feedback/voters-avatar-stack.tsx',
+    'components/admin/settings/boards/create-board-dialog.tsx',
+  ],
+  exclamation: [],
+  uppercase: [
+    // Also edited by the open portal builder stack; fixed after it merges.
+    'components/admin/settings/security/audit-log-page.tsx',
+  ],
 }

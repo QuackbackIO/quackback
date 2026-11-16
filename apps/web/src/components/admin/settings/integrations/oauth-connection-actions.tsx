@@ -191,7 +191,7 @@ export function OAuthConnectionActions({
             {connecting ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Connecting...
+                Connecting…
               </>
             ) : (
               connectLabel
@@ -210,7 +210,7 @@ export function OAuthConnectionActions({
               {disconnecting ? (
                 <>
                   <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                  Disconnecting...
+                  Disconnecting…
                 </>
               ) : (
                 'Disconnect'

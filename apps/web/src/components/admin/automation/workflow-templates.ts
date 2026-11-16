@@ -200,7 +200,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           {
             id: 'sales_ack',
             type: 'message',
-            body: body('Thanks! Our sales team will reach out shortly.'),
+            body: body('Thanks. Our sales team will reach out shortly.'),
           },
         ],
         edges: [

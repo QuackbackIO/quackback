@@ -250,7 +250,7 @@ function ChannelPicker<TChannel extends Channel>({
           {loading ? (
             <span className="flex items-center gap-2 text-muted-foreground">
               <ArrowPathIcon className="h-4 w-4 animate-spin" />
-              Loading channels...
+              Loading channels…
             </span>
           ) : selected ? (
             <span className="flex items-center gap-2">

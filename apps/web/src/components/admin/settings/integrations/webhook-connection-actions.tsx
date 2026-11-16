@@ -80,7 +80,7 @@ export function WebhookConnectionActions({
           {disconnecting ? (
             <>
               <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-              Disconnecting...
+              Disconnecting…
             </>
           ) : (
             'Disconnect'
@@ -133,7 +133,7 @@ export function WebhookConnectionActions({
             {saving ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
+                Saving…
               </>
             ) : (
               'Save'

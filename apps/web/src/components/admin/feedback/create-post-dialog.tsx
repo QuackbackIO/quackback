@@ -203,7 +203,7 @@ export function CreatePostDialog({
                             <LazyRichTextEditor
                               value={contentJson || ''}
                               onDocumentChange={handleContentChange}
-                              placeholder="Add more details... Type / for commands"
+                              placeholder="Add more details… Type / for commands"
                               minHeight="200px"
                               borderless
                               toolbarPosition="bottom"

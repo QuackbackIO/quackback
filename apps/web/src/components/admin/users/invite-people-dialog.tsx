@@ -85,7 +85,7 @@ export function InvitePeopleDialog({
             <Textarea
               value={messageInput}
               onChange={(e) => onMessageChange(e.target.value)}
-              placeholder="Hi! We'd love your feedback on the new beta."
+              placeholder="Hi, we'd love your feedback on the new beta."
               rows={3}
               className="mt-1.5 text-sm"
               maxLength={500}
