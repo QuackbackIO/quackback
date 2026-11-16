@@ -23,6 +23,8 @@ const FIX: Record<RuleName, string> = {
   'tab-icons': 'page-section tabs are text only',
   'toggle-rows': 'render the switch through SettingRow',
   palette: 'use semantic tokens (success, warning, destructive, muted) instead of palette colours',
+  ellipsis: 'use the ellipsis character (…), not three dots',
+  exclamation: 'end the sentence with a full stop; the admin uses no exclamation marks',
 }
 
 describe.each(RULE_NAMES)('admin consistency: %s', (rule) => {

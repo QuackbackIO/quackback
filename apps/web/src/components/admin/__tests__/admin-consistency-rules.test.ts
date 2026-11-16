@@ -158,6 +158,18 @@ const CASES: Array<{ rule: FileRuleName; file?: string; bad: string; good: strin
   },
   { rule: 'palette', bad: `cn('bg-amber-100 dark:bg-amber-900')`, good: `cn('bg-warning/10')` },
   { rule: 'palette', bad: `const c = 'border-rose-300'`, good: `const c = 'border-destructive'` },
+  {
+    rule: 'ellipsis',
+    bad: `<input placeholder="Search..." />`,
+    good: `<input placeholder="Search…" />`,
+  },
+  { rule: 'ellipsis', bad: `<span>Saving...</span>`, good: `const all = [...rows, 'Saving…']` },
+  {
+    rule: 'exclamation',
+    bad: `<span>Connected successfully!</span>`,
+    good: `<span>Connected.</span>`,
+  },
+  { rule: 'exclamation', bad: `toast.success('Saved!')`, good: `cn('!mt-0', a !== b && 'x')` },
 ]
 
 describe('matchers', () => {
@@ -168,9 +180,7 @@ describe('matchers', () => {
   })
 
   it('never flags a file outside the rule scope', () => {
-    expect(
-      offends('palette', 'components/admin/feedback/x.tsx', "const c = 'text-green-500'")
-    ).toBe(false)
+    expect(offends('palette', 'components/public/x.tsx', "const c = 'text-green-500'")).toBe(false)
     expect(offends('toggle-rows', 'components/admin/feedback/x.tsx', program('<Switch />'))).toBe(
       false
     )

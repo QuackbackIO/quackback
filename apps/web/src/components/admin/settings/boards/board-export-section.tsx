@@ -63,7 +63,7 @@ export function BoardExportSection({ boardId }: BoardExportSectionProps) {
               {isExporting ? (
                 <>
                   <ArrowPathIcon className="size-4 animate-spin" />
-                  Exporting...
+                  Exporting…
                 </>
               ) : (
                 <>
