@@ -7,6 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   selectError: null as Error | null,
+  /** When set, the session lookup finds this row. */
+  current: null as { id: string; userId: string } | null,
+  deleteError: null as Error | null,
   logged: [] as Array<{ level: string; args: unknown[] }>,
 }))
 
@@ -17,11 +20,18 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     for (const step of ['from', 'where']) chain[step] = () => chain
     chain.limit = async () => {
       if (hoisted.selectError) throw hoisted.selectError
-      return []
+      return hoisted.current ? [hoisted.current] : []
     }
     return chain
   }
-  return { ...real, db: { select: failing } }
+  const deleting = () => ({
+    where: () => ({
+      returning: async () => {
+        throw hoisted.deleteError ?? new Error('unexpected delete')
+      },
+    }),
+  })
+  return { ...real, db: { select: failing, delete: deleting } }
 })
 
 vi.mock('@/lib/server/logger', () => {
@@ -48,6 +58,8 @@ function ctx(overrides: Record<string, unknown> = {}) {
 describe('signOutHandoffFamily', () => {
   beforeEach(() => {
     hoisted.selectError = null
+    hoisted.current = null
+    hoisted.deleteError = null
     hoisted.logged.length = 0
   })
 
@@ -68,6 +80,18 @@ describe('signOutHandoffFamily', () => {
     await expect(signOutHandoffFamily(ctx())).resolves.toBeUndefined()
     expect(hoisted.logged).toHaveLength(1)
     expect(hoisted.logged[0]!.level).toBe('error')
+    expect(JSON.stringify(hoisted.logged)).not.toContain('a-session-token')
+  })
+
+  it('logs a failed family delete by error name, and the sign-out goes on', async () => {
+    hoisted.current = { id: 'sess-1', userId: 'user_1' }
+    hoisted.deleteError = Object.assign(new Error('delete ... params: a-session-token'), {
+      name: 'PostgresError',
+    })
+    await expect(signOutHandoffFamily(ctx())).resolves.toBeUndefined()
+    expect(hoisted.logged).toHaveLength(1)
+    expect(hoisted.logged[0]!.level).toBe('error')
+    expect(hoisted.logged[0]!.args[0]).toEqual({ error_name: 'PostgresError' })
     expect(JSON.stringify(hoisted.logged)).not.toContain('a-session-token')
   })
 })

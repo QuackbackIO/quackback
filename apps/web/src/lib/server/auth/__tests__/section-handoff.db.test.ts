@@ -18,6 +18,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
+  eq,
   like,
   oauthResource,
   principal,
@@ -792,7 +793,8 @@ describe.skipIf(!fixture.available)('section handoff', () => {
     it('follows a chain of handoffs: primary to help to status, signed out from the last', async () => {
       const help = await carry(PRIMARY, sourceCookie, HELP)
       const status = await carry(HELP, help, STATUS)
-      // And back to the primary domain from status, after the primary signed out alone.
+      // The primary domain's session ends on its own (expired, or revoked
+      // elsewhere); its carried sessions are still found through it.
       await testDb.delete(session).where(like(session.token, sourceToken))
       expect(await sessionOf(status)).not.toBeNull()
 
@@ -935,6 +937,97 @@ describe.skipIf(!fixture.available)('section handoff', () => {
         .from(verification)
         .where(like(verification.identifier, 'section-session-%'))
       expect(JSON.stringify(rows)).not.toContain(carried!.session.id)
+    })
+
+    it('a handoff that finishes while a sign-out is under way leaves nothing signed in', async () => {
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      const source = await sessionOf(sourceCookie)
+      // A second tab starts carrying the help session on to status...
+      const started = await beginSectionHandoffFrom(HELP, STATUS)
+      const mintUrl = location(started.response)
+      const minted = await mintSectionHandoff(
+        get(HELP, `${mintUrl.pathname}${mintUrl.search}`, help)
+      )
+      expect(location(minted).searchParams.get('token')).toBeTruthy()
+      const { revokeHandoffFamily } = await import('../section-session-family')
+
+      // ...and finishes in the middle of the primary domain's sign-out: after
+      // the sign-out has read the family, before it ends the members.
+      let raced: Response | null = null
+      await revokeHandoffFamily(
+        { id: source!.session.id, userId: ownerId },
+        {
+          afterFamilyRead: async () => {
+            raced = await finish(location(minted), STATUS, started.stateCookie)
+          },
+        }
+      )
+
+      expect(raced).not.toBeNull()
+      const installed = sessionCookieOf(raced!)
+      if (installed) expect(await sessionOf(cookiePair(installed))).toBeNull()
+      const left = await testDb
+        .select({ id: session.id })
+        .from(session)
+        .where(eq(session.userId, ownerId))
+      expect(left).toEqual([])
+    })
+
+    it('keeps the rows for as long as the carried session lives', async () => {
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      const carried = await sessionOf(help)
+      const rowExpiries = async () =>
+        (
+          await testDb
+            .select({ expiresAt: verification.expiresAt })
+            .from(verification)
+            .where(like(verification.identifier, 'section-session-%'))
+        ).map((r) => r.expiresAt.getTime())
+      const [row] = await testDb
+        .select({ expiresAt: session.expiresAt })
+        .from(session)
+        .where(like(session.id, carried!.session.id))
+      // They start out ending with the session...
+      expect(await rowExpiries()).toEqual([row!.expiresAt.getTime(), row!.expiresAt.getTime()])
+
+      // ...and move with it when the library slides its expiry.
+      const later = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      const context = await (await getAuth()).$context
+      await context.internalAdapter.updateSession(carried!.session.token, { expiresAt: later })
+      expect(await rowExpiries()).toEqual([later.getTime(), later.getTime()])
+    })
+
+    it('carries a sign-in no further once its root has ended', async () => {
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      await testDb.delete(session).where(like(session.token, sourceToken))
+
+      const started = await beginSectionHandoffFrom(HELP, STATUS)
+      const mintUrl = location(started.response)
+      const minted = await mintSectionHandoff(
+        get(HELP, `${mintUrl.pathname}${mintUrl.search}`, help)
+      )
+      const done = await finish(location(minted), STATUS, started.stateCookie)
+
+      expect(sessionCookieOf(done)).toBeUndefined()
+      // The refused session is gone, and so are its rows.
+      const carried = await sessionOf(help)
+      const left = await testDb
+        .select({ id: session.id })
+        .from(session)
+        .where(eq(session.userId, ownerId))
+      expect(left.map((r) => r.id)).toEqual([carried!.session.id])
+      expect(await linkRows()).toBe(2)
+    })
+
+    it('clears expired rows of any family at the next mint', async () => {
+      await testDb.insert(verification).values({
+        id: crypto.randomUUID(),
+        identifier: 'section-session-root:sess-long-gone',
+        value: 'sess-root-long-gone',
+        expiresAt: new Date(Date.now() - 1000),
+      })
+      await beginAndMint()
+      expect(await linkRows()).toBe(0)
     })
 
     it('a sign-out with no handoffs ends only its own session', async () => {

@@ -656,6 +656,14 @@ async function createAuth() {
         create: {
           before: assignSessionScope,
         },
+        update: {
+          // A carried session's family rows move with its expiry
+          // (section-session-family.ts).
+          after: async (updated) => {
+            const { followSessionExpiry } = await import('./section-session-family')
+            await followSessionExpiry(updated)
+          },
+        },
       },
     },
 
