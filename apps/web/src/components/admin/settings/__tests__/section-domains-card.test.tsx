@@ -90,28 +90,46 @@ describe('listedSections', () => {
 })
 
 describe('Custom domains card', () => {
-  it('gives a section on the primary domain no menu: Add custom domain sets it', () => {
-    renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: AT } } })
-    expect(screen.queryByRole('button', { name: 'Actions for Status' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Actions for Help center' })).toBeInTheDocument()
-  })
-
-  it('rows the portal, then each section, with its domain or the primary domain', () => {
+  it('rows the primary domain first, then only the sections with a domain of their own', () => {
     renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: AT } } })
     const card = screen.getByRole('heading', { name: 'Custom domains' }).closest('section')!
     expect(card).toHaveAttribute('id', 'custom-domains')
     expect(rows().map((r) => r.querySelector('span.font-medium')?.textContent)).toEqual([
       'Portal',
-      'Feedback',
       'Help center',
-      'Status',
     ])
-    expect(row('Portal')).toHaveTextContent('Primary domain')
     expect(row('Portal')).toHaveTextContent('acme.com')
     expect(row('Help center')).toHaveTextContent('help.acme.com')
-    expect(row('Status')).toHaveTextContent('acme.com')
     // A verified domain is the normal state: no badge.
     expect(row('Help center')).not.toHaveTextContent('Pending')
+  })
+
+  it('names the sections still on the primary domain in one quiet line', () => {
+    renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: AT } } })
+    expect(row('Portal')).toHaveTextContent('Primary domain · Also serves Feedback, Status')
+  })
+
+  it('leaves out a section that is off and has no domain of its own', () => {
+    renderCard({ sectionEnabled: { ...ALL_ON, status: false } })
+    expect(row('Portal')).toHaveTextContent('Also serves Feedback, Help center')
+    expect(row('Portal')).not.toHaveTextContent('Status')
+  })
+
+  it('with no section domains, shows a short empty state holding the one Add custom domain', () => {
+    renderCard()
+    expect(rows()).toHaveLength(1)
+    expect(screen.getByText('No section has its own domain yet.')).toBeVisible()
+    expect(screen.getAllByRole('button', { name: 'Add custom domain' })).toHaveLength(1)
+  })
+
+  it('self-hosted: the primary domain is a fixed row, with no menu', () => {
+    renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: AT } } })
+    expect(screen.queryByRole('button', { name: 'Actions for Portal' })).toBeNull()
+  })
+
+  it('on Cloud, changes the primary domain from its row', () => {
+    renderCard({ cloud: true })
+    expect(screen.getByRole('button', { name: 'Actions for Portal' })).toBeInTheDocument()
   })
 
   it('marks a domain pending, and one that stopped answering', () => {

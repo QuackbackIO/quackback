@@ -66,11 +66,11 @@ const choose = (dialog: HTMLElement, name: string) =>
   fireEvent.click(within(dialog).getByRole('radio', { name: new RegExp(`^${name}`) }))
 
 describe('Add custom domain', () => {
-  it('asks what the domain is used for first: Portal, then each section, as tiles', () => {
+  it('asks what the domain is used for first, each section as a tile', () => {
     const dialog = renderDialog({ map: { help: { hostname: 'help.acme.com', verifiedAt: null } } })
     expect(within(dialog).getByRole('heading', { name: 'Add custom domain' })).toBeVisible()
     expect(dialog).toHaveTextContent('Used for')
-    expect(tileTitles(dialog)).toEqual(['Portal', 'Feedback', 'Help center', 'Status'])
+    expect(tileTitles(dialog)).toEqual(['Feedback', 'Help center', 'Status'])
     // Each tile says where it is served now.
     expect(dialog).toHaveTextContent('help.acme.com')
     // A section without its own domain names the primary host, as the card's rows do.
@@ -119,12 +119,14 @@ describe('Add custom domain', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
-  it('self-hosted: the primary domain is set on the server, so Portal offers no field', () => {
+  it('self-hosted: offers no Portal tile, as BASE_URL sets the primary domain', () => {
     const dialog = renderDialog()
-    choose(dialog, 'Portal')
-    expect(dialog).toHaveTextContent('BASE_URL')
-    expect(within(dialog).queryByLabelText('Domain')).toBeNull()
-    expect(within(dialog).queryByRole('button', { name: 'Save' })).toBeNull()
+    expect(within(dialog).queryByRole('radio', { name: /^Portal/ })).toBeNull()
+  })
+
+  it('on Cloud, offers Portal first, then each section', () => {
+    const dialog = renderDialog({ cloud: true })
+    expect(tileTitles(dialog)).toEqual(['Portal', 'Feedback', 'Help center', 'Status'])
   })
 
   it('on a domain page, takes a name in front of that domain, starting from the section', async () => {

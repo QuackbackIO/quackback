@@ -1,9 +1,9 @@
 /**
- * The Custom domains card on Settings > Domains: where people reach the
- * portal, one row for the portal (the primary domain) and one per section in
- * nav order. A section without a hostname of its own is served on the primary
- * domain. Each row is verified, changed and removed from its menu; Add custom
- * domain asks what the domain is used for first.
+ * The Custom domains card on Settings > Domains: the primary domain (Portal)
+ * first, naming the sections it also serves, then one row per section with a
+ * domain of its own, in nav order. Each section row is verified, changed and
+ * removed from its menu; Add custom domain asks what the domain is used for
+ * first. A self-hosted primary domain is BASE_URL, so its row is fixed.
  *
  * On a self-hosted server a hostname not yet verified shows the CNAME it needs.
  * On Cloud the records belong to the custom domain itself, on the card below.
@@ -19,7 +19,6 @@ import {
 import type { CheckResult } from '@/components/admin/settings/section-domain-record'
 import { StateBadge, type BadgeState } from '@/components/shared/state-badge'
 import { errorText } from '@/lib/client/error-text'
-import { cn } from '@/lib/shared/utils'
 import { CUSTOM_DOMAINS_ANCHOR } from '@/lib/shared/section-domains'
 import {
   usedForLabel,
@@ -143,24 +142,30 @@ export function SectionDomainsCard({
     run(() => setSectionDomainFn({ data: { section, hostname: null } }))
 
   const removingEntry = removing ? map[removing] : undefined
+  const own = sections.filter((section) => map[section])
+  const alsoServes = sections
+    .filter((section) => !map[section] && sectionEnabled[section])
+    .map(usedForLabel)
+    .join(', ')
+  const add = canAdd ? (
+    <Button size="sm" variant="outline" onClick={() => setDialog({ initial: null })}>
+      Add custom domain
+    </Button>
+  ) : undefined
 
   return (
     <SettingsCard
       id={CUSTOM_DOMAINS_ANCHOR}
       title={CUSTOM_DOMAINS_TITLE}
-      action={
-        canAdd ? (
-          <Button size="sm" variant="outline" onClick={() => setDialog({ initial: null })}>
-            Add custom domain
-          </Button>
-        ) : undefined
-      }
+      // With no section domain yet, the empty state below holds Add custom domain.
+      action={own.length ? add : undefined}
       flush
     >
       <SettingsList>
         <SettingsListRow
           title={usedForLabel('portal')}
-          meta="Primary domain"
+          meta={alsoServes ? `Primary domain · Also serves ${alsoServes}` : 'Primary domain'}
+          wrapMeta
           trailing={
             <>
               <span className="truncate text-foreground">{primary}</span>
@@ -175,20 +180,19 @@ export function SectionDomainsCard({
             </>
           }
         />
-        {sections.map((section) => {
-          const entry = map[section]
+        {own.map((section) => {
+          const entry = map[section]!
           const label = usedForLabel(section)
-          const state = entry ? sectionDomainState(entry) : null
-          const badge = state ? STATE_BADGE[state] : null
+          const state = sectionDomainState(entry)
+          const badge = STATE_BADGE[state]
           const off = !sectionEnabled[section]
-          const showsRecord = !cloud && !!entry && state !== 'verified' && !!primary
+          const showsRecord = !cloud && state !== 'verified' && !!primary
           // A domain that needs a check has Verify on its row too; a verified one has it in the menu.
           const needsVerify = state === 'pending' || state === 'not-answering'
           // The second line: only a state that needs action speaks, and it says the next step.
           // Modules are turned on in Settings > General; named, not linked, as the page's JS budget is tight.
-          const note = !entry
-            ? undefined
-            : state === 'not-answering'
+          const note =
+            state === 'not-answering'
               ? notAnsweringNote(entry)
               : state === 'pending' && checks[section]?.verified === false
                 ? 'Not verified yet. DNS changes can take a while to show.'
@@ -209,18 +213,13 @@ export function SectionDomainsCard({
                     </>
                   ) : undefined
                 }
-                // A row with its own domain carries its menu in the trailing
-                // controls, so on a phone they move under the text together.
-                stackTrailing={!!entry}
+                // The row carries its menu in the trailing controls, so on a
+                // phone they move under the text together.
+                stackTrailing
                 trailing={
                   <>
-                    <span
-                      className={cn(
-                        'min-w-0 truncate',
-                        entry ? 'text-foreground max-sm:flex-1' : 'text-muted-foreground'
-                      )}
-                    >
-                      {entry?.hostname ?? primary}
+                    <span className="min-w-0 truncate text-foreground max-sm:flex-1">
+                      {entry.hostname}
                     </span>
                     {needsVerify && (
                       <Button
@@ -232,30 +231,25 @@ export function SectionDomainsCard({
                         Verify
                       </Button>
                     )}
-                    {/* A section on the primary domain is quiet: Add custom domain sets it. */}
-                    {entry ? (
-                      <RowActions
-                        label={label}
-                        items={[
-                          { label: 'Verify', onSelect: () => void verify(section), disabled: busy },
-                          ...(canAdd
-                            ? [{ label: 'Change', onSelect: () => setDialog({ initial: section }) }]
-                            : []),
-                          {
-                            label: 'Remove',
-                            onSelect: () => setRemoving(section),
-                            destructive: true,
-                            disabled: busy,
-                          },
-                        ]}
-                      />
-                    ) : (
-                      MENU_SPACE
-                    )}
+                    <RowActions
+                      label={label}
+                      items={[
+                        { label: 'Verify', onSelect: () => void verify(section), disabled: busy },
+                        ...(canAdd
+                          ? [{ label: 'Change', onSelect: () => setDialog({ initial: section }) }]
+                          : []),
+                        {
+                          label: 'Remove',
+                          onSelect: () => setRemoving(section),
+                          destructive: true,
+                          disabled: busy,
+                        },
+                      ]}
+                    />
                   </>
                 }
               />
-              {showsRecord && entry && (
+              {showsRecord && (
                 <div data-slot="section-domain-records" className="px-4 pb-3 sm:px-6">
                   <Suspense fallback={null}>
                     <SectionDomainRecord entry={entry} target={primary} check={checks[section]} />
@@ -266,6 +260,12 @@ export function SectionDomainsCard({
           )
         })}
       </SettingsList>
+      {own.length === 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 px-4 py-3 sm:px-6">
+          <p className="text-[13px] text-muted-foreground">No section has its own domain yet.</p>
+          {add}
+        </div>
+      )}
       {error && (
         <p
           role="alert"

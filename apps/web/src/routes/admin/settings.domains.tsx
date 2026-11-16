@@ -21,12 +21,7 @@ import {
 } from '@/lib/server/functions/cloud-identity'
 import { platformUrlSuffix } from '@/lib/shared/platform-label'
 import { DomainsCard, QuackbackUrlCard } from '@/components/admin/settings/domains-cards'
-import {
-  DomainList,
-  DomainsEmptyState,
-  domainRows,
-} from '@/components/admin/settings/domains-overview'
-import { AddDomainButton } from '@/components/admin/settings/add-domain-dialog'
+import { VerifiedDomainsCard, domainRows } from '@/components/admin/settings/domains-overview'
 import {
   listedSections,
   SectionDomainsCard,
@@ -120,15 +115,8 @@ function DomainsSettingsPage() {
   const cloud = useCloudDomains(operator?.domains ?? [])
   // Only settings.manage adds a bare domain; the other Domains permissions see the page without it.
   const canAdd = permissions?.includes(PERMISSIONS.SETTINGS_MANAGE) ?? false
-  const rows = domainRows({
-    sending,
-    signIn,
-    sectionDomains: sectionDomains?.sectionDomains,
-    webAddresses: operator ? cloud.domains : undefined,
-    added,
-  })
-  // Cloud hostnames are also on their own card, where they are added and verified.
-  const empty = rows.length === 0 && !operator?.domains.length && !sectionDomains
+  // Custom domains have their own cards below, so the list rows only the domains the workspace owns.
+  const rows = domainRows({ sending, signIn, added })
   const sectionEnabled = portalSectionsEnabled({
     featureFlags: settings?.featureFlags,
     statusConfig: settings?.statusConfig,
@@ -136,14 +124,8 @@ function DomainsSettingsPage() {
   })
 
   return (
-    <SettingsPage
-      page="/admin/settings/domains"
-      description={empty ? undefined : 'Every domain this workspace uses.'}
-      // With none yet, the empty card holds the one Add domain.
-      actions={canAdd && !empty ? <AddDomainButton /> : undefined}
-    >
-      {empty && <DomainsEmptyState canAdd={canAdd} />}
-      {rows.length > 0 && <DomainList rows={rows} links={links} />}
+    <SettingsPage page="/admin/settings/domains">
+      <VerifiedDomainsCard rows={rows} links={links} canAdd={canAdd} />
       {sectionDomains && (
         <SectionDomainsCard
           view={sectionDomains}
