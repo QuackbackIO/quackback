@@ -6,10 +6,17 @@ interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
   max?: number
 }
 
+/** The fill's level: under 80%, 80-99% (nearly full) and 100% (full). Themes style it too. */
+export function progressLevel(percent: number): 'ok' | 'warn' | 'full' {
+  if (percent >= 100) return 'full'
+  if (percent >= 80) return 'warn'
+  return 'ok'
+}
+
+const FILL_CLASS = { ok: 'bg-primary', warn: 'bg-amber-500', full: 'bg-destructive' } as const
+
 export function progressFillClass(percent: number): string {
-  if (percent >= 100) return 'bg-destructive'
-  if (percent >= 80) return 'bg-amber-500'
-  return 'bg-primary'
+  return FILL_CLASS[progressLevel(percent)]
 }
 
 function Progress({ className, value = 0, max = 100, ...props }: ProgressProps) {
@@ -18,6 +25,7 @@ function Progress({ className, value = 0, max = 100, ...props }: ProgressProps) 
   return (
     <div
       role="progressbar"
+      data-slot="progress"
       aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={value}
@@ -25,6 +33,8 @@ function Progress({ className, value = 0, max = 100, ...props }: ProgressProps) 
       {...props}
     >
       <div
+        data-slot="progress-fill"
+        data-level={progressLevel(percentage)}
         className={cn('h-full transition-all duration-300 ease-out', progressFillClass(percentage))}
         style={{ width: `${percentage}%` }}
       />
