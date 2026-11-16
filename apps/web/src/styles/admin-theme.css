@@ -310,3 +310,121 @@
 :root:has([data-admin-shell]) [data-slot='button'].bg-destructive {
   color: var(--destructive-foreground);
 }
+
+/* ------------------------------------------------------------------------------------------
+ * Admin components. components/ui is shared with the portal and the widget, which keep the
+ * workspace's look, so the kit's admin treatments live here, keyed on data-slot and
+ * data-variant and scoped to the admin shell. Kit cards named in each comment.
+ * ---------------------------------------------------------------------------------------- */
+
+/* PageHeader: the page title. */
+:root:has([data-admin-shell]) [data-page-header] h1 {
+  font: 700 22px/1.2 var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+/* Badge: a pill. Tones are tints with ink text; warning is the one duck fill. */
+:root:has([data-admin-shell]) [data-slot='badge'] {
+  border-radius: 999px;
+}
+:root:has([data-admin-shell]) [data-slot='badge'][data-variant='secondary'],
+:root:has([data-admin-shell]) [data-slot='badge'][data-variant='subtle'] {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+:root:has([data-admin-shell]) [data-slot='badge'][data-variant='secondary'] {
+  border-color: var(--border);
+}
+:root:has([data-admin-shell]) [data-slot='badge'][data-variant='success'] {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--foreground);
+}
+:root:has([data-admin-shell]) [data-slot='badge'][data-variant='success'] > svg {
+  color: var(--success);
+}
+:root:has([data-admin-shell]) [data-slot='badge'][data-variant='warning'] {
+  background: var(--duck);
+  color: var(--duck-ink);
+}
+:root:has([data-admin-shell]) [data-slot='badge'][data-variant='destructive'] {
+  background: transparent;
+  border-color: var(--destructive);
+  color: var(--destructive);
+}
+
+/* Tabs: the pill variant stays a pill now that buttons use 8px corners. */
+:root:has([data-admin-shell]) [data-slot='tabs']:not([data-variant='line']) [data-slot='tabs-list'],
+:root:has([data-admin-shell])
+  [data-slot='tabs']:not([data-variant='line'])
+  [data-slot='tabs-trigger'] {
+  border-radius: 999px;
+}
+
+/* Alert: soft panel, 12px corners. Danger is the edge and the icon; the text stays ink. */
+:root:has([data-admin-shell]) [data-slot='alert'] {
+  border-radius: var(--radius-panel);
+  border-color: var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+}
+:root:has([data-admin-shell]) [data-slot='alert'][data-variant='destructive'] {
+  background: var(--card);
+  border-color: var(--destructive);
+  box-shadow: inset 0 0 0 1px var(--destructive);
+}
+:root:has([data-admin-shell]) [data-slot='alert'][data-variant='destructive'] > svg {
+  color: var(--destructive);
+}
+:root:has([data-admin-shell])
+  [data-slot='alert'][data-variant='destructive']
+  [data-slot='alert-description'] {
+  color: var(--muted-foreground);
+}
+
+/* Avatar: initials in muted ink on the soft fill, ringed by a hairline. */
+:root:has([data-admin-shell]) [data-slot='avatar-fallback'] {
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+
+/* Skeleton: hairline-coloured blocks with 8px corners. */
+:root:has([data-admin-shell]) [data-slot='skeleton'] {
+  background: var(--border);
+  border-radius: var(--radius-field);
+}
+:root:has([data-admin-shell]) [data-slot='skeleton'].rounded-full {
+  border-radius: 999px;
+}
+
+/* Tooltip: the ink block, no border, no shadow. */
+:root:has([data-admin-shell]) [data-slot='tooltip-content'] {
+  background: var(--block);
+  color: var(--block-ink);
+  border-color: transparent;
+  border-radius: var(--radius-field);
+  box-shadow: none;
+}
+
+/* Progress: an ink fill on a hairline track; nearly full is duck, full is duck with an ink edge. */
+:root:has([data-admin-shell]) [data-slot='progress'] {
+  background: var(--border);
+}
+:root:has([data-admin-shell]) [data-slot='progress-fill'][data-level='ok'] {
+  background: var(--foreground);
+}
+:root:has([data-admin-shell]) [data-slot='progress-fill'][data-level='warn'],
+:root:has([data-admin-shell]) [data-slot='progress-fill'][data-level='full'] {
+  background: var(--duck);
+}
+:root:has([data-admin-shell]) [data-slot='progress-fill'][data-level='full'] {
+  box-shadow: inset 0 0 0 1px var(--foreground);
+}
+
+/* VoteButton, voted: a duck edge and tint with ink text, as on the website's product demo. */
+:root:has([data-admin-shell]) .post-card__vote--voted {
+  border-color: var(--duck);
+  background: color-mix(in srgb, var(--duck) 22%, transparent);
+  color: var(--foreground);
+}
