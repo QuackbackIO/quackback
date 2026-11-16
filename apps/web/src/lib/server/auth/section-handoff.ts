@@ -37,6 +37,9 @@
  *    `Cache-Control: no-store`; the finish lands on returnTo, so the token is
  *    gone from the address bar and from history. Nothing here logs a token.
  *  - Failure lands on the target page signed out, never on an error page.
+ *  - One sign-in, one sign-out. Each carried session records the sign-in it
+ *    came from, and signing out on any host ends every session of that
+ *    sign-in (section-session-family.ts).
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { and, db, eq, gt, like, lt, session, verification } from '@/lib/server/db'
@@ -44,6 +47,7 @@ import type { UserId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
 import { getSignInSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import { recordHandoffSession, sweepEndedLinks } from './section-session-family'
 import { normalizeHost } from '@/lib/shared/section-domains'
 import { SECTION_HANDOFF_PATH, handoffReturnTo } from '@/lib/shared/section-handoff'
 import type { SectionOrigins } from '@/lib/shared/section-links'
@@ -316,9 +320,15 @@ async function liveSourceSession(stored: StoredHandoff): Promise<{ expiresAt: Da
  * A new session for the user, portal scope, ending no later than the source
  * session. Created through the auth library so its hooks and token format
  * apply; the scope is then read back, so a session that is not portal scope
- * is never installed.
+ * is never installed. It is recorded as part of the source's sign-in, so
+ * signing out on any host ends it (section-session-family.ts); a session
+ * that could not be recorded is not installed either.
  */
-async function createPortalSession(userId: string, expiresAt: Date): Promise<string | null> {
+async function createPortalSession(
+  userId: string,
+  sourceSessionId: string,
+  expiresAt: Date
+): Promise<string | null> {
   const { getAuth } = await import('@/lib/server/auth')
   const context = await (await getAuth()).$context
   const created = (await context.internalAdapter.createSession(
@@ -334,7 +344,14 @@ async function createPortalSession(userId: string, expiresAt: Date): Promise<str
     .from(session)
     .where(eq(session.id, created.id))
     .limit(1)
-  if (row?.scope === 'portal') return created.token
+  if (row?.scope === 'portal') {
+    try {
+      await recordHandoffSession(created.id, sourceSessionId)
+      return created.token
+    } catch (err) {
+      log.error(errorKind(err), 'section handoff session not recorded; not installed')
+    }
+  }
   await db.delete(session).where(eq(session.id, created.id))
   return null
 }
@@ -402,7 +419,8 @@ export async function finishSectionHandoff(request: Request): Promise<Response> 
   const cookies = await (async () => {
     const source = await liveSourceSession(stored)
     if (!source) return 'source_session_ended' as const
-    const token = await createPortalSession(stored.u, source.expiresAt)
+    await sweepEndedLinks()
+    const token = await createPortalSession(stored.u, stored.sid, source.expiresAt)
     if (!token) return null
     return installSession(token, returnTo, primaryOrigin)
   })().catch((err: unknown) => {

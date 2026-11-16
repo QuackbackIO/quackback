@@ -694,4 +694,254 @@ describe.skipIf(!fixture.available)('section handoff', () => {
     expect(location(minted).searchParams.get('token')).toBeNull()
     expect(await handoffRows()).toBe(0)
   })
+
+  describe('signing out ends the sign-in on every host', () => {
+    /** Sign out through the production endpoint on `host`, as the browser does. */
+    async function signOut(host: string, cookie: string) {
+      const auth = await getAuth()
+      const response = await auth.handler(
+        new Request(`https://${host}/api/auth/sign-out`, {
+          method: 'POST',
+          headers: {
+            host,
+            origin: `https://${host}`,
+            'content-type': 'application/json',
+            cookie,
+          },
+          body: '{}',
+        })
+      )
+      expect(response.status).toBe(200)
+      return response
+    }
+
+    /** Carry the session that `fromCookie` stands for from `from` to `target`. */
+    async function carry(from: string, fromCookie: string, target: string): Promise<string> {
+      const started = await beginSectionHandoffFrom(from, target)
+      const mintUrl = location(started.response)
+      const minted = await mintSectionHandoff(
+        get(from, `${mintUrl.pathname}${mintUrl.search}`, fromCookie)
+      )
+      const done = await finish(location(minted), target, started.stateCookie)
+      const installed = sessionCookieOf(done)
+      expect(installed).toBeTruthy()
+      return cookiePair(installed!)
+    }
+
+    async function beginSectionHandoffFrom(from: string, target: string) {
+      const response = await beginSectionHandoff(
+        get(
+          target,
+          `/auth/section-handoff?${new URLSearchParams({ from, returnTo: '/' }).toString()}`
+        )
+      )
+      const stateSetCookie = setCookies(response).find((c) => c.startsWith(SECTION_STATE_COOKIE))
+      return { response, stateCookie: stateSetCookie ? cookiePair(stateSetCookie) : '' }
+    }
+
+    /** Another session of `userId`, signed in on its own (not handed off). */
+    async function separateSession(userId: UserId): Promise<string> {
+      const id = `sess-${suffix()}`
+      await testDb.insert(session).values({
+        id,
+        token: `tok${suffix()}${suffix()}`,
+        userId,
+        scope: 'portal',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        updatedAt: new Date(),
+      })
+      return id
+    }
+
+    async function sessionExists(id: string): Promise<boolean> {
+      const rows = await testDb.select({ id: session.id }).from(session).where(like(session.id, id))
+      return rows.length === 1
+    }
+
+    async function linkRows(): Promise<number> {
+      const rows = await testDb
+        .select({ id: verification.id })
+        .from(verification)
+        .where(like(verification.identifier, 'section-session-%'))
+      return rows.length
+    }
+
+    it('signing out on the section host signs the visitor out on the primary domain too', async () => {
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      expect(await sessionOf(help)).not.toBeNull()
+
+      await signOut(HELP, help)
+
+      expect(await sessionOf(help)).toBeNull()
+      expect(await sessionOf(sourceCookie)).toBeNull()
+      expect(await linkRows()).toBe(0)
+    })
+
+    it('signing out on the primary domain signs the visitor out on every section host', async () => {
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      const status = await carry(PRIMARY, sourceCookie, STATUS)
+
+      await signOut(PRIMARY, sourceCookie)
+
+      expect(await sessionOf(sourceCookie)).toBeNull()
+      expect(await sessionOf(help)).toBeNull()
+      expect(await sessionOf(status)).toBeNull()
+      expect(await linkRows()).toBe(0)
+    })
+
+    it('follows a chain of handoffs: primary to help to status, signed out from the last', async () => {
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      const status = await carry(HELP, help, STATUS)
+      // And back to the primary domain from status, after the primary signed out alone.
+      await testDb.delete(session).where(like(session.token, sourceToken))
+      expect(await sessionOf(status)).not.toBeNull()
+
+      await signOut(STATUS, status)
+
+      expect(await sessionOf(status)).toBeNull()
+      expect(await sessionOf(help)).toBeNull()
+    })
+
+    it('leaves the same person’s separate sign-ins alone', async () => {
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      const elsewhere = await separateSession(ownerId)
+
+      await signOut(HELP, help)
+
+      expect(await sessionOf(sourceCookie)).toBeNull()
+      expect(await sessionExists(elsewhere)).toBe(true)
+    })
+
+    it('never ends another person’s session, even one a link row names', async () => {
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      const otherId = createId('user') as UserId
+      await testDb.insert(user).values({
+        id: otherId,
+        name: 'Other',
+        email: `other-${suffix()}@example.com`,
+        emailVerified: true,
+      })
+      const theirs = await separateSession(otherId)
+      const source = await sessionOf(sourceCookie)
+      // A row claiming their session came from the owner's sign-in.
+      await testDb.insert(verification).values([
+        {
+          id: crypto.randomUUID(),
+          identifier: `section-session-root:${theirs}`,
+          value: source!.session.id,
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        },
+        {
+          id: crypto.randomUUID(),
+          identifier: `section-session-family:${source!.session.id}`,
+          value: theirs,
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        },
+      ])
+
+      await signOut(HELP, help)
+
+      expect(await sessionOf(help)).toBeNull()
+      expect(await sessionOf(sourceCookie)).toBeNull()
+      expect(await sessionExists(theirs)).toBe(true)
+    })
+
+    it('ends when the rows loop back on themselves', async () => {
+      const a = await separateSession(ownerId)
+      const b = await separateSession(ownerId)
+      const c = await separateSession(ownerId)
+      const row = (identifier: string, value: string) => ({
+        id: crypto.randomUUID(),
+        identifier,
+        value,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      })
+      // a says its root is b, b says its root is a; a's family names b and c.
+      await testDb
+        .insert(verification)
+        .values([
+          row(`section-session-root:${a}`, b),
+          row(`section-session-root:${b}`, a),
+          row(`section-session-family:${b}`, a),
+          row(`section-session-family:${a}`, b),
+          row(`section-session-family:${a}`, c),
+        ])
+      const { revokeHandoffFamily } = await import('../section-session-family')
+
+      const revoked = await revokeHandoffFamily({ id: a, userId: ownerId })
+
+      expect(revoked).toBeGreaterThan(0)
+      expect(await sessionExists(a)).toBe(false)
+      expect(await sessionExists(b)).toBe(false)
+      expect(await sessionExists(c)).toBe(false)
+      expect(await sessionOf(sourceCookie)).not.toBeNull()
+    })
+
+    it('ends a long chain in one pass', async () => {
+      let cookie = sourceCookie
+      const hosts = [HELP, STATUS, PRIMARY, HELP, STATUS, PRIMARY, HELP, STATUS]
+      let from = PRIMARY
+      const cookies: string[] = [sourceCookie]
+      for (const host of hosts) {
+        // Each host holds one session at a time: the carried one replaces it.
+        cookie = await carry(from, cookie, host)
+        cookies.push(cookie)
+        from = host
+      }
+
+      await signOut(from, cookie)
+
+      for (const each of cookies) expect(await sessionOf(each)).toBeNull()
+      expect(await linkRows()).toBe(0)
+    })
+
+    it('records where a carried session came from, and nothing else', async () => {
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      const carried = await sessionOf(help)
+      const source = await sessionOf(sourceCookie)
+      const rows = await testDb
+        .select({ identifier: verification.identifier, value: verification.value })
+        .from(verification)
+        .where(like(verification.identifier, 'section-session-%'))
+      expect(rows).toHaveLength(2)
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          { identifier: `section-session-root:${carried!.session.id}`, value: source!.session.id },
+          {
+            identifier: `section-session-family:${source!.session.id}`,
+            value: carried!.session.id,
+          },
+        ])
+      )
+      // Ids only: no session token is written anywhere.
+      for (const row of rows) {
+        expect(row.value).not.toContain(sourceToken)
+        expect(row.value).not.toContain(carried!.session.token)
+      }
+    })
+
+    it('clears the rows of sessions that ended some other way at the next handoff', async () => {
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      const carried = await sessionOf(help)
+      // The carried session expires or is revoked on its own: its rows stay behind...
+      await testDb.delete(session).where(like(session.id, carried!.session.id))
+      expect(await linkRows()).toBe(2)
+
+      // ...until the next handoff finishes, which leaves only its own two.
+      await carry(PRIMARY, sourceCookie, STATUS)
+      expect(await linkRows()).toBe(2)
+      const rows = await testDb
+        .select({ identifier: verification.identifier, value: verification.value })
+        .from(verification)
+        .where(like(verification.identifier, 'section-session-%'))
+      expect(JSON.stringify(rows)).not.toContain(carried!.session.id)
+    })
+
+    it('a sign-out with no handoffs ends only its own session', async () => {
+      const elsewhere = await separateSession(ownerId)
+      await signOut(PRIMARY, sourceCookie)
+      expect(await sessionOf(sourceCookie)).toBeNull()
+      expect(await sessionExists(elsewhere)).toBe(true)
+    })
+  })
 })

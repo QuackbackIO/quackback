@@ -500,6 +500,13 @@ export const hooksBefore = createAuthMiddleware(async (ctx) => {
     const moved = await sectionSignInMove(ctx)
     if (moved) return ctx.json(moved)
   }
+  // Signing out on one host ends the same sign-in on the workspace's other
+  // hosts (section-session-family.ts). Before the library ends this session,
+  // which is how the family is found.
+  if (ctx.path === '/sign-out') {
+    const { signOutHandoffFamily } = await import('./section-session-family')
+    await signOutHandoffFamily(ctx)
+  }
 })
 
 /**
