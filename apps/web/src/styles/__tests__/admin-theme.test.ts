@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { hexContrastRatio } from '@/lib/shared/website-brand-color'
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const css = readFileSync(join(dir, '../admin-theme.css'), 'utf8')
@@ -25,18 +26,8 @@ function tokens(head: string): Map<string, string> {
 const light = tokens(LIGHT)
 const dark = tokens(DARK)
 
-function luminance(hex: string): number {
-  const [r, g, b] = [1, 3, 5].map((i) => {
-    const c = parseInt(hex.slice(i, i + 2), 16) / 255
-    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
-  })
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b
-}
-
-function contrast(a: string, b: string): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
-  return (hi + 0.05) / (lo + 0.05)
-}
+/** WCAG contrast between two hex colours, from the app's shared helper. */
+const contrast = hexContrastRatio
 
 /** Strip comments and @font-face / @import, leaving the style rules' selectors. */
 function selectors(): string[] {
@@ -113,8 +104,9 @@ describe('admin theme stylesheet', () => {
 
   it('raises the work sheet above the rail in both themes', () => {
     for (const t of [light, dark]) {
-      const sheet = luminance(t.get('--background')!)
-      const rail = luminance(t.get('--chrome-background')!)
+      // Brighter means further from black.
+      const sheet = contrast(t.get('--background')!, '#000000')
+      const rail = contrast(t.get('--chrome-background')!, '#000000')
       // Raised means lighter: the sheet is brighter than the rail in light and dark.
       expect(sheet).toBeGreaterThan(rail)
     }

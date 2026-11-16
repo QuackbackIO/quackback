@@ -67,6 +67,13 @@ export const Route = createFileRoute('/admin')({
         type: 'font/woff2',
         crossOrigin: 'anonymous',
       },
+      {
+        rel: 'preload',
+        href: '/fonts/bricolage-grotesque-latin.woff2',
+        as: 'font',
+        type: 'font/woff2',
+        crossOrigin: 'anonymous',
+      },
     ],
   }),
   validateSearch: (

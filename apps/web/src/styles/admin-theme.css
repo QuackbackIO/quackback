@@ -8,7 +8,6 @@
  * because the portal's workspace theme must not see them.
  */
 @import '@fontsource/jetbrains-mono/400.css';
-@import '@fontsource/jetbrains-mono/500.css';
 
 /* Figtree (body) and Bricolage Grotesque (headings), self-hosted variable fonts (OFL). */
 @font-face {
@@ -56,6 +55,7 @@
 
 /* Site palette for the admin. Light: the quackback.io light theme, warm white. */
 :root:has([data-admin-shell]) {
+  letter-spacing: 0;
   --background: #ffffff;
   --foreground: #111111;
   --card: #ffffff;
@@ -215,10 +215,6 @@
   --block-ink: #f2f2f2;
 }
 
-:root:has([data-admin-shell]) {
-  letter-spacing: 0;
-}
-
 /* The site focus ring: an ink outline with a duck halo. It replaces the ring-* box-shadow
    focus styles under the admin. */
 :root:has([data-admin-shell]) :focus-visible {
@@ -227,13 +223,14 @@
   box-shadow: var(--focus-halo);
 }
 
-/* Inside a clipping container (a panel, list or card with overflow hidden) a row, tile or tab
-   sits flush with the edge, so the offset ring and halo were cut to a sliver. There, focus is a
-   2px ink outline drawn inside the element. Compact controls (buttons, switches, checkboxes,
-   radios) sit in padded rows and keep the full ring: an inset outline would vanish into an ink
-   fill. */
+/* In the work canvas, rows, tiles and tabs sit flush with the edge of clipping panels and the
+   canvas itself clips, so an offset ring and halo were cut to a sliver. Focus there is a 2px ink
+   outline drawn inside the element. Compact controls (buttons, switches, checkboxes, radios) sit
+   in padded rows and keep the full ring, which an inset outline would lose in an ink fill. The
+   rail, side panes and popovers keep the ring everywhere. Fields, menu rows and options are
+   excluded here because their own rules below handle focus. */
 :root:has([data-admin-shell])
-  :is(.overflow-hidden, .overflow-clip)
+  [data-admin-canvas]
   :focus-visible:not(
     [data-slot='button'],
     [role='switch'],
@@ -241,7 +238,18 @@
     [role='radio'],
     [data-slot='switch'],
     [data-slot='checkbox'],
-    [data-slot='radio-group-item']
+    [data-slot='radio-group-item'],
+    input,
+    textarea,
+    select,
+    [data-slot='select-trigger'],
+    [data-slot='command-input'],
+    [contenteditable='true'],
+    [role='menuitem'],
+    [role='menuitemcheckbox'],
+    [role='menuitemradio'],
+    [role='option'],
+    [cmdk-item]
   ) {
   outline-offset: -2px;
   box-shadow: none;
@@ -295,4 +303,10 @@
     [data-slot='sheet-title']
   ) {
   font-family: var(--font-display);
+}
+
+/* The destructive button labels in its foreground token, which the light value of
+   globals.css would make red on red; the admin sets it per theme. */
+:root:has([data-admin-shell]) [data-slot='button'].bg-destructive {
+  color: var(--destructive-foreground);
 }
