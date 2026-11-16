@@ -15,7 +15,6 @@ export const Route = createFileRoute('/_portal/changelog/')({
     if (typeof window === 'undefined') await setPublicDocumentCacheHeaders()
     return {
       workspaceName: context.settings?.name ?? 'Quackback',
-      baseUrl: context.baseUrl ?? '',
       canonicalUrl: pageCanonical('changelog', '/changelog', context),
     }
   },

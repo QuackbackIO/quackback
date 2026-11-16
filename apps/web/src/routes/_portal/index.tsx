@@ -116,7 +116,6 @@ export const Route = createFileRoute('/_portal/')({
       // the SSR HTML. `isEmpty` moved into the component (derived from the
       // suspense query) since the feed query is no longer awaited here.
       workspaceName: org.name,
-      baseUrl: context.baseUrl ?? '',
       canonicalUrl: pageCanonical('feedback', '/', context),
       showPoweredBy,
     }

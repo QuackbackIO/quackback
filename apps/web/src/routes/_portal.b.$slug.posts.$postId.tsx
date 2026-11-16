@@ -118,7 +118,6 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
       slug,
       postTitle: post.title,
       boardName: post.board.name,
-      baseUrl: context.baseUrl ?? '',
       canonicalUrl: pageCanonical('feedback', `/b/${slug}/posts/${postId}`, context),
     }
   },

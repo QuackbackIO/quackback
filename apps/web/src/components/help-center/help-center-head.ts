@@ -8,7 +8,7 @@
  * but the layout's route id.
  */
 import { getRouteApi } from '@tanstack/react-router'
-import { sectionUrl, type SectionOrigins } from '@/lib/shared/section-links'
+import { expandSectionLinks, sectionUrl, type SectionLinks } from '@/lib/shared/section-links'
 
 const helpCenterLayout = getRouteApi('/_portal/hc')
 
@@ -38,10 +38,9 @@ export function helpCenterHeadPortal(
   helpUrl: (path: string) => string | undefined
 } {
   const portal = matches.find((m) => m.routeId === '/_portal')
-  const context = portal?.context as
-    { baseUrl?: string; sectionOrigins?: SectionOrigins } | undefined
+  const context = portal?.context as { baseUrl?: string; sectionLinks?: SectionLinks } | undefined
   const baseUrl = context?.baseUrl
-  const origins = context?.sectionOrigins
+  const origins = expandSectionLinks(baseUrl, context?.sectionLinks)?.origins
   return {
     workspaceName:
       (portal?.loaderData as { workspaceName?: string } | undefined)?.workspaceName ??

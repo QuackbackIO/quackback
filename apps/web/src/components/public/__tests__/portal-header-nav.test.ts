@@ -250,24 +250,32 @@ describe('crossHostTabHref', () => {
   }
 
   it('keeps a tab on this host a client-side link', () => {
-    expect(crossHostTabHref('roadmap', '/roadmap', origins, PRIMARY)).toBeNull()
-    expect(crossHostTabHref('help', '/hc', origins, 'https://help.acme.com')).toBeNull()
+    expect(crossHostTabHref('roadmap', '/roadmap', { origins, hostOrigin: PRIMARY })).toBeNull()
+    expect(
+      crossHostTabHref('help', '/hc', { origins, hostOrigin: 'https://help.acme.com' })
+    ).toBeNull()
   })
 
   it("sends the primary domain's tab for a section on its own host there, home as /", () => {
-    expect(crossHostTabHref('help', '/hc', origins, PRIMARY)).toBe('https://help.acme.com/')
+    expect(crossHostTabHref('help', '/hc', { origins, hostOrigin: PRIMARY })).toBe(
+      'https://help.acme.com/'
+    )
   })
 
   it("sends a section host's tabs for other sections to their host or the primary domain", () => {
     const here = 'https://help.acme.com'
-    expect(crossHostTabHref('status', '/status', origins, here)).toBe('https://status.acme.com/')
-    expect(crossHostTabHref('roadmap', '/roadmap', origins, here)).toBe(
+    expect(crossHostTabHref('status', '/status', { origins, hostOrigin: here })).toBe(
+      'https://status.acme.com/'
+    )
+    expect(crossHostTabHref('roadmap', '/roadmap', { origins, hostOrigin: here })).toBe(
       'https://acme.example.com/roadmap'
     )
-    expect(crossHostTabHref('feedback', '/', origins, here)).toBe('https://acme.example.com/')
+    expect(crossHostTabHref('feedback', '/', { origins, hostOrigin: here })).toBe(
+      'https://acme.example.com/'
+    )
   })
 
   it('keeps every tab a client-side link when the origins are unknown', () => {
-    expect(crossHostTabHref('help', '/hc', null, PRIMARY)).toBeNull()
+    expect(crossHostTabHref('help', '/hc', null)).toBeNull()
   })
 })

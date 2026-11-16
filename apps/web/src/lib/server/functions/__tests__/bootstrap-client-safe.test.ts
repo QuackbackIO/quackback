@@ -105,8 +105,7 @@ async function getBootstrapData() {
     settings: { name: string; settings: object; statusConfig: object } | null
     onboarding: { complete: boolean; needsSetupWizard: boolean }
     sectionHome: string | null
-    sectionOrigins: Record<string, string>
-    hostOrigin: string
+    sectionLinks?: { hosts?: Record<string, string>; here?: string; primary?: string }
   }
 }
 
@@ -199,14 +198,22 @@ describe('getBootstrapData response', () => {
       statusConfig: { enabled: true },
     })
 
-    const { sectionOrigins, hostOrigin } = await getBootstrapData()
-    expect(sectionOrigins.help).toBe('https://help.acme.com')
-    expect(sectionOrigins.status).toBe('https://feedback.example')
-    expect(sectionOrigins.primary).toBe('https://feedback.example')
-    // The page is on the primary domain.
-    expect(hostOrigin).toBe('https://feedback.example')
+    // Only the exception is sent: the help center's host. The page is on
+    // the primary domain, which is its base URL.
+    expect((await getBootstrapData()).sectionLinks).toEqual({
+      hosts: { help: 'https://help.acme.com' },
+    })
 
     hoisted.host = 'help.acme.com'
-    expect((await getBootstrapData()).hostOrigin).toBe('https://help.acme.com')
+    expect((await getBootstrapData()).sectionLinks).toEqual({
+      hosts: { help: 'https://help.acme.com' },
+      here: 'https://help.acme.com',
+    })
+  })
+
+  it('sends nothing about section hosts while no section has one', async () => {
+    hoisted.getWorkspaceSettings.mockResolvedValue(workspaceSettings(setupState()))
+    const data = await getBootstrapData()
+    expect('sectionLinks' in data).toBe(false)
   })
 })

@@ -10,5 +10,7 @@ export function adminLoginRedirectTarget(d: { callbackUrl?: string; error?: stri
 
 export const Route = createFileRoute('/admin/login')({
   validateSearch: searchSchema,
-  beforeLoad: ({ search }) => { throw redirect(adminLoginRedirectTarget(search)) },
+  beforeLoad: ({ search }) => {
+    throw redirect(adminLoginRedirectTarget(search))
+  },
 })

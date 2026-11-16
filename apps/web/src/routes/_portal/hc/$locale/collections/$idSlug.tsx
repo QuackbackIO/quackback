@@ -15,7 +15,7 @@ import { hcArticlePath, hcCollectionPath } from '@/lib/shared/help-center-url'
 import { helpCenterHeadPortal } from '@/components/help-center/help-center-head'
 import {
   useBaseUrl,
-  useSectionOrigins,
+  useSectionLinks,
   useWorkspaceSettings,
 } from '@/lib/client/hooks/use-root-context'
 
@@ -151,7 +151,7 @@ function CollectionPage() {
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
   // Structured data names the help center's own host once it has one.
   const requestBaseUrl = useBaseUrl()
-  const baseUrl = useSectionOrigins()?.help ?? requestBaseUrl
+  const baseUrl = useSectionLinks()?.origins.help ?? requestBaseUrl
   const settings = useWorkspaceSettings()
   const askAiEnabled = !!settings?.featureFlags?.helpCenter
 

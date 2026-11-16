@@ -121,15 +121,11 @@ describe('help center landing canonicals', () => {
       routeId: '/_portal',
       loaderData: { workspaceName: 'Acme' },
       context: {
-        baseUrl: 'https://feedback.example.com',
-        sectionOrigins: {
+        baseUrl: 'https://help.acme.com',
+        sectionLinks: {
+          hosts: { help: 'https://help.acme.com' },
+          here: 'https://help.acme.com',
           primary: 'https://feedback.example.com',
-          feedback: 'https://feedback.example.com',
-          roadmap: 'https://feedback.example.com',
-          changelog: 'https://feedback.example.com',
-          help: 'https://help.acme.com',
-          support: 'https://feedback.example.com',
-          status: 'https://feedback.example.com',
         },
       },
     }

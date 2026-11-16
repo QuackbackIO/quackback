@@ -44,8 +44,7 @@ import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 import {
-  useHostOrigin,
-  useSectionOrigins,
+  useSectionLinks,
   useSessionContext,
   useWorkspaceSettings,
 } from '@/lib/client/hooks/use-root-context'
@@ -414,7 +413,7 @@ const NavTab = memo(
     const intl = useIntl()
     // A tab for a section served on another host (help.acme.com) is a plain
     // link there: a client-side navigation would never reach the server.
-    const crossHostHref = crossHostTabHref(item.type, item.to, useSectionOrigins(), useHostOrigin())
+    const crossHostHref = crossHostTabHref(item.type, item.to, useSectionLinks())
     const isActive = useRouterState({
       select: (s) => !crossHostHref && isTabActive(item.to, s.location.pathname),
     })

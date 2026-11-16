@@ -71,7 +71,6 @@ describe('help center article head', () => {
   })
 
   it("canonicalises to the article URL on the help center's own host", () => {
-    const origin = 'https://feedback.example.com'
     const { links } = head({
       loaderData: { article },
       params: { locale: 'en', idSlug: '150-mcp-reference' },
@@ -80,15 +79,11 @@ describe('help center article head', () => {
           routeId: '/_portal',
           loaderData: { workspaceName: 'Acme' },
           context: {
-            baseUrl: origin,
-            sectionOrigins: {
-              primary: origin,
-              feedback: origin,
-              roadmap: origin,
-              changelog: origin,
-              help: 'https://help.acme.com',
-              support: origin,
-              status: origin,
+            baseUrl: 'https://help.acme.com',
+            sectionLinks: {
+              hosts: { help: 'https://help.acme.com' },
+              here: 'https://help.acme.com',
+              primary: 'https://feedback.example.com',
             },
           },
         },

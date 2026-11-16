@@ -85,7 +85,7 @@ const HEADER_LINKS = [
 function renderHeader(
   pathname: string,
   headerLinks: { label: string; url: string }[] | undefined,
-  hosts: { sectionOrigins?: Record<string, string>; hostOrigin?: string } = {},
+  hosts: { baseUrl?: string; sectionLinks?: Record<string, unknown> } = {},
   featureFlags: Record<string, boolean> = { helpCenter: true }
 ) {
   mockPathname.value = pathname
@@ -141,18 +141,11 @@ describe('PortalHeader — tabs for sections on their own host', () => {
 
   const PRIMARY = 'https://acme.example.com'
   const FLAGS = { feedback: true, helpCenter: true }
-  const sectionOrigins = {
-    primary: PRIMARY,
-    feedback: PRIMARY,
-    roadmap: PRIMARY,
-    changelog: PRIMARY,
-    help: 'https://help.acme.com',
-    support: PRIMARY,
-    status: PRIMARY,
-  }
+  // What the bootstrap sends: only the help center's host.
+  const hostsOnly = { hosts: { help: 'https://help.acme.com' } }
 
   it("links the help center's tab to its own host from the primary domain", () => {
-    renderHeader('/', [], { sectionOrigins, hostOrigin: PRIMARY }, FLAGS)
+    renderHeader('/', [], { baseUrl: PRIMARY, sectionLinks: hostsOnly }, FLAGS)
     expect(screen.getByRole('link', { name: 'Help Center' })).toHaveAttribute(
       'href',
       'https://help.acme.com/'
@@ -162,7 +155,16 @@ describe('PortalHeader — tabs for sections on their own host', () => {
   })
 
   it("links the other sections' tabs to the primary domain from the help center's host", () => {
-    renderHeader('/hc', [], { sectionOrigins, hostOrigin: 'https://help.acme.com' }, FLAGS)
+    renderHeader(
+      '/hc',
+      [],
+      {
+        // On the help host the base URL is that host, so the primary is named.
+        baseUrl: 'https://help.acme.com',
+        sectionLinks: { ...hostsOnly, here: 'https://help.acme.com', primary: PRIMARY },
+      },
+      FLAGS
+    )
     expect(screen.getByRole('link', { name: 'Feedback' })).toHaveAttribute(
       'href',
       'https://acme.example.com/'

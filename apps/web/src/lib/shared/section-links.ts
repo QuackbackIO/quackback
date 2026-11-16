@@ -76,17 +76,65 @@ export function sectionUrl(section: PortalSection, path: string, origins: Sectio
 }
 
 /**
+ * What the browser is sent about section hosts: only what differs from the
+ * page's base URL, and nothing at all in the usual case where no section has
+ * a host of its own. The bootstrap goes into every document, so it carries
+ * the exception, not the full table.
+ */
+export interface SectionLinks {
+  /** The sections linked at their own host. */
+  hosts?: Partial<Record<PortalSection, string>>
+  /** The page's own origin, when it is a section's host. */
+  here?: string
+  /** The primary origin, when it is not the page's base URL. */
+  primary?: string
+}
+
+export function compactSectionLinks({
+  origins,
+  hostOrigin,
+  baseUrl,
+}: {
+  origins: SectionOrigins
+  hostOrigin: string
+  baseUrl: string
+}): SectionLinks | undefined {
+  const hosts: Partial<Record<PortalSection, string>> = {}
+  for (const section of PORTAL_SECTIONS) {
+    if (origins[section] !== origins.primary) hosts[section] = origins[section]
+  }
+  const links: SectionLinks = {
+    ...(Object.keys(hosts).length > 0 ? { hosts } : {}),
+    ...(hostOrigin !== origins.primary ? { here: hostOrigin } : {}),
+    ...(origins.primary !== trimOrigin(baseUrl) ? { primary: origins.primary } : {}),
+  }
+  return Object.keys(links).length > 0 ? links : undefined
+}
+
+/** The full table again, from what the browser was sent and its base URL. */
+export function expandSectionLinks(
+  baseUrl: string | null | undefined,
+  links: SectionLinks | null | undefined
+): { origins: SectionOrigins; hostOrigin: string } | null {
+  const primary = links?.primary ?? (baseUrl ? trimOrigin(baseUrl) : null)
+  if (!primary) return null
+  const origins = { primary } as SectionOrigins
+  for (const section of PORTAL_SECTIONS) origins[section] = links?.hosts?.[section] ?? primary
+  return { origins, hostOrigin: links?.here ?? primary }
+}
+
+/**
  * A page's canonical URL from the route context: on its section's origin, else
- * on the request's base URL, else empty (a relative canonical would resolve
- * against whichever host the crawler fetched).
+ * empty when the request carries no base URL (a relative canonical would
+ * resolve against whichever host the crawler fetched).
  */
 export function pageCanonical(
   section: PortalSection,
   path: string,
-  context: { sectionOrigins?: SectionOrigins | null; baseUrl?: string | null }
+  context: { sectionLinks?: SectionLinks | null; baseUrl?: string | null }
 ): string {
-  if (context.sectionOrigins) return sectionUrl(section, path, context.sectionOrigins)
-  return context.baseUrl ? `${context.baseUrl}${path}` : ''
+  const expanded = expandSectionLinks(context.baseUrl, context.sectionLinks)
+  return expanded ? sectionUrl(section, path, expanded.origins) : ''
 }
 
 /** An absolute URL for any portal path, on the host its section is linked at. */

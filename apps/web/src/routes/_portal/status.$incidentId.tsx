@@ -48,7 +48,6 @@ export const Route = createFileRoute('/_portal/status/$incidentId')({
       incidentId,
       incidentTitle: incident.title,
       workspaceName: context.settings?.name ?? 'Quackback',
-      baseUrl: context.baseUrl ?? '',
       canonicalUrl: pageCanonical('status', `/status/${incidentId}`, context),
       messages: await messagesPromise,
     }

@@ -26,7 +26,7 @@ import { runWithoutLogContext } from '@/lib/server/log-context'
 import { shouldRunWorkers } from '@/lib/server/process-role'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { analyticsWorkspaceKey } from '@/lib/shared/analytics-identity'
-import type { SectionOrigins } from '@/lib/shared/section-links'
+import type { SectionLinks } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'bootstrap' })
 
@@ -39,17 +39,13 @@ export interface BootstrapData {
    */
   sectionHome: string | null
   /**
-   * Where each portal section is linked: its own host once it has a verified
-   * one (help.acme.com), else the primary origin. Nav tabs, canonical tags
-   * and share links are built on it, so they never lean on a redirect.
+   * Where portal sections are linked, when any is not on the primary domain
+   * (help.acme.com), and this page's own host when it is a section's. Only the
+   * exception is sent, since this goes into every document: absent, every
+   * section and this page are on the base URL. `expandSectionLinks` rebuilds
+   * the full table.
    */
-  sectionOrigins: SectionOrigins
-  /**
-   * The origin this page is served at: a section's own host when the request
-   * came to one, else the primary origin. A nav tab whose section's origin
-   * differs is a plain link to that host.
-   */
-  hostOrigin: string
+  sectionLinks?: SectionLinks
   session: Session | null
   /**
    * The workspace settings as a browser may see them: redacted by
@@ -224,6 +220,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     },
     { requestWorkspaceHost },
     { sectionOriginsOf },
+    { compactSectionLinks },
   ] = await Promise.all([
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/auth/registered-providers'),
@@ -233,6 +230,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     import('@/lib/shared/section-domains'),
     import('@/lib/server/workspaces/saas-edge-host'),
     import('@/lib/server/domains/settings/section-links'),
+    import('@/lib/shared/section-links'),
   ])
 
   // Single principal read returns both session.principalType + userRole;
@@ -338,6 +336,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   const hostOrigin = onSectionHost
     ? `https://${normalizeHost(requestHost)}`
     : sectionOrigins.primary
+  const sectionLinks = compactSectionLinks({ origins: sectionOrigins, hostOrigin, baseUrl })
   const cloud = resolveCloudConfig(
     (settings?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
   )
@@ -346,8 +345,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   return {
     baseUrl,
     sectionHome,
-    sectionOrigins,
-    hostOrigin,
+    ...(sectionLinks ? { sectionLinks } : {}),
     session,
     settings: settings ? clientSafeSettings(settings) : null,
     onboarding: {

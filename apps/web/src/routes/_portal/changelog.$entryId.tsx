@@ -28,7 +28,6 @@ export const Route = createFileRoute('/_portal/changelog/$entryId')({
       entryId,
       entryTitle: entry.title,
       workspaceName: context.settings?.name ?? 'Quackback',
-      baseUrl: context.baseUrl ?? '',
       canonicalUrl: pageCanonical('changelog', `/changelog/${entryId}`, context),
     }
   },

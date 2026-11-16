@@ -20,7 +20,7 @@ const searchSchema = z.object({
 export const Route = createFileRoute('/_portal/roadmap/')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
-    const { queryClient, settings, baseUrl, userRole } = context
+    const { queryClient, settings, userRole } = context
     if (!isProductEnabled(settings?.featureFlags, 'feedback')) throw notFound()
 
     // The shell's lists in one request; the columns ask for their posts once it renders.
@@ -35,7 +35,6 @@ export const Route = createFileRoute('/_portal/roadmap/')({
     return {
       firstRoadmapId: roadmaps[0]?.id ?? null,
       workspaceName: settings?.name ?? 'Quackback',
-      baseUrl: baseUrl ?? '',
       canonicalUrl: pageCanonical('roadmap', '/roadmap', context),
       userRole: userRole ?? null,
     }

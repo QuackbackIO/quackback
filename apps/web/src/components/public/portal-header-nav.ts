@@ -182,9 +182,8 @@ export function isTabActive(to: string, pathname: string): boolean {
 export function crossHostTabHref(
   type: PortalBuiltInNavType,
   to: string,
-  origins: SectionOrigins | null | undefined,
-  hostOrigin: string | null | undefined
+  links: { origins: SectionOrigins; hostOrigin: string } | null | undefined
 ): string | null {
-  if (!origins || !hostOrigin || origins[type] === hostOrigin) return null
-  return sectionUrl(type, to, origins)
+  if (!links || links.origins[type] === links.hostOrigin) return null
+  return sectionUrl(type, to, links.origins)
 }

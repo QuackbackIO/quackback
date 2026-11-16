@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   allOnPrimary,
+  compactSectionLinks,
+  expandSectionLinks,
   pageCanonical,
   portalPageUrl,
   sectionOrigins,
@@ -152,17 +154,70 @@ describe('sectionServedAt', () => {
 
 describe('pageCanonical', () => {
   it("builds a page's canonical URL on its section's origin", () => {
-    const context = { baseUrl: 'https://help.acme.com', sectionOrigins: origins() }
+    // On the help center's host, whose base URL is that host.
+    const context = {
+      baseUrl: 'https://help.acme.com',
+      sectionLinks: compactSectionLinks({
+        origins: origins(),
+        hostOrigin: 'https://help.acme.com',
+        baseUrl: 'https://help.acme.com',
+      }),
+    }
     expect(pageCanonical('feedback', '/b/ideas/posts/p1', context)).toBe(
       'https://acme.example.com/b/ideas/posts/p1'
     )
     expect(pageCanonical('status', '/status', context)).toBe('https://status.acme.com/')
   })
 
-  it('falls back to the base URL before the origins are known, and to nothing without one', () => {
+  it('builds it on the base URL when no section has its own host, and is empty without one', () => {
     expect(pageCanonical('changelog', '/changelog', { baseUrl: PRIMARY })).toBe(
       'https://acme.example.com/changelog'
     )
     expect(pageCanonical('changelog', '/changelog', {})).toBe('')
+  })
+})
+
+describe('compactSectionLinks and expandSectionLinks', () => {
+  const onPrimary = allOnPrimary(PRIMARY)
+
+  it('sends nothing at all while no section has its own host and the page is on the primary', () => {
+    expect(
+      compactSectionLinks({ origins: onPrimary, hostOrigin: PRIMARY, baseUrl: PRIMARY })
+    ).toBeUndefined()
+    expect(expandSectionLinks(PRIMARY, undefined)).toEqual({
+      origins: onPrimary,
+      hostOrigin: PRIMARY,
+    })
+  })
+
+  it('sends only the sections on their own host, and rebuilds the full table from them', () => {
+    const compact = compactSectionLinks({
+      origins: origins(),
+      hostOrigin: PRIMARY,
+      baseUrl: PRIMARY,
+    })
+    expect(compact).toEqual({
+      hosts: { help: 'https://help.acme.com', status: 'https://status.acme.com' },
+    })
+    expect(expandSectionLinks(PRIMARY, compact)).toEqual({
+      origins: origins(),
+      hostOrigin: PRIMARY,
+    })
+  })
+
+  it("names the page's own host and the primary origin when the page is on a section host", () => {
+    // The base URL on the help center's host is that host, not the primary.
+    const here = 'https://help.acme.com'
+    const compact = compactSectionLinks({ origins: origins(), hostOrigin: here, baseUrl: here })
+    expect(compact).toEqual({
+      hosts: { help: 'https://help.acme.com', status: 'https://status.acme.com' },
+      here,
+      primary: PRIMARY,
+    })
+    expect(expandSectionLinks(here, compact)).toEqual({ origins: origins(), hostOrigin: here })
+  })
+
+  it('knows nothing without a base URL', () => {
+    expect(expandSectionLinks(undefined, undefined)).toBeNull()
   })
 })
