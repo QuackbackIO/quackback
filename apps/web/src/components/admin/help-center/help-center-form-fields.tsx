@@ -61,7 +61,7 @@ export function HelpCenterFormFields({
               <RichTextEditor
                 value={contentJson || ''}
                 onDocumentChange={onContentChange}
-                placeholder="Write your help article..."
+                placeholder="Write your help article…"
                 minHeight="100%"
                 fill
                 className="min-h-0 flex-1"

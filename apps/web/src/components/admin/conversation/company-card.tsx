@@ -201,7 +201,7 @@ function QualificationEditor({
         disabled={!name.trim() || saving}
         onClick={() => void commit()}
       >
-        {saving ? 'Saving...' : 'Save company'}
+        {saving ? 'Saving…' : 'Save company'}
       </Button>
       <p className="text-[11px] leading-snug text-muted-foreground">
         Saving links this user to an existing company with the same name, or creates one.

@@ -247,7 +247,7 @@ export function TeamDialog({
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : isEdit ? 'Save changes' : 'Create team'}
+            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create team'}
           </Button>
         </DialogFooter>
       </DialogContent>

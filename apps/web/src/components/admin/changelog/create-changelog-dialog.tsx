@@ -144,7 +144,7 @@ export function CreateChangelogDialog({
 
   const getSubmitButtonText = () => {
     if (createChangelogMutation.isPending) {
-      return publishState.type === 'published' ? 'Publishing...' : 'Saving...'
+      return publishState.type === 'published' ? 'Publishing…' : 'Saving…'
     }
     switch (publishState.type) {
       case 'draft':

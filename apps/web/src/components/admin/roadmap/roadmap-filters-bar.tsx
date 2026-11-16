@@ -340,7 +340,7 @@ export function RoadmapFiltersBar({
     <AdminListHeader
       searchValue={searchValue}
       onSearchChange={setSearchValue}
-      searchPlaceholder="Search posts..."
+      searchPlaceholder="Search posts…"
       sortOptions={SORT_OPTIONS}
       activeSort={filters.sort ?? 'votes'}
       onSortChange={(sort) => onFiltersChange({ sort: sort as RoadmapFilters['sort'] })}

@@ -603,7 +603,7 @@ export function SegmentFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!canSubmit || isPending}>
-              {isPending ? 'Saving...' : isEditing ? 'Save changes' : 'Create segment'}
+              {isPending ? 'Saving…' : isEditing ? 'Save changes' : 'Create segment'}
             </Button>
           </DialogFooter>
         </form>

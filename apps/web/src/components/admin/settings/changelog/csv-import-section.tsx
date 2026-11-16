@@ -150,7 +150,7 @@ export function CsvImportSection() {
               </label>
 
               <Button size="sm" onClick={handleImport} disabled={!consentChecked || isImporting}>
-                {isImporting ? 'Importing...' : `Subscribe ${emails.length} emails`}
+                {isImporting ? 'Importing…' : `Subscribe ${emails.length} emails`}
               </Button>
             </>
           )}

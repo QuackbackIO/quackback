@@ -376,7 +376,7 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
           <SearchInput
             value={search}
             onChange={setSearch}
-            placeholder="Search by name, email or role..."
+            placeholder="Search by name, email or role…"
           />
         </div>
         {seatDescription && (

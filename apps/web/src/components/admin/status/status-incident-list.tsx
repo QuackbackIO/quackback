@@ -98,7 +98,7 @@ export function StatusIncidentList({ kind, state, emptyMessage }: StatusIncident
         <AdminListHeader
           searchValue={searchValue}
           onSearchChange={setSearchValue}
-          searchPlaceholder="Search incidents..."
+          searchPlaceholder="Search incidents…"
           sortOptions={[
             { value: 'newest', label: 'Newest' },
             { value: 'impact', label: 'Impact' },

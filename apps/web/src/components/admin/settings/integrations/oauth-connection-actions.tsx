@@ -181,7 +181,7 @@ export function OAuthConnectionActions({
       {showSuccess && (
         <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           <CheckCircleIcon className="h-4 w-4" />
-          <span>Connected successfully!</span>
+          <span>Connected.</span>
         </div>
       )}
 

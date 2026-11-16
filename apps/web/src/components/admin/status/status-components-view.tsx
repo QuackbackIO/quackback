@@ -400,7 +400,7 @@ export function StatusComponentsView() {
       <AdminListHeader
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search services..."
+        searchPlaceholder="Search services…"
         action={
           <>
             <Button variant="outline" size="sm" onClick={() => setCreateGroupDialogOpen(true)}>

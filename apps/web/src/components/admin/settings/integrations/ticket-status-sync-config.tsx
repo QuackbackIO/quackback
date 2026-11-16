@@ -100,7 +100,7 @@ export function TicketStatusSyncConfig({
       {saving && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ArrowPathIcon className="h-4 w-4 animate-spin" />
-          <span>Saving...</span>
+          <span>Saving…</span>
         </div>
       )}
 

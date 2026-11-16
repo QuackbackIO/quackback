@@ -24,7 +24,7 @@ function renderBar(onFiltersChange = vi.fn(), filters = {}) {
 describe('RoadmapFiltersBar', () => {
   it('shows a search field, a sort menu and a Filter control on one row', () => {
     renderBar()
-    const search = screen.getByPlaceholderText('Search posts...')
+    const search = screen.getByPlaceholderText('Search posts…')
     const row = search.closest('[data-slot="admin-list-search"]')!.parentElement!
     const labels = Array.from(row.querySelectorAll('button')).map((b) => b.textContent?.trim())
     expect(labels).toContain('Sort: Votes')
@@ -44,7 +44,7 @@ describe('RoadmapFiltersBar', () => {
   it('sends typed search to the filters', async () => {
     vi.useFakeTimers()
     const onFiltersChange = renderBar()
-    fireEvent.change(screen.getByPlaceholderText('Search posts...'), { target: { value: 'dark' } })
+    fireEvent.change(screen.getByPlaceholderText('Search posts…'), { target: { value: 'dark' } })
     vi.advanceTimersByTime(400)
     vi.useRealTimers()
     expect(onFiltersChange).toHaveBeenCalledWith({ search: 'dark' })

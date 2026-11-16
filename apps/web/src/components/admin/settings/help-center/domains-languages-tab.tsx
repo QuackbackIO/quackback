@@ -522,7 +522,7 @@ function LocalesCard({ locales }: { locales: HelpCenterConfig['locales'] }) {
               onValueChange={(v) => setPendingLocale(v as SupportedLocale)}
             >
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Add a language..." />
+                <SelectValue placeholder="Add a language…" />
               </SelectTrigger>
               <SelectContent>
                 {candidates.map((l) => (

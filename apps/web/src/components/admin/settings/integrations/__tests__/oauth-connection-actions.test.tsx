@@ -60,7 +60,7 @@ describe('OAuthConnectionActions callback result', () => {
   it('confirms a connection and strips the param through the router', () => {
     mocks.search = { github: 'connected' }
     renderActions()
-    expect(screen.getByText('Connected successfully!')).toBeTruthy()
+    expect(screen.getByText('Connected.')).toBeTruthy()
     expect(strippedSearch({ github: 'connected' })).toEqual({})
   })
 
@@ -91,11 +91,11 @@ describe('OAuthConnectionActions callback result', () => {
         />
       </IntlProvider>
     )
-    expect(screen.getByText('Connected successfully!')).toBeTruthy()
+    expect(screen.getByText('Connected.')).toBeTruthy()
     act(() => {
       vi.advanceTimersByTime(3000)
     })
-    expect(screen.queryByText('Connected successfully!')).toBeNull()
+    expect(screen.queryByText('Connected.')).toBeNull()
   })
 
   it('says why a connection failed and strips both params, keeping the rest', () => {
@@ -114,7 +114,7 @@ describe('OAuthConnectionActions callback result', () => {
     mocks.search = { slack: 'error', reason: 'exchange_failed' }
     renderActions()
     expect(mocks.toastError).not.toHaveBeenCalled()
-    expect(screen.queryByText('Connected successfully!')).toBeNull()
+    expect(screen.queryByText('Connected.')).toBeNull()
     expect(mocks.navigate).not.toHaveBeenCalled()
   })
 })

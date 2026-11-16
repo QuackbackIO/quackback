@@ -94,7 +94,7 @@ function FeedbackListHeader({
     <AdminListHeader
       searchValue={searchValue}
       onSearchChange={setSearchValue}
-      searchPlaceholder="Search posts..."
+      searchPlaceholder="Search posts…"
       sortOptions={search ? SEARCH_SORT_OPTIONS : SORT_OPTIONS}
       activeSort={sort === 'relevance' && !search ? 'newest' : sort}
       onSortChange={handleSortChange}

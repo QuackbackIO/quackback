@@ -139,7 +139,7 @@ export function PlatformCredentialsForm({
             disabled={deleteMutation.isPending}
             className="text-destructive hover:text-destructive"
           >
-            {deleteMutation.isPending ? 'Removing...' : 'Remove'}
+            {deleteMutation.isPending ? 'Removing…' : 'Remove'}
           </Button>
         </div>
       </div>
@@ -186,7 +186,7 @@ export function PlatformCredentialsForm({
       </div>
       <div className="flex gap-2">
         <Button size="sm" onClick={handleSave} disabled={!requiredFilled || saveMutation.isPending}>
-          {saveMutation.isPending ? 'Saving...' : 'Save'}
+          {saveMutation.isPending ? 'Saving…' : 'Save'}
         </Button>
         {isEditing && (
           <Button variant="outline" size="sm" onClick={handleCancel}>

@@ -179,7 +179,7 @@ function LiveHelpCenterFinder({
         searchValue={searchValue}
         onSearchChange={setSearchValue}
         searchPlaceholder={
-          currentCategory ? `Search in ${currentCategory.name}...` : 'Search articles...'
+          currentCategory ? `Search in ${currentCategory.name}...` : 'Search articles…'
         }
         sortOptions={SORT_OPTIONS}
         activeSort={filters.sort}

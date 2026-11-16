@@ -74,7 +74,7 @@ export function AiBackfillCard({ tags, boards }: AiBackfillCardProps) {
         </Select>
         <Button size="sm" onClick={handleRun} disabled={!boardId || isRunning}>
           <SparklesIcon className="h-3.5 w-3.5" />
-          {isRunning ? 'Applying...' : 'Apply to untagged posts'}
+          {isRunning ? 'Applying…' : 'Apply to untagged posts'}
         </Button>
       </div>
     </SettingsCard>

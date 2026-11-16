@@ -304,7 +304,7 @@ function AddPeopleForm({
           Cancel
         </Button>
         <Button type="submit" disabled={chips.length === 0 || over || submitting}>
-          {submitting ? 'Adding...' : primaryLabel(chips)}
+          {submitting ? 'Adding…' : primaryLabel(chips)}
         </Button>
       </DialogFooter>
     </form>

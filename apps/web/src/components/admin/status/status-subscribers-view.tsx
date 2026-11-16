@@ -185,7 +185,7 @@ export function StatusSubscribersView() {
       <AdminListHeader
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        searchPlaceholder="Search subscribers..."
+        searchPlaceholder="Search subscribers…"
         action={
           <>
             <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>

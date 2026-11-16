@@ -470,17 +470,17 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           {
             id: 'thanks_3',
             type: 'message',
-            body: body('Glad that helped, thanks for the rating!'),
+            body: body('Glad that helped. Thanks for the rating.'),
           },
           {
             id: 'thanks_4',
             type: 'message',
-            body: body('Glad that helped, thanks for the rating!'),
+            body: body('Glad that helped. Thanks for the rating.'),
           },
           {
             id: 'thanks_5',
             type: 'message',
-            body: body('Glad that helped, thanks for the rating!'),
+            body: body('Glad that helped. Thanks for the rating.'),
           },
           {
             id: 'branch_sentiment',

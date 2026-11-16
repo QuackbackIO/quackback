@@ -127,7 +127,7 @@ export function MergedPostsList({ postId, mergedPosts: initialMergedPosts }: Mer
           <AlertDialogFooter>
             <AlertDialogCancel disabled={unmerge.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleUnmerge} disabled={unmerge.isPending}>
-              {unmerge.isPending ? 'Unmerging...' : 'Unmerge'}
+              {unmerge.isPending ? 'Unmerging…' : 'Unmerge'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -203,7 +203,7 @@ export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: Merge
           <div className="px-5 pb-3">
             <Input
               type="text"
-              placeholder="Search for similar feedback..."
+              placeholder="Search for similar feedback…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
@@ -212,7 +212,7 @@ export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: Merge
 
           <div className="min-h-[200px] max-h-[400px] overflow-y-auto border-t border-border/50">
             {isLoading && searchQuery.length >= 3 && (
-              <p className="text-sm text-muted-foreground py-6 text-center">Searching...</p>
+              <p className="text-sm text-muted-foreground py-6 text-center">Searching…</p>
             )}
 
             {suggestions && suggestions.length > 0 && (
@@ -299,7 +299,7 @@ export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: Merge
           <AlertDialogFooter>
             <AlertDialogCancel disabled={merge.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleMerge} disabled={merge.isPending}>
-              {mergingId ? 'Merging...' : 'Merge'}
+              {mergingId ? 'Merging…' : 'Merge'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -432,7 +432,7 @@ export function MergeOthersDialog({
         <div className="px-5 pb-3">
           <Input
             type="text"
-            placeholder="Search for similar feedback..."
+            placeholder="Search for similar feedback…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             autoFocus
@@ -465,7 +465,7 @@ export function MergeOthersDialog({
 
           {/* Search results section */}
           {isLoading && searchQuery.length >= 3 && (
-            <p className="text-sm text-muted-foreground py-6 text-center">Searching...</p>
+            <p className="text-sm text-muted-foreground py-6 text-center">Searching…</p>
           )}
 
           {hasSearchResults && (
@@ -523,7 +523,7 @@ export function MergeOthersDialog({
           </Button>
           <Button size="sm" onClick={handleMerge} disabled={selectedIds.size === 0 || isMerging}>
             {isMerging
-              ? 'Merging...'
+              ? 'Merging…'
               : selectedIds.size === 0
                 ? 'Select posts to merge'
                 : `Merge ${selectedIds.size} post${selectedIds.size > 1 ? 's' : ''}`}
