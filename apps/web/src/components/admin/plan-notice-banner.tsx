@@ -31,7 +31,6 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
       : view.urgent
         ? 'bg-warning/10 border-warning/40'
         : 'bg-primary/5 border-primary/10'
-  const muted = 'text-muted-foreground'
   const actionClass = ended
     ? 'inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-2'
     : 'inline-flex items-center gap-1 text-primary font-medium hover:underline'
@@ -39,7 +38,7 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
   return (
     <div className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm border-b ${tone}`}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-        <span className={`font-medium shrink-0 text-foreground`}>{view.label}</span>
+        <span className="font-medium shrink-0 text-foreground">{view.label}</span>
         {!view.ended && view.daysLeft !== null && (
           <>
             <span className="text-muted-foreground">·</span>
@@ -58,7 +57,9 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
         {view.message && (
           // A strip with no button has nothing but its message to say, so it
           // keeps it on a phone too.
-          <span className={`${muted} ${view.actionUrl ? 'hidden sm:inline truncate' : ''}`}>
+          <span
+            className={`text-muted-foreground ${view.actionUrl ? 'hidden sm:inline truncate' : ''}`}
+          >
             {view.message}
           </span>
         )}

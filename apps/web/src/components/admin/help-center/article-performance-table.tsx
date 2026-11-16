@@ -117,7 +117,7 @@ export function ArticlePerformanceTable() {
           type="button"
           data-testid="article-performance-worst"
           onClick={() => handleOpen(summary.worst!.article.id as KbArticleId)}
-          className="w-full mb-4 flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-left transition-colors hover:bg-warning/10"
+          className="w-full mb-4 flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-left transition-colors hover:bg-warning/20"
         >
           <ExclamationTriangleIcon className="size-5 shrink-0 text-warning" />
           <div className="min-w-0 flex-1">

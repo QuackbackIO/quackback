@@ -599,7 +599,7 @@ export function MergeInfoBanner({ mergeInfo, onNavigateToPost }: MergeInfoBanner
         <button
           type="button"
           onClick={() => onNavigateToPost?.(mergeInfo.canonicalPostId)}
-          className="font-medium underline underline-offset-2 hover:text-warning dark:hover:text-warning"
+          className="font-medium underline underline-offset-2 hover:text-warning"
         >
           {mergeInfo.canonicalPostTitle}
         </button>

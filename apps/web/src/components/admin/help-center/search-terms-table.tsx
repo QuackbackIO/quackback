@@ -72,9 +72,9 @@ export function SearchTermsTable() {
                       {alwaysMisses && (
                         <Badge
                           size="sm"
-                          variant="secondary"
+                          variant="warning"
                           data-testid={`search-term-no-results-${row.normalizedQuery}`}
-                          className="bg-warning/10 text-warning shrink-0"
+                          className="shrink-0"
                         >
                           No results
                         </Badge>

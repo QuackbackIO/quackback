@@ -220,11 +220,7 @@ export const ConversationAttributesEditor = memo(function ConversationAttributes
             <Row label={def.label} align="center">
               <div className="flex items-center gap-1.5">
                 {isAiSet && (
-                  <Badge
-                    variant="secondary"
-                    className="h-5 border border-border bg-muted px-1.5 text-xs text-foreground"
-                    title="Set by AI"
-                  >
+                  <Badge variant="secondary" className="h-5 px-1.5 text-xs" title="Set by AI">
                     AI
                   </Badge>
                 )}

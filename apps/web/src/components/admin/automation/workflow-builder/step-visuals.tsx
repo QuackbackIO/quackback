@@ -39,7 +39,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import type { ActionType, BlockStepKind } from '../workflow-graph'
-import type { Tone } from './step-content'
 
 export const ACTION_ICONS: Record<ActionType, typeof BoltIcon> = {
   assign_agent: UserPlusIcon,
@@ -61,7 +60,7 @@ export const ACTION_ICONS: Record<ActionType, typeof BoltIcon> = {
 /** Icons for the 8 conversational block kinds (Phase C, slice C-5) — every
  *  one of them is customer-facing (or, for disable_composer, a direct effect
  *  on the customer's composer), so they share a family look distinct from
- *  the internal action/condition/wait/branch steps (see TONE_TILE's 'pink'). */
+ *  the internal action/condition/wait/branch steps. */
 export const BLOCK_ICONS: Record<BlockStepKind, typeof BoltIcon> = {
   message: ChatBubbleLeftRightIcon,
   send_ticket_form: TicketIcon,
@@ -77,33 +76,15 @@ export const BLOCK_ICONS: Record<BlockStepKind, typeof BoltIcon> = {
 export const GATE_TINT = 'bg-muted text-foreground'
 export const STEP_TINT = 'bg-muted text-muted-foreground'
 
-/** Per-tone icon tile classes shared by the step cards and the step
- *  palette, so a step's tone reads the same in both places. 'pink' is the
- *  conversational-block family (see BLOCK_ICONS) — a distinct visual
- *  treatment for customer-facing steps vs. the internal action/branch/wait
- *  vocabulary, per the design brief's §4. */
-export const TONE_TILE: Record<Tone, string> = {
-  amber: 'bg-muted text-foreground',
-  violet: 'bg-muted text-foreground',
-  green: 'bg-muted text-foreground',
-  blue: 'bg-muted text-foreground',
-  pink: 'bg-muted text-foreground',
-}
+/** The icon tile every step kind and tone shares: the soft fill with ink, per the admin's
+ *  neutral category rule. A step's kind is carried by its icon and label. */
+export const STEP_TILE = GATE_TINT
 
 /** The label tab above a flow's first step. */
-export const START_TAG = TONE_TILE.amber
+export const START_TAG = STEP_TILE
 
 /** The dashed box a branch rule is drawn in on the canvas. */
-export const RULE_BOX = `border-border ${TONE_TILE.violet}`
-
-/** The kind dot beside an outline entry. */
-export const KIND_DOT: Record<string, string> = {
-  trigger: 'bg-muted-foreground',
-  condition: 'bg-muted-foreground',
-  branch: 'bg-muted-foreground',
-  action: 'bg-muted-foreground',
-  wait: 'bg-muted-foreground',
-}
+export const RULE_BOX = `border-border ${STEP_TILE}`
 
 export function ConfirmDeleteDialog({
   open,
