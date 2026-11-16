@@ -174,7 +174,7 @@ function SectionDomainForm({
     ...sections.map((section) => ({
       value: section,
       title: usedForLabel(section),
-      description: map[section]?.hostname ?? 'Primary domain',
+      description: map[section]?.hostname ?? primaryHost ?? '',
     })),
   ]
 

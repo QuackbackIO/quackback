@@ -73,6 +73,11 @@ describe('Add custom domain', () => {
     expect(tileTitles(dialog)).toEqual(['Portal', 'Feedback', 'Help center', 'Status'])
     // Each tile says where it is served now.
     expect(dialog).toHaveTextContent('help.acme.com')
+    // A section without its own domain names the primary host, as the card's rows do.
+    expect(within(dialog).getByRole('radio', { name: /^Feedback/ })).toHaveAccessibleName(
+      /acme\.com/
+    )
+    expect(dialog).not.toHaveTextContent('Primary domain')
     // No field until a choice is made.
     expect(within(dialog).queryByLabelText('Domain')).toBeNull()
     expect(within(dialog).queryByRole('combobox')).toBeNull()
