@@ -4,14 +4,15 @@ import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions
 
 const sending = vi.fn()
 const signIn = vi.fn()
-const helpCenter = vi.fn()
+const sections = vi.fn()
 const added = vi.fn()
 
 vi.mock('@/lib/server/functions/domains-overview', () => ({
   getSendingDomainSummariesFn: sending,
   getSignInDomainSummariesFn: signIn,
-  getHelpCenterDomainSummaryFn: helpCenter,
 }))
+
+vi.mock('@/lib/server/functions/section-domains', () => ({ getSectionDomainsFn: sections }))
 
 vi.mock('@/lib/server/functions/domains', () => ({ listDomainsFn: added }))
 
@@ -19,14 +20,17 @@ const { loadDomainSummaries } = await import('../domain-summaries')
 
 const SENDING = [{ id: 'dom_1', domain: 'acme.com' }]
 const SIGN_IN = [{ id: 'domain_a', name: 'acme.com', verified: true, provenBy: null }]
-const HELP = { domain: 'help.acme.com', verified: true }
+const SECTIONS = {
+  sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: '2026-11-01T00:00:00.000Z' } },
+  primaryHost: 'acme.com',
+}
 const ADDED = [{ name: 'acme.io', verified: false }]
 
 beforeEach(() => {
   vi.clearAllMocks()
   sending.mockResolvedValue(SENDING)
   signIn.mockResolvedValue(SIGN_IN)
-  helpCenter.mockResolvedValue(HELP)
+  sections.mockResolvedValue(SECTIONS)
   added.mockResolvedValue(ADDED)
 })
 
@@ -43,7 +47,7 @@ describe('domain summaries', () => {
     expect(result).toEqual({
       sending: SENDING,
       signIn: SIGN_IN,
-      helpCenterDomain: HELP,
+      sectionDomains: SECTIONS,
       added: ADDED,
     })
   })
@@ -54,26 +58,26 @@ describe('domain summaries', () => {
       cloudEnabled: false,
     })
     // Domains added by name are read by any viewer of the page.
-    expect(result).toEqual({ sending: [], signIn: SIGN_IN, helpCenterDomain: null, added: ADDED })
+    expect(result).toEqual({ sending: [], signIn: SIGN_IN, sectionDomains: null, added: ADDED })
     expect(sending).not.toHaveBeenCalled()
-    expect(helpCenter).not.toHaveBeenCalled()
+    expect(sections).not.toHaveBeenCalled()
   })
 
   it('reads nothing for a viewer with none of them', async () => {
     const result = await loadDomainSummaries({ permissions: undefined, cloudEnabled: false })
-    expect(result).toEqual({ sending: [], signIn: [], helpCenterDomain: null, added: [] })
+    expect(result).toEqual({ sending: [], signIn: [], sectionDomains: null, added: [] })
     expect(sending).not.toHaveBeenCalled()
     expect(signIn).not.toHaveBeenCalled()
-    expect(helpCenter).not.toHaveBeenCalled()
+    expect(sections).not.toHaveBeenCalled()
     expect(added).not.toHaveBeenCalled()
   })
 
-  it('leaves the help center domain to the custom domains card on Cloud', async () => {
-    await loadDomainSummaries({
+  it('reads the section domains on Cloud too, where they are set on the same page', async () => {
+    const result = await loadDomainSummaries({
       permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN],
       cloudEnabled: true,
     })
-    expect(helpCenter).not.toHaveBeenCalled()
+    expect(result.sectionDomains).toEqual(SECTIONS)
   })
 
   it('keeps the uses it could read when one read fails', async () => {
@@ -83,6 +87,6 @@ describe('domain summaries', () => {
       permissions: [EMAIL_SENDING_PERMISSION, PERMISSIONS.AUTH_MANAGE],
       cloudEnabled: false,
     })
-    expect(result).toEqual({ sending: [], signIn: SIGN_IN, helpCenterDomain: null, added: [] })
+    expect(result).toEqual({ sending: [], signIn: SIGN_IN, sectionDomains: null, added: [] })
   })
 })

@@ -38,6 +38,7 @@ const { domainUseLinks, CUSTOM_DOMAINS_ANCHOR } = await import('@/lib/shared/dom
 afterEach(cleanup)
 
 const NOW = new Date('2026-11-03T12:00:00.000Z')
+const VERIFIED = '2026-11-01T00:00:00.000Z'
 
 const sending = (over: Partial<Parameters<typeof domainRows>[0]['sending'][0]>) => ({
   id: 'sending_domain_1',
@@ -57,8 +58,7 @@ const ALL = [
   PERMISSIONS.HELP_CENTER_MANAGE,
 ]
 
-const linksFor = (permissions: string[], { cloudEnabled = false, helpCenterOn = true } = {}) =>
-  domainUseLinks({ permissions, cloudEnabled, helpCenterOn })
+const linksFor = (permissions: string[]) => domainUseLinks({ permissions })
 
 const rowOf = (text: string) => screen.getByText(text).closest('[data-slot="settings-list-row"]')!
 
@@ -93,26 +93,21 @@ describe('use links', () => {
   it('gates each use on the permission of the page it opens', () => {
     expect(Object.keys(linksFor([EMAIL_SENDING_PERMISSION]))).toEqual(['email'])
     expect(Object.keys(linksFor([PERMISSIONS.AUTH_MANAGE]))).toEqual(['signIn'])
-    expect(
-      Object.keys(linksFor([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.HELP_CENTER_MANAGE]))
-    ).toEqual(['customDomain'])
-    // The help center domain tab needs help center access too.
-    expect(linksFor([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]).customDomain).toBeUndefined()
+    expect(Object.keys(linksFor([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]))).toEqual(['customDomain'])
+    // Help center access alone sets up no custom domain: they are written on Settings > Domains.
+    expect(linksFor([PERMISSIONS.HELP_CENTER_MANAGE]).customDomain).toBeUndefined()
   })
 
-  it('on Cloud, lands Custom domain on the custom domains card of the Domains page', () => {
-    const links = linksFor([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN], {
-      cloudEnabled: true,
-      helpCenterOn: false,
-    })
+  it('lands Custom domain on the custom domains card of the Domains page, on Cloud and self-hosted', () => {
+    const links = linksFor([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])
     expect(links.customDomain).toEqual({
       to: '/admin/settings/domains',
       hash: CUSTOM_DOMAINS_ANCHOR,
     })
   })
 
-  it('does not depend on Support being on: email and sign-in stay open', () => {
-    const links = linksFor(ALL, { helpCenterOn: false })
+  it('opens email and sign-in on their own pages', () => {
+    const links = linksFor(ALL)
     expect(links.email).toEqual({ to: '/admin/settings/email' })
     expect(links.signIn).toEqual({
       to: '/admin/settings/security/authentication',
@@ -127,7 +122,6 @@ describe('domain list', () => {
       now: NOW,
       sending: [sending({ localParts: ['billing@', 'help@'] })],
       signIn: [{ id: 'domain_a', name: 'acme.com', verified: true, provenBy: null }],
-      helpCenterDomain: null,
     })
     render(<DomainList rows={rows} links={linksFor(ALL)} />)
 
@@ -162,7 +156,7 @@ describe('domain list', () => {
         { id: 'domain_c', name: 'eu.acme.com', verified: false, provenBy: 'email-sending' },
         { id: 'domain_d', name: 'example.io', verified: true, provenBy: 'workspace' },
       ],
-      helpCenterDomain: { domain: 'help.acme.com', verified: false },
+      sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: null } },
     })
     render(<DomainList rows={rows} links={linksFor(ALL)} />)
 
@@ -200,7 +194,6 @@ describe('domain list', () => {
       now: NOW,
       sending: [sending({})],
       signIn: [{ id: 'domain_a', name: 'ACME.com', verified: false, provenBy: null }],
-      helpCenterDomain: null,
     })
     render(<DomainList rows={rows} links={linksFor(ALL)} />)
     const row = rowOf('acme.com')
@@ -213,7 +206,6 @@ describe('domain list', () => {
       now: NOW,
       sending: [sending({})],
       signIn: [{ id: 'domain_a', name: 'acme.com', verified: true, provenBy: null }],
-      helpCenterDomain: null,
     })
     render(<DomainList rows={rows} links={linksFor([PERMISSIONS.AUTH_MANAGE])} />)
     expect(rowOf('acme.com')).toHaveAttribute('href', '/admin/settings/domains/acme.com')
@@ -224,9 +216,9 @@ describe('domain list', () => {
       now: NOW,
       sending: [],
       signIn: [],
-      helpCenterDomain: { domain: 'help.acme.com', verified: true },
+      sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } },
     })
-    render(<DomainList rows={rows} links={linksFor([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])} />)
+    render(<DomainList rows={rows} links={linksFor([PERMISSIONS.AUTH_MANAGE])} />)
     const row = rowOf('help.acme.com')
     expect(row.tagName).not.toBe('A')
     expect(row.querySelector('[data-slot="settings-list-chevron"]')).toBeNull()
@@ -238,7 +230,6 @@ describe('domain list', () => {
       now: NOW,
       sending: [sending({})],
       signIn: [],
-      helpCenterDomain: null,
       added: [
         { name: 'acme.io', verified: false },
         { name: 'acme.net', verified: true },
@@ -265,7 +256,6 @@ describe('domain list', () => {
       now: NOW,
       sending: [],
       signIn: [],
-      helpCenterDomain: null,
       webAddresses: [
         { hostname: 'status.acme.com', readiness: 'ready' },
         { hostname: 'help.acme.com', readiness: 'pending' },
@@ -281,7 +271,7 @@ describe('domain list', () => {
       { hostname: 'help.acme.com', usedFor: 'portal', state: 'pending' },
       { hostname: 'status.acme.com', usedFor: 'portal', state: null },
     ])
-    render(<DomainList rows={rows} links={linksFor(ALL, { cloudEnabled: true })} />)
+    render(<DomainList rows={rows} links={linksFor(ALL)} />)
     expect(rowOf('acme.com')).toHaveTextContent('help.acme.com · Portal')
     expect(rowOf('acme.com')).toHaveTextContent('Pending')
   })
@@ -291,7 +281,7 @@ describe('domain list', () => {
       now: NOW,
       sending: [],
       signIn: [],
-      helpCenterDomain: { domain: 'help.acme.com', verified: true },
+      sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } },
       added: [{ name: 'acme.com', verified: true }],
     })
     expect(rows.map((r) => r.name)).toEqual(['acme.com'])
@@ -306,7 +296,6 @@ describe('domain list', () => {
       now: NOW,
       sending: [],
       signIn: [],
-      helpCenterDomain: null,
       webAddresses: [
         { hostname: 'feedback.acme.com', readiness: 'ready' },
         { hostname: 'help.acme.com', readiness: 'pending' },
@@ -318,6 +307,51 @@ describe('domain list', () => {
       ['feedback.acme.com', [['customDomain', null]]],
       ['help.acme.com', [['customDomain', 'pending']]],
       ['status.acme.com', [['customDomain', 'attention']]],
+    ])
+  })
+
+  it('names what each Cloud custom domain is used for: its section, else the portal', () => {
+    const rows = domainRows({
+      now: NOW,
+      sending: [],
+      signIn: [],
+      webAddresses: [
+        { hostname: 'help.acme.com', readiness: 'ready' },
+        { hostname: 'feedback.acme.com', readiness: 'ready' },
+      ],
+      sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } },
+      added: [{ name: 'acme.com', verified: true }],
+    })
+    expect(rows[0]!.uses[0]!.addresses).toEqual([
+      { hostname: 'feedback.acme.com', usedFor: 'portal', state: null },
+      { hostname: 'help.acme.com', usedFor: 'help', state: null },
+    ])
+    expect(rows[0]!.uses[0]!.detail).toBe('feedback.acme.com · Portal, help.acme.com · Help center')
+  })
+
+  it('lists every section domain under its domain, a host that stopped answering needing attention', () => {
+    const rows = domainRows({
+      now: NOW,
+      sending: [],
+      signIn: [],
+      sectionDomains: {
+        help: { hostname: 'help.acme.com', verifiedAt: VERIFIED },
+        status: {
+          hostname: 'status.acme.com',
+          verifiedAt: VERIFIED,
+          unconfirmedSince: VERIFIED,
+        },
+        changelog: { hostname: 'news.acme.com', verifiedAt: null },
+      },
+      added: [{ name: 'acme.com', verified: true }],
+    })
+    expect(rows.map((r) => r.name)).toEqual(['acme.com'])
+    const [web] = rows[0]!.uses
+    expect(web).toMatchObject({ use: 'customDomain', state: 'attention' })
+    expect(web!.addresses).toEqual([
+      { hostname: 'help.acme.com', usedFor: 'help', state: null },
+      { hostname: 'news.acme.com', usedFor: 'changelog', state: 'pending' },
+      { hostname: 'status.acme.com', usedFor: 'status', state: 'attention' },
     ])
   })
 })

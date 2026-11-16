@@ -31,14 +31,14 @@ const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   setSectionDomain: vi.fn(),
   verifySectionDomain: vi.fn(),
-  getSectionDomains: vi.fn(),
+  getSectionDomainsView: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
 vi.mock('@/lib/server/domains/settings/section-domains.service', () => ({
   setSectionDomain: hoisted.setSectionDomain,
   verifySectionDomain: hoisted.verifySectionDomain,
-  getSectionDomains: hoisted.getSectionDomains,
+  getSectionDomainsView: hoisted.getSectionDomainsView,
 }))
 
 import { getSectionDomainsFn, setSectionDomainFn, verifySectionDomainFn } from '../section-domains'
@@ -50,7 +50,7 @@ beforeEach(() => {
   hoisted.requireAuth.mockResolvedValue({})
   hoisted.setSectionDomain.mockResolvedValue({ ok: true, sectionDomains: MAP })
   hoisted.verifySectionDomain.mockResolvedValue({ ok: true, sectionDomains: MAP, status: null })
-  hoisted.getSectionDomains.mockResolvedValue(MAP)
+  hoisted.getSectionDomainsView.mockResolvedValue({ sectionDomains: MAP, primaryHost: 'acme.com' })
 })
 
 describe('setSectionDomainFn', () => {
@@ -108,7 +108,10 @@ describe('verifySectionDomainFn', () => {
 
 describe('getSectionDomainsFn', () => {
   it('needs the custom domain permission, then reads the map', async () => {
-    await expect(getSectionDomainsFn()).resolves.toEqual(MAP)
+    await expect(getSectionDomainsFn()).resolves.toEqual({
+      sectionDomains: MAP,
+      primaryHost: 'acme.com',
+    })
     expect(hoisted.requireAuth).toHaveBeenCalledWith({
       permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
     })

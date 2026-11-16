@@ -21,10 +21,12 @@ const setSectionDomainSchema = z
 
 const service = () => import('@/lib/server/domains/settings/section-domains.service')
 
+export type { SectionDomainsView } from '@/lib/server/domains/settings/section-domains.service'
+
 export const getSectionDomainsFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN })
-  const { getSectionDomains } = await service()
-  return getSectionDomains()
+  const { getSectionDomainsView } = await service()
+  return getSectionDomainsView()
 })
 
 export const setSectionDomainFn = createServerFn({ method: 'POST' })

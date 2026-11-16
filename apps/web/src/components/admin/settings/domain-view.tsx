@@ -1,6 +1,6 @@
 /**
  * One domain's page body: its ownership, then its three uses (Email sending,
- * Web addresses, Sign-in), each set up from its row until it is on, then shown
+ * Custom domains, Sign-in), each set up from its row until it is on, then shown
  * with where it stands and removed on its own. Email's records and
  * addresses follow, checked and removed with the pieces Settings → Email uses.
  * The domain itself is removed only once no use holds it. A viewer sees only
@@ -9,12 +9,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import {
-  HELP_CENTER_SETTINGS,
-  type DomainUse,
-  type DomainUseLinks,
-  type UseLink,
-} from '@/lib/shared/domains-permissions'
+import type { DomainUse, DomainUseLinks, UseLink } from '@/lib/shared/domains-permissions'
 import { DOMAIN_USE_ORDER } from '@/lib/shared/domain-uses'
 import { verifiedThroughLabel } from '@/lib/shared/domain-proof'
 import { DomainSetupPanel } from '@/components/admin/channels/domain-setup-panel'
@@ -50,8 +45,9 @@ import {
   type DomainOwnershipResult,
 } from '@/lib/server/functions/domains'
 import { addProviderDomainFn, removeVerifiedDomainFn } from '@/lib/server/functions/sso'
-import { updateHelpCenterDomainFn } from '@/lib/server/functions/help-center-domain'
 import { mutateCloudCustomDomainFn } from '@/lib/server/functions/cloud-identity'
+import type { SectionDomainsView } from '@/lib/server/functions/section-domains'
+import type { PortalSection } from '@/lib/shared/custom-domains'
 import {
   USE_COPY,
   customDomainLine,
@@ -59,21 +55,13 @@ import {
   type DomainUseStatus,
 } from './domains-overview'
 import { AddCustomDomainDialog, type AddCustomDomainTarget } from './add-custom-domain-dialog'
+import { SectionDomainDialog } from './section-domain-dialog'
 
 /** The name of the page a use is set up on, as its link reads. */
-function pageName(use: DomainUse, link: UseLink): string {
+function pageName(use: DomainUse): string {
   if (use === 'email') return 'Email settings'
   if (use === 'signIn') return 'Sign-in settings'
-  return link.to === HELP_CENTER_SETTINGS ? 'Help center settings' : 'Custom domains'
-}
-
-/** What a use is for, on a row where it is not on yet. */
-function useDescription(use: DomainUse, link: UseLink | undefined): string {
-  // Off Cloud the only web address an install takes is its help center's.
-  if (use === 'customDomain' && link?.to === HELP_CENTER_SETTINGS) {
-    return 'Use this domain for your help center.'
-  }
-  return USE_COPY[use].description
+  return 'Custom domains'
 }
 
 function LinkButton({ link, children }: { link: UseLink; children: string }) {
@@ -238,36 +226,36 @@ function OwnershipCard({
   )
 }
 
-/** Removing a sign-in domain or the help center's address, from its row. */
-type OtherRemoval = { use: 'signIn'; id: string } | { use: 'customDomain'; hostname: string }
-
-const OTHER_REMOVAL_TITLE: Record<OtherRemoval['use'], (name: string) => string> = {
-  signIn: (name) => `Stop using ${name} for sign-in?`,
-  customDomain: (hostname) => `Stop serving the help center on ${hostname}?`,
+/** Removing a sign-in domain, from its row. Custom domains are removed on the Custom domains card. */
+interface SignInRemoval {
+  id: string
 }
 
-const OTHER_REMOVAL_NOTE: Record<OtherRemoval['use'], string> = {
-  signIn: 'People at this domain no longer sign in with SSO.',
-  customDomain: 'The help center stays on its default address.',
+/** Where the domain's custom domains are set: Cloud adds them, a self-hosted server maps a section. */
+export interface CustomDomainSetup {
+  cloud: boolean
+  /** The section map and primary domain; null when they could not be read. */
+  sectionDomains: SectionDomainsView | null
+  /** The sections offered, in nav order. */
+  sections: readonly PortalSection[]
 }
 
 /**
  * The three uses, each a row: Set up until it is on, then where it stands and
  * a Remove of its own. Set up runs here, for a viewer who may set that use up:
  * email opens Add address on this domain; a custom domain is named on the domain
- * (help.acme.com) and added as a Cloud web address, or becomes the help
- * center's address (confirmed first when that moves the help center off
- * another one); sign-in goes to the one identity
+ * (help.acme.com) and, on Cloud, added as a custom domain for the portal, or,
+ * self-hosted, given to the section chosen; sign-in goes to the one identity
  * provider, or to Sign-in settings to pick one (the providers are read on the
- * click, not with the page). Email with addresses on it is
- * removed an address at a time, in the list below.
+ * click, not with the page). Email with addresses on it is removed an address
+ * at a time, in the list below; a custom domain on the Custom domains card.
  */
 function UsesCard({
   name,
   uses,
   visibleUses,
   links,
-  helpCenterDomain,
+  setup,
   sending,
   onChanged,
 }: {
@@ -275,54 +263,38 @@ function UsesCard({
   uses: DomainUseStatus[]
   visibleUses: readonly DomainUse[]
   links: DomainUseLinks
-  helpCenterDomain: string | null
+  setup: CustomDomainSetup
   sending: ReturnType<typeof useSendingDomain>
   onChanged: () => void
 }) {
   const [domainTarget, setDomainTarget] = useState<DomainRemoval | null>(null)
-  const [other, setOther] = useState<OtherRemoval | null>(null)
+  const [other, setOther] = useState<SignInRemoval | null>(null)
   const [addressDialog, setAddressDialog] = useState<SendingAddressDialogTarget | null>(null)
   const [webDialog, setWebDialog] = useState<AddCustomDomainTarget | null>(null)
-  const [moveTo, setMoveTo] = useState<string | null>(null)
+  const [sectionDialog, setSectionDialog] = useState(false)
   const { busy, error, setError, run } = useDomainAction(onChanged)
   const { data, domain, addresses } = sending
-  const helpCenter = links.customDomain?.to === HELP_CENTER_SETTINGS
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
-  const removeOther = (target: OtherRemoval) =>
-    run(
-      () =>
-        target.use === 'signIn'
-          ? removeVerifiedDomainFn({ data: { id: target.id } })
-          : updateHelpCenterDomainFn({ data: { domain: null } }),
-      "Couldn't remove it."
-    )
+  const removeSignIn = (target: SignInRemoval) =>
+    run(() => removeVerifiedDomainFn({ data: { id: target.id } }), "Couldn't remove it.")
 
-  const setHelpCenterAddress = (hostname: string) =>
-    run(
-      () => updateHelpCenterDomainFn({ data: { domain: hostname } }),
-      "Couldn't set the help center's address."
-    )
-
-  /** The hostname typed in Add custom domain: a Cloud custom domain, or the help center's. */
+  /** The hostname typed in Add custom domain on Cloud: a custom domain for the portal. */
   const addWebAddress = (hostname: string) => {
     setWebDialog(null)
-    if (!helpCenter) {
-      void run(
-        () => mutateCloudCustomDomainFn({ data: { action: 'add', hostname } }),
-        "Couldn't add the custom domain."
-      )
-    } else if (helpCenterDomain && helpCenterDomain !== hostname) {
-      setMoveTo(hostname)
-    } else {
-      void setHelpCenterAddress(hostname)
-    }
+    void run(
+      () => mutateCloudCustomDomainFn({ data: { action: 'add', hostname } }),
+      "Couldn't add the custom domain."
+    )
   }
+
+  const addCustomDomain = (prefix: string) =>
+    setup.cloud ? setWebDialog({ prefix }) : setSectionDialog(true)
 
   const setUp: Record<DomainUse, () => void> = {
     email: () => setAddressDialog({ kind: 'add', domain: name }),
-    customDomain: () => setWebDialog({ prefix: helpCenter ? 'help' : 'feedback' }),
+    customDomain: () => addCustomDomain('feedback'),
     signIn: () =>
       void run(async () => {
         const providers = await queryClient.fetchQuery(settingsQueries.identityProviders())
@@ -358,13 +330,10 @@ function UsesCard({
     }
     if (status.use === 'signIn') {
       const id = status.id
-      return id ? removeButton(() => setOther({ use: 'signIn', id })) : null
+      return id ? removeButton(() => setOther({ id })) : null
     }
-    // Only the help center's own address is cleared from here; Cloud's are on their card.
-    if (!helpCenter) return null
-    const hostname =
-      status.addresses?.find((a) => a.usedFor === 'help')?.hostname ?? helpCenterDomain ?? name
-    return removeButton(() => setOther({ use: 'customDomain', hostname }))
+    // Custom domains are removed on the Custom domains card, one section at a time.
+    return null
   }
 
   const meta = (status: DomainUseStatus) => {
@@ -392,7 +361,7 @@ function UsesCard({
               <SettingsListRow
                 key={use}
                 title={USE_COPY[use].title}
-                meta={useDescription(use, link)}
+                meta={USE_COPY[use].description}
                 wrapMeta
                 trailing={setUpControl(use)}
               />
@@ -408,19 +377,17 @@ function UsesCard({
               badges={status.state ? <StateBadge state={status.state} /> : undefined}
               trailing={
                 <>
-                  {use === 'customDomain' && link && !helpCenter && (
+                  {use === 'customDomain' && link && (
                     <Button
                       variant="outline"
                       size="sm"
                       disabled={busy}
-                      onClick={() => setWebDialog({ prefix: '' })}
+                      onClick={() => addCustomDomain('')}
                     >
                       Add custom domain
                     </Button>
                   )}
-                  {use !== 'email' && link && (
-                    <LinkButton link={link}>{pageName(use, link)}</LinkButton>
-                  )}
+                  {use !== 'email' && link && <LinkButton link={link}>{pageName(use)}</LinkButton>}
                   {removal(status)}
                 </>
               }
@@ -448,41 +415,38 @@ function UsesCard({
       <ConfirmDialog
         open={other !== null}
         onOpenChange={(open) => !open && setOther(null)}
-        title={
-          other
-            ? OTHER_REMOVAL_TITLE[other.use](other.use === 'customDomain' ? other.hostname : name)
-            : ''
-        }
-        description={other ? OTHER_REMOVAL_NOTE[other.use] : undefined}
+        title={`Stop using ${name} for sign-in?`}
+        description="People at this domain no longer sign in with SSO."
         confirmLabel="Remove"
         variant="destructive"
         isPending={busy}
         onConfirm={() => {
-          if (other) void removeOther(other)
+          if (other) void removeSignIn(other)
           setOther(null)
         }}
       />
       <AddCustomDomainDialog
         target={webDialog}
         domain={name}
-        usedFor={helpCenter ? 'help' : 'portal'}
+        usedFor="portal"
         busy={busy}
         onAdd={addWebAddress}
         onClose={() => setWebDialog(null)}
       />
-      <ConfirmDialog
-        open={moveTo !== null}
-        onOpenChange={(open) => !open && setMoveTo(null)}
-        title={`Move the help center to ${moveTo}?`}
-        description={`${helpCenterDomain} will stop serving the help center.`}
-        confirmLabel="Move help center"
-        isPending={busy}
-        onConfirm={() => {
-          const target = moveTo
-          setMoveTo(null)
-          if (target) void setHelpCenterAddress(target)
-        }}
-      />
+      {!setup.cloud && (
+        <SectionDomainDialog
+          open={sectionDialog}
+          initial={null}
+          cloud={false}
+          sections={setup.sections}
+          map={setup.sectionDomains?.sectionDomains ?? {}}
+          primaryHost={setup.sectionDomains?.primaryHost ?? null}
+          readyHostnames={[]}
+          suffix={name}
+          onSaved={onChanged}
+          onClose={() => setSectionDialog(false)}
+        />
+      )}
     </SettingsCard>
   )
 }
@@ -578,7 +542,7 @@ export function DomainView({
   row,
   domain,
   links,
-  helpCenterDomain = null,
+  setup,
   visibleUses,
   canManage,
   onChanged,
@@ -588,8 +552,7 @@ export function DomainView({
   /** The domain itself; null when it could not be read. */
   domain: DomainDetail | null
   links: DomainUseLinks
-  /** The help center's own domain off Cloud, when one is set. */
-  helpCenterDomain?: string | null
+  setup: CustomDomainSetup
   /** The uses whose permission the viewer holds. */
   visibleUses: readonly DomainUse[]
   /** Whether the viewer adds, checks and removes domains (settings.manage). */
@@ -618,7 +581,7 @@ export function DomainView({
           uses={uses}
           visibleUses={visibleUses}
           links={links}
-          helpCenterDomain={helpCenterDomain}
+          setup={setup}
           sending={sending}
           onChanged={onChanged}
         />
