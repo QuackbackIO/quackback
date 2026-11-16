@@ -325,9 +325,9 @@ function ActivitySection({ companyId }: { companyId: CompanyId }) {
                   className={cn(
                     'shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium capitalize',
                     c.status === 'open'
-                      ? 'bg-emerald-500/10 text-emerald-600'
+                      ? 'bg-success/10 text-success'
                       : c.status === 'snoozed'
-                        ? 'bg-amber-500/10 text-amber-600'
+                        ? 'bg-warning/10 text-warning'
                         : 'bg-muted text-muted-foreground'
                   )}
                 >

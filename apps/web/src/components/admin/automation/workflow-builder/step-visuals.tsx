@@ -39,7 +39,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import type { ActionType, BlockStepKind } from '../workflow-graph'
-import type { Tone } from './step-content'
 
 export const ACTION_ICONS: Record<ActionType, typeof BoltIcon> = {
   assign_agent: UserPlusIcon,
@@ -61,7 +60,7 @@ export const ACTION_ICONS: Record<ActionType, typeof BoltIcon> = {
 /** Icons for the 8 conversational block kinds (Phase C, slice C-5) — every
  *  one of them is customer-facing (or, for disable_composer, a direct effect
  *  on the customer's composer), so they share a family look distinct from
- *  the internal action/condition/wait/branch steps (see TONE_TILE's 'pink'). */
+ *  the internal action/condition/wait/branch steps. */
 export const BLOCK_ICONS: Record<BlockStepKind, typeof BoltIcon> = {
   message: ChatBubbleLeftRightIcon,
   send_ticket_form: TicketIcon,
@@ -74,36 +73,18 @@ export const BLOCK_ICONS: Record<BlockStepKind, typeof BoltIcon> = {
   request_csat: FaceSmileIcon,
 }
 
-export const GATE_TINT = 'bg-amber-500/10 text-amber-600 dark:text-amber-500'
+export const GATE_TINT = 'bg-muted text-foreground'
 export const STEP_TINT = 'bg-muted text-muted-foreground'
 
-/** Per-tone icon tile classes shared by the step cards and the step
- *  palette, so a step's tone reads the same in both places. 'pink' is the
- *  conversational-block family (see BLOCK_ICONS) — a distinct visual
- *  treatment for customer-facing steps vs. the internal action/branch/wait
- *  vocabulary, per the design brief's §4. */
-export const TONE_TILE: Record<Tone, string> = {
-  amber: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
-  violet: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
-  green: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  blue: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
-  pink: 'bg-pink-500/10 text-pink-700 dark:text-pink-300',
-}
+/** The icon tile every step kind and tone shares: the soft fill with ink, per the admin's
+ *  neutral category rule. A step's kind is carried by its icon and label. */
+export const STEP_TILE = GATE_TINT
 
 /** The label tab above a flow's first step. */
-export const START_TAG = TONE_TILE.amber
+export const START_TAG = STEP_TILE
 
 /** The dashed box a branch rule is drawn in on the canvas. */
-export const RULE_BOX = `border-violet-500/40 ${TONE_TILE.violet}`
-
-/** The kind dot beside an outline entry. */
-export const KIND_DOT: Record<string, string> = {
-  trigger: 'bg-amber-500',
-  condition: 'bg-amber-500',
-  branch: 'bg-amber-500',
-  action: 'bg-emerald-500',
-  wait: 'bg-orange-500',
-}
+export const RULE_BOX = `border-border ${STEP_TILE}`
 
 export function ConfirmDeleteDialog({
   open,

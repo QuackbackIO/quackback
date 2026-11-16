@@ -35,10 +35,6 @@ export const ALLOWLIST: Record<RuleName, string[]> = {
   palette: [
     // Avatar hues picked from the connector's name, so each connector keeps its own colour.
     'components/admin/automation/connectors/connector-mark.tsx',
-    // The step kind colours that colour-code the workflow builder (trigger, branch, action, wait).
-    'components/admin/automation/workflow-builder/step-visuals.tsx',
-    // One icon tint per template category.
-    'components/admin/automation/workflow-templates.ts',
     // Per-provider brand tints for integration badges.
     'components/admin/settings/integrations/integration-ui.tsx',
   ],

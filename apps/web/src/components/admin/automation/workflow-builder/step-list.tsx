@@ -24,7 +24,7 @@ import {
   BLOCK_ICONS,
   ConfirmDeleteDialog,
   START_TAG,
-  TONE_TILE,
+  STEP_TILE,
 } from './step-visuals'
 import { LaneTabs } from './lane-tabs'
 import {
@@ -61,7 +61,7 @@ function Chip({ chip }: { chip: ChipData }) {
         chip.wrap
           ? 'h-auto min-h-[22px] max-w-full whitespace-normal py-0.5 text-left'
           : 'h-[22px] whitespace-nowrap',
-        chip.tone ? TONE_TILE[chip.tone] : 'bg-muted text-muted-foreground'
+        chip.tone ? STEP_TILE : 'bg-muted text-muted-foreground'
       )}
     >
       {chip.label}
@@ -162,7 +162,7 @@ function StepCard({
           <span
             className={cn(
               'flex size-[30px] shrink-0 items-center justify-center rounded-lg',
-              TONE_TILE[data.tone]
+              STEP_TILE
             )}
           >
             <Icon className="size-4" />

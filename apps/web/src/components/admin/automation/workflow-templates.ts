@@ -66,7 +66,6 @@ export interface WorkflowTemplate {
   benefit: string
   categories: WorkflowTemplateCategory[]
   icon: ComponentType<SVGProps<SVGSVGElement>>
-  iconClassName: string
   payload: WorkflowTemplatePayload
 }
 
@@ -93,7 +92,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     benefit: 'Greets, triages, and routes. No teammate needed up front.',
     categories: ['popular', 'customer_facing'],
     icon: ChatBubbleLeftRightIcon,
-    iconClassName: 'bg-pink-500/10 text-pink-600 dark:text-pink-400',
     payload: {
       name: 'Front-door triage bot',
       class: 'customer_facing',
@@ -236,7 +234,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     benefit: 'Quackback AI classifies, the workflow routes. The modern pattern.',
     categories: ['popular', 'routing'],
     icon: FunnelIcon,
-    iconClassName: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
     payload: {
       name: 'Route by issue type',
       class: 'background',
@@ -290,7 +287,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     benefit: 'Set honest expectations and capture a way to reply when the team is away.',
     categories: ['popular', 'customer_facing'],
     icon: ClockIcon,
-    iconClassName: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
     payload: {
       name: 'After-hours front door',
       class: 'customer_facing',
@@ -342,7 +338,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     benefit: 'Bump priority and pull in the escalation team before an SLA slips.',
     categories: ['popular', 'sla'],
     icon: ShieldCheckIcon,
-    iconClassName: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
     payload: {
       name: 'Rescue approaching breaches',
       class: 'background',
@@ -376,7 +371,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       'When the AI agent hands off: frustrated customers jump the queue, platform errors page the right team.',
     categories: ['popular'],
     icon: FaceFrownIcon,
-    iconClassName: 'bg-red-500/10 text-red-600 dark:text-red-400',
     payload: {
       name: 'Handoff triage',
       class: 'background',
@@ -433,7 +427,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     benefit: 'Let the AI agent try first, CSAT-checked and honestly escalated.',
     categories: ['customer_facing'],
     icon: SparklesIcon,
-    iconClassName: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
     payload: {
       name: 'AI-first support with honest escalation',
       class: 'customer_facing',
@@ -550,7 +543,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     benefit: 'Fast-track your best accounts. Adjust the audience to your real plan attribute.',
     categories: ['customer_facing', 'routing'],
     icon: StarIcon,
-    iconClassName: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
     payload: {
       name: 'VIP concierge lane',
       class: 'customer_facing',
@@ -600,7 +592,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     benefit: 'The no-AI fallback: branch on words in the first message.',
     categories: ['routing'],
     icon: ArrowsRightLeftIcon,
-    iconClassName: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
     payload: {
       name: 'Route by keywords',
       class: 'customer_facing',
@@ -645,7 +636,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       'React when Quackback AI marks a conversation urgent, the signal that exists at intake.',
     categories: ['sla'],
     icon: SparklesIcon,
-    iconClassName: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
     payload: {
       name: 'Prioritize by AI urgency',
       class: 'background',
@@ -683,7 +673,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     benefit: 'Nudge after the customer goes quiet, then close if silence continues.',
     categories: ['housekeeping'],
     icon: XCircleIcon,
-    iconClassName: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
     payload: {
       name: 'Auto-close idle conversations',
       class: 'background',
@@ -714,7 +703,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     benefit: 'A quiet CSAT check once a conversation closes.',
     categories: ['housekeeping'],
     icon: ClockIcon,
-    iconClassName: 'bg-teal-500/10 text-teal-600 dark:text-teal-400',
     payload: {
       name: 'Post-resolution follow-up',
       class: 'customer_facing',
@@ -749,7 +737,6 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     benefit: 'Tell the customer when the bug they reported is done.',
     categories: ['housekeeping'],
     icon: TicketIcon,
-    iconClassName: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
     payload: {
       name: 'Close the loop when a ticket ships',
       class: 'background',

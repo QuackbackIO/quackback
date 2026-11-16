@@ -45,7 +45,7 @@ export function SegmentBadge({ segment, onRemove, isRemoving, readOnly }: Segmen
             onRemove(segment.id)
           }}
           disabled={isRemoving}
-          className="ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 disabled:opacity-50"
+          className="ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive disabled:opacity-50"
           aria-label={`Remove from ${segment.name}`}
         >
           <XMarkIcon className="h-3 w-3" />

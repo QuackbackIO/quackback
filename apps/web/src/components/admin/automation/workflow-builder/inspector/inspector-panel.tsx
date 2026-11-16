@@ -7,7 +7,7 @@
  */
 import type { ComponentType } from 'react'
 import { BoltIcon, ClockIcon, FunnelIcon, PlusIcon, ShareIcon } from '@heroicons/react/24/outline'
-import { ACTION_ICONS, BLOCK_ICONS, GATE_TINT, STEP_TINT, TONE_TILE } from '../step-visuals'
+import { ACTION_ICONS, BLOCK_ICONS, GATE_TINT, STEP_TINT, STEP_TILE } from '../step-visuals'
 import type { BuilderSelection } from '../types'
 import type { TriggerSettingsDraft } from '../use-workflow-builder'
 import { ActionEditor } from './action-editor'
@@ -169,7 +169,7 @@ export function InspectorPanel({
     const header = (
       <InspectorHeader
         icon={BLOCK_ICONS[step.kind]}
-        tint={TONE_TILE.pink}
+        tint={STEP_TILE}
         title={BLOCK_STEP_LABELS[step.kind]}
         subtitle="Message"
       />

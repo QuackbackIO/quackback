@@ -6,7 +6,7 @@
 import { useState, type ComponentType } from 'react'
 import { ClockIcon, FunnelIcon, MagnifyingGlassIcon, ShareIcon } from '@heroicons/react/24/outline'
 import { MENU_LABEL, MENU_ROW } from '@/components/ui/menu'
-import { ACTION_ICONS, BLOCK_ICONS, TONE_TILE } from '../step-visuals'
+import { ACTION_ICONS, BLOCK_ICONS, STEP_TILE } from '../step-visuals'
 import { ACTION_TONE, type Tone } from '../step-content'
 import {
   ACTION_LABELS,
@@ -121,7 +121,7 @@ function PaletteGroup({ label, items }: { label: string; items: PaletteItem[] })
             className={`${MENU_ROW} w-full text-left hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <span
-              className={`flex size-6 shrink-0 items-center justify-center rounded-md ${TONE_TILE[item.tone]}`}
+              className={`flex size-6 shrink-0 items-center justify-center rounded-md ${STEP_TILE}`}
             >
               <item.icon className="size-3.5" />
             </span>

@@ -9,7 +9,6 @@
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import type { OutlineEntry } from '../workflow-graph'
-import { KIND_DOT } from './step-visuals'
 import type { BuilderSelection } from './types'
 
 export function OutlineRail({
@@ -64,12 +63,7 @@ export function OutlineRail({
               )}
               style={{ paddingLeft: `${entry.depth * 12 + 8}px` }}
             >
-              <span
-                className={cn(
-                  'size-2 shrink-0 rounded-[2px]',
-                  KIND_DOT[entry.kind] ?? 'bg-muted-foreground'
-                )}
-              />
+              <span className={cn('size-2 shrink-0 rounded-[2px]', 'bg-muted-foreground')} />
               <span className="min-w-0 flex-1 truncate">{entry.label}</span>
               {entry.hasIssue && (
                 <ExclamationTriangleIcon className="size-3.5 shrink-0 text-warning" />

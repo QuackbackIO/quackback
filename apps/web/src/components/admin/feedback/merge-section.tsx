@@ -593,13 +593,13 @@ interface MergeInfoBannerProps {
 
 export function MergeInfoBanner({ mergeInfo, onNavigateToPost }: MergeInfoBannerProps) {
   return (
-    <div className="mx-6 mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40">
-      <p className="text-sm text-amber-800 dark:text-amber-200">
+    <div className="mx-6 mt-4 p-3 rounded-lg bg-warning/10 dark:bg-warning/15 border border-warning/40">
+      <p className="text-sm text-warning">
         This feedback has been merged into{' '}
         <button
           type="button"
           onClick={() => onNavigateToPost?.(mergeInfo.canonicalPostId)}
-          className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
+          className="font-medium underline underline-offset-2 hover:text-warning"
         >
           {mergeInfo.canonicalPostTitle}
         </button>

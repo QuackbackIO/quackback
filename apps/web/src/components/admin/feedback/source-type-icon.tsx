@@ -45,10 +45,10 @@ const LOGO_SOURCE_TYPES = new Set(['quackback'])
 /** Intrinsic (non-integration) source types — their badge colors live here;
  *  every provider's color is derived from the shared integration manifest. */
 const INTRINSIC_SOURCE_COLORS: Record<string, string> = {
-  quackback: 'bg-yellow-100 dark:bg-yellow-900/80',
-  api: 'bg-violet-100 dark:bg-violet-900/80 text-violet-600 dark:text-violet-400',
-  csv: 'bg-amber-100 dark:bg-amber-900/80 text-amber-600 dark:text-amber-400',
-  email: 'bg-rose-100 dark:bg-rose-900/80 text-rose-600 dark:text-rose-400',
+  quackback: 'bg-muted',
+  api: 'bg-muted text-foreground',
+  csv: 'bg-muted text-foreground',
+  email: 'bg-muted text-foreground',
 }
 
 /** Source type → badge color, merging intrinsic sources with manifest-derived provider colors. */

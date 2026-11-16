@@ -428,7 +428,7 @@ function ViewsFilterSection({
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 >
                   {v.isPinned ? (
-                    <StarIcon className="size-4 shrink-0 text-amber-500" />
+                    <StarIcon className="size-4 shrink-0 text-warning" />
                   ) : (
                     <FunnelIcon className={cn('size-4 shrink-0', active && 'text-primary')} />
                   )}
@@ -768,7 +768,7 @@ export function InboxScopeMenu({
                   className={cn('gap-2', activeKey === inboxNavKey(item) && 'text-primary')}
                 >
                   {v.isPinned ? (
-                    <StarIcon className="h-4 w-4 text-amber-500" />
+                    <StarIcon className="h-4 w-4 text-warning" />
                   ) : (
                     <FunnelIcon className="h-4 w-4" />
                   )}

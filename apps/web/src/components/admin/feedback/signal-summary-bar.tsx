@@ -27,7 +27,7 @@ export function DuplicateSummaryBar({ active, onToggle }: DuplicateSummaryBarPro
         className={cn(
           'px-2 py-0.5 rounded-full transition-colors cursor-pointer',
           active
-            ? 'bg-amber-400/20 text-amber-300 font-medium'
+            ? 'bg-warning/15 text-warning font-medium'
             : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
         )}
       >
