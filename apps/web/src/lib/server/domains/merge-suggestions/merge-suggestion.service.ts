@@ -274,6 +274,7 @@ export async function getPendingSuggestionsForPost(postId: PostId): Promise<Merg
 export async function getPendingMergeSuggestions(opts: {
   sort?: 'newest' | 'relevance'
   limit?: number
+  postId?: PostId
 }): Promise<{
   items: Array<{
     id: string
@@ -289,10 +290,19 @@ export async function getPendingMergeSuggestions(opts: {
   total: number
 }> {
   log.debug(
-    { sort: opts.sort ?? 'newest', limit: opts.limit ?? 50 },
+    { sort: opts.sort ?? 'newest', limit: opts.limit ?? 50, postId: opts.postId },
     'get pending merge suggestions'
   )
   // Step 1: Fetch count + merge suggestion rows in parallel
+  const condition = opts.postId
+    ? and(
+        eq(mergeSuggestions.status, 'pending'),
+        or(
+          eq(mergeSuggestions.sourcePostId, opts.postId),
+          eq(mergeSuggestions.targetPostId, opts.postId)
+        )
+      )
+    : eq(mergeSuggestions.status, 'pending')
   const orderBy =
     opts.sort === 'relevance'
       ? [desc(mergeSuggestions.hybridScore), desc(mergeSuggestions.createdAt)]
@@ -302,11 +312,11 @@ export async function getPendingMergeSuggestions(opts: {
     db
       .select({ count: sql<number>`count(*)` })
       .from(mergeSuggestions)
-      .where(eq(mergeSuggestions.status, 'pending')),
+      .where(condition),
     db
       .select()
       .from(mergeSuggestions)
-      .where(eq(mergeSuggestions.status, 'pending'))
+      .where(condition)
       .orderBy(...orderBy)
       .limit(opts.limit ?? 50),
   ])

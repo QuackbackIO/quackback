@@ -7,6 +7,7 @@ import {
   registerPath,
   TypeIdSchema,
   createItemResponseSchema,
+  createPaginatedResponseSchema,
   createRequestBodySchema,
   asSchema,
 } from '../openapi'
@@ -40,6 +41,30 @@ const AcceptBodySchema = createRequestBodySchema({
   swapDirection: z.boolean().optional().meta({
     description: 'Merge the suggestion target into the source instead of the reverse',
   }),
+})
+
+const MergeSuggestionPostSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  content: z.string().nullable(),
+  voteCount: z.number().int(),
+  commentCount: z.number().int(),
+  createdAt: TimestampSchema,
+  boardName: z.string().nullable(),
+  statusName: z.string().nullable(),
+  statusColor: z.string().nullable(),
+})
+
+const MergeSuggestionSchema = z.object({
+  id: TypeIdSchema,
+  status: z.string(),
+  hybridScore: z.number(),
+  llmConfidence: z.number(),
+  llmReasoning: z.string().nullable(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+  sourcePost: MergeSuggestionPostSchema,
+  targetPost: MergeSuggestionPostSchema,
 })
 
 const postIdParam = {
@@ -110,6 +135,52 @@ registerPath('/posts/{postId}/merge', {
         },
       },
       ...errorResponses(400, 403, 404, 409),
+    },
+  },
+})
+
+registerPath('/suggestions', {
+  get: {
+    tags: ['Posts'],
+    summary: 'List pending merge suggestions',
+    description:
+      'Returns pending post-to-post merge suggestions sorted by creation time or hybrid duplicate relevance score. Requires the suggestion.view permission.',
+    parameters: [
+      {
+        name: 'sort',
+        in: 'query',
+        required: false,
+        schema: { type: 'string', enum: ['newest', 'relevance'] },
+        description: 'Sort order (default: newest)',
+      },
+      {
+        name: 'limit',
+        in: 'query',
+        required: false,
+        schema: { type: 'integer', minimum: 1, maximum: 100 },
+        description: 'Maximum number of suggestions to return (1-100, default: 50)',
+      },
+      {
+        name: 'postId',
+        in: 'query',
+        required: false,
+        schema: { type: 'string' },
+        description: 'Filter suggestions where the post is source or target (post_xxx)',
+      },
+    ],
+    responses: {
+      200: {
+        description: 'Pending merge suggestions',
+        content: {
+          'application/json': {
+            schema: createPaginatedResponseSchema(
+              MergeSuggestionSchema,
+              'List of pending merge suggestions'
+            ),
+          },
+        },
+      },
+      ...errorResponses(400, 401, 403),
     },
   },
 })

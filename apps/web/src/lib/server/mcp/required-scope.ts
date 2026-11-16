@@ -23,6 +23,7 @@ export const TOOL_SCOPES: Readonly<Record<string, McpScope>> = {
   create_changelog: 'write:changelog',
   update_changelog: 'write:changelog',
   delete_changelog: 'write:changelog',
+  list_suggestions: 'read:feedback',
   accept_suggestion: 'write:feedback',
   dismiss_suggestion: 'write:feedback',
   restore_suggestion: 'write:feedback',
