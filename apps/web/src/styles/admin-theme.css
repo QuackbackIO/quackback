@@ -428,3 +428,37 @@
   background: color-mix(in srgb, var(--duck) 22%, transparent);
   color: var(--foreground);
 }
+
+/* Tabs (pill): the BillingToggle on the website. A hairline track; the active tab is ink. */
+:root:has([data-admin-shell])
+  [data-slot='tabs']:not([data-variant='line'])
+  [data-slot='tabs-list'] {
+  border-color: var(--border);
+  background: var(--card);
+}
+:root:has([data-admin-shell])
+  [data-slot='tabs']:not([data-variant='line'])
+  [data-slot='tabs-trigger'][data-active] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: transparent;
+}
+
+/* Tabs (line): the active tab is 600 ink over a 2px ink rule. */
+:root:has([data-admin-shell])
+  [data-slot='tabs'][data-variant='line']
+  [data-slot='tabs-trigger'][data-active] {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* DataTable: 600 13px ink headers; a selected row is soft with a 2px ink edge on the left. */
+:root:has([data-admin-shell]) [data-slot='table-head'] {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+:root:has([data-admin-shell]) [data-slot='table-row'][data-state='selected'] {
+  background: var(--accent);
+  box-shadow: inset 2px 0 0 var(--foreground);
+}
