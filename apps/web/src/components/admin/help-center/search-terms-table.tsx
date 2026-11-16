@@ -74,7 +74,7 @@ export function SearchTermsTable() {
                           size="sm"
                           variant="secondary"
                           data-testid={`search-term-no-results-${row.normalizedQuery}`}
-                          className="bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0"
+                          className="bg-warning/10 text-warning shrink-0"
                         >
                           No results
                         </Badge>

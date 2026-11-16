@@ -112,7 +112,7 @@ export function CopilotProposedActionCard({ action }: { action: CopilotProposedA
           </Button>
         </div>
       ) : data?.status === 'executed' ? (
-        <div className="flex items-center gap-1.5 pt-0.5 text-emerald-700 dark:text-emerald-400">
+        <div className="flex items-center gap-1.5 pt-0.5 text-success">
           <CheckCircleIcon className="h-4 w-4 shrink-0" />
           <span>{formatProposedActionResult(data.result) ?? 'Approved and executed'}</span>
         </div>

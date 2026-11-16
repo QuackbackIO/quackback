@@ -23,7 +23,7 @@ export const DraftBar = memo(function DraftBar({
     <div
       data-slot="draft-bar"
       role="status"
-      className="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3.5 rounded-full bg-neutral-950 py-2 pl-4 pr-2 text-[13.5px] text-white shadow-lg"
+      className="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3.5 rounded-full bg-muted py-2 pl-4 pr-2 text-[13.5px] text-white shadow-lg"
     >
       <span>Unsaved changes</span>
       <Button
@@ -31,7 +31,7 @@ export const DraftBar = memo(function DraftBar({
         size="sm"
         onClick={onDiscard}
         disabled={saving}
-        className="text-neutral-300 hover:bg-white/10 hover:text-white"
+        className="text-muted-foreground hover:bg-white/10 hover:text-white"
       >
         Discard
       </Button>

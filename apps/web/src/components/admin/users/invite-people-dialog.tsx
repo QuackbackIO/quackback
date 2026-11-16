@@ -104,7 +104,7 @@ export function InvitePeopleDialog({
               the dialog before this can render. */}
           {batchResults && batchResults.failed.length > 0 && (
             <div
-              className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-800 dark:text-amber-400"
+              className="rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning"
               role="status"
             >
               <p className="font-medium">

@@ -94,7 +94,7 @@ export function UserTagControl({ principalId, canManage = false }: UserTagContro
             <button
               type="button"
               onClick={() => handleRemove(tag.id, tag.name)}
-              className="ml-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500"
+              className="ml-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
               aria-label={`Remove tag ${tag.name}`}
             >
               <XMarkIcon className="h-3 w-3" />

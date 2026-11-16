@@ -74,7 +74,7 @@ export const BLOCK_ICONS: Record<BlockStepKind, typeof BoltIcon> = {
   request_csat: FaceSmileIcon,
 }
 
-export const GATE_TINT = 'bg-amber-500/10 text-amber-600 dark:text-amber-500'
+export const GATE_TINT = 'bg-muted text-foreground'
 export const STEP_TINT = 'bg-muted text-muted-foreground'
 
 /** Per-tone icon tile classes shared by the step cards and the step
@@ -83,26 +83,26 @@ export const STEP_TINT = 'bg-muted text-muted-foreground'
  *  treatment for customer-facing steps vs. the internal action/branch/wait
  *  vocabulary, per the design brief's §4. */
 export const TONE_TILE: Record<Tone, string> = {
-  amber: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
-  violet: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
-  green: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  blue: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
-  pink: 'bg-pink-500/10 text-pink-700 dark:text-pink-300',
+  amber: 'bg-muted text-foreground',
+  violet: 'bg-muted text-foreground',
+  green: 'bg-muted text-foreground',
+  blue: 'bg-muted text-foreground',
+  pink: 'bg-muted text-foreground',
 }
 
 /** The label tab above a flow's first step. */
 export const START_TAG = TONE_TILE.amber
 
 /** The dashed box a branch rule is drawn in on the canvas. */
-export const RULE_BOX = `border-violet-500/40 ${TONE_TILE.violet}`
+export const RULE_BOX = `border-border ${TONE_TILE.violet}`
 
 /** The kind dot beside an outline entry. */
 export const KIND_DOT: Record<string, string> = {
-  trigger: 'bg-amber-500',
-  condition: 'bg-amber-500',
-  branch: 'bg-amber-500',
-  action: 'bg-emerald-500',
-  wait: 'bg-orange-500',
+  trigger: 'bg-muted-foreground',
+  condition: 'bg-muted-foreground',
+  branch: 'bg-muted-foreground',
+  action: 'bg-muted-foreground',
+  wait: 'bg-muted-foreground',
 }
 
 export function ConfirmDeleteDialog({

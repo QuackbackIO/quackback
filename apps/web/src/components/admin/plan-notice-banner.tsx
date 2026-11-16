@@ -20,37 +20,30 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
   // A trial with days to spare is a quiet line in the sidebar, not a banner.
   if (!view || isQuietTrial(view)) return null
 
-  // Red only for someone who can act on it. A teammate who cannot choose a
-  // plan gets the same news as a quiet strip, not an alarm with no way out.
+  // Red only for someone who can act on it: a danger tint with ink text, as
+  // every banner is. A teammate who cannot choose a plan gets the same news
+  // as a quiet strip, not an alarm with no way out.
   const ended = view.ended && Boolean(view.actionUrl)
   const tone = ended
-    ? 'bg-red-600 text-white border-red-700'
+    ? 'bg-destructive/15 border-destructive/40'
     : view.ended
       ? 'bg-muted/60 border-border'
       : view.urgent
-        ? 'bg-amber-500/10 border-amber-500/20'
+        ? 'bg-warning/10 border-warning/40'
         : 'bg-primary/5 border-primary/10'
-  const muted = ended ? 'text-white/80' : 'text-muted-foreground'
+  const muted = 'text-muted-foreground'
   const actionClass = ended
-    ? 'inline-flex items-center gap-1 font-medium text-white underline underline-offset-2 hover:text-white'
+    ? 'inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-2'
     : 'inline-flex items-center gap-1 text-primary font-medium hover:underline'
 
   return (
     <div className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm border-b ${tone}`}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-        <span className={`font-medium shrink-0 ${ended ? 'text-white' : 'text-foreground'}`}>
-          {view.label}
-        </span>
+        <span className={`font-medium shrink-0 text-foreground`}>{view.label}</span>
         {!view.ended && view.daysLeft !== null && (
           <>
             <span className="text-muted-foreground">·</span>
-            <span
-              className={
-                view.urgent
-                  ? 'text-amber-600 dark:text-amber-400 font-medium'
-                  : 'text-muted-foreground'
-              }
-            >
+            <span className={view.urgent ? 'text-warning font-medium' : 'text-muted-foreground'}>
               {view.daysLeft === 0
                 ? 'ends today'
                 : `${view.daysLeft} day${view.daysLeft === 1 ? '' : 's'} left`}

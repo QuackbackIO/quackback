@@ -75,7 +75,7 @@ import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 
 const RESOLVED_META = {
   label: 'Resolved',
-  className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  className: 'bg-success/10 text-success',
 }
 // Both resolution flavours (customer-confirmed + assumed-after-inactivity) read
 // as "Resolved" to the agent.
@@ -83,7 +83,7 @@ const AI_OUTCOME_META: Record<AssistantInvolvementOutcome, { label: string; clas
   active: { label: 'Handling', className: 'bg-primary/10 text-primary' },
   handed_off: {
     label: 'Escalated',
-    className: 'bg-amber-400/15 text-amber-700 dark:text-amber-300',
+    className: 'bg-warning/10 text-warning',
   },
   resolved_confirmed: RESOLVED_META,
   resolved_assumed: RESOLVED_META,
@@ -790,7 +790,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           )}
           {!isTicketItem && conversation?.csatRating != null && (
             <Row icon={FaceSmileIcon} label="CSAT">
-              <span className="text-sm text-amber-500">
+              <span className="text-sm text-warning">
                 {'★'.repeat(conversation.csatRating)}
                 <span className="text-muted-foreground/40">
                   {'★'.repeat(Math.max(0, 5 - conversation.csatRating))}

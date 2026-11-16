@@ -30,7 +30,7 @@ export const ChannelBadge = memo(function ChannelBadge({ channel }: { channel: C
 /** Flags to an agent that an offline reply has no address to reach. */
 export function NoEmailBadge() {
   return (
-    <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
+    <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">
       No email
     </span>
   )
@@ -40,7 +40,7 @@ export function NoEmailBadge() {
 export function UnreachableBadge({ channel }: { channel: Channel }) {
   const label = getChannelDescriptor(channel)?.label ?? 'channel'
   return (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
+    <span className="inline-flex items-center whitespace-nowrap rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">
       Unreachable on {label}
     </span>
   )

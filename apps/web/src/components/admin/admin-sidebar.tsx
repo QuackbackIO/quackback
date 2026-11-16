@@ -571,7 +571,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                           className={cn(
                             'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-background',
                             availability === 'online'
-                              ? 'bg-green-500'
+                              ? 'bg-success'
                               : 'border-2 border-muted-foreground bg-background'
                           )}
                           aria-hidden="true"
@@ -808,7 +808,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                     className={cn(
                       'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-background',
                       availability === 'online'
-                        ? 'bg-green-500'
+                        ? 'bg-success'
                         : 'border-2 border-muted-foreground bg-background'
                     )}
                     aria-hidden="true"

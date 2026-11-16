@@ -47,7 +47,7 @@ export function SavedMessagesColumn({
     >
       <div className="border-b border-border/50 px-4 py-[1.1rem]">
         <h2 className="flex items-center gap-1.5 truncate text-sm font-semibold leading-tight">
-          <BookmarkIcon className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+          <BookmarkIcon className="h-3.5 w-3.5 shrink-0 text-warning" />
           Saved messages
         </h2>
       </div>

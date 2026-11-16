@@ -19,10 +19,7 @@ export function InviteStatusBadge({ status }: { status: string | null }) {
       )
     case 'accepted':
       return (
-        <Badge
-          variant="outline"
-          className="border-green-500/30 text-green-600 text-[11px] px-1.5 py-0"
-        >
+        <Badge variant="outline" className="border-success/40 text-success text-[11px] px-1.5 py-0">
           Accepted
         </Badge>
       )

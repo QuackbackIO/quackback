@@ -96,7 +96,7 @@ export function WidgetInstallPage() {
       title="Install without an agent"
       description="Copy the snippet, or add the npm package."
     >
-      <pre className="max-h-72 overflow-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-100">
+      <pre className="max-h-72 overflow-auto rounded-lg bg-muted p-4 text-xs text-muted-foreground">
         <code>{snippet}</code>
       </pre>
       <div className="mt-4 flex flex-wrap items-center gap-2">

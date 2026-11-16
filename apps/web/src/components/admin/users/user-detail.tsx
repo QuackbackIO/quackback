@@ -191,7 +191,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
       )}
       {types.includes('commented') && (
         <span
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-muted text-foreground"
           title="Commented on this post"
         >
           <ChatBubbleLeftIcon className="h-2.5 w-2.5" />
@@ -199,7 +199,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
       )}
       {types.includes('voted') && (
         <span
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-warning/10 text-warning"
           title="Voted on this post"
         >
           <HandThumbUpIcon className="h-2.5 w-2.5" />
@@ -264,8 +264,8 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
 type StatusFilter = ConversationStatus | 'all'
 
 const STATUS_STYLE: Record<ConversationStatus, string> = {
-  open: 'bg-emerald-500/10 text-emerald-600',
-  snoozed: 'bg-amber-500/10 text-amber-600',
+  open: 'bg-success/10 text-success',
+  snoozed: 'bg-warning/10 text-warning',
   closed: 'bg-muted text-muted-foreground',
 }
 

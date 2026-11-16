@@ -222,7 +222,7 @@ export const ConversationAttributesEditor = memo(function ConversationAttributes
                 {isAiSet && (
                   <Badge
                     variant="secondary"
-                    className="h-5 border border-indigo-500/20 bg-indigo-500/10 px-1.5 text-xs text-indigo-600"
+                    className="h-5 border border-border bg-muted px-1.5 text-xs text-foreground"
                     title="Set by AI"
                   >
                     AI

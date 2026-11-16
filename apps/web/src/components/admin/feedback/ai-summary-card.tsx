@@ -25,7 +25,7 @@ export function AiSummaryCard({ summaryJson, summaryUpdatedAt }: AiSummaryCardPr
     return (
       <div className="border border-border/30 rounded-lg bg-muted/5">
         <div className="flex items-center gap-2 px-4 py-3">
-          <SparklesIcon className="size-3.5 text-amber-500/80 shrink-0" />
+          <SparklesIcon className="size-3.5 text-warning shrink-0" />
           <p className="text-xs font-medium text-muted-foreground/70">AI Summary</p>
         </div>
         <div className="px-4 pb-3">
@@ -44,7 +44,7 @@ export function AiSummaryCard({ summaryJson, summaryUpdatedAt }: AiSummaryCardPr
             type="button"
             className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/10 transition-colors rounded-t-lg"
           >
-            <SparklesIcon className="size-3.5 text-amber-500/80 shrink-0" />
+            <SparklesIcon className="size-3.5 text-warning shrink-0" />
             <p className="text-xs font-medium text-muted-foreground/70">AI Summary</p>
             <div className="flex-1" />
             {summaryUpdatedAt && (

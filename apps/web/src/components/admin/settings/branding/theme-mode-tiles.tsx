@@ -15,7 +15,7 @@ function Swatch({ mode }: { mode: ThemeMode }) {
       className="flex h-10 w-full overflow-hidden rounded-md border border-border/60"
     >
       {mode !== 'dark' && <span className="flex-1 bg-white" />}
-      {mode !== 'light' && <span className="flex-1 bg-neutral-900" />}
+      {mode !== 'light' && <span className="flex-1 bg-muted" />}
     </span>
   )
 }
