@@ -1,0 +1,312 @@
+/*
+ * The admin theme: the quackback.io palette, type and focus ring for the admin.
+ *
+ * Linked from routes/admin.tsx only, after globals.css, so the public portal, the widget
+ * iframe and every customer-branded surface never load it. Every rule is scoped to a
+ * document that contains the admin shell, so it is inert even where it is loaded.
+ * Source of truth: the Quackback design system (tokens.json); values are written out
+ * because the portal's workspace theme must not see them.
+ */
+@import '@fontsource/jetbrains-mono/400.css';
+
+/* Figtree (body) and Bricolage Grotesque (headings), self-hosted variable fonts (OFL). */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url(/fonts/bricolage-grotesque-latin-ext.woff2) format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url(/fonts/bricolage-grotesque-latin.woff2) format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url(/fonts/figtree-latin-ext.woff2) format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url(/fonts/figtree-latin.woff2) format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Site palette for the admin. Light: the quackback.io light theme, warm white. */
+:root:has([data-admin-shell]) {
+  letter-spacing: 0;
+  --background: #ffffff;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #111111;
+  --primary-foreground: #ffffff;
+  --secondary: #f7f6f2;
+  --secondary-foreground: #111111;
+  --muted: #f7f6f2;
+  --muted-foreground: #5f5d56;
+  --accent: #f7f6f2;
+  --accent-foreground: #111111;
+  --accent-ink: #111111;
+  --success: #1a7541;
+  --success-foreground: #ffffff;
+  --destructive: #b3261e;
+  --destructive-foreground: #ffffff;
+  --warning: #8a5300;
+  --warning-foreground: #111111;
+  --chart-1: #b27923;
+  --chart-2: #4687d8;
+  --chart-3: #89365b;
+  --chart-4: #1d9999;
+  --border: #e8e5dc;
+  --input: #8a887f;
+  --ring: #111111;
+  --metric-posts: #111111;
+  --metric-votes: #111111;
+  --metric-comments: #111111;
+  --metric-users: #111111;
+  --metric-visitors: #111111;
+  --metric-pageviews: #111111;
+  --metric-visits: #111111;
+  --sidebar: #f7f6f2;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #111111;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: #e8e5dc;
+  --sidebar-ring: #111111;
+  --font-sans: 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 0.5rem;
+  --radius-item: 8px;
+  --radius-field: 8px;
+  --radius-panel: 12px;
+  --letter-spacing: 0em;
+  --shadow-2xs: none;
+  --shadow-xs: none;
+  --shadow-sm: 0 0 0 1px #e8e5dc;
+  --shadow: 0 0 0 1px #e8e5dc;
+  --shadow-md: 0 24px 48px -32px rgba(17, 17, 17, 0.3);
+  --shadow-lg: 0 24px 48px -32px rgba(17, 17, 17, 0.3);
+  --shadow-xl: 0 24px 48px -32px rgba(17, 17, 17, 0.3);
+  --shadow-2xl: 0 24px 48px -32px rgba(17, 17, 17, 0.3);
+  --elevated: #f7f6f2;
+  --chrome-background: #f7f6f2;
+  --chrome-hairline: #e8e5dc;
+  --chrome-canvas-shadow: none;
+  --raise-shadow: none;
+  --raise-hover-shadow: none;
+  --float-shadow: 0 24px 48px -32px rgba(17, 17, 17, 0.3);
+  --float-focus-shadow: 0 24px 48px -32px rgba(17, 17, 17, 0.3);
+  --chrome-rail-text: #5f5d56;
+  --chrome-pane-text: #111111;
+  --chrome-icon: #5f5d56;
+  --chrome-label: #5f5d56;
+  --chrome-hover: color-mix(in srgb, #111111 5%, transparent);
+  --chrome-active-background: #ffffff;
+  --chrome-active-shadow: 0 0 0 1px #e8e5dc;
+  --chrome-active-text: #111111;
+  --chrome-active-icon: #111111;
+  --chrome-pane-active-background: #f7f6f2;
+  --chrome-focus: #111111;
+  --focus-halo: 0 0 0 5px #f7cc29;
+  --duck: #f7cc29;
+  --duck-ink: #111111;
+  --block: #111111;
+  --block-ink: #f3f1ea;
+}
+
+/* Dark: the quackback.io dark theme, neutral. Raised means lighter: the rail sits on the
+   page colour and the work sheet, its cards and menus one step up, with soft fills a step
+   above that, as main and most dark interfaces do. */
+:root.dark:has([data-admin-shell]),
+:root.dark [data-admin-canvas] {
+  --background: #1b1b1b;
+  --foreground: #f2f2f2;
+  --card: #1b1b1b;
+  --card-foreground: #f2f2f2;
+  --popover: #1b1b1b;
+  --popover-foreground: #f2f2f2;
+  --primary: #f2f2f2;
+  --primary-foreground: #121212;
+  --secondary: #222222;
+  --secondary-foreground: #f2f2f2;
+  --muted: #222222;
+  --muted-foreground: #a3a3a3;
+  --accent: #222222;
+  --accent-foreground: #f2f2f2;
+  --accent-ink: #f7cc29;
+  --success: #4cc27f;
+  --success-foreground: #121212;
+  --destructive: #ff7b6b;
+  --destructive-foreground: #121212;
+  --warning: #ee9d3a;
+  --warning-foreground: #121212;
+  --chart-1: #c68206;
+  --chart-2: #5294e6;
+  --chart-3: #b8527e;
+  --chart-4: #34a89e;
+  --metric-posts: #f2f2f2;
+  --metric-votes: #f2f2f2;
+  --metric-comments: #f2f2f2;
+  --metric-users: #f2f2f2;
+  --metric-visitors: #f2f2f2;
+  --metric-pageviews: #f2f2f2;
+  --metric-visits: #f2f2f2;
+  --border: #2a2a2a;
+  --input: #767676;
+  --ring: #f2f2f2;
+  --sidebar: #121212;
+  --sidebar-foreground: #f2f2f2;
+  --sidebar-primary: #f2f2f2;
+  --sidebar-primary-foreground: #121212;
+  --sidebar-accent: #1b1b1b;
+  --sidebar-accent-foreground: #f2f2f2;
+  --sidebar-border: #2a2a2a;
+  --sidebar-ring: #f2f2f2;
+  --shadow-sm: 0 0 0 1px #2a2a2a;
+  --shadow: 0 0 0 1px #2a2a2a;
+  --shadow-md: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+  --shadow-lg: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+  --shadow-xl: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+  --shadow-2xl: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+  --elevated: #222222;
+  --chrome-background: #121212;
+  --chrome-hairline: #2a2a2a;
+  --float-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+  --float-focus-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+  --chrome-rail-text: #a3a3a3;
+  --chrome-pane-text: #f2f2f2;
+  --chrome-icon: #a3a3a3;
+  --chrome-label: #a3a3a3;
+  --chrome-hover: color-mix(in srgb, #f2f2f2 5%, transparent);
+  --chrome-active-background: #1b1b1b;
+  --chrome-active-shadow: 0 0 0 1px #2a2a2a;
+  --chrome-active-text: #f2f2f2;
+  --chrome-active-icon: #f7cc29;
+  --chrome-pane-active-background: #222222;
+  --chrome-focus: #f2f2f2;
+  --block: #222222;
+  --block-ink: #f2f2f2;
+}
+
+/* The site focus ring: an ink outline with a duck halo. It replaces the ring-* box-shadow
+   focus styles under the admin. */
+:root:has([data-admin-shell]) :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: var(--focus-halo);
+}
+
+/* In the work canvas, rows, tiles and tabs sit flush with the edge of clipping panels and the
+   canvas itself clips, so an offset ring and halo were cut to a sliver. Focus there is a 2px ink
+   outline drawn inside the element. Compact controls (buttons, switches, checkboxes, radios) sit
+   in padded rows and keep the full ring, which an inset outline would lose in an ink fill. The
+   rail, side panes and popovers keep the ring everywhere. Fields, menu rows and options are
+   excluded here because their own rules below handle focus. */
+:root:has([data-admin-shell])
+  [data-admin-canvas]
+  :focus-visible:not(
+    [data-slot='button'],
+    [role='switch'],
+    [role='checkbox'],
+    [role='radio'],
+    [data-slot='switch'],
+    [data-slot='checkbox'],
+    [data-slot='radio-group-item'],
+    input,
+    textarea,
+    select,
+    [data-slot='select-trigger'],
+    [data-slot='command-input'],
+    [contenteditable='true'],
+    [role='menuitem'],
+    [role='menuitemcheckbox'],
+    [role='menuitemradio'],
+    [role='option'],
+    [cmdk-item]
+  ) {
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+/* Menu items and listbox options show focus with their highlighted row. */
+:root:has([data-admin-shell])
+  :is(
+    [role='menuitem'],
+    [role='menuitemcheckbox'],
+    [role='menuitemradio'],
+    [role='option'],
+    [cmdk-item]
+  ):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Text fields take a quieter focus: their own edge becomes a 2px ink edge, with no offset
+   outline and no halo. The full ring stacked on a bordered field read as three rings, and a
+   duck glow over the dark sheet turned olive. Buttons and links keep the ink-and-duck ring. */
+:root:has([data-admin-shell])
+  :is(
+    input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit']),
+    textarea,
+    select,
+    [data-slot='select-trigger']
+  ):focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 1px var(--ring);
+}
+
+/* Fields with no edge of their own (the command palette's search, the editor body) sit
+   inside a panel that already shows where focus is. */
+:root:has([data-admin-shell])
+  :is([data-slot='command-input'], [contenteditable='true']):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Page, panel and dialog titles in the display face. Row titles (the h3 in a post list)
+   stay in the body face, as the kit's ListRow does. */
+:root:has([data-admin-shell])
+  :is(
+    h1,
+    h2,
+    [data-slot='card-title'],
+    [data-slot='dialog-title'],
+    [data-slot='alert-dialog-title'],
+    [data-slot='sheet-title']
+  ) {
+  font-family: var(--font-display);
+}
+
+/* The destructive button labels in its foreground token, which the light value of
+   globals.css would make red on red; the admin sets it per theme. */
+:root:has([data-admin-shell]) [data-slot='button'].bg-destructive {
+  color: var(--destructive-foreground);
+}
