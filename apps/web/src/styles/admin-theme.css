@@ -139,6 +139,7 @@
   --duck-ink: #111111;
   --block: #111111;
   --block-ink: #f3f1ea;
+  --scrim: rgba(17, 17, 17, 0.6);
 }
 
 /* Dark: the quackback.io dark theme, neutral. Raised means lighter: the rail sits on the
@@ -213,6 +214,7 @@
   --chrome-focus: #f2f2f2;
   --block: #222222;
   --block-ink: #f2f2f2;
+  --scrim: rgba(0, 0, 0, 0.75);
 }
 
 /* The site focus ring: an ink outline with a duck halo. It replaces the ring-* box-shadow
@@ -476,4 +478,19 @@
 /* RadioGroup: a checked radio has an ink edge around its ink dot, as on the website. */
 :root:has([data-admin-shell]) [data-slot='radio-group-item'][data-checked] {
   border-color: var(--primary);
+}
+
+/* Dialog, ConfirmDialog, Sheet: the site's scrim behind; a confirmation is 400px wide. */
+:root:has([data-admin-shell])
+  :is(
+    [data-slot='dialog-overlay'],
+    [data-slot='alert-dialog-overlay'],
+    [data-slot='sheet-overlay']
+  ) {
+  background: var(--scrim);
+}
+@media (min-width: 640px) {
+  :root:has([data-admin-shell]) [data-slot='alert-dialog-content'] {
+    max-width: 400px;
+  }
 }
