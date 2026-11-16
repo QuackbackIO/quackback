@@ -23,7 +23,7 @@ const buttonVariants = cva(
         default:
           'bg-primary text-primary-foreground hover:bg-primary/90 hover:brightness-94 active:bg-primary/85',
         destructive:
-          'bg-destructive text-white hover:bg-destructive/90 active:bg-destructive/85 focus-visible:ring-destructive',
+          'bg-destructive text-white dark:text-destructive-foreground hover:bg-destructive/90 active:bg-destructive/85 focus-visible:ring-destructive',
         outline:
           'border border-border/50 bg-transparent hover:bg-muted/40 hover:border-border/70 active:bg-muted/60',
         // Danger-zone actions: outlined red, never a filled button.

@@ -30,6 +30,7 @@ import {
   useHasPermission,
 } from '@/lib/client/hooks/use-root-context'
 import { useToasterLocale } from '@/components/ui/use-toaster-locale'
+import adminThemeCss from '@/styles/admin-theme.css?url'
 
 /** What the admin pages read from the role guard's answer. */
 type AdminGuard = Pick<
@@ -54,6 +55,20 @@ async function loadAdminGuard(callbackUrl: string): Promise<AdminGuard> {
 }
 
 export const Route = createFileRoute('/admin')({
+  // The admin theme (site palette, Figtree and Bricolage, the focus ring). Linked here, not
+  // in globals.css, so the portal and the widget never load it.
+  head: () => ({
+    links: [
+      { rel: 'stylesheet', href: adminThemeCss },
+      {
+        rel: 'preload',
+        href: '/fonts/figtree-latin.woff2',
+        as: 'font',
+        type: 'font/woff2',
+        crossOrigin: 'anonymous',
+      },
+    ],
+  }),
   validateSearch: (
     search: Record<string, unknown>
   ): { post?: string; entry?: string; article?: string } => {
