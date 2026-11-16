@@ -29,7 +29,7 @@ export function AiSummaryCard({ summaryJson, summaryUpdatedAt }: AiSummaryCardPr
           <p className="text-xs font-medium text-muted-foreground/70">AI Summary</p>
         </div>
         <div className="px-4 pb-3">
-          <p className="text-sm text-muted-foreground italic">Summary is being generated...</p>
+          <p className="text-sm text-muted-foreground italic">Summary is being generated…</p>
         </div>
       </div>
     )

@@ -214,7 +214,7 @@ function ChannelPicker<TChannel extends Channel>({
   loading,
   onRefresh,
   renderChannelIcon,
-  placeholder = 'Select a channel...',
+  placeholder = 'Select a channel…',
 }: {
   channels: TChannel[]
   value: string
@@ -270,7 +270,7 @@ function ChannelPicker<TChannel extends Channel>({
             ref={inputRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search channels..."
+            placeholder="Search channels…"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           {onRefresh && (
@@ -382,7 +382,7 @@ function BoardFilterCombobox({
       <PopoverContent align="start" className="w-(--anchor-width) p-0">
         {open && (
           <Command>
-            <CommandInput placeholder="Search boards..." />
+            <CommandInput placeholder="Search boards…" />
             <CommandList>
               <CommandEmpty>No boards found.</CommandEmpty>
               <CommandGroup>
@@ -602,7 +602,7 @@ function ChannelRow<TChannel extends Channel>({
               onClick={handleRemove}
               disabled={removeMutation.isPending}
             >
-              {removeMutation.isPending ? 'Removing...' : 'Remove'}
+              {removeMutation.isPending ? 'Removing…' : 'Remove'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -639,9 +639,7 @@ function RoutingTable<TChannel extends Channel>({
           className="grid items-end bg-muted/40 border-b border-border/50"
           style={tableGridStyle(events.length)}
         >
-          <div className="px-4 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-            Channel
-          </div>
+          <div className="px-4 py-2 text-[11px] font-medium text-muted-foreground">Channel</div>
           {events.map((event) => (
             <div
               key={event.id}
@@ -836,7 +834,7 @@ function AddChannelDialog<TChannel extends Channel>({
             onClick={handleSave}
             disabled={!channelId || noEventsSelected || addMutation.isPending}
           >
-            {addMutation.isPending ? 'Adding...' : 'Add channel'}
+            {addMutation.isPending ? 'Adding…' : 'Add channel'}
           </Button>
         </DialogFooter>
       </DialogContent>

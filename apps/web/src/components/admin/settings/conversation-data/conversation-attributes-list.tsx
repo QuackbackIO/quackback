@@ -390,7 +390,7 @@ function AttributeFormDialog({
                   title="Fill descriptions from the option labels using AI"
                 >
                   <SparklesIcon className="h-3 w-3" />
-                  {draftDescriptions.isPending ? 'Drafting...' : 'Draft descriptions'}
+                  {draftDescriptions.isPending ? 'Drafting…' : 'Draft descriptions'}
                 </Button>
               </div>
               {pendingDraft && (
@@ -545,7 +545,7 @@ function AttributeFormDialog({
                 onClick={handleTestDetection}
               >
                 <SparklesIcon className="h-3 w-3" />
-                {previewDetection.isPending ? 'Testing...' : 'Test detection'}
+                {previewDetection.isPending ? 'Testing…' : 'Test detection'}
               </Button>
               {previewResult && (
                 <div className="rounded-md bg-muted/50 px-2.5 py-2 text-xs">
@@ -606,7 +606,7 @@ function AttributeFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!canSubmit || isPending}>
-              {isPending ? 'Saving...' : isEditing ? 'Save changes' : 'Create attribute'}
+              {isPending ? 'Saving…' : isEditing ? 'Save changes' : 'Create attribute'}
             </Button>
           </DialogFooter>
         </form>

@@ -150,7 +150,7 @@ function ChangeRoleForm({
           Cancel
         </Button>
         <Button type="submit" disabled={saving || value === initial}>
-          {saving ? 'Saving...' : 'Change role'}
+          {saving ? 'Saving…' : 'Change role'}
         </Button>
       </DialogFooter>
     </form>

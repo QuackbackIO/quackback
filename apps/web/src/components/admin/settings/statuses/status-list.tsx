@@ -497,7 +497,7 @@ function CreateStatusDialog({ open, onOpenChange, onSubmit }: CreateStatusDialog
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting || !name || !slug}>
-              {isSubmitting ? 'Creating...' : 'Create status'}
+              {isSubmitting ? 'Creating…' : 'Create status'}
             </Button>
           </DialogFooter>
         </form>
@@ -567,7 +567,7 @@ function EditStatusDialog({ open, onOpenChange, status, onSubmit }: EditStatusDi
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting || !name.trim()}>
-              {isSubmitting ? 'Saving...' : 'Save changes'}
+              {isSubmitting ? 'Saving…' : 'Save changes'}
             </Button>
           </DialogFooter>
         </form>

@@ -68,7 +68,7 @@ describe('ConversationListColumn toolbar', () => {
   it('searches from the list column at every width', () => {
     const onSearchInput = vi.fn()
     renderColumn({ onSearchInput })
-    const box = screen.getByPlaceholderText('Search conversations...')
+    const box = screen.getByPlaceholderText('Search conversations…')
     expect(box.closest('.lg\\:hidden')).toBeNull()
     fireEvent.change(box, { target: { value: 'refund' } })
     expect(onSearchInput).toHaveBeenCalledWith('refund')

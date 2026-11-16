@@ -31,9 +31,7 @@ function ShortcutRow({ keys, label }: { keys: string; label: string }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="text-muted-foreground mb-1 text-xs font-medium tracking-wide uppercase">
-        {title}
-      </h3>
+      <h3 className="text-muted-foreground mb-1 text-xs font-medium">{title}</h3>
       <div className="divide-border divide-y">{children}</div>
     </section>
   )

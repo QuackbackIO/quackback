@@ -110,7 +110,7 @@ export function ArticleTranslationsDialog({
         <div className="flex items-center gap-2">
           <Select value={locale ?? undefined} onValueChange={setLocale}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Choose a locale..." />
+              <SelectValue placeholder="Choose a locale…" />
             </SelectTrigger>
             <SelectContent>
               {additionalLocales.map((l) => (

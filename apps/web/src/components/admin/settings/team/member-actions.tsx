@@ -172,9 +172,7 @@ export function MemberActions({
           </DropdownMenuItem>
           {customRoles.length > 0 && (
             <>
-              <DropdownMenuLabel className="uppercase tracking-wider text-muted-foreground">
-                Custom
-              </DropdownMenuLabel>
+              <DropdownMenuLabel className="text-muted-foreground">Custom</DropdownMenuLabel>
               {customRoles.map((r) => (
                 <DropdownMenuItem
                   key={r.id}
@@ -237,7 +235,7 @@ export function MemberActions({
             </>
           )
         }
-        confirmLabel={isLoading ? 'Updating...' : `Change to ${pendingRole?.label ?? ''}`}
+        confirmLabel={isLoading ? 'Updating…' : `Change to ${pendingRole?.label ?? ''}`}
         isPending={isLoading}
         onConfirm={handleRoleChange}
       />
@@ -254,7 +252,7 @@ export function MemberActions({
           </>
         }
         variant="destructive"
-        confirmLabel={isLoading ? 'Removing...' : 'Remove from team'}
+        confirmLabel={isLoading ? 'Removing…' : 'Remove from team'}
         isPending={isLoading}
         onConfirm={handleRemove}
       />
@@ -272,7 +270,7 @@ export function MemberActions({
           </>
         }
         variant="destructive"
-        confirmLabel={isLoading ? 'Resetting...' : 'Reset two-factor'}
+        confirmLabel={isLoading ? 'Resetting…' : 'Reset two-factor'}
         isPending={isLoading}
         onConfirm={handleResetTfa}
       />
@@ -289,7 +287,7 @@ export function MemberActions({
           </>
         }
         variant="destructive"
-        confirmLabel={isLoading ? 'Signing out...' : 'Sign out everywhere'}
+        confirmLabel={isLoading ? 'Signing out…' : 'Sign out everywhere'}
         isPending={isLoading}
         onConfirm={handleForceSignOut}
       />

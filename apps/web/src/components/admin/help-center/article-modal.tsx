@@ -194,7 +194,7 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
 
         <ModalFooter
           onCancel={onClose}
-          submitLabel={updateArticleMutation.isPending ? 'Saving...' : 'Save changes'}
+          submitLabel={updateArticleMutation.isPending ? 'Saving…' : 'Save changes'}
           isPending={updateArticleMutation.isPending}
           submitDisabled={!isDirty}
         >

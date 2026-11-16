@@ -313,9 +313,7 @@ function ScopeMenuSection({
   return (
     <>
       <DropdownMenuSeparator />
-      <DropdownMenuLabel className="uppercase tracking-wide text-muted-foreground">
-        {title}
-      </DropdownMenuLabel>
+      <DropdownMenuLabel className="text-muted-foreground">{title}</DropdownMenuLabel>
       {rows.map((r) => {
         const item = makeItem(r.id)
         return (
@@ -684,9 +682,7 @@ export function InboxScopeMenu({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        <DropdownMenuLabel className="uppercase tracking-wide text-muted-foreground">
-          Conversations
-        </DropdownMenuLabel>
+        <DropdownMenuLabel className="text-muted-foreground">Conversations</DropdownMenuLabel>
         {CONVERSATION_VIEWS.map(({ view, label, Icon }) => {
           const item: InboxNavItem = { kind: 'view', view }
           const count = countForConversationView(view, counts)
@@ -717,9 +713,7 @@ export function InboxScopeMenu({
         {showTickets && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="uppercase tracking-wide text-muted-foreground">
-              Tickets
-            </DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground">Tickets</DropdownMenuLabel>
             {TICKET_INBOX_VIEWS.map(({ view, label, Icon }) => {
               const item: InboxNavItem = { kind: 'view', view }
               const count = countForTicketView(view, counts)
@@ -756,9 +750,7 @@ export function InboxScopeMenu({
         {(views ?? []).length > 0 && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="uppercase tracking-wide text-muted-foreground">
-              Saved views
-            </DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground">Saved views</DropdownMenuLabel>
             {(views ?? []).map((v) => {
               const item: InboxNavItem = { kind: 'custom', viewId: v.id }
               return (

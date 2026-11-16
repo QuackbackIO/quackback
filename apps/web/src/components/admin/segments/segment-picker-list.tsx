@@ -42,7 +42,7 @@ export function SegmentPickerList({
 
   return (
     <Command>
-      {showSearch && <CommandInput placeholder="Search segments..." />}
+      {showSearch && <CommandInput placeholder="Search segments…" />}
       <CommandList>
         <CommandEmpty className="px-3 py-2 text-xs">{emptyMessage}</CommandEmpty>
         <CommandGroup>

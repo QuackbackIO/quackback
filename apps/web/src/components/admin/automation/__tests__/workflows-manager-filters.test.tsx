@@ -67,7 +67,7 @@ describe('WorkflowsManager toolbar', () => {
   it('has a search box and one Filter button instead of status and type selects', async () => {
     renderManager()
     await screen.findByText('Welcome tour')
-    expect(screen.getByRole('textbox', { name: 'Search workflows...' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Search workflows…' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Filter' })).toBeInTheDocument()
     expect(screen.queryByRole('combobox')).toBeNull()
   })

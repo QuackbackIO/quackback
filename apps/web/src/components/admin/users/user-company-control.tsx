@@ -110,7 +110,7 @@ export function UserCompanyControl({
         value={filter}
         disabled={busy}
         onChange={(e) => setFilter(e.target.value)}
-        placeholder="Search or create..."
+        placeholder="Search or create…"
         className="mb-2 w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
       />
       <div className="max-h-48 space-y-0.5 overflow-y-auto">

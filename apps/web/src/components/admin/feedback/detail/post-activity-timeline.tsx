@@ -368,7 +368,7 @@ function MergedInCard({ activity, isUnmerged }: { activity: ActivityItem; isUnme
           <AlertDialogFooter>
             <AlertDialogCancel disabled={unmerge.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleUnmerge} disabled={unmerge.isPending}>
-              {unmerge.isPending ? 'Unmerging...' : 'Unmerge'}
+              {unmerge.isPending ? 'Unmerging…' : 'Unmerge'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

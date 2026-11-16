@@ -111,7 +111,7 @@ export function CloudOwnershipActions({
         onOpenChange={setTransferOpen}
         title="Transfer ownership?"
         description={`${toEmail} will become the owner of this workspace.`}
-        confirmLabel={busy ? 'Transferring...' : 'Transfer ownership'}
+        confirmLabel={busy ? 'Transferring…' : 'Transfer ownership'}
         isPending={busy}
         onConfirm={transfer}
       />
@@ -121,7 +121,7 @@ export function CloudOwnershipActions({
         title="Leave this workspace?"
         description="You will lose access to this workspace. The owner stays."
         variant="destructive"
-        confirmLabel={busy ? 'Leaving...' : 'Leave workspace'}
+        confirmLabel={busy ? 'Leaving…' : 'Leave workspace'}
         isPending={busy}
         onConfirm={leave}
       />

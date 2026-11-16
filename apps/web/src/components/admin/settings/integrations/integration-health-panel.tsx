@@ -48,9 +48,7 @@ export function IntegrationHealthPanel({
       className={embedded ? undefined : 'rounded-xl border bg-card p-4'}
     >
       <div className="flex items-start justify-between gap-3">
-        <h3
-          className={`text-[11px] font-medium uppercase tracking-wide text-muted-foreground ${actions ? 'pt-1.5' : ''}`}
-        >
+        <h3 className={`text-[11px] font-medium text-muted-foreground ${actions ? 'pt-1.5' : ''}`}>
           Health
         </h3>
         {actions}

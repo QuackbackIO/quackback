@@ -172,7 +172,7 @@ describe('WorkflowsManager class list', () => {
     hoisted.workflowEffectivenessFn.mockResolvedValue([])
     renderManager()
 
-    await userEvent.type(await screen.findByLabelText('Search workflows...'), 'i')
+    await userEvent.type(await screen.findByLabelText('Search workflows…'), 'i')
     const handle = await screen.findByLabelText('Reorder Billing triage')
     expect(handle.getAttribute('disabled')).not.toBeNull()
     expect(screen.queryByLabelText('Reorder Welcome tour')).toBeNull()

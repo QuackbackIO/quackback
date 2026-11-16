@@ -170,7 +170,7 @@ describe('GuidanceRulesCard', () => {
     expect(screen.queryByRole('button', { name: 'Delete Refund policy' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Move Refund policy/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Actions for Refund policy' })).toBeInTheDocument()
-    fireEvent.change(screen.getByPlaceholderText('Search guidance...'), {
+    fireEvent.change(screen.getByPlaceholderText('Search guidance…'), {
       target: { value: 'next step' },
     })
     expect(screen.getByText('Always be clear')).toBeInTheDocument()
@@ -213,7 +213,7 @@ describe('GuidanceRulesCard', () => {
   it('does not reorder while a search is active', async () => {
     renderCard()
     await screen.findByText('Refund policy')
-    fireEvent.change(screen.getByPlaceholderText('Search guidance...'), { target: { value: 'e' } })
+    fireEvent.change(screen.getByPlaceholderText('Search guidance…'), { target: { value: 'e' } })
     dnd.onDragEnd?.({
       active: { id: 'assistant_guidance_2' },
       over: { id: 'assistant_guidance_1' },

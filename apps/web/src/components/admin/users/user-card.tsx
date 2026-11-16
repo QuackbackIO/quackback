@@ -48,7 +48,7 @@ export function UserCard({ user, isSelected, onClick, showCountry = false }: Use
           {user.name || 'Unnamed user'}
         </h3>
         {user.isLead ? (
-          <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-px text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-px text-[11px] font-medium text-muted-foreground">
             Lead
           </span>
         ) : (

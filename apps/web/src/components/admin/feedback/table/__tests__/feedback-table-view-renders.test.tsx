@@ -130,7 +130,7 @@ describe('FeedbackTableView renders', () => {
     render(<Harness />)
     expect(rendersSoFar()).toEqual({ post_a: 1, post_b: 1, post_c: 1 })
 
-    const search = screen.getByPlaceholderText('Search posts...')
+    const search = screen.getByPlaceholderText('Search posts…')
     let typed = ''
     for (const char of 'export') {
       typed += char
@@ -146,7 +146,7 @@ describe('FeedbackTableView renders', () => {
     render(<Harness />)
     expect(sortMenuRenders).toBe(1)
 
-    const search = screen.getByPlaceholderText('Search posts...')
+    const search = screen.getByPlaceholderText('Search posts…')
     let typed = ''
     for (const char of 'export') {
       typed += char
@@ -164,7 +164,7 @@ describe('FeedbackTableView renders', () => {
 
   it('renders no row when the debounced search lands with the old rows still showing', () => {
     render(<Harness />)
-    fireEvent.change(screen.getByPlaceholderText('Search posts...'), {
+    fireEvent.change(screen.getByPlaceholderText('Search posts…'), {
       target: { value: 'export' },
     })
 
@@ -173,7 +173,7 @@ describe('FeedbackTableView renders', () => {
     })
 
     expect(filterChanges).toEqual([{ search: 'export' }])
-    expect(screen.getByPlaceholderText('Search posts...')).toHaveValue('export')
+    expect(screen.getByPlaceholderText('Search posts…')).toHaveValue('export')
     expect(rendersSoFar()).toEqual({ post_a: 1, post_b: 1, post_c: 1 })
   })
 

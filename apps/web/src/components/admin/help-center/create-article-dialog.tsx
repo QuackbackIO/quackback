@@ -188,7 +188,7 @@ export function CreateArticleDialog({
 
             <ModalFooter
               onCancel={() => handleOpenChange(false)}
-              submitLabel={isPending ? 'Saving...' : canPublish ? 'Publish' : 'Save draft'}
+              submitLabel={isPending ? 'Saving…' : canPublish ? 'Publish' : 'Save draft'}
               isPending={isPending}
               {...(canPublish ? { submitType: 'button' as const, onSubmit: handlePublish } : {})}
             >

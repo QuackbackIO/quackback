@@ -130,7 +130,7 @@ function AttachMemberButton({ companyId }: { companyId: CompanyId }) {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search users..."
+          placeholder="Search users…"
           className="mb-2 h-8 text-sm"
           autoFocus
         />
@@ -467,7 +467,7 @@ function CompanyAttributesPanel({
                 Cancel
               </Button>
               <Button size="sm" className="h-7 text-xs" onClick={save} disabled={saving}>
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? 'Saving…' : 'Save'}
               </Button>
             </div>
           ) : (
@@ -700,7 +700,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
                 Cancel
               </Button>
               <Button size="sm" className="h-8" onClick={saveEdits} disabled={saving}>
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? 'Saving…' : 'Save'}
               </Button>
             </div>
           )}

@@ -510,7 +510,7 @@ export function CreatePostDialog({
 
             <ModalFooter
               onCancel={() => setOpen(false)}
-              submitLabel={createPostMutation.isPending ? 'Creating...' : 'Create post'}
+              submitLabel={createPostMutation.isPending ? 'Creating…' : 'Create post'}
               isPending={createPostMutation.isPending}
               hintAction="to create"
             />

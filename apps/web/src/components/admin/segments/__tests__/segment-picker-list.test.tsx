@@ -31,22 +31,22 @@ describe('<SegmentPickerList>', () => {
 
   it('hides the search input at or below the threshold', () => {
     render(<SegmentPickerList segments={makeSegments(6)} onSelect={vi.fn()} />)
-    expect(screen.queryByPlaceholderText('Search segments...')).toBeNull()
+    expect(screen.queryByPlaceholderText('Search segments…')).toBeNull()
   })
 
   it('shows the search input once the list exceeds the threshold', () => {
     render(<SegmentPickerList segments={makeSegments(7)} onSelect={vi.fn()} />)
-    expect(screen.getByPlaceholderText('Search segments...')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Search segments…')).toBeInTheDocument()
   })
 
   it('respects a custom searchThreshold', () => {
     render(<SegmentPickerList segments={makeSegments(3)} onSelect={vi.fn()} searchThreshold={2} />)
-    expect(screen.getByPlaceholderText('Search segments...')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Search segments…')).toBeInTheDocument()
   })
 
   it('filters rows as the admin types', () => {
     render(<SegmentPickerList segments={makeSegments(7)} onSelect={vi.fn()} />)
-    fireEvent.change(screen.getByPlaceholderText('Search segments...'), {
+    fireEvent.change(screen.getByPlaceholderText('Search segments…'), {
       target: { value: 'Segment 3' },
     })
     expect(screen.getByText('Segment 3')).toBeInTheDocument()

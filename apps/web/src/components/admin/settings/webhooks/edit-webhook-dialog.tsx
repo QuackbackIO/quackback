@@ -231,7 +231,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
                 Cancel
               </Button>
               <Button type="submit" disabled={isPending || !url || selectedEvents.length === 0}>
-                {isPending ? 'Saving...' : 'Save changes'}
+                {isPending ? 'Saving…' : 'Save changes'}
               </Button>
             </DialogFooter>
           </form>

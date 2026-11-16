@@ -120,6 +120,6 @@ describe('<UsersBulkSegmentBar>', () => {
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /add to segment/i }))
-    expect(screen.getByPlaceholderText('Search segments...')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Search segments…')).toBeInTheDocument()
   })
 })
