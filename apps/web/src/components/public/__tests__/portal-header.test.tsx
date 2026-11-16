@@ -128,16 +128,12 @@ function renderHeader({
   userRole,
   isLoggedIn,
   workspaceName = 'Acme',
-  route = {},
 }: {
   userRole?: 'admin' | 'member' | 'user' | null
   isLoggedIn: boolean
   workspaceName?: string
-  /** More of the root route context: the base URL and the section links. */
-  route?: Record<string, unknown>
 }) {
   mockGetRouteContext.mockReturnValue({
-    ...route,
     session: isLoggedIn ? loggedInSession : null,
     settings: {
       name: workspaceName,
@@ -180,30 +176,6 @@ describe('PortalHeader — Admin dropdown item', () => {
     const trigger = screen.getByRole('button')
     fireEvent.click(trigger)
     expect(await screen.findByRole('menuitem', { name: /admin/i })).toBeInTheDocument()
-  })
-
-  it('links Admin on the page on the primary domain', async () => {
-    renderHeader({ userRole: 'admin', isLoggedIn: true, route: { baseUrl: 'https://acme.com' } })
-    expect(screen.getByRole('link', { name: /admin/i }).getAttribute('href')).toBe('/admin')
-    fireEvent.click(screen.getByRole('button'))
-    const item = await screen.findByRole('menuitem', { name: /admin/i })
-    expect(item.getAttribute('href')).toBe('/admin')
-  })
-
-  it('links Admin to the primary domain on a section host, where the admin does not run', async () => {
-    renderHeader({
-      userRole: 'admin',
-      isLoggedIn: true,
-      route: { baseUrl: 'https://acme.com', sectionLinks: { here: 'https://help.acme.com' } },
-    })
-    // The button in the header...
-    expect(screen.getByRole('link', { name: /admin/i }).getAttribute('href')).toBe(
-      'https://acme.com/admin'
-    )
-    // ...and the item in the account menu.
-    fireEvent.click(screen.getByRole('button'))
-    const item = await screen.findByRole('menuitem', { name: /admin/i })
-    expect(item.getAttribute('href')).toBe('https://acme.com/admin')
   })
 
   it('hides the Admin item for portal users', async () => {

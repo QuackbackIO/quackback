@@ -43,7 +43,6 @@ import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-s
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
-import { TeamPageLink } from './team-page-link'
 import {
   useSectionLinks,
   useSessionContext,
@@ -200,10 +199,10 @@ export function PortalHeader({
       {/* Admin Button (visible for team members) */}
       {canAccessAdmin && (
         <Button variant="outline" size="sm" asChild className="ms-1 me-2">
-          <TeamPageLink to="/admin">
+          <Link to="/admin" search={{}}>
             <ShieldCheckIcon className="me-2 h-4 w-4" />
             <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
-          </TeamPageLink>
+          </Link>
         </Button>
       )}
 
@@ -240,10 +239,10 @@ export function PortalHeader({
             <DropdownMenuSeparator />
             {canAccessAdmin && (
               <DropdownMenuItem asChild>
-                <TeamPageLink to="/admin">
+                <Link to="/admin" search={{}}>
                   <ShieldCheckIcon className="me-2 h-4 w-4" />
                   <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
-                </TeamPageLink>
+                </Link>
               </DropdownMenuItem>
             )}
             <DropdownMenuItem asChild>

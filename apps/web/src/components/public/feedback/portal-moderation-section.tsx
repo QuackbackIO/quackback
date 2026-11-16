@@ -13,7 +13,7 @@
  */
 import { useRef, useState } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
-import { TeamPageLink } from '@/components/public/team-page-link'
+import { Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -190,8 +190,9 @@ export function PortalModerationSection({
           >
             <FormattedMessage id="portal.moderation.banner.review" defaultMessage="Review here" />
           </button>
-          <TeamPageLink
+          <Link
             to="/admin/feedback/moderation"
+            search={{}}
             className="inline-flex items-center gap-1 font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-300"
           >
             <FormattedMessage
@@ -199,7 +200,7 @@ export function PortalModerationSection({
               defaultMessage="Open queue in admin"
             />
             <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-          </TeamPageLink>
+          </Link>
         </div>
       </div>
 
