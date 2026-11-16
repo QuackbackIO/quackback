@@ -227,6 +227,39 @@
   box-shadow: var(--focus-halo);
 }
 
+/* Inside a clipping container (a panel, list or card with overflow hidden) a row, tile or tab
+   sits flush with the edge, so the offset ring and halo were cut to a sliver. There, focus is a
+   2px ink outline drawn inside the element. Compact controls (buttons, switches, checkboxes,
+   radios) sit in padded rows and keep the full ring: an inset outline would vanish into an ink
+   fill. */
+:root:has([data-admin-shell])
+  :is(.overflow-hidden, .overflow-clip)
+  :focus-visible:not(
+    [data-slot='button'],
+    [role='switch'],
+    [role='checkbox'],
+    [role='radio'],
+    [data-slot='switch'],
+    [data-slot='checkbox'],
+    [data-slot='radio-group-item']
+  ) {
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+/* Menu items and listbox options show focus with their highlighted row. */
+:root:has([data-admin-shell])
+  :is(
+    [role='menuitem'],
+    [role='menuitemcheckbox'],
+    [role='menuitemradio'],
+    [role='option'],
+    [cmdk-item]
+  ):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 /* Text fields take a quieter focus: their own edge becomes a 2px ink edge, with no offset
    outline and no halo. The full ring stacked on a bordered field read as three rings, and a
    duck glow over the dark sheet turned olive. Buttons and links keep the ink-and-duck ring. */
