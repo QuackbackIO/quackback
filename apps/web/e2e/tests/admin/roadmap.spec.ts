@@ -751,7 +751,7 @@ test.describe('Admin Roadmap - Filters bar', () => {
     const noRoadmapMsg = page.getByText('No roadmap selected')
 
     if ((await noRoadmapMsg.count()) === 0) {
-      await expect(page.getByPlaceholder('Search posts...')).toBeVisible({ timeout: 10000 })
+      await expect(page.getByPlaceholder('Search posts…')).toBeVisible({ timeout: 10000 })
     }
   })
 
@@ -813,7 +813,7 @@ test.describe('Admin Roadmap - Filters bar', () => {
     const noRoadmapMsg = page.getByText('No roadmap selected')
 
     if ((await noRoadmapMsg.count()) === 0) {
-      await page.getByPlaceholder('Search posts...').fill('test query')
+      await page.getByPlaceholder('Search posts…').fill('test query')
 
       // URL should reflect the search param
       await expect(page).toHaveURL(/search=test/, { timeout: 5000 })

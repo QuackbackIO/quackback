@@ -122,7 +122,7 @@ test.describe('Base UI component usability', () => {
 
   test('menu checkbox items, alert dialog, and dropdown stay usable', async ({ page }) => {
     await page.goto('/admin/users')
-    await expect(page.getByPlaceholder('Search users...')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByPlaceholder('Search users…')).toBeVisible({ timeout: 15_000 })
     const columns = page.getByRole('button', { name: 'Columns' })
     await waitForHydration(columns)
     await columns.click()
