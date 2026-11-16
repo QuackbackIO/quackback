@@ -462,3 +462,13 @@
   background: var(--accent);
   box-shadow: inset 2px 0 0 var(--foreground);
 }
+
+/* Checkbox, CodeEntry: in dark an unchecked box sits on the sheet like a field, with no grey
+   fill; checked keeps the ink fill. */
+:root.dark:has([data-admin-shell]) [data-slot='checkbox']:not([data-checked]),
+:root.dark:has([data-admin-shell]) [data-slot='input-otp-slot'] {
+  background: transparent;
+}
+:root:has([data-admin-shell]) [data-slot='input-otp-slot'] {
+  box-shadow: none;
+}
