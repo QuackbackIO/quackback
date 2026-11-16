@@ -178,6 +178,45 @@ describe('POST /api/v1/tickets (create)', () => {
     expect(bad.status).toBe(400)
     expect(mockCreateTicket).not.toHaveBeenCalled()
   })
+
+  // An integration relaying the requester's own report (e.g. an in-app bug form).
+  describe('relayed requester tickets', () => {
+    const create = (body: Record<string, unknown>) =>
+      post(ListRoute)({
+        request: jsonReq('https://x.test/api/v1/tickets', { title: 'Bug', ...body }),
+        params: {},
+      })
+
+    beforeEach(() => {
+      mockCreateTicket.mockResolvedValue(ticketDTO)
+    })
+
+    it('passes filedByRequester and notifyRequester through', async () => {
+      const res = await create({
+        requesterPrincipalId: PRINCIPAL_ID,
+        filedByRequester: true,
+        notifyRequester: false,
+      })
+      expect(res.status).toBe(201)
+      expect(mockCreateTicket.mock.calls[0][0]).toMatchObject({
+        filedByRequester: true,
+        notifyRequester: false,
+      })
+    })
+
+    it('leaves filedByRequester and notifyRequester unset by default', async () => {
+      await create({ requesterPrincipalId: PRINCIPAL_ID })
+      const input = mockCreateTicket.mock.calls[0][0]
+      expect(input.filedByRequester).toBeUndefined()
+      expect(input.notifyRequester).toBeUndefined()
+    })
+
+    it('rejects filedByRequester without a requester', async () => {
+      const res = await create({ filedByRequester: true })
+      expect(res.status).toBe(400)
+      expect(mockCreateTicket).not.toHaveBeenCalled()
+    })
+  })
 })
 
 describe('POST /api/v1/tickets/:id/reply', () => {

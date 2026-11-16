@@ -1479,6 +1479,8 @@ export async function getTicketCreatedEmailTargets(
   context: HookContext
 ): Promise<HookTarget[]> {
   if (event.type !== 'ticket.created') return []
+  // The creating caller already acknowledged the requester (API notifyRequester: false).
+  if (event.skipRequesterAck) return []
   if (!(await isSupportTicketsEnabled())) return []
 
   const t = event.data.ticket

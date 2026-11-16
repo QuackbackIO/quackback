@@ -170,6 +170,13 @@ describe('getTicketCreatedEmailTargets', () => {
     })
   })
 
+  it('returns [] when the creating caller already acknowledged the requester', async () => {
+    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    queueSelect([{ conversationId: 'conversation_1' }])
+    const event = { ...createdEvent(), skipRequesterAck: true } as EventData
+    expect(await getTicketCreatedEmailTargets(event, context)).toEqual([])
+  })
+
   it('returns [] when there is no requester', async () => {
     // Payload lacks a requester → re-reads the row, which also has none.
     queueSelect([{ requesterPrincipalId: null, title: 'Cannot log in', assigneeTeamId: null }])

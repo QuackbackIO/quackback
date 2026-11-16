@@ -25,5 +25,6 @@ export function toLegacyEvent(event: DomainEvent): EventData {
     timestamp: event.occurredAt.toISOString(),
     actor,
     data: event.payload,
+    ...(event.context.skipRequesterAck ? { skipRequesterAck: true } : {}),
   } as unknown as EventData
 }
