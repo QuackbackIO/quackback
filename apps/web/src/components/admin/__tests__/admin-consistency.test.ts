@@ -25,6 +25,7 @@ const FIX: Record<RuleName, string> = {
   palette: 'use semantic tokens (success, warning, destructive, muted) instead of palette colours',
   ellipsis: 'use the ellipsis character (…), not three dots',
   exclamation: 'end the sentence with a full stop; the admin uses no exclamation marks',
+  uppercase: 'set labels in sentence case; drop uppercase (and its tracking-wide)',
 }
 
 describe.each(RULE_NAMES)('admin consistency: %s', (rule) => {

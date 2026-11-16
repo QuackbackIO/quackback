@@ -45,4 +45,8 @@ export const ALLOWLIST: Record<RuleName, string[]> = {
     'components/admin/settings/boards/create-board-dialog.tsx',
   ],
   exclamation: [],
+  uppercase: [
+    // Also edited by the open portal builder stack; fixed after it merges.
+    'components/admin/settings/security/audit-log-page.tsx',
+  ],
 }

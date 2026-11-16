@@ -170,6 +170,11 @@ const CASES: Array<{ rule: FileRuleName; file?: string; bad: string; good: strin
     good: `<span>Connected.</span>`,
   },
   { rule: 'exclamation', bad: `toast.success('Saved!')`, good: `cn('!mt-0', a !== b && 'x')` },
+  {
+    rule: 'uppercase',
+    bad: `<h3 className="text-xs uppercase tracking-wide">Status</h3>`,
+    good: `<h3 className="text-xs font-medium">Status</h3>`,
+  },
 ]
 
 describe('matchers', () => {

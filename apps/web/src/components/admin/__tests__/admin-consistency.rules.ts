@@ -19,6 +19,7 @@ export const RULE_NAMES = [
   'palette',
   'ellipsis',
   'exclamation',
+  'uppercase',
 ] as const
 export type RuleName = (typeof RULE_NAMES)[number]
 
@@ -196,6 +197,7 @@ export function inScope(rule: FileRuleName, file: string): boolean {
     case 'palette':
     case 'ellipsis':
     case 'exclamation':
+    case 'uppercase':
       return isAdminFile(file)
     case 'page-shell':
       return isSettingsOrAutomationFile(file) && !SHELL_PRIMITIVES.has(file)
@@ -230,6 +232,8 @@ const MATCHERS: Record<FileRuleName, (a: Analysis) => boolean> = {
   // A sentence ending in "!" ("Saved!", "Connected successfully!"). Tailwind's important
   // modifier ("!mt-0") and "!=" never follow a letter and a word boundary like this.
   exclamation: (a) => a.texts.some((text) => /[A-Za-z)][!](?:\s|$)/.test(text)),
+  // Tracked-out capitals for labels ("FEEDBACK & ROADMAPS"): the house style is sentence case.
+  uppercase: (a) => a.classTexts.some((text) => /(?:^|\s)uppercase(?:\s|$)/.test(text)),
 }
 
 /** Whether a source file breaks the rule (false for files outside its scope). */
