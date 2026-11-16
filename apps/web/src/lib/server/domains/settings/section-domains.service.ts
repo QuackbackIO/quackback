@@ -23,6 +23,7 @@ import {
 import {
   getHelpCenterConfig,
   getPortalConfig,
+  getWorkspaceSettings,
   updateHelpCenterConfig,
   updatePortalConfig,
 } from './settings.service'
@@ -91,8 +92,16 @@ export interface SectionDomainsView {
   primaryHost: string | null
 }
 
+/** Read from the workspace settings the request already holds, so the page adds no query. */
 export async function getSectionDomainsView(): Promise<SectionDomainsView> {
-  const [hosting, map] = await Promise.all([readHosting(), getSectionDomains('fresh')])
+  const workspace = await getWorkspaceSettings()
+  const hosting = hostingOf(
+    (workspace?.settings as { cloud?: unknown; cloudIdentity?: unknown } | undefined) ?? null
+  )
+  const map = effectiveSectionDomains({
+    sectionDomains: workspace?.portalConfig?.sectionDomains,
+    legacyHelpDomain: workspace?.helpCenterConfig?.domain,
+  })
   return { sectionDomains: routableSectionDomains(map, hosting), primaryHost: primaryHost(hosting) }
 }
 

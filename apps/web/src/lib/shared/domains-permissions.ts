@@ -1,5 +1,6 @@
 import { PERMISSIONS, type PermissionKey } from './permissions'
 import { EMAIL_SENDING_PERMISSION } from './email-sending-permissions'
+import { CUSTOM_DOMAINS_ANCHOR } from './section-domains'
 
 export type DomainUse = 'email' | 'customDomain' | 'signIn'
 
@@ -23,7 +24,7 @@ export const DOMAINS_PAGE_PERMISSIONS = [
 ] as const satisfies readonly PermissionKey[]
 
 /** The Custom domains card on the Domains page, where each section's domain is set. */
-export const CUSTOM_DOMAINS_ANCHOR = 'custom-domains'
+export { CUSTOM_DOMAINS_ANCHOR }
 
 /** The Cloud card where a hostname is added and its DNS records are checked. */
 export const DOMAIN_VERIFICATION_ANCHOR = 'domain-verification'

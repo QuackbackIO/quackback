@@ -22,7 +22,7 @@ import type {
   SignInDomainSummary,
 } from '@/lib/server/functions/domains-overview'
 import { PORTAL_SECTIONS, sectionOfHost, type SectionDomainMap } from '@/lib/shared/section-domains'
-import { sectionDomainState, type SectionDomainState } from '@/lib/shared/section-domain-state'
+import { sectionDomainState, type SectionDomainState } from '@/lib/shared/section-domains'
 
 export const EMPTY_DESCRIPTION = 'Use your own domain for email, web addresses and sign-in.'
 

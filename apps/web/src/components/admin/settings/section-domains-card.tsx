@@ -8,31 +8,41 @@
  * On a self-hosted server a hostname not yet verified shows the CNAME it needs.
  * On Cloud the records belong to the custom domain itself, on the card below.
  */
-import { Fragment, useState } from 'react'
+import { Fragment, lazy, Suspense, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
-import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { DnsRecordTable, type DnsRecordRow } from '@/components/shared/dns-record-table'
+import type { CheckResult } from '@/components/admin/settings/section-domain-record'
 import { StateBadge, type BadgeState } from '@/components/shared/state-badge'
-import { seedNavEditorItems } from '@/components/public/portal-header-nav'
-import { SectionDomainDialog } from '@/components/admin/settings/section-domain-dialog'
 import { errorText } from '@/lib/client/error-text'
 import { cn } from '@/lib/shared/utils'
-import { CUSTOM_DOMAINS_ANCHOR } from '@/lib/shared/domains-permissions'
+import { CUSTOM_DOMAINS_ANCHOR } from '@/lib/shared/section-domains'
 import {
   usedForLabel,
   type CustomDomainUsedFor,
   type PortalSection,
 } from '@/lib/shared/custom-domains'
-import type { SectionDomain, SectionDomainMap } from '@/lib/shared/section-domains'
-import { sectionDomainState, type SectionDomainState } from '@/lib/shared/section-domain-state'
+import { PORTAL_SECTIONS, type SectionDomainMap } from '@/lib/shared/section-domains'
+import { sectionDomainState, type SectionDomainState } from '@/lib/shared/section-domains'
 import type { PortalNavConfig } from '@/lib/shared/types/settings'
 import {
   setSectionDomainFn,
   verifySectionDomainFn,
   type SectionDomainsView,
 } from '@/lib/server/functions/section-domains'
+
+// Loaded when it opens, so the page ships only the list.
+const SectionDomainDialog = lazy(() =>
+  import('@/components/admin/settings/section-domain-dialog').then((m) => ({
+    default: m.SectionDomainDialog,
+  }))
+)
+
+// Each is loaded only when shown: a removal being confirmed, a record still awaited.
+const ConfirmDialog = lazy(() =>
+  import('@/components/shared/confirm-dialog').then((m) => ({ default: m.ConfirmDialog }))
+)
+const SectionDomainRecord = lazy(() => import('@/components/admin/settings/section-domain-record'))
 
 export const CUSTOM_DOMAINS_TITLE = 'Custom domains'
 
@@ -49,40 +59,20 @@ export function listedSections({
   sectionEnabled: Record<PortalSection, boolean>
   map: SectionDomainMap
 }): PortalSection[] {
-  return seedNavEditorItems(nav).flatMap((item) =>
-    item.type !== 'link' && (sectionEnabled[item.type] || map[item.type]) ? [item.type] : []
-  )
+  // The saved order first, then any section it does not name, as the nav editor seeds it.
+  const saved = (nav?.items ?? []).flatMap((item) => (item.type === 'link' ? [] : [item.type]))
+  const order = [...new Set([...saved, ...PORTAL_SECTIONS])]
+  return order.filter((section) => sectionEnabled[section] || map[section])
 }
+
+/** Holds a row's place where it has no menu, so every domain lines up. */
+const MENU_SPACE = <span aria-hidden="true" className="size-7 shrink-0" />
 
 const STATE_BADGE = {
   verified: null,
   pending: 'pending',
   'not-answering': 'attention',
 } as const satisfies Record<SectionDomainState, BadgeState | null>
-
-/** What the last check found, from a self-hosted verify. */
-interface CheckResult {
-  dnsResolved: boolean
-  verified: boolean
-}
-
-/** The CNAME a self-hosted section hostname needs, with what its last check found. */
-export function cnameRecord(
-  entry: SectionDomain,
-  target: string,
-  check?: CheckResult
-): DnsRecordRow {
-  const record = { label: 'Routing', type: 'CNAME', name: entry.hostname, value: target }
-  if (!check) return { ...record, state: 'waiting' }
-  if (check.verified) return { ...record, state: 'found' }
-  if (!check.dnsResolved) return { ...record, state: 'waiting' }
-  return {
-    ...record,
-    state: 'problem',
-    problem:
-      'This name resolves but does not reach this server yet. Check the CNAME and your proxy.',
-  }
-}
 
 export function SectionDomainsCard({
   view,
@@ -166,8 +156,7 @@ export function SectionDomainsCard({
           trailing={
             <>
               <span className="truncate text-foreground">{primary}</span>
-              {/* Keeps the domain in line with the section rows, which have a menu. */}
-              {!(cloud && canAdd) && <span aria-hidden="true" className="size-7 shrink-0" />}
+              {!(cloud && canAdd) && MENU_SPACE}
             </>
           }
           actions={
@@ -197,42 +186,32 @@ export function SectionDomainsCard({
                   ) : undefined
                 }
                 trailing={
-                  <span
-                    className={cn('truncate', entry ? 'text-foreground' : 'text-muted-foreground')}
-                  >
-                    {entry?.hostname ?? primary}
-                  </span>
+                  <>
+                    <span
+                      className={cn(
+                        'truncate',
+                        entry ? 'text-foreground' : 'text-muted-foreground'
+                      )}
+                    >
+                      {entry?.hostname ?? primary}
+                    </span>
+                    {!entry && MENU_SPACE}
+                  </>
                 }
+                // A section on the primary domain is quiet: Add custom domain sets it.
                 actions={
-                  canAdd || entry
+                  entry
                     ? [
-                        ...(entry
-                          ? [
-                              {
-                                label: 'Verify',
-                                onSelect: () => void verify(section),
-                                disabled: busy,
-                              },
-                            ]
-                          : []),
+                        { label: 'Verify', onSelect: () => void verify(section), disabled: busy },
                         ...(canAdd
-                          ? [
-                              {
-                                label: entry ? 'Change' : 'Add custom domain',
-                                onSelect: () => setDialog({ initial: section }),
-                              },
-                            ]
+                          ? [{ label: 'Change', onSelect: () => setDialog({ initial: section }) }]
                           : []),
-                        ...(entry
-                          ? [
-                              {
-                                label: 'Remove',
-                                onSelect: () => setRemoving(section),
-                                destructive: true,
-                                disabled: busy,
-                              },
-                            ]
-                          : []),
+                        {
+                          label: 'Remove',
+                          onSelect: () => setRemoving(section),
+                          destructive: true,
+                          disabled: busy,
+                        },
                       ]
                     : undefined
                 }
@@ -240,7 +219,9 @@ export function SectionDomainsCard({
               />
               {showsRecord && entry && (
                 <div data-slot="section-domain-records" className="px-4 pb-3 sm:px-6">
-                  <DnsRecordTable records={[cnameRecord(entry, primary, checks[section])]} />
+                  <Suspense fallback={null}>
+                    <SectionDomainRecord entry={entry} target={primary} check={checks[section]} />
+                  </Suspense>
                 </div>
               )}
             </Fragment>
@@ -255,39 +236,47 @@ export function SectionDomainsCard({
           {error}
         </p>
       )}
-      <SectionDomainDialog
-        open={dialog !== null}
-        initial={dialog?.initial ?? null}
-        cloud={cloud}
-        sections={sections}
-        map={map}
-        primaryHost={view.primaryHost}
-        readyHostnames={readyHostnames}
-        onSaved={onChanged}
-        onClose={() => setDialog(null)}
-        onMakePrimary={onMakePrimary}
-        onAddDomain={onAddDomain}
-      />
-      <ConfirmDialog
-        open={removing !== null}
-        onOpenChange={(open) => !open && setRemoving(null)}
-        title={
-          removing && removingEntry
-            ? `Stop using ${removingEntry.hostname} for ${usedForLabel(removing)}?`
-            : ''
-        }
-        description={
-          removing ? `${usedForLabel(removing)} goes back to the primary domain.` : undefined
-        }
-        confirmLabel="Remove"
-        variant="destructive"
-        isPending={busy}
-        onConfirm={() => {
-          const section = removing
-          setRemoving(null)
-          if (section) void remove(section)
-        }}
-      />
+      {dialog && (
+        <Suspense fallback={null}>
+          <SectionDomainDialog
+            open
+            initial={dialog?.initial ?? null}
+            cloud={cloud}
+            sections={sections}
+            map={map}
+            primaryHost={view.primaryHost}
+            readyHostnames={readyHostnames}
+            onSaved={onChanged}
+            onClose={() => setDialog(null)}
+            onMakePrimary={onMakePrimary}
+            onAddDomain={onAddDomain}
+          />
+        </Suspense>
+      )}
+      {removing && (
+        <Suspense fallback={null}>
+          <ConfirmDialog
+            open
+            onOpenChange={(open) => !open && setRemoving(null)}
+            title={
+              removing && removingEntry
+                ? `Stop using ${removingEntry.hostname} for ${usedForLabel(removing)}?`
+                : ''
+            }
+            description={
+              removing ? `${usedForLabel(removing)} goes back to the primary domain.` : undefined
+            }
+            confirmLabel="Remove"
+            variant="destructive"
+            isPending={busy}
+            onConfirm={() => {
+              const section = removing
+              setRemoving(null)
+              if (section) void remove(section)
+            }}
+          />
+        </Suspense>
+      )}
     </SettingsCard>
   )
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sectionDomainState } from '../section-domain-state'
+import { sectionDomainState } from '../section-domains'
 
 const AT = '2026-11-01T00:00:00.000Z'
 

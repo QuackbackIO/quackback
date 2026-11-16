@@ -96,7 +96,7 @@ describe('ChannelsHubPage', () => {
   it("shows the portal Support section's custom domain read-only", () => {
     seed(WORKING_GITHUB)
     renderPage()
-    expect(screen.getByRole('heading', { name: 'Custom domain' })).toBeTruthy()
+    expect(screen.getByText('Custom domain')).toBeTruthy()
     expect(screen.getByText('support.acme.com')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Custom domains' }).getAttribute('href')).toBe(
       '/admin/settings/domains'

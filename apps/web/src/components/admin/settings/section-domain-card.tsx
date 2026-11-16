@@ -6,20 +6,18 @@
  */
 import { useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { StateBadge } from '@/components/shared/state-badge'
-import { CUSTOM_DOMAINS_ANCHOR } from '@/lib/shared/domains-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PortalSection } from '@/lib/shared/custom-domains'
 import {
+  CUSTOM_DOMAINS_ANCHOR,
   effectiveSectionDomains,
   normalizeHost,
+  sectionDomainState,
   type SectionDomainMap,
 } from '@/lib/shared/section-domains'
-import { sectionDomainState } from '@/lib/shared/section-domain-state'
-import { cn } from '@/lib/shared/utils'
 import {
   useBaseUrl,
   useHasPermission,
@@ -40,40 +38,30 @@ export function SectionDomainCard({
 }) {
   const entry = map[section]
   const state = entry ? sectionDomainState(entry) : null
+  // Label left, value right, as a detail row reads; kept plain, it sits on many pages.
   return (
-    <SettingsCard title="Custom domain">
-      <SettingRows>
-        <SettingRow
-          label="Domain"
-          description={entry ? undefined : 'Primary domain'}
-          badge={
-            state === 'pending' ? (
-              <StateBadge state="pending" />
-            ) : state === 'not-answering' ? (
-              <StateBadge state="attention" />
-            ) : undefined
-          }
-          control={
-            <>
-              <span
-                className={cn(
-                  'text-sm wrap-anywhere',
-                  entry ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                {entry?.hostname ?? primaryHost}
-              </span>
-              {canManage && (
-                <Button variant="outline" size="sm" asChild>
-                  <Link to="/admin/settings/domains" hash={CUSTOM_DOMAINS_ANCHOR}>
-                    Custom domains
-                  </Link>
-                </Button>
-              )}
-            </>
-          }
-        />
-      </SettingRows>
+    <SettingsCard>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-sm">
+        <span className="flex items-center gap-2 font-medium">
+          Custom domain
+          {state === 'pending' && <StateBadge state="pending" />}
+          {state === 'not-answering' && <StateBadge state="attention" />}
+        </span>
+        <span className="flex items-center gap-3">
+          <span className={entry ? undefined : 'text-muted-foreground'}>
+            {entry?.hostname ?? `${primaryHost} (primary domain)`}
+          </span>
+          {canManage && (
+            <Link
+              to="/admin/settings/domains"
+              hash={CUSTOM_DOMAINS_ANCHOR}
+              className={`${INLINE_LINK} text-[13px]`}
+            >
+              Custom domains
+            </Link>
+          )}
+        </span>
+      </div>
     </SettingsCard>
   )
 }

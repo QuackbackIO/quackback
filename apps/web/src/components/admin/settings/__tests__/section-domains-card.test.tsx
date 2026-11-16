@@ -13,7 +13,8 @@ vi.mock('@/lib/server/functions/section-domains', () => ({
   verifySectionDomainFn: verifySectionDomain,
 }))
 
-const { SectionDomainsCard, cnameRecord, listedSections } = await import('../section-domains-card')
+const { SectionDomainsCard, listedSections } = await import('../section-domains-card')
+const { cnameRecord } = await import('../section-domain-record')
 
 beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
@@ -89,6 +90,12 @@ describe('listedSections', () => {
 })
 
 describe('Custom domains card', () => {
+  it('gives a section on the primary domain no menu: Add custom domain sets it', () => {
+    renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: AT } } })
+    expect(screen.queryByRole('button', { name: 'Actions for Status' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Actions for Help center' })).toBeInTheDocument()
+  })
+
   it('rows the portal, then each section, with its domain or the primary domain', () => {
     renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: AT } } })
     const card = screen.getByRole('heading', { name: 'Custom domains' }).closest('section')!
@@ -119,8 +126,9 @@ describe('Custom domains card', () => {
     expect(row('Status')).toHaveTextContent('Not answering')
   })
 
-  it('self-hosted: shows the CNAME a pending domain needs, pointing at this server', () => {
+  it('self-hosted: shows the CNAME a pending domain needs, pointing at this server', async () => {
     renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: null } } })
+    await screen.findByText('CNAME')
     const record = document.querySelector('[data-slot="section-domain-records"]')!
     expect(record).toHaveTextContent('CNAME')
     expect(record).toHaveTextContent('help.acme.com')
@@ -155,7 +163,7 @@ describe('Custom domains card', () => {
     setSectionDomain.mockResolvedValue({ ok: true, sectionDomains: {} })
     renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: AT } }, onChanged })
     await pick('Help center', 'Remove')
-    const confirm = screen.getByRole('alertdialog')
+    const confirm = await screen.findByRole('alertdialog')
     expect(confirm).toHaveTextContent('Stop using help.acme.com for Help center?')
     fireEvent.click(within(confirm).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
@@ -165,14 +173,14 @@ describe('Custom domains card', () => {
   it('opens Change on that section', async () => {
     renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: AT } } })
     await pick('Help center', 'Change')
-    const dialog = screen.getByRole('dialog')
+    const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('radio', { name: /^Help center/ })).toBeChecked()
   })
 
-  it('adds a custom domain from the card, asking what it is used for first', () => {
+  it('adds a custom domain from the card, asking what it is used for first', async () => {
     renderCard()
     fireEvent.click(screen.getByRole('button', { name: 'Add custom domain' }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('Used for')
     expect(within(dialog).queryByLabelText('Domain')).toBeNull()
   })

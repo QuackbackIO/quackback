@@ -6,7 +6,7 @@
  * The domain itself is removed only once no use holds it. A viewer sees only
  * the uses whose permission they hold.
  */
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import type { DomainUse, DomainUseLinks, UseLink } from '@/lib/shared/domains-permissions'
@@ -55,7 +55,11 @@ import {
   type DomainUseStatus,
 } from './domains-overview'
 import { AddCustomDomainDialog, type AddCustomDomainTarget } from './add-custom-domain-dialog'
-import { SectionDomainDialog } from './section-domain-dialog'
+
+// Loaded when it opens: most visits never add a custom domain here.
+const SectionDomainDialog = lazy(() =>
+  import('./section-domain-dialog').then((m) => ({ default: m.SectionDomainDialog }))
+)
 
 /** The name of the page a use is set up on, as its link reads. */
 function pageName(use: DomainUse): string {
@@ -433,19 +437,21 @@ function UsesCard({
         onAdd={addWebAddress}
         onClose={() => setWebDialog(null)}
       />
-      {!setup.cloud && (
-        <SectionDomainDialog
-          open={sectionDialog}
-          initial={null}
-          cloud={false}
-          sections={setup.sections}
-          map={setup.sectionDomains?.sectionDomains ?? {}}
-          primaryHost={setup.sectionDomains?.primaryHost ?? null}
-          readyHostnames={[]}
-          suffix={name}
-          onSaved={onChanged}
-          onClose={() => setSectionDialog(false)}
-        />
+      {!setup.cloud && sectionDialog && (
+        <Suspense fallback={null}>
+          <SectionDomainDialog
+            open
+            initial={null}
+            cloud={false}
+            sections={setup.sections}
+            map={setup.sectionDomains?.sectionDomains ?? {}}
+            primaryHost={setup.sectionDomains?.primaryHost ?? null}
+            readyHostnames={[]}
+            suffix={name}
+            onSaved={onChanged}
+            onClose={() => setSectionDialog(false)}
+          />
+        </Suspense>
       )}
     </SettingsCard>
   )

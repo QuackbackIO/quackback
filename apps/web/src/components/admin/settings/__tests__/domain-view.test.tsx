@@ -330,9 +330,11 @@ describe('domain view set up', () => {
   })
 
   /** The section tiles, then the name in front of the domain, then Save. */
-  const chooseSection = (section: string) =>
+  const chooseSection = async (section: string) =>
     fireEvent.click(
-      within(screen.getByRole('dialog')).getByRole('radio', { name: new RegExp(`^${section}`) })
+      within(await screen.findByRole('dialog')).getByRole('radio', {
+        name: new RegExp(`^${section}`),
+      })
     )
 
   it('self-hosted: asks what the domain is used for, then takes a name on it', async () => {
@@ -340,10 +342,10 @@ describe('domain view set up', () => {
     setSectionDomain.mockResolvedValue({ ok: true, sectionDomains: {} })
     renderView(rowWith({}), { onChanged })
     setUp('Custom domains')
-    const dialog = screen.getByRole('dialog')
+    const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('Used for')
     expect(within(dialog).queryByLabelText('Domain')).toBeNull()
-    chooseSection('Help center')
+    await chooseSection('Help center')
     expect(within(dialog).getByLabelText('Domain')).toHaveValue('help')
     expect(dialog).toHaveTextContent('.acme.com')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
@@ -358,17 +360,17 @@ describe('domain view set up', () => {
     setSectionDomain.mockResolvedValue({ ok: true, sectionDomains: {} })
     renderView(rowWith({}))
     setUp('Custom domains')
-    chooseSection('Status')
+    await chooseSection('Status')
     const dialog = screen.getByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText('Domain'), { target: { value: '' } })
     // Nothing typed: nothing to save yet.
     expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 
-  it('refuses a name that is not one, and changes nothing', () => {
+  it('refuses a name that is not one, and changes nothing', async () => {
     renderView(rowWith({}))
     setUp('Custom domains')
-    chooseSection('Help center')
+    await chooseSection('Help center')
     const dialog = screen.getByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText('Domain'), { target: { value: 'help desk' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))

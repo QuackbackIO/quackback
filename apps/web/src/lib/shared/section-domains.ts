@@ -27,6 +27,22 @@ export interface SectionDomain {
   unconfirmedSince?: string | null
 }
 
+/** The Custom domains card on Settings > Domains, where each section's domain is set. */
+export const CUSTOM_DOMAINS_ANCHOR = 'custom-domains'
+
+/** Where one section's hostname stands, as the admin pages name it. */
+export type SectionDomainState = 'verified' | 'pending' | 'not-answering'
+
+/**
+ * Verified once it reaches this server; pending until then. A verification
+ * kept while the hostname's lookups go unanswered (self-hosted) is "not
+ * answering", whether or not its grace has run out.
+ */
+export function sectionDomainState(entry: SectionDomain): SectionDomainState {
+  if (entry.unconfirmedSince) return 'not-answering'
+  return entry.verifiedAt ? 'verified' : 'pending'
+}
+
 /** How long routing keeps a verification whose lookups go unanswered: the domain ownership grace. */
 export const UNCONFIRMED_GRACE_MS = 7 * 24 * 60 * 60 * 1000
 
