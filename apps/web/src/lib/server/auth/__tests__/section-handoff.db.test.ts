@@ -1,23 +1,39 @@
 // @vitest-environment node
 /**
- * Signing in across section hosts, against real Postgres and a real Better
- * Auth instance. The workspace serves acme.com (primary), help.acme.com and
- * status.acme.com. Each test drives the three legs as the browser would:
+ * Signing in across section hosts, against real Postgres and the PRODUCTION
+ * auth instance (`getAuth()`: the real hooks, cookie settings and trusted
+ * origins). The workspace serves acme.com (primary), help.acme.com and
+ * status.acme.com. Each test drives the three steps as the browser would:
  * begin on the target, mint on the source, finish on the target.
  *
- * A double that answers "valid" or "invalid" cannot tell a replay from an
- * expiry from a token for another host, so the token rows are real rows and
- * the session cookie comes from the library itself.
+ * Only the section table, the request headers and the logger are stood in
+ * for. A double that answers "valid" or "invalid" cannot tell a replay from an
+ * expiry from a token for another host, so the rows are real rows and every
+ * cookie comes from the auth library itself.
  *
- * Every write rolls back with the fixture transaction.
+ * Every write rolls back with the fixture transaction. Like every *.db.test.ts
+ * it is skipped when no Postgres is reachable.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { betterAuth } from 'better-auth'
-import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { oneTimeToken } from 'better-auth/plugins'
-import { createId } from '@quackback/ids'
+import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { user, session, account, verification, like } from '@/lib/server/db'
+import {
+  like,
+  oauthResource,
+  principal,
+  session,
+  settings,
+  user,
+  verification,
+} from '@/lib/server/db'
+import { ensureMcpOauthResource } from '@/lib/server/auth/ensure-mcp-oauth-resource'
+import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+
+vi.hoisted(() => {
+  process.env.BASE_URL = 'https://acme.com'
+  process.env.SECRET_KEY = 'test-secret-key-for-section-handoff-0123456789'
+})
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -25,30 +41,27 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 const hoisted = vi.hoisted(() => {
-  const handler = vi.fn()
-  const getSession = vi.fn()
   const logCalls: unknown[][] = []
-  const record =
-    () =>
-    (...args: unknown[]) => {
-      logCalls.push(args)
+  const log: Record<string, unknown> = new Proxy(
+    {},
+    {
+      get: (_target, prop) => {
+        if (prop === 'child') return () => log
+        if (prop === 'level') return 'info'
+        if (prop === 'isLevelEnabled') return () => true
+        if (prop === 'then') return undefined
+        return (...args: unknown[]) => {
+          logCalls.push(args)
+        }
+      },
     }
-  const log = {
-    info: record(),
-    warn: record(),
-    error: record(),
-    debug: record(),
-    child: () => log,
-  }
+  )
   return {
-    handler,
-    getSession,
     logCalls,
     log,
-    auth: {
-      handler: (...args: unknown[]) => handler(...args),
-      api: { getSession: (...args: unknown[]) => getSession(...args) },
-    },
+    /** When set, the session lookup fails with this error. */
+    failSession: null as Error | null,
+    requestHeaders: new Headers(),
     origins: {
       primary: 'https://acme.com',
       feedback: 'https://acme.com',
@@ -61,10 +74,53 @@ const hoisted = vi.hoisted(() => {
   }
 })
 
-vi.mock('@/lib/server/auth', () => ({ auth: hoisted.auth }))
 vi.mock('@/lib/server/logger', () => ({ logger: hoisted.log }))
 vi.mock('@/lib/server/domains/settings/section-links', () => ({
+  getSignInSectionOrigins: async () => hoisted.origins,
   getSectionOrigins: async () => hoisted.origins,
+}))
+// The real auth instance, with one fault switch on its session lookup.
+vi.mock('@/lib/server/auth', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/server/auth')>()
+  return {
+    ...real,
+    auth: {
+      handler: (request: Request) => real.auth.handler(request),
+      get api() {
+        return new Proxy(real.auth.api, {
+          get: (target, prop) =>
+            prop === 'getSession' && hoisted.failSession
+              ? async () => {
+                  throw hoisted.failSession
+                }
+              : (target as Record<string | symbol, unknown>)[prop],
+        })
+      },
+    },
+  }
+})
+vi.mock('@tanstack/react-start/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-start/server')>()),
+  getRequestHeaders: () => hoisted.requestHeaders,
+}))
+// Server functions run their own validator, as the server does.
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-start')>()),
+  createServerFn: () => {
+    let schema: { parse: (value: unknown) => unknown } | null = null
+    const chain: Record<string, unknown> = {}
+    chain.validator = (next: { parse: (value: unknown) => unknown }) => {
+      schema = next
+      return chain
+    }
+    chain.handler = (handler: (args: { data?: unknown }) => Promise<unknown>) =>
+      Object.assign(
+        async (args?: { data?: unknown }) =>
+          handler({ data: schema ? schema.parse(args?.data) : args?.data }),
+        chain
+      )
+    return chain
+  },
 }))
 
 const { beginSectionHandoff, mintSectionHandoff, finishSectionHandoff, SECTION_STATE_COOKIE } =
@@ -73,7 +129,7 @@ const { beginSectionHandoff, mintSectionHandoff, finishSectionHandoff, SECTION_S
 const fixture = await createDbTestFixture({
   probe: async (db) => {
     await db.select({ id: user.id }).from(user).limit(0)
-    await db.select({ id: session.id, token: session.token }).from(session).limit(0)
+    await db.select({ id: session.id, scope: session.scope }).from(session).limit(0)
     await db.select({ identifier: verification.identifier }).from(verification).limit(0)
   },
 })
@@ -115,49 +171,92 @@ async function handoffRows(): Promise<number> {
 }
 
 describe.skipIf(!fixture.available)('section handoff', () => {
+  /** The owner's real dashboard session on the primary domain. */
   let sourceCookie: string
-  let realGetSession: (args: { headers: Headers }) => Promise<unknown>
+  let sourceToken: string
+  let ownerId: UserId
+
+  async function getAuth() {
+    const { getAuth } = await import('@/lib/server/auth/index')
+    return getAuth()
+  }
+
+  /** The session a cookie stands for, read by the production instance. */
+  async function sessionOf(cookie: string) {
+    const auth = await getAuth()
+    return (await auth.api.getSession({ headers: new Headers({ cookie }) })) as {
+      user: { id: string }
+      session: { id: string; token: string; scope?: string }
+    } | null
+  }
 
   beforeEach(async () => {
     await fixture.begin()
-    hoisted.handler.mockReset()
-    hoisted.getSession.mockReset()
     hoisted.logCalls.length = 0
-    const auth = betterAuth({
-      baseURL: 'https://acme.com',
-      secret: 'test-secret-not-used-for-anything-real-0123456789',
-      trustedOrigins: ['https://acme.com'],
-      database: drizzleAdapter(testDb, {
-        provider: 'pg',
-        schema: { user, session, account, verification },
-      }),
-      emailAndPassword: { enabled: true },
-      advanced: {
-        defaultCookieAttributes: { sameSite: 'lax', secure: true },
-        database: {
-          generateId: ({ model }) => (model === 'user' ? createId('user') : crypto.randomUUID()),
-        },
-      },
-      plugins: [oneTimeToken({ expiresIn: 10 })],
+    hoisted.failSession = null
+    hoisted.requestHeaders = new Headers()
+    await ensureMcpOauthResource({
+      db: testDb as unknown as Parameters<typeof ensureMcpOauthResource>[0]['db'],
+      table: oauthResource,
+      identifier: 'https://acme.com/api/mcp',
+      allowedScopes: API_KEY_SCOPES,
     })
-    hoisted.handler.mockImplementation((request: Request) => auth.handler(request))
-    realGetSession = (args) => auth.api.getSession(args)
-    hoisted.getSession.mockImplementation((args: { headers: Headers }) => realGetSession(args))
+    if ((await testDb.select({ id: settings.id }).from(settings)).length === 0) {
+      await testDb.insert(settings).values({
+        id: createId('workspace'),
+        name: 'Acme',
+        slug: `acme-${suffix()}`,
+        createdAt: new Date(),
+      })
+    }
 
-    const signUp = await auth.api.signUpEmail({
-      body: {
-        email: `jo-${suffix()}@example.com`,
-        password: 'correct-horse-battery',
-        name: 'Jo',
-      },
-      asResponse: true,
+    // The workspace owner, an admin, signed in on the primary domain.
+    ownerId = createId('user') as UserId
+    await testDb.insert(user).values({
+      id: ownerId,
+      name: 'Owner',
+      email: `owner-${suffix()}@example.com`,
+      emailVerified: true,
     })
-    sourceCookie = signUp.headers
+    await testDb.insert(principal).values({
+      id: createId('principal') as PrincipalId,
+      userId: ownerId,
+      role: 'admin',
+      displayName: 'Owner',
+      createdAt: new Date(),
+    })
+    sourceToken = `src${suffix()}${suffix()}`
+    await testDb.insert(session).values({
+      id: `sess-${suffix()}`,
+      token: sourceToken,
+      userId: ownerId,
+      scope: 'dashboard',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      updatedAt: new Date(),
+    })
+    // Its cookie, as the production instance signs it.
+    const ott = `ott${suffix()}`
+    await testDb.insert(verification).values({
+      id: crypto.randomUUID(),
+      identifier: `one-time-token:${ott}`,
+      value: sourceToken,
+      expiresAt: new Date(Date.now() + 60 * 1000),
+    })
+    const auth = await getAuth()
+    const verified = await auth.handler(
+      new Request('https://acme.com/api/auth/one-time-token/verify', {
+        method: 'POST',
+        headers: { origin: 'https://acme.com', 'content-type': 'application/json' },
+        body: JSON.stringify({ token: ott }),
+      })
+    )
+    sourceCookie = verified.headers
       .getSetCookie()
       .map(cookiePair)
-      .filter((pair) => pair.includes('session_token'))
+      .filter((pair) => pair.includes('session_token='))
       .join('; ')
     expect(sourceCookie).toContain('session_token=')
+    hoisted.logCalls.length = 0
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
@@ -214,14 +313,11 @@ describe.skipIf(!fixture.available)('section handoff', () => {
     expect(done.headers.get('location')).toBe('/hc/articles/x?ref=nav')
     const installed = sessionCookieOf(done)
     expect(installed).toBeTruthy()
-    // The same session the source holds, signed in on the target.
-    const session = await realGetSession({
-      headers: new Headers({ cookie: cookiePair(installed!) }),
-    })
-    const source = await realGetSession({ headers: new Headers({ cookie: sourceCookie }) })
-    expect((session as { user: { id: string } }).user.id).toBe(
-      (source as { user: { id: string } }).user.id
-    )
+    // The same person, signed in on the target with a session of its own.
+    const carried = await sessionOf(cookiePair(installed!))
+    expect(carried?.user.id).toBe(ownerId)
+    expect(carried?.session.token).not.toBe(sourceToken)
+    expect(carried?.session.scope).toBe('portal')
   })
 
   it('installs a host-only cookie with the attributes of a normal sign-in', async () => {
@@ -365,10 +461,7 @@ describe.skipIf(!fixture.available)('section handoff', () => {
       expect(setCookies(response).some((c) => c.startsWith(SECTION_STATE_COOKIE))).toBe(false)
     })
 
-    it('reads the host the edge vouches for, not a spoofed Host header', async () => {
-      // A request whose Host is help.acme.com but whose URL says another host
-      // still resolves to the Host header (requestWorkspaceHost). A Host that
-      // is not a workspace host gets nothing.
+    it('starts nothing on a Host that is not one of this workspace hosts', async () => {
       const response = await beginSectionHandoff(
         get('evil.example', '/auth/section-handoff?from=acme.com&returnTo=%2Fhc')
       )
@@ -466,9 +559,7 @@ describe.skipIf(!fixture.available)('section handoff', () => {
 
     it('logs a failure by its kind only, never the error that may quote a credential', async () => {
       // A failed query's message carries its parameters: here, session tokens.
-      hoisted.getSession.mockRejectedValue(
-        new Error(`Failed query, params: ${sourceCookie} handoff-token-secret`)
-      )
+      hoisted.failSession = new Error(`Failed query, params: ${sourceCookie} handoff-token-secret`)
       await beginSectionHandoff(
         get(HELP, '/auth/section-handoff?from=acme.com&returnTo=%2Fhc', sourceCookie)
       )
@@ -486,6 +577,16 @@ describe.skipIf(!fixture.available)('section handoff', () => {
       expect(JSON.stringify(logged)).not.toContain('handoff-token-secret')
     })
 
+    it('never stores the source session token', async () => {
+      await beginAndMint()
+      const rows = await testDb
+        .select({ value: verification.value })
+        .from(verification)
+        .where(like(verification.identifier, 'section-handoff:%'))
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!.value).not.toContain(sourceToken)
+    })
+
     it('never logs the token, on success or failure', async () => {
       const { finishUrl, stateCookie } = await beginAndMint()
       const token = finishUrl.searchParams.get('token')!
@@ -494,5 +595,103 @@ describe.skipIf(!fixture.available)('section handoff', () => {
       expect(hoisted.logCalls.length).toBeGreaterThan(0)
       expect(JSON.stringify(hoisted.logCalls)).not.toContain(token)
     })
+  })
+
+  describe('a hostile target host', () => {
+    // Someone who controls a mapped section host (a lapsed domain, a dangling
+    // record) sends the owner a mint link with a state of their own choosing.
+    // The owner's browser carries the primary domain's session cookie on that
+    // cross-site GET, and the finish request lands on the attacker's server,
+    // who replays it to the real server with their own state cookie.
+    async function attackerFinish() {
+      const attackerState = 'attacker-chosen-state'
+      const { createHash } = await import('node:crypto')
+      const stateHash = createHash('sha256').update(attackerState).digest('hex')
+      const minted = await mintSectionHandoff(
+        get(
+          PRIMARY,
+          `/auth/section-handoff?${new URLSearchParams({
+            leg: 'mint',
+            to: HELP,
+            state: stateHash,
+            returnTo: '/',
+          }).toString()}`,
+          sourceCookie
+        )
+      )
+      const finishUrl = location(minted)
+      return finish(finishUrl, HELP, `${SECTION_STATE_COOKIE}=${attackerState}`)
+    }
+
+    it('never yields the source session or its token', async () => {
+      const done = await attackerFinish()
+      const installed = sessionCookieOf(done)
+      // The attacker does get a session for the owner on that host...
+      expect(installed).toBeTruthy()
+      expect(installed).not.toContain(sourceToken)
+      const carried = await sessionOf(cookiePair(installed!))
+      expect(carried?.session.token).not.toBe(sourceToken)
+      expect(carried?.session.scope).toBe('portal')
+    })
+
+    it('yields nothing that opens /admin', async () => {
+      const installed = cookiePair(sessionCookieOf(await attackerFinish())!)
+      const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
+      const adminGate = () =>
+        requireWorkspaceRole({ data: { allowedRoles: ['admin', 'member'], callbackUrl: '/admin' } })
+
+      // The source session opens it (so this gate can tell the two apart)...
+      hoisted.requestHeaders = new Headers({ cookie: sourceCookie })
+      await expect(adminGate()).resolves.toMatchObject({ principal: { role: 'admin' } })
+
+      // ...the handed-off one does not.
+      hoisted.requestHeaders = new Headers({ cookie: installed })
+      const refused = await adminGate().then(
+        () => null,
+        (err: { options?: unknown }) => err
+      )
+      // A redirect to sign-in as a teammate, not the admin page.
+      expect(JSON.stringify(refused?.options ?? refused)).toContain('not_team_member')
+    })
+
+    it('yields nothing that passes an admin server function gate', async () => {
+      const installed = cookiePair(sessionCookieOf(await attackerFinish())!)
+      const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
+
+      hoisted.requestHeaders = new Headers({ cookie: sourceCookie })
+      await expect(requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })).resolves.toMatchObject(
+        { scope: 'dashboard' }
+      )
+
+      hoisted.requestHeaders = new Headers({ cookie: installed })
+      await expect(requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })).rejects.toThrow(
+        /dashboard session/
+      )
+      const plain = await requireAuth()
+      expect(plain.scope).toBe('portal')
+      expect(plain.permissions).toEqual([])
+      expect(plain.principal.role).toBe('user')
+    })
+
+    it('ends the carried session no later than the source session', async () => {
+      const installed = cookiePair(sessionCookieOf(await attackerFinish())!)
+      const carried = await sessionOf(installed)
+      const [source] = await testDb
+        .select({ expiresAt: session.expiresAt })
+        .from(session)
+        .where(like(session.token, sourceToken))
+      const [row] = await testDb
+        .select({ expiresAt: session.expiresAt })
+        .from(session)
+        .where(like(session.id, carried!.session.id))
+      expect(row!.expiresAt.getTime()).toBeLessThanOrEqual(source!.expiresAt.getTime())
+    })
+  })
+
+  it('does not carry a widget session', async () => {
+    await testDb.update(session).set({ scope: 'widget' }).where(like(session.token, sourceToken))
+    const { minted } = await beginAndMint()
+    expect(location(minted).searchParams.get('token')).toBeNull()
+    expect(await handoffRows()).toBe(0)
   })
 })

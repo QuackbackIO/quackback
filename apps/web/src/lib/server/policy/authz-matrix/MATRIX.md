@@ -99,6 +99,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | status_page.manage | status_page | ✓ | · |
 | status_page.publish | status_page | ✓ | ✓ |
 
+### Session reach beyond the gated surfaces
+
+- **settings.custom_domain**: Maps section hostnames. Each verified section host (on Cloud a ready custom domain; self-hosted, one whose lookups still answer) becomes a trusted sign-in origin and a host a signed-in session can be carried to through the section handoff. A carried session is a new portal-scope session for the same person: it never holds team permissions, so it cannot open /admin or pass a permission gate.
+
 ## 2. Surfaces and their enforced authorization
 
 ### Server functions (`requireAuth`) — 772 surfaces

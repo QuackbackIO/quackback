@@ -4,12 +4,12 @@
  *
  *   begin  (target) state cookie, then to the source's mint
  *   mint   (source) a single-use token bound to the target host and the state
- *   finish (target) burn the token, check host and state, install the session
+ *   finish (target) burn the token, check host and state, sign in a new session
  *
  * What each property rests on:
  *
  *  - Hosts. Every host is checked against this workspace's own: the primary
- *    domain and the routable section hosts (`getSectionOrigins`, the same
+ *    domain and the routable section hosts (`getSignInSectionOrigins`, the same
  *    table links and routing use). The request's host is the one the edge
  *    vouches for (`requestWorkspaceHost`), never a forwarded header. A token
  *    names the one host it may be finished on; on Cloud it also lives only in
@@ -20,20 +20,30 @@
  *  - Bound to the browser. The begin leg sets a random state in a `__Host-`
  *    cookie on the target; the token carries its hash. A token minted in an
  *    attacker's browser cannot sign a victim's browser in as the attacker.
- *  - The session cookie is installed by the auth library's own one-time-token
- *    verify (`verifyOttCookies`), so it has exactly the attributes of a
- *    normal sign-in and no Domain: host-only on the target. The inner token
- *    is made and spent inside this request and never leaves the server.
+ *  - The source session never moves. The token names the user and the
+ *    source session's id, never its token. The finish checks that session is
+ *    still live and signs the user in with a NEW session, always portal
+ *    scope: it never carries team authority, so it cannot open /admin or pass
+ *    a permission gate (`requireAuth`, `requireWorkspaceRole`), even if the
+ *    target host turns out to be hostile. Widget sessions are not carried.
+ *  - The new session's cookie is installed by the auth library's own
+ *    one-time-token verify (`verifyOttCookies`), so it has exactly the
+ *    attributes of a normal sign-in and no Domain: host-only on the target.
+ *    The inner token is made and spent inside this request.
+ *  - Only confirmed hosts. A self-hosted section host whose verification is
+ *    only kept (lookups unanswered) is never a handoff host
+ *    (`getSignInSectionOrigins`).
  *  - No leaks. Every leg answers `Referrer-Policy: no-referrer` and
  *    `Cache-Control: no-store`; the finish lands on returnTo, so the token is
  *    gone from the address bar and from history. Nothing here logs a token.
  *  - Failure lands on the target page signed out, never on an error page.
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
-import { and, db, eq, like, lt, verification } from '@/lib/server/db'
+import { and, db, eq, gt, like, lt, session, verification } from '@/lib/server/db'
+import type { UserId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
-import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import { getSignInSectionOrigins } from '@/lib/server/domains/settings/section-links'
 import { normalizeHost } from '@/lib/shared/section-domains'
 import { SECTION_HANDOFF_PATH, handoffReturnTo } from '@/lib/shared/section-handoff'
 import type { SectionOrigins } from '@/lib/shared/section-links'
@@ -57,8 +67,10 @@ const INSECURE_STATE_COOKIE = 'qb_section_handoff'
 const SHA256_HEX = /^[0-9a-f]{64}$/
 
 interface StoredHandoff {
-  /** The session token being carried. */
-  s: string
+  /** The user being signed in on the target. */
+  u: string
+  /** The source session's id (never its token): it must still be live at the finish. */
+  sid: string
   /** The one host the token may be finished on. */
   h: string
   /** SHA-256 of the state the target set in its cookie. */
@@ -140,11 +152,18 @@ function isSecureOrigin(origin: string | undefined): boolean {
   return !origin || origin.startsWith('https:')
 }
 
-async function hasSession(headers: Headers): Promise<{ token: string } | null> {
+interface SourceSession {
+  id: string
+  userId: string
+  scope: unknown
+}
+
+async function hasSession(headers: Headers): Promise<SourceSession | null> {
   try {
     const { auth } = await import('@/lib/server/auth')
     const found = await auth.api.getSession({ headers })
-    return found?.session?.token ? { token: found.session.token } : null
+    const s = found?.session as { id?: string; userId?: string; scope?: unknown } | undefined
+    return s?.id && s.userId ? { id: s.id, userId: s.userId, scope: s.scope } : null
   } catch (err) {
     log.warn(errorKind(err), 'session lookup failed; treating the viewer as signed out')
     return null
@@ -162,7 +181,7 @@ interface HandoffRequest {
 
 async function readRequest(request: Request): Promise<HandoffRequest> {
   const url = new URL(request.url)
-  const origins = await getSectionOrigins()
+  const origins = await getSignInSectionOrigins()
   return {
     url,
     host: normalizeHost(requestWorkspaceHost(request)),
@@ -213,11 +232,12 @@ export async function mintSectionHandoff(request: Request): Promise<Response> {
     log.info({ reason: 'bad_state' }, 'section handoff not minted')
     return redirect(signedOut)
   }
-  const session = await hasSession(request.headers)
-  if (!session) return redirect(signedOut)
+  const source = await hasSession(request.headers)
+  // A widget session is a Bearer for the widget; it is never carried.
+  if (!source || source.scope === 'widget') return redirect(signedOut)
 
   const token = randomToken()
-  const stored: StoredHandoff = { s: session.token, h: toHost, b: stateHash }
+  const stored: StoredHandoff = { u: source.userId, sid: source.id, h: toHost, b: stateHash }
   try {
     await db.insert(verification).values({
       id: crypto.randomUUID(),
@@ -263,11 +283,12 @@ async function spendToken(token: string): Promise<StoredHandoff | null> {
   try {
     const parsed = JSON.parse(row.value) as Partial<StoredHandoff>
     if (
-      typeof parsed.s === 'string' &&
+      typeof parsed.u === 'string' &&
+      typeof parsed.sid === 'string' &&
       typeof parsed.h === 'string' &&
       typeof parsed.b === 'string'
     ) {
-      return { s: parsed.s, h: parsed.h, b: parsed.b }
+      return { u: parsed.u, sid: parsed.sid, h: parsed.h, b: parsed.b }
     }
   } catch {
     // An unreadable row is no token.
@@ -275,11 +296,54 @@ async function spendToken(token: string): Promise<StoredHandoff | null> {
   return null
 }
 
+/** The source session, while it is still live, and when it expires. */
+async function liveSourceSession(stored: StoredHandoff): Promise<{ expiresAt: Date } | null> {
+  const [row] = await db
+    .select({ expiresAt: session.expiresAt })
+    .from(session)
+    .where(
+      and(
+        eq(session.id, stored.sid),
+        eq(session.userId, stored.u as UserId),
+        gt(session.expiresAt, new Date())
+      )
+    )
+    .limit(1)
+  return row ?? null
+}
+
 /**
- * Install the carried session through the auth library's own verify, so the
- * cookie is exactly a normal sign-in's. The verify is asked as the primary
- * origin, which the library always trusts; the cookie it sets carries no
- * Domain, so the browser keeps it for this host only.
+ * A new session for the user, portal scope, ending no later than the source
+ * session. Created through the auth library so its hooks and token format
+ * apply; the scope is then read back, so a session that is not portal scope
+ * is never installed.
+ */
+async function createPortalSession(userId: string, expiresAt: Date): Promise<string | null> {
+  const { getAuth } = await import('@/lib/server/auth')
+  const context = await (await getAuth()).$context
+  const created = (await context.internalAdapter.createSession(
+    userId,
+    false,
+    { scope: 'portal', expiresAt },
+    true
+  )) as { id?: string; token?: string } | null
+  if (!created?.id || !created.token) return null
+  await db.update(session).set({ scope: 'portal' }).where(eq(session.id, created.id))
+  const [row] = await db
+    .select({ scope: session.scope })
+    .from(session)
+    .where(eq(session.id, created.id))
+    .limit(1)
+  if (row?.scope === 'portal') return created.token
+  await db.delete(session).where(eq(session.id, created.id))
+  return null
+}
+
+/**
+ * Install a session through the auth library's own verify, so the cookie is
+ * exactly a normal sign-in's. The verify is asked as the primary origin, which
+ * the library always trusts; the cookie it sets carries no Domain, so the
+ * browser keeps it for this host only.
  */
 async function installSession(
   sessionToken: string,
@@ -335,10 +399,17 @@ export async function finishSectionHandoff(request: Request): Promise<Response> 
   const state = readCookie(request, stateCookieName(secure))
   if (!state || !sameHash(sha256(state), stored.b)) return signedOut('state_mismatch')
 
-  const cookies = await installSession(stored.s, returnTo, primaryOrigin).catch((err: unknown) => {
+  const cookies = await (async () => {
+    const source = await liveSourceSession(stored)
+    if (!source) return 'source_session_ended' as const
+    const token = await createPortalSession(stored.u, source.expiresAt)
+    if (!token) return null
+    return installSession(token, returnTo, primaryOrigin)
+  })().catch((err: unknown) => {
     log.error(errorKind(err), 'section handoff session install failed')
     return null
   })
+  if (cookies === 'source_session_ended') return signedOut('source_session_ended')
   if (!cookies) return signedOut('session_not_installed')
 
   log.info({ outcome: 'installed' }, 'section handoff finished')
