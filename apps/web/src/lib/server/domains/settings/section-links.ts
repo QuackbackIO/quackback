@@ -12,7 +12,9 @@ import type { WorkspaceSettings } from './settings.types'
 import {
   confirmedSectionDomains,
   effectiveSectionDomains,
+  normalizeHost,
   portalSectionsEnabled,
+  sectionOfHost,
 } from '@/lib/shared/section-domains'
 import {
   allOnPrimary,
@@ -71,4 +73,31 @@ export async function sectionHostOrigin(host: string | null): Promise<string | n
   const origins = await getSignInSectionOrigins()
   const section = sectionServedAt(host, origins)
   return section ? origins[section] : null
+}
+
+function primaryHost(): string | null {
+  try {
+    return normalizeHost(new URL(getBaseUrl()).host)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Whether `host` is one of this workspace's section hosts: any hostname a
+ * section names, verified or not, on or off, routable or not. Never the
+ * primary domain, even if a section names it. Sessions made on such a host
+ * are portal scope (session-audience.ts), so the widest reading is the safe
+ * one. `host` must be the one the edge vouches for, never a forwarded header.
+ */
+export async function isSectionHost(host: string | null): Promise<boolean> {
+  const clean = normalizeHost(host)
+  if (!clean || clean === primaryHost()) return false
+  const settings = await getWorkspaceSettings()
+  if (!settings) return false
+  const map = effectiveSectionDomains({
+    sectionDomains: settings.portalConfig?.sectionDomains,
+    legacyHelpDomain: settings.helpCenterConfig?.domain,
+  })
+  return sectionOfHost(clean, map) !== null
 }

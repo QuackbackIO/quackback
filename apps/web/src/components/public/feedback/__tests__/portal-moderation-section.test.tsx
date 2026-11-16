@@ -8,9 +8,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // gate itself is enforced server-side (covered by moderation.test.ts); these
 // tests assert the portal render contract: zero footprint when the viewer
 // lacks post.approve, and correct wiring when they hold it.
-const { mockList, mockListComments } = vi.hoisted(() => ({
+const { mockList, mockListComments, rootContext } = vi.hoisted(() => ({
   mockList: vi.fn(),
   mockListComments: vi.fn(),
+  rootContext: { current: {} as Record<string, unknown> },
 }))
 
 vi.mock('@/lib/server/functions/moderation', () => ({
@@ -19,6 +20,8 @@ vi.mock('@/lib/server/functions/moderation', () => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
+  useRouteContext: (opts?: { select?: (context: unknown) => unknown }) =>
+    opts?.select ? opts.select(rootContext.current) : rootContext.current,
   Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode }) => (
     <a href={to} {...(rest as React.HTMLAttributes<HTMLAnchorElement>)}>
       {children}
@@ -57,6 +60,7 @@ const PENDING = {
 }
 
 beforeEach(() => {
+  rootContext.current = { baseUrl: 'https://acme.com' }
   mockList.mockReset()
   mockListComments.mockReset().mockResolvedValue({ comments: [] })
 })
@@ -80,7 +84,20 @@ describe('PortalModerationSection — render gate', () => {
     renderSection(true)
     expect(await screen.findByText(/waiting for approval/i)).toBeInTheDocument()
     expect(screen.getByText('Dark mode please')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /open queue/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /open queue/i }).getAttribute('href')).toBe(
+      '/admin/feedback/moderation'
+    )
+  })
+
+  it('links the queue to the primary domain on a section host, where the admin does not run', async () => {
+    rootContext.current = {
+      baseUrl: 'https://acme.com',
+      sectionLinks: { here: 'https://ideas.acme.com' },
+    }
+    mockList.mockResolvedValue(PENDING)
+    renderSection(true)
+    const link = await screen.findByRole('link', { name: /open queue/i })
+    expect(link.getAttribute('href')).toBe('https://acme.com/admin/feedback/moderation')
   })
 
   it('renders nothing when the holder has an empty queue', async () => {

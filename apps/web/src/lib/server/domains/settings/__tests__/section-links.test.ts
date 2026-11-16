@@ -21,7 +21,8 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   },
 }))
 
-const { getSectionOrigins, getSignInSectionOrigins } = await import('../section-links')
+const { getSectionOrigins, getSignInSectionOrigins, isSectionHost } =
+  await import('../section-links')
 
 const VERIFIED = '2026-11-01T00:00:00.000Z'
 const PRIMARY = 'https://acme.example.com'
@@ -133,5 +134,45 @@ describe('a kept verification on a self-hosted server', () => {
 
   it('a confirmed host is one sign-in may use', async () => {
     expect((await getSignInSectionOrigins()).help).toBe('https://help.acme.com')
+  })
+})
+
+describe('isSectionHost', () => {
+  it('is true for a verified section host, whatever its case, port or trailing dot', async () => {
+    expect(await isSectionHost('help.acme.com')).toBe(true)
+    expect(await isSectionHost('Help.Acme.com.:443')).toBe(true)
+  })
+
+  it('is true for a host set up but not yet verified, or kept while it does not answer', async () => {
+    state.settings = workspace({
+      sectionDomains: {
+        help: { hostname: 'help.acme.com', verifiedAt: null },
+        status: { hostname: 'status.acme.com', verifiedAt: VERIFIED, unconfirmedSince: VERIFIED },
+      },
+    })
+    expect(await isSectionHost('help.acme.com')).toBe(true)
+    expect(await isSectionHost('status.acme.com')).toBe(true)
+  })
+
+  it("is true for the help center's own domain before the map is first written", async () => {
+    state.settings = workspace({
+      legacyHelpDomain: { domain: 'help.acme.com', verifiedAt: VERIFIED },
+    })
+    expect(await isSectionHost('help.acme.com')).toBe(true)
+  })
+
+  it('is false for the primary domain, without a settings read, even if a section names it', async () => {
+    state.settings = workspace({
+      sectionDomains: { help: { hostname: 'acme.example.com', verifiedAt: VERIFIED } },
+    })
+    expect(await isSectionHost('acme.example.com')).toBe(false)
+    expect(state.reads).toBe(0)
+  })
+
+  it('is false for a host no section names, and with no settings', async () => {
+    expect(await isSectionHost('other.example.com')).toBe(false)
+    expect(await isSectionHost(null)).toBe(false)
+    state.settings = null
+    expect(await isSectionHost('help.acme.com')).toBe(false)
   })
 })

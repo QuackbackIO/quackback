@@ -89,7 +89,8 @@ export const SECTION_HOME: Record<PortalSection, string> = {
 /**
  * Paths every host serves whatever section it is for: sign-in, the API,
  * account pages, feeds, admin and assets. Checked before the section paths,
- * so a feed under /changelog stays a feed.
+ * so a feed under /changelog stays a feed. The team pages among them
+ * (`PRIMARY_ONLY_PREFIXES`) are answered on the primary domain only.
  */
 const SHARED_PREFIXES = [
   '/api',
@@ -118,6 +119,21 @@ const SHARED_PREFIXES = [
   '/assets',
   '/_serverFn',
 ]
+
+/**
+ * The team's pages, which run on the primary domain only: the admin, the
+ * setup wizard, the apps embedded in other tools, approving a device, and the
+ * OAuth pages (provider consent, integration connect and callback). A section
+ * host sends them there. A session made on a section host is portal scope
+ * (session-audience.ts), so none of them could work there anyway, and the
+ * OAuth ones keep their state cookie on the primary domain.
+ */
+const PRIMARY_ONLY_PREFIXES = ['/admin', '/onboarding', '/apps', '/device', '/oauth']
+
+/** Whether a path is one of the team's pages, served on the primary domain only. */
+function isPrimaryOnlyPath(path: string): boolean {
+  return PRIMARY_ONLY_PREFIXES.some((prefix) => underPrefix(path, prefix))
+}
 
 const SECTION_PREFIXES: ReadonlyArray<[string, PortalSection]> = [
   ['/b', 'feedback'],
@@ -251,9 +267,26 @@ export type SectionHostRoute =
   | { kind: 'pass' }
   /** Serve `home` in place of `/`; the address bar keeps `/`. */
   | { kind: 'rewrite-home'; home: string }
-  | { kind: 'redirect'; status: 301 | 302; location: string }
+  | {
+      kind: 'redirect'
+      status: 301 | 302
+      location: string
+      /**
+       * False for a team page sent to the primary domain: the move never goes
+       * through the sign-in handoff, which would arrive with a portal session.
+       */
+      carrySession?: false
+    }
 
 const PASS: SectionHostRoute = { kind: 'pass' }
+
+function hostOfOrigin(origin: string): string | null {
+  try {
+    return new URL(origin).host
+  } catch {
+    return null
+  }
+}
 
 /**
  * What a request does given the section map.
@@ -265,6 +298,8 @@ const PASS: SectionHostRoute = { kind: 'pass' }
  *   paths goes (302) to the primary domain.
  * - On any other host: a section with a verified host, and on, has its paths
  *   moved there (301).
+ * - The team's pages (`isPrimaryOnlyPath`) on a section's host, on or off,
+ *   go (302) to the primary domain, without the sign-in handoff.
  *
  * Only GET and HEAD are redirected; nothing that changes state is.
  */
@@ -288,10 +323,24 @@ export function resolveSectionHostRoute({
   if (method !== 'GET' && method !== 'HEAD') return PASS
   // A request whose host is unknown cannot be told apart from a section's.
   if (!normalizeHost(host)) return PASS
+  const primary = primaryOrigin.replace(/\/$/, '')
+
+  if (isPrimaryOnlyPath(path)) {
+    // Never a move to itself, should a section ever name the primary host.
+    if (!sectionOfHost(host, map) || normalizeHost(hostOfOrigin(primary)) === normalizeHost(host)) {
+      return PASS
+    }
+    return {
+      kind: 'redirect',
+      status: 302,
+      location: `${primary}${path}${search}`,
+      carrySession: false,
+    }
+  }
+
   const pathSection = sectionForPath(path)
   if (!pathSection) return PASS
 
-  const primary = primaryOrigin.replace(/\/$/, '')
   const routableHost = (section: PortalSection) => routableSectionHost(section, map, sectionEnabled)
 
   const hostSection = sectionOfHost(host, map)

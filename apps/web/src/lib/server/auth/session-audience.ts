@@ -9,6 +9,7 @@ import { and, db, eq, session } from '@/lib/server/db'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { logger } from '@/lib/server/logger'
+import { headersWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
 import { SESSION_AUDIENCE_HEADER, toSessionScope, type SessionScope } from '@/lib/shared/roles'
 
 const log = logger.child({ component: 'session-audience' })
@@ -39,21 +40,70 @@ export function anonymousSessionScope(headers: HeaderBag | undefined): SessionSc
   return headers?.get(SESSION_AUDIENCE_HEADER) === 'portal' ? 'portal' : 'widget'
 }
 
+/** The current request's headers, or null outside a request. */
+function currentRequestHeaders(): HeaderBag | null {
+  try {
+    return getRequestHeaders()
+  } catch {
+    return null
+  }
+}
+
 /**
- * Only the anonymous mint is tagged (with its scope and the caller's resolved
- * address); every other session-creating path is a sign-in and keeps the
- * column default (dashboard).
+ * Whether the session is being made on one of the workspace's section hosts
+ * (help.acme.com for the help center). Every host the creation can be traced
+ * to counts: the library's own request, the headers it was handed, and the
+ * request being served. A failed settings read counts as a section host: the
+ * cost is a sign-in without team authority, never one with too much.
+ */
+async function createdOnSectionHost(context: SessionCreateContext): Promise<boolean> {
+  const hosts = new Set<string>()
+  const add = (headers: HeaderBag | null | undefined) => {
+    const host = headers ? headersWorkspaceHost(headers) : null
+    if (host) hosts.add(host)
+  }
+  add(context.request?.headers)
+  add(context.headers)
+  add(currentRequestHeaders())
+  if (hosts.size === 0) return false
+  try {
+    const { isSectionHost } = await import('@/lib/server/domains/settings/section-links')
+    for (const host of hosts) {
+      if (await isSectionHost(host)) return true
+    }
+    return false
+  } catch (err) {
+    log.error({ err }, 'section hosts not read; the new session is portal scope')
+    return true
+  }
+}
+
+/**
+ * The anonymous mint is tagged with its scope and the caller's resolved
+ * address. Any other session is a sign-in: portal scope when it is made on a
+ * section host, else the column default (dashboard).
+ *
+ * The admin runs on the primary domain only, and a session cookie is
+ * host-only, so a sign-in on a section host never needs team authority. It
+ * must not carry it either: a section host's domain can lapse and pass to
+ * someone else, who would then receive that cookie. Sessions carried there by
+ * the handoff are portal scope for the same reason (section-handoff.ts).
  */
 export async function assignSessionScope<T extends Record<string, unknown>>(
   sessionData: T,
   context: SessionCreateContext | null | undefined
-): Promise<{ data: T & { scope: SessionScope; ipAddress: string } } | undefined> {
-  if (context?.path !== '/sign-in/anonymous') return undefined
-  const scope = anonymousSessionScope(context.headers ?? context.request?.headers)
-  // The address through getClientIp, which honours only trusted proxy hops,
-  // rather than the first forwarding header a client could set. The anonymous
-  // vote limit counts these sessions by that address.
-  return { data: { ...sessionData, scope, ipAddress: getClientIp(getRequestHeaders()) } }
+): Promise<{ data: T & { scope: SessionScope; ipAddress?: string } } | undefined> {
+  if (context?.path === '/sign-in/anonymous') {
+    const scope = anonymousSessionScope(context.headers ?? context.request?.headers)
+    // The address through getClientIp, which honours only trusted proxy hops,
+    // rather than the first forwarding header a client could set. The anonymous
+    // vote limit counts these sessions by that address.
+    return { data: { ...sessionData, scope, ipAddress: getClientIp(getRequestHeaders()) } }
+  }
+  if (context && (await createdOnSectionHost(context))) {
+    return { data: { ...sessionData, scope: 'portal' } }
+  }
+  return undefined
 }
 
 /** The anonymous plugin's `isAnonymous` user field is not in the inferred type. */

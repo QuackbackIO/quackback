@@ -145,9 +145,65 @@ describe('resolveSectionHostRoute on a section host', () => {
   })
 
   it('serves the shared paths', () => {
-    for (const path of ['/api/health', '/auth/login', '/admin', '/settings', '/robots.txt']) {
+    for (const path of ['/api/health', '/auth/login', '/settings', '/robots.txt']) {
       expect(route('help.acme.com', path)).toEqual({ kind: 'pass' })
     }
+  })
+
+  it.each([
+    ['/admin', ''],
+    ['/admin/feedback', '?post=p_1&view=all'],
+    ['/admin/login', '?callbackUrl=%2Fadmin'],
+    ['/onboarding', ''],
+    ['/onboarding/account', '?step=2'],
+    ['/apps/zendesk/sidebar', '?origin=x'],
+    ['/device', '?user_code=ABCD-EFGH'],
+    ['/oauth/consent', '?client_id=c1'],
+    ['/oauth/slack/connect', ''],
+  ])(
+    'sends the team page %s%s to the primary domain, without carrying the session',
+    (path, search) => {
+      expect(route('help.acme.com', path, { search })).toEqual({
+        kind: 'redirect',
+        status: 302,
+        location: `${PRIMARY}${path}${search}`,
+        carrySession: false,
+      })
+    }
+  )
+
+  it('sends team pages to the primary domain from a host set up but not yet verified', () => {
+    expect(route('news.acme.com', '/admin')).toEqual({
+      kind: 'redirect',
+      status: 302,
+      location: `${PRIMARY}/admin`,
+      carrySession: false,
+    })
+  })
+
+  it('sends team pages to the primary domain while its section is off', () => {
+    expect(route('help.acme.com', '/admin', { sectionEnabled: { help: false } })).toEqual({
+      kind: 'redirect',
+      status: 302,
+      location: `${PRIMARY}/admin`,
+      carrySession: false,
+    })
+  })
+
+  it('does not take a team prefix that only starts the same way', () => {
+    expect(route('help.acme.com', '/administer')).not.toMatchObject({ carrySession: false })
+    expect(route('help.acme.com', '/devices')).not.toMatchObject({ carrySession: false })
+  })
+
+  it('never redirects a team request that changes something', () => {
+    expect(route('help.acme.com', '/admin', { method: 'POST' })).toEqual({ kind: 'pass' })
+  })
+
+  it('never redirects a team page to itself when a section names the primary host', () => {
+    const map: SectionDomainMap = {
+      help: { hostname: 'acme.example.com', verifiedAt: VERIFIED },
+    }
+    expect(route('acme.example.com', '/admin', { map })).toEqual({ kind: 'pass' })
   })
 
   it("sends another section's path to that section's host when it has a verified one", () => {
@@ -265,7 +321,16 @@ describe('resolveSectionHostRoute on the primary host', () => {
       ...MAP,
       changelog: { hostname: 'news.acme.com', verifiedAt: VERIFIED },
     }
-    for (const path of ['/changelog/feed', '/status/feed', '/api/health', '/admin']) {
+    for (const path of [
+      '/changelog/feed',
+      '/status/feed',
+      '/api/health',
+      '/admin',
+      '/onboarding',
+      '/apps/zendesk/sidebar',
+      '/device',
+      '/oauth/consent',
+    ]) {
       expect(route('acme.example.com', path, { map })).toEqual({ kind: 'pass' })
     }
   })

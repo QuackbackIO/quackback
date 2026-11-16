@@ -143,6 +143,21 @@ export function portalPageUrl(path: string, origins: SectionOrigins): string {
   return section ? sectionUrl(section, path, origins) : `${origins.primary}${path}`
 }
 
+/**
+ * A link to one of the team's pages (/admin and the like), which run on the
+ * primary domain only, from a page on `links.hostOrigin`: the absolute address
+ * on the primary domain when the page is on a section host, else null, and
+ * the page links it as usual. Never through the sign-in handoff: a carried
+ * session is portal scope and could not open the admin.
+ */
+export function teamPageHref(
+  path: string,
+  links: { origins: SectionOrigins; hostOrigin: string } | null
+): string | null {
+  if (!links || links.hostOrigin === links.origins.primary) return null
+  return `${links.origins.primary}${path}`
+}
+
 /** The sections the primary domain serves itself, in nav order. */
 export function sectionsOnPrimary(origins: SectionOrigins): PortalSection[] {
   return PORTAL_SECTIONS.filter((section) => origins[section] === origins.primary)
