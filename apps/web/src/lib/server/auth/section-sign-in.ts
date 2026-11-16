@@ -7,14 +7,21 @@
  * So the library's `/sign-in/social` answers a section host with the address
  * of SECTION_SIGN_IN_PATH on the primary domain instead of the provider's.
  * The client goes there the way it would have gone to the provider (its popup
- * or the page itself); the sign-in runs on the primary domain and the section
- * handoff brings the session back (lib/shared/section-handoff.ts). Every
+ * or the page itself). `startSectionSignIn` answers there: it starts the
+ * provider sign-in on the primary domain, with a callback that is the section
+ * handoff back to the section host (lib/shared/section-handoff.ts). Every
  * caller of `signIn.social` gets this for free.
  */
 import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import { logger } from '@/lib/server/logger'
 import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
 import { normalizeHost } from '@/lib/shared/section-domains'
-import { safeHandoffReturnTo, sectionSignInUrl } from '@/lib/shared/section-handoff'
+import {
+  handoffReturnTo,
+  safeHandoffReturnTo,
+  sectionHandoffUrl,
+  sectionSignInUrl,
+} from '@/lib/shared/section-handoff'
 import { sectionServedAt } from '@/lib/shared/section-links'
 
 /** A callback the client sent, as a path on `hereOrigin`, else the home page. */
@@ -66,4 +73,64 @@ export async function sectionSignInMove(ctx: {
     }),
     redirect: true,
   }
+}
+
+function redirect(location: string, cookies: string[] = []): Response {
+  const headers = new Headers({
+    Location: location,
+    'Cache-Control': 'no-store',
+    'Referrer-Policy': 'no-referrer',
+  })
+  for (const cookie of cookies) headers.append('Set-Cookie', cookie)
+  return new Response(null, { status: 302, headers })
+}
+
+/**
+ * SECTION_SIGN_IN_PATH, on the primary domain. `to` must be a routable
+ * section host of this workspace, checked here against the same table links
+ * and routing use; anything else starts nothing and stays on this host. The
+ * library sets its state cookie on this response, so it lands on this host,
+ * where the provider's callback reads it.
+ */
+export async function startSectionSignIn(request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const origins = await getSectionOrigins()
+  const host = normalizeHost(requestWorkspaceHost(request))
+  const primaryHost = normalizeHost(new URL(origins.primary).host)
+  const section = sectionServedAt(url.searchParams.get('to'), origins)
+  const provider = url.searchParams.get('provider')
+  if (!host || host !== primaryHost || !section || !provider) return redirect('/')
+
+  const target = origins[section]
+  const returnTo = handoffReturnTo(url.searchParams.get('returnTo'))
+  const errorCallbackURL = `${target}${handoffReturnTo(
+    url.searchParams.get('errorReturnTo') ?? returnTo
+  )}`
+  const loginHint = url.searchParams.get('loginHint')
+  try {
+    const { auth } = await import('@/lib/server/auth')
+    const response = (await auth.api.signInSocial({
+      body: {
+        provider,
+        callbackURL: sectionHandoffUrl({ targetOrigin: target, fromHost: host, returnTo }),
+        errorCallbackURL,
+        ...(loginHint ? { loginHint } : {}),
+        disableRedirect: true,
+      },
+      headers: request.headers,
+      asResponse: true,
+    })) as Response
+    const body = response.ok ? ((await response.json()) as { url?: unknown }) : null
+    if (typeof body?.url === 'string') {
+      return redirect(body.url, response.headers.getSetCookie())
+    }
+  } catch (err) {
+    logger
+      .child({ component: 'section-sign-in' })
+      .warn(
+        { error_name: err instanceof Error ? err.name : typeof err },
+        'provider sign-in not started'
+      )
+  }
+  return redirect(errorCallbackURL)
 }

@@ -1,8 +1,7 @@
 // @vitest-environment node
 /**
- * The three legs of the section handoff are plain GET handlers: each hands the
- * request to its leg in lib/server/auth/section-handoff.ts and returns that
- * response untouched (its 302, cookies and no-referrer header).
+ * The section handoff is one GET route; `leg` picks the step. Each step's
+ * response (its 302, cookies and no-referrer header) is returned untouched.
  */
 import { describe, expect, it, vi } from 'vitest'
 
@@ -22,22 +21,30 @@ vi.mock('@/lib/server/auth/section-handoff', () => ({
   finishSectionHandoff: legs.finish,
 }))
 
-type Handlers = { GET: (args: { request: Request }) => Promise<Response> }
-function getHandler(route: unknown): Handlers['GET'] {
-  return (route as { options: { server: { handlers: Handlers } } }).options.server.handlers.GET
-}
+const { Route } = await import('../auth.section-handoff')
 
-describe('section handoff routes', () => {
+type Handlers = { GET: (args: { request: Request }) => Promise<Response> }
+const GET = (Route as unknown as { options: { server: { handlers: Handlers } } }).options.server
+  .handlers.GET
+
+describe('section handoff route', () => {
+  it('is served at /auth/section-handoff', () => {
+    expect((Route as unknown as { path: string }).path).toBe('/auth/section-handoff')
+  })
+
   it.each([
-    ['../auth.section-handoff', '/auth/section-handoff', 'begin'],
-    ['../auth.section-handoff-mint', '/auth/section-handoff-mint', 'mint'],
-    ['../auth.section-handoff-finish', '/auth/section-handoff-finish', 'finish'],
-  ] as const)('%s answers with its leg', async (modulePath, path, leg) => {
-    const { Route } = (await import(/* @vite-ignore */ modulePath)) as { Route: unknown }
-    expect((Route as { path: string }).path).toBe(path)
-    const request = new Request(`https://help.acme.com${path}?returnTo=%2F`)
-    const response = await getHandler(Route)({ request })
+    ['', 'begin'],
+    ['&leg=mint', 'mint'],
+    ['&leg=finish', 'finish'],
+    ['&leg=unknown', 'begin'],
+  ] as const)('query %s answers with the %s step', async (query, leg) => {
+    for (const fn of Object.values(legs)) fn.mockClear()
+    const request = new Request(`https://help.acme.com/auth/section-handoff?returnTo=%2F${query}`)
+    const response = await GET({ request })
     expect(legs[leg]).toHaveBeenCalledWith(request)
+    for (const [name, fn] of Object.entries(legs)) {
+      if (name !== leg) expect(fn).not.toHaveBeenCalled()
+    }
     expect(response.headers.get('location')).toBe(`/${leg}`)
   })
 })

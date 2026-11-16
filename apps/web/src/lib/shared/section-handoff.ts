@@ -8,11 +8,11 @@
  *   1. Target host, SECTION_HANDOFF_PATH?from=<source host>&returnTo=<path>
  *      Already signed in here: straight to returnTo. Otherwise a random state
  *      goes into a host-only cookie and the browser is sent to the source.
- *   2. Source host, SECTION_HANDOFF_MINT_PATH?to=<target>&state=<hash>&returnTo
+ *   2. Source host, SECTION_HANDOFF_PATH?leg=mint&to=<target>&state=<hash>&returnTo
  *      Signed in: a single-use token bound to the target host and the state is
  *      minted, and the browser goes back to the target with it. Signed out: to
  *      returnTo on the target, signed out.
- *   3. Target host, SECTION_HANDOFF_FINISH_PATH?token=<token>&returnTo=<path>
+ *   3. Target host, SECTION_HANDOFF_PATH?leg=finish&token=<token>&returnTo=<path>
  *      The token is burned, then checked against this host and the state
  *      cookie; on a match the session cookie is installed. Either way the
  *      browser lands on returnTo, with the token gone from the address bar.
@@ -25,8 +25,6 @@ import { normalizeHost } from './section-domains'
 import type { SectionOrigins } from './section-links'
 
 export const SECTION_HANDOFF_PATH = '/auth/section-handoff'
-export const SECTION_HANDOFF_MINT_PATH = '/auth/section-handoff-mint'
-export const SECTION_HANDOFF_FINISH_PATH = '/auth/section-handoff-finish'
 /** Provider sign-in started from a section host runs on the primary domain. */
 export const SECTION_SIGN_IN_PATH = '/auth/section-sign-in'
 

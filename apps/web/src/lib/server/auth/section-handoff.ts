@@ -35,11 +35,7 @@ import { logger } from '@/lib/server/logger'
 import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
 import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
 import { normalizeHost } from '@/lib/shared/section-domains'
-import {
-  SECTION_HANDOFF_FINISH_PATH,
-  SECTION_HANDOFF_MINT_PATH,
-  handoffReturnTo,
-} from '@/lib/shared/section-handoff'
+import { SECTION_HANDOFF_PATH, handoffReturnTo } from '@/lib/shared/section-handoff'
 import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'section-handoff' })
@@ -193,8 +189,8 @@ export async function beginSectionHandoff(request: Request): Promise<Response> {
 
   const state = randomToken()
   const secure = isSecureOrigin(hosts.get(host))
-  const params = new URLSearchParams({ to: host, state: sha256(state), returnTo })
-  return redirect(`${fromOrigin}${SECTION_HANDOFF_MINT_PATH}?${params.toString()}`, [
+  const params = new URLSearchParams({ leg: 'mint', to: host, state: sha256(state), returnTo })
+  return redirect(`${fromOrigin}${SECTION_HANDOFF_PATH}?${params.toString()}`, [
     stateCookie(state, secure, STATE_TTL_SECONDS),
   ])
 }
@@ -234,8 +230,8 @@ export async function mintSectionHandoff(request: Request): Promise<Response> {
     return redirect(signedOut)
   }
   await sweepExpiredTokens()
-  const params = new URLSearchParams({ token, returnTo })
-  return redirect(`${toOrigin}${SECTION_HANDOFF_FINISH_PATH}?${params.toString()}`)
+  const params = new URLSearchParams({ leg: 'finish', token, returnTo })
+  return redirect(`${toOrigin}${SECTION_HANDOFF_PATH}?${params.toString()}`)
 }
 
 /**

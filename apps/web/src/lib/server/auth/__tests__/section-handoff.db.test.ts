@@ -198,13 +198,15 @@ describe.skipIf(!fixture.available)('section handoff', () => {
     expect(response.status).toBe(302)
     const mintUrl = location(response)
     expect(mintUrl.origin).toBe('https://acme.com')
-    expect(mintUrl.pathname).toBe('/auth/section-handoff-mint')
+    expect(mintUrl.pathname).toBe('/auth/section-handoff')
+    expect(mintUrl.searchParams.get('leg')).toBe('mint')
     expect(mintUrl.searchParams.get('to')).toBe(HELP)
     expect(stateCookie).toMatch(new RegExp(`^${SECTION_STATE_COOKIE}=`))
 
     expect(minted.status).toBe(302)
     expect(finishUrl.origin).toBe('https://help.acme.com')
-    expect(finishUrl.pathname).toBe('/auth/section-handoff-finish')
+    expect(finishUrl.pathname).toBe('/auth/section-handoff')
+    expect(finishUrl.searchParams.get('leg')).toBe('finish')
     expect(finishUrl.searchParams.get('token')).toBeTruthy()
 
     const done = await finish(finishUrl, HELP, stateCookie)
