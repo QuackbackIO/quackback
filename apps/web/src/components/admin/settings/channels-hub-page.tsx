@@ -18,6 +18,7 @@ import {
   isWidgetMessengerEnabled,
 } from '@/lib/shared/support-surfaces'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { SectionDomainSettingsCard } from '@/components/admin/settings/section-domain-card'
 
 // The hub's GitHub row may be up to a minute old, like its email row.
 const HUB_STATUS_STALE_MS = 60_000
@@ -41,9 +42,8 @@ export function ChannelsHubPage() {
   const messenger = getChannelDescriptor('messenger')
   const email = getChannelDescriptor('email')
   const github = getChannelDescriptor('github')
-  const messengerOn =
-    isWidgetMessengerEnabled(flags, widget.data) ||
-    isPortalSupportSurfaceEnabled(flags, portal.data)
+  const portalSupportOn = isPortalSupportSurfaceEnabled(flags, portal.data)
+  const messengerOn = isWidgetMessengerEnabled(flags, widget.data) || portalSupportOn
   const emailSubtitle = emailStatusQuery.data?.inboundDomain ?? 'Add an inbound route'
   const githubStatus = githubStatusQuery.data
   const githubAttention =
@@ -82,6 +82,8 @@ export function ChannelsHubPage() {
           />
         </SettingsList>
       </SettingsCard>
+
+      {portalSupportOn && <SectionDomainSettingsCard section="support" />}
 
       <SettingsCard
         title="Conversation routing"

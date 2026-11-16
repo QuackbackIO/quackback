@@ -23,7 +23,17 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
-  useWorkspaceSettings: () => ({ featureFlags: { supportInbox: true } }),
+  useWorkspaceSettings: () => ({
+    featureFlags: { supportInbox: true },
+    portalConfig: {
+      support: { enabled: true },
+      sectionDomains: {
+        support: { hostname: 'support.acme.com', verifiedAt: '2026-11-01T00:00:00.000Z' },
+      },
+    },
+  }),
+  useBaseUrl: () => 'https://acme.com',
+  useHasPermission: () => true,
 }))
 vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/settings')>()),
@@ -83,6 +93,16 @@ const WORKING_GITHUB = {
 }
 
 describe('ChannelsHubPage', () => {
+  it("shows the portal Support section's custom domain read-only", () => {
+    seed(WORKING_GITHUB)
+    renderPage()
+    expect(screen.getByRole('heading', { name: 'Custom domain' })).toBeTruthy()
+    expect(screen.getByText('support.acme.com')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Custom domains' }).getAttribute('href')).toBe(
+      '/admin/settings/domains'
+    )
+  })
+
   it('has no breadcrumb of its own, as a page of the Support module', () => {
     seed(WORKING_GITHUB)
     renderPage()

@@ -90,7 +90,7 @@ export const ENTITLEMENTS = {
     plural: true,
     tierFeature: 'customDomain',
     chokepoint:
-      'lib/server/functions/cloud-identity.ts (mutateCloudCustomDomainFn); lib/server/domains/help-center/help-center-domain.service.ts (setHelpCenterDomain)',
+      'lib/server/functions/cloud-identity.ts (mutateCloudCustomDomainFn); lib/server/domains/settings/section-domains.service.ts (setSectionDomain)',
   },
   sso: {
     friendly: 'Single sign-on',

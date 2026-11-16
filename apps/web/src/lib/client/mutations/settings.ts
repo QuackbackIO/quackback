@@ -39,10 +39,6 @@ import {
   updateHelpCenterAutoTranslateFn,
 } from '@/lib/server/functions/help-center-settings'
 import {
-  updateHelpCenterDomainFn,
-  verifyHelpCenterDomainFn,
-} from '@/lib/server/functions/help-center-domain'
-import {
   createRedirectRuleFn,
   deleteRedirectRuleFn,
 } from '@/lib/server/functions/help-center-redirect-rules'
@@ -429,34 +425,6 @@ export function useUpdateHelpCenterAutoTranslate() {
       updateHelpCenterAutoTranslateFn({ data }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey }),
-  })
-}
-
-export function useUpdateHelpCenterDomain() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    scope: HELP_CENTER_CONFIG_SCOPE,
-    // The server's reasons (a host already in use, say) are written for the person saving.
-    meta: { ...AUTOSAVE, showServerMessage: true },
-    mutationFn: (domain: string | null) => updateHelpCenterDomainFn({ data: { domain } }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey }),
-  })
-}
-
-export function useVerifyHelpCenterDomain() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    scope: HELP_CENTER_CONFIG_SCOPE,
-    mutationFn: () => verifyHelpCenterDomainFn({ data: {} }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey })
-      queryClient.invalidateQueries({
-        queryKey: settingsQueries.helpCenterDomainStatus().queryKey,
-      })
-    },
   })
 }
 

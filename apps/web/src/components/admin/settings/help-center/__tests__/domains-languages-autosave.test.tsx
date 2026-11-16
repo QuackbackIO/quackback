@@ -16,17 +16,13 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 const fns = vi.hoisted(() => ({
-  updateDomain: vi.fn(),
-  verifyDomain: vi.fn(),
   updateChrome: vi.fn(),
   updateAutoTranslate: vi.fn(),
   deleteRule: vi.fn(),
 }))
 
-vi.mock('@/lib/server/functions/help-center-domain', () => ({
-  updateHelpCenterDomainFn: fns.updateDomain,
-  verifyHelpCenterDomainFn: fns.verifyDomain,
-  getHelpCenterDomainStatusFn: vi.fn(),
+vi.mock('@/components/admin/settings/section-domain-card', () => ({
+  SectionDomainSettingsCard: () => null,
 }))
 vi.mock('@/lib/server/functions/help-center-settings', () => ({
   updateHelpCenterConfigFn: vi.fn(),
@@ -46,10 +42,6 @@ vi.mock('@/lib/server/functions/help-center', () => ({ listArticlesFn: vi.fn() }
 vi.mock('@/lib/client/queries/settings', () => ({
   settingsQueries: {
     helpCenterConfig: () => ({ queryKey: ['hc-config'] }),
-    helpCenterDomainStatus: () => ({
-      queryKey: ['hc-domain-status'],
-      queryFn: async () => null,
-    }),
     helpCenterRedirectRules: () => ({
       queryKey: ['hc-redirects'],
       queryFn: async () => [
@@ -81,7 +73,7 @@ const config = {
   },
 }
 
-function renderTab(domain: { domain: string | null; verifiedAt: string | null } = config.domain) {
+function renderTab() {
   const client = new QueryClient({
     mutationCache: createAutosaveMutationCache(),
     defaultOptions: { queries: { retry: false } },
@@ -89,7 +81,7 @@ function renderTab(domain: { domain: string | null; verifiedAt: string | null } 
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   )
-  return render(<DomainsLanguagesTab config={{ ...config, domain }} />, { wrapper: Wrapper })
+  return render(<DomainsLanguagesTab config={config} />, { wrapper: Wrapper })
 }
 
 function typeAndBlur(input: HTMLElement, value: string) {
@@ -98,7 +90,6 @@ function typeAndBlur(input: HTMLElement, value: string) {
 }
 
 beforeEach(() => {
-  fns.updateDomain.mockResolvedValue({})
   fns.updateChrome.mockResolvedValue({})
   fns.updateAutoTranslate.mockResolvedValue({})
   fns.deleteRule.mockResolvedValue({})
@@ -113,100 +104,6 @@ describe('Help Center domains and languages autosave', () => {
   it('has no per-card Save buttons', () => {
     renderTab()
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
-  })
-
-  describe('custom domain', () => {
-    it('saves a valid domain when the field loses focus', async () => {
-      renderTab()
-      typeAndBlur(screen.getByLabelText('Domain'), ' help.acme.com ')
-      await waitFor(() => expect(fns.updateDomain).toHaveBeenCalledTimes(1))
-      expect(fns.updateDomain).toHaveBeenCalledWith({ data: { domain: 'help.acme.com' } })
-    })
-
-    it.each(['not a domain', 'https://help.acme.com', 'help', 'help.acme.com/path', '-a.b.com'])(
-      'never sends %j',
-      async (bad) => {
-        renderTab()
-        typeAndBlur(screen.getByLabelText('Domain'), bad)
-        await new Promise((resolve) => setTimeout(resolve, 30))
-        expect(fns.updateDomain).not.toHaveBeenCalled()
-        expect(screen.getByRole('alert').textContent).toMatch(/hostname/i)
-      }
-    )
-
-    it('saves a mixed-case domain once, then treats the lower-cased form as saved', async () => {
-      renderTab()
-      const input = screen.getByLabelText('Domain') as HTMLInputElement
-      typeAndBlur(input, 'Help.Acme.com')
-      await waitFor(() => expect(fns.updateDomain).toHaveBeenCalledTimes(1))
-      expect(fns.updateDomain).toHaveBeenCalledWith({ data: { domain: 'help.acme.com' } })
-      await waitFor(() => expect(input.value).toBe('help.acme.com'))
-      fireEvent.blur(input)
-      await new Promise((resolve) => setTimeout(resolve, 30))
-      expect(fns.updateDomain).toHaveBeenCalledTimes(1)
-    })
-
-    it('queues a Verify click behind the save the click itself starts', async () => {
-      let resolveUpdate!: (value: unknown) => void
-      fns.updateDomain.mockReturnValue(new Promise((r) => (resolveUpdate = r)))
-      fns.verifyDomain.mockResolvedValue({})
-      renderTab({ domain: 'old.acme.com', verifiedAt: null })
-      fireEvent.change(screen.getByLabelText('Domain'), { target: { value: 'new.acme.com' } })
-      fireEvent.blur(screen.getByLabelText('Domain'))
-      // A real click lands after the mousedown that blurred the field has rendered.
-      await waitFor(() => expect(fns.updateDomain).toHaveBeenCalledTimes(1))
-      await new Promise((resolve) => setTimeout(resolve, 10))
-      fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
-      await new Promise((resolve) => setTimeout(resolve, 30))
-      expect(fns.updateDomain).toHaveBeenCalledTimes(1)
-      expect(fns.verifyDomain).not.toHaveBeenCalled()
-      resolveUpdate({})
-      await waitFor(() => expect(fns.verifyDomain).toHaveBeenCalledTimes(1))
-    })
-
-    it('queues a Verify click behind the save the click itself starts', async () => {
-      let resolveUpdate!: (value: unknown) => void
-      fns.updateDomain.mockReturnValue(new Promise((r) => (resolveUpdate = r)))
-      fns.verifyDomain.mockResolvedValue({})
-      renderTab({ domain: 'old.acme.com', verifiedAt: null })
-      fireEvent.change(screen.getByLabelText('Domain'), { target: { value: 'new.acme.com' } })
-      fireEvent.blur(screen.getByLabelText('Domain'))
-      fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
-      await new Promise((resolve) => setTimeout(resolve, 30))
-      expect(fns.updateDomain).toHaveBeenCalledTimes(1)
-      expect(fns.verifyDomain).not.toHaveBeenCalled()
-      resolveUpdate({})
-      await waitFor(() => expect(fns.verifyDomain).toHaveBeenCalledTimes(1))
-    })
-
-    it.each([
-      ['hilfe.müller.de', 'hilfe.xn--mller-kva.de'],
-      ['help.shop.xn--p1ai', 'help.shop.xn--p1ai'],
-      ['help.acme.com.', 'help.acme.com'],
-    ])('accepts %s and sends %s', async (typed, sent) => {
-      renderTab()
-      typeAndBlur(screen.getByLabelText('Domain'), typed)
-      await waitFor(() => expect(fns.updateDomain).toHaveBeenCalledTimes(1))
-      expect(fns.updateDomain).toHaveBeenCalledWith({ data: { domain: sent } })
-      expect(screen.queryByRole('alert')).toBeNull()
-    })
-
-    it('does not save an unchanged value', async () => {
-      renderTab()
-      fireEvent.blur(screen.getByLabelText('Domain'))
-      await new Promise((resolve) => setTimeout(resolve, 30))
-      expect(fns.updateDomain).not.toHaveBeenCalled()
-    })
-
-    it('raises the shared toast exactly once when the save fails', async () => {
-      fns.updateDomain.mockRejectedValue(new Error('Domain already in use'))
-      renderTab()
-      typeAndBlur(screen.getByLabelText('Domain'), 'help.acme.com')
-      await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1))
-      await new Promise((resolve) => setTimeout(resolve, 30))
-      expect(toastError).toHaveBeenCalledTimes(1)
-      expect(toastError).toHaveBeenCalledWith("Couldn't save. Domain already in use")
-    })
   })
 
   describe('overlapping saves', () => {
