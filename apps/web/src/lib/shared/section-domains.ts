@@ -49,6 +49,21 @@ export function sectionDomainState(entry: SectionDomain): SectionDomainState {
 export const UNCONFIRMED_GRACE_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
+ * What the admin pages say about a hostname that stopped answering: that, and
+ * the date its grace ends. In UTC, so the server's render and the browser's
+ * agree on the day. Null for a hostname that answers.
+ */
+export function notAnsweringNote(entry: SectionDomain): string | null {
+  if (!entry.unconfirmedSince) return null
+  const since = Date.parse(entry.unconfirmedSince)
+  if (Number.isNaN(since)) return 'Not answering.'
+  const by = new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(
+    since + UNCONFIRMED_GRACE_MS
+  )
+  return `Not answering. Fix DNS by ${by}.`
+}
+
+/**
  * The map as sign-in may use it: a hostname whose verification is only kept
  * (its lookups go unanswered) counts as unverified. A lapsed or dangling
  * domain may be someone else's now, and a session must never be carried to

@@ -4,7 +4,20 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { seedNavEditorItems } from '@/components/public/portal-header-nav'
 
-const { PortalNavEditor } = await import('../portal-nav-editor')
+const { PortalNavEditor, servedSectionHosts } = await import('../portal-nav-editor')
+
+describe('servedSectionHosts', () => {
+  it('names the hostname each tab is served at: verified ones only', () => {
+    const AT = '2026-11-01T00:00:00.000Z'
+    expect(
+      servedSectionHosts({
+        help: { hostname: 'help.acme.com', verifiedAt: AT },
+        status: { hostname: 'status.acme.com', verifiedAt: null },
+        changelog: { hostname: 'news.acme.com', verifiedAt: AT, unconfirmedSince: AT },
+      })
+    ).toEqual({ help: 'help.acme.com', changelog: 'news.acme.com' })
+  })
+})
 
 afterEach(cleanup)
 

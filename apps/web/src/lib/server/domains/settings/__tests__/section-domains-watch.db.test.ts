@@ -70,10 +70,10 @@ const notices = vi.hoisted(() => ({
   lapsed: [] as string[],
 }))
 vi.mock('../section-domains-notify', () => ({
-  notifySectionDomainNotAnswering: async (hostname: string, deadline: Date) => {
+  notifySectionDomainNotAnswering: async (_section: string, hostname: string, deadline: Date) => {
     notices.notAnswering.push({ hostname, deadline })
   },
-  notifySectionDomainLapsed: async (hostname: string) => {
+  notifySectionDomainLapsed: async (_section: string, hostname: string) => {
     notices.lapsed.push(hostname)
   },
 }))

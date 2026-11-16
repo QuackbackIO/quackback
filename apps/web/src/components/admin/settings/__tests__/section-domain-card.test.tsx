@@ -55,6 +55,19 @@ describe('a product page custom domain', () => {
     expect(screen.getByText('Pending')).toBeVisible()
   })
 
+  it('says by when a domain that stopped answering has to be fixed', () => {
+    render(
+      <SectionDomainCard
+        section="status"
+        map={{ status: { hostname: 'status.acme.com', verifiedAt: AT, unconfirmedSince: AT } }}
+        primaryHost="acme.com"
+        canManage
+      />
+    )
+    expect(screen.getByText('Needs attention')).toBeVisible()
+    expect(screen.getByText('Not answering. Fix DNS by November 8, 2026.')).toBeVisible()
+  })
+
   it('offers no link to a viewer who cannot manage custom domains', () => {
     render(
       <SectionDomainCard

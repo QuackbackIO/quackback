@@ -166,14 +166,14 @@ export async function watchSectionDomains(
         'section domain no longer reaches this server; sign-in stops there, routing keeps its grace'
       )
       const deadline = new Date(Date.parse(decision.since) + UNCONFIRMED_GRACE_MS)
-      await notifySectionDomainNotAnswering(hostname, deadline)
+      await notifySectionDomainNotAnswering(section, hostname, deadline)
     } else if (decision.kind === 'lapse') {
       result.lapsed += 1
       log.warn(
         { section, hostname },
         'section domain still does not reach this server after the grace; it is no longer verified'
       )
-      await notifySectionDomainLapsed(hostname)
+      await notifySectionDomainLapsed(section, hostname)
     }
   }
   return result

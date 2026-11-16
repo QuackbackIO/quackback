@@ -65,7 +65,8 @@ export function VisibilityTiles<T extends string>({
             <span className="min-w-0">
               <span className="block text-sm font-medium">{option.title}</span>
               {option.description && (
-                <span className="mt-0.5 block text-[13px] text-muted-foreground">
+                // A long hostname breaks inside the tile rather than running past its edge.
+                <span className="mt-0.5 block text-[13px] text-muted-foreground wrap-anywhere">
                   {option.description}
                 </span>
               )}

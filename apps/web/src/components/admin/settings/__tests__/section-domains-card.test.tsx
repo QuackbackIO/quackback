@@ -123,7 +123,36 @@ describe('Custom domains card', () => {
     })
     expect(row('Help center')).toHaveTextContent('Pending')
     expect(row('Status')).toHaveTextContent('Needs attention')
-    expect(row('Status')).toHaveTextContent('Not answering')
+    // The next action, and the date the 7-day grace ends.
+    expect(row('Status')).toHaveTextContent('Not answering. Fix DNS by November 8, 2026.')
+  })
+
+  it('puts Verify on the row of a domain that needs it, and keeps a verified row quiet', () => {
+    renderCard({
+      map: {
+        feedback: { hostname: 'feedback.acme.com', verifiedAt: AT },
+        help: { hostname: 'help.acme.com', verifiedAt: null },
+        status: { hostname: 'status.acme.com', verifiedAt: AT, unconfirmedSince: AT },
+      },
+    })
+    expect(within(row('Help center')).getByRole('button', { name: 'Verify' })).toBeVisible()
+    expect(within(row('Status')).getByRole('button', { name: 'Verify' })).toBeVisible()
+    expect(within(row('Feedback')).queryByRole('button', { name: 'Verify' })).toBeNull()
+  })
+
+  it('says what a check found when it did not verify', async () => {
+    verifySectionDomain.mockResolvedValue({
+      ok: true,
+      sectionDomains: {},
+      status: { dnsResolved: false, verified: false },
+    })
+    renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: null } } })
+    fireEvent.click(within(row('Help center')).getByRole('button', { name: 'Verify' }))
+    await waitFor(() =>
+      expect(row('Help center')).toHaveTextContent(
+        'Not verified yet. DNS changes can take a while to show.'
+      )
+    )
   })
 
   it('self-hosted: shows the CNAME a pending domain needs, pointing at this server', async () => {
@@ -147,13 +176,36 @@ describe('Custom domains card', () => {
       map: { status: { hostname: 'status.acme.com', verifiedAt: AT } },
     })
     expect(row('Status')).toHaveTextContent('Off')
+    // The next step, and where modules are turned on.
+    expect(row('Status')).toHaveTextContent(
+      'Turn Status on in Settings > General to use this domain.'
+    )
+  })
+
+  it('forgets what a check found once the domain is changed', async () => {
+    verifySectionDomain.mockResolvedValue({
+      ok: true,
+      sectionDomains: {},
+      status: { dnsResolved: false, verified: false },
+    })
+    setSectionDomain.mockResolvedValue({ ok: true, sectionDomains: {} })
+    renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: null } } })
+    fireEvent.click(within(row('Help center')).getByRole('button', { name: 'Verify' }))
+    await waitFor(() => expect(row('Help center')).toHaveTextContent('Not verified yet.'))
+    await pick('Help center', 'Change')
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Domain'), {
+      target: { value: 'support.acme.com' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(row('Help center')).not.toHaveTextContent('Not verified yet.'))
   })
 
   it('verifies a section from its row', async () => {
     const onChanged = vi.fn()
     verifySectionDomain.mockResolvedValue({ ok: true, sectionDomains: {}, status: null })
     renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: null } }, onChanged })
-    await pick('Help center', 'Verify')
+    fireEvent.click(within(row('Help center')).getByRole('button', { name: 'Verify' }))
     expect(verifySectionDomain).toHaveBeenCalledWith({ data: { section: 'help' } })
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
@@ -196,7 +248,7 @@ describe('Custom domains card', () => {
       code: 'SECTION_DOMAIN_NOT_SET',
       message: 'Set a domain before verifying it.',
     })
-    renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: null } } })
+    renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: AT } } })
     await pick('Help center', 'Verify')
     expect(await screen.findByRole('alert')).toHaveTextContent('Set a domain before verifying it.')
   })

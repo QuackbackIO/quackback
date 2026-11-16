@@ -37,7 +37,7 @@ describe('section domain notices', () => {
   })
 
   it('tells whoever may set a section domain that one stopped reaching this server, and by when', async () => {
-    await notifySectionDomainNotAnswering('help.acme.com', new Date('2026-11-23T07:00:00Z'))
+    await notifySectionDomainNotAnswering('help', 'help.acme.com', new Date('2026-11-23T07:00:00Z'))
 
     expect(calls.permissions).toEqual(['settings.custom_domain'])
     expect(calls.rings).toEqual([
@@ -45,7 +45,7 @@ describe('section domain notices', () => {
         type: 'domain_needs_attention',
         bell: {
           title: 'help.acme.com needs attention',
-          body: 'help.acme.com is not reaching this server. Fix its DNS by 2026-11-23 to keep it verified.',
+          body: 'The Help center domain is not answering. Fix its DNS by 2026-11-23 to keep it verified.',
           metadata: { domain: 'help.acme.com', audience: 'admin' },
         },
       },
@@ -53,14 +53,14 @@ describe('section domain notices', () => {
   })
 
   it('says when one stopped being verified', async () => {
-    await notifySectionDomainLapsed('help.acme.com')
+    await notifySectionDomainLapsed('help', 'help.acme.com')
 
     expect(calls.rings).toEqual([
       {
         type: 'domain_needs_attention',
         bell: {
           title: 'help.acme.com is no longer verified',
-          body: 'help.acme.com still does not reach this server. Verify it again once its DNS is fixed.',
+          body: 'Help center is back on the primary domain. Fix the DNS, then verify it again.',
           metadata: { domain: 'help.acme.com', audience: 'admin' },
         },
       },
@@ -70,9 +70,9 @@ describe('section domain notices', () => {
   it('swallows a failure, so the watch keeps what it found', async () => {
     calls.fail = true
     await expect(
-      notifySectionDomainNotAnswering('help.acme.com', new Date())
+      notifySectionDomainNotAnswering('help', 'help.acme.com', new Date())
     ).resolves.toBeUndefined()
-    await expect(notifySectionDomainLapsed('help.acme.com')).resolves.toBeUndefined()
+    await expect(notifySectionDomainLapsed('help', 'help.acme.com')).resolves.toBeUndefined()
     expect(calls.rings).toEqual([])
   })
 })
