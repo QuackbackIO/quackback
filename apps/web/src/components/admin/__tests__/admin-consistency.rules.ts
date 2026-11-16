@@ -226,9 +226,10 @@ const MATCHERS: Record<FileRuleName, (a: Analysis) => boolean> = {
   'tab-icons': (a) => a.tabTriggerElementChild,
   'toggle-rows': (a) => a.rendersSwitch && !a.usesSettingRow,
   palette: (a) => a.classTexts.some((text) => PALETTE.test(text)),
-  // Three dots after a word, in a string or JSX text ("Saving...", "Search..."). The spread
-  // operator never sits inside a string, so code is not matched.
-  ellipsis: (a) => a.texts.some((text) => /[A-Za-z0-9)]\.\.\.(?:\s|$)/.test(text)),
+  // Three dots after a word, in a string or JSX text ("Saving..."), or opening a template-string
+  // segment after an interpolation (`Search in ${name}...`). The spread operator never sits inside
+  // a string, so code is not matched.
+  ellipsis: (a) => a.texts.some((text) => /(?:^|[A-Za-z0-9)])\.\.\.(?:\s|$)/.test(text)),
   // A sentence ending in "!" ("Saved!", "Connected successfully!"). Tailwind's important
   // modifier ("!mt-0") and "!=" never follow a letter and a word boundary like this.
   exclamation: (a) => a.texts.some((text) => /[A-Za-z)][!](?:\s|$)/.test(text)),

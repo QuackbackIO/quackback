@@ -165,6 +165,11 @@ const CASES: Array<{ rule: FileRuleName; file?: string; bad: string; good: strin
   },
   { rule: 'ellipsis', bad: `<span>Saving...</span>`, good: `const all = [...rows, 'Saving…']` },
   {
+    rule: 'ellipsis',
+    bad: 'const p = `Search in ${name}...`',
+    good: 'const p = `Search in ${name}…`',
+  },
+  {
     rule: 'exclamation',
     bad: `<span>Connected successfully!</span>`,
     good: `<span>Connected.</span>`,

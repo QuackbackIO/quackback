@@ -154,7 +154,7 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
                       {isKeyExpired(key) && <ExpiredTag label={intl.formatMessage(m.expired)} />}
                     </div>
                     <code className="font-mono text-xs text-muted-foreground">
-                      {key.keyPrefix}...
+                      {key.keyPrefix}…
                     </code>
                   </KeyTableCell>
                   <KeyTableCell>{key.role?.name ?? ''}</KeyTableCell>
