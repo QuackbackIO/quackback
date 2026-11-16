@@ -12,7 +12,7 @@ describe('billingSessionErrorResponse', () => {
     expect(location(res)).toBe('/admin/settings/billing?billing_error=already_on_addon')
   })
 
-  it.each(['subscription_pending', 'already_subscribed'])('maps %s', (code) => {
+  it.each(['subscription_pending', 'already_subscribed', 'workspace_changed'])('maps %s', (code) => {
     const res = billingSessionErrorResponse(new Error(code))
     expect(res.status).toBe(303)
     expect(location(res)).toBe(`/admin/settings/billing?billing_error=${code}`)

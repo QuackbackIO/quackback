@@ -10,6 +10,7 @@ export function billingErrorCode(error: unknown): string {
   if (message === 'already_on_addon') return 'already_on_addon'
   if (message === 'subscription_pending') return 'subscription_pending'
   if (message === 'already_subscribed') return 'already_subscribed'
+  if (message === 'workspace_changed') return 'workspace_changed'
   if (message === 'not_on_addon') return 'not_on_addon'
   if (message === 'seats_below_usage') return 'seats_below_usage'
   if (message === 'seat_cap_exceeded') return 'seat_cap_exceeded'

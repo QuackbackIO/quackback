@@ -21,6 +21,7 @@ const BILLING_ERROR_COPY: Record<string, string> = {
   already_on_addon: 'Branding removal is already on this workspace.',
   subscription_pending: 'Your subscription is being set up. Refresh in a minute.',
   already_subscribed: 'This workspace already has a subscription.',
+  workspace_changed: 'Something changed while starting the upgrade. Please try again.',
   not_on_addon: 'Branding removal is not on this workspace.',
   unavailable: 'That billing action is not available right now.',
   invalid: 'That billing request was not valid. Try again from this page.',
