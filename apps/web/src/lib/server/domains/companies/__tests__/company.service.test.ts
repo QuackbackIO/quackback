@@ -113,6 +113,14 @@ describe.skipIf(!fixture.available)('company.service (real DB, rolled back)', ()
     expect(await getForPrincipal(principalId)).toBeNull()
   })
 
+  it('refuses to attach a person that does not exist', async () => {
+    const company = await createCompany({ name: `Orphan link ${suffix()}` })
+    const missing = createId('principal') as PrincipalId
+    await expect(attachPrincipal(company.id as CompanyId, missing)).rejects.toMatchObject({
+      code: 'PRINCIPAL_NOT_FOUND',
+    })
+  })
+
   it('counts members per company', async () => {
     const company = await createCompany({ name: `Counted ${suffix()}` })
     const p1 = await seedPrincipal()

@@ -8,8 +8,15 @@ import {
   TypeIdSchema,
   createItemResponseSchema,
   createPaginatedResponseSchema,
+  createRequestBodySchema,
+  asSchema,
 } from '../openapi'
-import { TimestampSchema, UnauthorizedErrorSchema, NotFoundErrorSchema } from './common'
+import {
+  TimestampSchema,
+  UnauthorizedErrorSchema,
+  NotFoundErrorSchema,
+  ValidationErrorSchema,
+} from './common'
 
 // Company schema (GET /companies, GET /companies/{companyId})
 const CompanySchema = z
@@ -135,6 +142,124 @@ registerPath('/companies/{companyId}', {
         description: 'Company not found',
         content: { 'application/json': { schema: NotFoundErrorSchema } },
       },
+    },
+  },
+})
+
+// Write bodies (POST /companies, PATCH /companies/{companyId})
+const companyWriteFields = {
+  domain: z.string().max(255).nullable().optional().meta({ example: 'acme.example' }),
+  externalId: z
+    .string()
+    .max(255)
+    .nullable()
+    .optional()
+    .meta({ description: 'External system identifier; unique', example: 'cust-123' }),
+  plan: z.string().max(255).nullable().optional(),
+  mrrCents: z.number().int().nullable().optional(),
+  size: z.string().max(255).nullable().optional(),
+  website: z.string().max(255).nullable().optional(),
+  industry: z.string().max(255).nullable().optional(),
+  customAttributes: z.record(z.string(), z.unknown()).optional(),
+}
+const CreateCompanyBodySchema = createRequestBodySchema(
+  { name: z.string().min(1).max(200).meta({ example: 'Acme Corp' }), ...companyWriteFields },
+  'Company to create (source is set to api)'
+)
+const UpdateCompanyBodySchema = createRequestBodySchema(
+  { name: z.string().min(1).max(200).optional(), ...companyWriteFields },
+  'Fields to update'
+)
+const companyIdParam = {
+  name: 'companyId',
+  in: 'path' as const,
+  required: true,
+  schema: { type: 'string' as const },
+  description: 'Company ID',
+}
+const conflict = { description: 'externalId or domain already in use' }
+const unauthorized = {
+  description: 'Unauthorized',
+  content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+}
+const invalid = {
+  description: 'Invalid request',
+  content: { 'application/json': { schema: ValidationErrorSchema } },
+}
+const notFound = {
+  description: 'Company not found',
+  content: { 'application/json': { schema: NotFoundErrorSchema } },
+}
+
+registerPath('/companies', {
+  post: {
+    tags: ['Companies'],
+    summary: 'Create a company',
+    description: 'Creates a company with source "api". Requires company.manage.',
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: asSchema(CreateCompanyBodySchema) } },
+    },
+    responses: {
+      201: {
+        description: 'Company created',
+        content: {
+          'application/json': { schema: createItemResponseSchema(CompanySchema, 'Company') },
+        },
+      },
+      400: invalid,
+      401: unauthorized,
+      409: conflict,
+    },
+  },
+})
+
+registerPath('/companies/{companyId}', {
+  patch: {
+    tags: ['Companies'],
+    summary: 'Update a company',
+    description: 'Updates the provided fields of a company. Requires company.manage.',
+    parameters: [companyIdParam],
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: asSchema(UpdateCompanyBodySchema) } },
+    },
+    responses: {
+      200: {
+        description: 'Updated company',
+        content: {
+          'application/json': { schema: createItemResponseSchema(CompanySchema, 'Company') },
+        },
+      },
+      400: invalid,
+      401: unauthorized,
+      404: notFound,
+      409: conflict,
+    },
+  },
+})
+
+registerPath('/companies/{companyId}/members/{principalId}', {
+  put: {
+    tags: ['Companies'],
+    summary: 'Link a person to a company',
+    description:
+      'Links the person to the company (a person belongs to one company). Idempotent. Requires company.manage.',
+    parameters: [
+      companyIdParam,
+      {
+        name: 'principalId',
+        in: 'path',
+        required: true,
+        schema: { type: 'string' },
+        description: 'Principal ID of the person',
+      },
+    ],
+    responses: {
+      204: { description: 'Linked' },
+      400: invalid,
+      401: unauthorized,
+      404: notFound,
     },
   },
 })

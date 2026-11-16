@@ -1,9 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
+import {
+  successResponse,
+  createdResponse,
+  badRequestResponse,
+  handleDomainError,
+} from '@/lib/server/domains/api/responses'
 import type { CompanyId } from '@quackback/ids'
 import { serializeCompany } from './-serialize'
+import { createCompanySchema } from './-write-schemas'
 
 export const Route = createFileRoute('/api/v1/companies/')({
   server: {
@@ -61,6 +67,31 @@ export const Route = createFileRoute('/api/v1/companies/')({
               hasMore: page.hasMore,
             },
           })
+        } catch (error) {
+          return handleDomainError(error)
+        }
+      },
+
+      /**
+       * POST /api/v1/companies
+       * Create a company (source: api). A taken externalId or domain is a 409.
+       */
+      POST: async ({ request }) => {
+        try {
+          await withApiKeyAuth(request, { permission: PERMISSIONS.COMPANY_MANAGE })
+
+          const parsed = createCompanySchema.safeParse(await request.json().catch(() => null))
+          if (!parsed.success) {
+            return badRequestResponse('Invalid request body', {
+              errors: parsed.error.flatten().fieldErrors,
+            })
+          }
+
+          const { createCompany } = await import('@/lib/server/domains/companies/company.service')
+          const company = await createCompany({ ...parsed.data, source: 'api' })
+
+          // A company created here has no members yet.
+          return createdResponse(serializeCompany({ ...company, memberCount: 0 }))
         } catch (error) {
           return handleDomainError(error)
         }

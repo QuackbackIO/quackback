@@ -509,7 +509,14 @@ export async function attachPrincipal(
 ): Promise<void> {
   await getCompany(companyId)
   log.info({ company_id: companyId, principal_id: principalId }, 'attach principal to company')
-  await db.update(principal).set({ companyId }).where(eq(principal.id, principalId))
+  const rows = await db
+    .update(principal)
+    .set({ companyId })
+    .where(eq(principal.id, principalId))
+    .returning({ id: principal.id })
+  if (rows.length === 0) {
+    throw new NotFoundError('PRINCIPAL_NOT_FOUND', `Principal with ID ${principalId} not found`)
+  }
 }
 
 /** Unlink a person from their company. */
