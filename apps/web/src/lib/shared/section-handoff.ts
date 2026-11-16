@@ -27,6 +27,12 @@ import type { SectionOrigins } from './section-links'
 export const SECTION_HANDOFF_PATH = '/auth/section-handoff'
 /** Provider sign-in started from a section host runs on the primary domain. */
 export const SECTION_SIGN_IN_PATH = '/auth/section-sign-in'
+/**
+ * Linking a provider started from a section host runs on the primary domain.
+ * Not under `/auth/section-`: the handoff that signs the visitor in on the
+ * primary domain lands back here, and the handoff refuses its own paths.
+ */
+export const SECTION_LINK_PATH = '/auth/provider-link'
 
 const MAX_RETURN_TO_LENGTH = 2048
 
@@ -170,4 +176,37 @@ export function sectionSignInUrl({
     ...(loginHint ? { loginHint } : {}),
   })
   return `${primaryOrigin.replace(/\/+$/, '')}${SECTION_SIGN_IN_PATH}?${params.toString()}`
+}
+
+/** What a provider link started on a section host names, signed by the server. */
+export interface SectionLinkRequest {
+  provider: string
+  /** The section host the link started on, and returns to. */
+  to: string
+  returnTo: string
+  errorReturnTo: string
+  /** When the address stops working, in epoch milliseconds. */
+  expires: number
+}
+
+/**
+ * Where linking a provider starts when the page is on a section host. The
+ * provider's callback and the link's state live on the primary domain, so the
+ * link runs there and the provider returns the visitor to `to`. `sig` binds
+ * every field to the user who asked, so the address links nobody else.
+ */
+export function sectionLinkUrl(
+  primaryOrigin: string,
+  request: SectionLinkRequest,
+  sig: string
+): string {
+  const params = new URLSearchParams({
+    provider: request.provider,
+    to: request.to,
+    returnTo: request.returnTo,
+    errorReturnTo: request.errorReturnTo,
+    expires: String(request.expires),
+    sig,
+  })
+  return `${primaryOrigin.replace(/\/+$/, '')}${SECTION_LINK_PATH}?${params.toString()}`
 }

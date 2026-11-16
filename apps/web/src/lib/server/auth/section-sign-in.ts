@@ -25,7 +25,7 @@ import {
 import { sectionServedAt } from '@/lib/shared/section-links'
 
 /** A callback the client sent, as a path on `hereOrigin`, else the home page. */
-function pathOnHost(value: unknown, hereOrigin: string): string {
+export function pathOnHost(value: unknown, hereOrigin: string): string {
   if (typeof value !== 'string') return '/'
   const relative = safeHandoffReturnTo(value)
   if (relative) return relative
