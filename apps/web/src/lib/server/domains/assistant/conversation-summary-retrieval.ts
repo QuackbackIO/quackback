@@ -49,6 +49,7 @@ import {
   sql,
 } from '@/lib/server/db'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
+import { escapeLike } from '@/lib/server/db/like'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { isUnscopedService, type Actor } from '@/lib/server/policy/types'
@@ -181,7 +182,7 @@ async function keywordQuery(
   topK: number,
   viewer: Actor
 ): Promise<SummaryRow[]> {
-  const pattern = `%${query}%`
+  const pattern = `%${escapeLike(query)}%`
 
   return db
     .select({

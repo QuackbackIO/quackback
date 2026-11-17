@@ -9,9 +9,9 @@
  * in-progress summary.
  *
  * Every test runs inside the db-test-fixture rollback transaction, so
- * quackback_test stays clean. The keyword (no-embedding) ranking path is used
- * throughout — this suite is about the scope predicate, not the ranking
- * algorithm, so a mocked `generateEmbedding` avoids a real network call.
+ * quackback_test stays clean. A mocked `generateEmbedding` avoids a real
+ * network call: it returns null (the keyword path) unless a test sets a
+ * vector, which the teammate-scoping block does to cover the semantic path too.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import {
@@ -30,6 +30,7 @@ import {
   teams,
   user,
   eq,
+  sql,
 } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { Actor } from '@/lib/server/policy/types'
@@ -39,8 +40,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+// Null selects the keyword path; a vector selects the semantic path.
+let queryEmbedding: number[] | null = null
 vi.mock('@/lib/server/domains/embeddings/embedding.service', () => ({
-  generateEmbedding: vi.fn().mockResolvedValue(null),
+  generateEmbedding: async () => queryEmbedding,
 }))
 
 import { retrieveConversationSummaries } from '../conversation-summary-retrieval'
@@ -128,8 +131,14 @@ async function seedSummary(
     conversationId,
     visitorPrincipalId,
     summary,
+    embedding: sql`${`[${VECTOR.join(',')}]`}::vector`,
+    embeddingModel: 'test',
   })
 }
+
+/** A unit vector along one axis: the query and every seeded summary share it,
+ *  so the semantic path scores each seeded row at cosine 1. */
+const VECTOR = Array.from({ length: 1536 }, (_, i) => (i === 0 ? 1 : 0))
 
 const BILLING_SUMMARY = 'Billing dispute about a duplicate invoice charge, refunded in full.'
 
@@ -144,6 +153,7 @@ describe.skipIf(!fixture.available)(
     // admin who can see every conversation.
     let viewer: Actor
     beforeEach(async () => {
+      queryEmbedding = null
       viewer = adminActor(await seedTeammate('admin'))
     })
 
@@ -225,6 +235,25 @@ describe.skipIf(!fixture.available)(
       expect(items).toEqual([])
     })
 
+    it('matches LIKE wildcards in the keyword query literally', async () => {
+      const customerA = await seedCustomer('Customer A')
+      const conversationA1 = await seedConversation(customerA)
+      const conversationA2 = await seedConversation(customerA)
+      await seedSummary(conversationA1, customerA, BILLING_SUMMARY)
+      const opts = { customerPrincipalId: customerA, conversationId: conversationA2, viewer }
+
+      // Unescaped, `_` matches any one character and `%` any run, so this
+      // term would match the seeded summary.
+      expect(await retrieveConversationSummaries('billing_dispute%charge', 'team', opts)).toEqual(
+        []
+      )
+      expect(
+        (await retrieveConversationSummaries('billing dispute', 'team', opts)).map(
+          (i) => i.conversationId
+        )
+      ).toEqual([conversationA1])
+    })
+
     describe('teammate scoping', () => {
       // One customer with a closed conversation on team X and another on team Y,
       // grounding from a third conversation on team X (the one the copilot is open on).
@@ -265,17 +294,26 @@ describe.skipIf(!fixture.available)(
         return items.map((i) => i.conversationId).sort()
       }
 
-      it("gives a scoped teammate the summary from their own team's conversation and not another team's", async () => {
-        expect(await ids(scoped)).toEqual([teamXPast])
-      })
+      describe.each([
+        ['keyword', null],
+        ['semantic', VECTOR],
+      ])('%s path', (_path, embedding) => {
+        beforeEach(() => {
+          queryEmbedding = embedding
+        })
 
-      it('gives a workspace admin every summary for the customer', async () => {
-        expect(await ids(admin)).toEqual([teamXPast, teamYPast].sort())
-      })
+        it("gives a scoped teammate the summary from their own team's conversation and not another team's", async () => {
+          expect(await ids(scoped)).toEqual([teamXPast])
+        })
 
-      it("never widens to Quinn's own service actor or a missing viewer", async () => {
-        expect(await ids(quinnActor(scoped.principalId!))).toEqual([])
-        expect(await ids(undefined)).toEqual([])
+        it('gives a workspace admin every summary for the customer', async () => {
+          expect(await ids(admin)).toEqual([teamXPast, teamYPast].sort())
+        })
+
+        it("never widens to Quinn's own service actor or a missing viewer", async () => {
+          expect(await ids(quinnActor(scoped.principalId!))).toEqual([])
+          expect(await ids(undefined)).toEqual([])
+        })
       })
     })
   }

@@ -26,6 +26,7 @@
  * a missing or unscoped-service viewer returns nothing.
  */
 import { db, ticketSummaries, tickets, and, desc, eq, ilike, sql } from '@/lib/server/db'
+import { escapeLike } from '@/lib/server/db/like'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import { ticketFilter } from '@/lib/server/policy/tickets'
 import { isUnscopedService, type Actor } from '@/lib/server/policy/types'
@@ -116,12 +117,6 @@ async function hybridQuery(
       .orderBy(sql`score DESC`)
       .limit(topK)
   )
-}
-
-/** Escape LIKE wildcards (and the escape character itself) so a query term
- *  matches literally; Postgres LIKE uses backslash as its default escape. */
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (c) => `\\${c}`)
 }
 
 /** Keyword-only fallback when embedding generation is unavailable: a plain
