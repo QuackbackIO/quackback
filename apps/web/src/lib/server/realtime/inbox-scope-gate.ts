@@ -11,7 +11,9 @@
  *   a frame without it came from code that skipped the scope check.
  * - A frame whose envelope names previous owner and team, for an item the
  *   subscriber held before and does not now, becomes an `inbox_item_removed`
- *   event instead, so the row leaves their list.
+ *   event instead, so the row leaves their list. A delete needs no such
+ *   step: its frame is already the removal, sent with the scope from before
+ *   the delete, so it reaches exactly the subscribers who held the item.
  * - The cache is reloaded lazily: a frame that arrives more than the TTL after
  *   the last load, or after a scope-changed signal, waits for a reload first.
  *   Idle streams run no queries. The TTL is jittered below `ttlMs` per load,

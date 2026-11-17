@@ -95,6 +95,7 @@ import {
 } from '@/lib/server/realtime/conversation-channels'
 import type { ScopedRow } from '@/lib/server/policy/row-scope'
 import { conversationScopeOf } from '@/lib/server/realtime/inbox-envelope'
+import { publishInboxRemoval } from '@/lib/server/realtime/inbox-publish'
 import {
   validateContent,
   preview,
@@ -1338,6 +1339,9 @@ export async function deleteConversationPermanently(
     throw new ValidationError('VALIDATION_ERROR', 'Conversation is not marked as spam')
   }
   await db.delete(conversations).where(eq(conversations.id, conversationId))
+  // The owner and team read before the delete, so every inbox that held the
+  // row drops it now.
+  publishInboxRemoval({ kind: 'conversation', id: conversationId }, conversationScopeOf(existing))
   log.info({ conversation_id: conversationId }, 'conversation permanently deleted')
 }
 

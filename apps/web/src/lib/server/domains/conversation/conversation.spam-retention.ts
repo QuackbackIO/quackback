@@ -39,6 +39,8 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
+import { publishInboxRemovals } from '@/lib/server/realtime/inbox-publish'
+import { deletedRowScope } from '@/lib/server/realtime/inbox-envelope'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'spam-retention' })
@@ -87,9 +89,18 @@ export async function sweepFiledSpamConversations(opts?: {
           AND resolved_at < ${cutoffIso}::timestamptz
         LIMIT ${batchSize}
       )
-      RETURNING id
+      RETURNING id, assigned_agent_principal_id AS assignee, assigned_team_id AS team
     `)
-    const batch = getExecuteRows<{ id: string }>(result).length
+    const rows = getExecuteRows<{ id: string; assignee: string | null; team: string | null }>(
+      result
+    )
+    // Each row's owner and team as the delete found them, so an inbox open on
+    // the Spam view drops the rows now.
+    await publishInboxRemovals(
+      'conversation',
+      rows.map((r) => deletedRowScope('conversation', r))
+    )
+    const batch = rows.length
     deleted += batch
     if (batch < batchSize) break
   }

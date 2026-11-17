@@ -37,7 +37,12 @@ vi.mock('../inbox-scope-read', () => ({
   }),
 }))
 
-import { publishInboxFrame, inboxPublishesSettled } from '../inbox-publish'
+import {
+  publishInboxFrame,
+  publishInboxRemoval,
+  publishInboxRemovals,
+  inboxPublishesSettled,
+} from '../inbox-publish'
 
 const INBOX = 'conversation:inbox'
 
@@ -167,5 +172,60 @@ describe('publishInboxFrame', () => {
     await inboxPublishesSettled()
     expect(publishAsync.mock.calls.map((c) => c[1])).toEqual([{ n: 2 }, { n: 3 }])
     expect(logged.filter((l) => l.level === 'warn')).toHaveLength(2)
+  })
+
+  it('sends a delete as a removal with the owner and team captured before it, never reading the row', async () => {
+    publishInboxRemoval(
+      { kind: 'ticket', id: 'ticket_gone' },
+      { assigneePrincipalId: 'p1', teamId: 'team_x' }
+    )
+    await inboxPublishesSettled()
+    // The row is gone, so a read would find nothing and drop the frame.
+    expect(reads).toEqual([])
+    expect(publishAsync).toHaveBeenCalledWith(
+      INBOX,
+      { kind: 'inbox_item_removed', itemKind: 'ticket', id: 'ticket_gone' },
+      { kind: 'ticket', id: 'ticket_gone', assigneePrincipalId: 'p1', teamId: 'team_x' }
+    )
+  })
+
+  it('sends a removal behind the frames already queued for the same item', async () => {
+    let open!: () => void
+    gates.set('conversation_c1', new Promise<void>((r) => (open = r)))
+    rows.set('conversation_c1', { assigneePrincipalId: 'p1', teamId: null })
+    publishInboxFrame({ kind: 'conversation', id: 'conversation_c1' }, { n: 1 })
+    publishInboxRemoval(
+      { kind: 'conversation', id: 'conversation_c1' },
+      { assigneePrincipalId: 'p1', teamId: null }
+    )
+    await new Promise((r) => setTimeout(r, 10))
+    expect(publishAsync).not.toHaveBeenCalled()
+    open()
+    await inboxPublishesSettled()
+    expect(publishAsync.mock.calls.map((c) => (c[1] as { kind?: string }).kind ?? 'n')).toEqual([
+      'n',
+      'inbox_item_removed',
+    ])
+  })
+
+  it('a batch of removals resolves once each one has been sent, one at a time', async () => {
+    let inFlight = 0
+    let most = 0
+    publishAsync.mockImplementation(async () => {
+      inFlight += 1
+      most = Math.max(most, inFlight)
+      await new Promise((r) => setTimeout(r, 1))
+      inFlight -= 1
+    })
+    await publishInboxRemovals('conversation', [
+      { id: 'conversation_a', assigneePrincipalId: null, teamId: 'team_x' },
+      { id: 'conversation_b', assigneePrincipalId: 'p2', teamId: null },
+    ])
+    publishAsync.mockImplementation(async () => {})
+    expect(publishAsync.mock.calls.map((c) => c[2])).toEqual([
+      { kind: 'conversation', id: 'conversation_a', assigneePrincipalId: null, teamId: 'team_x' },
+      { kind: 'conversation', id: 'conversation_b', assigneePrincipalId: 'p2', teamId: null },
+    ])
+    expect(most).toBe(1)
   })
 })

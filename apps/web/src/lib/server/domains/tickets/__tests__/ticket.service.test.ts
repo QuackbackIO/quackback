@@ -60,6 +60,11 @@ vi.mock('../ticket.webhooks', () => webhooks)
 // own test convention.
 const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))
 vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
+const inboxRemoval = vi.hoisted(() => ({ publishInboxRemoval: vi.fn() }))
+vi.mock('@/lib/server/realtime/inbox-publish', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  ...inboxRemoval,
+}))
 
 // Neutralize the fire-and-forget activity log: this suite's actors are mostly
 // unbacked principal ids, and a real insert's FK failure would abort the
@@ -791,22 +796,20 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
       )
     })
 
-    it('softDeleteTicket publishes ticket_updated so other viewers refetch the list', async () => {
+    it('softDeleteTicket publishes a removal with the owner and team it had, and no ticket_updated', async () => {
       await seedSettings()
       await seedStatuses()
       const actor = adminActor()
       const created = await createTicket({ type: 'customer', title: 'Delete me' }, actor)
       realtime.publishTicketEvent.mockClear()
+      inboxRemoval.publishInboxRemoval.mockClear()
 
       await softDeleteTicket(created.id, actor)
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
-        created.id,
-        {
-          kind: 'ticket_updated',
-          ticket: expect.objectContaining({ id: created.id }),
-        },
-        expect.objectContaining({ teamId: null })
+      expect(inboxRemoval.publishInboxRemoval).toHaveBeenCalledWith(
+        { kind: 'ticket', id: created.id },
+        { assigneePrincipalId: created.assignee.principalId, teamId: null }
       )
+      expect(realtime.publishTicketEvent).not.toHaveBeenCalled()
     })
   })
 

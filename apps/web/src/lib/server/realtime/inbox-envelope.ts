@@ -14,6 +14,7 @@
  * stream then sends a removal to a subscriber who held the item and no longer
  * does.
  */
+import { fromUuid } from '@quackback/ids'
 import type { ScopedRow } from '@/lib/server/policy/row-scope'
 import type { InboxItemRef } from '@/lib/shared/inbox/items'
 
@@ -42,6 +43,22 @@ export function ticketScopeOf(row: {
   return {
     assigneePrincipalId: row.assigneePrincipalId ?? null,
     teamId: row.assigneeTeamId ?? null,
+  }
+}
+
+/**
+ * A row a raw SQL delete returned, as `RETURNING id, <owner> AS assignee,
+ * <team> AS team`. Raw SQL hands back bare uuids, while the inbox and every
+ * scope compare typed ids, so each one is converted here.
+ */
+export function deletedRowScope(
+  kind: InboxItemRef['kind'],
+  row: { id: string; assignee: string | null; team: string | null }
+): { id: string } & ScopedRow {
+  return {
+    id: fromUuid(kind, row.id),
+    assigneePrincipalId: row.assignee ? fromUuid('principal', row.assignee) : null,
+    teamId: row.team ? fromUuid('team', row.team) : null,
   }
 }
 

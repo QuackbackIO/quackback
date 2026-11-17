@@ -507,9 +507,11 @@ export type TicketStreamEvent =
   | { kind: 'ticket_read'; ticketId: TicketId; side: MessageSenderType; at: string }
 
 /**
- * Events the inbox stream builds per subscriber, never published (see
- * realtime/inbox-scope-gate.ts). `inbox_item_removed`: an item this teammate
- * held left their scope (a reassignment), so its row leaves their lists.
+ * Scope events on the inbox stream. `inbox_item_removed`: an item this
+ * teammate held left their scope, so its row leaves their lists. The stream
+ * builds it per subscriber for a reassignment (realtime/inbox-scope-gate.ts),
+ * and a delete publishes it with the item's scope from before the delete
+ * (realtime/inbox-publish.ts), so only teammates who held the item get it.
  * `inbox_scope_changed`: their role or teams changed, so lists are refetched.
  */
 export type InboxScopeStreamEvent =

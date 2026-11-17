@@ -26,6 +26,7 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   conversations,
   eq,
+  inArray,
   permissions,
   principal,
   principalRoleAssignments,
@@ -35,6 +36,7 @@ import {
   invitation,
   teamMembers,
   teams,
+  ticketConversations,
   tickets,
   ticketStatuses,
   user,
@@ -182,10 +184,16 @@ import { publishInboxScopeChanged } from '@/lib/server/realtime/inbox-scope-inva
 import {
   assignConversation,
   assignTeam,
+  deleteConversationPermanently,
   requeueUnansweredOnAgentOffline,
 } from '@/lib/server/domains/conversation/conversation.service'
+import { sweepFiledSpamConversations } from '@/lib/server/domains/conversation/conversation.spam-retention'
+import {
+  deleteTestConversations,
+  sweepTestData,
+} from '@/lib/server/domains/conversation/conversation.test-data'
 import { conversationToDTO } from '@/lib/server/domains/conversation/conversation.query'
-import { assignTicket } from '@/lib/server/domains/tickets/ticket.service'
+import { assignTicket, softDeleteTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { sendTicketMessage } from '@/lib/server/domains/tickets/ticket-message.service'
 import { addPrincipalToDefaultTeam, setTeamMembers } from '@/lib/server/domains/teams'
 import { setPrincipalRole } from '@/lib/server/domains/principals/principal.factory'
@@ -816,5 +824,153 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
     for (const e of bus.wire.filter((x) => x.channel === 'conversation:inbox')) {
       expect(e.scope).toBeDefined()
     }
+  })
+
+  /** The removals an inbox received, as their item ids, in arrival order. */
+  const removalsIn = (inbox: Awaited<ReturnType<typeof openInbox>>) =>
+    inbox
+      .frames()
+      .filter((f) => f.event === 'inbox_item_removed')
+      .map((f) => `${f.data.itemKind}:${f.data.id}`)
+
+  /** Old enough for the retention sweeps. */
+  const longAgo = () => new Date(Date.now() - 60 * 86_400_000)
+
+  it('removes a deleted conversation from every inbox that held it, and tells no one else', async () => {
+    const w = await seedWorld()
+    await testDb
+      .update(conversations)
+      .set({ status: 'closed', endReason: 'spam', spamReason: 'manual' })
+      .where(inArray(conversations.id, [w.conv.x, w.conv.y]))
+    const scoped = await openInbox(w.scoped)
+    const viewAll = await openInbox(w.viewAll)
+
+    await deleteConversationPermanently(w.conv.x, w.adminActor)
+    await deleteConversationPermanently(w.conv.y, w.adminActor)
+    await settle()
+
+    expect(removalsIn(scoped)).toEqual([`conversation:${w.conv.x}`])
+    expect(removalsIn(viewAll)).toEqual([`conversation:${w.conv.x}`, `conversation:${w.conv.y}`])
+    // Nothing about the other team's conversation reaches the scoped teammate.
+    expect(scoped.frames().map(itemIdOf)).not.toContain(w.conv.y)
+  })
+
+  it('removes a deleted ticket from every inbox that held it, and never patches it back in', async () => {
+    const w = await seedWorld()
+    const scoped = await openInbox(w.scoped)
+    const viewAll = await openInbox(w.viewAll)
+
+    await softDeleteTicket(w.ticket.x, w.adminActor)
+    await softDeleteTicket(w.ticket.y, w.adminActor)
+    await settle()
+
+    expect(removalsIn(scoped)).toEqual([`ticket:${w.ticket.x}`])
+    expect(removalsIn(viewAll)).toEqual([`ticket:${w.ticket.x}`, `ticket:${w.ticket.y}`])
+    expect(scoped.frames().map(itemIdOf)).not.toContain(w.ticket.y)
+    // A ticket_updated after the removal would put the deleted ticket back in
+    // the open pane's cache.
+    for (const inbox of [scoped, viewAll]) {
+      expect(inbox.frames().map((f) => f.event)).not.toContain('ticket_updated')
+    }
+  })
+
+  it('removes the conversations the spam retention sweep deletes, each by its own scope', async () => {
+    const w = await seedWorld()
+    await testDb
+      .update(conversations)
+      .set({
+        status: 'closed',
+        endReason: 'spam',
+        spamReason: 'classifier',
+        resolvedAt: longAgo(),
+      })
+      .where(inArray(conversations.id, [w.conv.x, w.conv.y]))
+    const scoped = await openInbox(w.scoped)
+    const viewAll = await openInbox(w.viewAll)
+
+    await sweepFiledSpamConversations()
+    await settle()
+
+    expect(removalsIn(scoped)).toEqual([`conversation:${w.conv.x}`])
+    expect(removalsIn(viewAll).sort()).toEqual(
+      [`conversation:${w.conv.x}`, `conversation:${w.conv.y}`].sort()
+    )
+  })
+
+  /** A test customer of the admin, with a conversation on each team and a ticket on team X. */
+  async function seedTestThreads(w: Awaited<ReturnType<typeof seedWorld>>) {
+    const customer = await seedPrincipal('user')
+    await testDb
+      .update(principal)
+      .set({ testOwnerPrincipalId: w.admin })
+      .where(eq(principal.id, customer))
+    const conv = {
+      x: createId('conversation') as ConversationId,
+      y: createId('conversation') as ConversationId,
+    }
+    await testDb.insert(conversations).values([
+      {
+        id: conv.x,
+        visitorPrincipalId: customer,
+        channel: 'messenger',
+        assignedTeamId: w.teamX,
+        createdAt: longAgo(),
+      },
+      {
+        id: conv.y,
+        visitorPrincipalId: customer,
+        channel: 'messenger',
+        assignedTeamId: w.teamY,
+        createdAt: longAgo(),
+      },
+    ])
+    const [status] = await testDb.select({ id: ticketStatuses.id }).from(ticketStatuses).limit(1)
+    const ticketX = createId('ticket') as TicketId
+    await testDb.insert(tickets).values({
+      id: ticketX,
+      title: 'test',
+      statusId: status.id,
+      requesterPrincipalId: customer,
+      assigneeTeamId: w.teamX,
+      createdAt: longAgo(),
+    })
+    await testDb
+      .insert(ticketConversations)
+      .values({ ticketId: ticketX, conversationId: conv.x, ticketType: 'customer' })
+    return { conv, ticketX }
+  }
+
+  it('removes the test threads and tickets the test data sweep deletes, each by its own scope', async () => {
+    const w = await seedWorld()
+    const t = await seedTestThreads(w)
+    const scoped = await openInbox(w.scoped)
+    const viewAll = await openInbox(w.viewAll)
+
+    await sweepTestData()
+    await settle()
+
+    expect(removalsIn(scoped).sort()).toEqual(
+      [`conversation:${t.conv.x}`, `ticket:${t.ticketX}`].sort()
+    )
+    expect(removalsIn(viewAll).sort()).toEqual(
+      [`conversation:${t.conv.x}`, `conversation:${t.conv.y}`, `ticket:${t.ticketX}`].sort()
+    )
+  })
+
+  it('removes the test threads and their tickets a teammate deletes, each by its own scope', async () => {
+    const w = await seedWorld()
+    const t = await seedTestThreads(w)
+    const scoped = await openInbox(w.scoped)
+    const viewAll = await openInbox(w.viewAll)
+
+    await deleteTestConversations(w.adminActor)
+    await settle()
+
+    expect(removalsIn(scoped).sort()).toEqual(
+      [`conversation:${t.conv.x}`, `ticket:${t.ticketX}`].sort()
+    )
+    expect(removalsIn(viewAll).sort()).toEqual(
+      [`conversation:${t.conv.x}`, `conversation:${t.conv.y}`, `ticket:${t.ticketX}`].sort()
+    )
   })
 })
