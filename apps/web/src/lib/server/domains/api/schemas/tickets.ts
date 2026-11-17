@@ -304,7 +304,8 @@ registerPath('/tickets/{ticketId}/messages', {
         name: 'includeInternal',
         in: 'query',
         schema: { type: 'boolean' },
-        description: 'Include internal teammate notes (default: false)',
+        description:
+          'Include internal teammate notes and assignment notices, which customers never see (default: false)',
       },
       {
         name: 'before',
