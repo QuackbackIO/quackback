@@ -1,8 +1,8 @@
 /**
  * A product page's custom domain, read-only: the hostname its section is
- * served at, or the primary domain. Custom domains are set only on Settings >
- * Domains, behind settings.custom_domain, so a viewer who holds it gets a link
- * there and nobody edits it here.
+ * served at, or the primary domain. Custom domains are set only on the Custom
+ * domains tab of Settings > Portal, behind settings.custom_domain, so a viewer
+ * who holds it gets a link there and nobody edits it here.
  */
 import { useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
@@ -11,8 +11,8 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { StateBadge } from '@/components/shared/state-badge'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PortalSection } from '@/lib/shared/custom-domains'
+import { CUSTOM_DOMAINS_LINK } from '@/lib/shared/portal-settings-tabs'
 import {
-  CUSTOM_DOMAINS_ANCHOR,
   effectiveSectionDomains,
   normalizeHost,
   notAnsweringNote,
@@ -34,7 +34,7 @@ export function SectionDomainCard({
   section: PortalSection
   map: SectionDomainMap
   primaryHost: string | null
-  /** Holds settings.custom_domain: may change it on Settings > Domains. */
+  /** Holds settings.custom_domain: may change it on Settings > Portal, Custom domains. */
   canManage: boolean
 }) {
   const entry = map[section]
@@ -58,8 +58,8 @@ export function SectionDomainCard({
           </span>
           {canManage && (
             <Link
-              to="/admin/settings/domains"
-              hash={CUSTOM_DOMAINS_ANCHOR}
+              to={CUSTOM_DOMAINS_LINK.to}
+              search={CUSTOM_DOMAINS_LINK.search}
               className={`${INLINE_LINK} text-[13px]`}
             >
               Custom domains

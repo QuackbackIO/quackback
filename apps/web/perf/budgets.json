@@ -573,17 +573,17 @@
       "componentRenders": 431
     },
     "sweep:doc:admin:/admin/settings/domains": {
-      "dbQueries": 16,
-      "htmlKB": 73.0
+      "dbQueries": 15,
+      "htmlKB": 70.4
     },
     "sweep:ui:admin:/admin/settings/domains": {
-      "dbQueries": 16,
+      "dbQueries": 15,
       "serverRequests": 1,
-      "requests": 111,
-      "jsRequests": 104,
-      "jsKB": 405.2,
-      "htmlTransferKB": 29.7,
-      "componentRenders": 346
+      "requests": 103,
+      "jsRequests": 96,
+      "jsKB": 402.3,
+      "htmlTransferKB": 13.6,
+      "componentRenders": 330
     },
     "sweep:doc:admin:/admin/settings/domains/acme.com": {
       "dbQueries": 29
@@ -773,6 +773,19 @@
       "jsKB": 1143.6,
       "htmlTransferKB": 34.3,
       "componentRenders": 1517
+    },
+    "sweep:doc:admin:/admin/settings/portal?tab=custom-domains": {
+      "dbQueries": 6,
+      "htmlKB": 73.9
+    },
+    "sweep:ui:admin:/admin/settings/portal?tab=custom-domains": {
+      "dbQueries": 6,
+      "serverRequests": 1,
+      "requests": 153,
+      "jsRequests": 145,
+      "jsKB": 671.6,
+      "htmlTransferKB": 14.2,
+      "componentRenders": 356
     },
     "sweep:doc:admin:/admin/settings/security/authentication": {
       "dbQueries": 11,

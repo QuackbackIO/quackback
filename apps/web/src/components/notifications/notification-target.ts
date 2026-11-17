@@ -8,6 +8,7 @@
  * safety gain (the shapes are validated by each destination route already).
  */
 import type { SerializedNotification } from '@/lib/client/hooks/use-notifications-queries'
+import { CUSTOM_DOMAINS_LINK } from '@/lib/shared/portal-settings-tabs'
 
 export interface NotificationTarget {
   to: string
@@ -100,8 +101,12 @@ export function getNotificationTarget(
     return { to: '/admin/settings/email' }
   }
 
-  // Domain bells open Settings → Domains, where each domain's record is.
+  // Domain bells open Settings → Domains, where each domain's record is; a
+  // section's custom domain bell opens the Custom domains tab, where it is verified.
   if (notification.type === 'domain_needs_attention') {
+    if (notification.section) {
+      return { to: CUSTOM_DOMAINS_LINK.to, search: { ...CUSTOM_DOMAINS_LINK.search } }
+    }
     return { to: '/admin/settings/domains' }
   }
 

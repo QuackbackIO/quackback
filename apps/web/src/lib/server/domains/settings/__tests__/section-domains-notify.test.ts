@@ -46,7 +46,7 @@ describe('section domain notices', () => {
         bell: {
           title: 'help.acme.com needs attention',
           body: 'The Help center domain is not answering. Fix its DNS by 2026-11-23 to keep it verified.',
-          metadata: { domain: 'help.acme.com', audience: 'admin' },
+          metadata: { domain: 'help.acme.com', audience: 'admin', section: 'help' },
         },
       },
     ])
@@ -61,7 +61,7 @@ describe('section domain notices', () => {
         bell: {
           title: 'help.acme.com is no longer verified',
           body: 'Help center is back on the primary domain. Fix the DNS, then verify it again.',
-          metadata: { domain: 'help.acme.com', audience: 'admin' },
+          metadata: { domain: 'help.acme.com', audience: 'admin', section: 'help' },
         },
       },
     ])

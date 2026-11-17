@@ -19,6 +19,7 @@ const { cardRenders, previewRenders, rootContext } = vi.hoisted(() => ({
   rootContext: {
     settings: { name: 'Acme', featureFlags: { feedback: true, changelog: true } },
     session: null,
+    permissions: ['settings.branding'] as string[],
   },
 }))
 
@@ -32,6 +33,7 @@ vi.mock('@tanstack/react-router', async () => {
       select(rootContext),
     useRouter: () => ({ invalidate: vi.fn() }),
     useBlocker: () => undefined,
+    useSearch: () => ({}),
     Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
   }
 })
@@ -159,5 +161,24 @@ describe('portal settings page hydration', () => {
       fireEvent.click(container.querySelector('[data-testid="rich-text-editor"]')!)
     })
     expect(container.querySelector('[data-slot="draft-bar"]')).toBeTruthy()
+  })
+
+  it('shows no tab bar to a viewer without settings.custom_domain', async () => {
+    const container = await hydratePage()
+    expect(container.querySelector('nav[aria-label="Portal"]')).toBeNull()
+    expect(container).not.toHaveTextContent('Custom domains')
+  })
+
+  it('shows Navigation and Custom domains tabs to a viewer with settings.custom_domain', async () => {
+    rootContext.permissions = ['settings.branding', 'settings.custom_domain']
+    try {
+      const container = await hydratePage()
+      const bar = container.querySelector('nav[aria-label="Portal"]')
+      expect(bar?.textContent).toBe('NavigationCustom domains')
+      // Navigation is open: its cards are on the page.
+      expect([...cardRenders.keys()]).toContain('Welcome message')
+    } finally {
+      rootContext.permissions = ['settings.branding']
+    }
   })
 })

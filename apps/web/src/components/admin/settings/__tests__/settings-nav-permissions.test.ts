@@ -50,6 +50,7 @@ describe('navSectionsFor', () => {
     expect(labels(only(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN), 'Workspace')).toEqual([
       'Domains',
       'Notifications',
+      'Portal',
     ])
     expect(labels(only(PERMISSIONS.AUTH_MANAGE), 'Workspace')).toEqual([
       'Domains',
@@ -201,8 +202,8 @@ describe('firstSettingsPath', () => {
     expect(first(new Set([PERMISSIONS.CHANNEL_ACCOUNT_MANAGE]), email)).toBe(
       '/admin/settings/channels/email'
     )
-    // Domains holds web address setup, which this permission owns: it lands there.
-    expect(first(new Set([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]))).toBe('/admin/settings/domains')
+    // Custom domains are set on Settings > Portal, so their owner lands there.
+    expect(first(new Set([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]))).toBe('/admin/settings/portal')
     // A viewer who only reaches Domains through another page's permission does not.
     expect(first(new Set([PERMISSIONS.AUTH_MANAGE]))).not.toBe('/admin/settings/domains')
   })

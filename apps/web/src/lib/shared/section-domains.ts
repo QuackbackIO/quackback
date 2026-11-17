@@ -29,7 +29,10 @@ export interface SectionDomain {
   unconfirmedSince?: string | null
 }
 
-/** The Custom domains card on Settings > Domains, where each section's domain is set. */
+/**
+ * The Custom domains card's id. The card was on Settings > Domains, so old links
+ * carry it as /admin/settings/domains#custom-domains (`legacyCustomDomainsTarget`).
+ */
 export const CUSTOM_DOMAINS_ANCHOR = 'custom-domains'
 
 /** Where one section's hostname stands, as the admin pages name it. */

@@ -223,6 +223,12 @@ describe('getNotificationTarget', () => {
     })
   })
 
+  it("routes a section's custom domain bell to the Custom domains tab of Settings > Portal", () => {
+    expect(
+      getNotificationTarget(buildNotification({ type: 'domain_needs_attention', section: 'help' }))
+    ).toEqual({ to: '/admin/settings/portal', search: { tab: 'custom-domains' } })
+  })
+
   it('routes changelog_published with a changelogId to the specific entry', () => {
     const notification = buildNotification({
       type: 'changelog_published',
