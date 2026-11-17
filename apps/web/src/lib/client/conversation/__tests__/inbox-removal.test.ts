@@ -2,10 +2,15 @@
  * An item that left the teammate's scope leaves every cached inbox list at
  * once, and its open thread or detail refetches so the pane shows not found.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
 import type { ConversationId, TicketId } from '@quackback/ids'
-import { removeInboxItemFromCaches, settleOpenItemAfterScopeChange } from '../inbox-removal'
+import {
+  createInboxRemovalHandler,
+  REMOVAL_COUNTS_DELAY_MS,
+  removeInboxItemFromCaches,
+  settleOpenItemAfterScopeChange,
+} from '../inbox-removal'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { inboxKeys, ticketKeys } from '@/lib/client/queries/inbox'
 
@@ -93,5 +98,51 @@ describe('removeInboxItemFromCaches', () => {
       qc.getQueryData(conversationKeys.agentThread('conversation_1' as ConversationId))
     ).toBeUndefined()
     expect(qc.getQueryData(ticketKeys.detail('ticket_1' as TicketId))).toEqual({ id: 'ticket_1' })
+  })
+})
+
+describe('createInboxRemovalHandler', () => {
+  it('takes each removed item out at once, and refetches the counts once for a burst', () => {
+    vi.useFakeTimers()
+    try {
+      const qc = seeded()
+      const refreshCounts = vi.fn()
+      const handler = createInboxRemovalHandler(qc, refreshCounts)
+      // A sweep's removals arrive one after another, a few milliseconds apart.
+      for (const [itemKind, id] of [
+        ['conversation', 'conversation_1'],
+        ['ticket', 'ticket_1'],
+        ['conversation', 'conversation_2'],
+      ] as const) {
+        handler.onRemoved({ itemKind, id })
+        vi.advanceTimersByTime(5)
+      }
+      expect(qc.getQueryData<{ items: unknown[] }>([...inboxKeys.items(), 'mine'])?.items).toEqual(
+        []
+      )
+      expect(refreshCounts).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(REMOVAL_COUNTS_DELAY_MS)
+      expect(refreshCounts).toHaveBeenCalledTimes(1)
+      // A removal after the burst refetches again.
+      handler.onRemoved({ itemKind: 'conversation', id: 'conversation_3' })
+      vi.advanceTimersByTime(REMOVAL_COUNTS_DELAY_MS)
+      expect(refreshCounts).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('cancel drops a pending count refetch', () => {
+    vi.useFakeTimers()
+    try {
+      const refreshCounts = vi.fn()
+      const handler = createInboxRemovalHandler(seeded(), refreshCounts)
+      handler.onRemoved({ itemKind: 'ticket', id: 'ticket_1' })
+      handler.cancel()
+      vi.advanceTimersByTime(REMOVAL_COUNTS_DELAY_MS)
+      expect(refreshCounts).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

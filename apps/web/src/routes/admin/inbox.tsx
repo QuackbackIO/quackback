@@ -104,7 +104,7 @@ import { itemRefId } from '@/lib/client/conversation/inbox-cache'
 import { coalescedJitter } from '@/lib/client/coalesced-jitter'
 import { createOwnSendEchoHold } from '@/components/conversation/thread-echo'
 import {
-  removeInboxItemFromCaches,
+  createInboxRemovalHandler,
   settleOpenItemAfterScopeChange,
 } from '@/lib/client/conversation/inbox-removal'
 import type { Channel } from '@/lib/shared/channels'
@@ -704,6 +704,12 @@ function InboxPage() {
   )
   useEffect(() => () => scopeRefetch.cancel(), [scopeRefetch])
 
+  const removals = useMemo(
+    () => createInboxRemovalHandler(queryClient, refreshInboxCounts),
+    [queryClient, refreshInboxCounts]
+  )
+  useEffect(() => () => removals.cancel(), [removals])
+
   // This tab's own send reaches the open thread as its response and as the
   // stream's echo. While the send is in flight, its conversation's echo frames
   // wait and land after the response, where they change nothing, so the thread
@@ -745,10 +751,9 @@ function InboxPage() {
       // refetches as a reconnect does, since lists and the open pane may all
       // have moved.
       if (evt.kind === 'inbox_item_removed') {
-        // The lists are patched here; only the counts need the server.
-        const ref = inboxItemRefFromId(evt.id)
-        if (ref) removeInboxItemFromCaches(queryClient, ref)
-        refreshInboxCounts()
+        // The lists are patched here; only the counts need the server, once
+        // per burst (a sweep sends one removal per row).
+        removals.onRemoved(evt)
         return
       }
       if (evt.kind === 'inbox_scope_changed') {
