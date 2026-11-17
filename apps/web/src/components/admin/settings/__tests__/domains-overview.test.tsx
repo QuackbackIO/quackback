@@ -96,6 +96,11 @@ describe('Verified domains card', () => {
     }
   })
 
+  it('opens Add domain straight away when the page was opened to add one', () => {
+    render(<VerifiedDomainsCard rows={[]} links={linksFor(ALL)} canAdd openAdd />)
+    expect(screen.getByRole('dialog')).toHaveTextContent('Add domain')
+  })
+
   it('offers no Add domain to a viewer who cannot add one', () => {
     const { container } = render(
       <VerifiedDomainsCard rows={[]} links={linksFor(ALL)} canAdd={false} />

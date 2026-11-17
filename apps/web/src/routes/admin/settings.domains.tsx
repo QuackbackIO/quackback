@@ -1,7 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
-import { DOMAINS_PAGE_PERMISSIONS, domainUseLinks } from '@/lib/shared/domains-permissions'
+import {
+  DOMAINS_PAGE_PERMISSIONS,
+  domainUseLinks,
+  opensAddDomain,
+} from '@/lib/shared/domains-permissions'
 import { legacyCustomDomainsTarget } from '@/lib/shared/portal-settings-tabs'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
@@ -15,6 +19,9 @@ import { adminPageHead } from '@/lib/client/admin-head'
  */
 export const Route = createFileRoute('/admin/settings/domains')({
   head: adminPageHead('Domains settings'),
+  // `?add=1` (ADD_DOMAIN_LINK) opens Add domain on arrival, as Custom domains links here to add one.
+  validateSearch: (search: Record<string, unknown>): { add?: '1' } =>
+    opensAddDomain(search) ? { add: '1' } : {},
   loader: async ({ context }) => {
     assertRouteAnyPermission(context.permissions, DOMAINS_PAGE_PERMISSIONS)
     // The list rows only the domains the workspace owns, so it reads no section map.
@@ -30,6 +37,7 @@ export const Route = createFileRoute('/admin/settings/domains')({
 function DomainsSettingsPage() {
   const { sending, signIn, added, links } = Route.useLoaderData()
   const { permissions } = Route.useRouteContext()
+  const { add } = Route.useSearch()
   const navigate = useNavigate()
   // Only settings.manage adds a bare domain; the other Domains permissions see the page without it.
   const canAdd = permissions?.includes(PERMISSIONS.SETTINGS_MANAGE) ?? false
@@ -44,9 +52,15 @@ function DomainsSettingsPage() {
     if (target) void navigate({ ...target, replace: true })
   }, [navigate, permissions])
 
+  // Add domain opens once: the request leaves the URL, so going back or reloading does not reopen it.
+  const [openAdd] = useState(add === '1')
+  useEffect(() => {
+    if (openAdd) void navigate({ to: '/admin/settings/domains', search: {}, replace: true })
+  }, [navigate, openAdd])
+
   return (
     <SettingsPage page="/admin/settings/domains">
-      <VerifiedDomainsCard rows={rows} links={links} canAdd={canAdd} />
+      <VerifiedDomainsCard rows={rows} links={links} canAdd={canAdd} openAdd={openAdd} />
     </SettingsPage>
   )
 }

@@ -23,6 +23,14 @@ export const DOMAINS_PAGE_PERMISSIONS = [
   DOMAIN_USE_PERMISSION.signIn,
 ] as const satisfies readonly PermissionKey[]
 
+/** Settings > Domains with its Add domain dialog open, for a viewer who holds settings.manage. */
+export const ADD_DOMAIN_LINK = { to: '/admin/settings/domains', search: { add: '1' } } as const
+
+/** Whether a Domains page URL asks for Add domain open (`?add=1`, read as a number or a string). */
+export function opensAddDomain(search: Record<string, unknown>): boolean {
+  return search.add === '1' || search.add === 1
+}
+
 /** The Cloud card, on the Custom domains tab, where a hostname is added and its DNS records are checked. */
 export const DOMAIN_VERIFICATION_ANCHOR = 'domain-verification'
 
