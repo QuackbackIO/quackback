@@ -136,12 +136,16 @@ function renderHeader({
   userRole,
   isLoggedIn,
   workspaceName = 'Acme',
+  route = {},
 }: {
   userRole?: 'admin' | 'member' | 'user' | null
   isLoggedIn: boolean
   workspaceName?: string
+  /** More of the root route context, as the bootstrap sends it. */
+  route?: Record<string, unknown>
 }) {
   mockGetRouteContext.mockReturnValue({
+    ...route,
     session: isLoggedIn ? loggedInSession : null,
     settings: {
       name: workspaceName,
@@ -184,6 +188,57 @@ describe('PortalHeader — Admin dropdown item', () => {
     const trigger = screen.getByRole('button')
     fireEvent.click(trigger)
     expect(await screen.findByRole('menuitem', { name: /admin/i })).toBeInTheDocument()
+  })
+
+  it('links Admin on the page on the primary domain', async () => {
+    renderHeader({ userRole: 'admin', isLoggedIn: true, route: { baseUrl: 'https://acme.com' } })
+    expect(screen.getByRole('link', { name: /admin/i }).getAttribute('href')).toBe('/admin')
+    fireEvent.click(screen.getByRole('button'))
+    const item = await screen.findByRole('menuitem', { name: /admin/i })
+    expect(item.getAttribute('href')).toBe('/admin')
+  })
+
+  // On a section host the session is portal scope, so the role reads as a
+  // portal user's; the bootstrap sends a teammate the admin's address instead.
+  const onSectionHost = {
+    baseUrl: 'https://acme.com',
+    sectionLinks: {
+      hosts: { feedback: 'https://feedback.acme.com' },
+      here: 'https://feedback.acme.com',
+    },
+  }
+
+  it('links a teammate on a section host to the admin on the primary domain', async () => {
+    renderHeader({
+      userRole: 'user',
+      isLoggedIn: true,
+      route: { ...onSectionHost, primaryAdminUrl: 'https://acme.com/admin' },
+    })
+    // The button in the header...
+    expect(screen.getByRole('link', { name: /admin/i }).getAttribute('href')).toBe(
+      'https://acme.com/admin'
+    )
+    // ...and the item in the account menu.
+    fireEvent.click(screen.getByRole('button'))
+    const item = await screen.findByRole('menuitem', { name: /admin/i })
+    expect(item.getAttribute('href')).toBe('https://acme.com/admin')
+  })
+
+  it('shows a portal user on a section host no Admin', async () => {
+    renderHeader({ userRole: 'user', isLoggedIn: true, route: onSectionHost })
+    expect(screen.queryByRole('link', { name: /admin/i })).toBeNull()
+    fireEvent.click(screen.getByRole('button'))
+    await screen.findByRole('menuitem', { name: /settings/i })
+    expect(screen.queryByRole('menuitem', { name: /admin/i })).toBeNull()
+  })
+
+  it('shows a visitor who is not signed in on a section host no Admin', () => {
+    renderHeader({
+      userRole: null,
+      isLoggedIn: false,
+      route: { ...onSectionHost, primaryAdminUrl: 'https://acme.com/admin' },
+    })
+    expect(screen.queryByRole('link', { name: /admin/i })).toBeNull()
   })
 
   it('hides the Admin item for portal users', async () => {

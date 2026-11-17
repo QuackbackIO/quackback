@@ -156,8 +156,19 @@ export function PortalHeader({
   const email = initialUserData?.email ?? user?.email ?? null
   const avatarUrl = initialUserData?.avatarUrl ?? user?.image ?? null
 
+  // On a section host the session is portal scope, so the role reads as a
+  // portal user's, and the admin runs on the primary domain only. The bootstrap
+  // sends a teammate there the admin's address on the primary domain instead,
+  // and Link renders an absolute address as a plain link: a full page load,
+  // with no session carried. On the primary domain it is absent and the link
+  // is the router's /admin, as before.
+  const primaryAdminUrl = useRouteContext({
+    from: '__root__',
+    select: (context) => context.primaryAdminUrl,
+  })
+
   // Team members (admin, member) can access admin dashboard
-  const canAccessAdmin = isLoggedIn && isTeamMember(userRole)
+  const canAccessAdmin = isLoggedIn && (isTeamMember(userRole) || !!primaryAdminUrl)
 
   // Skip the sign-in dialog for a single-IdP workspace: go straight to the
   // OIDC provider (same redirect the dialog's "Continue" path uses), returning
@@ -204,7 +215,7 @@ export function PortalHeader({
       {/* Admin Button (visible for team members) */}
       {canAccessAdmin && (
         <Button variant="outline" size="sm" asChild className="ms-1 me-2">
-          <Link to="/admin" search={{}}>
+          <Link to={primaryAdminUrl ?? '/admin'} search={{}}>
             <ShieldCheckIcon className="me-2 h-4 w-4" />
             <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
           </Link>
@@ -244,7 +255,7 @@ export function PortalHeader({
             <DropdownMenuSeparator />
             {canAccessAdmin && (
               <DropdownMenuItem asChild>
-                <Link to="/admin" search={{}}>
+                <Link to={primaryAdminUrl ?? '/admin'} search={{}}>
                   <ShieldCheckIcon className="me-2 h-4 w-4" />
                   <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
                 </Link>

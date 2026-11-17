@@ -1,6 +1,6 @@
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { Role } from '@/lib/shared/roles'
-import { sessionRole, toSessionScope } from '@/lib/shared/roles'
+import { isTeamMember, sessionRole, toSessionScope } from '@/lib/shared/roles'
 import {
   colorSchemeHintHeaders,
   getThemeCookie,
@@ -56,6 +56,15 @@ export interface BootstrapData {
   /** Onboarding progress, decided here so the raw setup state never leaves the server. */
   onboarding: { complete: boolean; needsSetupWizard: boolean }
   userRole: Role | null
+  /**
+   * The admin's address on the primary domain (https://acme.com/admin), sent
+   * only to a signed-in, unblocked teammate viewing a section host. The admin
+   * does not run there and the session there is portal scope, so `userRole`
+   * reads as a portal user's; the portal header links this instead. It is a
+   * plain link: it grants nothing, and the session stays portal scope. Absent
+   * everywhere else, so no other document changes.
+   */
+  primaryAdminUrl?: string
   themeCookie: Theme
   /** OS color-scheme preference from the `Sec-CH-Prefers-Color-Scheme` client
    *  hint, used by the root document to resolve a `system` theme during SSR.
@@ -127,9 +136,13 @@ export interface BootstrapData {
 
 // Returns both the session (with principalType) AND the user role from one
 // principal read, both shared with every other identity read in the request.
+// `teammate` is the principal's own role, read past the session's scope: true
+// for an unblocked admin or member signed in on the site (never the widget).
+// It decides only whether a link is shown, never what the session may do.
 async function getSessionAndRole(): Promise<{
   session: Session | null
   role: Role | null
+  teammate?: boolean
 }> {
   // Fast-path for unauthenticated requests: if there's no Cookie header at
   // all the request can't possibly carry a session token, so we can skip
@@ -181,6 +194,10 @@ async function getSessionAndRole(): Promise<{
         },
       },
       role: principalRecord ? sessionRole(principalRecord.role as Role, scope) : null,
+      teammate:
+        scope !== 'widget' &&
+        isTeamMember(principalRecord?.role) &&
+        principalRecord?.blockedAt == null,
     }
   } catch (error) {
     // During SSR, auth might fail due to env var issues
@@ -235,11 +252,8 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 
   // Single principal read returns both session.principalType + userRole;
   // run in parallel with the settings fetch.
-  const [{ session, role: userRole }, settings, registeredAuthProviders] = await Promise.all([
-    getSessionAndRole(),
-    getWorkspaceSettings(),
-    getRegisteredAuthProviders(),
-  ])
+  const [{ session, role: userRole, teammate }, settings, registeredAuthProviders] =
+    await Promise.all([getSessionAndRole(), getWorkspaceSettings(), getRegisteredAuthProviders()])
 
   // One-time initialization on first request.
   //
@@ -337,6 +351,8 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     ? `https://${normalizeHost(requestHost)}`
     : sectionOrigins.primary
   const sectionLinks = compactSectionLinks({ origins: sectionOrigins, hostOrigin, baseUrl })
+  // The admin runs on the primary domain only (see BootstrapData.primaryAdminUrl).
+  const primaryAdminUrl = onSectionHost && teammate ? `${sectionOrigins.primary}/admin` : null
   const cloud = resolveCloudConfig(
     (settings?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
   )
@@ -353,6 +369,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
       needsSetupWizard: needsCloudOnboardingWizard(setupState),
     },
     userRole,
+    ...(primaryAdminUrl ? { primaryAdminUrl } : {}),
     themeCookie,
     prefersColorScheme,
     managedFieldPaths: settings?.managedFieldPaths ?? [],
