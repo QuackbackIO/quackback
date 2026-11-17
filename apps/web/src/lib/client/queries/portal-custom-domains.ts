@@ -39,6 +39,8 @@ export interface PortalCustomDomainsData {
 export function portalCustomDomainsQuery(cloud: boolean) {
   return queryOptions({
     queryKey: ['settings', 'portal-custom-domains', cloud],
+    // Read ahead on hover, then again only when a change invalidates it.
+    staleTime: 30_000,
     queryFn: async (): Promise<PortalCustomDomainsData> => {
       const [sectionDomains, operator] = await Promise.all([
         getSectionDomainsFn().catch(() => null),

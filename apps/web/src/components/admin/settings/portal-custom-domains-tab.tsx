@@ -10,7 +10,6 @@ import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-q
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import {
-  getCloudCustomDomainsFn,
   mutateCloudCustomDomainFn,
   platformLabelFromHostname,
   updateCloudIdentityFn,
@@ -41,8 +40,13 @@ function goToAddDomain() {
   }, 0)
 }
 
-/** Moves the session to the domain that became the canonical one, back to this tab. */
-function transferTo(canonicalOrigin: string, token: string) {
+/**
+ * Moves the session to the domain that became the canonical one, back to this
+ * tab. The page is left on purpose, so the page's unsaved-changes guard is
+ * dropped first (`onLeave`): the change it would ask about has already been made.
+ */
+function transferTo(canonicalOrigin: string, token: string, onLeave?: () => void) {
+  onLeave?.()
   const target = new URL('/auth/origin-transfer', canonicalOrigin)
   target.searchParams.set('ott', token)
   target.searchParams.set('returnTo', CUSTOM_DOMAINS_HREF)
@@ -50,11 +54,15 @@ function transferTo(canonicalOrigin: string, token: string) {
 }
 
 /**
- * The Cloud custom domains the operator routes here, and the one change made
- * to them at a time. Making a domain primary may move the session to it.
+ * The Cloud custom domains the operator routes here, as the tab's query last
+ * read them, and the one change made to them at a time. A change reads them
+ * again through the query. Making a domain primary may move the session to it.
  */
-function useCloudDomains(initial: WebAddress[], onChanged: () => Promise<void>) {
-  const [domains, setDomains] = useState(initial)
+function useCloudDomains(
+  domains: WebAddress[],
+  onChanged: () => Promise<void>,
+  onLeave?: () => void
+) {
   const mutation = useMutation({
     mutationFn: (input: {
       action: 'add' | 'refresh' | 'makePrimary' | 'remove'
@@ -62,12 +70,10 @@ function useCloudDomains(initial: WebAddress[], onChanged: () => Promise<void>) 
     }) => mutateCloudCustomDomainFn({ data: input }),
     onSuccess: async (result) => {
       if (result.transferToken) {
-        transferTo(result.projection.canonicalOrigin, result.transferToken)
+        transferTo(result.projection.canonicalOrigin, result.transferToken, onLeave)
         return
       }
       toast.success('Domain updated')
-      const next = await getCloudCustomDomainsFn().catch(() => domains)
-      setDomains(next)
       await onChanged()
     },
     onError: (error) => {
@@ -77,7 +83,16 @@ function useCloudDomains(initial: WebAddress[], onChanged: () => Promise<void>) 
   return { domains, mutation }
 }
 
-export default function PortalCustomDomainsTab({ cloud }: { cloud: boolean }) {
+const NO_DOMAINS: WebAddress[] = []
+
+export default function PortalCustomDomainsTab({
+  cloud,
+  onLeave,
+}: {
+  cloud: boolean
+  /** Called before the tab sends the browser to another domain. */
+  onLeave?: () => void
+}) {
   const settings = useWorkspaceSettings()
   const queryClient = useQueryClient()
   const router = useRouter()
@@ -89,7 +104,7 @@ export default function PortalCustomDomainsTab({ cloud }: { cloud: boolean }) {
     await queryClient.invalidateQueries({ queryKey: query.queryKey })
     await router.invalidate()
   }
-  const cloudDomains = useCloudDomains(operator?.domains ?? [], onChanged)
+  const cloudDomains = useCloudDomains(operator?.domains ?? NO_DOMAINS, onChanged, onLeave)
   const sectionEnabled = portalSectionsEnabled({
     featureFlags: settings?.featureFlags,
     statusConfig: settings?.statusConfig,
@@ -121,7 +136,14 @@ export default function PortalCustomDomainsTab({ cloud }: { cloud: boolean }) {
           onAddDomain={operator ? goToAddDomain : undefined}
         />
       )}
-      {operator && <OperatorHostnames {...operator} cloud={cloudDomains} onChanged={onChanged} />}
+      {operator && (
+        <OperatorHostnames
+          {...operator}
+          cloud={cloudDomains}
+          onChanged={onChanged}
+          onLeave={onLeave}
+        />
+      )}
     </div>
   )
 }
@@ -132,9 +154,11 @@ function OperatorHostnames({
   cloudIdentity: initialCloudIdentity,
   cloud,
   onChanged,
+  onLeave,
 }: CustomDomainsOperator & {
   cloud: ReturnType<typeof useCloudDomains>
   onChanged: () => Promise<void>
+  onLeave?: () => void
 }) {
   const [hostname, setHostname] = useState('')
   const [cloudIdentity, setCloudIdentity] = useState(initialCloudIdentity)
@@ -160,7 +184,7 @@ function OperatorHostnames({
           : ''
       )
       if (result.transferToken) {
-        transferTo(result.projection.canonicalOrigin, result.transferToken)
+        transferTo(result.projection.canonicalOrigin, result.transferToken, onLeave)
         return
       }
       toast.success('Workspace URL saved')

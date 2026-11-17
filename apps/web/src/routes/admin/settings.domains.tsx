@@ -36,6 +36,9 @@ function DomainsSettingsPage() {
   const rows = domainRows({ sending, signIn, added })
 
   // An old link to the Custom domains card (#custom-domains) opens its tab on Settings > Portal.
+  // An effect, not beforeLoad: old links arrive as full page loads, rendered on
+  // the server, which never sees the hash, and beforeLoad does not run again
+  // when the browser hydrates.
   useEffect(() => {
     const target = legacyCustomDomainsTarget(window.location.hash, permissions)
     if (target) void navigate({ ...target, replace: true })

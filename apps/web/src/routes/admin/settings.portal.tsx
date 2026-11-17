@@ -19,7 +19,7 @@ import {
   useRouter,
   useSearch,
 } from '@tanstack/react-router'
-import { useSuspenseQuery, type QueryClient } from '@tanstack/react-query'
+import { useQueryClient, useSuspenseQuery, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import {
@@ -128,6 +128,21 @@ async function warmCustomDomainsTab(queryClient: QueryClient, cloud: boolean) {
   await queryClient.ensureQueryData(portalCustomDomainsQuery(cloud))
 }
 
+/**
+ * The same, read ahead when the pointer or focus reaches the tab. A tab switch
+ * keeps the page's route match, so the router reads nothing ahead of it; this
+ * does, and the tab then opens on data already in hand. A failed read waits
+ * for the tab, which shows it.
+ */
+function readCustomDomainsTabAhead(queryClient: QueryClient, cloud: boolean) {
+  void Promise.all([
+    import('@/lib/client/queries/portal-custom-domains'),
+    loadCustomDomainsTab(),
+  ]).then(([{ portalCustomDomainsQuery }]) =>
+    queryClient.prefetchQuery(portalCustomDomainsQuery(cloud))
+  )
+}
+
 export const Route = createFileRoute('/admin/settings/portal')({
   head: adminPageHead('Portal settings'),
   validateSearch: searchSchema,
@@ -187,7 +202,10 @@ const PortalTabBar = memo(function PortalTabBar({
   tab: PortalTab
   tabs: readonly PortalTab[]
 }) {
+  const queryClient = useQueryClient()
+  const cloud = useCloudEnabled()
   if (tabs.length < 2) return null
+  const readAhead = () => readCustomDomainsTabAhead(queryClient, cloud)
   return (
     <nav
       aria-label={SETTINGS_PAGES[PORTAL_SETTINGS_PATH].label}
@@ -207,6 +225,9 @@ const PortalTabBar = memo(function PortalTabBar({
           data-active={value === tab ? '' : undefined}
           aria-current={value === tab ? 'page' : undefined}
           className="inline-flex shrink-0 items-center text-sm whitespace-nowrap transition-colors"
+          {...(value === 'custom-domains' && value !== tab
+            ? { onMouseEnter: readAhead, onFocus: readAhead, onTouchStart: readAhead }
+            : {})}
         >
           {PORTAL_TAB_LABELS[value]}
         </Link>
@@ -216,11 +237,11 @@ const PortalTabBar = memo(function PortalTabBar({
 })
 
 /** The Custom domains tab, its code and reads loaded when it opens. */
-function CustomDomainsPanel() {
+function CustomDomainsPanel({ onLeave }: { onLeave?: () => void }) {
   const cloudEnabled = useCloudEnabled()
   return (
     <Suspense fallback={null}>
-      <PortalCustomDomainsTab cloud={cloudEnabled} />
+      <PortalCustomDomainsTab cloud={cloudEnabled} onLeave={onLeave} />
     </Suspense>
   )
 }
@@ -286,12 +307,18 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
 
   // Navigating away with unsaved edits prompts; closing the tab warns too.
   // Moving between this page's tabs keeps the drafts, so it does not.
+  // A Cloud change on Custom domains can send the browser to the new primary
+  // domain after the change is made; the drafts are not asked about then.
+  const leaving = useRef(false)
+  const markLeaving = useCallback(() => {
+    leaving.current = true
+  }, [])
   useBlocker({
     shouldBlockFn: ({ current, next }) => {
-      if (!isDirty || saving || next.pathname === current.pathname) return false
+      if (!isDirty || saving || leaving.current || next.pathname === current.pathname) return false
       return !window.confirm('You have unsaved portal changes. Leave without saving?')
     },
-    enableBeforeUnload: () => isDirty,
+    enableBeforeUnload: () => isDirty && !leaving.current,
   })
 
   const handleSave = useStableCallback(async () => {
@@ -491,7 +518,7 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
   return (
     <SettingsPage page="/admin/settings/portal" width={tab === 'navigation' ? 'wide' : 'form'}>
       <PortalTabBar tab={tab} tabs={tabs} />
-      {tab === 'navigation' ? navigation : <CustomDomainsPanel />}
+      {tab === 'navigation' ? navigation : <CustomDomainsPanel onLeave={markLeaving} />}
       {/* Custom domains save from their own dialog; the drafts wait on the Navigation tab. */}
       {tab === 'navigation' && (
         <DraftBar dirty={isDirty} saving={saving} onSave={handleSave} onDiscard={handleDiscard} />

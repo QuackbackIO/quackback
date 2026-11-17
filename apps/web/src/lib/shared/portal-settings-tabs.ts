@@ -52,7 +52,7 @@ export const CUSTOM_DOMAINS_LINK = {
 } as const satisfies { to: string; search: { tab: PortalTab } }
 
 /** The same place as one URL, for a server-made link (a bell, the MCP navigation tool). */
-export const CUSTOM_DOMAINS_HREF = `${PORTAL_SETTINGS_PATH}?tab=custom-domains`
+export const CUSTOM_DOMAINS_HREF = `${CUSTOM_DOMAINS_LINK.to}?${new URLSearchParams(CUSTOM_DOMAINS_LINK.search)}`
 
 /**
  * Custom domains used to be a card on Settings > Domains, linked as
