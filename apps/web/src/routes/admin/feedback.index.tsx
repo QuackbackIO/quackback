@@ -1,6 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
-import { adminQueries } from '@/lib/client/queries/admin'
+import { useAdminTeamMembers } from '@/lib/client/hooks/use-team-members'
+import {
+  useAdminBoards,
+  useAdminStatuses,
+  useAdminTags,
+} from '@/lib/client/hooks/use-admin-catalogues'
 import { warmFeedbackPage } from '@/lib/client/queries/feedback-page'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -70,17 +74,18 @@ function FeedbackIndexPage() {
   // Read pre-fetched reference data from React Query cache. The posts list is
   // read directly by InboxContainer's own infinite `useInboxPosts` hook — which
   // shares its query definition with the loader's prefetch (QC-1) — so there's
-  // no separate suspense query for posts here.
-  const boardsQuery = useSuspenseQuery(adminQueries.boards())
-  const tagsQuery = useSuspenseQuery(adminQueries.tags())
-  const statusesQuery = useSuspenseQuery(adminQueries.statuses())
-  const membersQuery = useQuery(adminQueries.teamMembers())
+  // no separate suspense query for posts here. Each list needs a permission of
+  // its own: a viewer without it gets an empty list, not a refused request.
+  const boardsQuery = useAdminBoards()
+  const tagsQuery = useAdminTags()
+  const statusesQuery = useAdminStatuses()
+  const membersQuery = useAdminTeamMembers()
 
   return (
     <InboxContainer
-      boards={boardsQuery.data}
-      tags={tagsQuery.data}
-      statuses={statusesQuery.data}
+      boards={boardsQuery.data ?? []}
+      tags={tagsQuery.data ?? []}
+      statuses={statusesQuery.data ?? []}
       members={membersQuery.data ?? []}
       currentUser={currentUser}
     />

@@ -15,6 +15,7 @@ import { portalInvitesQueryOptions } from '@/lib/client/queries/portal-invites'
 import { parseCompanyFilterParts } from '@/lib/shared/company-filters'
 import { countCompaniesFn, listCompaniesPageFn } from '@/lib/server/functions/companies'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 /** The companies directory (the people page's Companies tab). */
 export const companiesDirectoryQueries = {
@@ -61,13 +62,20 @@ export function canReadCompanies(role: string) {
  * Warm what the people page reads on every load, for its route loader: the
  * unfiltered people list, the segment and tag filters, the attribute
  * definitions, the nav badge counts and the companies directory. Each is
- * best-effort: a failed read is left to the page's own query.
+ * best-effort: a failed read is left to the page's own query. The segment
+ * filter needs segment.view, so it is warmed only for a viewer holding it.
  */
-export function warmUsersPage(queryClient: QueryClient, role: string) {
+export function warmUsersPage(
+  queryClient: QueryClient,
+  role: string,
+  permissions: readonly PermissionKey[]
+) {
   const companies = canReadCompanies(role)
   return Promise.all([
     queryClient.ensureInfiniteQueryData(portalUsersInfiniteOptions(defaultUsersFilters)),
-    queryClient.ensureQueryData(adminQueries.segments()),
+    permissions.includes(PERMISSIONS.SEGMENT_VIEW)
+      ? queryClient.ensureQueryData(adminQueries.segments())
+      : undefined,
     warmQuery(queryClient, totalUserCountOptions('users')),
     warmQuery(queryClient, totalUserCountOptions('leads')),
     warmQuery(queryClient, adminQueries.userAttributes()),

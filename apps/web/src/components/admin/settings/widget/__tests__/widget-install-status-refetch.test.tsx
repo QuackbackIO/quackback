@@ -16,6 +16,8 @@ const { fetchOnboardingStatus } = vi.hoisted(() => ({
   fetchOnboardingStatus: vi.fn(async () => ({ hasWidgetInstalled: false })),
 }))
 
+// A viewer holding every permission, so each permission-gated read runs.
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 vi.mock('@/lib/server/functions/admin', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/admin')>()),
   fetchOnboardingStatus,

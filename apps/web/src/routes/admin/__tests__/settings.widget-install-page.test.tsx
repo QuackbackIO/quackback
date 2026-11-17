@@ -29,6 +29,8 @@ const { onboarding, mintInstallCode, toast, copyWithFallback } = vi.hoisted(() =
 
 const queryClient = new (await import('@tanstack/react-query')).QueryClient()
 
+// A viewer holding every permission, so each permission-gated read runs.
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 vi.mock('@tanstack/react-router', async () => {
   const actual =
     await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')

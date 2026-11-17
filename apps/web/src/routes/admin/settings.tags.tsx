@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { useAdminBoards } from '@/lib/client/hooks/use-admin-catalogues'
 import { TagsSettingsPage } from '@/components/admin/settings/tags/tag-list'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
@@ -19,7 +20,14 @@ export const Route = createFileRoute('/admin/settings/tags')({
     assertRoutePermission(context.permissions, PERMISSIONS.TAG_MANAGE)
     const { queryClient } = context
     const ensure = readBatch(queryClient)
-    await Promise.all([ensure(adminQueries.tags()), ensure(adminQueries.boards())])
+    // The backfill card's board picker needs board.manage, which tag.manage
+    // does not imply.
+    await Promise.all([
+      ensure(adminQueries.tags()),
+      context.permissions?.includes(PERMISSIONS.BOARD_MANAGE)
+        ? ensure(adminQueries.boards())
+        : undefined,
+    ])
     return {}
   },
   component: TagsPage,
@@ -27,7 +35,7 @@ export const Route = createFileRoute('/admin/settings/tags')({
 
 function TagsPage() {
   const tagsQuery = useSuspenseQuery(adminQueries.tags())
-  const boardsQuery = useSuspenseQuery(adminQueries.boards())
+  const boardsQuery = useAdminBoards()
 
-  return <TagsSettingsPage initialTags={tagsQuery.data} boards={boardsQuery.data} />
+  return <TagsSettingsPage initialTags={tagsQuery.data} boards={boardsQuery.data ?? []} />
 }

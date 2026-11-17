@@ -7,6 +7,8 @@ import { IntlProvider } from 'react-intl'
 const updateAck = vi.fn()
 const updateSpam = vi.fn()
 
+// A viewer holding every permission, so each permission-gated read runs.
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
     <a href={to}>{children}</a>
