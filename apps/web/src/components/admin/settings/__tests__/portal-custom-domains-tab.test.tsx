@@ -72,7 +72,7 @@ vi.mock('@/components/admin/settings/domains-cards', () => ({
 }))
 
 const { default: PortalCustomDomainsTab } = await import('../portal-custom-domains-tab')
-const { portalCustomDomainsQuery } = await import('@/lib/client/queries/portal-custom-domains')
+const { portalCustomDomainsQueries } = await import('@/lib/client/queries/portal-custom-domains')
 
 const PENDING = { hostname: 'help.acme.com', readiness: 'pending', isPrimary: false }
 const READY = { ...PENDING, readiness: 'ready' }
@@ -111,7 +111,7 @@ describe('the Custom domains tab on Cloud', () => {
 
     calls.domains = [READY]
     await act(() =>
-      queryClient.refetchQueries({ queryKey: portalCustomDomainsQuery(true).queryKey })
+      queryClient.refetchQueries({ queryKey: portalCustomDomainsQueries.tab(true).queryKey })
     )
 
     await waitFor(() => expect(calls.readyHostnames).toEqual(['help.acme.com']))

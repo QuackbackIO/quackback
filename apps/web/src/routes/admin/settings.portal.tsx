@@ -11,14 +11,7 @@ import {
 } from 'react'
 import { z } from 'zod'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
-import {
-  ClientOnly,
-  createFileRoute,
-  Link,
-  useBlocker,
-  useRouter,
-  useSearch,
-} from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, Link, useBlocker, useRouter } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -89,7 +82,6 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import {
   useCloudEnabled,
-  usePermissions,
   useSessionContext,
   useWorkspaceSettings,
 } from '@/lib/client/hooks/use-root-context'
@@ -121,11 +113,11 @@ const PortalCustomDomainsTab = lazy(loadCustomDomainsTab)
 
 /** The Custom domains tab's code and reads, fetched together when it opens. */
 async function warmCustomDomainsTab(queryClient: QueryClient, cloud: boolean) {
-  const [{ portalCustomDomainsQuery }] = await Promise.all([
+  const [{ portalCustomDomainsQueries }] = await Promise.all([
     import('@/lib/client/queries/portal-custom-domains'),
     loadCustomDomainsTab(),
   ])
-  await queryClient.ensureQueryData(portalCustomDomainsQuery(cloud))
+  await queryClient.ensureQueryData(portalCustomDomainsQueries.tab(cloud))
 }
 
 /**
@@ -138,8 +130,8 @@ function readCustomDomainsTabAhead(queryClient: QueryClient, cloud: boolean) {
   void Promise.all([
     import('@/lib/client/queries/portal-custom-domains'),
     loadCustomDomainsTab(),
-  ]).then(([{ portalCustomDomainsQuery }]) =>
-    queryClient.prefetchQuery(portalCustomDomainsQuery(cloud))
+  ]).then(([{ portalCustomDomainsQueries }]) =>
+    queryClient.prefetchQuery(portalCustomDomainsQueries.tab(cloud))
   )
 }
 
@@ -170,14 +162,14 @@ export const Route = createFileRoute('/admin/settings/portal')({
         : null,
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
+    return { tabs }
   },
   component: PortalSettingsRoute,
 })
 
 function PortalSettingsRoute() {
-  const permissions = usePermissions()
-  const search = useSearch({ from: '/admin/settings/portal' })
-  const tabs = useMemo(() => portalTabsFor([...permissions]), [permissions])
+  const { tabs } = Route.useLoaderData()
+  const search = Route.useSearch()
   const tab = resolvePortalTab(search.tab, tabs)
   if (tabs.includes('design')) return <PortalPage tab={tab} tabs={tabs} />
   // settings.custom_domain alone: the Custom domains tab is the page.
@@ -190,10 +182,9 @@ function PortalSettingsRoute() {
 }
 
 /**
- * The tab bar, shown when the viewer has both tabs. Each tab is a link to its
- * `?tab=`, drawn by the admin theme like a module's tabs; a tab the viewer
- * lacks the permission for is not there at all. Kept apart from the open tab,
- * so editing a draft on Design does not render it again.
+ * The tab bar, shown when the viewer has both tabs. A tab the viewer lacks the
+ * permission for is not there at all. Kept apart from the open tab, so editing
+ * a draft on Design does not render it again.
  */
 const PortalTabBar = memo(function PortalTabBar({
   tab,
@@ -206,6 +197,7 @@ const PortalTabBar = memo(function PortalTabBar({
   const cloud = useCloudEnabled()
   if (tabs.length < 2) return null
   const readAhead = () => readCustomDomainsTabAhead(queryClient, cloud)
+  // Links drawn with the tab slots, like a module's tabs, not <Tabs> as other settings pages use: on this page <Tabs> added 1.5 KB of HTML (over the ceiling), 3 KB of JS and a chunk.
   return (
     <nav
       aria-label={SETTINGS_PAGES[PORTAL_SETTINGS_PATH].label}

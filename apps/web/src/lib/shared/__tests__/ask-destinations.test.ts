@@ -64,7 +64,7 @@ describe('Ask destinations', () => {
     expect(first).toMatchObject({
       href: '/admin/settings/portal?tab=custom-domains',
       defaultMessage: 'Custom domains',
-      messageId: 'ask.destination.settings_custom_domains',
+      messageId: 'ask.destination.settings_portal_custom-domains',
     })
     // Domains stays, for the domains the workspace verified.
     expect(searchAskDestinations('domains', options).map((item) => item.href)).toContain(

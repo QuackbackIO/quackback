@@ -28,12 +28,19 @@ const { cardRenders, previewRenders, rootContext, router, customDomainReads } = 
   },
 }))
 
+const { portalTabsFor } = await vi.hoisted(() => import('@/lib/shared/portal-settings-tabs'))
+
 vi.mock('@tanstack/react-router', async () => {
   const actual =
     await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
   return {
     ...actual,
-    createFileRoute: () => (options: Record<string, unknown>) => ({ options }),
+    createFileRoute: () => (options: Record<string, unknown>) => ({
+      options,
+      useLoaderData: () => ({ tabs: portalTabsFor(rootContext.permissions) }),
+      useSearch: () => router.search,
+      useNavigate: () => vi.fn(),
+    }),
     useRouteContext: ({ select }: { select: (context: typeof rootContext) => unknown }) =>
       select(rootContext),
     useRouter: () => ({ invalidate: vi.fn() }),
@@ -52,7 +59,11 @@ vi.mock('@tanstack/react-router', async () => {
       to?: string
       search?: unknown
       replace?: boolean
-    }) => <a {...rest}>{children}</a>,
+    }) => (
+      <a href="#tab" {...rest}>
+        {children}
+      </a>
+    ),
   }
 })
 
@@ -66,14 +77,16 @@ vi.mock('@/components/admin/settings/portal-custom-domains-tab', () => ({
 }))
 
 vi.mock('@/lib/client/queries/portal-custom-domains', () => ({
-  portalCustomDomainsQuery: (cloud: boolean) => ({
-    queryKey: ['settings', 'portal-custom-domains', cloud],
-    staleTime: 30_000,
-    queryFn: async () => {
-      customDomainReads.count++
-      return { sectionDomains: null, operator: null }
-    },
-  }),
+  portalCustomDomainsQueries: {
+    tab: (cloud: boolean) => ({
+      queryKey: ['settings', 'portal-custom-domains', cloud],
+      staleTime: 30_000,
+      queryFn: async () => {
+        customDomainReads.count++
+        return { sectionDomains: null, operator: null }
+      },
+    }),
+  },
 }))
 
 vi.mock('@/lib/client/mutations/settings', () => ({
@@ -147,6 +160,8 @@ afterEach(() => {
   cardRenders.clear()
   previewRenders.count = 0
   document.body.innerHTML = ''
+  rootContext.permissions = ['settings.branding']
+  router.search = {}
 })
 
 describe('portal settings page hydration', () => {
@@ -209,47 +224,38 @@ describe('portal settings page hydration', () => {
 
   it('shows Design and Custom domains tabs to a viewer with settings.custom_domain', async () => {
     rootContext.permissions = ['settings.branding', 'settings.custom_domain']
-    try {
-      const container = await hydratePage()
-      const bar = container.querySelector('nav[aria-label="Portal"]')
-      expect(bar?.textContent).toBe('DesignCustom domains')
-      // Design is open: its cards are on the page.
-      expect([...cardRenders.keys()]).toContain('Welcome message')
-    } finally {
-      rootContext.permissions = ['settings.branding']
-    }
+    const container = await hydratePage()
+    const bar = container.querySelector('nav[aria-label="Portal"]')
+    expect(bar?.textContent).toBe('DesignCustom domains')
+    // Design is open: its cards are on the page.
+    expect([...cardRenders.keys()]).toContain('Welcome message')
   })
 
   it('reads the Custom domains tab ahead when the pointer or focus reaches its tab', async () => {
     rootContext.permissions = ['settings.branding', 'settings.custom_domain']
     customDomainReads.count = 0
-    try {
-      render(
-        <IntlProvider locale="en" defaultLocale="en">
-          <QueryClientProvider client={seededClient()}>
-            <PortalPage />
-          </QueryClientProvider>
-        </IntlProvider>
-      )
-      expect(customDomainReads.count).toBe(0)
-      fireEvent.mouseEnter(screen.getByText('Custom domains'))
-      await vi.waitFor(() => expect(customDomainReads.count).toBe(1))
-      // Reaching it again reads nothing new.
-      fireEvent.focus(screen.getByText('Custom domains'))
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(customDomainReads.count).toBe(1)
-      // Design has nothing to read ahead.
-      fireEvent.mouseEnter(screen.getByRole('navigation', { name: 'Portal' }).firstElementChild!)
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(customDomainReads.count).toBe(1)
-    } finally {
-      rootContext.permissions = ['settings.branding']
-    }
+    render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <QueryClientProvider client={seededClient()}>
+          <PortalPage />
+        </QueryClientProvider>
+      </IntlProvider>
+    )
+    expect(customDomainReads.count).toBe(0)
+    fireEvent.mouseEnter(screen.getByRole('link', { name: 'Custom domains' }))
+    await vi.waitFor(() => expect(customDomainReads.count).toBe(1))
+    // Reaching it again reads nothing new.
+    fireEvent.focus(screen.getByRole('link', { name: 'Custom domains' }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(customDomainReads.count).toBe(1)
+    // Design has nothing to read ahead.
+    fireEvent.mouseEnter(screen.getByRole('link', { name: 'Design' }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(customDomainReads.count).toBe(1)
   })
 
   it('drops the unsaved-changes guard when the Custom domains tab leaves for another domain', async () => {
     rootContext.permissions = ['settings.branding', 'settings.custom_domain']
-    router.search = {}
     const queryClient = seededClient()
     const page = () => (
       <IntlProvider locale="en" defaultLocale="en">
@@ -258,23 +264,18 @@ describe('portal settings page hydration', () => {
         </QueryClientProvider>
       </IntlProvider>
     )
-    try {
-      const { rerender } = render(page())
-      act(() => {
-        fireEvent.click(screen.getByTestId('rich-text-editor'))
-      })
-      expect(router.blocker?.enableBeforeUnload()).toBe(true)
+    const { rerender } = render(page())
+    act(() => {
+      fireEvent.click(screen.getByTestId('rich-text-editor'))
+    })
+    expect(router.blocker?.enableBeforeUnload()).toBe(true)
 
-      // The drafts wait on Design while the admin is on Custom domains.
-      router.search = { tab: 'custom-domains' }
-      rerender(page())
-      expect(router.blocker?.enableBeforeUnload()).toBe(true)
+    // The drafts wait on Design while the admin is on Custom domains.
+    router.search = { tab: 'custom-domains' }
+    rerender(page())
+    expect(router.blocker?.enableBeforeUnload()).toBe(true)
 
-      fireEvent.click(await screen.findByText('Leave for the new domain'))
-      expect(router.blocker?.enableBeforeUnload()).toBe(false)
-    } finally {
-      rootContext.permissions = ['settings.branding']
-      router.search = {}
-    }
+    fireEvent.click(await screen.findByText('Leave for the new domain'))
+    expect(router.blocker?.enableBeforeUnload()).toBe(false)
   })
 })

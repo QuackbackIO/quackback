@@ -18,7 +18,7 @@ export const Route = createFileRoute('/admin/settings/domains')({
   loader: async ({ context }) => {
     assertRouteAnyPermission(context.permissions, DOMAINS_PAGE_PERMISSIONS)
     // The list rows only the domains the workspace owns, so it reads no section map.
-    const summaries = await loadDomainSummaries(context, { sectionDomains: false })
+    const summaries = await loadDomainSummaries({ ...context, sectionDomains: false })
     return {
       ...summaries,
       links: domainUseLinks({ permissions: context.permissions ?? [] }),

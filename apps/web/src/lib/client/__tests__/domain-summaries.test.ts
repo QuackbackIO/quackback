@@ -73,10 +73,11 @@ describe('domain summaries', () => {
   })
 
   it('reads no section map for the Domains list, which rows only the domains the workspace owns', async () => {
-    const result = await loadDomainSummaries(
-      { permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN], cloudEnabled: false },
-      { sectionDomains: false }
-    )
+    const result = await loadDomainSummaries({
+      permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN],
+      cloudEnabled: false,
+      sectionDomains: false,
+    })
     expect(result.sectionDomains).toBeNull()
     expect(sections).not.toHaveBeenCalled()
     expect(added).toHaveBeenCalled()

@@ -28,16 +28,15 @@ export interface DomainSummaries {
   added: AddedDomainSummary[]
 }
 
-export async function loadDomainSummaries(
-  {
-    permissions,
-  }: {
-    permissions?: readonly string[]
-    cloudEnabled?: boolean
-  },
+export async function loadDomainSummaries({
+  permissions,
+  sectionDomains: withSections = true,
+}: {
+  permissions?: readonly string[]
+  cloudEnabled?: boolean
   /** The Domains list rows no section map; a domain's own page lists its custom domains. */
-  { sectionDomains: withSections = true }: { sectionDomains?: boolean } = {}
-): Promise<DomainSummaries> {
+  sectionDomains?: boolean
+}): Promise<DomainSummaries> {
   const can = (permission: string) => permissions?.includes(permission) ?? false
   const [sending, signIn, sectionDomains, added] = await Promise.all([
     can(EMAIL_SENDING_PERMISSION)

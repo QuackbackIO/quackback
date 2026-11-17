@@ -25,7 +25,7 @@ import { portalSectionsEnabled } from '@/lib/shared/section-domains'
 import { DOMAIN_VERIFICATION_ANCHOR } from '@/lib/shared/domains-permissions'
 import { CUSTOM_DOMAINS_HREF } from '@/lib/shared/portal-settings-tabs'
 import {
-  portalCustomDomainsQuery,
+  portalCustomDomainsQueries,
   type CustomDomainsOperator,
 } from '@/lib/client/queries/portal-custom-domains'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
@@ -96,7 +96,7 @@ export default function PortalCustomDomainsTab({
   const settings = useWorkspaceSettings()
   const queryClient = useQueryClient()
   const router = useRouter()
-  const query = portalCustomDomainsQuery(cloud)
+  const query = portalCustomDomainsQueries.tab(cloud)
   const { data } = useSuspenseQuery(query)
   const { sectionDomains, operator } = data
   // The tab's own reads, then the workspace settings the product pages' read-only lines use.

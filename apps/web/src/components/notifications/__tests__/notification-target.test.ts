@@ -25,6 +25,7 @@ function buildNotification(overrides: Partial<SerializedNotification>): Serializ
     actorName: null,
     actorAvatarUrl: null,
     audience: null,
+    section: null,
     readAt: null,
     archivedAt: null,
     createdAt: new Date().toISOString(),

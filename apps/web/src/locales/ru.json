@@ -1413,7 +1413,7 @@
   "ask.destination.settings_ticket-statuses": "Статусы заявок",
   "ask.destination.settings_general": "Общие",
   "ask.destination.settings_domains": "Домены",
-  "ask.destination.settings_custom_domains": "Пользовательские домены",
+  "ask.destination.settings_portal_custom-domains": "Пользовательские домены",
   "ask.destination.settings_email": "Эл. почта",
   "ask.destination.settings_widget": "Виджет",
   "ask.destination.settings_members": "Участники и команды",

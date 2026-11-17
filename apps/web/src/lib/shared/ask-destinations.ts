@@ -85,7 +85,7 @@ const KEYWORDS: Record<string, string[]> = {
 
 /** Ids for destinations whose href is not a plain path (a tab of a page). */
 const DESTINATION_IDS: Record<string, string> = {
-  [CUSTOM_DOMAINS_HREF]: 'settings_custom_domains',
+  [CUSTOM_DOMAINS_HREF]: 'settings_portal_custom-domains',
 }
 
 /**
