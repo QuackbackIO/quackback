@@ -1,8 +1,8 @@
 /**
  * Download mode: `?download=1[&filename=…]` on a read link always answers as
  * an attachment, under the name asked for (made safe for a header) or the
- * key's own, on the proxy path and through the presigned redirect. It never
- * stands in for the read capability.
+ * key's own, through the same-origin proxy even when redirects are enabled.
+ * It never stands in for the read capability.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -108,41 +108,61 @@ describe('download mode on the proxy path', () => {
   })
 })
 
-describe('download mode on the redirect path', () => {
-  it('presigns the attachment with the name asked for', async () => {
+describe('download mode when storage normally redirects', () => {
+  it('serves an attachment on this origin so an embedded download stays within frame-src CSP', async () => {
     const res = await get(
       `/api/storage/${KEY}?read=ok&download=1&filename=${encodeURIComponent('Q3 Réport.pdf')}`
     )
-    expect(res.status).toBe(302)
-    expect(generatePresignedGetUrl).toHaveBeenCalledWith(
-      KEY,
-      172_800,
-      'Q3 Réport.pdf',
-      'application/pdf'
+    expect(res.status).toBe(200)
+    expect(res.headers.get('location')).toBeNull()
+    expect(res.headers.get('content-type')).toBe('application/pdf')
+    expect(res.headers.get('content-disposition')).toBe(
+      `attachment; filename="Q3 R_port.pdf"; filename*=UTF-8''Q3%20R%C3%A9port.pdf`
+    )
+    expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([0x25, 0x50, 0x44, 0x46])
+    expect(generatePresignedGetUrl).not.toHaveBeenCalled()
+  })
+
+  it('serves under the key name without a requested filename', async () => {
+    const res = await get(`/api/storage/${KEY}?read=ok&download=1`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-disposition')).toBe(
+      `attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`
     )
   })
 
-  it('presigns under the key name without one', async () => {
-    await get(`/api/storage/${KEY}?read=ok&download=1`)
-    expect(generatePresignedGetUrl).toHaveBeenCalledWith(
-      KEY,
-      172_800,
-      'report.pdf',
-      'application/pdf'
-    )
+  it('keeps the normal read redirect without explicit download mode', async () => {
+    const res = await get(`/api/storage/${KEY}?read=ok`)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('https://s3.example.com/presigned')
   })
 })
 
 describe('download mode needs the read capability', () => {
   it('refuses a private key without a valid capability, download or not', async () => {
-    const res = await get(`/api/storage/${KEY}?read=bad&proxy=1&download=1&filename=x.pdf`)
+    const res = await get(`/api/storage/${KEY}?read=bad&download=1&filename=x.pdf`)
     expect(res.status).toBe(403)
     expect(getS3Object).not.toHaveBeenCalled()
+    expect(generatePresignedGetUrl).not.toHaveBeenCalled()
   })
 
   it('ignores download mode on a public key, which carries no capability', async () => {
     const res = await get('/api/storage/logos/2026/10/brand.pdf?proxy=1&download=1&filename=a.exe')
     expect(res.status).toBe(200)
     expect(res.headers.get('content-disposition')).toBeNull()
+  })
+
+  it('keeps public keys on the redirect path with download=1', async () => {
+    const res = await get('/api/storage/logos/2026/10/brand.pdf?download=1&filename=a.exe')
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('https://s3.example.com/presigned')
+    expect(res.headers.get('content-disposition')).toBeNull()
+    expect(getS3Object).not.toHaveBeenCalled()
+    expect(generatePresignedGetUrl).toHaveBeenCalledWith(
+      'logos/2026/10/brand.pdf',
+      172_800,
+      undefined,
+      'application/pdf'
+    )
   })
 })
