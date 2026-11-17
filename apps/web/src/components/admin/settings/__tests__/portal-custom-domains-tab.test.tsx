@@ -15,6 +15,22 @@ const calls = vi.hoisted(() => ({
     transferToken?: string
   },
   domains: [] as { hostname: string; readiness: string; isPrimary: boolean }[],
+  permissions: [] as string[],
+  navigate: vi.fn(),
+  card: {} as {
+    cloudHostnames?: readonly string[]
+    loadVerifiedDomains?: () => Promise<readonly string[]>
+    loadCloudRecords?: (hostname: string) => Promise<unknown[]>
+    onAddVerifiedDomain?: () => void
+  },
+}))
+
+vi.mock('@/lib/server/functions/domains', () => ({
+  listDomainsFn: vi.fn(async () => [
+    { name: 'acme.com', verified: true },
+    { name: 'pending.org', verified: false },
+    { name: 'acme.io', verified: true },
+  ]),
 }))
 
 vi.mock('@/lib/server/functions/cloud-identity', () => ({
@@ -36,10 +52,13 @@ vi.mock('@/lib/server/functions/section-domains', () => ({
   }),
 }))
 
-vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ invalidate: vi.fn() }) }))
+vi.mock('@tanstack/react-router', () => ({
+  useRouter: () => ({ invalidate: vi.fn(), navigate: calls.navigate }),
+}))
 
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useWorkspaceSettings: () => ({ featureFlags: { feedback: true }, portalConfig: {} }),
+  useHasPermission: (permission: string) => calls.permissions.includes(permission),
 }))
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -49,11 +68,16 @@ vi.mock('@/components/admin/settings/section-domains-card', () => ({
   SectionDomainsCard: ({
     readyHostnames,
     onMakePrimary,
+    ...rest
   }: {
     readyHostnames: readonly string[]
     onMakePrimary?: (hostname: string) => void
+    cloudHostnames?: readonly string[]
+    loadVerifiedDomains?: () => Promise<readonly string[]>
+    onAddVerifiedDomain?: () => void
   }) => {
     calls.readyHostnames = readyHostnames
+    calls.card = rest
     return (
       <button type="button" onClick={() => onMakePrimary?.('help.acme.com')}>
         Make primary
@@ -69,6 +93,7 @@ vi.mock('@/components/admin/settings/domains-cards', () => ({
     </button>
   ),
   QuackbackUrlCard: () => null,
+  hostnameRecords: (domain: { hostname: string }) => [{ name: domain.hostname }],
 }))
 
 const { default: PortalCustomDomainsTab } = await import('../portal-custom-domains-tab')
@@ -96,6 +121,9 @@ beforeEach(() => {
   calls.order = []
   calls.domains = [PENDING]
   calls.mutateResult = { projection: { canonicalOrigin: 'https://help.acme.com' } }
+  calls.permissions = []
+  calls.navigate.mockReset()
+  calls.card = {}
 })
 
 afterEach(() => {
@@ -139,5 +167,43 @@ describe('the Custom domains tab on Cloud', () => {
 
     await waitFor(() => expect(assign).toHaveBeenCalledTimes(1))
     expect(calls.order).toEqual(['leave', 'assign'])
+  })
+})
+
+describe('the Custom domains tab: Verified domains for the dialog', () => {
+  it('hands the dialog the Verified domains only, and every Cloud custom domain', async () => {
+    renderTab()
+    await screen.findByText('Make primary')
+    expect(calls.card.cloudHostnames).toEqual(['help.acme.com'])
+    await expect(calls.card.loadVerifiedDomains?.()).resolves.toEqual(['acme.com', 'acme.io'])
+  })
+
+  it("reads a Cloud custom domain's records fresh for the DNS step", async () => {
+    renderTab()
+    await screen.findByText('Make primary')
+    const reads = calls.domainLists
+    await expect(calls.card.loadCloudRecords?.('help.acme.com')).resolves.toEqual([
+      { name: 'help.acme.com' },
+    ])
+    expect(calls.domainLists).toBe(reads + 1)
+    await expect(calls.card.loadCloudRecords?.('other.acme.com')).resolves.toEqual([])
+  })
+
+  it('sends a viewer who may add a domain to Add domain on Settings > Domains', async () => {
+    calls.permissions = ['settings.manage']
+    renderTab()
+    await screen.findByText('Make primary')
+    calls.card.onAddVerifiedDomain?.()
+    expect(calls.navigate).toHaveBeenCalledWith({
+      to: '/admin/settings/domains',
+      search: { add: '1' },
+    })
+  })
+
+  it('never links a viewer who cannot add a domain there', async () => {
+    calls.permissions = ['settings.custom_domain']
+    renderTab()
+    await screen.findByText('Make primary')
+    expect(calls.card.onAddVerifiedDomain).toBeUndefined()
   })
 })

@@ -15,6 +15,8 @@ vi.mock('@/lib/server/functions/section-domains', () => ({
 
 const { SectionDomainsCard, listedSections } = await import('../section-domains-card')
 const { cnameRecord } = await import('../section-domain-record')
+// The dialog is loaded when it opens; load it once up front so a busy run does not time the first open out.
+await import('../section-domain-dialog')
 
 beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
