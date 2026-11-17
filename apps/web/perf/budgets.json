@@ -105,8 +105,8 @@
     "ui:widget-load": {
       "dbQueries": 20,
       "serverRequests": 3,
-      "requests": 170,
-      "jsRequests": 163,
+      "requests": 167,
+      "jsRequests": 160,
       "jsKB": 747.9,
       "htmlTransferKB": 13.1,
       "componentRenders": 295
@@ -114,8 +114,8 @@
     "ui:widget-embed": {
       "dbQueries": 20,
       "serverRequests": 5,
-      "requests": 88,
-      "jsRequests": 79,
+      "requests": 67,
+      "jsRequests": 59,
       "jsKB": 347.7,
       "htmlTransferKB": 1.1,
       "componentRenders": 348
