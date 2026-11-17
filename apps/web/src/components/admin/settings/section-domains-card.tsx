@@ -319,13 +319,11 @@ export function SectionDomainsCard({
             open
             onOpenChange={(open) => !open && setRemoving(null)}
             title={
-              removing && removingEntry
+              removingEntry
                 ? `Stop using ${removingEntry.hostname} for ${usedForLabel(removing)}?`
                 : ''
             }
-            description={
-              removing ? `${usedForLabel(removing)} goes back to the primary domain.` : undefined
-            }
+            description={`${usedForLabel(removing)} goes back to the primary domain.`}
             confirmLabel="Remove"
             variant="destructive"
             isPending={busy}
