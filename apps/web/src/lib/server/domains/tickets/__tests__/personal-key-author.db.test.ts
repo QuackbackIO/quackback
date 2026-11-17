@@ -10,7 +10,7 @@
  * to nobody and keeps showing its own name.
  *
  * Only a personal key made at or after the cutoff that the migration
- * `0312_personal_key_reply_cutoff` records shows its creator, the same rule the
+ * `0316_personal_key_reply_cutoff` records shows its creator, the same rule the
  * reply-timing code uses. An older personal key, or any key while no cutoff is
  * recorded, keeps its own name.
  *

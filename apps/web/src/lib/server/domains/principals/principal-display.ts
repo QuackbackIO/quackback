@@ -123,7 +123,7 @@ async function selectAuthorRows(
 /**
  * The kv key recording when this database reached the release that treats a
  * personal key's replies as its creator's. Written once by the migration
- * `0312_personal_key_reply_cutoff`, and read the same way by the shared reply
+ * `0316_personal_key_reply_cutoff`, and read the same way by the shared reply
  * rule (`messages/reply-rule.ts`), so what a key's messages show and how they
  * count follow one rule.
  */
