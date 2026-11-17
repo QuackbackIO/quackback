@@ -7,7 +7,7 @@
  * service principal. The assistant, workflow blocks and workspace API keys
  * write as service principals, so their replies never count. A personal API
  * key made from the release that records the personal-key cutoff on (the
- * migration `0312_personal_key_reply_cutoff`) acts as its creator: its reply,
+ * migration `0316_personal_key_reply_cutoff`) acts as its creator: its reply,
  * written through the REST API under the key's own service principal, counts
  * as that teammate's reply, revoked or not and whether or not its creator is
  * still known, because the rule reads the message's principal and never the
