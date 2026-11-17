@@ -81,7 +81,7 @@ export interface RetrievedItem {
  *
  * `viewer` is the teammate the turn answers (the copilot's asker, or the
  * workspace assistant's requester), never Quinn's own service actor. A source
- * whose rows carry team scope (today the closed-tickets source) bounds its
+ * whose rows carry team scope (closed tickets and past-conversation summaries) bounds its
  * results by it, and returns nothing without it.
  */
 export interface KnowledgeSource {

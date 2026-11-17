@@ -14,9 +14,25 @@
  * algorithm, so a mocked `generateEmbedding` avoids a real network call.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
-import { createId, type ConversationId, type PrincipalId, type UserId } from '@quackback/ids'
+import {
+  createId,
+  type ConversationId,
+  type PrincipalId,
+  type TeamId,
+  type UserId,
+} from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { conversationSummaries, conversations, principal, user, eq } from '@/lib/server/db'
+import {
+  conversationSummaries,
+  conversations,
+  principal,
+  teamMembers,
+  teams,
+  user,
+  eq,
+} from '@/lib/server/db'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { Actor } from '@/lib/server/policy/types'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -28,6 +44,7 @@ vi.mock('@/lib/server/domains/embeddings/embedding.service', () => ({
 }))
 
 import { retrieveConversationSummaries } from '../conversation-summary-retrieval'
+import { quinnActor } from '../assistant.actor'
 
 const fixture = await createDbTestFixture({
   // Schema-currency probe over the columns this suite depends on — a stale
@@ -62,10 +79,43 @@ async function seedCustomer(name: string): Promise<PrincipalId> {
   return principalId
 }
 
-async function seedConversation(visitorPrincipalId: PrincipalId): Promise<ConversationId> {
+async function seedConversation(
+  visitorPrincipalId: PrincipalId,
+  assignedTeamId: TeamId | null = null
+): Promise<ConversationId> {
   const id = createId('conversation') as ConversationId
-  await testDb.insert(conversations).values({ id, visitorPrincipalId, channel: 'messenger' })
+  await testDb
+    .insert(conversations)
+    .values({ id, visitorPrincipalId, channel: 'messenger', assignedTeamId })
   return id
+}
+
+async function seedTeammate(role: 'admin' | 'member'): Promise<PrincipalId> {
+  const userId = createId('user') as UserId
+  const principalId = createId('principal') as PrincipalId
+  await testDb
+    .insert(user)
+    .values({ id: userId, name: 'Teammate', email: `${runSuffix()}@example.com` })
+  await testDb
+    .insert(principal)
+    .values({ id: principalId, userId, role, type: 'user', createdAt: new Date() })
+  return principalId
+}
+
+/** A workspace admin: the role's own permissions, which include conversation.view_all. */
+function adminActor(principalId: PrincipalId): Actor {
+  return { principalId, principalType: 'user', role: 'admin', segmentIds: new Set() }
+}
+
+/** A teammate who sees only conversations assigned to them or their teams. */
+function scopedActor(principalId: PrincipalId): Actor {
+  return {
+    principalId,
+    principalType: 'user',
+    role: 'member',
+    segmentIds: new Set(),
+    permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+  }
 }
 
 async function seedSummary(
@@ -90,6 +140,13 @@ describe.skipIf(!fixture.available)(
     afterEach(fixture.rollback)
     afterAll(fixture.close)
 
+    // Customer scoping is the subject here, so the viewer is a workspace-wide
+    // admin who can see every conversation.
+    let viewer: Actor
+    beforeEach(async () => {
+      viewer = adminActor(await seedTeammate('admin'))
+    })
+
     it("retrieves customer A's past summary when grounding in another of customer A's conversations", async () => {
       const customerA = await seedCustomer('Customer A')
       const conversationA1 = await seedConversation(customerA)
@@ -99,6 +156,7 @@ describe.skipIf(!fixture.available)(
       const items = await retrieveConversationSummaries('billing dispute', 'team', {
         customerPrincipalId: customerA,
         conversationId: conversationA2,
+        viewer,
       })
 
       expect(items.map((i) => i.conversationId)).toEqual([conversationA1])
@@ -114,6 +172,7 @@ describe.skipIf(!fixture.available)(
       const items = await retrieveConversationSummaries('billing dispute', 'team', {
         customerPrincipalId: customerB,
         conversationId: conversationB1,
+        viewer,
       })
 
       expect(items).toEqual([])
@@ -127,6 +186,7 @@ describe.skipIf(!fixture.available)(
       const items = await retrieveConversationSummaries('billing dispute', 'team', {
         customerPrincipalId: customerA,
         conversationId: conversationA1,
+        viewer,
       })
 
       expect(items).toEqual([])
@@ -140,6 +200,7 @@ describe.skipIf(!fixture.available)(
 
       const items = await retrieveConversationSummaries('billing dispute', 'team', {
         conversationId: conversationA2,
+        viewer,
       })
 
       expect(items).toEqual([])
@@ -158,9 +219,64 @@ describe.skipIf(!fixture.available)(
       const items = await retrieveConversationSummaries('billing dispute', 'team', {
         customerPrincipalId: customerA,
         conversationId: conversationA2,
+        viewer,
       })
 
       expect(items).toEqual([])
+    })
+
+    describe('teammate scoping', () => {
+      // One customer with a closed conversation on team X and another on team Y,
+      // grounding from a third conversation on team X (the one the copilot is open on).
+      let scoped: Actor
+      let admin: Actor
+      let customer: PrincipalId
+      let teamXPast: ConversationId
+      let teamYPast: ConversationId
+      let current: ConversationId
+
+      beforeEach(async () => {
+        const scopedId = await seedTeammate('member')
+        scoped = scopedActor(scopedId)
+        admin = adminActor(await seedTeammate('admin'))
+
+        const teamX = createId('team') as TeamId
+        const teamY = createId('team') as TeamId
+        await testDb.insert(teams).values([
+          { id: teamX, name: `X-${teamX}` },
+          { id: teamY, name: `Y-${teamY}` },
+        ])
+        await testDb.insert(teamMembers).values({ teamId: teamX, principalId: scopedId })
+
+        customer = await seedCustomer('Customer')
+        teamXPast = await seedConversation(customer, teamX)
+        teamYPast = await seedConversation(customer, teamY)
+        current = await seedConversation(customer, teamX)
+        await seedSummary(teamXPast, customer, BILLING_SUMMARY)
+        await seedSummary(teamYPast, customer, BILLING_SUMMARY)
+      })
+
+      async function ids(asker: Actor | undefined): Promise<string[]> {
+        const items = await retrieveConversationSummaries('billing dispute', 'team', {
+          customerPrincipalId: customer,
+          conversationId: current,
+          viewer: asker,
+        })
+        return items.map((i) => i.conversationId).sort()
+      }
+
+      it("gives a scoped teammate the summary from their own team's conversation and not another team's", async () => {
+        expect(await ids(scoped)).toEqual([teamXPast])
+      })
+
+      it('gives a workspace admin every summary for the customer', async () => {
+        expect(await ids(admin)).toEqual([teamXPast, teamYPast].sort())
+      })
+
+      it("never widens to Quinn's own service actor or a missing viewer", async () => {
+        expect(await ids(quinnActor(scoped.principalId!))).toEqual([])
+        expect(await ids(undefined)).toEqual([])
+      })
     })
   }
 )
