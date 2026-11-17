@@ -257,7 +257,7 @@ export function buildNavSections(
         { ...navPage('/admin/settings/notifications') },
         {
           ...navPage('/admin/settings/portal'),
-          // Its Navigation tab opens to settings.branding, its Custom domains tab to settings.custom_domain.
+          // Its Design tab opens to settings.branding, its Custom domains tab to settings.custom_domain.
           anyOf: PORTAL_PAGE_PERMISSIONS,
         },
         {

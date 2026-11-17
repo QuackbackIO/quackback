@@ -1,5 +1,5 @@
 /**
- * Settings > Portal is one settings row with two tabs: Navigation (the
+ * Settings > Portal is one settings row with two tabs: Design (the
  * portal's look, tabs and welcome message, saved from the page's save bar) and
  * Custom domains (where each section's domain is set, saved from its own
  * dialog). Each tab opens to the permission that owns it, so the page opens to
@@ -11,23 +11,23 @@ import { CUSTOM_DOMAINS_ANCHOR } from './section-domains'
 
 export const PORTAL_SETTINGS_PATH = '/admin/settings/portal'
 
-export const PORTAL_TABS = ['navigation', 'custom-domains'] as const
+export const PORTAL_TABS = ['design', 'custom-domains'] as const
 export type PortalTab = (typeof PORTAL_TABS)[number]
 
 export const PORTAL_TAB_LABELS: Record<PortalTab, string> = {
-  navigation: 'Navigation',
+  design: 'Design',
   'custom-domains': 'Custom domains',
 }
 
 /** The permission each tab's reads and writes are gated on. */
 const TAB_PERMISSION: Record<PortalTab, PermissionKey> = {
-  navigation: PERMISSIONS.SETTINGS_BRANDING,
+  design: PERMISSIONS.SETTINGS_BRANDING,
   'custom-domains': PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
 }
 
 /** Who can open Settings > Portal: a holder of either tab's permission. */
 export const PORTAL_PAGE_PERMISSIONS = [
-  TAB_PERMISSION.navigation,
+  TAB_PERMISSION.design,
   TAB_PERMISSION['custom-domains'],
 ] as const satisfies readonly PermissionKey[]
 
@@ -42,7 +42,7 @@ export function resolvePortalTab(
   tabs: readonly PortalTab[]
 ): PortalTab {
   if (requested && tabs.includes(requested)) return requested
-  return tabs[0] ?? 'navigation'
+  return tabs[0] ?? 'design'
 }
 
 /** Where custom domains are set: the Custom domains tab of Settings > Portal. */

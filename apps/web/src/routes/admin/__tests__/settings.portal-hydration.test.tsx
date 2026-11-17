@@ -207,13 +207,13 @@ describe('portal settings page hydration', () => {
     expect(container).not.toHaveTextContent('Custom domains')
   })
 
-  it('shows Navigation and Custom domains tabs to a viewer with settings.custom_domain', async () => {
+  it('shows Design and Custom domains tabs to a viewer with settings.custom_domain', async () => {
     rootContext.permissions = ['settings.branding', 'settings.custom_domain']
     try {
       const container = await hydratePage()
       const bar = container.querySelector('nav[aria-label="Portal"]')
-      expect(bar?.textContent).toBe('NavigationCustom domains')
-      // Navigation is open: its cards are on the page.
+      expect(bar?.textContent).toBe('DesignCustom domains')
+      // Design is open: its cards are on the page.
       expect([...cardRenders.keys()]).toContain('Welcome message')
     } finally {
       rootContext.permissions = ['settings.branding']
@@ -238,7 +238,7 @@ describe('portal settings page hydration', () => {
       fireEvent.focus(screen.getByText('Custom domains'))
       await new Promise((resolve) => setTimeout(resolve, 0))
       expect(customDomainReads.count).toBe(1)
-      // Navigation has nothing to read ahead.
+      // Design has nothing to read ahead.
       fireEvent.mouseEnter(screen.getByRole('navigation', { name: 'Portal' }).firstElementChild!)
       await new Promise((resolve) => setTimeout(resolve, 0))
       expect(customDomainReads.count).toBe(1)
@@ -265,7 +265,7 @@ describe('portal settings page hydration', () => {
       })
       expect(router.blocker?.enableBeforeUnload()).toBe(true)
 
-      // The drafts wait on Navigation while the admin is on Custom domains.
+      // The drafts wait on Design while the admin is on Custom domains.
       router.search = { tab: 'custom-domains' }
       rerender(page())
       expect(router.blocker?.enableBeforeUnload()).toBe(true)

@@ -3,7 +3,7 @@
  * hostname and the primary domain, and on Cloud the custom domains the
  * operator routes here, whether the plan includes them, and the workspace URL.
  * The tab and the Portal route's loader import this only when the tab is open,
- * so the Navigation tab neither ships nor fetches it.
+ * so the Design tab neither ships nor fetches it.
  */
 import { queryOptions } from '@tanstack/react-query'
 import {

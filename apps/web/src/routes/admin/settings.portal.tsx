@@ -107,7 +107,7 @@ import {
 
 /**
  * Two tabs, in the `?tab=` pattern of the other settings pages:
- *  - `navigation`      the portal's look, tabs and welcome message (settings.branding),
+ *  - `design`          the portal's look, tabs and welcome message (settings.branding),
  *                      saved from the save bar
  *  - `custom-domains`  each section's domain (settings.custom_domain), saved from its
  *                      own dialog. Its code and reads load only when it opens.
@@ -156,8 +156,8 @@ export const Route = createFileRoute('/admin/settings/portal')({
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const ensure = readBatch(context.queryClient)
     await Promise.all([
-      // The Navigation drafts live on the page, so they are read on either tab.
-      ...(tabs.includes('navigation')
+      // The Design drafts live on the page, so they are read on either tab.
+      ...(tabs.includes('design')
         ? [
             ensure(settingsQueries.branding()),
             ensure(settingsQueries.logo()),
@@ -179,7 +179,7 @@ function PortalSettingsRoute() {
   const search = useSearch({ from: '/admin/settings/portal' })
   const tabs = useMemo(() => portalTabsFor([...permissions]), [permissions])
   const tab = resolvePortalTab(search.tab, tabs)
-  if (tabs.includes('navigation')) return <PortalPage tab={tab} tabs={tabs} />
+  if (tabs.includes('design')) return <PortalPage tab={tab} tabs={tabs} />
   // settings.custom_domain alone: the Custom domains tab is the page.
   return (
     <SettingsPage page="/admin/settings/portal">
@@ -193,7 +193,7 @@ function PortalSettingsRoute() {
  * The tab bar, shown when the viewer has both tabs. Each tab is a link to its
  * `?tab=`, drawn by the admin theme like a module's tabs; a tab the viewer
  * lacks the permission for is not there at all. Kept apart from the open tab,
- * so editing a draft on Navigation does not render it again.
+ * so editing a draft on Design does not render it again.
  */
 const PortalTabBar = memo(function PortalTabBar({
   tab,
@@ -217,8 +217,8 @@ const PortalTabBar = memo(function PortalTabBar({
         <Link
           key={value}
           to={PORTAL_SETTINGS_PATH}
-          // Navigation is the default, so its link carries no tab.
-          search={value === 'navigation' ? {} : { tab: value }}
+          // Design is the default, so its link carries no tab.
+          search={value === 'design' ? {} : { tab: value }}
           replace
           data-slot="tabs-trigger"
           data-variant="line"
@@ -516,11 +516,11 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
   )
 
   return (
-    <SettingsPage page="/admin/settings/portal" width={tab === 'navigation' ? 'wide' : 'form'}>
+    <SettingsPage page="/admin/settings/portal" width={tab === 'design' ? 'wide' : 'form'}>
       <PortalTabBar tab={tab} tabs={tabs} />
-      {tab === 'navigation' ? navigation : <CustomDomainsPanel onLeave={markLeaving} />}
-      {/* Custom domains save from their own dialog; the drafts wait on the Navigation tab. */}
-      {tab === 'navigation' && (
+      {tab === 'design' ? navigation : <CustomDomainsPanel onLeave={markLeaving} />}
+      {/* Custom domains save from their own dialog; the drafts wait on the Design tab. */}
+      {tab === 'design' && (
         <DraftBar dirty={isDirty} saving={saving} onSave={handleSave} onDiscard={handleDiscard} />
       )}
       <UpgradeModal
