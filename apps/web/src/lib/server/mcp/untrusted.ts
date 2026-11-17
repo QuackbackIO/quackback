@@ -277,6 +277,13 @@ export const UNTRUSTED_TOOL_FIELDS = {
   update_changelog: NONE,
   delete_changelog: NONE,
 
+  list_suggestions: [
+    'suggestions[].sourcePost.title',
+    'suggestions[].sourcePost.content',
+    'suggestions[].targetPost.title',
+    'suggestions[].targetPost.content',
+    'suggestions[].llmReasoning',
+  ],
   accept_suggestion: NONE,
   dismiss_suggestion: NONE,
   restore_suggestion: NONE,

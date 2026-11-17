@@ -875,7 +875,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workspace-api-key-settings.ts`::fetchWorkspaceKeyRolesFn | api_key.manage |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 131 surfaces
+### Public REST API (`withApiKeyAuth`) — 132 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -984,6 +984,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/suggestions/$suggestionId.accept.ts`::POST | suggestion.manage |
 | `routes/api/v1/suggestions/$suggestionId.dismiss.ts`::POST | suggestion.manage |
 | `routes/api/v1/suggestions/$suggestionId.restore.ts`::POST | suggestion.manage |
+| `routes/api/v1/suggestions/index.ts`::GET | suggestion.view |
 | `routes/api/v1/tags/$tagId.ts`::GET | PUBLIC (any valid key) |
 | `routes/api/v1/tags/$tagId.ts`::PATCH | tag.manage |
 | `routes/api/v1/tags/$tagId.ts`::DELETE | tag.manage |
@@ -1031,7 +1032,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-43 tools. "Team" = requires an admin/member role in addition to the scope.
+44 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
@@ -1054,6 +1055,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | get_ticket | read:chat | ✓ |
 | link_ticket | write:chat | ✓ |
 | list_conversations | read:chat | ✓ |
+| list_suggestions | read:feedback | ✓ |
 | list_tickets | read:chat | ✓ |
 | manage_category | write:article | ✓ |
 | merge_post | write:feedback | ✓ |
@@ -1091,7 +1093,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-228 of 1106 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+228 of 1107 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

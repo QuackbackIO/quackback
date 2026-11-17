@@ -11,13 +11,21 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
   acceptMergeSuggestion,
   dismissMergeSuggestion,
+  getPendingMergeSuggestions,
   restoreMergeSuggestion,
 } from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
 import { isTypeId } from '@quackback/ids'
-import type { PostMergeSuggestionId } from '@quackback/ids'
+import type { PostId, PostMergeSuggestionId } from '@quackback/ids'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { McpAuthContext } from '../types'
-import { registerTool, jsonResult, errorResult, WRITE } from './helpers'
+import {
+  registerTool,
+  jsonResult,
+  compactJsonResult,
+  errorResult,
+  READ_ONLY,
+  WRITE,
+} from './helpers'
 
 /** Validate a merge-suggestion TypeID, owning the shared error message. */
 function resolveMergeId(
@@ -28,6 +36,24 @@ function resolveMergeId(
     ok: false,
     result: errorResult(new Error('Invalid suggestion ID. Expected post_merge_sug_xxx format.')),
   }
+}
+
+const listSuggestionsSchema = {
+  sort: z
+    .enum(['newest', 'relevance'])
+    .optional()
+    .describe('Sort order: newest (default) or relevance (highest hybrid score first)'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Maximum number of pending suggestions to return (default 50, max 100)'),
+  postId: z
+    .string()
+    .optional()
+    .describe('Optional post TypeID (post_xxx) to filter suggestions for a specific post'),
 }
 
 const acceptSuggestionSchema = {
@@ -45,11 +71,38 @@ const restoreSuggestionSchema = {
     .describe('Merge suggestion TypeID to restore from dismissed to pending (post_merge_sug_xxx)'),
 }
 
+type ListSuggestionsArgs = { sort?: 'newest' | 'relevance'; limit?: number; postId?: string }
 type AcceptSuggestionArgs = { id: string; swapDirection?: boolean }
 type DismissSuggestionArgs = { id: string }
 type RestoreSuggestionArgs = { id: string }
 
 export function registerSuggestionTools(server: McpServer, auth: McpAuthContext) {
+  registerTool<ListSuggestionsArgs>(server, auth, {
+    name: 'list_suggestions',
+    permissions: [PERMISSIONS.SUGGESTION_VIEW],
+    description: `List pending post-to-post merge suggestions sorted by newest or relevance (hybrid duplicate score). Optionally filter by postId.
+
+Examples:
+- List newest pending suggestions: list_suggestions({})
+- Filter by relevance for one post: list_suggestions({ postId: "post_01abc...", sort: "relevance", limit: 20 })`,
+    schema: listSuggestionsSchema,
+    annotations: READ_ONLY,
+    scope: 'read:feedback',
+    teamOnly: true,
+    handler: async (args) => {
+      if (args.postId !== undefined && !isTypeId(args.postId, 'post')) {
+        return errorResult(new Error('Invalid post ID. Expected post_xxx format.'))
+      }
+      const limit = args.limit === undefined ? 50 : Math.min(100, Math.max(1, args.limit))
+      const result = await getPendingMergeSuggestions({
+        sort: args.sort,
+        limit,
+        postId: args.postId as PostId | undefined,
+      })
+      return compactJsonResult({ suggestions: result.items, total: result.total })
+    },
+  })
+
   registerTool<AcceptSuggestionArgs>(server, auth, {
     name: 'accept_suggestion',
     permissions: [PERMISSIONS.SUGGESTION_MANAGE],

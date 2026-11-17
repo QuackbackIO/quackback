@@ -205,6 +205,42 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 }))
 
 vi.mock('@/lib/server/domains/merge-suggestions/merge-suggestion.service', () => ({
+  getPendingMergeSuggestions: vi.fn().mockResolvedValue({
+    items: [
+      {
+        id: 'post_merge_sug_01abc',
+        status: 'pending',
+        hybridScore: 0.9,
+        llmConfidence: 0.85,
+        llmReasoning: 'Duplicate request',
+        createdAt: new Date('2026-11-16T00:00:00.000Z'),
+        updatedAt: new Date('2026-11-16T00:00:00.000Z'),
+        sourcePost: {
+          id: 'post_src',
+          title: 'Source post',
+          content: null,
+          voteCount: 1,
+          commentCount: 0,
+          createdAt: new Date('2026-11-15T00:00:00.000Z'),
+          boardName: 'Features',
+          statusName: 'Open',
+          statusColor: '#22c55e',
+        },
+        targetPost: {
+          id: 'post_tgt',
+          title: 'Target post',
+          content: null,
+          voteCount: 3,
+          commentCount: 1,
+          createdAt: new Date('2026-11-14T00:00:00.000Z'),
+          boardName: 'Features',
+          statusName: 'Open',
+          statusColor: '#22c55e',
+        },
+      },
+    ],
+    total: 1,
+  }),
   acceptMergeSuggestion: vi.fn().mockResolvedValue(undefined),
   dismissMergeSuggestion: vi.fn().mockResolvedValue(undefined),
   restoreMergeSuggestion: vi.fn().mockResolvedValue(undefined),
@@ -726,6 +762,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('create_changelog')
       expect(toolNames).toContain('update_changelog')
       expect(toolNames).toContain('delete_changelog')
+      expect(toolNames).toContain('list_suggestions')
       expect(toolNames).toContain('update_comment')
       expect(toolNames).toContain('delete_comment')
       expect(toolNames).toContain('react_to_comment')
@@ -753,7 +790,32 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('navigate_workspace')
       // Settings change directly through update_settings; no tool files a settings card.
       expect(toolNames).not.toContain('propose_settings_change')
-      expect(toolNames).toHaveLength(43)
+      expect(toolNames).toHaveLength(44)
+    })
+
+    it('list_suggestions lists pending merge suggestions without auditing a read-only call', async () => {
+      await setupValidAuth()
+      const { handleMcpRequest } = await import('../handler')
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'list_suggestions',
+            arguments: { sort: 'relevance', limit: 10 },
+          })
+        )
+      )
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError?: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBeUndefined()
+      const parsed = JSON.parse(body.result.content[0]!.text) as {
+        suggestions: Array<{ id: string }>
+        total: number
+      }
+      expect(parsed.total).toBe(1)
+      expect(parsed.suggestions[0]!.id).toBe('post_merge_sug_01abc')
+      expect(mockAuditInsertValues).not.toHaveBeenCalled()
     })
 
     it('should handle resources/list request', async () => {
