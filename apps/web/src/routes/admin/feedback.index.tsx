@@ -1,9 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useAdminTeamMembers } from '@/lib/client/hooks/use-team-members'
 import {
   useAdminBoards,
   useAdminStatuses,
   useAdminTags,
+  useAdminTeamMembers,
 } from '@/lib/client/hooks/use-admin-catalogues'
 import { warmFeedbackPage } from '@/lib/client/queries/feedback-page'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'

@@ -8,7 +8,6 @@ import {
   inboxPostsInfiniteOptions,
 } from '@/lib/client/hooks/use-inbox-query'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
-import { teamMembersQuery } from '@/lib/client/hooks/use-team-members'
 
 /**
  * Warm what the admin feedback page renders on first paint, for its route
@@ -27,7 +26,9 @@ export function warmFeedbackPage(queryClient: QueryClient, permissions: readonly
     can(PERMISSIONS.TAG_VIEW) ? queryClient.ensureQueryData(adminQueries.tags()) : undefined,
     can(PERMISSIONS.STATUS_VIEW) ? queryClient.ensureQueryData(adminQueries.statuses()) : undefined,
     // The same cache entry the page's useAdminTeamMembers reads.
-    can(PERMISSIONS.MEMBER_VIEW) ? queryClient.ensureQueryData(teamMembersQuery()) : undefined,
+    can(PERMISSIONS.MEMBER_VIEW)
+      ? queryClient.ensureQueryData(adminQueries.teamMembers())
+      : undefined,
     queryClient.ensureQueryData(mergeSuggestionQueries.summary()),
     // Warm the moderation count so the pending-moderation banner renders on
     // first paint instead of popping in once the query resolves. Only a

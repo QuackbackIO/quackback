@@ -148,11 +148,13 @@ export const adminQueries = {
     }),
 
   /**
-   * List all team members
+   * List all team members. The same cache entry as teamMembersQuery (the
+   * roster useAdminTeamMembers reads), so a route loader can warm it without
+   * pulling that hook into the entry chunk.
    */
   teamMembers: () =>
     queryOptions({
-      queryKey: ['admin', 'team', 'members'],
+      queryKey: ['admin', 'team-members'],
       queryFn: () => fetchTeamMembers(),
       staleTime: 5 * 60 * 1000, // 5min - reference data for filters/assignments
     }),
