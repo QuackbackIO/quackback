@@ -284,6 +284,20 @@ export async function createEmailConversation(input: {
   const { routeUnassignedConversation } = await import('./conversation.service')
   await routeUnassignedConversation(conversation)
 
+  // The team email a widget-started conversation sends from sendVisitorMessage
+  // when no agent is online. The direct inserts above bypass that path, so
+  // without this an emailed-in thread rang only the in-app bell and reached
+  // nobody who was away from the inbox.
+  const { notifyVisitorMessage } = await import('./conversation.notify')
+  void notifyVisitorMessage({
+    conversation,
+    content: content || (attachments[0] ? attachments[0].name : ''),
+    contentJson: safeContentJson,
+    authorName: normalizeSenderAddress(parsed.from) ?? 'A visitor',
+    isFirstMessage: true,
+    attachments,
+  })
+
   return conversation.id
 }
 
