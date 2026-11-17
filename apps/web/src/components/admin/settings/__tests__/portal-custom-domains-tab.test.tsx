@@ -21,7 +21,7 @@ const calls = vi.hoisted(() => ({
     cloudHostnames?: readonly string[]
     loadVerifiedDomains?: () => Promise<readonly string[]>
     loadCloudRecords?: (hostname: string) => Promise<unknown[]>
-    onAddVerifiedDomain?: () => void
+    onAddVerifiedDomain?: (section: string) => void
   },
 }))
 
@@ -74,7 +74,7 @@ vi.mock('@/components/admin/settings/section-domains-card', () => ({
     onMakePrimary?: (hostname: string) => void
     cloudHostnames?: readonly string[]
     loadVerifiedDomains?: () => Promise<readonly string[]>
-    onAddVerifiedDomain?: () => void
+    onAddVerifiedDomain?: (section: string) => void
   }) => {
     calls.readyHostnames = readyHostnames
     calls.card = rest
@@ -193,10 +193,10 @@ describe('the Custom domains tab: Verified domains for the dialog', () => {
     calls.permissions = ['settings.manage']
     renderTab()
     await screen.findByText('Make primary')
-    calls.card.onAddVerifiedDomain?.()
+    calls.card.onAddVerifiedDomain?.('help')
     expect(calls.navigate).toHaveBeenCalledWith({
       to: '/admin/settings/domains',
-      search: { add: '1' },
+      search: { add: '1', for: 'help' },
     })
   })
 

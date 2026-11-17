@@ -222,7 +222,7 @@ export function VerifiedDomainsCard({
   rows: DomainRow[]
   links: DomainUseLinks
   canAdd: boolean
-  /** Open Add domain on arrival: a link asked for it (`ADD_DOMAIN_LINK`). */
+  /** Open Add domain on arrival: a link asked for it (`addDomainLink`). */
   openAdd?: boolean
 }) {
   // A custom domain is listed on the Custom domains card, not here.

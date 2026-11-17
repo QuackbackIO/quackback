@@ -139,3 +139,25 @@ describe('<DnsRecordTable> a value longer than one TXT string', () => {
     )
   })
 })
+
+describe('<DnsRecordTable> one record alone', () => {
+  it('can leave out the record label, keeping its state for screen readers', () => {
+    render(
+      <DnsRecordTable
+        hideLabels
+        records={[
+          {
+            label: 'Routing',
+            type: 'CNAME',
+            name: 'help',
+            value: 'edge.example.net',
+            state: 'waiting',
+          },
+        ]}
+      />
+    )
+    const row = document.querySelector('[data-slot="dns-record"]') as HTMLElement
+    expect(row).not.toHaveTextContent('Routing')
+    expect(row).toHaveTextContent('Waiting')
+  })
+})

@@ -346,7 +346,7 @@ describe('domain view set up', () => {
     expect(dialog).toHaveTextContent('Used for')
     expect(within(dialog).queryByLabelText('Domain')).toBeNull()
     await chooseSection('Help center')
-    expect(within(dialog).getByLabelText('Domain')).toHaveValue('help')
+    expect(within(dialog).getByLabelText(/^Name in front of /)).toHaveValue('help')
     expect(dialog).toHaveTextContent('.acme.com')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
@@ -362,7 +362,7 @@ describe('domain view set up', () => {
     setUp('Custom domains')
     await chooseSection('Status')
     const dialog = screen.getByRole('dialog')
-    fireEvent.change(within(dialog).getByLabelText('Domain'), { target: { value: '' } })
+    fireEvent.change(within(dialog).getByLabelText(/^Name in front of /), { target: { value: '' } })
     // Nothing typed: nothing to save yet.
     expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
   })
@@ -372,7 +372,9 @@ describe('domain view set up', () => {
     setUp('Custom domains')
     await chooseSection('Help center')
     const dialog = screen.getByRole('dialog')
-    fireEvent.change(within(dialog).getByLabelText('Domain'), { target: { value: 'help desk' } })
+    fireEvent.change(within(dialog).getByLabelText(/^Name in front of /), {
+      target: { value: 'help desk' },
+    })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Use letters, numbers and hyphens')
     expect(setSectionDomain).not.toHaveBeenCalled()

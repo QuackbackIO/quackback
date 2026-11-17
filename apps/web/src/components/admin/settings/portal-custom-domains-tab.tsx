@@ -27,7 +27,7 @@ import {
   SectionDomainsCard,
 } from '@/components/admin/settings/section-domains-card'
 import { portalSectionsEnabled } from '@/lib/shared/section-domains'
-import { ADD_DOMAIN_LINK, DOMAIN_VERIFICATION_ANCHOR } from '@/lib/shared/domains-permissions'
+import { addDomainLink, DOMAIN_VERIFICATION_ANCHOR } from '@/lib/shared/domains-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { CUSTOM_DOMAINS_HREF } from '@/lib/shared/portal-settings-tabs'
 import {
@@ -149,7 +149,7 @@ export default function PortalCustomDomainsTab({
           loadCloudRecords={cloud ? loadCloudRecords : undefined}
           // Through the router, so unsaved Design changes ask first, as leaving the page does.
           onAddVerifiedDomain={
-            canAddDomain ? () => void router.navigate(ADD_DOMAIN_LINK) : undefined
+            canAddDomain ? (section) => void router.navigate(addDomainLink(section)) : undefined
           }
           canAdd={!cloud || !!operator?.entitled}
           onChanged={() => void onChanged()}

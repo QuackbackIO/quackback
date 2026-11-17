@@ -117,7 +117,7 @@ export function SectionDomainsCard({
   onMakePrimary?: (hostname: string) => void
   onAddDomain?: () => void
   /** Go to Settings > Domains to add one; only for a viewer who may. */
-  onAddVerifiedDomain?: () => void
+  onAddVerifiedDomain?: (section: PortalSection) => void
 }) {
   const map = view.sectionDomains
   const primary = view.primaryHost ?? ''

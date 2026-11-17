@@ -84,7 +84,14 @@ const STATE_ICON = {
   problem: { icon: ExclamationCircleIcon, label: 'Needs a fix', tone: 'text-destructive' },
 } as const
 
-export function DnsRecordTable({ records }: { records: DnsRecordRow[] }) {
+export function DnsRecordTable({
+  records,
+  hideLabels = false,
+}: {
+  records: DnsRecordRow[]
+  /** Leave out each record's label (its state stays, for screen readers): for one record alone. */
+  hideLabels?: boolean
+}) {
   return (
     <div className="@container overflow-x-auto">
       <table className="w-full text-[13px] @max-xl:block">
@@ -108,8 +115,11 @@ export function DnsRecordTable({ records }: { records: DnsRecordRow[] }) {
                   <td className="py-1.5 pr-3 whitespace-nowrap @max-xl:block @max-xl:pt-0 @max-xl:font-medium">
                     <span className="flex items-center gap-1.5">
                       <Icon className={cn('size-4 shrink-0', tone)} aria-hidden="true" />
-                      <span className="sr-only">{label}: </span>
-                      {r.label}
+                      <span className="sr-only">
+                        {label}
+                        {hideLabels ? '' : ': '}
+                      </span>
+                      {!hideLabels && r.label}
                     </span>
                   </td>
                   <td data-label="Name" className={cn('py-1.5 pr-3', STACKED_CELL)}>

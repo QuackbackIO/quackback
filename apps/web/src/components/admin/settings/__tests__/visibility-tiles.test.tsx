@@ -59,6 +59,37 @@ describe('VisibilityTiles', () => {
     expect(tiles[1].getAttribute('data-selected')).toBe('false')
   })
 
+  it('is named by the heading it points at', () => {
+    render(
+      <>
+        <p id="who">Who can see it</p>
+        <VisibilityTiles
+          name="v"
+          value="everyone"
+          onChange={() => {}}
+          options={options}
+          aria-labelledby="who"
+        />
+      </>
+    )
+    expect(screen.getByRole('radiogroup', { name: 'Who can see it' })).toBeTruthy()
+  })
+
+  it('renders what an option asks for directly under its tile', () => {
+    render(
+      <VisibilityTiles
+        name="v"
+        value="everyone"
+        onChange={() => {}}
+        options={options}
+        renderAfter={(value) => (value === 'everyone' ? <span>under everyone</span> : null)}
+      />
+    )
+    const tiles = document.querySelectorAll('[data-slot="visibility-tile"]')
+    expect(tiles[0].nextElementSibling?.textContent).toBe('under everyone')
+    expect(tiles[1].nextElementSibling).toBe(tiles[2])
+  })
+
   it('has the shared labels', () => {
     expect(VISIBILITY_LABELS).toEqual({
       everyone: 'Everyone',
