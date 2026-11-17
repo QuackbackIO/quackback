@@ -79,6 +79,47 @@ beforeEach(() => {
   })
 })
 
+describe('team sign-in while Feedback has its own domain', () => {
+  // /admin without a session sends the browser to the sign-in dialog on `/`,
+  // and Feedback owns `/`. Moved to Feedback's host, the sign-in made a portal
+  // session there and sent the browser back to /admin on the primary domain,
+  // which had no session, and so on round again.
+  beforeEach(() => {
+    state.settings = workspace({
+      sectionDomains: { feedback: { hostname: 'feedback.acme.com', verifiedAt: VERIFIED } },
+    })
+  })
+
+  it.each([
+    '/?auth=signin&callbackUrl=%2Fadmin',
+    '/?auth=signin&callbackUrl=%2Fadmin&error=not_team_member',
+    '/?auth=signup&callbackUrl=%2Fonboarding',
+    '/?auth=signin&callbackUrl=%2Fdevice%3Fuser_code%3DABCD-EFGH',
+    '/?auth=signin&callbackUrl=%2Foauth%2Fconsent%3Fclient_id%3Dc1',
+  ])('answers %s on the primary domain', async (pathAndQuery) => {
+    const { response } = await send(`https://acme.example.com${pathAndQuery}`)
+    expect(response).toBe(PASSED)
+  })
+
+  it('sends a team sign-in that reached the Feedback host back to the primary domain', async () => {
+    const { response } = await send('https://feedback.acme.com/?auth=signin&callbackUrl=%2Fadmin')
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(
+      'https://acme.example.com/?auth=signin&callbackUrl=%2Fadmin'
+    )
+  })
+
+  it("still moves the portal's own sign-in to the Feedback host", async () => {
+    const { response } = await send(
+      'https://acme.example.com/?auth=signin&callbackUrl=%2Fb%2Fideas'
+    )
+    expect(response.status).toBe(301)
+    expect(response.headers.get('location')).toBe(
+      'https://feedback.acme.com/?auth=signin&callbackUrl=%2Fb%2Fideas'
+    )
+  })
+})
+
 describe('handleSectionHost', () => {
   it("shows the help center at / on the help center's host", async () => {
     const { response, context } = await send('https://help.acme.com/')

@@ -10,6 +10,7 @@
  * sends visitors to the primary domain.
  */
 import type { PortalSection } from './custom-domains'
+import { isSafeCallbackUrl, isTeamCallback } from './routing'
 import type { FeatureFlags, HelpCenterDomainConfig } from './types/settings'
 import { isProductEnabled } from './types/settings'
 import { isStatusPagePublished } from './status-settings'
@@ -151,6 +152,26 @@ const PRIMARY_ONLY_PREFIXES = ['/admin', '/onboarding', '/apps', '/device', '/oa
 /** Whether a path is one of the team's pages, served on the primary domain only. */
 function isPrimaryOnlyPath(path: string): boolean {
   return PRIMARY_ONLY_PREFIXES.some((prefix) => underPrefix(path, prefix))
+}
+
+/**
+ * A team sign-in: the sign-in dialog on `/` (`?auth=signin` or `signup`)
+ * asked for on the way to a team page (`/admin`, `/onboarding`, the device and
+ * OAuth sign-ins, a team invitation). Every team sign-in redirect lands here,
+ * as it did before sections had domains of their own. It must finish on the
+ * primary domain: a session made on a section host is a portal session, and
+ * the primary domain never sees its cookie. So it is answered on the primary
+ * domain, like the team pages, even while a section owns `/`.
+ */
+function isTeamSignIn(path: string, search: string): boolean {
+  if (path !== '/') return false
+  const params = new URLSearchParams(search)
+  const auth = params.get('auth')
+  if (auth !== 'signin' && auth !== 'signup') return false
+  const callbackUrl = params.get('callbackUrl')
+  if (!isSafeCallbackUrl(callbackUrl)) return false
+  const callbackPath = new URL(callbackUrl, 'https://callback.invalid').pathname
+  return isPrimaryOnlyPath(callbackPath) || isTeamCallback(callbackUrl)
 }
 
 const SECTION_PREFIXES: ReadonlyArray<[string, PortalSection]> = [
@@ -343,7 +364,7 @@ export function resolveSectionHostRoute({
   if (!normalizeHost(host)) return PASS
   const primary = primaryOrigin.replace(/\/$/, '')
 
-  if (isPrimaryOnlyPath(path)) {
+  if (isPrimaryOnlyPath(path) || isTeamSignIn(path, search)) {
     // Never a move to itself, should a section ever name the primary host.
     if (!sectionOfHost(host, map) || normalizeHost(hostOfOrigin(primary)) === normalizeHost(host)) {
       return PASS
