@@ -112,6 +112,61 @@ describe('admin theme stylesheet', () => {
     }
   })
 
+  describe('focus', () => {
+    /** A token's value with one level of var() resolved against the same theme. */
+    const resolve = (t: Map<string, string>, name: string): string => {
+      const value = t.get(name)!
+      const ref = value.match(/^var\((--[\w-]+)\)$/)
+      return ref ? t.get(ref[1])! : value
+    }
+    /** A grey: the RGB channels sit within a few steps of each other. */
+    const isNeutral = (hex: string) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+      return Math.max(r, g, b) - Math.min(r, g, b) <= 12
+    }
+    const focusTokens = ['--ring', '--sidebar-ring', '--chrome-focus']
+
+    it('rings focus in the muted grey, never ink, duck or a brand colour', () => {
+      for (const t of [light, dark]) {
+        for (const name of focusTokens) {
+          expect(t.get(name), name).toBe('var(--muted-foreground)')
+          const value = resolve(t, name)
+          expect(value, name).toMatch(/^#[0-9a-f]{6}$/)
+          expect(isNeutral(value), `${name} ${value}`).toBe(true)
+          expect(value, name).not.toBe(t.get('--duck') ?? light.get('--duck'))
+          expect(value, name).not.toBe(t.get('--foreground'))
+        }
+      }
+    })
+
+    it('keeps the grey ring at 3:1 or more against every admin surface', () => {
+      for (const t of [light, dark]) {
+        const ring = resolve(t, '--ring')
+        for (const surface of ['--background', '--card', '--muted', '--chrome-background']) {
+          expect(contrast(ring, t.get(surface)!), surface).toBeGreaterThanOrEqual(3)
+        }
+      }
+    })
+
+    it('has no halo: one 2px offset outline and no box-shadow', () => {
+      expect(css).not.toContain('--focus-halo')
+      const head = ':root:has([data-admin-shell]) :focus-visible {'
+      const start = css.indexOf(head)
+      expect(start).toBeGreaterThanOrEqual(0)
+      const rule = css.slice(start + head.length, css.indexOf('}', start))
+      expect(rule).toContain('outline: 2px solid var(--ring);')
+      expect(rule).toContain('outline-offset: 2px;')
+      expect(rule).toContain('box-shadow: none;')
+    })
+
+    it('never paints a focus rule in duck', () => {
+      const rules = css.replace(/\/\*[\s\S]*?\*\//g, '')
+      for (const m of rules.matchAll(/([^{}]+){([^{}]*)}/g)) {
+        if (m[1].includes(':focus')) expect(m[2], m[1].trim()).not.toMatch(/duck|#f7cc29/i)
+      }
+    })
+  })
+
   it('never uses duck for a single data series, where it would be too faint on beige', () => {
     for (const [name, value] of light) {
       if (name.startsWith('--metric-')) expect(value, name).not.toBe('#f7cc29')
