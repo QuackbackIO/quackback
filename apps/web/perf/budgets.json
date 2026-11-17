@@ -132,9 +132,9 @@
     "ui:admin-feedback-load": {
       "dbQueries": 25,
       "serverRequests": 1,
-      "requests": 167,
-      "jsRequests": 162,
-      "jsKB": 466.1,
+      "requests": 132,
+      "jsRequests": 125,
+      "jsKB": 427,
       "htmlTransferKB": 38.1,
       "componentRenders": 487
     },
@@ -371,9 +371,9 @@
     "sweep:ui:admin:/admin/feedback": {
       "dbQueries": 25,
       "serverRequests": 1,
-      "requests": 167,
-      "jsRequests": 162,
-      "jsKB": 466.1,
+      "requests": 132,
+      "jsRequests": 125,
+      "jsKB": 427,
       "htmlTransferKB": 38.1,
       "componentRenders": 516
     },
