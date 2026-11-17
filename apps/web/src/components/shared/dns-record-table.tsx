@@ -89,15 +89,20 @@ export function DnsRecordTable({
   hideLabels = false,
 }: {
   records: DnsRecordRow[]
-  /** Leave out each record's label (its state stays, for screen readers): for one record alone. */
+  /**
+   * For one record alone: leave out its label. A waiting record then shows no icon (its
+   * state is kept for screen readers); a found or failing one shows its icon with the word.
+   */
   hideLabels?: boolean
 }) {
+  const quiet = (r: DnsRecordRow) => hideLabels && r.state === 'waiting'
+  const allQuiet = records.every(quiet)
   return (
     <div className="@container overflow-x-auto">
       <table className="w-full text-[13px] @max-xl:block">
         <thead className="@max-xl:hidden">
           <tr className="text-left text-xs text-muted-foreground">
-            <th className="py-1.5 pr-3 font-medium">Record</th>
+            <th className={cn('py-1.5 pr-3 font-medium', allQuiet && 'sr-only')}>Record</th>
             <th className="py-1.5 pr-3 font-medium">Name</th>
             <th className="py-1.5 pr-3 font-medium">Type</th>
             <th className="py-1.5 font-medium">Value</th>
@@ -112,15 +117,28 @@ export function DnsRecordTable({
                   data-slot="dns-record"
                   className="border-t border-border/50 align-top @max-xl:block @max-xl:py-2 @max-xl:first:border-t-0"
                 >
-                  <td className="py-1.5 pr-3 whitespace-nowrap @max-xl:block @max-xl:pt-0 @max-xl:font-medium">
-                    <span className="flex items-center gap-1.5">
-                      <Icon className={cn('size-4 shrink-0', tone)} aria-hidden="true" />
-                      <span className="sr-only">
-                        {label}
-                        {hideLabels ? '' : ': '}
+                  <td
+                    className={cn(
+                      'py-1.5 pr-3 whitespace-nowrap @max-xl:block @max-xl:pt-0 @max-xl:font-medium',
+                      quiet(r) && 'sr-only'
+                    )}
+                  >
+                    {hideLabels ? (
+                      quiet(r) ? (
+                        <span className="sr-only">{label}</span>
+                      ) : (
+                        <span className="flex items-center gap-1.5">
+                          <Icon className={cn('size-4 shrink-0', tone)} aria-hidden="true" />
+                          <span>{label}</span>
+                        </span>
+                      )
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <Icon className={cn('size-4 shrink-0', tone)} aria-hidden="true" />
+                        <span className="sr-only">{label}: </span>
+                        {r.label}
                       </span>
-                      {!hideLabels && r.label}
-                    </span>
+                    )}
                   </td>
                   <td data-label="Name" className={cn('py-1.5 pr-3', STACKED_CELL)}>
                     <span className="flex min-w-0 items-start gap-1">

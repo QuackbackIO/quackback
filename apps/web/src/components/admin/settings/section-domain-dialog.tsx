@@ -84,7 +84,11 @@ const MAX_TILES = 4
 /** What a Verify found, in the words the Custom domains card uses. */
 const PENDING_NOTE = 'Not verified yet. DNS changes can take a while to show.'
 const VERIFIED_NOTE = 'Verified.'
-const NO_RECORD = "Couldn't load the DNS record. It's also shown on the Custom domains card."
+/** Where the record is when it cannot be shown here: Cloud keeps it under Domain verification. */
+const NO_RECORD = {
+  cloud: "Couldn't load the DNS record. Find it under Domain verification.",
+  selfHosted: "Couldn't load the DNS record. Find it on the Custom domains card.",
+}
 
 /** A hostname's state as a badge: the card's badges, and Verified once it is. */
 const STATE_BADGE: Record<SectionDomainState, BadgeState> = {
@@ -335,12 +339,24 @@ function outcomeOf(entry: SectionDomain): string {
   return PENDING_NOTE
 }
 
-/** The error under a field, which the field points at. */
-function FieldError({ text }: { text: string | null }) {
-  if (!text) return null
+/** What is said under a field: an error it points at, or a quiet note. */
+interface FieldMessage {
+  text: string
+  tone: 'error' | 'note'
+}
+
+function FieldError({ message }: { message: FieldMessage | null }) {
+  if (!message) return null
+  if (message.tone === 'note') {
+    return (
+      <p role="status" className="text-[13px] text-muted-foreground">
+        {message.text}
+      </p>
+    )
+  }
   return (
     <p id={ERROR_ID} role="alert" className="text-sm text-destructive">
-      {text}
+      {message.text}
     </p>
   )
 }
@@ -371,7 +387,10 @@ function SectionDomainForm({
   const [choice, setChoice] = useState<string | null>(null)
   const [prefix, setPrefix] = useState<string | null>(null)
   const [picked, setPicked] = useState<string>('')
-  const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<FieldMessage | null>(null)
+  const setError = (text: string | null) => setMessage(text ? { text, tone: 'error' } : null)
+  // Only an error marks a field invalid; a note does not.
+  const error = message?.tone === 'error' ? message.text : null
   const [saving, setSaving] = useState(false)
   const [dns, setDns] = useState<DnsStep | null>(null)
   // Cloud: hostnames this dialog has added as custom domains, so a retry never adds one twice.
@@ -422,13 +441,6 @@ function SectionDomainForm({
   const startPrefix = current?.prefix ?? (section ? DEFAULT_PREFIX[section] : '')
   const prefixValue = prefix ?? startPrefix
 
-  /** The hostname an option names, with the typed name in front once it is picked. */
-  const hostnameOf = (option: DomainOption) => {
-    if (!option.domain || option.value !== chosen) return option.hostname
-    const name = prefixValue.trim().toLowerCase()
-    return name ? `${name}.${option.domain}` : option.domain
-  }
-
   const freeHostname = (): string | null => {
     if (suffix) return webAddressOn(typed, suffix)
     const value = typed.trim().toLowerCase()
@@ -453,10 +465,29 @@ function SectionDomainForm({
     sectionDomainState(currentEntry) === 'verified' &&
     sectionHostname() === currentEntry.hostname
 
+  // Change: a hostname still waiting on DNS, kept as it is, only needs its record shown again.
+  const showRecord =
+    changing &&
+    !!currentEntry &&
+    sectionDomainState(currentEntry) !== 'verified' &&
+    sectionHostname() === currentEntry.hostname
+
   const canSave =
     usedFor === 'portal'
       ? !!picked
       : !loading && !unchanged && (chosen === OTHER ? !!typed.trim() : !!chosenOption)
+
+  /** The DNS step for a hostname the section has, with the zone and records it is shown in. */
+  const openDns = async (section: PortalSection, hostname: string, entry: SectionDomain) => {
+    setDns({
+      section,
+      hostname,
+      entry,
+      zone: suffix ?? zoneFor(hostname, verifiedDomains ?? []),
+      cloudRecords: cloud ? await readRecords(loadCloudRecords, hostname) : undefined,
+      outcome: '',
+    })
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -472,8 +503,12 @@ function SectionDomainForm({
       return
     }
     setError(null)
+    if (showRecord && currentEntry) {
+      await openDns(usedFor, hostname, currentEntry)
+      return
+    }
     setSaving(true)
-    const addedButUnused = `${hostname} was added but isn't used for ${usedForLabel(usedFor)} yet. Try again.`
+    const label = usedForLabel(usedFor)
     let wasAdded = added.has(hostname)
     try {
       // Cloud: a hostname the control plane does not route yet is added as a custom domain first.
@@ -494,13 +529,21 @@ function SectionDomainForm({
       try {
         result = await setSectionDomainFn({ data: { section: usedFor, hostname } })
       } catch (err) {
-        setError(wasAdded ? addedButUnused : errorText(err, "Couldn't save the custom domain."))
+        // Added, but the section step did not answer: the add stands, so Save again only sets it.
+        if (wasAdded) {
+          setMessage({
+            text: `${hostname} is added. Select Save to use it for ${label}.`,
+            tone: 'note',
+          })
+        } else {
+          setError(errorText(err, "Couldn't save the custom domain."))
+        }
         return
       }
       if (!result.ok) {
         // A refusal comes back as a value whose words are written for this dialog.
         const { message: refusal } = result
-        setError(wasAdded ? addedButUnused : refusal)
+        setError(wasAdded ? `${hostname} was added. ${refusal}` : refusal)
         return
       }
       onSaved()
@@ -509,15 +552,7 @@ function SectionDomainForm({
         onClose()
         return
       }
-      const zone = suffix ?? zoneFor(hostname, verifiedDomains ?? [])
-      setDns({
-        section: usedFor,
-        hostname,
-        entry,
-        zone,
-        cloudRecords: cloud ? await readRecords(loadCloudRecords, hostname) : undefined,
-        outcome: '',
-      })
+      await openDns(usedFor, hostname, entry)
     } finally {
       setSaving(false)
     }
@@ -553,7 +588,8 @@ function SectionDomainForm({
   const choiceItems = [
     ...options.map((option) => ({
       value: option.value,
-      title: hostnameOf(option),
+      // The tile picks the domain; the field under it picks the name.
+      title: option.domain ?? option.hostname,
       description: readySet.has(option.hostname) && !option.domain ? 'Ready' : undefined,
     })),
     { value: OTHER, title: ANOTHER_DOMAIN },
@@ -561,6 +597,8 @@ function SectionDomainForm({
   const asSelect = choiceItems.length > MAX_TILES
   const single = options.length === 1 && !!options[0].domain
   const showChoices = !!section && !suffix && options.length > 0
+  const showingEmptyState =
+    !!section && !loading && !suffix && !showChoices && emptyState && chosen !== OTHER
 
   const pickChoice = (next: string) => {
     setChoice(next)
@@ -587,7 +625,7 @@ function SectionDomainForm({
           setError(null)
         }}
       />
-      <FieldError text={error} />
+      <FieldError message={message} />
     </div>
   )
 
@@ -625,7 +663,7 @@ function SectionDomainForm({
             {...invalid()}
           />
         )}
-        <FieldError text={error} />
+        <FieldError message={message} />
       </div>
     )
 
@@ -665,7 +703,7 @@ function SectionDomainForm({
         {chosen === OTHER ? (
           <>
             {freeField('labelled')}
-            {textLink(`Use ${only.domain}`, () => pickChoice(only.value))}
+            {textLink(`Use ${only.hostname}`, () => pickChoice(only.value))}
           </>
         ) : (
           <>
@@ -718,10 +756,10 @@ function SectionDomainForm({
           </div>
         )}
         {/* A refusal for a ready custom domain, which has no field of its own. */}
-        {chosenOption && !chosenOption.domain && <FieldError text={error} />}
+        {chosenOption && !chosenOption.domain && <FieldError message={message} />}
       </div>
     )
-  } else if (section && emptyState && chosen !== OTHER) {
+  } else if (showingEmptyState && section) {
     domainBlock = (
       <div className="space-y-2">
         {heading}
@@ -778,6 +816,7 @@ function SectionDomainForm({
                 options={tiles}
                 disabled={saving}
                 aria-labelledby={USED_FOR_HEADING}
+                truncateDescriptions
                 className="grid-cols-2"
               />
             </div>
@@ -815,9 +854,10 @@ function SectionDomainForm({
         <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
-        {usedFor && (
+        {/* Nothing to save while the empty state asks for a domain first. */}
+        {usedFor && !showingEmptyState && (
           <Button type="submit" disabled={saving || !canSave}>
-            Save
+            {showRecord ? 'Show DNS record' : 'Save'}
           </Button>
         )}
       </DialogFooter>
@@ -869,7 +909,8 @@ function PrefixField({
 
 /**
  * After Save: the hostname and its state, the record to add, Verify to check
- * it now and Done. Closing early is fine; the card's row keeps its Verify.
+ * it now and Verify later. Closing early is fine; the card's row keeps its
+ * Verify. Once verified, only the hostname, its badge and Done remain.
  */
 function PointDns({
   step,
@@ -891,6 +932,7 @@ function PointDns({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const verifyRef = useRef<HTMLButtonElement>(null)
+  const doneRef = useRef<HTMLButtonElement>(null)
   const state = sectionDomainState(step.entry)
   const verified = state === 'verified'
   const records = relativeTo(
@@ -903,10 +945,11 @@ function PointDns({
   )
   const where = step.zone ? `where you manage DNS for ${step.zone}` : 'at your DNS host'
 
-  // The next thing to do is Verify, once the record is in.
+  // The next thing to do: Verify, once the record is in; Done, once it is verified.
   useEffect(() => {
-    verifyRef.current?.focus()
-  }, [])
+    if (verified) doneRef.current?.focus()
+    else verifyRef.current?.focus()
+  }, [verified])
 
   const verify = async () => {
     setError(null)
@@ -955,7 +998,7 @@ function PointDns({
           <span className="min-w-0 break-all">{step.hostname}</span>
           <StateBadge state={STATE_BADGE[state]} />
         </div>
-        {records.length > 0 ? (
+        {verified ? null : records.length > 0 ? (
           <>
             <p className="text-sm">
               {records.length > 1
@@ -966,9 +1009,16 @@ function PointDns({
             {!step.zone && <p className="text-xs text-muted-foreground">{FULL_NAMES_NOTE}</p>}
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">{NO_RECORD}</p>
+          <p className="text-sm text-muted-foreground">
+            {cloud ? NO_RECORD.cloud : NO_RECORD.selfHosted}
+          </p>
         )}
-        <p role="status" aria-live="polite" className="text-[13px] text-muted-foreground">
+        {/* Always mounted, so a result is announced; once verified the badge says it on screen. */}
+        <p
+          role="status"
+          aria-live="polite"
+          className={verified ? 'sr-only' : 'text-[13px] text-muted-foreground'}
+        >
           {step.outcome}
         </p>
         {error && (
@@ -980,12 +1030,13 @@ function PointDns({
       {/* On a phone the footer stacks in reverse, so the last button here is the top one. */}
       <DialogFooter>
         <Button
+          ref={doneRef}
           type="button"
           variant={verified ? 'default' : 'outline'}
           onClick={onDone}
           disabled={busy}
         >
-          Done
+          {verified ? 'Done' : 'Verify later'}
         </Button>
         {!verified && (
           <Button

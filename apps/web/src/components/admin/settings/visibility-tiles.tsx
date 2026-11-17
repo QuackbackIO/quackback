@@ -27,6 +27,8 @@ interface VisibilityTilesProps<T extends string> {
   'aria-labelledby'?: string
   /** Shown directly under an option's tile, such as a field the option needs. */
   renderAfter?: (value: T) => ReactNode
+  /** Keep each description to one line, the whole of it on hover, for tight grids. */
+  truncateDescriptions?: boolean
 }
 
 /** Radio tiles: radio dot, title and a one-line description per option. */
@@ -39,6 +41,7 @@ export function VisibilityTiles<T extends string>({
   className,
   'aria-labelledby': labelledBy,
   renderAfter,
+  truncateDescriptions = false,
 }: VisibilityTilesProps<T>) {
   return (
     <RadioGroup
@@ -58,7 +61,9 @@ export function VisibilityTiles<T extends string>({
               data-slot="visibility-tile"
               data-selected={selected}
               className={cn(
-                'flex items-start gap-2.5 rounded-xl border px-3.5 py-3 transition-colors',
+                'flex gap-2.5 rounded-xl border px-3.5 py-3 transition-colors',
+                // A tile with one line centres it, so a tile stretched beside a taller one is not hollow.
+                option.description ? 'items-start' : 'items-center',
                 selected
                   ? 'border-primary bg-primary/10 ring-1 ring-primary'
                   : 'border-border hover:bg-muted/40',
@@ -68,16 +73,24 @@ export function VisibilityTiles<T extends string>({
               <RadioGroupItem
                 value={option.value}
                 disabled={off}
-                className={cn('mt-0.5', RADIO_TILE_DOT)}
+                className={cn(option.description && 'mt-0.5', RADIO_TILE_DOT)}
               />
               <span className="min-w-0">
                 <span className="block text-sm font-medium">{option.title}</span>
-                {option.description && (
-                  // A long hostname breaks inside the tile rather than running past its edge.
-                  <span className="mt-0.5 block text-[13px] text-muted-foreground wrap-anywhere">
-                    {option.description}
-                  </span>
-                )}
+                {option.description &&
+                  (truncateDescriptions ? (
+                    <span
+                      className="mt-0.5 block truncate text-[13px] text-muted-foreground"
+                      title={option.description}
+                    >
+                      {option.description}
+                    </span>
+                  ) : (
+                    // A long hostname breaks inside the tile rather than running past its edge.
+                    <span className="mt-0.5 block text-[13px] text-muted-foreground wrap-anywhere">
+                      {option.description}
+                    </span>
+                  ))}
               </span>
             </label>
             {renderAfter?.(option.value)}

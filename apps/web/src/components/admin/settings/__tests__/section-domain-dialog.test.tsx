@@ -89,6 +89,10 @@ describe('Used for', () => {
       { title: 'Status', description: null },
     ])
     expect(dialog).not.toHaveTextContent('portal.example.net')
+    // At phone width a hostname stays on one line, whole on hover.
+    const helpTile = within(dialog).getByText('help.acme.com')
+    expect(helpTile).toHaveClass('truncate')
+    expect(helpTile).toHaveAttribute('title', 'help.acme.com')
     // Two across at every width.
     expect(dialog.querySelector('[data-slot="used-for-tiles"] [role="radiogroup"]')).toHaveClass(
       'grid-cols-2'
@@ -146,14 +150,27 @@ describe('Change custom domain', () => {
     expect(saveButton).toBeEnabled()
   })
 
-  it('a pending one can be saved again, on to its DNS record', async () => {
-    setSectionDomain.mockResolvedValue(pending('help', 'help.acme.com'))
+  it('a pending one, unchanged, shows its DNS record without saving again', async () => {
     const dialog = renderDialog({
       initial: 'help',
       map: { help: { hostname: 'help.acme.com', verifiedAt: null } },
     })
-    save(dialog)
+    expect(within(dialog).queryByRole('button', { name: 'Save' })).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Show DNS record' }))
     expect(await within(dialog).findByRole('button', { name: 'Verify' })).toBeVisible()
+    expect(setSectionDomain).not.toHaveBeenCalled()
+  })
+
+  it('a pending one, changed, is saved', () => {
+    const dialog = renderDialog({
+      initial: 'help',
+      map: { help: { hostname: 'help.acme.com', verifiedAt: null } },
+    })
+    fireEvent.change(within(dialog).getByLabelText('Domain'), {
+      target: { value: 'docs.acme.com' },
+    })
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeEnabled()
+    expect(within(dialog).queryByRole('button', { name: 'Show DNS record' })).toBeNull()
   })
 
   it('opens on the Verified domain the section already uses', async () => {
@@ -162,7 +179,7 @@ describe('Change custom domain', () => {
       loadVerifiedDomains: verified('acme.com', 'acme.io'),
       map: { help: { hostname: 'docs.acme.io', verifiedAt: null } },
     })
-    expect(await within(dialog).findByRole('radio', { name: 'docs.acme.io' })).toBeChecked()
+    expect(await within(dialog).findByRole('radio', { name: 'acme.io' })).toBeChecked()
     expect(within(dialog).getByLabelText('Name in front of acme.io')).toHaveValue('docs')
   })
 })
@@ -280,23 +297,27 @@ describe('Domain: picking a Verified domain', () => {
     expect(setSectionDomain).not.toHaveBeenCalled()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Another domain' }))
     expect(within(dialog).getByLabelText('Domain')).toBeVisible()
+    // The way back names the hostname it restores.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Use help.acme.com' }))
+    expect(within(dialog).getByLabelText('Name in front of acme.com')).toHaveValue('help')
   })
 
   it('with two, offers each then Another domain, the first picked, its field under its tile', async () => {
     const dialog = renderDialog({ loadVerifiedDomains: verified('acme.com', 'acme.io') })
     choose(dialog, 'Help center')
     await waitFor(() =>
-      expect(domainTitles(dialog)).toEqual(['help.acme.com', 'help.acme.io', 'Another domain'])
+      expect(domainTitles(dialog)).toEqual(['acme.com', 'acme.io', 'Another domain'])
     )
     expect(within(dialog).getByRole('radiogroup', { name: 'Domain' })).toBeVisible()
-    const tile = within(dialog).getByRole('radio', { name: 'help.acme.com' })
+    const tile = within(dialog).getByRole('radio', { name: 'acme.com' })
     expect(tile).toBeChecked()
     const field = within(dialog).getByLabelText('Name in front of acme.com')
     // Directly under the picked tile, before the next one.
     const picked = tile.closest('[data-slot="visibility-tile"]') as HTMLElement
     expect(picked.nextElementSibling).toContainElement(field)
+    // The tile picks the domain; the field picks the name.
     fireEvent.change(field, { target: { value: 'docs' } })
-    expect(within(dialog).getByRole('radio', { name: 'docs.acme.com' })).toBeChecked()
+    expect(tile).toBeChecked()
   })
 
   it('picks the Verified domain the other sections already use', async () => {
@@ -305,7 +326,7 @@ describe('Domain: picking a Verified domain', () => {
       map: { feedback: { hostname: 'feedback.acme.io', verifiedAt: AT } },
     })
     choose(dialog, 'Help center')
-    expect(await within(dialog).findByRole('radio', { name: 'help.acme.io' })).toBeChecked()
+    expect(await within(dialog).findByRole('radio', { name: 'acme.io' })).toBeChecked()
   })
 
   it('never offers a hostname another section uses', async () => {
@@ -352,7 +373,7 @@ describe('Domain: picking a Verified domain', () => {
     choose(dialog, 'Help center')
     await waitFor(() =>
       expect(tiles(dialog, 'domain-choices')).toEqual([
-        { title: 'help.acme.com', description: null },
+        { title: 'acme.com', description: null },
         { title: 'news.acme.com', description: 'Ready' },
         { title: 'Another domain', description: null },
       ])
@@ -391,7 +412,9 @@ describe('Domain: no Verified domain yet', () => {
     choose(dialog, 'Status')
     expect(await within(dialog).findByText('No Verified domains yet.')).toBeVisible()
     expect(within(dialog).queryByRole('textbox')).toBeNull()
-    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
+    // Only Add domain, Type a domain and Cancel: nothing to save yet.
+    expect(within(dialog).queryByRole('button', { name: 'Save' })).toBeNull()
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeVisible()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Add domain' }))
     expect(onAddVerifiedDomain).toHaveBeenCalledWith('status')
     expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(
@@ -404,6 +427,7 @@ describe('Domain: no Verified domain yet', () => {
     choose(dialog, 'Status')
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Type a domain' }))
     expect(within(dialog).getByLabelText('Domain')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeVisible()
     expect(dialog).not.toHaveTextContent('Another domain')
   })
 
@@ -449,8 +473,9 @@ describe('Point DNS', () => {
     expect(dialog).not.toHaveTextContent(FULL_NAMES_NOTE)
     // One record: no group label above it.
     expect(dialog.querySelector('[data-slot="dns-record"]')).not.toHaveTextContent('Routing')
-    // Verify leads until the domain is verified; Done is the way out.
-    const done = within(dialog).getByRole('button', { name: 'Done' })
+    // Verify leads until the domain is verified; Verify later is the way out.
+    const done = within(dialog).getByRole('button', { name: 'Verify later' })
+    expect(within(dialog).queryByRole('button', { name: 'Done' })).toBeNull()
     expect(verify).toHaveClass('bg-primary')
     expect(done).not.toHaveClass('bg-primary')
     expect(done).toHaveClass('border')
@@ -475,6 +500,22 @@ describe('Point DNS', () => {
     ).toBeVisible()
     expect(within(dialog).getByRole('button', { name: 'Copy name status.other.org' })).toBeVisible()
     expect(dialog).toHaveTextContent(FULL_NAMES_NOTE)
+  })
+
+  it('without a record to show, says where it is', async () => {
+    setSectionDomain.mockResolvedValue(pending('status', 'status.other.org'))
+    const dialog = renderDialog({ primaryHost: null })
+    choose(dialog, 'Status')
+    fireEvent.change(within(dialog).getByLabelText('Domain'), {
+      target: { value: 'status.other.org' },
+    })
+    save(dialog)
+    expect(
+      await within(dialog).findByText(
+        "Couldn't load the DNS record. Find it on the Custom domains card."
+      )
+    ).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Verify' })).toBeVisible()
   })
 
   it('a hostname that is verified already just closes', async () => {
@@ -565,10 +606,20 @@ describe('Point DNS', () => {
     const dialog = renderDialog({ loadVerifiedDomains: verified('acme.com') })
     await saveOnVerified(dialog)
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Verify' }))
-    expect(await within(dialog).findByText('Verified.')).toBeVisible()
-    expect(within(dialog).queryByRole('button', { name: 'Verify' })).toBeNull()
-    expect(within(dialog).getByRole('button', { name: 'Done' })).toHaveClass('bg-primary')
+    const done = await within(dialog).findByRole('button', { name: 'Done' })
+    // Only the hostname with its badge, and Done, focused.
     expect(dialog.querySelector('[data-slot="point-dns-hostname"]')).toHaveTextContent('Verified')
+    expect(within(dialog).queryByRole('button', { name: 'Verify' })).toBeNull()
+    expect(within(dialog).queryByRole('button', { name: 'Verify later' })).toBeNull()
+    expect(done).toHaveClass('bg-primary')
+    await waitFor(() => expect(done).toHaveFocus())
+    expect(dialog).not.toHaveTextContent('Add this record')
+    expect(dialog.querySelector('[data-slot="dns-record"]')).toBeNull()
+    expect(dialog).not.toHaveTextContent(FULL_NAMES_NOTE)
+    // Still announced, but not shown twice beside the badge.
+    const status = within(dialog).getByRole('status')
+    expect(status).toHaveTextContent('Verified.')
+    expect(status).toHaveClass('sr-only')
   })
 })
 
@@ -626,32 +677,49 @@ describe('Cloud: a hostname not yet a custom domain', () => {
     expect(mutateCloudCustomDomain).not.toHaveBeenCalled()
   })
 
-  it('added but not set: says so, refreshes the cards, and a retry only sets the section', async () => {
+  it('added, then the section step threw: a quiet note to Save again, which only sets the section', async () => {
     const onSaved = vi.fn()
     mutateCloudCustomDomain.mockResolvedValue({ projection: {}, transferToken: null })
     setSectionDomain.mockRejectedValueOnce(new Error('timeout'))
     const dialog = cloud({ onSaved })
     await saveOnVerified(dialog)
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      "help.acme.com was added but isn't used for Help center yet. Try again."
+    const note = await within(dialog).findByText(
+      'help.acme.com is added. Select Save to use it for Help center.'
+    )
+    expect(note).toHaveAttribute('role', 'status')
+    expect(note).toHaveClass('text-muted-foreground')
+    expect(within(dialog).queryByRole('alert')).toBeNull()
+    expect(within(dialog).getByLabelText('Name in front of acme.com')).not.toHaveAttribute(
+      'aria-invalid'
     )
     expect(onSaved).toHaveBeenCalledTimes(1)
 
+    setSectionDomain.mockResolvedValueOnce(pending('help', 'help.acme.com'))
+    save(dialog)
+    await within(dialog).findByRole('button', { name: 'Verify' })
+    expect(setSectionDomain).toHaveBeenCalledTimes(2)
+    expect(mutateCloudCustomDomain).toHaveBeenCalledTimes(1)
+  })
+
+  it('added, then the section step refused: the real reason, at the field', async () => {
+    mutateCloudCustomDomain.mockResolvedValue({ projection: {}, transferToken: null })
     setSectionDomain.mockResolvedValueOnce({
       ok: false,
       code: 'SECTION_DOMAIN_CLOUD_UNAVAILABLE',
       message: 'Custom domains cannot be read right now. Try again shortly.',
     })
-    save(dialog)
-    await waitFor(() => expect(setSectionDomain).toHaveBeenCalledTimes(2))
+    const dialog = cloud()
+    await saveOnVerified(dialog)
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      "help.acme.com was added but isn't used for Help center yet. Try again."
+      'help.acme.com was added. Custom domains cannot be read right now. Try again shortly.'
     )
-
+    expect(within(dialog).getByLabelText('Name in front of acme.com')).toHaveAttribute(
+      'aria-invalid',
+      'true'
+    )
     setSectionDomain.mockResolvedValueOnce(pending('help', 'help.acme.com'))
     save(dialog)
     await within(dialog).findByRole('button', { name: 'Verify' })
-    expect(setSectionDomain).toHaveBeenCalledTimes(3)
     expect(mutateCloudCustomDomain).toHaveBeenCalledTimes(1)
   })
 
@@ -671,7 +739,7 @@ describe('Cloud: a hostname not yet a custom domain', () => {
     await saveOnVerified(dialog)
     expect(
       await within(dialog).findByText(
-        "Couldn't load the DNS record. It's also shown on the Custom domains card."
+        "Couldn't load the DNS record. Find it under Domain verification."
       )
     ).toBeVisible()
     expect(dialog).not.toHaveTextContent('Add this record')
