@@ -104,7 +104,10 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   and,
   apiKeys,
+  boards,
   conversationMessages,
+  postComments,
+  posts,
   ticketConversations,
   eq,
   principal,
@@ -115,6 +118,7 @@ import {
   user,
 } from '@/lib/server/db'
 import { ALL_PERMISSIONS, SYSTEM_ROLES } from '@/lib/shared/permissions'
+import { DEFAULT_BOARD_ACCESS } from '@/lib/shared/db-types'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { createApiKey } from '@/lib/server/domains/api-keys/api-key.service'
@@ -123,6 +127,7 @@ import {
   PERSONAL_KEY_CUTOFF_KV_KEY,
 } from '@/lib/server/domains/principals/principal-display'
 import { createTicket } from '../ticket.service'
+import { getPostWithDetails } from '@/lib/server/domains/posts/post.query'
 import { dispatchMessageCreated, dispatchMessageNoteCreated } from '@/lib/server/events/dispatch'
 import { Route as ReplyRoute } from '@/routes/api/v1/conversations/$conversationId.reply'
 import { Route as NoteRoute } from '@/routes/api/v1/conversations/$conversationId.note'
@@ -419,6 +424,35 @@ describe.skipIf(!fixture.available)('messages sent through an API key', () => {
     expect(portal.author?.displayName).toBe(KEY_NAME)
     const inbox = openingMessage((await listTicketMessagesForAgent(ticketId, creator)).messages)
     expect(inbox.author?.displayName).toBe(KEY_NAME)
+  })
+
+  it("a pinned comment from a personal key made after the cutoff shows its creator's name and avatar together", async () => {
+    await setCutoff(anHourAgo())
+    const creator = await seedCreator()
+    const { apiKey } = await createApiKey({ name: KEY_NAME }, creator)
+    const [board] = await testDb
+      .insert(boards)
+      .values({ slug: `pinned-${suffix()}`, name: 'Pinned', access: DEFAULT_BOARD_ACCESS })
+      .returning()
+    const [postRow] = await testDb
+      .insert(posts)
+      .values({ boardId: board.id, title: 'A post', content: '', principalId: creator })
+      .returning()
+    const [comment] = await testDb
+      .insert(postComments)
+      .values({
+        postId: postRow.id,
+        principalId: apiKey.principalId,
+        content: 'Pinned through the key',
+        isTeamMember: true,
+      })
+      .returning()
+    await testDb.update(posts).set({ pinnedCommentId: comment.id }).where(eq(posts.id, postRow.id))
+
+    const { pinnedComment } = await getPostWithDetails(postRow.id)
+    expect(pinnedComment?.principalId).toBe(apiKey.principalId)
+    expect(pinnedComment?.authorName).toBe(PUBLIC_NAME)
+    expect(pinnedComment?.avatarUrl).toBe(CREATOR_IMAGE)
   })
 
   it('a personal key with no recorded creator keeps its own name', async () => {

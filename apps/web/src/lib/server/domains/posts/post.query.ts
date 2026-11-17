@@ -107,11 +107,6 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     post.pinnedCommentId
       ? db.query.postComments.findFirst({
           where: eq(postComments.id, post.pinnedCommentId),
-          with: {
-            author: {
-              columns: { displayName: true, avatarUrl: true, avatarKey: true },
-            },
-          },
         })
       : undefined,
   ])
@@ -122,6 +117,8 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
 
   let pinnedComment: PinnedComment | null = null
   if (pinnedCommentData && !pinnedCommentData.deletedAt) {
+    // Name and avatar both come from the shared author loader, so they always
+    // describe the same person (a personal key's comment shows its creator).
     const author = (await loadAuthors([pinnedCommentData.principalId])).get(
       pinnedCommentData.principalId
     )
@@ -137,7 +134,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       id: pinnedCommentData.id,
       content: pinnedCommentData.content,
       contentJson: pinnedHydratedContentJson,
-      authorName: pinnedCommentData.author?.displayName ?? null,
+      authorName: author?.displayName ?? null,
       principalId: pinnedCommentData.principalId,
       avatarUrl,
       createdAt: pinnedCommentData.createdAt,
