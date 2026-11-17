@@ -54,7 +54,7 @@ vi.mock('@/lib/server/realtime/presence', () => ({
   listOnlineAgentIds: (...a: []) => listOnlineAgentIds(...a),
   // The gates read presence once: nobody when isAnyAgentOnline says so, the
   // listed agents when someone is, and unknown (null) when the store throws.
-  readOnlineAgentIds: async () => {
+  readAvailableAgentIds: async () => {
     try {
       return (await isAnyAgentOnline()) ? await listOnlineAgentIds() : []
     } catch {

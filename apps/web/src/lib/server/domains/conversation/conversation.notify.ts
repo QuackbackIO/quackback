@@ -48,7 +48,7 @@ import type { ConversationId, ConversationMessageId, PrincipalId } from '@quackb
 import type { JSONContent } from '@tiptap/core'
 import { generateContentHTML } from '@/lib/shared/content-html'
 import { withEmailProxyHint } from '@/lib/server/content/email-image-proxy'
-import { isPrincipalOnline, readOnlineAgentIds } from '@/lib/server/realtime/presence'
+import { isPrincipalOnline, readAvailableAgentIds } from '@/lib/server/realtime/presence'
 import { buildHookContext } from '@/lib/server/events/hook-context'
 import { truncate } from '@/lib/shared/utils/string'
 import { resolveReplyRecipient } from './conversation.recipient'
@@ -264,9 +264,11 @@ export async function notifyVisitorMessage(opts: {
     const testOwner = await testOwnerOf(opts.conversation.visitorPrincipalId)
 
     // Avoid email spam: email only when nobody who can see the conversation
-    // is around to see it live. Presence is read once. Nobody online skips the
-    // check; otherwise only the online teammates are judged, so an agent who
-    // cannot see the conversation never silences the teammates who can. An
+    // is around to see it live. Presence is read once, counting only
+    // teammates with a live inbox who are not set to Away: Away with a tab
+    // open is not watching. Nobody around skips the check; otherwise only
+    // those teammates are judged, so an agent who cannot see the
+    // conversation never silences the teammates who can. An
     // unreadable presence store counts as someone online (no alert), so an
     // outage cannot turn every message into an email.
     //
@@ -275,7 +277,7 @@ export async function notifyVisitorMessage(opts: {
     // hook, at worker time, for the bell (its own anti-spam gate, over the
     // same in-scope recipients). Never try to unify them — the bell's check
     // intentionally runs later, off the request path.
-    const online = await readOnlineAgentIds()
+    const online = await readAvailableAgentIds()
     if (online === null) return
     if (online.length > 0) {
       const watching = await inScopeRecipients(

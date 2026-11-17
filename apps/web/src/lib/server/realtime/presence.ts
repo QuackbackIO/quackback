@@ -223,9 +223,8 @@ export async function isAnyAgentOnline(): Promise<boolean> {
 
 /**
  * Principal ids of all team members with a live inbox stream right now, or
- * null when the presence store cannot be read. Callers that must tell "nobody
- * online" from "unknown" (the new-message alert gates) read this; the rest use
- * `listOnlineAgentIds`.
+ * null when the presence store cannot be read. Counts a teammate set to Away;
+ * the new-message alert gates read `readAvailableAgentIds` instead.
  */
 export async function readOnlineAgentIds(): Promise<PrincipalId[] | null> {
   try {
@@ -240,6 +239,30 @@ export async function readOnlineAgentIds(): Promise<PrincipalId[] | null> {
     )
   } catch (err) {
     log.warn({ err }, 'list online agents failed')
+    return null
+  }
+}
+
+/**
+ * Of the team members with a live inbox stream, those not set to Away, or
+ * null when either read fails. The new-message alert gates read this, since
+ * they must tell "nobody around" from "unknown": a teammate who set Away with
+ * a tab open is online but not watching, so they never hold back an alert.
+ * Presence rows hold typed ids as text, so the Away filter is a second read
+ * through the principal table rather than a join.
+ */
+export async function readAvailableAgentIds(): Promise<PrincipalId[] | null> {
+  const onlineIds = await readOnlineAgentIds()
+  if (onlineIds === null) return null
+  if (onlineIds.length === 0) return []
+  try {
+    const rows = await db
+      .select({ id: principal.id })
+      .from(principal)
+      .where(and(inArray(principal.id, onlineIds), eq(principal.chatAvailability, 'online')))
+    return rows.map((r) => r.id)
+  } catch (err) {
+    log.warn({ err }, 'read available agents failed')
     return null
   }
 }

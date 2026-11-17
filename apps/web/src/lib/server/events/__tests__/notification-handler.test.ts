@@ -25,7 +25,7 @@ const onlineAgentIds = vi.fn().mockResolvedValue([])
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: () => isAnyAgentOnlineSpy(),
   listOnlineAgentIds: () => onlineAgentIds(),
-  readOnlineAgentIds: () => onlineAgentIds(),
+  readAvailableAgentIds: () => onlineAgentIds(),
 }))
 
 import { notificationHook } from '../handlers/notification'

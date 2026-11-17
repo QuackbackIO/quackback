@@ -23,6 +23,7 @@ import {
   conversationMessageMentions,
   conversationMessages,
   conversations,
+  principal,
   ticketSubscriptions,
   eq,
 } from '@/lib/server/db'
@@ -54,13 +55,20 @@ vi.mock('@quackback/email', async (original) => ({
 /** Who has a live inbox stream; empty unless a test puts someone online. */
 const presence = vi.hoisted(() => ({ online: [] as string[], down: false }))
 // Each function fails the way the real one does when the store is down:
-// isAnyAgentOnline open, listOnlineAgentIds closed, readOnlineAgentIds null.
-vi.mock('@/lib/server/realtime/presence', () => ({
-  isAnyAgentOnline: async () => presence.down || presence.online.length > 0,
-  isPrincipalOnline: async (id: string) => !presence.down && presence.online.includes(id),
-  listOnlineAgentIds: async () => (presence.down ? [] : [...presence.online]),
-  readOnlineAgentIds: async () => (presence.down ? null : [...presence.online]),
-}))
+// isAnyAgentOnline open, listOnlineAgentIds closed, readAvailableAgentIds
+// null. Otherwise readAvailableAgentIds, which the new-message gates read, is
+// the real one over the presence rows `goOnline` writes, so whether Away
+// counts is decided by the real queries.
+vi.mock('@/lib/server/realtime/presence', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/realtime/presence')>()
+  return {
+    ...actual,
+    isAnyAgentOnline: async () => presence.down || presence.online.length > 0,
+    isPrincipalOnline: async (id: string) => !presence.down && presence.online.includes(id),
+    listOnlineAgentIds: async () => (presence.down ? [] : [...presence.online]),
+    readAvailableAgentIds: async () => (presence.down ? null : actual.readAvailableAgentIds()),
+  }
+})
 const dispatchMentioned = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/events/dispatch', async (original) => ({
   ...(await original<typeof import('@/lib/server/events/dispatch')>()),
@@ -98,6 +106,13 @@ import {
 import { syncConversationMessageMentions } from '@/lib/server/domains/conversation/sync-conversation-mentions'
 import { notifyVisitorMessage } from '@/lib/server/domains/conversation/conversation.notify'
 import { notificationHook } from '../handlers/notification'
+import { markPresent } from '@/lib/server/realtime/presence'
+
+/** Open a live inbox stream for a teammate: a real presence row. */
+async function goOnline(id: string): Promise<void> {
+  presence.online.push(id)
+  await markPresent(id as PrincipalId, `stream-${id}`, true)
+}
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -821,7 +836,7 @@ describe('presence gate on a follow-up visitor message', () => {
   it('an agent online who cannot see the conversation does not silence the bell or email', async () => {
     const w = await seedWorld()
     const { conversation } = await seedConversation({ team: w.billing })
-    presence.online = [w.elsewhere.id]
+    await goOnline(w.elsewhere.id)
 
     await notifyVisitorMessage({
       conversation,
@@ -854,7 +869,7 @@ describe('presence gate on a follow-up visitor message', () => {
   it('an online teammate who can see the conversation still silences both', async () => {
     const w = await seedWorld()
     const { conversation } = await seedConversation({ team: w.billing })
-    presence.online = [w.onTeam.id]
+    await goOnline(w.onTeam.id)
 
     await notifyVisitorMessage({
       conversation,
@@ -865,5 +880,26 @@ describe('presence gate on a follow-up visitor message', () => {
     expect(sendEmail).not.toHaveBeenCalled()
 
     expect(await belled(followUp(conversation.id as ConversationId))).toEqual([])
+  })
+
+  it('a teammate set to Away who can see the conversation does not silence the bell or email, even with the inbox open', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ team: w.billing })
+    await testDb
+      .update(principal)
+      .set({ chatAvailability: 'away' })
+      .where(eq(principal.id, w.onTeam.id))
+    await goOnline(w.onTeam.id)
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'Anyone there?',
+      authorName: 'Visitor',
+      isFirstMessage: false,
+    })
+    const emailed = sendEmail.mock.calls.map(([options]) => options.to as string)
+    expect(emailed).toContain(w.onTeam.email)
+
+    expect(await belled(followUp(conversation.id as ConversationId))).toContain(w.onTeam.id)
   })
 })
