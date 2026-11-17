@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "登入",
   "portal.header.auth.signUp": "註冊",
   "portal.header.auth.signOut": "登出",
+  "portal.header.auth.signOutFailed": "無法登出。請再試一次。",
   "portal.header.auth.settings": "設定",
   "portal.header.auth.admin": "管理後台",
   "portal.header.theme.toggleLabel": "切換主題",

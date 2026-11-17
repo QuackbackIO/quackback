@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "Anmelden",
   "portal.header.auth.signUp": "Registrieren",
   "portal.header.auth.signOut": "Abmelden",
+  "portal.header.auth.signOutFailed": "Abmelden fehlgeschlagen. Versuche es erneut.",
   "portal.header.auth.settings": "Einstellungen",
   "portal.header.auth.admin": "Administration",
   "portal.header.theme.toggleLabel": "Design wechseln",

@@ -17,6 +17,8 @@ const {
   mockInvalidateQueries,
   mockRemoveQueries,
   mockSignOut,
+  mockNavigate,
+  mockToastError,
   linkRenders,
 } = vi.hoisted(() => ({
   mockGetRouteContext: vi.fn(),
@@ -27,7 +29,11 @@ const {
   mockHasDistinctSignup: vi.fn((): boolean => true),
   mockInvalidateQueries: vi.fn(() => Promise.resolve()),
   mockRemoveQueries: vi.fn(() => Promise.resolve()),
-  mockSignOut: vi.fn(() => Promise.resolve()),
+  mockSignOut: vi.fn((): Promise<unknown> =>
+    Promise.resolve({ data: { success: true }, error: null })
+  ),
+  mockNavigate: vi.fn(),
+  mockToastError: vi.fn(),
   // The label (or target) of each Link render, to tell which tabs rendered.
   linkRenders: [] as string[],
 }))
@@ -35,7 +41,7 @@ const {
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({
     invalidate: vi.fn(),
-    navigate: vi.fn(),
+    navigate: mockNavigate,
     state: { location: { pathname: '/' } },
   }),
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
@@ -95,6 +101,8 @@ vi.mock('@/lib/server/functions/conversation', () => ({
 vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
   useAuthBroadcast: () => {},
 }))
+
+vi.mock('sonner', () => ({ toast: { error: mockToastError, success: vi.fn() } }))
 
 vi.mock('@/lib/client/auth-client', () => ({
   signOut: mockSignOut,
@@ -222,6 +230,52 @@ describe('PortalHeader — sign-out cache hygiene', () => {
         ['publicPosts'],
       ])
     )
+  })
+})
+
+describe('PortalHeader: a sign-out that fails', () => {
+  beforeEach(() => {
+    mockSignOut.mockReset()
+    mockNavigate.mockClear()
+    mockToastError.mockClear()
+    mockRemoveQueries.mockClear()
+  })
+  afterEach(() => cleanup())
+
+  async function clickSignOut() {
+    renderHeader({ userRole: 'user', isLoggedIn: true })
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /log out|sign out/i }))
+    await vi.waitFor(() => expect(mockSignOut).toHaveBeenCalled())
+  }
+
+  it('says so when the server refuses it, and stays signed in where it is', async () => {
+    mockSignOut.mockResolvedValue({
+      data: null,
+      error: { status: 403, code: 'INVALID_ORIGIN', message: 'Invalid origin' },
+    })
+    await clickSignOut()
+    await vi.waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith("Couldn't sign you out. Try again.")
+    )
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(mockRemoveQueries).not.toHaveBeenCalled()
+  })
+
+  it('says so when the request fails', async () => {
+    mockSignOut.mockRejectedValue(new TypeError('Failed to fetch'))
+    await clickSignOut()
+    await vi.waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith("Couldn't sign you out. Try again.")
+    )
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('goes home with no error when it works', async () => {
+    mockSignOut.mockResolvedValue({ data: { success: true }, error: null })
+    await clickSignOut()
+    await vi.waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/' }))
+    expect(mockToastError).not.toHaveBeenCalled()
   })
 })
 

@@ -112,6 +112,81 @@ describe('authTrustedOrigins on a single-workspace install', () => {
   })
 })
 
+describe('a host kept while its lookups go unanswered', () => {
+  // Still served for up to 7 days, so a visitor signed in there must be able to sign out.
+  const kept = () =>
+    workspace({
+      sectionDomains: {
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          unconfirmedSince: new Date().toISOString(),
+        },
+      },
+    })
+  const post = (path: string, body?: Record<string, unknown>) =>
+    new Request(`https://help.acme.com${path}`, {
+      method: 'POST',
+      headers: { origin: 'https://help.acme.com', 'content-type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+    })
+
+  beforeEach(() => {
+    state.settings = kept()
+  })
+
+  it('is trusted for a sign-out posted from it', async () => {
+    expect(await authTrustedOrigins(post('/api/auth/sign-out'))).toContain('https://help.acme.com')
+  })
+
+  it('is not trusted for a sign-in posted from it, nor for its callback URL', async () => {
+    const origins = await authTrustedOrigins(
+      post('/api/auth/sign-in/email', { callbackURL: 'https://help.acme.com/hc' })
+    )
+    expect(origins).not.toContain('https://help.acme.com')
+    expect(origins).toContain('https://acme.com')
+  })
+
+  it('is trusted for the sign-out path only, matched exactly', async () => {
+    for (const path of [
+      '/api/auth/sign-out-everywhere',
+      '/api/auth/sign-out/extra',
+      '/api/auth/sign-in/email?next=/api/auth/sign-out',
+      '/api/auth/link-social',
+    ]) {
+      expect(await authTrustedOrigins(post(path)), path).not.toContain('https://help.acme.com')
+    }
+    const get = new Request('https://help.acme.com/api/auth/sign-out', {
+      headers: { origin: 'https://help.acme.com' },
+    })
+    expect(await authTrustedOrigins(get)).not.toContain('https://help.acme.com')
+  })
+
+  it('stops being trusted for sign-out once it is no longer served', async () => {
+    state.settings = workspace({
+      sectionDomains: {
+        help: {
+          hostname: 'help.acme.com',
+          verifiedAt: VERIFIED,
+          unconfirmedSince: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+      },
+    })
+    expect(await authTrustedOrigins(post('/api/auth/sign-out'))).not.toContain(
+      'https://help.acme.com'
+    )
+  })
+
+  it('is never trusted for sign-out while only set up and not yet verified', async () => {
+    state.settings = workspace({
+      sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: null } },
+    })
+    expect(await authTrustedOrigins(post('/api/auth/sign-out'))).not.toContain(
+      'https://help.acme.com'
+    )
+  })
+})
+
 describe('authTrustedOrigins on Cloud', () => {
   function cloudWith(readiness: string) {
     return {

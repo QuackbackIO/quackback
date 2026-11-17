@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "Se connecter",
   "portal.header.auth.signUp": "S'inscrire",
   "portal.header.auth.signOut": "Se déconnecter",
+  "portal.header.auth.signOutFailed": "Impossible de vous déconnecter. Réessayez.",
   "portal.header.auth.settings": "Paramètres",
   "portal.header.auth.admin": "Administration",
   "portal.header.theme.toggleLabel": "Changer de thème",

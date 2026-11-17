@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "Войти",
   "portal.header.auth.signUp": "Регистрация",
   "portal.header.auth.signOut": "Выйти",
+  "portal.header.auth.signOutFailed": "Не удалось выйти. Попробуйте ещё раз.",
   "portal.header.auth.settings": "Настройки",
   "portal.header.auth.admin": "Админ",
   "portal.header.theme.toggleLabel": "Переключить тему",

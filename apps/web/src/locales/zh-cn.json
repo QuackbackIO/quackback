@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "登录",
   "portal.header.auth.signUp": "注册",
   "portal.header.auth.signOut": "退出登录",
+  "portal.header.auth.signOutFailed": "无法退出登录。请重试。",
   "portal.header.auth.settings": "设置",
   "portal.header.auth.admin": "管理后台",
   "portal.header.theme.toggleLabel": "切换主题",

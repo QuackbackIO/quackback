@@ -21,7 +21,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   },
 }))
 
-const { getSectionOrigins, getSignInSectionOrigins, isSectionHost } =
+const { getSectionOrigins, getSignInSectionOrigins, isSectionHost, sectionHostOrigin } =
   await import('../section-links')
 
 const VERIFIED = '2026-11-01T00:00:00.000Z'
@@ -130,6 +130,11 @@ describe('a kept verification on a self-hosted server', () => {
   it('is never a host sign-in is carried to or trusted from', async () => {
     state.settings = keptSince(DAY)
     expect((await getSignInSectionOrigins()).help).toBe(PRIMARY)
+  })
+
+  it('is no host a session is handed off to', async () => {
+    state.settings = keptSince(DAY)
+    expect(await sectionHostOrigin('help.acme.com')).toBeNull()
   })
 
   it('a confirmed host is one sign-in may use', async () => {
