@@ -24,6 +24,7 @@
  * exactly that gap so the editor can badge keys added since the role's last
  * edit.
  */
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 import {
   db,
   roles,
@@ -288,6 +289,7 @@ export async function createRole(
     })
   }
   log.info({ role_id: id, permission_count: grantedKeys.length }, 'custom role created')
+  await invalidatePlanLimits()
 
   const [role] = (await listRoles()).filter((r) => r.id === id)
   return { role, droppedKeys }
@@ -398,6 +400,8 @@ export async function updateRole(
     })
   }
 
+  // A role's permissions decide who has billing rights, which keeps a seat.
+  await invalidatePlanLimits()
   const [updated] = (await listRoles()).filter((r) => r.id === roleId)
   return updated
 }
@@ -489,6 +493,7 @@ export async function deleteRole(
     })
   }
   log.info({ role_id: roleId, holders, reassigned_to: reassignTo }, 'custom role deleted')
+  await invalidatePlanLimits()
 
   return { reassignedCount: holders }
 }

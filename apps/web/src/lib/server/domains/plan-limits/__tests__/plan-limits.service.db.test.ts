@@ -20,6 +20,7 @@ import {
   principalRoleAssignments,
   roles,
   settings,
+  statusComponents,
   user,
   webhooks,
 } from '@/lib/server/db'
@@ -39,6 +40,8 @@ vi.mock('@/lib/server/domains/billing/usage-counts', async (original) => {
 
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { updateFeatureFlags } from '@/lib/server/domains/settings/settings.service'
+import { deleteBoard } from '@/lib/server/domains/boards/board.service'
+import { deleteStatusComponent } from '@/lib/server/domains/status/status.components'
 import { writeBillingProjection } from '@/lib/server/domains/settings/cloud/billing-projection.write'
 import { parseBillingProjection } from '@/lib/server/domains/settings/cloud/billing-projection'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
@@ -216,6 +219,30 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     expect(spies.loadUsageCounts).toHaveBeenCalledTimes(2)
     await invalidatePlanLimits()
     expect((await getPlanLimits()).phase).toBe('ok')
+  })
+
+  it('shows the fix at once when a board is deleted through the board service', async () => {
+    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await getPlanLimits()
+    expect((await getPlanLimits()).phase).toBe('grace')
+    await deleteBoard(small)
+    expect((await getPlanLimits()).phase).toBe('ok')
+  })
+
+  it('shows the fix at once when a status component is deleted', async () => {
+    await configure({
+      planLimits: true,
+      tierLimits: { ...FREE_LIKE, maxBoards: null, maxStatusComponents: 0 },
+    })
+    const [component] = await testDb
+      .insert(statusComponents)
+      .values({ name: 'Acme API' })
+      .returning({ id: statusComponents.id })
+    await invalidatePlanLimits()
+    await getPlanLimits()
+    expect((await getPlanLimits()).issues.map((i) => i.key)).toContain('maxStatusComponents')
+    await deleteStatusComponent(component!.id)
+    expect((await getPlanLimits()).issues.map((i) => i.key)).not.toContain('maxStatusComponents')
   })
 
   it('gives no new grace for going back over the same limits after the grace ended', async () => {

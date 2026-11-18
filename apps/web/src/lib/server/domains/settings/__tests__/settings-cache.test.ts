@@ -24,6 +24,7 @@ vi.mock('@/lib/server/cache', () => ({
     ACTIVE_WEBHOOKS: 'hooks:webhooks-active',
     SLACK_CHANNELS: 'slack:channels',
     REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
+    PLAN_LIMITS_INPUTS: 'plan-limits:inputs',
   },
 }))
 

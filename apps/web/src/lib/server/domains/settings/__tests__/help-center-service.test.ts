@@ -31,6 +31,7 @@ vi.mock('@/lib/server/cache', () => ({
     ACTIVE_WEBHOOKS: 'hooks:webhooks-active',
     SLACK_CHANNELS: 'slack:channels',
     REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
+    PLAN_LIMITS_INPUTS: 'plan-limits:inputs',
   },
 }))
 
@@ -238,7 +239,11 @@ describe('updateHelpCenterConfig', () => {
 
     await updateHelpCenterConfig({ enabled: true })
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:workspace',
+      'auth:registered-providers',
+      'plan-limits:inputs'
+    )
   })
 
   it('can update nested seo config', async () => {

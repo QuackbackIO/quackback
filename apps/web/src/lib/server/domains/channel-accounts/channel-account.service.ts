@@ -10,6 +10,7 @@
  * CRUD is {@link ensurePlatformInboundRoute}, which owns the fact that a
  * workspace HAS an inbound address before anybody configures one.
  */
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 import {
   db,
   eq,
@@ -74,7 +75,7 @@ export async function createSendingDomain(input: {
   dkimMode?: EmailSendingDomain['dkimMode']
 }): Promise<EmailSendingDomain> {
   const limit = (await getTierLimits()).maxSendingDomains
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('quackback:sending_domain_slot'))`)
     await tierEnforce.enforceSendingDomainLimit(limit, tx)
     const [row] = await tx
@@ -84,6 +85,8 @@ export async function createSendingDomain(input: {
       .returning()
     return row
   })
+  await invalidatePlanLimits()
+  return created
 }
 
 export async function listSendingDomains(owningTeamId: TeamId): Promise<EmailSendingDomain[]> {
@@ -151,6 +154,7 @@ export async function deleteSendingDomain(id: SendingDomainId): Promise<void> {
     await tx.update(channelAccounts).set({ sendingDomainId: null }).where(removed)
     await tx.delete(emailSendingDomains).where(eq(emailSendingDomains.id, id))
   })
+  await invalidatePlanLimits()
 }
 
 // ---------------------------------------------------------------------------
