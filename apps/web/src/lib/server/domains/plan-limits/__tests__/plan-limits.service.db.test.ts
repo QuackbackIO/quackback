@@ -430,6 +430,8 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
       tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: 0 },
     })
     const [ownerRole] = await testDb.select().from(roles).where(eq(roles.key, 'owner')).limit(1)
+    // The migrations seed the Owner preset; without it this case would prove nothing.
+    expect(ownerRole).toBeDefined()
     if (!ownerRole) return
     const uid = createId('user') as UserId
     const assigned = createId('principal') as PrincipalId
