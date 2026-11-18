@@ -11,7 +11,7 @@ import {
   type PostTagId,
   type UserId,
 } from '@quackback/ids'
-import type { BoardSettings, BoardAccess } from '@/lib/server/db'
+import type { BoardAccess } from '@/lib/server/db'
 // Pure helper + its type, imported through the client-safe re-export so suites
 // that mock '@/lib/server/db' don't have to stub them.
 import { resolveReplyPolicy, type ReplyPolicy } from '@/lib/shared/db-types'
