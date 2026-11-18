@@ -39,6 +39,7 @@ import {
   PLAN_FEATURES,
   PLAN_FEATURE_KEYS,
   planFeatureSet,
+  type PlanFeatureDefinition,
   type PlanFeatureKey,
 } from './plan-limits.features'
 import {
@@ -427,10 +428,18 @@ async function viewOrNull(): Promise<PlanLimits | null> {
  * Use it where a runtime path already gates on the plan (the assistant,
  * article translation, MCP). Where a path runs with no plan gate today, use
  * {@link isFeaturePaused}, which is false with the flag off.
+ *
+ * On a read error a key gated by an entitlement answers as its gate did
+ * before: the plan's own entitlement, so it fails closed on a plan without
+ * it. A key gated by a tier flag alone fails open.
  */
 export async function isFeatureLive(key: PlanFeatureKey): Promise<boolean> {
   const view = await viewOrNull()
-  return view ? featureLive(view, key) : true
+  if (view) return featureLive(view, key)
+  const definition: PlanFeatureDefinition = PLAN_FEATURES[key]
+  if (!definition.entitlement || definition.gate === 'tier') return true
+  const { hasEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+  return hasEntitlement(definition.entitlement)
 }
 
 /** True only with the flag on, when the feature is not live (see {@link isFeatureLive}). */
