@@ -21,6 +21,7 @@ import {
   roles,
   session,
   settings,
+  sql,
   statusComponents,
   user,
   webhooks,
@@ -423,130 +424,6 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     expect(await isFeaturePaused('webhooks')).toBe(true)
   })
 
-  it('pauses only members without a seat after the grace, never the owner', async () => {
-    const memberId = await addMember('Acme Member', null)
-    // One seat over, whatever else the database holds.
-    const { used } = await countSeatUsage()
-    await configure({
-      planLimits: true,
-      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
-    })
-    await invalidatePlanLimits()
-    const { limits, candidates } = await getPlanLimitsWithCandidates()
-    expect(limits.issues.map((i) => i.key)).toEqual(['maxTeamSeats'])
-    const owner = candidates.members?.find((m) => m.id === ownerId)
-    expect(owner).toMatchObject({ isOwner: true, canManageBilling: true })
-    expect(candidates.members?.find((m) => m.id === memberId)).toMatchObject({
-      isOwner: false,
-      canManageBilling: false,
-    })
-    expect(await isSeatPaused(memberId)).toBe(false)
-    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
-    expect(await isSeatPaused(memberId)).toBe(true)
-    expect(await isSeatPaused(ownerId)).toBe(false)
-    // Choosing every member is more seats than the plan has.
-    const everyone = candidates.members!.map((m) => m.id)
-    expect(await setSeatHolders(everyone)).toEqual({ ok: false, reason: 'too_many' })
-    // Someone who is not a seat (a service principal behind a key) is never paused.
-    expect(await isSeatPaused(createId('principal'))).toBe(false)
-  })
-
-  async function addMember(name: string, lastSignIn: Date | null): Promise<PrincipalId> {
-    const uid = createId('user') as UserId
-    const id = createId('principal') as PrincipalId
-    await testDb.insert(user).values({ id: uid, name, email: `${uid}@example.com` })
-    await testDb
-      .insert(principal)
-      .values({ id, userId: uid, role: 'member', type: 'user', createdAt: new Date() })
-    if (lastSignIn) {
-      await testDb.insert(session).values({
-        id: createId('user'),
-        token: createId('user'),
-        userId: uid,
-        createdAt: lastSignIn,
-        updatedAt: lastSignIn,
-        expiresAt: new Date(lastSignIn.getTime() + 30 * DAY),
-      } as never)
-    }
-    return id
-  }
-
-  it('shows the fix at once when a member is removed through the member service', async () => {
-    const memberId = await addMember('Acme Member', null)
-    // One seat over, whatever else the database holds.
-    const { used } = await countSeatUsage()
-    await configure({
-      planLimits: true,
-      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
-    })
-    await invalidatePlanLimits()
-    await getPlanLimits()
-    expect((await getPlanLimits()).issues.map((i) => i.key)).toEqual(['maxTeamSeats'])
-    await removeTeamMember(memberId, ownerId, null, undefined, { granterRole: 'admin' })
-    const [row] = await testDb.select().from(principal).where(eq(principal.id, memberId))
-    expect(row?.role).toBe('user')
-    expect((await getPlanLimits()).issues).toEqual([])
-  })
-
-  it('ranks seats on activity before the grace ended, so signing in later takes no seat', async () => {
-    const earlier = await addMember('Acme Earlier', new Date(Date.now() - 2 * DAY))
-    const later = await addMember('Acme Later', null)
-    await addMember('Acme Unrelated', null)
-    // Two seats over: the two newest members without recent activity.
-    const { used } = await countSeatUsage()
-    await configure({
-      planLimits: true,
-      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 2 },
-    })
-    await invalidatePlanLimits()
-    await getPlanLimits()
-    // After the grace, a member without a seat signs in.
-    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
-    const [laterRow] = await testDb.select().from(principal).where(eq(principal.id, later))
-    await testDb.insert(session).values({
-      id: createId('user'),
-      token: createId('user'),
-      userId: laterRow!.userId!,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      expiresAt: new Date(Date.now() + DAY),
-    } as never)
-    await invalidatePlanLimits()
-    expect(await isSeatPaused(earlier)).toBe(false)
-    expect(await isSeatPaused(later)).toBe(true)
-  })
-
-  it('keeps the admin a seat when nobody holds the owner role or billing rights', async (ctx) => {
-    // As a seeded workspace leaves it: the admin holds the Admin role, which
-    // cannot manage billing, and no one holds Owner.
-    const [adminRole] = await testDb.select().from(roles).where(eq(roles.key, 'admin')).limit(1)
-    if (!adminRole) ctx.skip()
-    await testDb
-      .insert(principalRoleAssignments)
-      .values({ principalId: ownerId, roleId: adminRole!.id } as never)
-    const active = await addMember('Acme Active', new Date(Date.now() - DAY))
-    const { used } = await countSeatUsage()
-    await configure({
-      planLimits: true,
-      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
-    })
-    await invalidatePlanLimits()
-    const { candidates } = await getPlanLimitsWithCandidates()
-    const admin = candidates.members?.find((m) => m.id === ownerId)
-    expect(admin).toMatchObject({ isOwner: false, canManageBilling: false, isAdmin: true })
-    // Other test files can leave owners or admins committed; the rule is only
-    // observable without them.
-    const others = (candidates.members ?? []).filter((m) => m.id !== ownerId && m.id !== active)
-    if (others.some((m) => m.isOwner || m.canManageBilling || m.isAdmin)) ctx.skip()
-    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
-    expect(await isSeatPaused(ownerId)).toBe(false)
-    // The guarantee holds for a choice too: the admin plus the cap is too many.
-    expect(await setSeatHolders(candidates.members!.map((m) => m.id))).toEqual({
-      ok: false,
-      reason: 'too_many',
-    })
-  })
-
   it('reads an owner role assignment as the owner', async () => {
     await configure({
       planLimits: true,
@@ -593,6 +470,167 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     await detectPlanLimitsAfterProjectionWrite(replaced)
     const stored = await storedState()
     expect(stored?.fromPlan).toBe('pro')
+  })
+})
+
+/**
+ * Seats are counted and ranked over every team member in the database, and
+ * other test files commit members while this one runs. These cases read one
+ * snapshot (a repeatable read transaction) on a pinned clock, so the count,
+ * the cap and the ranking all see the same people, and the members they add
+ * are the newest there.
+ */
+describe.skipIf(!fixture.available)('seat ranking against one snapshot (real DB)', () => {
+  const PINNED = new Date('2030-01-07T09:00:00.000Z')
+
+  async function addSeat(name: string, createdAt: Date, lastSignIn: Date | null) {
+    const uid = createId('user') as UserId
+    const id = createId('principal') as PrincipalId
+    await testDb.insert(user).values({ id: uid, name, email: `${uid}@example.com` })
+    await testDb
+      .insert(principal)
+      .values({ id, userId: uid, role: 'member', type: 'user', createdAt })
+    if (lastSignIn) await signIn(uid, lastSignIn)
+    return { id, uid }
+  }
+
+  async function signIn(uid: UserId, at: Date) {
+    await testDb.insert(session).values({
+      id: createId('user'),
+      token: createId('user'),
+      userId: uid,
+      createdAt: at,
+      updatedAt: at,
+      expiresAt: new Date(at.getTime() + 30 * DAY),
+    } as never)
+  }
+
+  beforeEach(async () => {
+    await fixture.begin()
+    await testDb.execute(sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`)
+    vi.useFakeTimers({ toFake: ['Date'], now: PINNED })
+    spies.cache.clear()
+    spies.readsNoState = false
+    settingsId = await ensureSettings()
+    await testDb.update(settings).set({ planLimitsState: null }).where(eq(settings.id, settingsId))
+    const uid = createId('user') as UserId
+    ownerId = createId('principal') as PrincipalId
+    await testDb.insert(user).values({ id: uid, name: 'Acme Owner', email: `${uid}@example.com` })
+    await testDb
+      .insert(principal)
+      .values({ id: ownerId, userId: uid, role: 'admin', type: 'user', createdAt: new Date(0) })
+  })
+  afterEach(async () => {
+    vi.useRealTimers()
+    await invalidatePlanLimits()
+    await fixture.rollback()
+  })
+
+  // Members this file adds are the newest in the database, whatever other
+  // files have left committed, so the ones over the cap are always theirs.
+  let newest = Date.parse('2100-01-01T00:00:00.000Z')
+  async function addMember(name: string, lastSignIn: Date | null): Promise<PrincipalId> {
+    newest += DAY
+    return (await addSeat(name, new Date(newest), lastSignIn)).id
+  }
+
+  it('pauses only members without a seat after the grace, never the owner', async () => {
+    const memberId = await addMember('Acme Member', null)
+    // One seat over, whatever else the database holds.
+    const { used } = await countSeatUsage()
+    await configure({
+      planLimits: true,
+      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
+    })
+    await invalidatePlanLimits()
+    const { limits, candidates } = await getPlanLimitsWithCandidates()
+    expect(limits.issues.map((i) => i.key)).toEqual(['maxTeamSeats'])
+    const owner = candidates.members?.find((m) => m.id === ownerId)
+    expect(owner).toMatchObject({ isOwner: true, canManageBilling: true })
+    expect(candidates.members?.find((m) => m.id === memberId)).toMatchObject({
+      isOwner: false,
+      canManageBilling: false,
+    })
+    expect(await isSeatPaused(memberId)).toBe(false)
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
+    expect(await isSeatPaused(memberId)).toBe(true)
+    expect(await isSeatPaused(ownerId)).toBe(false)
+    // Choosing every member is more seats than the plan has.
+    const everyone = candidates.members!.map((m) => m.id)
+    expect(await setSeatHolders(everyone)).toEqual({ ok: false, reason: 'too_many' })
+    // Someone who is not a seat (a service principal behind a key) is never paused.
+    expect(await isSeatPaused(createId('principal'))).toBe(false)
+  })
+
+  it('shows the fix at once when a member is removed through the member service', async () => {
+    const memberId = await addMember('Acme Member', null)
+    // One seat over, whatever else the database holds.
+    const { used } = await countSeatUsage()
+    await configure({
+      planLimits: true,
+      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
+    })
+    await invalidatePlanLimits()
+    await getPlanLimits()
+    expect((await getPlanLimits()).issues.map((i) => i.key)).toEqual(['maxTeamSeats'])
+    await removeTeamMember(memberId, ownerId, null, undefined, { granterRole: 'admin' })
+    const [row] = await testDb.select().from(principal).where(eq(principal.id, memberId))
+    expect(row?.role).toBe('user')
+    expect((await getPlanLimits()).issues).toEqual([])
+  })
+
+  it('keeps the admin a seat when nobody holds the owner role or billing rights', async (ctx) => {
+    // As a seeded workspace leaves it: the admin holds the Admin role, which
+    // cannot manage billing, and no one holds Owner.
+    const [adminRole] = await testDb.select().from(roles).where(eq(roles.key, 'admin')).limit(1)
+    if (!adminRole) ctx.skip()
+    await testDb
+      .insert(principalRoleAssignments)
+      .values({ principalId: ownerId, roleId: adminRole!.id } as never)
+    const active = await addMember('Acme Active', new Date(Date.now() - DAY))
+    const { used } = await countSeatUsage()
+    await configure({
+      planLimits: true,
+      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
+    })
+    await invalidatePlanLimits()
+    const { candidates } = await getPlanLimitsWithCandidates()
+    const admin = candidates.members?.find((m) => m.id === ownerId)
+    expect(admin).toMatchObject({ isOwner: false, canManageBilling: false, isAdmin: true })
+    // Other test files can leave owners or admins committed; the rule is only
+    // observable without them.
+    const others = (candidates.members ?? []).filter((m) => m.id !== ownerId && m.id !== active)
+    if (others.some((m) => m.isOwner || m.canManageBilling || m.isAdmin)) ctx.skip()
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
+    expect(await isSeatPaused(ownerId)).toBe(false)
+    // The guarantee holds for a choice too: the admin plus the cap is too many.
+    expect(await setSeatHolders(candidates.members!.map((m) => m.id))).toEqual({
+      ok: false,
+      reason: 'too_many',
+    })
+  })
+
+  it('ranks seats on activity before the grace ended, so signing in later takes no seat', async () => {
+    const earlier = await addSeat('Acme Earlier', PINNED, new Date(PINNED.getTime() - 2 * DAY))
+    // Newest of all, without activity: the two seats over the cap.
+    const later = await addSeat('Acme Later', new Date('2100-01-01T00:00:00.000Z'), null)
+    const unrelated = await addSeat('Acme Unrelated', new Date('2100-01-02T00:00:00.000Z'), null)
+    const { used } = await countSeatUsage()
+    await configure({
+      planLimits: true,
+      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 2 },
+    })
+    const start = await getPlanLimits()
+    expect(start.phase).toBe('grace')
+    expect(start.issues.find((i) => i.key === 'maxTeamSeats')).toMatchObject({ used })
+
+    // After the grace, the member without a seat signs in.
+    vi.setSystemTime(Date.parse(start.graceEndsAt!) + DAY)
+    await signIn(later.uid, new Date())
+    await invalidatePlanLimits()
+    expect(await isSeatPaused(earlier.id)).toBe(false)
+    expect(await isSeatPaused(later.id)).toBe(true)
+    expect(await isSeatPaused(unrelated.id)).toBe(true)
   })
 })
 
