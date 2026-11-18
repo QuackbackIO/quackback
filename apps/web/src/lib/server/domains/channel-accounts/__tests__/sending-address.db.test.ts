@@ -2,9 +2,10 @@
  * Adding, removing and testing a sending address, against a real database and
  * a fake provider.
  *
- * An address on a domain this workspace has not verified is allowed: it brings
- * its domain with it (a new one, or the one already being set up) and sends
- * from the default address until that domain is live.
+ * On a shared server an address has to be on a Verified domain (Settings >
+ * Domains), and its sending domain is set up from there; it sends from the
+ * default address until that is live. A single-workspace server takes any
+ * address, which still brings its domain when it can set one up.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import type { ChannelAccountId, TeamId, UserId } from '@quackback/ids'
@@ -108,7 +109,7 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', async (importOrigin
 })
 
 import {
-  addSendingAddress,
+  addSendingAddress as addOrRefuse,
   removeSendingAddress,
   sendTestEmail,
   addressModeFor,
@@ -116,6 +117,13 @@ import {
 import { sendingIdentityContext } from '../outbound-identity'
 import { refreshSendingDomain } from '../sending-identity'
 import { deleteSendingDomain, SendingDomainInUseError } from '../channel-account.service'
+
+/** Add an address the server accepts; a refusal fails the test. */
+async function addSendingAddress(input: Parameters<typeof addOrRefuse>[0]) {
+  const result = await addOrRefuse(input)
+  if (!result.ok) throw new Error(`refused: ${result.message}`)
+  return result.account
+}
 
 const identity = (domain: string): SesDomainIdentity => ({
   domain,
@@ -154,6 +162,20 @@ async function seedDomain(teamId: TeamId, domain: string, status: 'pending' | 'v
   const [row] = await testDb
     .insert(emailSendingDomains)
     .values({ owningTeamId: teamId, domain, status })
+    .returning()
+  return row
+}
+
+/** A domain on Settings > Domains whose own record was found: a Verified domain. */
+async function ownDomain(name: string, status: 'pending' | 'verified' = 'verified') {
+  const [row] = await testDb
+    .insert(domains)
+    .values({
+      name,
+      ownershipToken: `token-${suffix()}`,
+      status,
+      verifiedAt: status === 'verified' ? new Date() : null,
+    })
     .returning()
   return row
 }
@@ -201,8 +223,9 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
   afterAll(fixture.close)
 
   describe('addSendingAddress', () => {
-    it('sets up the domain of an address on an unverified domain and links the address to it', async () => {
+    it('sets up the sending domain of an address on a Verified domain and links the address to it', async () => {
       const teamId = await seedTeam()
+      await ownDomain('acme.com')
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'Help@Acme.com',
@@ -216,6 +239,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
 
     it('reuses the domain already being set up for a second address on it', async () => {
       const teamId = await seedTeam()
+      await ownDomain('acme.com')
       const first = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
@@ -244,6 +268,8 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
 
     it('refuses past the plan cap and keeps no address', async () => {
       const teamId = await seedTeam()
+      await ownDomain('a.example')
+      await ownDomain('b.example')
       maxSendingDomains.mockReturnValue(1)
       await addSendingAddress({
         owningTeamId: teamId,
@@ -370,6 +396,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         // inserted its own, which is the unique-key race.
         vi.stubEnv('QUACKBACK_TENANCY', tenancy)
         const teamId = await seedTeam()
+        await ownDomain('acme.com')
         let winner: { id: string } | undefined
         duringPreflight.mockImplementationOnce(async () => {
           winner = await seedDomain(teamId, 'acme.com', 'pending')
@@ -389,6 +416,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       // before it ever reaches the unique key. The domain exists all the same.
       maxSendingDomains.mockReturnValue(1)
       const teamId = await seedTeam()
+      await ownDomain('acme.com')
       let winner: { id: string } | undefined
       duringPreflight.mockImplementationOnce(async () => {
         winner = await seedDomain(teamId, 'acme.com', 'pending')
@@ -405,6 +433,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
     it('still refuses at the plan cap when the domain was not added meanwhile', async () => {
       maxSendingDomains.mockReturnValue(1)
       const teamId = await seedTeam()
+      await ownDomain('acme.com')
       duringPreflight.mockImplementationOnce(async () => {
         await seedDomain(teamId, 'other.example', 'pending')
       })
@@ -426,6 +455,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
 
     it('releases a domain it set up when the address itself is refused', async () => {
       const teamId = await seedTeam()
+      await ownDomain('acme.com')
       await testDb.insert(channelAccounts).values({
         owningTeamId: teamId,
         role: 'inbound',
@@ -441,6 +471,8 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const addedDomains = () => testDb.select().from(domains)
 
       it('leaves exactly one domain for the address, and nothing for any other use', async () => {
+        // A single-workspace server, where an address may still bring its domain.
+        vi.stubEnv('QUACKBACK_TENANCY', '')
         const teamId = await seedTeam()
         await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
 
@@ -451,6 +483,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       })
 
       it('keeps the one domain and its token for a second address on it', async () => {
+        vi.stubEnv('QUACKBACK_TENANCY', '')
         const teamId = await seedTeam()
         await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
         const [first] = await addedDomains()
@@ -462,6 +495,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       })
 
       it('adds the domain before its sending row is set up', async () => {
+        vi.stubEnv('QUACKBACK_TENANCY', '')
         const teamId = await seedTeam()
         const seen: string[][] = []
         duringPreflight.mockImplementation(async () => {
@@ -477,6 +511,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
           .insert(emailSendingDomains)
           .values({ owningTeamId: teamId, domain: 'acme.com', mailFromLabel: 'qb-bounce' })
           .returning()
+        await ownDomain('acme.com')
         await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
         const [domain] = await addedDomains()
 
@@ -487,15 +522,137 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       })
 
       it('leaves no domain behind when the address is refused', async () => {
+        vi.stubEnv('QUACKBACK_TENANCY', '')
         const teamId = await seedTeam()
-        maxSendingDomains.mockReturnValue(1)
         await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
+        await testDb.insert(channelAccounts).values({
+          owningTeamId: teamId,
+          role: 'inbound',
+          address: 'help@acme.io',
+        })
         await expect(
           addSendingAddress({ owningTeamId: teamId, address: 'help@acme.io' })
-        ).rejects.toThrow(/sending domains/i)
+        ).rejects.toThrow()
 
         expect((await addedDomains()).map((d) => d.name)).toEqual(['acme.com'])
       })
+    })
+  })
+
+  describe('only on a Verified domain, on a shared server', () => {
+    const addedDomains = () => testDb.select().from(domains)
+
+    it('refuses an address on a domain the workspace has not added, and keeps nothing', async () => {
+      const teamId = await seedTeam()
+      const result = await addOrRefuse({ owningTeamId: teamId, address: 'help@acme.com' })
+
+      expect(result).toEqual({
+        ok: false,
+        code: 'DOMAIN_NOT_VERIFIED',
+        domain: 'acme.com',
+        message: 'Verify acme.com in Settings > Domains first.',
+      })
+      expect(await liveAddresses(teamId)).toEqual([])
+      expect(await domainsOf(teamId)).toEqual([])
+      expect(await addedDomains()).toEqual([])
+      expect(createIdentity).not.toHaveBeenCalled()
+    })
+
+    it('refuses an address on a domain added but not verified yet', async () => {
+      const teamId = await seedTeam()
+      await ownDomain('acme.com', 'pending')
+      const result = await addOrRefuse({ owningTeamId: teamId, address: 'help@acme.com' })
+
+      expect(result).toMatchObject({ ok: false, code: 'DOMAIN_NOT_VERIFIED' })
+      expect(await liveAddresses(teamId)).toEqual([])
+      expect(await domainsOf(teamId)).toEqual([])
+    })
+
+    it('refuses a domain that only ends like a Verified one', async () => {
+      const teamId = await seedTeam()
+      await ownDomain('acme.com')
+      const result = await addOrRefuse({ owningTeamId: teamId, address: 'help@notacme.com' })
+      expect(result).toMatchObject({ ok: false, domain: 'notacme.com' })
+    })
+
+    it('adds an address on a Verified domain, and its sending setup runs as before', async () => {
+      const teamId = await seedTeam()
+      await ownDomain('acme.com')
+      const account = await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
+
+      // Owning the domain is not signing for it: the provider's records still
+      // have to be published, so the address waits on its sending row.
+      const [row] = await domainsOf(teamId)
+      expect(row).toMatchObject({ domain: 'acme.com', status: 'pending' })
+      expect(createIdentity).toHaveBeenCalledWith('acme.com')
+      expect(account).toMatchObject({ address: 'help@acme.com', sendingDomainId: row!.id })
+    })
+
+    it('adds an address under a Verified domain, with no domain of its own on Settings > Domains', async () => {
+      const teamId = await seedTeam()
+      await ownDomain('acme.com')
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@mail.acme.com',
+      })
+
+      const [row] = await domainsOf(teamId)
+      expect(row).toMatchObject({ domain: 'mail.acme.com' })
+      expect(account.sendingDomainId).toBe(row!.id)
+      expect((await addedDomains()).map((d) => d.name)).toEqual(['acme.com'])
+    })
+
+    it('counts a domain under a zone the workspace proved another way', async () => {
+      // A verified sending domain proves its zone, so an added domain under it
+      // reads as verified on Settings > Domains, and here too.
+      const teamId = await seedTeam()
+      await seedDomain(teamId, 'acme.com', 'verified')
+      await ownDomain('mail.acme.com', 'pending')
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@mail.acme.com',
+      })
+      expect(account.address).toBe('help@mail.acme.com')
+    })
+
+    it('leaves an address already on an unverified domain as it was', async () => {
+      const teamId = await seedTeam()
+      const pending = await seedDomain(teamId, 'old.example', 'pending')
+      const [old] = await testDb
+        .insert(channelAccounts)
+        .values({
+          owningTeamId: teamId,
+          role: 'sending',
+          address: 'help@old.example',
+          sendingDomainId: pending.id,
+        })
+        .returning()
+      await ownDomain('acme.com')
+
+      await addSendingAddress({ owningTeamId: teamId, address: 'news@acme.com' })
+      const refused = await addOrRefuse({ owningTeamId: teamId, address: 'more@old.example' })
+
+      expect(refused).toMatchObject({ ok: false })
+      const [kept] = await testDb
+        .select()
+        .from(channelAccounts)
+        .where(eq(channelAccounts.id, old!.id))
+      expect(kept).toMatchObject({
+        address: 'help@old.example',
+        sendingDomainId: pending.id,
+        deletedAt: null,
+      })
+      expect((await liveAddresses(teamId)).map((a) => a.address).sort()).toEqual([
+        'help@old.example',
+        'news@acme.com',
+      ])
+    })
+
+    it('accepts any typed address on a single-workspace server, as before', async () => {
+      vi.stubEnv('QUACKBACK_TENANCY', '')
+      const teamId = await seedTeam()
+      const result = await addOrRefuse({ owningTeamId: teamId, address: 'help@newbrand.example' })
+      expect(result).toMatchObject({ ok: true, account: { address: 'help@newbrand.example' } })
     })
   })
 
@@ -522,6 +679,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
   describe('removeSendingAddress', () => {
     it('flags the domain when its last address goes', async () => {
       const teamId = await seedTeam()
+      await ownDomain('acme.com')
       const a = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
@@ -572,6 +730,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
 
     it('lets the domain be deleted once its last address is removed', async () => {
       const teamId = await seedTeam()
+      await ownDomain('acme.com')
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
@@ -585,6 +744,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
 
     it('still refuses to delete a domain a live address uses', async () => {
       const teamId = await seedTeam()
+      await ownDomain('acme.com')
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
@@ -681,6 +841,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
 
     it('refuses while the domain is not live', async () => {
       const teamId = await seedTeam()
+      await ownDomain('acme.com')
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',

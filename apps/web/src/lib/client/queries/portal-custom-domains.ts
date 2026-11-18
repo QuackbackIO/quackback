@@ -2,7 +2,8 @@
  * What the Custom domains tab of Settings > Portal reads: each section's
  * hostname and the primary domain, and on Cloud the custom domains the
  * operator routes here, whether the plan includes them, and the workspace URL.
- * The Verified domains Add custom domain offers are read only when it opens.
+ * The Verified domains Add custom domain offers are read only when it opens
+ * (`addedDomainsQuery` in `queries/channel-accounts.ts`).
  * The tab and the Portal route's loader import this only when the tab is open,
  * so the Design tab neither ships nor fetches it.
  */
@@ -13,7 +14,6 @@ import {
   hasCustomDomainEntitlementFn,
   type WebAddress,
 } from '@/lib/server/functions/cloud-identity'
-import { listDomainsFn } from '@/lib/server/functions/domains'
 import {
   getSectionDomainsFn,
   type SectionDomainsView,
@@ -51,17 +51,5 @@ export const portalCustomDomainsQueries = {
         ])
         return { sectionDomains, operator }
       },
-    }),
-  /**
-   * The names of the workspace's Verified domains, for Add custom domain to
-   * build a section's hostname on. Readable with settings.custom_domain, as
-   * every Domains page permission reads the domain list.
-   */
-  verifiedDomains: () =>
-    queryOptions({
-      queryKey: ['settings', 'verified-domains'],
-      staleTime: 30_000,
-      queryFn: async (): Promise<string[]> =>
-        (await listDomainsFn()).filter((d) => d.verified).map((d) => d.name),
     }),
 }

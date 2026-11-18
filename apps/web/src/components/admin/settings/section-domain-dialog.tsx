@@ -34,6 +34,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { VisibilityTiles } from '@/components/admin/settings/visibility-tiles'
+import {
+  MAX_DOMAIN_TILES,
+  NoVerifiedDomains,
+  SuffixField,
+  useVerifiedDomains,
+} from '@/components/admin/settings/verified-domain-picker'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { webAddressOn } from '@/components/admin/settings/add-custom-domain-dialog'
 import { cnameRecord, type CheckResult } from '@/components/admin/settings/section-domain-record'
@@ -78,8 +84,6 @@ const NOT_A_NAME = 'Use letters, numbers and hyphens, like help or status.'
 const OTHER = 'other'
 const ANOTHER_DOMAIN = 'Another domain'
 const VERIFIED = 'verified:'
-/** Up to this many choices (Another domain included) show as tiles; more, as a select. */
-const MAX_TILES = 4
 
 /** What a Verify found, in the words the Custom domains card uses. */
 const PENDING_NOTE = 'Not verified yet. DNS changes can take a while to show.'
@@ -283,30 +287,6 @@ function relativeTo(records: DnsRecordRow[], zone: string | null): DnsRecordRow[
     }
     return record
   })
-}
-
-/**
- * The workspace's Verified domains: undefined while they load, null when they
- * cannot be read (or are not asked for), so the free field shows as before.
- */
-function useVerifiedDomains(
-  load: (() => Promise<readonly string[]>) | undefined
-): readonly string[] | null | undefined {
-  const [domains, setDomains] = useState<readonly string[] | null | undefined>(
-    load ? undefined : null
-  )
-  useEffect(() => {
-    if (!load) return
-    let live = true
-    load().then(
-      (names) => live && setDomains(names),
-      () => live && setDomains(null)
-    )
-    return () => {
-      live = false
-    }
-  }, [load])
-  return domains
 }
 
 /** The DNS step: the hostname saved, its records and what the last Verify found. */
@@ -594,7 +574,7 @@ function SectionDomainForm({
     })),
     { value: OTHER, title: ANOTHER_DOMAIN },
   ]
-  const asSelect = choiceItems.length > MAX_TILES
+  const asSelect = choiceItems.length > MAX_DOMAIN_TILES
   const single = options.length === 1 && !!options[0].domain
   const showChoices = !!section && !suffix && options.length > 0
   const showingEmptyState =
@@ -614,10 +594,11 @@ function SectionDomainForm({
 
   const prefixField = (domain: string) => (
     <div className="space-y-2">
-      <PrefixField
+      <SuffixField
         id="section-domain-prefix"
         value={prefixValue}
-        domain={domain}
+        suffix={`.${domain}`}
+        label={`Name in front of ${domain}`}
         disabled={saving}
         invalid={invalid}
         onChange={(value) => {
@@ -634,10 +615,11 @@ function SectionDomainForm({
     section && (
       <div className="space-y-2">
         {suffix ? (
-          <PrefixField
+          <SuffixField
             id="section-domain-hostname"
             value={typed}
-            domain={suffix}
+            suffix={`.${suffix}`}
+            label={`Name in front of ${suffix}`}
             disabled={saving}
             invalid={invalid}
             onChange={(value) => {
@@ -763,20 +745,12 @@ function SectionDomainForm({
     domainBlock = (
       <div className="space-y-2">
         {heading}
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-dashed px-3.5 py-3">
-          <p className="text-[13px] text-muted-foreground">No Verified domains yet.</p>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              onClose()
-              onAddVerifiedDomain?.(section)
-            }}
-          >
-            Add domain
-          </Button>
-        </div>
+        <NoVerifiedDomains
+          onAddDomain={() => {
+            onClose()
+            onAddVerifiedDomain?.(section)
+          }}
+        />
         {textLink('Type a domain', () => pickChoice(OTHER))}
       </div>
     )
@@ -862,48 +836,6 @@ function SectionDomainForm({
         )}
       </DialogFooter>
     </form>
-  )
-}
-
-/** A name typed in front of a fixed domain, as one field. */
-function PrefixField({
-  id,
-  value,
-  domain,
-  disabled,
-  invalid,
-  onChange,
-}: {
-  id: string
-  value: string
-  domain: string
-  disabled: boolean
-  /** The field's invalid state, pointing at the suffix it names and any error under it. */
-  invalid: (describedBy?: string) => Record<string, unknown>
-  onChange: (value: string) => void
-}) {
-  const suffixId = `${id}-suffix`
-  return (
-    <div className="flex h-9 min-w-0 items-center border border-input bg-transparent shadow-xs transition-[color,box-shadow] outline-none focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px] dark:bg-input/30 [border-radius:calc(var(--radius)*0.8)]">
-      <Input
-        id={id}
-        aria-label={`Name in front of ${domain}`}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-full min-w-0 border-0 focus-visible:ring-0"
-        autoComplete="off"
-        autoCapitalize="none"
-        spellCheck={false}
-        disabled={disabled}
-        {...invalid(suffixId)}
-      />
-      <span
-        id={suffixId}
-        className="max-w-[60%] shrink-0 truncate pe-3 text-sm text-muted-foreground"
-      >
-        .{domain}
-      </span>
-    </div>
   )
 }
 

@@ -112,10 +112,11 @@ export default function PortalCustomDomainsTab({
   }
   const cloudDomains = useCloudDomains(operator?.domains ?? NO_DOMAINS, onChanged, onLeave)
   // Add custom domain reads the Verified domains when it opens, not with the tab.
-  const loadVerifiedDomains = useCallback(
-    () => queryClient.fetchQuery(portalCustomDomainsQueries.verifiedDomains()),
-    [queryClient]
-  )
+  const loadVerifiedDomains = useCallback(async () => {
+    const { addedDomainsQuery, verifiedDomainNames } =
+      await import('@/lib/client/queries/channel-accounts')
+    return verifiedDomainNames(await queryClient.fetchQuery(addedDomainsQuery()))
+  }, [queryClient])
   // The records a Cloud custom domain needs, read fresh for Add custom domain's DNS step.
   const loadCloudRecords = useCallback(async (hostname: string) => {
     const domain = (await getCloudCustomDomainsFn()).find((d) => d.hostname === hostname)

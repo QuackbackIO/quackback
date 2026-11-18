@@ -5,11 +5,31 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { EmailSendersDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 
+const navigate = vi.hoisted(() => vi.fn())
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
+  Link: ({
+    children,
+    to,
+    params,
+    search,
+  }: {
+    children: React.ReactNode
+    to: string
+    params?: { domain?: string }
+    search?: { add?: string }
+  }) => (
+    <a
+      href={`${to.replace('$domain', params?.domain ?? '')}${search?.add ? `?add=${search.add}` : ''}`}
+    >
+      {children}
+    </a>
   ),
+  useRouter: () => ({ navigate }),
 }))
+
+/** The domains on Settings > Domains, as the list reads them. */
+const listDomains = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/functions/domains', () => ({ listDomainsFn: listDomains }))
 
 const deleteAccount = vi.fn()
 const deleteDomain = vi.fn()
@@ -227,6 +247,8 @@ beforeEach(() => {
   }
   clipboard.mockReset().mockResolvedValue()
   useClipboardMock()
+  navigate.mockReset()
+  listDomains.mockReset().mockResolvedValue([{ name: 'acme.com', verified: true }])
 })
 afterEach(cleanup)
 
@@ -401,7 +423,7 @@ describe('address rows', () => {
     const user = await openMenu('Acme Help <help@acme.com>')
     await user.click(screen.getByRole('menuitem', { name: 'Edit name' }))
     const dialog = await screen.findByRole('dialog')
-    const name = within(dialog).getByLabelText('Sender name') as HTMLInputElement
+    const name = (await within(dialog).findByLabelText('Sender name')) as HTMLInputElement
     expect(name.value).toBe('Acme Help')
     expect(within(dialog).queryByLabelText('Email address')).toBeNull()
     fireEvent.change(name, { target: { value: 'Acme Support' } })
@@ -1161,12 +1183,17 @@ describe('the support inbox', () => {
   })
 })
 
-describe('adding an address', () => {
-  async function openAdd() {
-    fireEvent.click(screen.getByRole('button', { name: 'Add address' }))
-    return screen.findByRole('dialog')
-  }
+/** Open Add address and wait for its Verified domains. */
+async function openAdd() {
+  fireEvent.click(screen.getByRole('button', { name: 'Add address' }))
+  const dialog = await screen.findByRole('dialog')
+  // The form loads when the dialog first opens, then the Verified domains.
+  await within(dialog).findByRole('heading', { name: 'Add address' })
+  await waitFor(() => expect(dialog.querySelector('[aria-busy="true"]')).toBeNull())
+  return dialog
+}
 
+describe('adding an address', () => {
   it('opens a dialog with the address and a sender name that starts as the workspace name', async () => {
     renderSettings()
     const dialog = await openAdd()
@@ -1186,16 +1213,17 @@ describe('adding an address', () => {
     )
   }
 
-  it('says a new domain brings DNS records next, and names the button for it', async () => {
+  it('says a Verified domain not set up for email brings DNS records next, and names the button for it', async () => {
+    listDomains.mockResolvedValue([{ name: 'newbrand.com', verified: true }])
     renderSettings({ view: 'workspace' })
     const dialog = await openAdd()
-    expect(dialog.textContent).not.toMatch(/is new here|is verified/)
+    expect(dialog.textContent).not.toMatch(/DNS records|is verified/)
     fireEvent.change(within(dialog).getByLabelText('Email address'), {
-      target: { value: 'hello@newbrand.com' },
+      target: { value: 'hello' },
     })
     expect(
       within(dialog).getByText(
-        "newbrand.com is new here. Next you'll add its DNS records, and email keeps coming from your current address until they're found."
+        "Next you'll add DNS records so email can send from newbrand.com. Until they're found, it comes from your current address."
       )
     ).toBeTruthy()
     expect(within(dialog).getByRole('button', { name: 'Add and show records' })).toBeTruthy()
@@ -1203,6 +1231,7 @@ describe('adding an address', () => {
   })
 
   it('says an address on a verified domain can send right away', async () => {
+    listDomains.mockResolvedValue([{ name: 'mail.acme.com', verified: true }])
     renderSettings({
       view: 'workspace',
       addresses: [address('a1', 'help@acme.com')],
@@ -1210,7 +1239,7 @@ describe('adding an address', () => {
     })
     const dialog = await openAdd()
     fireEvent.change(within(dialog).getByLabelText('Email address'), {
-      target: { value: 'billing@mail.acme.com' },
+      target: { value: 'billing' },
     })
     expect(
       within(dialog).getByText('acme.com is verified, so it can send right away.')
@@ -1237,6 +1266,7 @@ describe('adding an address', () => {
   })
 
   it('does not treat a subdomain of a domain still being set up as covered by it', async () => {
+    listDomains.mockResolvedValue([{ name: 'mail.acme.com', verified: true }])
     renderSettings({
       view: 'workspace',
       addresses: [address('a1', 'help@acme.com')],
@@ -1244,28 +1274,33 @@ describe('adding an address', () => {
     })
     const dialog = await openAdd()
     fireEvent.change(within(dialog).getByLabelText('Email address'), {
-      target: { value: 'billing@mail.acme.com' },
+      target: { value: 'billing' },
     })
-    expect(within(dialog).getByText(/^mail\.acme\.com is new here\./)).toBeTruthy()
+    expect(
+      within(dialog).getByText(
+        /^Next you'll add DNS records so email can send from mail\.acme\.com\./
+      )
+    ).toBeTruthy()
   })
 
   it('promises no records where an address sends without its domain being set up', async () => {
     renderSettings({ view: 'workspace', addressMode: 'any' })
     const dialog = await openAdd()
     fireEvent.change(within(dialog).getByLabelText('Email address'), {
-      target: { value: 'hello@newbrand.com' },
+      target: { value: 'hello' },
     })
-    expect(dialog.textContent).not.toMatch(/is new here|DNS records/)
+    expect(dialog.textContent).not.toMatch(/DNS records/)
     expect(within(dialog).getByRole('button', { name: 'Add address' })).toBeTruthy()
   })
 
   it('says nothing about the domain of the address email already comes from', async () => {
+    listDomains.mockResolvedValue([{ name: 'example.com', verified: true }])
     renderSettings({ view: 'workspace' })
     const dialog = await openAdd()
     fireEvent.change(within(dialog).getByLabelText('Email address'), {
-      target: { value: 'hello@example.com' },
+      target: { value: 'hello' },
     })
-    expect(dialog.textContent).not.toMatch(/is new here/)
+    expect(dialog.textContent).not.toMatch(/DNS records/)
     expect(within(dialog).getByRole('button', { name: 'Add address' })).toBeTruthy()
   })
 
@@ -1295,7 +1330,7 @@ describe('adding an address', () => {
 
   it('says so when the address added became the default sender', async () => {
     createAddress.mockImplementation((_input: unknown, opts: { onSuccess: (r: unknown) => void }) =>
-      opts.onSuccess({ address: 'help@acme.com', madeDefault: true })
+      opts.onSuccess({ ok: true, address: 'help@acme.com', madeDefault: true })
     )
     renderSettings()
     const dialog = await openAdd()
@@ -1305,7 +1340,7 @@ describe('adding an address', () => {
 
   it('says nothing when the address added changed no sender', async () => {
     createAddress.mockImplementation((_input: unknown, opts: { onSuccess: (r: unknown) => void }) =>
-      opts.onSuccess({ address: 'help@acme.com', madeDefault: false })
+      opts.onSuccess({ ok: true, address: 'help@acme.com', madeDefault: false })
     )
     renderSettings()
     const dialog = await openAdd()
@@ -1568,5 +1603,109 @@ describe('where focus goes when the Add address dialog closes', () => {
     await user.keyboard('{Escape}')
     await closed()
     await waitFor(() => expect(document.activeElement).not.toBe(addButton()))
+  })
+})
+
+describe('Add address on the Verified domains', () => {
+  it('reads the Verified domains when the dialog opens, not with the page', async () => {
+    renderSettings({ view: 'workspace' })
+    expect(listDomains).not.toHaveBeenCalled()
+    const dialog = await openAdd()
+    expect(listDomains).toHaveBeenCalledTimes(1)
+    expect(within(dialog).getByText('@acme.com')).toBeTruthy()
+  })
+
+  it('goes to Settings > Domains with Add domain open when there is none yet', async () => {
+    listDomains.mockResolvedValue([{ name: 'acme.com', verified: false }])
+    renderSettings({ view: 'workspace' })
+    const dialog = await openAdd()
+    expect(within(dialog).getByText('No Verified domains yet.')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add domain' }))
+    expect(navigate).toHaveBeenCalledWith({ to: '/admin/settings/domains', search: { add: '1' } })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('shows the refusal a shared server returns, in the dialog', async () => {
+    createAddress.mockImplementation((_input: unknown, opts: { onSuccess: (r: unknown) => void }) =>
+      opts.onSuccess({
+        ok: false,
+        code: 'DOMAIN_NOT_VERIFIED',
+        domain: 'acme.com',
+        message: 'Verify acme.com in Settings > Domains first.',
+      })
+    )
+    renderSettings({ view: 'workspace' })
+    const dialog = await openAdd()
+    fireEvent.change(within(dialog).getByLabelText('Email address'), { target: { value: 'help' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add and show records' }))
+    expect((await within(dialog).findByRole('alert')).textContent).toBe(
+      'Verify acme.com in Settings > Domains first.'
+    )
+    expect(toastSuccess).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBe(dialog)
+  })
+})
+
+describe('Verify domain beside an address on an unverified domain', () => {
+  const OLD = domain({ id: 'dom_old', domain: 'old.example' })
+  const oldAddress = () => address('a1', 'help@old.example', 'dom_old', null, false)
+
+  it('links to Add domain when the domain is not on Settings > Domains', async () => {
+    listDomains.mockResolvedValue([{ name: 'acme.com', verified: true }])
+    renderSettings({ view: 'workspace', addresses: [oldAddress()], domains: [OLD] })
+    const link = await within(row('Acme <help@old.example>')).findByRole('link', {
+      name: 'Verify domain',
+    })
+    expect(link.getAttribute('href')).toBe('/admin/settings/domains?add=1')
+  })
+
+  it('links to the domain on Settings > Domains when it is there', async () => {
+    listDomains.mockResolvedValue([{ name: 'old.example', verified: false }])
+    renderSettings({ view: 'workspace', addresses: [oldAddress()], domains: [OLD] })
+    const link = await within(row('Acme <help@old.example>')).findByRole('link', {
+      name: 'Verify domain',
+    })
+    expect(link.getAttribute('href')).toBe('/admin/settings/domains/old.example')
+  })
+
+  it('offers none for a Verified domain still waiting on its sending records', async () => {
+    listDomains.mockResolvedValue([{ name: 'old.example', verified: true }])
+    const other = domain({ id: 'dom_other', domain: 'other.example' })
+    renderSettings({
+      view: 'workspace',
+      addresses: [oldAddress(), address('a2', 'help@other.example', 'dom_other', null, false)],
+      domains: [OLD, other],
+    })
+    // The domains are read: the address on a domain not added gets its link.
+    await within(row('Acme <help@other.example>')).findByRole('link', { name: 'Verify domain' })
+    // The Verified one's setup panel is its next step.
+    expect(within(row('Acme <help@old.example>')).queryByRole('link')).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'Verify domain' })).toHaveLength(1)
+  })
+
+  it('reads nothing more while every address can send', async () => {
+    renderSettings({
+      view: 'workspace',
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [LIVE],
+    })
+    // Long enough for a query that was started to have called the server.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(listDomains).not.toHaveBeenCalled()
+    expect(screen.queryByRole('link', { name: 'Verify domain' })).toBeNull()
+  })
+
+  it('offers none to a support lead who cannot verify a domain', async () => {
+    renderSettings({
+      view: 'support',
+      canManageSending: false,
+      addresses: [oldAddress()],
+      domains: [OLD],
+      senders: { support: { mode: 'address', id: 'a1' } },
+    })
+    expect(screen.getByText(/isn't verified yet/)).toBeTruthy()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(listDomains).not.toHaveBeenCalled()
+    expect(screen.queryByRole('link', { name: 'Verify domain' })).toBeNull()
   })
 })

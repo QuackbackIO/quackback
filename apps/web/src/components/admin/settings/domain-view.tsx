@@ -9,7 +9,12 @@
 import { lazy, Suspense, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import type { DomainUse, DomainUseLinks, UseLink } from '@/lib/shared/domains-permissions'
+import {
+  addDomainLink,
+  type DomainUse,
+  type DomainUseLinks,
+  type UseLink,
+} from '@/lib/shared/domains-permissions'
 import { DOMAIN_USE_ORDER } from '@/lib/shared/domain-uses'
 import { verifiedThroughLabel } from '@/lib/shared/domain-proof'
 import { DomainSetupPanel } from '@/components/admin/channels/domain-setup-panel'
@@ -36,6 +41,7 @@ import { StateBadge } from '@/components/shared/state-badge'
 import { Button } from '@/components/ui/button'
 import { useRestartSendingDomainChecks } from '@/lib/client/mutations/channel-accounts'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { addedDomainsQuery, verifiedDomainNames } from '@/lib/client/queries/channel-accounts'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import {
   addDomainFn,
@@ -404,8 +410,13 @@ function UsesCard({
         target={addressDialog}
         workspaceName={sending.view.workspaceName}
         domains={data?.domains}
-        setsUpDomains={sending.view.addressMode === 'verified-domains'}
+        addressMode={sending.view.addressMode}
         ownDomains={sending.view.ownDomains}
+        loadVerifiedDomains={async () =>
+          verifiedDomainNames(await queryClient.fetchQuery(addedDomainsQuery()))
+        }
+        // Email is set up here only by settings.manage, which adds domains too.
+        onAddDomain={links.email ? () => void navigate(addDomainLink()) : undefined}
         onAdded={onChanged}
         onClose={() => setAddressDialog(null)}
       />
