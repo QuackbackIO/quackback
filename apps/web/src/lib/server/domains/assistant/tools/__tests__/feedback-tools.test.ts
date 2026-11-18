@@ -124,9 +124,19 @@ describe.skipIf(!fixture.available)('workspace reads with real DB', () => {
       .insert(principal)
       .values({ type: 'anonymous', role: 'user', createdAt: new Date() })
       .returning()
+    // Assigned to someone else with no team, so a scoped viewer cannot see it.
+    const [assignee] = await testDb
+      .insert(principal)
+      .values({ type: 'anonymous', role: 'user', createdAt: new Date() })
+      .returning()
     const [conversation] = await testDb
       .insert(conversations)
-      .values({ visitorPrincipalId: author.id, channel: 'messenger', subject: 'Billing' })
+      .values({
+        visitorPrincipalId: author.id,
+        channel: 'messenger',
+        subject: 'Billing',
+        assignedAgentPrincipalId: assignee.id,
+      })
       .returning()
     await testDb.insert(conversationMessages).values({
       conversationId: conversation.id,
