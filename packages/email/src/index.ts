@@ -1067,7 +1067,7 @@ export async function sendPlanLimitsEmail(params: SendPlanLimitsParams): Promise
   })
 }
 
-export { PlanLimitsEmail, planLimitsSubject } from './templates/plan-limits'
+export { PlanLimitsEmail, planLimitsSubject, featureList } from './templates/plan-limits'
 export type {
   PlanLimitsEmailKind,
   PlanLimitsEmailProps,

@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { render } from '@react-email/components'
-import { PlanLimitsEmail, planLimitsSubject } from '../templates/plan-limits'
+import { PlanLimitsEmail, featureList, planLimitsSubject } from '../templates/plan-limits'
 import {
   EMAIL_BILLABLE,
   EMAIL_TENANTED,
@@ -54,7 +54,7 @@ describe('PlanLimitsEmail', () => {
     expect(text).toContain(
       'Team seats: 3 of 1. 2 teammates lose admin access until a seat frees up.'
     )
-    expect(text).toContain('Webhooks, Custom domain pause on Nov 25.')
+    expect(text).toContain('Webhooks and your custom domain pause on Nov 25.')
     expect(text.match(/Nothing is deleted\./g)).toHaveLength(1)
     expect(text).toContain('Review issues')
     expect(text).toContain('Upgrade to Pro')
@@ -74,7 +74,7 @@ describe('PlanLimitsEmail', () => {
   it('after the deadline: says what is paused and that it comes back on upgrade', async () => {
     const text = visibleText(await render(PlanLimitsEmail({ ...base, kind: 'enforced' })))
     expect(text).toContain('Some of Acme Support is now paused')
-    expect(text).toContain('Webhooks, Custom domain are paused on the Free plan.')
+    expect(text).toContain('Webhooks and your custom domain are paused on the Free plan.')
     expect(text).toContain('Nothing is deleted. It comes back when you upgrade.')
     expect(text).toContain('Review issues')
     expect(text).not.toMatch(BANNED)
@@ -85,6 +85,18 @@ describe('PlanLimitsEmail', () => {
       await render(PlanLimitsEmail({ ...base, kind: 'start', fromPlanName: null }))
     )
     expect(text).toContain('Compare plans')
+  })
+
+  it('lists one, two and three features as a sentence', () => {
+    expect(featureList(['Webhooks'])).toBe('Webhooks')
+    expect(featureList(['Webhooks', 'Custom domain'])).toBe('Webhooks and your custom domain')
+    expect(featureList(['Webhooks', 'Workflows', 'Integrations'])).toBe(
+      'Webhooks, workflows and integrations'
+    )
+    expect(featureList(['Workflows', 'AI assistant', 'Custom CSS'])).toBe(
+      'Workflows, AI assistant and your custom CSS'
+    )
+    expect(featureList(['Custom domain'])).toBe('Your custom domain')
   })
 
   it('words the three subjects', () => {

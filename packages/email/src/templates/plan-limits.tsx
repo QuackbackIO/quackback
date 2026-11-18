@@ -66,8 +66,25 @@ function intro(props: PlanLimitsEmailProps): string {
   return `${name} is over the limits of ${plan}. Fix ${issues(props.rows.length)} by ${props.deadline}, or upgrade to keep everything.`
 }
 
+/**
+ * Feature names as a sentence's subject, joined without a serial comma: "Webhooks, workflows and your custom
+ * domain". Names after the first lose their leading capital unless they open
+ * with an acronym (AI, MCP), and "Custom ..." names read as the workspace's own.
+ */
+export function featureList(names: readonly string[]): string {
+  const items = names.map((name, index) => {
+    const own = /^Custom /.test(name)
+      ? `your ${name.charAt(0).toLowerCase()}${name.slice(1)}`
+      : name
+    if (index === 0) return own.charAt(0).toUpperCase() + own.slice(1)
+    const first = own.split(' ')[0] ?? ''
+    return /^[A-Z]{2,}$/.test(first) ? own : own.charAt(0).toLowerCase() + own.slice(1)
+  })
+  return new Intl.ListFormat('en-GB', { style: 'long', type: 'conjunction' }).format(items)
+}
+
 function featureLine(props: PlanLimitsEmailProps): string {
-  const list = props.pausingFeatures.join(', ')
+  const list = featureList(props.pausingFeatures)
   const many = props.pausingFeatures.length > 1
   if (props.kind === 'enforced') {
     return `${list} ${many ? 'are' : 'is'} paused on the ${props.planName ?? 'current'} plan.`
