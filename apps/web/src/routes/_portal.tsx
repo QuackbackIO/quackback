@@ -227,7 +227,6 @@ export const Route = createFileRoute('/_portal')({
     ])
 
     const brandingData = settings?.brandingData ?? null
-    const faviconData = settings?.faviconData ?? null
     const brandingConfig = settings?.brandingConfig ?? {}
     const customCss = settings?.customCss ?? ''
     const publicPortalConfig = settings?.publicPortalConfig ?? null
@@ -266,7 +265,6 @@ export const Route = createFileRoute('/_portal')({
       baseUrl: baseUrl ?? '',
       userRole,
       brandingData,
-      faviconData,
       themeStyles,
       customCss: customCssToApply,
       configFontSans: readFontSans(brandingConfig.light),
@@ -288,13 +286,8 @@ export const Route = createFileRoute('/_portal')({
           { title: `Sign in · ${loaderData.gate.workspaceName}` },
           { name: 'robots', content: 'noindex, nofollow' },
         ],
-        links: [{ rel: 'icon', href: loaderData.gate.logoUrl || '/logo.png' }],
       }
     }
-
-    // Favicon priority: dedicated favicon > workspace logo > default logo.png
-    const faviconUrl =
-      loaderData?.faviconData?.url || loaderData?.brandingData?.logoUrl || '/logo.png'
 
     const workspaceName = loaderData?.workspaceName ?? 'Quackback'
     const description = `Share feedback, vote on feature requests, and track the ${workspaceName} roadmap.`
@@ -311,10 +304,8 @@ export const Route = createFileRoute('/_portal')({
       { name: 'twitter:title', content: workspaceName },
       { name: 'twitter:description', content: description },
     ]
-    return {
-      meta,
-      links: [{ rel: 'icon', href: faviconUrl }],
-    }
+    // The tab icon comes from the root route (lib/shared/workspace-icon.ts).
+    return { meta }
   },
   component: PortalLayout,
 })
