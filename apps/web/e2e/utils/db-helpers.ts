@@ -74,6 +74,11 @@ export function setSupportSurfaces(enabled: boolean = true): void {
   runScript('set-support-surfaces.ts', [enabled ? 'on' : 'off'], 'set support surfaces')
 }
 
+/** Turn one workspace feature flag on or off (and bust the settings cache). */
+export function setFeatureFlag(flag: string, enabled: boolean): void {
+  runScript('set-feature-flag.ts', [flag, enabled ? 'on' : 'off'], `set feature flag ${flag}`)
+}
+
 /** Enable (or disable) widget Help/Changelog/Messages tabs plus product flags. */
 export function setWidgetSurfaces(enabled: boolean = true): void {
   runScript('set-widget-surfaces.ts', [enabled ? 'on' : 'off'], 'set widget surfaces')
