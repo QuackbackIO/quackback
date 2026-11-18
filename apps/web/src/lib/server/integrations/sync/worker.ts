@@ -52,9 +52,8 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
   if (!claim) return
   // Paused after the plan limits grace: the operation is settled, not left
   // queued, so nothing is sent now or replayed after an upgrade. The
-  // connection and its tokens are kept. Provider app events still run: they
-  // carry the app's own lifecycle, such as an uninstall.
-  if (claim.operation.kind !== 'app-hook' && (await isFeaturePaused('integrations'))) {
+  // connection and its tokens are kept.
+  if (await isFeaturePaused('integrations')) {
     log.info(
       { operationId: id, provider: claim.operation.provider },
       'integrations paused on this plan; sync cancelled'

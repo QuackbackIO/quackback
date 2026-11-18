@@ -12,10 +12,10 @@
  *
  * Only a safe, top-level read is redirected. Left in place:
  *  - every other method, so a form posted before the pause still lands;
- *  - `/api/*` other than auth (the widget's cross-origin calls, the REST API,
- *    MCP and inbound webhooks: a redirect would drop their CORS answer or
- *    their credentials), with `/api/auth/*` redirected so a sign-in link
- *    or callback minted on the custom hostname still lands;
+ *  - `/api/*` (the widget's calls, the REST API, MCP and inbound webhooks: a
+ *    redirect would drop their CORS answer or their credentials), except a
+ *    navigation to `/api/auth/*`, so a sign-in link or callback minted on the
+ *    custom hostname still lands;
  *  - `/.well-known/*` discovery documents and server functions;
  *  - the `/widget` frame, so an embed whose SDK was loaded before the pause
  *    keeps the frame origin it talks to. A fresh SDK names the default host.
@@ -89,9 +89,14 @@ export async function pausedCustomDomain(): Promise<PausedCustomDomain | null> {
 }
 
 /** Whether a request on a paused custom hostname is redirected (see the module doc). */
-function redirectable(method: string, pathname: string): boolean {
-  if (method !== 'GET' && method !== 'HEAD') return false
-  if (pathname.startsWith('/api/')) return pathname.startsWith('/api/auth/')
+function redirectable(request: Request, pathname: string): boolean {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false
+  if (pathname.startsWith('/api/')) {
+    // Only a navigation: a script's fetch (the widget frame's token call)
+    // cannot follow a cross-origin redirect with its credentials.
+    const mode = request.headers.get('sec-fetch-mode')
+    return pathname.startsWith('/api/auth/') && (mode === null || mode === 'navigate')
+  }
   if (pathname.startsWith('/.well-known/') || pathname.startsWith('/_serverFn')) return false
   if (pathname === '/widget' || pathname.startsWith('/widget/')) return false
   return true
@@ -120,7 +125,7 @@ export async function handlePausedCustomDomain<T>({
   if (!paused) return next()
 
   const host = requestWorkspaceHost(request)?.toLowerCase() ?? null
-  if (host && paused.customHostnames.has(host) && redirectable(request.method, url.pathname)) {
+  if (host && paused.customHostnames.has(host) && redirectable(request, url.pathname)) {
     return new Response(null, {
       status: 301,
       headers: {

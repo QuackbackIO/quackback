@@ -2,8 +2,8 @@
  * Inbound status webhooks pause after the plan limits grace on a plan without
  * integrations. The handshake and signature check still run, and a verified
  * delivery is acknowledged with 200 so the provider keeps the hook, but the
- * status change is not queued. The GitHub inbox channel keeps ingesting:
- * those are customer messages and are never dropped.
+ * status change is not queued. The inbox channel on the same webhook keeps
+ * ingesting: those are customer messages and are never dropped.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -71,7 +71,7 @@ describe('inbound webhooks and the plan limits pause', () => {
     expect(h.queueInboundWebhook).not.toHaveBeenCalled()
   })
 
-  it('keeps the GitHub inbox channel ingesting while paused', async () => {
+  it('keeps the inbox channel ingesting while paused', async () => {
     setFeatureState('enforced', 'integrations')
     const res = await handleInboundWebhook(req(), 'github')
     expect(res.status).toBe(200)

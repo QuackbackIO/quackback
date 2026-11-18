@@ -132,6 +132,24 @@ describe('requests on a custom hostname', () => {
     )
   })
 
+  it("serves an auth call made by a script in place, such as the widget frame's token call", async () => {
+    setFeatureState('enforced', 'customDomain')
+    const req = new Request('https://feedback.acme.test/api/auth/one-time-token/generate', {
+      headers: { host: 'feedback.acme.test', 'sec-fetch-mode': 'cors' },
+    })
+    expect((await serve(req)).result).toBe('next')
+  })
+
+  it('redirects a browser navigation to an auth callback', async () => {
+    setFeatureState('enforced', 'customDomain')
+    const req = new Request('https://feedback.acme.test/api/auth/callback/acme?code=c1&state=s1', {
+      headers: { host: 'feedback.acme.test', 'sec-fetch-mode': 'navigate' },
+    })
+    expect(((await serve(req)).result as Response).headers.get('location')).toBe(
+      'https://acme.example.com/api/auth/callback/acme?code=c1&state=s1'
+    )
+  })
+
   it.each([
     ['a write', 'https://feedback.acme.test/b/ideas', 'POST'],
     ['a widget API call from an embed', 'https://feedback.acme.test/api/widget/config', 'GET'],
