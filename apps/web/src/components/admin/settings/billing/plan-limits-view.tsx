@@ -10,6 +10,7 @@ import {
   featureConsequence,
   infoRowNote,
   isPlanLimitsOver,
+  keepEverythingLines,
 } from '@/lib/shared/billing/plan-limits-copy'
 import { daysUntil } from '@/lib/shared/billing/trial-state'
 import type { PlanCapKey } from '@/lib/shared/billing/plan-downgrade'
@@ -224,6 +225,7 @@ export function PlanLimitsView(props: {
 
       <KeepEverything
         target={target}
+        lines={target ? keepEverythingLines(limits, target) : []}
         fromPlan={limits.fromPlan}
         canManageBilling={limits.canManageBilling}
         catalogue={props.catalogue}
@@ -252,6 +254,8 @@ function daysLeftLabel(days: number | null): string {
 
 function KeepEverything(props: {
   target: string | null
+  /** What the plan keeps of this page, from its rows. */
+  lines: string[]
   fromPlan: string | null
   canManageBilling: boolean
   catalogue: BillingCatalogue | null
@@ -274,9 +278,9 @@ function KeepEverything(props: {
             : 'Nothing above changes.'}
         </p>
       </div>
-      {entry && entry.highlights.length > 0 ? (
-        <ul className="space-y-1.5">
-          {entry.highlights.slice(0, 5).map((line) => (
+      {props.lines.length > 0 ? (
+        <ul data-plan-limits-keep-lines="" className="space-y-1.5">
+          {props.lines.map((line) => (
             <li key={line} className="flex gap-2 text-[13px]">
               <CheckIcon aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
               {line}

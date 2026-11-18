@@ -12,6 +12,8 @@ export function UsageMeter(props: {
   note?: ReactNode
   /** A short flag beside the label, such as an over-limit link. */
   flag?: ReactNode
+  /** `over` for a cap that needs a fix, `muted` for one that needs none. */
+  tone?: 'over' | 'muted'
 }) {
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-10">
@@ -28,6 +30,7 @@ export function UsageMeter(props: {
         <div className="flex min-w-0 items-center gap-3">
           <Progress
             className={cn('h-1.5 flex-1')}
+            tone={props.tone}
             value={props.used}
             max={Math.max(props.limit, 1)}
           />

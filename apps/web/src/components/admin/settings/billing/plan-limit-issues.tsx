@@ -58,6 +58,7 @@ export function PlanLimitIssues(props: { rows: PlanLimitRow[]; className?: strin
             {row.status === 'over' ? (
               <Progress
                 className="h-1.5"
+                tone="over"
                 value={row.used}
                 max={Math.max(row.cap, 1)}
                 aria-label={`${PLAN_CAP_LABELS[row.key]}: ${row.used} of ${row.cap}`}

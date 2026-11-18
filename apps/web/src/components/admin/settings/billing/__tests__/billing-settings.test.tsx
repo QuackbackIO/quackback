@@ -542,9 +542,14 @@ describe('BillingPlansView with plan limits', () => {
       name: 'Over limit · fix by Nov 25',
     })
     expect(boards).toHaveAttribute('href', '/admin/settings/billing/limits')
-    expect(within(meter('Boards')).getByRole('progressbar').firstElementChild).toHaveAttribute(
-      'data-level',
-      'full'
+    const boardsBar = within(meter('Boards')).getByRole('progressbar')
+    expect(boardsBar).toHaveAttribute('data-tone', 'over')
+    expect(boardsBar.className).toMatch(/bg-destructive\/15/)
+    expect(boardsBar.firstElementChild).toHaveAttribute('data-level', 'over')
+    expect(boardsBar.firstElementChild?.className).toMatch(/\bbg-destructive\b/)
+    // A meter within its cap keeps the normal bar.
+    expect(within(meter('Sending domains')).getByRole('progressbar')).not.toHaveAttribute(
+      'data-tone'
     )
     // Seats show on the usage card once they are over.
     expect(within(meter('Team seats')).getByRole('link', { name: /Over limit/ })).toBeVisible()
@@ -554,6 +559,7 @@ describe('BillingPlansView with plan limits', () => {
   it('notes that only new posts stop, with no link', () => {
     renderView({ usage, limits: overLimits() })
     expect(meter('Posts')).toHaveTextContent('New posts stop at 50. Existing posts stay.')
+    expect(within(meter('Posts')).getByRole('progressbar')).toHaveAttribute('data-tone', 'muted')
     expect(within(meter('Posts')).queryByRole('link')).toBeNull()
   })
 
@@ -572,5 +578,6 @@ describe('BillingPlansView with plan limits', () => {
     expect(screen.queryByRole('link', { name: /Over limit|See plan limits/ })).toBeNull()
     expect(screen.queryByText(/New posts stop/)).toBeNull()
     expect(screen.queryByText('Team seats', { selector: 'div' })).toBeNull()
+    expect(document.querySelector('[data-tone]')).toBeNull()
   })
 })

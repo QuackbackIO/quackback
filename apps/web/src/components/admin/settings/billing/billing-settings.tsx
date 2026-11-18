@@ -489,6 +489,13 @@ function UsageCard(props: {
                 valueText={`${formatNumber(line.used)} of ${formatNumber(line.limit)}`}
                 used={line.used}
                 limit={line.limit}
+                tone={
+                  overKeys.has(line.key)
+                    ? 'over'
+                    : infoKeys.has(line.key) && line.key === 'maxPosts'
+                      ? 'muted'
+                      : undefined
+                }
                 flag={
                   overKeys.has(line.key) ? (
                     <a

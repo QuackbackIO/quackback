@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { ExclamationCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid'
 import { FormattedDate, FormattedMessage } from 'react-intl'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 import { planLimitsQueries } from '@/lib/client/queries/plan-limits'
@@ -56,23 +57,35 @@ export function PlanLimitsBanner(props: {
   if (!limits || props.pathname === PLAN_LIMITS_PATH) return null
   const copy = planLimitsBannerCopy(limits, format(limits.graceEndsAt, DEADLINE_FORMAT))
   if (!copy) return null
+  const enforced = copy.tone === 'enforced'
+  // Amber with warning accents during grace, as the urgent plan notice is;
+  // the destructive tint once something is paused.
+  const Icon = enforced ? ExclamationCircleIcon : ExclamationTriangleIcon
   return (
     <div
       data-plan-limits-banner={copy.tone}
       className={cn(
         'flex items-center justify-between gap-3 border-b px-4 py-2.5 text-sm',
-        copy.tone === 'enforced'
-          ? 'bg-destructive/15 border-destructive/40'
-          : 'bg-warning/10 border-warning/40'
+        enforced ? 'bg-destructive/15 border-destructive/40' : 'bg-warning/10 border-warning/40'
       )}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+        <Icon
+          aria-hidden
+          data-plan-limits-icon=""
+          className={cn('size-4 shrink-0', enforced ? 'text-destructive' : 'text-warning')}
+        />
         <span className="shrink-0 font-medium text-foreground">{copy.title}</span>
         <span className="text-muted-foreground">{copy.body}</span>
       </div>
       <a
         href={PLAN_LIMITS_PATH}
-        className="inline-flex shrink-0 items-center gap-1 font-medium text-foreground underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+        className={cn(
+          'inline-flex shrink-0 items-center gap-1 font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground',
+          enforced
+            ? 'text-foreground decoration-destructive/60'
+            : 'text-warning decoration-warning/60'
+        )}
       >
         {copy.action}
       </a>

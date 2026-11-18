@@ -82,21 +82,28 @@ describe('PlanLimitsBanner', () => {
   it('during grace is amber, with the count, the date and the plan to keep', () => {
     render(<PlanLimitsBanner limits={limits()} pathname="/admin" />)
     expect(banner()).toHaveAttribute('data-plan-limits-banner', 'grace')
-    expect(banner()?.className).toMatch(/bg-warning/)
+    expect(banner()?.className).toMatch(/bg-warning\/10/)
+    expect(banner()?.className).toMatch(/border-warning\/40/)
+    expect(banner()?.querySelector('[data-plan-limits-icon]')?.getAttribute('class')).toMatch(
+      /text-warning/
+    )
     expect(screen.getByText('Over the Free plan limits.')).toBeInTheDocument()
     expect(
       screen.getByText(/^Fix 2 things by Wed, Nov 25, or keep everything on Pro\.$/)
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Review 2 issues' })).toHaveAttribute(
-      'href',
-      PLAN_LIMITS_PATH
-    )
+    const review = screen.getByRole('link', { name: 'Review 2 issues' })
+    expect(review).toHaveAttribute('href', PLAN_LIMITS_PATH)
+    expect(review.className).toMatch(/text-warning/)
   })
 
   it('once enforced is red and says what is paused', () => {
     render(<PlanLimitsBanner limits={limits({ phase: 'enforced' })} pathname="/admin" />)
     expect(banner()).toHaveAttribute('data-plan-limits-banner', 'enforced')
-    expect(banner()?.className).toMatch(/bg-destructive/)
+    expect(banner()?.className).toMatch(/bg-destructive\/15/)
+    expect(banner()?.className).not.toMatch(/bg-warning/)
+    expect(banner()?.querySelector('[data-plan-limits-icon]')?.getAttribute('class')).toMatch(
+      /text-destructive/
+    )
     expect(screen.getByText('Paused on the Free plan.')).toBeInTheDocument()
     expect(
       screen.getByText(

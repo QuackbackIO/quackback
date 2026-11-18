@@ -64,7 +64,13 @@ describe('PlanLimitsView', () => {
     expect(row('maxBoards')).toHaveTextContent(
       'On Nov 25, 2 boards become read-only. Their posts stay visible to everyone.'
     )
-    expect(within(row('maxBoards')).getByRole('progressbar')).toBeInTheDocument()
+    // An over bar is destructive on a destructive tint, never the brand colour.
+    const bar = within(row('maxBoards')).getByRole('progressbar')
+    expect(bar).toHaveAttribute('data-tone', 'over')
+    expect(bar.className).toMatch(/bg-destructive\/15/)
+    expect(bar.firstElementChild).toHaveAttribute('data-level', 'over')
+    expect(bar.firstElementChild?.className).toMatch(/\bbg-destructive\b/)
+    expect(bar.firstElementChild?.className).not.toMatch(/bg-primary/)
     expect(
       within(row('maxBoards')).getByRole('button', { name: 'Choose the board to keep' })
     ).toBeInTheDocument()
@@ -110,6 +116,17 @@ describe('PlanLimitsView', () => {
       expect.stringContaining('/admin/settings/billing/checkout')
     )
     expect(within(aside).getByRole('link', { name: 'Compare all plans' })).toBeInTheDocument()
+    // What the plan keeps, from the rows on the page: no custom roles line,
+    // since Pro includes none.
+    const lines = [...aside.querySelectorAll('[data-plan-limits-keep-lines] li')].map(
+      (li) => li.textContent
+    )
+    expect(lines).toEqual([
+      'Unlimited boards and posts',
+      'Up to 5 team seats',
+      'Up to 10 status components',
+      'Webhooks',
+    ])
   })
 
   it('shows a teammate without billing rights only the fixes they may make, and asks for an owner', () => {

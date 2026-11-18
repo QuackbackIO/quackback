@@ -5,8 +5,12 @@
  * in already formatted.
  */
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
-import type { PlanFeatureKey } from '@/lib/server/domains/plan-limits/plan-limits.features'
-import type { PlanCapKey } from './plan-downgrade'
+import {
+  PLAN_FEATURES,
+  type PlanFeatureKey,
+} from '@/lib/server/domains/plan-limits/plan-limits.features'
+import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
+import { PLAN_NUMERIC_CAPS, type PlanCapKey } from './plan-downgrade'
 
 /** A grace date is ahead (future tense); an enforced one has passed (present tense). */
 export type PlanLimitsTense = 'grace' | 'enforced'
@@ -236,4 +240,59 @@ export function planLimitsBannerCopy(
         : `Some features pause on ${date}${keep}.`,
     action: n > 0 ? `Review ${plural(n, 'issue', 'issues')}` : 'Review',
   }
+}
+
+const lowerFirst = (label: string) =>
+  /^[A-Z][a-z]/.test(label) ? `${label.charAt(0).toLowerCase()}${label.slice(1)}` : label
+
+function capLine(key: PlanCapKey, cap: number | null): string {
+  const noun = PLAN_CAP_LABELS[key].toLowerCase()
+  return cap === null ? `Unlimited ${noun}` : `Up to ${cap} ${noun}`
+}
+
+/**
+ * What `target` keeps of this page, at most five short lines: its caps for
+ * every row over (boards and posts read as one line when both are
+ * unlimited), then the paused features it includes.
+ */
+export function keepEverythingLines(
+  limits: Pick<PlanLimitsPage, 'issues' | 'infoRows' | 'featureIssues' | 'fromPlan'>,
+  target: PlanId
+): string[] {
+  const caps = PLAN_NUMERIC_CAPS[target]
+  const keys = new Set<string>([
+    ...limits.issues.map((issue) => issue.key),
+    ...limits.infoRows.map((row) => row.key),
+  ])
+  const lines: string[] = []
+  if (
+    keys.has('maxBoards') &&
+    keys.has('maxPosts') &&
+    caps.maxBoards === null &&
+    caps.maxPosts === null
+  ) {
+    lines.push('Unlimited boards and posts')
+    keys.delete('maxBoards')
+    keys.delete('maxPosts')
+  }
+  for (const key of Object.keys(caps) as PlanCapKey[]) {
+    // A cap of none says nothing the plan keeps.
+    if (keys.has(key) && caps[key] !== 0) lines.push(capLine(key, caps[key]))
+  }
+  // A feature the plan grants, or any the plan before had when the target is
+  // that plan (tier features carry no grant to check).
+  const grants = new Set<string>(PLAN_CATALOGUE[target].grants)
+  const features = limits.featureIssues
+    .filter((feature) => {
+      const entitlement = PLAN_FEATURES[feature.key].entitlement
+      return entitlement ? grants.has(entitlement) : limits.fromPlan === target
+    })
+    .map((feature, index) => (index === 0 ? feature.label : lowerFirst(feature.label)))
+  if (features.length > 0) lines.push(joinAll(features))
+  return lines.slice(0, 5)
+}
+
+function joinAll(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? ''
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
