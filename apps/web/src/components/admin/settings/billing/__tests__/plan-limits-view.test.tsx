@@ -302,4 +302,31 @@ describe('choosers', () => {
     )
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
+
+  it('shows the read-only refusal, and a plain fallback for a reason it does not know', async () => {
+    hoisted.setKeptBoardFn.mockResolvedValueOnce({ ok: false, reason: 'read_only' })
+    hoisted.setKeptBoardFn.mockResolvedValueOnce({ ok: false, reason: 'something_new' })
+    mount(overLimits())
+    fireEvent.click(screen.getByRole('button', { name: 'Choose which board stays open' }))
+    const dialog = await screen.findByRole('dialog')
+    const keep = within(dialog).getByRole('button', { name: 'Keep Feature requests open' })
+    fireEvent.click(keep)
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'This board is set to read-only. Turn that off in board settings to take feedback.'
+    )
+    fireEvent.click(keep)
+    await waitFor(() =>
+      expect(within(dialog).getByRole('alert')).toHaveTextContent(
+        'This choice could not be saved. Close this and try again.'
+      )
+    )
+  })
+
+  it('says what changes after the last day to fix, never from it', async () => {
+    mount(overLimits())
+    fireEvent.click(screen.getByRole('button', { name: 'Choose which board stays open' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent(/After Nov \d+, the others are read-only\./)
+    expect(dialog).not.toHaveTextContent(/From Nov/)
+  })
 })

@@ -21,6 +21,7 @@ import {
   catalogueTrialedPlanIds,
   type BillingPlanAction,
   type PaidPlanId,
+  isPlanDowngrade,
 } from '@/lib/shared/billing/plan-action'
 import { daysUntil } from '@/lib/shared/billing/trial-state'
 import { planLimitsDay } from '@/lib/shared/billing/plan-limits-copy'
@@ -167,6 +168,7 @@ export function BillingPlansView(props: {
                 subscribeIsContinuation={Boolean(overview.trialActive || overview.trialEnded)}
                 onSubscribe={setSubscribePlanId}
                 currentPlanName={overview.planName}
+                currentPlanId={overview.plan}
               />
             ))}
           </div>
@@ -624,6 +626,7 @@ function PlanCard(props: {
   subscribeIsContinuation: boolean
   onSubscribe: (planId: PaidPlanId) => void
   currentPlanName?: string
+  currentPlanId?: string | null
 }) {
   const { plan, period, action } = props
   const isAnnual = period === 'annual'
@@ -684,6 +687,7 @@ function PlanCard(props: {
           subscribeIsContinuation={props.subscribeIsContinuation}
           onSubscribe={props.onSubscribe}
           currentPlanName={props.currentPlanName}
+          currentPlanId={props.currentPlanId}
         />
       </div>
     </article>
@@ -698,6 +702,7 @@ function PlanActionButton(props: {
   subscribeIsContinuation: boolean
   onSubscribe: (planId: PaidPlanId) => void
   currentPlanName?: string
+  currentPlanId?: string | null
 }) {
   const { action } = props
   if (action.kind === 'current') {
@@ -739,7 +744,9 @@ function PlanActionButton(props: {
       >
         {props.subscribeIsContinuation
           ? `Continue with ${props.planName}`
-          : `Subscribe to ${props.planName}`}
+          : props.currentPlanId && isPlanDowngrade(props.currentPlanId, action.planId)
+            ? `Downgrade to ${props.planName}`
+            : `Upgrade to ${props.planName}`}
       </Button>
     )
   }

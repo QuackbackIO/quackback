@@ -35,11 +35,16 @@ interface ChoiceItem {
   locked?: boolean
 }
 
-const REFUSAL_TEXT: Record<Exclude<PlanLimitsChoiceResponse, { ok: true }>['reason'], string> = {
+// Keyed by plain string so a refusal reason this file has not heard of yet
+// still shows something sensible (see REFUSAL_FALLBACK).
+const REFUSAL_TEXT: Record<string, string> = {
   not_over: 'This fits the plan now, so there is nothing to choose.',
   unknown: 'Something in this list has changed. Close this and try again.',
   too_many: 'That is more than the plan includes. Clear one and try again.',
+  read_only: 'This board is set to read-only. Turn that off in board settings to take feedback.',
 }
+
+const REFUSAL_FALLBACK = 'This choice could not be saved. Close this and try again.'
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
@@ -62,7 +67,8 @@ function chooserSpec(
 ): ChooserSpec | null {
   const plan = limits.planName ? `The ${limits.planName} plan` : 'Your plan'
   const grace = limits.phase === 'grace'
-  const from = grace ? `From ${date}, ` : ''
+  // `date` is the last day to fix, so what changes happens after it.
+  const from = grace ? `After ${date}, ` : ''
   const capOf = (key: string) => limits.issues.find((issue) => issue.key === key)?.cap ?? 0
   switch (kind) {
     case 'board': {
@@ -200,7 +206,7 @@ function ChooserBody(props: { spec: ChooserSpec; onDone: () => void }) {
     try {
       const result = await spec.save(selected)
       if (!result.ok) {
-        setError(REFUSAL_TEXT[result.reason])
+        setError(REFUSAL_TEXT[result.reason] ?? REFUSAL_FALLBACK)
         return
       }
       await queryClient.invalidateQueries({ queryKey: planLimitsQueries.all })

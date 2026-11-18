@@ -584,4 +584,25 @@ describe('BillingPlansView with plan limits', () => {
     expect(screen.queryByText('Team seats', { selector: 'div' })).toBeNull()
     expect(document.querySelector('[data-tone]')).toBeNull()
   })
+
+  describe('plan card calls to action', () => {
+    it('offers Upgrade to each higher plan from Free, and marks the current card', () => {
+      renderView({
+        overview: {
+          ...paidOverview,
+          plan: 'free',
+          planName: 'Free',
+          status: null,
+          renewalAt: null,
+          canUpgrade: true,
+        },
+        catalogue: { ...catalogue, trialedPlanIds: ['pro', 'business', 'enterprise'] },
+      })
+      for (const name of ['Pro', 'Business', 'Enterprise']) {
+        expect(screen.getByRole('button', { name: `Upgrade to ${name}` })).toBeInTheDocument()
+      }
+      expect(screen.queryByRole('button', { name: /Subscribe to/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
+    })
+  })
 })
