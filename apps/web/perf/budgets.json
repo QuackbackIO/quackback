@@ -132,18 +132,18 @@
     "ui:admin-feedback-load": {
       "dbQueries": 25,
       "serverRequests": 1,
-      "requests": 167,
-      "jsRequests": 162,
-      "jsKB": 466.1,
+      "requests": 132,
+      "jsRequests": 125,
+      "jsKB": 427,
       "htmlTransferKB": 38.1,
       "componentRenders": 487
     },
     "ui:admin-open-post": {
       "dbQueries": 17,
       "serverRequests": 1,
-      "requests": 54,
-      "jsRequests": 52,
-      "jsKB": 277.7,
+      "requests": 73,
+      "jsRequests": 71,
+      "jsKB": 305.6,
       "htmlTransferKB": 0,
       "componentRenders": 562
     },
@@ -159,9 +159,9 @@
     "ui:admin-nav-feedback-to-roadmap": {
       "dbQueries": 18,
       "serverRequests": 2,
-      "requests": 44,
-      "jsRequests": 42,
-      "jsKB": 82.9,
+      "requests": 64,
+      "jsRequests": 62,
+      "jsKB": 115.2,
       "htmlTransferKB": 0,
       "componentRenders": 455
     },
@@ -177,9 +177,9 @@
     "ui:admin-hover-nav-feedback-to-roadmap": {
       "dbQueries": 18,
       "serverRequests": 2,
-      "requests": 44,
-      "jsRequests": 42,
-      "jsKB": 82.9,
+      "requests": 64,
+      "jsRequests": 62,
+      "jsKB": 115.2,
       "htmlTransferKB": 0,
       "componentRenders": 455
     },
@@ -371,9 +371,9 @@
     "sweep:ui:admin:/admin/feedback": {
       "dbQueries": 25,
       "serverRequests": 1,
-      "requests": 167,
-      "jsRequests": 162,
-      "jsKB": 466.1,
+      "requests": 132,
+      "jsRequests": 125,
+      "jsKB": 427,
       "htmlTransferKB": 38.1,
       "componentRenders": 516
     },
