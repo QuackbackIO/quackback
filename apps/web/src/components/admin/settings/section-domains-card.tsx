@@ -90,6 +90,7 @@ export function SectionDomainsCard({
   cloud,
   readyHostnames,
   cloudHostnames,
+  cloudDomainsUnavailable,
   loadVerifiedDomains,
   loadCloudRecords,
   canAdd,
@@ -97,6 +98,7 @@ export function SectionDomainsCard({
   onMakePrimary,
   onAddDomain,
   onAddVerifiedDomain,
+  refreshCloudDomain,
 }: {
   view: SectionDomainsView
   /** The sections to row, in nav order (`listedSections`). */
@@ -107,6 +109,8 @@ export function SectionDomainsCard({
   readyHostnames: readonly string[]
   /** Cloud: every custom domain's hostname, ready or not. */
   cloudHostnames?: readonly string[]
+  /** Cloud: the custom domains could not be read, so the two lists above are not known. */
+  cloudDomainsUnavailable?: boolean
   /** Reads the Verified domains Add custom domain offers. */
   loadVerifiedDomains?: () => Promise<readonly string[]>
   /** Cloud: reads the DNS records a custom domain needs. */
@@ -118,6 +122,8 @@ export function SectionDomainsCard({
   onAddDomain?: () => void
   /** Go to Settings > Domains to add one; only for a viewer who may. */
   onAddVerifiedDomain?: (section: PortalSection) => void
+  /** Cloud: asks the control plane to look at a custom domain again, before Verify reads it. */
+  refreshCloudDomain?: (hostname: string) => Promise<unknown>
 }) {
   const map = view.sectionDomains
   const primary = view.primaryHost ?? ''
@@ -144,6 +150,9 @@ export function SectionDomainsCard({
 
   const verify = (section: PortalSection) =>
     run(async () => {
+      // Cloud: the control plane looks again first, as the dialog's Verify does.
+      const hostname = map[section]?.hostname
+      if (cloud && hostname && refreshCloudDomain) await refreshCloudDomain(hostname)
       const result = await verifySectionDomainFn({ data: { section } })
       if (result.ok && result.status) {
         const status = result.status
@@ -299,6 +308,7 @@ export function SectionDomainsCard({
             primaryHost={view.primaryHost}
             readyHostnames={readyHostnames}
             cloudHostnames={cloudHostnames}
+            cloudDomainsUnavailable={cloudDomainsUnavailable}
             loadVerifiedDomains={loadVerifiedDomains}
             loadCloudRecords={loadCloudRecords}
             onAddVerifiedDomain={onAddVerifiedDomain}

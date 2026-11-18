@@ -15,6 +15,8 @@ vi.mock('@/lib/server/jobs/worker', () => ({
 }))
 
 import { handleLivenessProbe } from '../health.live'
+import { handleHealthProbe } from '../health'
+import { SEEN_HOST_HEADER } from '@/lib/server/domains/domain-proof/seen-host'
 import { handleReadinessProbe, resetReadinessCache } from '../health.ready'
 
 beforeEach(() => {
@@ -43,6 +45,29 @@ describe('GET /api/health/live', () => {
     expect(execute).not.toHaveBeenCalled()
     expect(getMigrationStatus).not.toHaveBeenCalled()
     expect(getJobWorkerStatus).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/health', () => {
+  it('answers as liveness does, naming the host it was asked on', async () => {
+    const res = handleHealthProbe(
+      new Request('https://help.acme.com/api/health', { headers: { host: 'Help.Acme.com:443' } })
+    )
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toEqual({ status: 'ok' })
+    // What the custom domain check compares: the host this server saw, as
+    // the section routing reads it, not a forwarded one anyone can send.
+    expect(res.headers.get(SEEN_HOST_HEADER)).toBe('help.acme.com')
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('names the host the request reached, never a forwarded one', () => {
+    const res = handleHealthProbe(
+      new Request('https://feedback.acme.com/api/health', {
+        headers: { host: 'feedback.acme.com', 'x-forwarded-host': 'help.acme.com' },
+      })
+    )
+    expect(res.headers.get(SEEN_HOST_HEADER)).toBe('feedback.acme.com')
   })
 })
 

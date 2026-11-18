@@ -72,7 +72,7 @@ import {
 import { DEFAULT_PORTAL_CONFIG, isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
-import { effectiveSectionDomains } from '@/lib/shared/section-domains'
+import { effectiveSectionDomains, hostOfOrigin } from '@/lib/shared/section-domains'
 import type {
   PortalConfig,
   PortalNavItemConfig,
@@ -81,7 +81,8 @@ import type {
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import {
-  useCloudEnabled,
+  useBaseUrl,
+  useSectionDomainsCloud,
   useSessionContext,
   useWorkspaceSettings,
 } from '@/lib/client/hooks/use-root-context'
@@ -158,7 +159,7 @@ export const Route = createFileRoute('/admin/settings/portal')({
           ]
         : []),
       tab === 'custom-domains'
-        ? warmCustomDomainsTab(context.queryClient, !!context.cloudEnabled)
+        ? warmCustomDomainsTab(context.queryClient, !!context.sectionDomainsCloud)
         : null,
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
@@ -194,7 +195,7 @@ const PortalTabBar = memo(function PortalTabBar({
   tabs: readonly PortalTab[]
 }) {
   const queryClient = useQueryClient()
-  const cloud = useCloudEnabled()
+  const cloud = useSectionDomainsCloud()
   if (tabs.length < 2) return null
   const readAhead = () => readCustomDomainsTabAhead(queryClient, cloud)
   // Links drawn with the tab slots, like a module's tabs, not <Tabs> as other settings pages use: on this page <Tabs> added 1.5 KB of HTML (over the ceiling), 3 KB of JS and a chunk.
@@ -230,10 +231,10 @@ const PortalTabBar = memo(function PortalTabBar({
 
 /** The Custom domains tab, its code and reads loaded when it opens. */
 function CustomDomainsPanel({ onLeave }: { onLeave?: () => void }) {
-  const cloudEnabled = useCloudEnabled()
+  const cloud = useSectionDomainsCloud()
   return (
     <Suspense fallback={null}>
-      <PortalCustomDomainsTab cloud={cloudEnabled} onLeave={onLeave} />
+      <PortalCustomDomainsTab cloud={cloud} onLeave={onLeave} />
     </Suspense>
   )
 }
@@ -241,6 +242,7 @@ function CustomDomainsPanel({ onLeave }: { onLeave?: () => void }) {
 function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] }) {
   const router = useRouter()
   const settings = useWorkspaceSettings()
+  const baseUrl = useBaseUrl()
   const session = useSessionContext()
   const [, startTransition] = useTransition()
   // Display-only: the name is edited on Workspace > General.
@@ -398,9 +400,10 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
         effectiveSectionDomains({
           sectionDomains: settings?.portalConfig?.sectionDomains,
           legacyHelpDomain: settings?.helpCenterConfig?.domain,
+          primaryHost: hostOfOrigin(baseUrl),
         })
       ),
-    [settings]
+    [settings, baseUrl]
   )
 
   const resetNavItems = useCallback(() => setNavItems(seedNavEditorItems(null)), [])

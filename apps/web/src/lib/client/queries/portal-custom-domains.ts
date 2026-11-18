@@ -22,11 +22,23 @@ import {
 async function loadOperator() {
   const [entitled, domains, cloudIdentity] = await Promise.all([
     hasCustomDomainEntitlementFn(),
-    getCloudCustomDomainsFn().catch(() => [] as WebAddress[]),
+    getCloudCustomDomainsFn().catch(() => null),
     getCloudIdentityFn().catch(() => null),
   ])
-  return { entitled, domains, cloudIdentity }
+  return {
+    entitled,
+    domains: domains ?? NO_DOMAINS,
+    /**
+     * The custom domains could not be read. A failed read is not "no custom
+     * domains": shown as one, a hostname already added would look new and be
+     * added again.
+     */
+    domainsUnavailable: domains === null,
+    cloudIdentity,
+  }
 }
+
+const NO_DOMAINS: WebAddress[] = []
 
 /** Cloud: the hostnames an operator routes to this workspace, set up on the tab. */
 export type CustomDomainsOperator = Awaited<ReturnType<typeof loadOperator>>
@@ -42,8 +54,9 @@ export const portalCustomDomainsQueries = {
   tab: (cloud: boolean) =>
     queryOptions({
       queryKey: ['settings', 'portal-custom-domains', cloud],
-      // Read ahead on hover, then again only when a change invalidates it.
-      staleTime: 30_000,
+      // Read ahead on hover, then again only when a change invalidates it;
+      // a failed read of the custom domains is tried again on the next use.
+      staleTime: (query) => (query.state.data?.operator?.domainsUnavailable ? 0 : 30_000),
       queryFn: async (): Promise<PortalCustomDomainsData> => {
         const [sectionDomains, operator] = await Promise.all([
           getSectionDomainsFn().catch(() => null),

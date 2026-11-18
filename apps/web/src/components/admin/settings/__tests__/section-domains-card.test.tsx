@@ -38,6 +38,8 @@ function renderCard({
   cloud = false,
   canAdd = true,
   onChanged = vi.fn(),
+  refreshCloudDomain,
+  cloudDomainsUnavailable,
 }: {
   map?: SectionDomainMap
   sections?: PortalSection[]
@@ -45,6 +47,8 @@ function renderCard({
   cloud?: boolean
   canAdd?: boolean
   onChanged?: () => void
+  refreshCloudDomain?: (hostname: string) => Promise<unknown>
+  cloudDomainsUnavailable?: boolean
 } = {}) {
   return render(
     <SectionDomainsCard
@@ -55,6 +59,8 @@ function renderCard({
       readyHostnames={[]}
       canAdd={canAdd}
       onChanged={onChanged}
+      refreshCloudDomain={refreshCloudDomain}
+      cloudDomainsUnavailable={cloudDomainsUnavailable}
     />
   )
 }
@@ -230,6 +236,41 @@ describe('Custom domains card', () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
 
+  it('on Cloud, asks the control plane to look again before verifying from the row', async () => {
+    const order: string[] = []
+    const refreshCloudDomain = vi.fn(async (hostname: string) => {
+      order.push(`refresh ${hostname}`)
+    })
+    verifySectionDomain.mockImplementation(async () => {
+      order.push('verify')
+      return { ok: true, sectionDomains: {}, status: null }
+    })
+    const onChanged = vi.fn()
+    renderCard({
+      map: { help: { hostname: 'help.acme.com', verifiedAt: null } },
+      cloud: true,
+      refreshCloudDomain,
+      onChanged,
+    })
+    fireEvent.click(within(row('Help center')).getByRole('button', { name: 'Verify' }))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    expect(order).toEqual(['refresh help.acme.com', 'verify'])
+  })
+
+  it('self-hosted, verifies from the row without asking a control plane', async () => {
+    const refreshCloudDomain = vi.fn(async () => {})
+    verifySectionDomain.mockResolvedValue({ ok: true, sectionDomains: {}, status: null })
+    const onChanged = vi.fn()
+    renderCard({
+      map: { help: { hostname: 'help.acme.com', verifiedAt: null } },
+      refreshCloudDomain,
+      onChanged,
+    })
+    fireEvent.click(within(row('Help center')).getByRole('button', { name: 'Verify' }))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    expect(refreshCloudDomain).not.toHaveBeenCalled()
+  })
+
   it('removes a section domain once confirmed, back to the primary domain', async () => {
     const onChanged = vi.fn()
     setSectionDomain.mockResolvedValue({ ok: true, sectionDomains: {} })
@@ -256,6 +297,15 @@ describe('Custom domains card', () => {
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('Used for')
     expect(within(dialog).queryByLabelText('Domain')).toBeNull()
+  })
+
+  it('on Cloud, tells Add custom domain when the custom domains could not be read', async () => {
+    renderCard({ cloud: true, cloudDomainsUnavailable: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom domain' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      "Couldn't load your custom domains. Try again."
+    )
   })
 
   it('offers no way to add one without the plan', () => {

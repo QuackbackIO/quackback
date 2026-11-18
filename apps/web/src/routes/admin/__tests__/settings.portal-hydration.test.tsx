@@ -20,11 +20,13 @@ const { cardRenders, previewRenders, rootContext, router, customDomainReads } = 
     search: {} as { tab?: string },
     blocker: null as null | { enableBeforeUnload: () => boolean },
   },
-  customDomainReads: { count: 0 },
+  customDomainReads: { count: 0, cloud: [] as boolean[] },
   rootContext: {
     settings: { name: 'Acme', featureFlags: { feedback: true, changelog: true } },
     session: null,
     permissions: ['settings.branding'] as string[],
+    cloudEnabled: false,
+    sectionDomainsCloud: false,
   },
 }))
 
@@ -69,8 +71,8 @@ vi.mock('@tanstack/react-router', async () => {
 
 // The Custom domains tab: leaving for another domain is all this page needs of it.
 vi.mock('@/components/admin/settings/portal-custom-domains-tab', () => ({
-  default: ({ onLeave }: { onLeave?: () => void }) => (
-    <button type="button" onClick={onLeave}>
+  default: ({ onLeave, cloud }: { onLeave?: () => void; cloud: boolean }) => (
+    <button type="button" onClick={onLeave} data-cloud={String(cloud)}>
       Leave for the new domain
     </button>
   ),
@@ -83,6 +85,7 @@ vi.mock('@/lib/client/queries/portal-custom-domains', () => ({
       staleTime: 30_000,
       queryFn: async () => {
         customDomainReads.count++
+        customDomainReads.cloud.push(cloud)
         return { sectionDomains: null, operator: null }
       },
     }),
@@ -277,5 +280,55 @@ describe('portal settings page hydration', () => {
 
     fireEvent.click(await screen.findByText('Leave for the new domain'))
     expect(router.blocker?.enableBeforeUnload()).toBe(false)
+  })
+
+  it('loads the Custom domains tab the Cloud way on a pooled workspace whose projection has not landed', async () => {
+    customDomainReads.cloud = []
+    const loader = (
+      Route as unknown as {
+        options: { loader: (args: Record<string, unknown>) => Promise<unknown> }
+      }
+    ).options.loader
+    await loader({
+      context: {
+        queryClient: seededClient(),
+        permissions: ['settings.custom_domain'],
+        billingEnabled: false,
+        cloudEnabled: false,
+        sectionDomainsCloud: true,
+      },
+      location: { search: { tab: 'custom-domains' } },
+    })
+    expect(customDomainReads.cloud).toEqual([true])
+  })
+
+  it('sets up section domains the Cloud way on a pooled workspace whose projection has not landed', async () => {
+    // Billing is not on yet (cloudEnabled false), but the workspace is on
+    // Cloud's fleet: the tab must never offer the self-hosted record and check.
+    rootContext.permissions = ['settings.branding', 'settings.custom_domain']
+    rootContext.cloudEnabled = false
+    rootContext.sectionDomainsCloud = true
+    customDomainReads.cloud = []
+    try {
+      const page = () => (
+        <IntlProvider locale="en" defaultLocale="en">
+          <QueryClientProvider client={seededClient()}>
+            <PortalPage />
+          </QueryClientProvider>
+        </IntlProvider>
+      )
+      const { rerender } = render(page())
+      // Read ahead the Cloud way...
+      fireEvent.mouseEnter(screen.getByRole('link', { name: 'Custom domains' }))
+      await vi.waitFor(() => expect(customDomainReads.cloud).toEqual([true]))
+      // ...and opened the Cloud way.
+      router.search = { tab: 'custom-domains' }
+      rerender(page())
+      const tab = await screen.findByText('Leave for the new domain')
+      expect(tab.getAttribute('data-cloud')).toBe('true')
+    } finally {
+      rootContext.sectionDomainsCloud = false
+      router.search = {}
+    }
   })
 })

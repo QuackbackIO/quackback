@@ -26,7 +26,11 @@ import {
   listedSections,
   SectionDomainsCard,
 } from '@/components/admin/settings/section-domains-card'
-import { portalSectionsEnabled } from '@/lib/shared/section-domains'
+import {
+  portalSectionsEnabled,
+  sectionOfHost,
+  type SectionDomainMap,
+} from '@/lib/shared/section-domains'
 import { addDomainLink, DOMAIN_VERIFICATION_ANCHOR } from '@/lib/shared/domains-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { CUSTOM_DOMAINS_HREF } from '@/lib/shared/portal-settings-tabs'
@@ -35,7 +39,7 @@ import {
   type CustomDomainsOperator,
 } from '@/lib/client/queries/portal-custom-domains'
 import { useHasPermission, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import { toastError } from '@/lib/client/error-notice'
+import { toastError, toastErrorLine } from '@/lib/client/error-notice'
 
 /** Go to the Domain verification card and its Domain field, where a Cloud custom domain is added. */
 function goToAddDomain() {
@@ -75,6 +79,11 @@ function useCloudDomains(
       hostname: string
     }) => mutateCloudCustomDomainFn({ data: input }),
     onSuccess: async (result) => {
+      // A refusal comes back as a value whose words are written for this page.
+      if (result.ok === false) {
+        toastErrorLine(result.message)
+        return
+      }
       if (result.transferToken) {
         transferTo(result.projection.canonicalOrigin, result.transferToken, onLeave)
         return
@@ -90,6 +99,10 @@ function useCloudDomains(
 }
 
 const NO_DOMAINS: WebAddress[] = []
+
+/** Cloud: asks the control plane to look at a custom domain again. */
+const refreshCloudDomain = (hostname: string) =>
+  mutateCloudCustomDomainFn({ data: { action: 'refresh', hostname } })
 
 export default function PortalCustomDomainsTab({
   cloud,
@@ -146,6 +159,7 @@ export default function PortalCustomDomainsTab({
             .filter((d) => d.readiness === 'ready' && !d.isPrimary)
             .map((d) => d.hostname)}
           cloudHostnames={cloudDomains.domains.map((d) => d.hostname)}
+          cloudDomainsUnavailable={operator?.domainsUnavailable ?? false}
           loadVerifiedDomains={loadVerifiedDomains}
           loadCloudRecords={cloud ? loadCloudRecords : undefined}
           // Through the router, so unsaved Design changes ask first, as leaving the page does.
@@ -160,11 +174,13 @@ export default function PortalCustomDomainsTab({
               : undefined
           }
           onAddDomain={operator ? goToAddDomain : undefined}
+          refreshCloudDomain={cloud ? refreshCloudDomain : undefined}
         />
       )}
       {operator && (
         <OperatorHostnames
           {...operator}
+          sectionDomains={sectionDomains?.sectionDomains ?? null}
           cloud={cloudDomains}
           onChanged={onChanged}
           onLeave={onLeave}
@@ -177,11 +193,15 @@ export default function PortalCustomDomainsTab({
 /** Hostnames an operator routes to this workspace, set up on this tab. */
 function OperatorHostnames({
   entitled,
+  domainsUnavailable,
   cloudIdentity: initialCloudIdentity,
+  sectionDomains,
   cloud,
   onChanged,
   onLeave,
 }: CustomDomainsOperator & {
+  /** The section map, to keep Make primary off a domain a section uses; null when unread. */
+  sectionDomains: SectionDomainMap | null
   cloud: ReturnType<typeof useCloudDomains>
   onChanged: () => Promise<void>
   onLeave?: () => void
@@ -223,6 +243,7 @@ function OperatorHostnames({
       <DomainsCard
         entitled={entitled}
         domains={domains}
+        domainsUnavailable={domainsUnavailable}
         hostname={hostname}
         pending={mutation.isPending}
         error={mutation.error}
@@ -232,6 +253,9 @@ function OperatorHostnames({
         }
         onRefresh={(value) => mutation.mutate({ action: 'refresh', hostname: value })}
         onMakePrimary={(value) => mutation.mutate({ action: 'makePrimary', hostname: value })}
+        usedBySection={(value) =>
+          sectionDomains ? sectionOfHost(value, sectionDomains) !== null : false
+        }
         onRemove={(value) => mutation.mutate({ action: 'remove', hostname: value })}
       />
       {cloudIdentity && (

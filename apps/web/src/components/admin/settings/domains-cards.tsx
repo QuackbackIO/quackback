@@ -13,6 +13,7 @@ import {
 } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import { pendingProvenLabel, type ShownProofSource } from '@/lib/shared/domain-proof'
+import { CUSTOM_DOMAINS_UNREADABLE } from '@/lib/shared/custom-domains'
 
 /** A hostname, with how its ownership was accepted when a proven zone covered it. */
 type HostnameRow = CustomDomainInstruction & { provenBy?: ShownProofSource | null }
@@ -134,6 +135,8 @@ function ReadinessBadge({ readiness }: { readiness: CustomDomainInstruction['rea
 export function DomainsCard(props: {
   entitled: boolean
   domains: HostnameRow[]
+  /** The custom domains could not be read: the list is not known to be empty. */
+  domainsUnavailable?: boolean
   hostname: string
   pending: boolean
   error: Error | null
@@ -141,6 +144,8 @@ export function DomainsCard(props: {
   onAdd: () => void
   onRefresh: (hostname: string) => void
   onMakePrimary: (hostname: string) => void
+  /** Whether a section uses the hostname: such a domain is never made primary. */
+  usedBySection?: (hostname: string) => boolean
   onRemove: (hostname: string) => void
 }) {
   return (
@@ -173,7 +178,11 @@ export function DomainsCard(props: {
               disabled={props.pending}
             />
           </div>
-          <Button type="submit" size="sm" disabled={props.pending || !props.hostname.trim()}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={props.pending || props.domainsUnavailable || !props.hostname.trim()}
+          >
             Add domain
           </Button>
         </form>
@@ -182,6 +191,12 @@ export function DomainsCard(props: {
       {props.error && (
         <p role="alert" className="mt-4 text-sm text-destructive">
           {props.error.message}
+        </p>
+      )}
+
+      {props.domainsUnavailable && (
+        <p role="alert" className="mt-4 text-sm text-destructive">
+          {CUSTOM_DOMAINS_UNREADABLE}
         </p>
       )}
 
@@ -209,17 +224,19 @@ export function DomainsCard(props: {
                   >
                     Verify
                   </Button>
-                  {domain.readiness === 'ready' && !domain.isPrimary && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={props.pending}
-                      onClick={() => props.onMakePrimary(domain.hostname)}
-                    >
-                      Make primary
-                    </Button>
-                  )}
+                  {domain.readiness === 'ready' &&
+                    !domain.isPrimary &&
+                    !props.usedBySection?.(domain.hostname) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={props.pending}
+                        onClick={() => props.onMakePrimary(domain.hostname)}
+                      >
+                        Make primary
+                      </Button>
+                    )}
                   <Button
                     type="button"
                     size="sm"

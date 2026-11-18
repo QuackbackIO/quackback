@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   effectiveSectionDomains,
+  hostOfOrigin,
   portalSectionsEnabled,
   resolveSectionHostRoute,
   sectionForPath,
   sectionHomeForHost,
   sectionOfHost,
+  storedSectionDomains,
+  withoutPrimaryHost,
+  type SectionDomain,
   type SectionDomainMap,
   type SectionHostRoute,
 } from '../section-domains'
@@ -436,6 +440,7 @@ describe('effectiveSectionDomains', () => {
       effectiveSectionDomains({
         sectionDomains: { status: { hostname: 'status.acme.com', verifiedAt: null } },
         legacyHelpDomain: { domain: 'help.acme.com', verifiedAt: VERIFIED },
+        primaryHost: null,
       })
     ).toEqual({ status: { hostname: 'status.acme.com', verifiedAt: null } })
   })
@@ -445,6 +450,7 @@ describe('effectiveSectionDomains', () => {
       effectiveSectionDomains({
         sectionDomains: undefined,
         legacyHelpDomain: { domain: 'help.acme.com', verifiedAt: VERIFIED },
+        primaryHost: null,
       })
     ).toEqual({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
   })
@@ -454,11 +460,16 @@ describe('effectiveSectionDomains', () => {
       effectiveSectionDomains({
         sectionDomains: undefined,
         legacyHelpDomain: { domain: null, verifiedAt: null },
+        primaryHost: null,
       })
     ).toEqual({})
-    expect(effectiveSectionDomains({ sectionDomains: undefined, legacyHelpDomain: null })).toEqual(
-      {}
-    )
+    expect(
+      effectiveSectionDomains({
+        sectionDomains: undefined,
+        legacyHelpDomain: null,
+        primaryHost: null,
+      })
+    ).toEqual({})
   })
 
   it('treats a stored empty map as written, so a cleared help domain stays cleared', () => {
@@ -466,8 +477,128 @@ describe('effectiveSectionDomains', () => {
       effectiveSectionDomains({
         sectionDomains: {},
         legacyHelpDomain: { domain: 'help.acme.com', verifiedAt: VERIFIED },
+        primaryHost: null,
       })
     ).toEqual({})
+  })
+})
+
+describe('a section hostname that is the primary domain', () => {
+  const LEGACY_ON_PRIMARY = { domain: 'acme.example.com', verifiedAt: VERIFIED }
+
+  it('is left out of the map every reader takes, without case, port or trailing dot', () => {
+    for (const primaryHost of ['acme.example.com', 'ACME.example.com:8443', 'acme.example.com.']) {
+      expect(
+        effectiveSectionDomains({
+          sectionDomains: {
+            help: { hostname: 'acme.example.com', verifiedAt: VERIFIED },
+            status: { hostname: 'status.acme.com', verifiedAt: VERIFIED },
+          },
+          legacyHelpDomain: null,
+          primaryHost,
+        })
+      ).toEqual({ status: { hostname: 'status.acme.com', verifiedAt: VERIFIED } })
+    }
+  })
+
+  it("is left out when it is the help center's own domain from before the map", () => {
+    expect(
+      effectiveSectionDomains({
+        sectionDomains: undefined,
+        legacyHelpDomain: LEGACY_ON_PRIMARY,
+        primaryHost: 'acme.example.com',
+      })
+    ).toEqual({})
+  })
+
+  it('is kept in the map a write starts from', () => {
+    expect(
+      storedSectionDomains({ sectionDomains: undefined, legacyHelpDomain: LEGACY_ON_PRIMARY })
+    ).toEqual({ help: { hostname: 'acme.example.com', verifiedAt: VERIFIED } })
+  })
+
+  it('leaves the map as it is with no primary host to compare', () => {
+    const map = { help: { hostname: 'acme.example.com', verifiedAt: VERIFIED } }
+    expect(withoutPrimaryHost(map, null)).toBe(map)
+  })
+
+  it('takes the host from an origin, and nothing from something that is not one', () => {
+    expect(hostOfOrigin('https://Acme.example.com:8443/')).toBe('acme.example.com')
+    expect(hostOfOrigin('not a url')).toBeNull()
+    expect(hostOfOrigin(undefined)).toBeNull()
+  })
+
+  it('routes the primary domain as the primary domain, even with the raw map', () => {
+    const map: SectionDomainMap = {
+      help: { hostname: 'acme.example.com', verifiedAt: VERIFIED },
+      status: { hostname: 'status.acme.com', verifiedAt: VERIFIED },
+    }
+    expect(route('acme.example.com', '/', { map })).toEqual({ kind: 'pass' })
+    expect(route('acme.example.com', '/roadmap', { map })).toEqual({ kind: 'pass' })
+    expect(route('acme.example.com', '/hc', { map })).toEqual({ kind: 'pass' })
+    expect(route('acme.example.com', '/status', { map })).toEqual({
+      kind: 'redirect',
+      status: 301,
+      location: 'https://status.acme.com/status',
+    })
+  })
+})
+
+describe('no route ever redirects to its own URL', () => {
+  // Every map over a small set of hosts, for every primary among them: no
+  // request is ever sent to the URL it asked for. The maps include ones no
+  // write would make (one hostname under two sections, the primary's own
+  // hostname), since a reader can still meet them in stored data.
+  const HOSTS = ['acme.example.com', 'help.acme.com', 'status.acme.com']
+  const SECTIONS: PortalSection[] = ['feedback', 'help', 'status']
+  const PATHS = ['/', '/b/x', '/roadmap', '/changelog', '/hc', '/status', '/support', '/admin']
+  const CHOICES: (SectionDomain | null)[] = [
+    null,
+    ...HOSTS.flatMap((hostname) => [
+      { hostname, verifiedAt: VERIFIED },
+      { hostname, verifiedAt: null },
+    ]),
+  ]
+
+  function* maps(index = 0, map: SectionDomainMap = {}): Generator<SectionDomainMap> {
+    if (index === SECTIONS.length) {
+      yield map
+      return
+    }
+    for (const entry of CHOICES) {
+      const next = { ...map }
+      if (entry) next[SECTIONS[index]] = entry
+      yield* maps(index + 1, next)
+    }
+  }
+
+  it('holds for every map, primary, host, path and section switch', () => {
+    let checked = 0
+    for (const map of maps()) {
+      for (const primary of HOSTS) {
+        for (const host of HOSTS) {
+          for (const path of [...PATHS, '/?auth=signin&callbackUrl=%2Fadmin']) {
+            const [pathname, query = ''] = path.split('?')
+            for (const enabled of [ALL_ON, { ...ALL_ON, help: false }]) {
+              const search = query ? `?${query}` : ''
+              const result = resolveSectionHostRoute({
+                host,
+                path: pathname,
+                search,
+                method: 'GET',
+                map,
+                sectionEnabled: enabled,
+                primaryOrigin: `https://${primary}`,
+              })
+              checked += 1
+              if (result.kind !== 'redirect') continue
+              expect(result.location).not.toBe(`https://${host}${pathname}${search}`)
+            }
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(10_000)
   })
 })
 

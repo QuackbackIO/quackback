@@ -21,8 +21,13 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   },
 }))
 
-const { getSectionOrigins, getSignInSectionOrigins, isSectionHost, sectionHostOrigin } =
-  await import('../section-links')
+const {
+  getSectionOrigins,
+  getSignInSectionOrigins,
+  isSectionHost,
+  sectionHostOrigin,
+  sectionOriginsOf,
+} = await import('../section-links')
 
 const VERIFIED = '2026-11-01T00:00:00.000Z'
 const PRIMARY = 'https://acme.example.com'
@@ -179,5 +184,79 @@ describe('isSectionHost', () => {
     expect(await isSectionHost(null)).toBe(false)
     state.settings = null
     expect(await isSectionHost('help.acme.com')).toBe(false)
+  })
+})
+
+describe('a section hostname that is the primary domain', () => {
+  // BASE_URL's host, or BASE_URL moved onto a section's hostname: never a
+  // section's origin, so links, sign-in origins and handoffs keep to the
+  // primary domain as it is now, port and all.
+  const ON_PRIMARY = () =>
+    workspace({ legacyHelpDomain: { domain: 'acme.example.com', verifiedAt: VERIFIED } })
+
+  it('links nothing at it, comparing without the port', () => {
+    const settings = ON_PRIMARY() as unknown as Parameters<typeof sectionOriginsOf>[0]
+    const primary = 'https://acme.example.com:8443'
+    for (const forSignIn of [false, true]) {
+      const origins = sectionOriginsOf(settings, primary, { forSignIn })
+      expect(origins.help).toBe(primary)
+      expect(origins.primary).toBe(primary)
+    }
+  })
+
+  it('hands no session off to it', async () => {
+    state.settings = ON_PRIMARY()
+    expect(await sectionHostOrigin('acme.example.com')).toBeNull()
+  })
+})
+
+describe('on Cloud, a section saved while its custom domain was pending', () => {
+  // Routing, links and sign-in follow the control plane's readiness alone:
+  // the stored verification is never what holds a domain back or keeps it up.
+  function cloudWith(readiness: string | null, verifiedAt: string | null = null) {
+    return workspace({
+      sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt } },
+      cloud: {
+        cloud: { enabled: true },
+        cloudIdentity: {
+          version: 1,
+          displayName: 'Acme',
+          canonicalOrigin: PRIMARY,
+          platformHostname: 'acme.example.com',
+          customDomains: readiness
+            ? [
+                {
+                  hostname: 'help.acme.com',
+                  readiness,
+                  isPrimary: false,
+                  updatedAt: VERIFIED,
+                },
+              ]
+            : [],
+          updatedAt: VERIFIED,
+        },
+      },
+    })
+  }
+
+  it('is not live while its domain is pending', async () => {
+    state.settings = cloudWith('pending')
+    expect((await getSectionOrigins()).help).toBe(PRIMARY)
+    expect((await getSignInSectionOrigins()).help).toBe(PRIMARY)
+  })
+
+  it('goes live when its domain turns ready, with no Verify', async () => {
+    state.settings = cloudWith('ready')
+    expect((await getSectionOrigins()).help).toBe('https://help.acme.com')
+    expect((await getSignInSectionOrigins()).help).toBe('https://help.acme.com')
+    expect(await sectionHostOrigin('help.acme.com')).toBe('https://help.acme.com')
+  })
+
+  it('goes down when a ready domain turns failed or is removed, though once verified', async () => {
+    for (const readiness of ['failed', 'pending', null]) {
+      state.settings = cloudWith(readiness, VERIFIED)
+      expect((await getSectionOrigins()).help).toBe(PRIMARY)
+      expect((await getSignInSectionOrigins()).help).toBe(PRIMARY)
+    }
   })
 })

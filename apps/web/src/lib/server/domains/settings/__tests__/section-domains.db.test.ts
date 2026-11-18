@@ -23,6 +23,7 @@ const side = vi.hoisted(() => ({
   entitled: true,
   status: { dnsResolved: true, instanceReachable: true, verified: true },
   dnsAnswered: true,
+  primaryHosts: [] as (string | null | undefined)[],
 }))
 vi.mock('@/lib/server/domains/domain-proof/ensure-domain', () => ({
   ensureDomainForCustomDomain: async (hostname: string) => {
@@ -38,7 +39,10 @@ vi.mock('@/lib/server/config', async (importOriginal) => ({
   getBaseUrl: () => 'https://feedback.acme.com',
 }))
 vi.mock('@/lib/server/domains/domain-proof/reachability-probe', () => ({
-  probeCustomDomain: async () => ({ status: side.status, dnsAnswered: side.dnsAnswered }),
+  probeCustomDomain: async (_hostname: string, opts?: { primaryOrigin?: string | null }) => {
+    side.primaryHosts.push(opts?.primaryOrigin)
+    return { status: side.status, dnsAnswered: side.dnsAnswered }
+  },
 }))
 
 const { getSectionDomains, getSectionDomainsView, setSectionDomain, verifySectionDomain } =
@@ -97,6 +101,7 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
     side.entitled = true
     side.status = { dnsResolved: true, instanceReachable: true, verified: true }
     side.dnsAnswered = true
+    side.primaryHosts = []
     await fixture.begin()
   })
   afterEach(fixture.rollback)
@@ -196,6 +201,27 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
       expect(entry?.verifiedAt).toEqual(expect.any(String))
     })
 
+    it("hands the probe the primary domain's host, so a hairpin install can verify", async () => {
+      await setSectionDomain('status', 'status.acme.com')
+      await verifySectionDomain('status')
+      expect(side.primaryHosts).toEqual(['https://feedback.acme.com'])
+    })
+
+    it("forgets the daily run's first miss once a person's Verify has checked", async () => {
+      await seedSettings({
+        portalConfig: JSON.stringify({
+          sectionDomains: {
+            help: { hostname: 'help.acme.com', verifiedAt: NOW, missedAt: NOW },
+          },
+        }),
+      })
+      await verifySectionDomain('help')
+      expect((await stored()).sectionDomains.help).toEqual({
+        hostname: 'help.acme.com',
+        verifiedAt: expect.any(String),
+      })
+    })
+
     it('takes the verification away when the hostname stops answering', async () => {
       await seedSettings({ helpCenterConfig: legacyHelp('help.acme.com', NOW) })
       side.status = { dnsResolved: true, instanceReachable: false, verified: false }
@@ -289,6 +315,78 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
         unconfirmedSince: '2020-01-01T00:00:00.000Z',
       })
     })
+
+    describe('a help center domain that is the primary domain', () => {
+      // Set before section domains, when nothing refused BASE_URL's host.
+      beforeEach(() => seedSettings({ helpCenterConfig: legacyHelp('feedback.acme.com', NOW) }))
+
+      it('is no section domain to any reader', async () => {
+        expect(await getSectionDomains()).toEqual({})
+        expect((await getSectionDomainsView()).sectionDomains).toEqual({})
+      })
+
+      it('cannot be verified as a section domain', async () => {
+        expect(await verifySectionDomain('help')).toMatchObject({
+          ok: false,
+          code: 'SECTION_DOMAIN_NOT_SET',
+        })
+      })
+
+      it('stays stored through a change to another section', async () => {
+        const result = await setSectionDomain('status', 'status.acme.com')
+        expect(result).toEqual({
+          ok: true,
+          sectionDomains: { status: { hostname: 'status.acme.com', verifiedAt: null } },
+        })
+        expect(await stored()).toEqual({
+          sectionDomains: {
+            help: { hostname: 'feedback.acme.com', verifiedAt: NOW },
+            status: { hostname: 'status.acme.com', verifiedAt: null },
+          },
+          helpDomain: { domain: 'feedback.acme.com', verifiedAt: NOW },
+        })
+      })
+    })
+  })
+
+  describe('a pooled workspace whose projections have not landed', () => {
+    // Cloud's fleet, before the control plane has pushed anything: no
+    // settings.cloud, no identity. It must never fall back to the self-hosted
+    // way, which would take another workspace's hostname and verify it.
+    beforeEach(async () => {
+      vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+      await seedSettings()
+    })
+    afterEach(() => vi.unstubAllEnvs())
+
+    it('refuses to set a section hostname, and writes nothing', async () => {
+      expect(await setSectionDomain('help', 'help.other.com')).toMatchObject({
+        ok: false,
+        code: 'SECTION_DOMAIN_CLOUD_UNAVAILABLE',
+      })
+      expect((await stored()).sectionDomains).toBeUndefined()
+      expect(side.ensured).toEqual([])
+    })
+
+    it('verifies nothing, and never runs the self-hosted probe', async () => {
+      await testDb.update(settings).set({
+        portalConfig: JSON.stringify({
+          sectionDomains: { help: { hostname: 'help.other.com', verifiedAt: null } },
+        }),
+      })
+      expect(await verifySectionDomain('help')).toMatchObject({ ok: true, status: null })
+      expect(side.primaryHosts).toEqual([])
+      expect((await stored()).sectionDomains.help.verifiedAt).toBeNull()
+    })
+
+    it('shows a stored hostname as not live', async () => {
+      await testDb.update(settings).set({
+        portalConfig: JSON.stringify({
+          sectionDomains: { help: { hostname: 'help.other.com', verifiedAt: NOW } },
+        }),
+      })
+      expect((await getSectionDomainsView()).sectionDomains.help?.verifiedAt).toBeNull()
+    })
   })
 
   describe('Cloud', () => {
@@ -371,6 +469,57 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
       const view = await getSectionDomainsView()
       expect(view.sectionDomains.help).toEqual({ hostname: 'help.acme.com', verifiedAt: null })
       expect(view.primaryHost).toBe('acme.example.com')
+    })
+
+    describe('a section saved while its custom domain was pending', () => {
+      const WORKSPACE_KEY = 'ws_section_domains_test'
+      let previousInstanceId: string | undefined
+      beforeEach(() => {
+        previousInstanceId = process.env.QUACKBACK_INSTANCE_ID
+        process.env.QUACKBACK_INSTANCE_ID = WORKSPACE_KEY
+      })
+      afterEach(() => {
+        if (previousInstanceId === undefined) delete process.env.QUACKBACK_INSTANCE_ID
+        else process.env.QUACKBACK_INSTANCE_ID = previousInstanceId
+      })
+
+      /** The control plane's next projection, written the way it always is. */
+      async function project(version: number, statusReadiness: string | null) {
+        const { writeIdentityProjection } = await import('../cloud/identity-projection.write')
+        const identity = cloudIdentity([
+          { hostname: 'acme.com', readiness: 'ready', isPrimary: true },
+          ...(statusReadiness ? [{ hostname: 'status.acme.com', readiness: statusReadiness }] : []),
+        ]) as unknown as Parameters<typeof writeIdentityProjection>[1]
+        await writeIdentityProjection(WORKSPACE_KEY, { ...identity, version })
+      }
+
+      it('goes live when the projection says its domain is ready, with no Verify', async () => {
+        await setSectionDomain('status', 'status.acme.com')
+        expect((await getSectionDomainsView()).sectionDomains.status?.verifiedAt).toBeNull()
+
+        await project(2, 'ready')
+
+        expect((await getSectionDomainsView()).sectionDomains.status?.verifiedAt).toEqual(
+          expect.any(String)
+        )
+        // Nothing was written to the map: readiness alone decides.
+        expect((await stored()).sectionDomains.status.verifiedAt).toBeNull()
+      })
+
+      it('goes down when a ready domain turns failed, or is removed', async () => {
+        await project(2, 'ready')
+        await setSectionDomain('status', 'status.acme.com')
+        expect((await getSectionDomainsView()).sectionDomains.status?.verifiedAt).toEqual(
+          expect.any(String)
+        )
+
+        await project(3, 'failed')
+        expect((await getSectionDomainsView()).sectionDomains.status?.verifiedAt).toBeNull()
+
+        await project(4, 'ready')
+        await project(5, null)
+        expect((await getSectionDomainsView()).sectionDomains.status?.verifiedAt).toBeNull()
+      })
     })
   })
 })

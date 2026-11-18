@@ -44,6 +44,7 @@ const h = vi.hoisted(() => ({
   added: [] as string[],
   operatorFails: false,
   ensureFails: false,
+  sectionDomains: {} as Record<string, { hostname: string; verifiedAt: string | null }>,
 }))
 
 vi.mock('@/lib/server/db', () => ({
@@ -93,6 +94,10 @@ vi.mock('@/lib/server/domains/domain-proof/hostname-proof', () => ({
   },
 }))
 
+vi.mock('@/lib/server/domains/settings/section-domains.service', () => ({
+  getSectionDomains: async () => h.sectionDomains,
+}))
+
 vi.mock('@/lib/server/domains/domain-proof/domains.service', () => ({
   listDomains: async () => h.added.map((name) => ({ name })),
   ensureDomain: async (name: string) => {
@@ -117,6 +122,7 @@ beforeEach(() => {
   h.added = []
   h.operatorFails = false
   h.ensureFails = false
+  h.sectionDomains = {}
 })
 afterEach(() => {
   delete process.env[FLAG]
@@ -187,6 +193,41 @@ describe('mutateCloudCustomDomainFn and Settings > Domains', () => {
     h.operatorFails = true
     await expect(mutate('add', 'feedback.acme.com')).rejects.toThrow('operator refused')
     expect(h.ensured).toEqual([])
+  })
+})
+
+describe('mutateCloudCustomDomainFn and the section domains', () => {
+  // Made primary, a section's hostname would be the primary domain and that
+  // section's host at once, and its pages would be sent to themselves.
+  it.each([
+    ['ready', '2026-10-01T12:00:00.000Z'],
+    ['not yet ready', null],
+  ])(
+    'refuses to make primary a domain a section uses, %s, and tells the operator nothing',
+    async (_label, verifiedAt) => {
+      h.sectionDomains = { help: { hostname: 'help.acme.com', verifiedAt } }
+      await expect(mutate('makePrimary', 'Help.Acme.com')).resolves.toEqual({
+        ok: false,
+        code: 'CUSTOM_DOMAIN_USED_BY_SECTION',
+        message: 'Help center uses this domain. Remove it there first.',
+      })
+      expect(h.sent).toEqual([])
+    }
+  )
+
+  it('makes primary a domain no section uses', async () => {
+    h.sectionDomains = { help: { hostname: 'help.acme.com', verifiedAt: null } }
+    await expect(mutate('makePrimary', 'feedback.acme.com')).resolves.toMatchObject({ ok: true })
+    expect(h.sent).toEqual([
+      { customDomain: { action: 'makePrimary', hostname: 'feedback.acme.com' } },
+    ])
+  })
+
+  it("still lets a section's domain be verified or removed", async () => {
+    h.sectionDomains = { help: { hostname: 'help.acme.com', verifiedAt: null } }
+    await mutate('refresh', 'help.acme.com')
+    await mutate('remove', 'help.acme.com')
+    expect(h.sent).toHaveLength(2)
   })
 })
 

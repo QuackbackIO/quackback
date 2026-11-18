@@ -10,18 +10,23 @@ const calls = vi.hoisted(() => ({
   sectionReads: 0,
   readyHostnames: [] as readonly string[],
   order: [] as string[],
-  mutateResult: { projection: { canonicalOrigin: 'https://help.acme.com' } } as {
-    projection: { canonicalOrigin: string }
-    transferToken?: string
-  },
+  mutateResult: { projection: { canonicalOrigin: 'https://help.acme.com' } } as
+    | { projection: { canonicalOrigin: string }; transferToken?: string }
+    | { ok: false; code: string; message: string },
   domains: [] as { hostname: string; readiness: string; isPrimary: boolean }[],
   permissions: [] as string[],
   navigate: vi.fn(),
+  sectionDomains: {} as Record<string, { hostname: string; verifiedAt: string | null }>,
+  usedBySection: undefined as ((hostname: string) => boolean) | undefined,
+  domainsFail: false,
+  domainsUnavailable: undefined as boolean | undefined,
   card: {} as {
     cloudHostnames?: readonly string[]
+    cloudDomainsUnavailable?: boolean
     loadVerifiedDomains?: () => Promise<readonly string[]>
     loadCloudRecords?: (hostname: string) => Promise<unknown[]>
     onAddVerifiedDomain?: (section: string) => void
+    refreshCloudDomain?: (hostname: string) => Promise<unknown>
   },
 }))
 
@@ -36,6 +41,7 @@ vi.mock('@/lib/server/functions/domains', () => ({
 vi.mock('@/lib/server/functions/cloud-identity', () => ({
   getCloudCustomDomainsFn: vi.fn(async () => {
     calls.domainLists++
+    if (calls.domainsFail) throw new Error('control plane unavailable')
     return calls.domains
   }),
   getCloudIdentityFn: vi.fn(async () => null),
@@ -48,7 +54,7 @@ vi.mock('@/lib/server/functions/cloud-identity', () => ({
 vi.mock('@/lib/server/functions/section-domains', () => ({
   getSectionDomainsFn: vi.fn(async () => {
     calls.sectionReads++
-    return { sectionDomains: {}, primaryHost: 'acme.com' }
+    return { sectionDomains: calls.sectionDomains, primaryHost: 'acme.com' }
   }),
 }))
 
@@ -72,6 +78,7 @@ vi.mock('@/components/admin/settings/section-domains-card', () => ({
   }: {
     readyHostnames: readonly string[]
     onMakePrimary?: (hostname: string) => void
+    refreshCloudDomain?: (hostname: string) => Promise<unknown>
     cloudHostnames?: readonly string[]
     loadVerifiedDomains?: () => Promise<readonly string[]>
     onAddVerifiedDomain?: (section: string) => void
@@ -87,11 +94,23 @@ vi.mock('@/components/admin/settings/section-domains-card', () => ({
 }))
 
 vi.mock('@/components/admin/settings/domains-cards', () => ({
-  DomainsCard: ({ onRefresh }: { onRefresh: (hostname: string) => void }) => (
-    <button type="button" onClick={() => onRefresh('help.acme.com')}>
-      Verify domain
-    </button>
-  ),
+  DomainsCard: ({
+    onRefresh,
+    usedBySection,
+    domainsUnavailable,
+  }: {
+    onRefresh: (hostname: string) => void
+    usedBySection?: (hostname: string) => boolean
+    domainsUnavailable?: boolean
+  }) => {
+    calls.usedBySection = usedBySection
+    calls.domainsUnavailable = domainsUnavailable
+    return (
+      <button type="button" onClick={() => onRefresh('help.acme.com')}>
+        Verify domain
+      </button>
+    )
+  },
   QuackbackUrlCard: () => null,
   hostnameRecords: (domain: { hostname: string }) => [{ name: domain.hostname }],
 }))
@@ -124,6 +143,10 @@ beforeEach(() => {
   calls.permissions = []
   calls.navigate.mockReset()
   calls.card = {}
+  calls.sectionDomains = {}
+  calls.usedBySection = undefined
+  calls.domainsFail = false
+  calls.domainsUnavailable = undefined
 })
 
 afterEach(() => {
@@ -167,6 +190,66 @@ describe('the Custom domains tab on Cloud', () => {
 
     await waitFor(() => expect(assign).toHaveBeenCalledTimes(1))
     expect(calls.order).toEqual(['leave', 'assign'])
+  })
+
+  it('tells both cards when the custom domains could not be read, and reads them again next time', async () => {
+    calls.domainsFail = true
+    renderTab()
+    await screen.findByText('Verify domain')
+    expect(calls.card.cloudDomainsUnavailable).toBe(true)
+    expect(calls.card.cloudHostnames).toEqual([])
+    expect(calls.domainsUnavailable).toBe(true)
+
+    // Not kept as an answer: the next use reads them again.
+    calls.domainsFail = false
+    await act(() => queryClient.prefetchQuery(portalCustomDomainsQueries.tab(true)))
+    await waitFor(() => expect(calls.card.cloudDomainsUnavailable).toBe(false))
+    expect(calls.card.cloudHostnames).toEqual(['help.acme.com'])
+    expect(calls.domainsUnavailable).toBe(false)
+  })
+
+  it("gives the card's row Verify the control plane's refresh", async () => {
+    const { mutateCloudCustomDomainFn } = await import('@/lib/server/functions/cloud-identity')
+    renderTab()
+    await screen.findByText('Make primary')
+    await calls.card.refreshCloudDomain?.('help.acme.com')
+    expect(mutateCloudCustomDomainFn).toHaveBeenCalledWith({
+      data: { action: 'refresh', hostname: 'help.acme.com' },
+    })
+  })
+
+  it('tells the Domain verification card which domains a section uses', async () => {
+    calls.sectionDomains = { help: { hostname: 'help.acme.com', verifiedAt: null } }
+    renderTab()
+    await screen.findByText('Verify domain')
+    expect(calls.usedBySection?.('help.acme.com')).toBe(true)
+    expect(calls.usedBySection?.('feedback.acme.com')).toBe(false)
+  })
+
+  it('says why Make primary was refused, and leaves the page where it is', async () => {
+    calls.mutateResult = {
+      ok: false,
+      code: 'CUSTOM_DOMAIN_USED_BY_SECTION',
+      message: 'Help center uses this domain. Remove it there first.',
+    }
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+    const onLeave = vi.fn()
+    const { toast } = await import('sonner')
+    vi.mocked(toast.error).mockClear()
+    vi.mocked(toast.success).mockClear()
+    renderTab(onLeave)
+
+    fireEvent.click(await screen.findByText('Make primary'))
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Help center uses this domain. Remove it there first.'
+      )
+    )
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(assign).not.toHaveBeenCalled()
+    expect(onLeave).not.toHaveBeenCalled()
   })
 })
 

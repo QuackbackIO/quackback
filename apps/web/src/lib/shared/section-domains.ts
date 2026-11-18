@@ -28,6 +28,13 @@ export interface SectionDomain {
    * sign-in is never carried there.
    */
   unconfirmedSince?: string | null
+  /**
+   * Self-hosted only: when a daily re-check first found the hostname not
+   * reaching this server. Only a second run that misses marks it
+   * `unconfirmedSince`; a run that answers clears it. Neither routing nor
+   * sign-in reads it.
+   */
+  missedAt?: string | null
 }
 
 /**
@@ -224,8 +231,11 @@ export function sectionOfHost(
  * The map as stored, or, before it was first written, one built from the help
  * center's own domain (the setting it replaces). A stored map, even an empty
  * one, wins: a help domain cleared from the map stays cleared.
+ *
+ * Writes start from this. Every reader goes through `effectiveSectionDomains`,
+ * which also leaves out a hostname that is now the primary domain.
  */
-export function effectiveSectionDomains({
+export function storedSectionDomains({
   sectionDomains,
   legacyHelpDomain,
 }: {
@@ -235,6 +245,57 @@ export function effectiveSectionDomains({
   if (sectionDomains) return sectionDomains
   if (!legacyHelpDomain?.domain) return {}
   return { help: { hostname: legacyHelpDomain.domain, verifiedAt: legacyHelpDomain.verifiedAt } }
+}
+
+/** The host of an origin (or URL) as compared here, or null when it is not one. */
+export function hostOfOrigin(origin: string | null | undefined): string | null {
+  if (!origin) return null
+  try {
+    return normalizeHost(new URL(origin).host)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The map without any entry whose hostname is the primary domain's. Such an
+ * entry would make the primary domain a section's host, and its routing would
+ * send the primary domain's own paths to itself. It can come from before
+ * section domains (a help center domain set to BASE_URL's host), from BASE_URL
+ * changed to a hostname a section names, or from a custom domain made primary.
+ * It stays stored, and is used again if the primary domain moves away.
+ */
+export function withoutPrimaryHost(
+  map: SectionDomainMap,
+  primaryHost: string | null | undefined
+): SectionDomainMap {
+  const primary = normalizeHost(primaryHost)
+  if (!primary) return map
+  let result: SectionDomainMap | null = null
+  for (const section of PORTAL_SECTIONS) {
+    if (normalizeHost(map[section]?.hostname) !== primary) continue
+    result ??= { ...map }
+    delete result[section]
+  }
+  return result ?? map
+}
+
+/**
+ * The map every reader uses: as stored (`storedSectionDomains`), less any
+ * hostname that is the primary domain (`withoutPrimaryHost`). `primaryHost`
+ * is the host the primary domain is served at now (BASE_URL's on a server,
+ * the page's base URL in the admin).
+ */
+export function effectiveSectionDomains({
+  sectionDomains,
+  legacyHelpDomain,
+  primaryHost,
+}: {
+  sectionDomains: SectionDomainMap | undefined
+  legacyHelpDomain: HelpCenterDomainConfig | null | undefined
+  primaryHost: string | null | undefined
+}): SectionDomainMap {
+  return withoutPrimaryHost(storedSectionDomains({ sectionDomains, legacyHelpDomain }), primaryHost)
 }
 
 /** The help center's entry in the shape the help center's own readers take. */
@@ -319,14 +380,6 @@ export type SectionHostRoute =
 
 const PASS: SectionHostRoute = { kind: 'pass' }
 
-function hostOfOrigin(origin: string): string | null {
-  try {
-    return new URL(origin).host
-  } catch {
-    return null
-  }
-}
-
 /**
  * What a request does given the section map.
  *
@@ -359,16 +412,58 @@ export function resolveSectionHostRoute({
   sectionEnabled: Record<PortalSection, boolean>
   primaryOrigin: string
 }): SectionHostRoute {
+  const route = sectionHostRoute({
+    host,
+    path,
+    search,
+    method,
+    // The primary domain is never a section's host, whatever the map says.
+    map: withoutPrimaryHost(map, hostOfOrigin(primaryOrigin)),
+    sectionEnabled,
+    primary: primaryOrigin.replace(/\/$/, ''),
+  })
+  // Never a move to the very URL asked for: that would loop.
+  if (route.kind === 'redirect' && isSameUrl(route.location, host, path, search)) return PASS
+  return route
+}
+
+/** Whether `location` is the URL asked for, on whichever scheme. */
+function isSameUrl(location: string, host: string | null, path: string, search: string): boolean {
+  try {
+    const target = new URL(location)
+    return (
+      normalizeHost(target.host) === normalizeHost(host) &&
+      target.pathname === path &&
+      target.search === search
+    )
+  } catch {
+    return false
+  }
+}
+
+function sectionHostRoute({
+  host,
+  path,
+  search,
+  method,
+  map,
+  sectionEnabled,
+  primary,
+}: {
+  host: string | null
+  path: string
+  search: string
+  method: string
+  map: SectionDomainMap
+  sectionEnabled: Record<PortalSection, boolean>
+  primary: string
+}): SectionHostRoute {
   if (method !== 'GET' && method !== 'HEAD') return PASS
   // A request whose host is unknown cannot be told apart from a section's.
   if (!normalizeHost(host)) return PASS
-  const primary = primaryOrigin.replace(/\/$/, '')
 
   if (isPrimaryOnlyPath(path) || isTeamSignIn(path, search)) {
-    // Never a move to itself, should a section ever name the primary host.
-    if (!sectionOfHost(host, map) || normalizeHost(hostOfOrigin(primary)) === normalizeHost(host)) {
-      return PASS
-    }
+    if (!sectionOfHost(host, map)) return PASS
     return {
       kind: 'redirect',
       status: 302,

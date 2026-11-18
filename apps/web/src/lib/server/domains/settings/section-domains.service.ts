@@ -32,8 +32,11 @@ import type { SettingsFreshness } from './settings.helpers'
 import {
   effectiveSectionDomains,
   helpDomainConfig,
+  hostOfOrigin,
   normalizeHost,
   sectionOfHost,
+  storedSectionDomains,
+  withoutPrimaryHost,
   type SectionDomainMap,
 } from '@/lib/shared/section-domains'
 import type { PortalSection } from '@/lib/shared/custom-domains'
@@ -67,18 +70,35 @@ function refuse(code: SectionDomainRefusalCode, message: string): SectionDomainR
   return { ok: false, code, message }
 }
 
-/** The map, or the help center's own domain before the map was first written. */
-export async function getSectionDomains(
+/**
+ * The map as stored, or the help center's own domain before the map was first
+ * written. Only for a write to start from: it keeps an entry that names the
+ * primary domain, which every reader leaves out (`getSectionDomains`), so an
+ * unrelated change never drops it.
+ */
+export async function readStoredSectionDomains(
   freshness: SettingsFreshness = 'cached'
 ): Promise<SectionDomainMap> {
   const [portalConfig, helpCenterConfig] = await Promise.all([
     getPortalConfig(freshness),
     getHelpCenterConfig(freshness),
   ])
-  return effectiveSectionDomains({
+  return storedSectionDomains({
     sectionDomains: portalConfig.sectionDomains,
     legacyHelpDomain: helpCenterConfig.domain,
   })
+}
+
+/** The primary domain's host now: the one routing sends the primary domain's paths to. */
+function currentPrimaryHost(): string | null {
+  return hostOfOrigin(getBaseUrl())
+}
+
+/** The map as every reader takes it: without a hostname that is the primary domain. */
+export async function getSectionDomains(
+  freshness: SettingsFreshness = 'cached'
+): Promise<SectionDomainMap> {
+  return withoutPrimaryHost(await readStoredSectionDomains(freshness), currentPrimaryHost())
 }
 
 /** What the Custom domains tab shows: each section's hostname as visitors are routed, and the primary domain. */
@@ -102,17 +122,23 @@ export async function getSectionDomainsView(): Promise<SectionDomainsView> {
   const map = effectiveSectionDomains({
     sectionDomains: workspace?.portalConfig?.sectionDomains,
     legacyHelpDomain: workspace?.helpCenterConfig?.domain,
+    primaryHost: currentPrimaryHost(),
   })
   return { sectionDomains: routableSectionDomains(map, hosting), primaryHost: primaryHost(hosting) }
 }
 
 /** Where the workspace is hosted, read fresh from its settings row. */
 export async function readHosting(): Promise<Hosting> {
+  return (await readHostingIfSetUp()) ?? hostingOf(null)
+}
+
+/** As `readHosting`, or null before the workspace is set up and has no settings row. */
+export async function readHostingIfSetUp(): Promise<Hosting | null> {
   const [row] = await db
     .select({ cloud: settings.cloud, cloudIdentity: settings.cloudIdentity })
     .from(settings)
     .limit(1)
-  return hostingOf(row ?? null)
+  return row ? hostingOf(row) : null
 }
 
 /**
@@ -139,7 +165,8 @@ export async function setSectionDomain(
   hostnameInput: string | null
 ): Promise<SetSectionDomainResult> {
   const hosting = await readHosting()
-  const current = await getSectionDomains('fresh')
+  // As stored, so an entry hidden as the primary domain's is kept (`readStoredSectionDomains`).
+  const current = await readStoredSectionDomains('fresh')
 
   if (hostnameInput === null || hostnameInput.trim() === '') {
     // Clearing is always allowed, so a downgraded workspace is never stuck.
@@ -147,7 +174,7 @@ export async function setSectionDomain(
     delete next[section]
     await writeSectionDomains(next, hosting)
     log.info({ section }, 'section domain cleared')
-    return { ok: true, sectionDomains: next }
+    return { ok: true, sectionDomains: withoutPrimaryHost(next, currentPrimaryHost()) }
   }
 
   const hostname = normalizeDomain(hostnameInput)
@@ -158,7 +185,7 @@ export async function setSectionDomain(
   if (owner && owner !== section) {
     return refuse('SECTION_DOMAIN_TAKEN', `${hostname} is already used for another section.`)
   }
-  if (hostname === primaryHost(hosting)) {
+  if (hostname === primaryHost(hosting) || hostname === currentPrimaryHost()) {
     return refuse('SECTION_DOMAIN_PRIMARY', `${hostname} is the primary domain.`)
   }
 
@@ -195,7 +222,7 @@ export async function setSectionDomain(
   const { ensureDomainForCustomDomain } =
     await import('@/lib/server/domains/domain-proof/ensure-domain')
   await ensureDomainForCustomDomain(hostname)
-  return { ok: true, sectionDomains: next }
+  return { ok: true, sectionDomains: withoutPrimaryHost(next, currentPrimaryHost()) }
 }
 
 /**
@@ -207,8 +234,9 @@ export async function verifySectionDomain(
   section: PortalSection
 ): Promise<VerifySectionDomainResult> {
   const hosting = await readHosting()
-  const current = await getSectionDomains('fresh')
-  const entry = current[section]
+  const current = await readStoredSectionDomains('fresh')
+  // A hostname that is the primary domain is not a section's to verify.
+  const entry = withoutPrimaryHost(current, currentPrimaryHost())[section]
   if (!entry) return refuse('SECTION_DOMAIN_NOT_SET', 'Set a domain before verifying it.')
 
   let verifiedAt: string | null
@@ -220,7 +248,9 @@ export async function verifySectionDomain(
   } else {
     const { probeCustomDomain } =
       await import('@/lib/server/domains/domain-proof/reachability-probe')
-    const probe = await probeCustomDomain(entry.hostname)
+    // A hairpin install, which cannot reach itself through the hostname, is
+    // verified by the hostname resolving to the primary domain's address.
+    const probe = await probeCustomDomain(entry.hostname, { primaryOrigin: getBaseUrl() })
     status = probe.status
     const kept = !status.verified && !probe.dnsAnswered ? entry.verifiedAt : null
     verifiedAt = status.verified ? new Date().toISOString() : kept
@@ -234,11 +264,12 @@ export async function verifySectionDomain(
     )
   }
 
-  const { unconfirmedSince: _previous, ...rest } = entry
+  // A person's check stands in for the daily run's: its first miss is forgotten.
+  const { unconfirmedSince: _previous, missedAt: _missed, ...rest } = entry
   const next: SectionDomainMap = {
     ...current,
     [section]: { ...rest, verifiedAt, ...(unconfirmedSince ? { unconfirmedSince } : {}) },
   }
   await writeSectionDomains(next, hosting)
-  return { ok: true, sectionDomains: next, status }
+  return { ok: true, sectionDomains: withoutPrimaryHost(next, currentPrimaryHost()), status }
 }
