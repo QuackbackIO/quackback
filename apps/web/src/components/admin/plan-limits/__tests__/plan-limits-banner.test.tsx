@@ -2,7 +2,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 import { PLAN_LIMITS_PATH } from '@/lib/shared/billing/plan-limits-path'
@@ -13,7 +13,15 @@ vi.mock('@/lib/client/queries/plan-limits', () => ({
 
 const { PlanLimitsBanner, PlanLimitsQuiet } = await import('../plan-limits-banner')
 
-afterEach(cleanup)
+// The dates below are in the same year as this clock, so they show no year.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-18T12:00:00.000Z'))
+})
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 const boards = {
   key: 'maxBoards' as const,
@@ -195,6 +203,15 @@ describe('PlanLimitsQuiet', () => {
     cleanup()
     mount(limits({ enabled: false }))
     expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('goes quiet with the banner once only paused features remain after the date', () => {
+    mount(limits({ phase: 'enforced', issues: [] }))
+    expect(screen.queryByRole('link')).toBeNull()
+    cleanup()
+    // Before the date, features alone still show, with the day they pause.
+    mount(limits({ issues: [] }))
+    expect(screen.getByRole('link')).toHaveTextContent(/^Free planFix by Nov 24$/)
   })
 
   it('needs no message catalogue, so nothing is seeded for it', () => {
