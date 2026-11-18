@@ -5,7 +5,7 @@
  *
  * Usage: bun set-workspace-anon.ts <true|false>
  */
-import postgres from 'postgres'
+import { bustWorkspaceSettings, openDb } from './_lib'
 
 const arg = (process.argv[2] || '').toLowerCase()
 if (arg !== 'true' && arg !== 'false') {
@@ -13,12 +13,7 @@ if (arg !== 'true' && arg !== 'false') {
   process.exit(1)
 }
 const enabled = arg === 'true'
-const connectionString = process.env.DATABASE_URL
-if (!connectionString) {
-  console.error('DATABASE_URL environment variable is required')
-  process.exit(1)
-}
-const sql = postgres(connectionString)
+const sql = openDb()
 
 try {
   const rows = await sql`SELECT id, portal_config FROM settings ORDER BY created_at ASC LIMIT 1`
@@ -36,6 +31,8 @@ try {
   features.allowAnonymous = enabled
   config.features = features
   await sql`UPDATE settings SET portal_config = ${JSON.stringify(config)} WHERE id = ${id}`
+  // A running server reads settings through this cache; drop it so the change is live at once.
+  await bustWorkspaceSettings(sql)
   console.log(JSON.stringify({ allowAnonymous: enabled }))
   await sql.end()
 } catch (err) {

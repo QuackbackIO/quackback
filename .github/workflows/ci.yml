@@ -6,9 +6,12 @@ on:
   pull_request:
   schedule:
     - cron: '17 3 * * *'
+  # Lets a maintainer run the nightly-only e2e jobs on any branch.
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # The event name keeps a push to main from cancelling the nightly run.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -331,10 +334,20 @@ jobs:
             exit 1
           fi
 
+  # The whole Playwright suite, nightly and on demand (Actions > CI > Run
+  # workflow). Six shards on separate runners, each with its own database,
+  # migrate, seed and dev server, so no shard waits on another and every one
+  # finishes well inside its time limit. Quarantined tests (@quarantine, see
+  # apps/web/e2e/QUARANTINE.md) are left out here and run in e2e-quarantine.
   e2e-full:
-    if: github.event_name == 'schedule'
+    name: e2e-full (${{ matrix.shard }}/6)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -377,5 +390,113 @@ jobs:
           if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
             echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
           fi
-      - run: ./node_modules/.bin/playwright test
+      # Playwright starts the dev server itself (webServer in
+      # playwright.config.ts). Each shard runs the setup project (admin sign-in)
+      # when any of its tests need it. One retry: a test that needs more is
+      # flaky and belongs in the quarantine. The global timeout stops the run
+      # before the job limit, so Playwright still writes its report.
+      - name: Run shard ${{ matrix.shard }} of 6
         working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright test --shard=${{ matrix.shard }}/6 \
+            --grep-invert @quarantine --retries=1 --global-timeout=1200000
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: e2e-full-blob-${{ matrix.shard }}
+          path: apps/web/blob-report
+          retention-days: 7
+
+  # Merges the six shard reports into one HTML report and writes the result,
+  # with every failed and flaky test, to the job summary. Runs even when a
+  # shard fails or is cancelled, so a bad night still leaves a report.
+  e2e-full-report:
+    needs: e2e-full
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: e2e-full-blob-*
+          path: apps/web/all-blob-reports
+          merge-multiple: true
+      - name: Merge shard reports
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-full-results.json
+        run: ./node_modules/.bin/playwright merge-reports --reporter html,json ./all-blob-reports
+      - name: Write the job summary
+        working-directory: apps/web
+        run: bun e2e/scripts/summarize-report.ts e2e-full-results.json "e2e-full" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: e2e-full-report
+          path: apps/web/playwright-report
+          retention-days: 14
+
+  # Runs only the quarantined tests, so the list in apps/web/e2e/QUARANTINE.md
+  # shows each night which still fail and which could come back. It never
+  # fails the workflow.
+  e2e-quarantine:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: quackback_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      SECRET_KEY: e2e-full-secret-key-for-ci-only-at-least-32-chars
+      BASE_URL: http://acme.localhost:3000
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.0
+      - name: Map acme.localhost to loopback
+        run: echo "127.0.0.1 acme.localhost" | sudo tee -a /etc/hosts
+      - run: bun install --frozen-lockfile
+      - name: Write .env for the dev server and e2e scripts
+        run: |
+          cat > .env <<EOF
+          DATABASE_URL=$DATABASE_URL
+          SECRET_KEY=$SECRET_KEY
+          BASE_URL=$BASE_URL
+          EOF
+      - run: bun run --filter @quackback/widget build
+      - run: bun run db:migrate
+      - run: bun run db:seed
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 8
+        working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
+      - name: Run the quarantined tests
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-quarantine-results.json
+        run: |
+          ./node_modules/.bin/playwright test --grep @quarantine --pass-with-no-tests \
+            --retries=0 --global-timeout=1200000 --reporter=list,json || true
+          bun e2e/scripts/summarize-report.ts e2e-quarantine-results.json \
+            "Quarantined e2e tests (see apps/web/e2e/QUARANTINE.md)" --all >> "$GITHUB_STEP_SUMMARY"

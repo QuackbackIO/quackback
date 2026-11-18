@@ -43,6 +43,8 @@ coverage
 # Playwright
 playwright-report/
 test-results/
+blob-report/
+all-blob-reports/
 apps/web/e2e/.auth/
 
 # Turbo

@@ -51,7 +51,12 @@ export const WIDGET_PNG = 'e2e-widget.png'
 export const CHANGELOG_PNG = 'e2e-changelog.png'
 export const POST_PNG = 'e2e-post.png'
 
-/** Serve fixture PNGs and stub upload endpoints so e2e never hits MinIO. */
+/**
+ * Serve fixture PNGs and stub the inline image upload endpoints so e2e never
+ * hits object storage. Conversation attachments no longer use these
+ * endpoints: since #629 they upload to /api/upload/file and /api/widget/files
+ * and become file records, so those flows need real storage.
+ */
 export async function stubConversationImageNetwork(page: Page): Promise<Buffer> {
   const png = landscapePng()
   const fulfillPng = async (route: Route) => {

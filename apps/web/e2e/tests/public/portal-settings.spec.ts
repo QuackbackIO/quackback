@@ -49,19 +49,26 @@ test.describe('Portal Settings — unauthenticated access', () => {
   // Redirect destination is the public portal homepage
   // -------------------------------------------------------------------------
 
-  test('/settings redirect lands on the public portal homepage', async ({ page }) => {
+  test('/settings redirect lands on the public portal homepage', async ({ page, baseURL }) => {
     await page.goto('/settings')
     await page.waitForLoadState('networkidle')
 
     // The beforeLoad guard throws redirect({ to: '/' }); URL may include default search params
-    await expect(page).toHaveURL(/^http:\/\/acme\.localhost:3000\//)
+    await expect(page).toHaveURL(
+      (url) => url.origin === new URL(baseURL!).origin && url.pathname === '/'
+    )
   })
 
-  test('/settings/profile redirect lands on the public portal homepage', async ({ page }) => {
+  test('/settings/profile redirect lands on the public portal homepage', async ({
+    page,
+    baseURL,
+  }) => {
     await page.goto('/settings/profile')
     await page.waitForLoadState('networkidle')
 
-    await expect(page).toHaveURL(/^http:\/\/acme\.localhost:3000\//)
+    await expect(page).toHaveURL(
+      (url) => url.origin === new URL(baseURL!).origin && url.pathname === '/'
+    )
   })
 
   // -------------------------------------------------------------------------

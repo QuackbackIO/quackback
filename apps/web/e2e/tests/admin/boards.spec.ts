@@ -206,15 +206,13 @@ test.describe('Admin Board Management', () => {
 
   test('can access board access settings', async ({ page }) => {
     await openFirstBoard(page)
-    // Navigate to access settings tab
-    const accessLink = page.getByRole('link', { name: 'Access' })
+    // Access is a tab on the board's settings page (?tab=access), not a page
+    // of its own. A link named "Access" now matches the settings nav's
+    // "Access & Security" instead.
+    await page.getByRole('tab', { name: 'Access' }).click()
 
-    if ((await accessLink.count()) > 0) {
-      await accessLink.click()
-
-      // Should navigate to access settings page
-      await expect(page).toHaveURL(/\/access/, { timeout: 5000 })
-    }
+    await expect(page).toHaveURL(/[?&]tab=access/, { timeout: 5000 })
+    await expect(page.getByText('Per-action permissions')).toBeVisible({ timeout: 5000 })
   })
 })
 
