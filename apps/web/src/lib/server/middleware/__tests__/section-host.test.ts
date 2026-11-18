@@ -240,3 +240,41 @@ describe('handleSectionHost for a signed-in visitor', () => {
     expect(response.headers.get('location')).toBe('https://help.acme.com/hc/articles/x')
   })
 })
+
+describe('handleSectionHost for a team page on a section host', () => {
+  it('sends /admin to the primary domain, keeping the path and query', async () => {
+    const { response } = await send('https://help.acme.com/admin/feedback?post=p_1')
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(
+      'https://acme.example.com/admin/feedback?post=p_1'
+    )
+    expect(response.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it('never carries a section host session to the primary domain for a team page', async () => {
+    const { response } = await send('https://help.acme.com/admin', {
+      headers: { cookie: 'better-auth.session_token=abc.sig' },
+    })
+    expect(response.status).toBe(302)
+    // A plain move: the teammate signs in on the primary domain as a teammate,
+    // rather than arriving with a portal session carried from the section host.
+    expect(response.headers.get('location')).toBe('https://acme.example.com/admin')
+  })
+
+  it('sends onboarding and the device page to the primary domain too', async () => {
+    for (const path of ['/onboarding', '/device?user_code=ABCD-EFGH']) {
+      const { response } = await send(`https://status.acme.com${path}`)
+      expect(response.status).toBe(302)
+      expect(response.headers.get('location')).toBe(`https://acme.example.com${path}`)
+    }
+  })
+
+  it('serves /admin on the primary domain', async () => {
+    expect((await send('https://acme.example.com/admin')).response).toBe(PASSED)
+  })
+
+  it('leaves server functions on a section host to the app', async () => {
+    const { response } = await send('https://help.acme.com/_serverFn/abc', { method: 'POST' })
+    expect(response).toBe(PASSED)
+  })
+})

@@ -57,7 +57,7 @@ function trustedOriginHosts(env: NodeJS.ProcessEnv = process.env): Set<string> {
  */
 export function verifiedCustomerHost(
   requestHost: string | null,
-  headers: Headers,
+  headers: Pick<Headers, 'get'>,
   env: NodeJS.ProcessEnv = process.env
 ): string | null {
   if (!requestHost || !trustedOriginHosts(env).has(requestHost)) return null
@@ -86,6 +86,15 @@ export function requestWorkspaceHost(
   const host =
     hostnameOnly(request.headers.get('host')) ?? hostnameOnly(new URL(request.url).hostname)
   return verifiedCustomerHost(host, request.headers, env) ?? host
+}
+
+/** `requestWorkspaceHost` from the headers alone, for code handed headers and no Request. */
+export function headersWorkspaceHost(
+  headers: Pick<Headers, 'get'>,
+  env: NodeJS.ProcessEnv = process.env
+): string | null {
+  const host = hostnameOnly(headers.get('host'))
+  return verifiedCustomerHost(host, headers, env) ?? host
 }
 
 /*
