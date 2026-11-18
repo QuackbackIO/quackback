@@ -5,13 +5,13 @@ import { IntlProvider } from 'react-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+import { PLAN_LIMITS_PATH } from '@/lib/shared/billing/plan-limits-path'
 
 vi.mock('@/lib/client/queries/plan-limits', () => ({
   planLimitsQueries: { all: ['plan-limits'] },
 }))
 
-const { PlanLimitsBanner, PlanLimitsQuiet, PLAN_LIMITS_PATH } =
-  await import('../plan-limits-banner')
+const { PlanLimitsBanner, PlanLimitsQuiet } = await import('../plan-limits-banner')
 
 afterEach(cleanup)
 

@@ -10,8 +10,7 @@ import {
 } from '@/lib/shared/billing/plan-limits-copy'
 import { useLocalDateFormatter } from '@/components/ui/local-date'
 import { cn } from '@/lib/shared/utils'
-
-export const PLAN_LIMITS_PATH = '/admin/settings/billing/limits'
+import { PLAN_LIMITS_PATH } from '@/lib/shared/billing/plan-limits-path'
 
 /**
  * A deadline in a heading: "Mon, Nov 23". A deadline reads as a day, never as

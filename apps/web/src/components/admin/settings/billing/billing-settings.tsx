@@ -26,6 +26,7 @@ import {
 import { daysUntil } from '@/lib/shared/billing/trial-state'
 import { planLimitsDay } from '@/lib/shared/billing/plan-limits-copy'
 import { checkoutPath } from '@/lib/shared/billing/checkout-path'
+import { PLAN_LIMITS_PATH } from '@/lib/shared/billing/plan-limits-path'
 import { SubscribeDialog } from './subscribe-dialog'
 import { UsageMeter } from './usage-meter'
 import { TrialExpiredBilling } from './trial-expired-billing'
@@ -40,7 +41,6 @@ const PlanDowngradeDialog = lazy(() =>
 // Plan limits reach this page as data only (the admin loader's summary, kept
 // fresh by the banner's query), never as code: the page imports nothing of
 // theirs, so a workspace without the flag ships nothing extra.
-const PLAN_LIMITS_PATH = '/admin/settings/billing/limits'
 
 function isOver(limits: PlanLimitsPage | null | undefined): limits is PlanLimitsPage {
   return Boolean(limits?.enabled) && (limits?.phase === 'grace' || limits?.phase === 'enforced')

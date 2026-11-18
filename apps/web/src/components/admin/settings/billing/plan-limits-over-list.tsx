@@ -1,6 +1,6 @@
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 import { Button } from '@/components/ui/button'
-import { PLAN_LIMITS_PATH } from '@/components/admin/plan-limits/plan-limits-banner'
+import { PLAN_LIMITS_PATH } from '@/lib/shared/billing/plan-limits-path'
 import { PlanLimitIssues } from './plan-limit-issues'
 
 /**
