@@ -889,13 +889,16 @@ export interface ConversationMessageCitation {
 // Channel provenance stored on a conversation message (conversation_messages.metadata).
 // Null for ordinary in-app messenger messages; set when a message arrives over
 // another channel so the inbox can render it and dedupe provider retries.
-/** Author-less 'system' status events (conversation ended/reopened, assignment). */
+/** Author-less 'system' status events (conversation ended/reopened, assignment).
+ *  Assignment notices ('assigned', 'team_assigned') are team-only: stored
+ *  internal, and hidden from customers by kind on legacy public rows. */
 // NOTE: the stored kind values keep the chat_ prefix until the Phase B data
 // migration rewrites conversation_messages.metadata.
 export type ConversationSystemEventKind =
   | 'chat_ended'
   | 'chat_reopened'
   | 'assigned'
+  | 'team_assigned'
   | 'assistant_handoff'
   | 'ticket_status_changed'
   | 'ticket_linked'
@@ -910,8 +913,10 @@ export type ConversationSystemEventKind =
 
 export interface ConversationSystemEvent {
   kind: ConversationSystemEventKind
-  /** Assignee display name for 'assigned'. */
+  /** Assignee display name for 'assigned'. Team-only (the row is internal). */
   agentName?: string
+  /** Team name for 'team_assigned'. Team-only (the row is internal). */
+  teamName?: string
   /** Customer-facing stage label for 'ticket_status_changed' (never the raw
    *  internal status name). Absent when `closed` is set. */
   stageLabel?: string

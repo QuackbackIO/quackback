@@ -61,6 +61,7 @@ import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
 import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
+import { customerVisibleMessageSql } from '@/lib/server/messages/customer-audience'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { isTestThreadSql } from './conversation.test-data'
 import { testOwnerOf } from '@/lib/server/test-data'
@@ -879,6 +880,51 @@ export async function findBackfillCursor(
   return row ?? null
 }
 
+/**
+ * The messages a reconnecting SSE client missed after `lastEventId`, oldest
+ * first, as DTOs. Mirrors listMessages: soft-deleted rows are skipped, the
+ * composite (created_at, id) keyset keeps same-microsecond siblings, and a
+ * customer (no `includeInternal`) gets the customer audience only, since
+ * publish-time channel separation does not cover this DB read. Empty when
+ * the cursor is not a message of this conversation.
+ */
+export async function listMissedMessagesForBackfill(
+  conversationId: ConversationId,
+  lastEventId: string,
+  opts: { includeInternal: boolean }
+): Promise<ConversationMessageDTO[]> {
+  const cursor = await findBackfillCursor(conversationId, lastEventId)
+  if (!cursor) return []
+  const missed = await db
+    .select()
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        isNull(conversationMessages.deletedAt),
+        opts.includeInternal ? undefined : customerVisibleMessageSql(),
+        or(
+          gt(conversationMessages.createdAt, cursor.createdAt),
+          and(
+            eq(conversationMessages.createdAt, cursor.createdAt),
+            gt(conversationMessages.id, cursor.id)
+          )
+        )
+      )
+    )
+    .orderBy(conversationMessages.createdAt, conversationMessages.id)
+  const authors = await loadAuthors(
+    missed.map((m) => m.principalId),
+    { preferAccountName: opts.includeInternal }
+  )
+  return missed.map((m) =>
+    toMessageDTO(
+      m,
+      m.principalId ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId)) : null
+    )
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Convergence Phase 0 — pair thread (scratchpad/convergence-design.md,
 // mechanics appendix "Read (Phase 0)"). pair-thread.service.ts (tickets
@@ -991,8 +1037,9 @@ export async function listMessages(
       and(
         eq(conversationMessages.conversationId, conversationId),
         isNull(conversationMessages.deletedAt),
-        // Visitors never see internal notes; agents pass includeInternal.
-        opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
+        // Visitors never see internal rows or team-only notices; agents pass
+        // includeInternal.
+        opts?.includeInternal ? undefined : customerVisibleMessageSql(),
         cursor
           ? or(
               lt(conversationMessages.createdAt, cursor.createdAt),
@@ -1018,7 +1065,7 @@ export async function listMessages(
           and(
             eq(conversationMessages.ticketId, linkedTicketId),
             isNull(conversationMessages.deletedAt),
-            opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
+            opts?.includeInternal ? undefined : customerVisibleMessageSql(),
             cursor
               ? or(
                   lt(conversationMessages.createdAt, cursor.createdAt),
@@ -1113,7 +1160,7 @@ export async function listConversationMessagesForGrounding(
       and(
         eq(conversationMessages.conversationId, conversationId),
         isNull(conversationMessages.deletedAt),
-        opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false)
+        opts?.includeInternal ? undefined : customerVisibleMessageSql()
       )
     )
     .orderBy(asc(conversationMessages.createdAt), asc(conversationMessages.id))

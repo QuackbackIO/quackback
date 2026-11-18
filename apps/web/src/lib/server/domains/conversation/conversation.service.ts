@@ -1334,17 +1334,18 @@ export interface SystemNoticeAttribution {
 }
 
 /**
- * Insert + broadcast an author-less 'system' status event (assignment, chat
- * ended/reopened, ticket created, …). It carries senderType 'system' with no
- * principal, so it renders as a centered notice on both sides, never counts as
- * unread, and does not bump the conversation's last-message preview.
+ * Insert + broadcast an author-less 'system' status event (chat ended/reopened,
+ * ticket created, assignment, …). It carries senderType 'system' with no
+ * principal, so it renders as a centered notice, never counts as unread, and
+ * does not bump the conversation's last-message preview.
  * Best-effort: a failure here must not undo the action that already landed.
  * Exported so sibling domains (e.g. the create-ticket flow's conversation
  * announcement) can post the same shape without duplicating the insert +
  * publish plumbing.
  *
  * `internal: true` makes the event team-only for the events the customer has
- * no business hearing about (an internal task spun off their conversation):
+ * no business hearing about (an internal task spun off their conversation, an
+ * assignment, a priority change, a snooze):
  * the row is stored `isInternal`, which every visitor read path filters, and
  * the broadcast goes to the agent inbox channel ONLY — the same two-part rule
  * `addAgentNote` follows, since channel separation and the read filter each
@@ -1391,7 +1392,12 @@ export async function emitSystemMessage(
   }
 }
 
-/** "Conversation assigned to <agent>" status event (best-effort, author-less). */
+/**
+ * "Conversation assigned to <agent>" status event (best-effort, author-less,
+ * internal): who on the team holds the conversation is inbox state, not
+ * correspondence, so the row is stored isInternal and broadcast to the agent
+ * channel only. Customer reads also hide legacy public rows of this kind.
+ */
 async function emitAssignmentSystemMessage(
   conversationId: ConversationId,
   agentPrincipalId: PrincipalId,
@@ -1415,16 +1421,22 @@ async function emitAssignmentSystemMessage(
       kind: 'assigned',
       agentName: name,
     },
-    { workflowName: attribution?.workflowName }
+    { internal: true, workflowName: attribution?.workflowName }
   )
 }
 
-/** "Conversation assigned to the <team> team" status event (author-less). */
+/** "Conversation assigned to the <team> team" status event (author-less,
+ *  internal, like the agent notice above). */
 async function emitTeamAssignmentSystemMessage(
   conversationId: ConversationId,
   teamName: string
 ): Promise<void> {
-  await emitSystemMessage(conversationId, `Conversation assigned to the ${teamName} team`)
+  await emitSystemMessage(
+    conversationId,
+    `Conversation assigned to the ${teamName} team`,
+    { kind: 'team_assigned', teamName },
+    { internal: true }
+  )
 }
 
 /** Actor display name for a team-only status event; generic fallback for a
@@ -2351,7 +2363,7 @@ export async function executeAssistantHandoff(
     kind: 'assistant_handoff',
   })
   // A live assistant.handed_off workflow owns assignment. The deterministic
-  // router stands down so the customer does not see two assignment notices.
+  // router stands down so the thread does not get two assignment notices.
   const { hasLiveWorkflowForTrigger } =
     await import('@/lib/server/domains/workflows/workflow.service')
   const routingWorkflowOwnsHandoff = await hasLiveWorkflowForTrigger('assistant.handed_off')

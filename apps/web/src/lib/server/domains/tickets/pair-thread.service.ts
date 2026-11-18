@@ -83,6 +83,7 @@ import {
 import type { ConversationId, ConversationMessageId, TicketId } from '@quackback/ids'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
+import { customerVisibleMessageSql } from '@/lib/server/messages/customer-audience'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 
@@ -215,8 +216,9 @@ function pairParentWhere(
       ? eq(conversationMessages.ticketId, parent.ticketId)
       : eq(conversationMessages.conversationId, parent.conversationId),
     isNull(conversationMessages.deletedAt),
-    // AUDIENCE RULE: the internal strip applies to both parents alike.
-    opts.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
+    // AUDIENCE RULE: the customer strip (internal rows, team-only notices)
+    // applies to both parents alike.
+    opts.includeInternal ? undefined : customerVisibleMessageSql(),
     cursor
       ? or(
           lt(conversationMessages.createdAt, cursor.createdAt),

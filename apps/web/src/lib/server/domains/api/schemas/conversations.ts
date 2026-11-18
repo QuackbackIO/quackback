@@ -205,7 +205,8 @@ registerPath('/conversations/{conversationId}/messages', {
         name: 'includeInternal',
         in: 'query',
         schema: { type: 'boolean' },
-        description: 'Include internal agent notes (default: false)',
+        description:
+          'Include internal agent notes and assignment notices, which customers never see (default: false)',
       },
       {
         name: 'cursor',

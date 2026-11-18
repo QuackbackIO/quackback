@@ -95,7 +95,7 @@ Examples:
   }>(server, auth, {
     name: 'get_conversation',
     permissions: [PERMISSIONS.CONVERSATION_VIEW],
-    description: `Get a conversation and its most recent messages. Set includeInternal to also return agent-only internal notes.
+    description: `Get a conversation and its most recent messages. Set includeInternal to also return agent-only internal notes and assignment notices, which customers never see.
 
 Example: get_conversation({ conversationId: "conversation_01abc...", includeInternal: true })`,
     schema: {
@@ -104,7 +104,7 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
         .boolean()
         .optional()
         .default(false)
-        .describe('Include agent-only internal notes'),
+        .describe('Include agent-only internal notes and assignment notices'),
       cursor: z
         .string()
         .optional()

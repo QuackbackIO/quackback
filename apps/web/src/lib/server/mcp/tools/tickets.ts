@@ -165,7 +165,7 @@ Examples:
   }>(server, auth, {
     name: 'get_ticket',
     permissions: [PERMISSIONS.TICKET_VIEW],
-    description: `Get a ticket and its most recent thread messages, oldest-first. For a conversation-linked customer ticket the thread is the pair's shared thread (the conversation's messages plus the ticket's own legacy/internal rows). Set includeInternal to also return internal teammate notes.
+    description: `Get a ticket and its most recent thread messages, oldest-first. For a conversation-linked customer ticket the thread is the pair's shared thread (the conversation's messages plus the ticket's own legacy/internal rows). Set includeInternal to also return internal teammate notes and assignment notices, which customers never see.
 
 Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
     schema: {
@@ -174,7 +174,7 @@ Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
         .boolean()
         .optional()
         .default(false)
-        .describe('Include internal teammate notes'),
+        .describe('Include internal teammate notes and assignment notices'),
       cursor: z
         .string()
         .optional()
