@@ -28,6 +28,8 @@ interface AuthSettingsProps {
   credentialStatus: Record<string, boolean> & { _emailConfigured?: boolean }
   /** Tier flag for portal custom OIDC — passed through to <SignInProvidersTab>. */
   customOidcProviderTier: boolean
+  /** Single sign-on works right now (see `getSsoLiveFn`). Defaults to the tier flag. */
+  ssoLive?: boolean
   /** When false the audit tab stays mounted as an upgrade notice, not a throwing list. */
   auditEntitled: boolean
 }
@@ -46,6 +48,7 @@ export function AuthSettings({
   portalConfig,
   credentialStatus,
   customOidcProviderTier,
+  ssoLive,
   auditEntitled,
 }: AuthSettingsProps) {
   // No `from` — passes an absolute `to`, so binding the navigate hook
@@ -87,6 +90,7 @@ export function AuthSettings({
           initialTeamAuthConfig={teamAuthConfig}
           credentialStatus={credentialStatus}
           customOidcProviderTier={customOidcProviderTier}
+          ssoLive={ssoLive}
         />
       </TabsContent>
 

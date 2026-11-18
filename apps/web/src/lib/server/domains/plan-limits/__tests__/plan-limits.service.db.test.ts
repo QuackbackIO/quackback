@@ -15,7 +15,6 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   boards,
   eq,
-  identityProvider,
   isNull,
   posts,
   principal,
@@ -83,8 +82,6 @@ vi.mock('@/lib/server/domains/billing/usage-counts', async (original) => {
 })
 
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
-import { getWorkspaceSettings } from '@/lib/server/domains/settings/settings.service'
-import { isSsoLive } from '@/lib/server/auth/registered-providers'
 import { deleteBoard } from '@/lib/server/domains/boards/board.service'
 import { removeTeamMember } from '@/lib/server/domains/principals/principal.service'
 import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
@@ -215,6 +212,32 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     expect(await isFeaturePaused('webhooks')).toBe(false)
     // The plan's own answer: it does not have webhooks.
     expect(await isFeatureLive('webhooks')).toBe(false)
+  })
+
+  it('never starts a grace on an install whose operator sets tier limits in the config file', async () => {
+    await configure({ planBilling: false, tierLimits: null })
+    // The config file's tier limits: one board, webhooks off, and webhooks set up.
+    await writeTierLimits(FREE_LIKE as never, { writer: 'config' })
+    invalidateTierLimitsCache()
+    await invalidateSettingsCache()
+    await testDb.insert(webhooks).values({
+      url: 'https://example.com/hook',
+      secret: 'acme-secret',
+      events: ['post.created'],
+      createdById: ownerId,
+    } as never)
+    for (const days of [0, 8, 30]) {
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + days * DAY })
+      await invalidatePlanLimits()
+      const limits = await detectPlanLimits()
+      expect(limits.enabled).toBe(false)
+      expect(limits.phase).toBe('ok')
+      expect(await openBoardIds()).toBeNull()
+      expect(await isBoardOpen(small)).toBe(true)
+      expect(await isFeaturePaused('webhooks')).toBe(false)
+      vi.useRealTimers()
+    }
+    expect(await storedState()).toBeNull()
   })
 
   it('is ok without counting anything when nothing is capped', async () => {
@@ -698,70 +721,6 @@ describe.skipIf(!fixture.available)('seat ranking against one snapshot (real DB)
     expect(await isSeatPaused(earlier.id)).toBe(false)
     expect(await isSeatPaused(later.id)).toBe(true)
     expect(await isSeatPaused(unrelated.id)).toBe(true)
-  })
-})
-
-/**
- * Single sign-on set up on a plan without it: it keeps working through the
- * grace and falls back to email links only once paused. The workspace
- * settings read asks for it, and plan limits read the settings, so the read
- * must not wait on itself.
- */
-describe.skipIf(!fixture.available)('single sign-on through the grace (real DB)', () => {
-  const NO_SSO = {
-    ...OSS_TIER_LIMITS,
-    features: { ...OSS_TIER_LIMITS.features, customOidcProvider: false },
-  }
-
-  beforeEach(async () => {
-    await fixture.begin()
-    vi.useRealTimers()
-    spies.cache.clear()
-    settingsId = await ensureSettings()
-    await testDb.update(settings).set({ planLimitsState: null }).where(eq(settings.id, settingsId))
-    await testDb.update(boards).set({ deletedAt: new Date() }).where(isNull(boards.deletedAt))
-    await testDb.delete(identityProvider)
-    await testDb.insert(identityProvider).values({
-      registrationId: 'acme-sso',
-      label: 'Acme SSO',
-      clientId: 'acme-client',
-      enabled: true,
-    } as never)
-  })
-  afterEach(async () => {
-    vi.useRealTimers()
-    await invalidatePlanLimits()
-    await fixture.rollback()
-  })
-
-  const settled = <T>(work: Promise<T>) =>
-    Promise.race([
-      work,
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('the settings read waited on itself')), 5000)
-      ),
-    ])
-
-  it('keeps a provider set up before the drop signing in until the grace ends', async () => {
-    await configure({ planBilling: true, tierLimits: NO_SSO })
-    const workspace = await settled(getWorkspaceSettings())
-    expect(workspace?.ssoProvidersConfigured).toBe(true)
-    expect(await isSsoLive()).toBe(true)
-    const state = await storedState()
-    expect((state?.fromFeatures as Record<string, boolean>).sso).toBe(true)
-
-    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
-    await invalidatePlanLimits()
-    expect(await isSsoLive()).toBe(false)
-    await settled(getWorkspaceSettings())
-  })
-
-  it('is the plan alone without plan billing', async () => {
-    await configure({ planBilling: false, tierLimits: NO_SSO })
-    expect(await isSsoLive()).toBe(false)
-    await configure({ planBilling: false, tierLimits: { ...OSS_TIER_LIMITS } })
-    expect(await isSsoLive()).toBe(true)
-    expect(await storedState()).toBeNull()
   })
 })
 

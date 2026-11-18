@@ -96,7 +96,7 @@ describe('TrialExpiredBilling with plan limits', () => {
     )
   })
 
-  it('shows nothing extra with the flag off', () => {
+  it('shows nothing extra without plan billing', () => {
     renderPage({ limits: overLimits({ enabled: false }) })
     expect(screen.queryByRole('heading', { name: 'Over your limits' })).toBeNull()
     expect(document.querySelector('[data-plan-limit-issues]')).toBeNull()

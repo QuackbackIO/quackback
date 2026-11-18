@@ -86,6 +86,14 @@ vi.mock('@/lib/server/domains/channel-accounts/sending-domain-notify', async (or
       lookups.managers(...args),
   }
 })
+// The month's usage report, as hosted billing receives it.
+const reported = vi.hoisted(() => ({ months: [] as string[] }))
+vi.mock('@/lib/server/control-plane/client', async (original) => ({
+  ...(await original<typeof import('@/lib/server/control-plane/client')>()),
+  reportWorkspaceUsage: async (report: { month: string }) => {
+    reported.months.push(report.month)
+  },
+}))
 vi.mock('@quackback/email', async (original) => ({
   ...(await original<typeof import('@quackback/email')>()),
   isEmailConfigured: () => mail.configured,
@@ -94,10 +102,16 @@ vi.mock('@quackback/email', async (original) => ({
 
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
-import { detectPlanLimits, getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
+import {
+  detectPlanLimits,
+  getPlanLimits,
+  invalidatePlanLimits,
+  isFeatureLive,
+} from '../plan-limits.service'
 import { setKeptBoard } from '../plan-limits.choosers'
 import { readPlanLimitsSources } from '@/lib/server/domains/settings/settings.plan-limits'
 import { claimPlanLimitsEmail, deadlineText, sendPlanLimitsEmails } from '../plan-limits.emails'
+import { planBillingOn } from './plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -106,13 +120,21 @@ const DAY = 24 * 60 * 60 * 1000
 let settingsId: WorkspaceId
 let billingEmail: string
 
-async function configure(options: { planLimits: boolean; maxBoards?: number | null }) {
+/** `planBilling` off is an install without plan billing. */
+async function configure(options: {
+  planBilling: boolean
+  maxBoards?: number | null
+  keepTierLimits?: boolean
+}) {
   await testDb
     .update(settings)
     .set({
-      featureFlags: JSON.stringify({ feedback: true, planLimits: options.planLimits }),
-      tierLimits: JSON.stringify({ ...OSS_TIER_LIMITS, maxBoards: options.maxBoards ?? 1 }),
-      cloud: null,
+      ...(options.keepTierLimits
+        ? {}
+        : {
+            tierLimits: JSON.stringify({ ...OSS_TIER_LIMITS, maxBoards: options.maxBoards ?? 1 }),
+          }),
+      cloud: (options.planBilling ? planBillingOn() : null) as never,
     })
     .where(eq(settings.id, settingsId))
   invalidateTierLimitsCache()
@@ -211,7 +233,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('sends the start email once, to billing managers only', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     const view = await getPlanLimits()
     expect(view.phase).toBe('grace')
     await settle()
@@ -247,7 +269,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('lets one caller claim each recipient per grace and refuses a stale grace', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     const view = await getPlanLimits()
     await settle()
     const since = view.since!
@@ -266,7 +288,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('takes a claim again once its lease has lapsed, as after a crash mid-send', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     const view = await getPlanLimits()
     await settle()
     const since = view.since!
@@ -281,7 +303,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('keeps the record through the foundation write paths', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     const view = await getPlanLimits()
     await settle()
     const [board] = await testDb
@@ -292,18 +314,86 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
     expect((await storedState())?.emailsSent).toEqual(['start'])
     await detectPlanLimits()
     expect((await storedState())?.emailsSent).toEqual(['start'])
-    // The flag off keeps the state; turning it on again finds it.
-    await configure({ planLimits: false })
+    // Plan billing off keeps the state; turning it on again finds it.
+    await configure({ planBilling: false })
     await getPlanLimits()
     expect((await storedState())?.emailsSent).toEqual(['start'])
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     expect(await sendPlanLimitsEmails(await getPlanLimits())).toBeNull()
     expect(sentKinds()).toEqual(['start'])
     expect(view.since).toBe((await storedState())?.since)
   })
 
+  it('sends the start email outside the evaluation that started the grace', async () => {
+    await configure({ planBilling: true })
+    // Single sign-on is off on this plan: a real read says so, while a helper
+    // asked from inside an evaluation answers as on a read error (live).
+    await testDb
+      .update(settings)
+      .set({
+        tierLimits: JSON.stringify({
+          ...OSS_TIER_LIMITS,
+          maxBoards: 1,
+          features: { ...OSS_TIER_LIMITS.features, customOidcProvider: false },
+        }),
+      })
+      .where(eq(settings.id, settingsId))
+    await configure({ planBilling: true, keepTierLimits: true })
+    const seen: boolean[] = []
+    mail.sendPlanLimitsEmail.mockImplementationOnce(async () => {
+      seen.push(await isFeatureLive('sso'))
+      return { sent: true }
+    })
+    expect((await getPlanLimits()).phase).toBe('grace')
+    await vi.waitFor(() => expect(seen).toHaveLength(1), { timeout: 8000 })
+    expect(seen).toEqual([false])
+  })
+
+  it("starts a parked workspace's grace from the month's usage report the catch-up queues", async () => {
+    await configure({ planBilling: true })
+    const control = process.env.QUACKBACK_CONTROL_PLANE_URL
+    process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://billing.example.com'
+    reported.months = []
+    // Nobody has visited: no request has detected anything.
+    expect(await storedState()).toBeNull()
+    const catchUpAt = new Date(Date.now() + 3 * DAY)
+    vi.useFakeTimers({ toFake: ['Date'], now: catchUpAt })
+    try {
+      const { runUsageReport } = await import('@/lib/server/domains/billing/usage-report-queue')
+      const { usageReportDedupeKey } = await import('@/lib/server/domains/billing/usage-report')
+      await runUsageReport({
+        id: '1',
+        jobId: 'job_1',
+        queue: 'usage-report',
+        dedupeKey: usageReportDedupeKey('2026-10'),
+        payload: { month: '2026-10' },
+        workspaceKey: null,
+        attempts: 1,
+        maxAttempts: 10,
+        leaseToken: 'tok',
+        lockedUntil: new Date(),
+        runAt: new Date(),
+      })
+      expect(reported.months).toEqual(['2026-10'])
+      // Read from the row, not through plan limits, which would detect too.
+      expect((await storedState())?.since).toBe(catchUpAt.toISOString())
+      await settle()
+      expect(sentKinds()).toEqual(['start'])
+    } finally {
+      if (control === undefined) delete process.env.QUACKBACK_CONTROL_PLANE_URL
+      else process.env.QUACKBACK_CONTROL_PLANE_URL = control
+    }
+  })
+
   it('does not send the start email when a stale reader merely adopts the stored grace', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
+    // The key of the limits a grace is granted against, from a first detection.
+    await getPlanLimits()
+    await settle()
+    const limitsKey = (await storedState())?.limitsKey
+    await testDb.update(settings).set({ planLimitsState: null }).where(eq(settings.id, settingsId))
+    await configure({ planBilling: true })
+    mail.sendPlanLimitsEmail.mockClear()
     // Warm the settings cache while no grace is stored.
     await readPlanLimitsSources()
     const since = new Date().toISOString()
@@ -315,7 +405,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
           graceEndsAt: new Date(Date.now() + 7 * DAY).toISOString(),
           fromPlan: null,
           fromFeatures: {},
-          limitsKey: '[null,[1,null,null,null,null,null],[]]',
+          limitsKey: limitsKey,
         } as never,
       })
       .where(eq(settings.id, settingsId))
@@ -327,7 +417,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('does not send the start email from a process that loses the race to store the grace', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     race.lose = true
     race.rivalSince = new Date(Date.now() - 1000).toISOString()
     try {
@@ -345,8 +435,8 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
     }
   })
 
-  it('sends nothing with the flag off', async () => {
-    await configure({ planLimits: false })
+  it('sends nothing without plan billing', async () => {
+    await configure({ planBilling: false })
     const view = await getPlanLimits()
     await settleQuietly()
     expect(await sendPlanLimitsEmails(view)).toBeNull()
@@ -355,7 +445,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('sends nothing when email is not configured, and sends once it is', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     mail.configured = false
     const view = await getPlanLimits()
     await settleQuietly()
@@ -366,7 +456,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('does not send again after a restart', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     await getPlanLimits()
     await settle()
     expect(sentKinds()).toEqual(['start'])
@@ -378,7 +468,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('sends the reminder two days before the end, once, and the enforcement email after it', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     // The grace ends at the first noon UTC after seven days, so time is set
     // from its end rather than from now.
     const end = Date.parse((await getPlanLimits()).graceEndsAt!)
@@ -400,7 +490,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('skips the reminder and the enforcement email once the workspace is back to ok', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     await getPlanLimits()
     await settle()
     await testDb.update(boards).set({ deletedAt: new Date() }).where(isNull(boards.deletedAt))
@@ -416,14 +506,14 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('sends again for a new grace', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     await getPlanLimits()
     await settle()
     expect(sentKinds()).toEqual(['start'])
 
     // A different drop (a lower cap) starts a new grace with its own record.
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + DAY })
-    await configure({ planLimits: true, maxBoards: 0 })
+    await configure({ planBilling: true, maxBoards: 0 })
     const second = await getPlanLimits()
     expect(second.phase).toBe('grace')
     // The new grace's own trigger sends its start email; nothing more follows.
@@ -446,7 +536,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
 
   it('retries only the recipients that failed, and sends nothing once all have it', async () => {
     const second = await addPerson('owner', 'admin')
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     const view = await getPlanLimits()
     await settle()
     await resetRecord()
@@ -473,7 +563,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('retries everyone when every send fails', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     const view = await getPlanLimits()
     await settle()
     await resetRecord()
@@ -485,7 +575,7 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   })
 
   it('makes no recipient lookups once the email is complete', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     await getPlanLimits()
     await settle()
     lookups.resolve.mockClear()

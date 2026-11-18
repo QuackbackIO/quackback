@@ -167,6 +167,27 @@ const NO_EMAIL_BEFORE_PATHS = new Set<string>([
   '/oauth2/callback/:providerId',
 ])
 
+/** Paths that start a sign-in with a provider, before any upstream redirect. */
+const OIDC_START_PATHS = new Set<string>(['/sign-in/social', '/sign-in/oauth2'])
+
+/**
+ * Refuse the start of a sign-in with an identity provider that is set up but
+ * not registered right now. The auth instance registers its providers when it
+ * is built and is rebuilt only when `auth_config_version` moves, while single
+ * sign-on can stop on the clock (a plan limits grace ending) with nothing
+ * written. Asking per request keeps the start in step with the sign-in methods
+ * the forms show.
+ */
+async function refuseUnregisteredOidcStart(
+  provider: string,
+  ctx: { redirect: (url: string) => Error }
+): Promise<void> {
+  const { getConfiguredOidcProviderIds, isSsoLive } = await import('./registered-providers')
+  if (!(await getConfiguredOidcProviderIds()).has(provider)) return
+  if (await isSsoLive()) return
+  throw ctx.redirect('/?auth=signin&error=oauth_method_not_allowed')
+}
+
 /**
  * Email-bearing paths that bring a NEW account into existence when no user
  * holds the address yet — the ones `openSignup` is about.
@@ -231,6 +252,7 @@ export async function handleSignInPreCheck(ctx: {
     log.debug({ path: ctx.path, provider }, 'sign-in pre-check')
   }
 
+  if (OIDC_START_PATHS.has(ctx.path ?? '')) await refuseUnregisteredOidcStart(provider, ctx)
   if (NO_EMAIL_BEFORE_PATHS.has(ctx.path ?? '')) return
 
   // The anonymous mint carries no email, so it can't ride the per-email

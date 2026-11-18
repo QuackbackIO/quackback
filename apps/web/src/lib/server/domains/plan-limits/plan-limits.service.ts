@@ -20,7 +20,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { CACHE_KEYS, cacheGet, cacheSet } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
-import { memoizePerRequest, rememberPerRequest } from '@/lib/server/request-memo'
+import { derivedMemoKey, memoizePerRequest, rememberPerRequest } from '@/lib/server/request-memo'
 import { config } from '@/lib/server/config'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
@@ -299,11 +299,14 @@ async function evaluateNow(options: EvaluateOptions): Promise<Evaluation> {
       // This process won the write of a changed, non-empty state, which is only
       // ever a new grace (an unchanged state is never written, and a reader that
       // merely adopts the stored one lost the write): tell the billing managers
-      // now, not at the next hourly slot.
+      // now, not at the next hourly slot. The send runs outside the evaluation,
+      // so the plan limits it reads are real answers, not the guard's.
       const view = result.view
-      void import('./plan-limits.emails')
-        .then((m) => m.sendPlanLimitsEmailsQuietly(view))
-        .catch((err) => log.warn({ err }, 'plan limits start email trigger failed'))
+      evaluating.exit(() => {
+        void import('./plan-limits.emails')
+          .then((m) => m.sendPlanLimitsEmailsQuietly(view))
+          .catch((err) => log.warn({ err }, 'plan limits start email trigger failed'))
+      })
     }
   }
   // The emails' progress rides along so the hourly slot can skip a finished email.
@@ -437,10 +440,16 @@ export async function detectPlanLimitsQuietly(): Promise<void> {
 // Runtime helpers. Each fails open.
 // ---------------------------------------------------------------------------
 
+/**
+ * Every runtime helper in one request shares one evaluation. A write that
+ * drops the plan limits inputs or the settings forgets it with them.
+ */
+const VIEW_MEMO_KEY = derivedMemoKey(INPUTS_KEY, 'view')
+
 async function viewOrNull(): Promise<PlanLimits | null> {
   if (evaluating.getStore()) return null
   try {
-    return await getPlanLimits()
+    return await memoizePerRequest(VIEW_MEMO_KEY, () => getPlanLimits())
   } catch (err) {
     log.error({ err }, 'plan limits read failed; failing open')
     return null

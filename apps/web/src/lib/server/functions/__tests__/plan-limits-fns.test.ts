@@ -11,6 +11,7 @@ const hoisted = vi.hoisted(() => ({
   setSeatHolders: vi.fn(async (_ids: string[]) => ({ ok: true as const })),
   getPlanLimits: vi.fn(),
   getPlanLimitsWithCandidates: vi.fn(),
+  billing: { canUpgrade: true, canManageBilling: true },
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', async (original) => ({
@@ -39,6 +40,11 @@ vi.mock('@tanstack/react-start', () => ({
   },
 }))
 
+// Whether the plan can be changed in the app, as the billing projection says.
+vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
+  getCloudConfig: async () => ({ enabled: true, ...hoisted.billing }),
+}))
+
 vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
   getPlanLimits: () => hoisted.getPlanLimits(),
   getPlanLimitsWithCandidates: () => hoisted.getPlanLimitsWithCandidates(),
@@ -50,7 +56,10 @@ const [getPlanLimits, setKeptBoard, setSeatHolders] = handlers
 const getPlanLimitsSummary = handlers[5]
 const getPlanLimitsNotice = handlers[6]
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  hoisted.billing = { canUpgrade: true, canManageBilling: true }
+})
 
 const teammate = (permissions: string[]) => ({
   permissions,
@@ -132,6 +141,26 @@ describe('plan limits summary', () => {
       candidates: {},
     })
     expect((summary.issues as unknown[]).length).toBe(1)
+  })
+
+  it('offers the upgrade only where the plan can be changed in the app', async () => {
+    hoisted.requireAuth.mockResolvedValue(teammate([PERMISSIONS.BILLING_MANAGE]))
+    hoisted.getPlanLimits.mockResolvedValue(graceView)
+    const summary = async () =>
+      (await getPlanLimitsSummary!({ data: {} })) as Record<string, unknown>
+    expect(await summary()).toMatchObject({ enabled: true, canManageBilling: true })
+    hoisted.billing = { canUpgrade: false, canManageBilling: false }
+    // Still over the plan, so the banner and the page still show.
+    expect(await summary()).toMatchObject({
+      enabled: true,
+      phase: 'grace',
+      canManageBilling: false,
+    })
+    hoisted.getPlanLimitsWithCandidates.mockResolvedValue({ limits: graceView, candidates: {} })
+    expect(await getPlanLimits!({ data: {} })).toMatchObject({
+      enabled: true,
+      canManageBilling: false,
+    })
   })
 })
 

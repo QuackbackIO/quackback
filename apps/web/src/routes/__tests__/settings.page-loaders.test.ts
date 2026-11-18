@@ -12,6 +12,8 @@ vi.mock('@/lib/server/functions/entitlement-status', () => ({
   hasEntitlementFn: vi.fn(async () => entitled.current),
   listEntitlementsFn: vi.fn(async () => ({ sso: false, auditLog: false })),
 }))
+const { getSsoLiveFn } = vi.hoisted(() => ({ getSsoLiveFn: vi.fn(async () => true) }))
+vi.mock('@/lib/server/functions/sso', () => ({ getSsoLiveFn }))
 
 const { Route: MacrosRoute } = await import('../admin/settings.macros')
 const { Route: SlaRoute } = await import('../admin/settings.sla')
@@ -97,5 +99,23 @@ describe('settings page loaders', () => {
     expect(await warmedKeys(AuthenticationRoute, [PERMISSIONS.AUTH_MANAGE])).not.toContain(
       key('admin', 'segments')
     )
+  })
+
+  it('access and security: asks whether single sign-on is live only with plan billing on', async () => {
+    const load = (cloudEnabled: boolean) =>
+      loaderOf(AuthenticationRoute)({
+        context: {
+          queryClient: { ensureQueryData: vi.fn(async () => undefined) },
+          permissions: [PERMISSIONS.AUTH_MANAGE],
+          billingEnabled: false,
+          cloudEnabled,
+        },
+        location: { search: { tab: 'sign-in' } },
+      }) as Promise<{ ssoLive?: boolean }>
+    getSsoLiveFn.mockClear()
+    expect((await load(false)).ssoLive).toBeUndefined()
+    expect(getSsoLiveFn).not.toHaveBeenCalled()
+    expect((await load(true)).ssoLive).toBe(true)
+    expect(getSsoLiveFn).toHaveBeenCalledTimes(1)
   })
 })

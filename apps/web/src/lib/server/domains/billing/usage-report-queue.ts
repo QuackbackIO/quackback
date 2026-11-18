@@ -72,6 +72,12 @@ export async function runUsageReport(job: ClaimedJob): Promise<void> {
     await enqueueUsageReport({ month })
     return
   }
+  // The month's report is also the one job the dormant catch-up queues for a
+  // parked workspace, which runs no hourly slot: it detects here too, so a
+  // workspace parked over its limits starts its grace (and gets the start
+  // email) at the first report after a month boundary, or at its next request
+  // if that comes first.
+  await detectPlanLimitsQuietly()
   const at = dateForUtcMonth(month)
   const [aiTokens, emailsSent, seats, postRow, boardRow] = await Promise.all([
     aiTokensInUtcMonth(at),

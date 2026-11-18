@@ -2,13 +2,13 @@
  * Broadcasts held back because the month's email cap is used up.
  *
  * A changelog or status broadcast that finds the cap used up is skipped. With
- * plan limits on, each skipped broadcast is recorded once for the month, in
+ * plan billing on, each skipped broadcast is recorded once for the month, in
  * the key-value store's set so two deliveries of the same broadcast (one per
  * recipient, on any replica) count once. The first record logs a warning, and
  * the Plan limits page adds the count to its used-up email row.
  */
 import { kvSetCount, kvSetMemberClaim } from '@/lib/server/kv/pg-kv'
-import { getFeatureFlags } from '@/lib/server/domains/settings/settings.service'
+import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'plan-limits' })
@@ -21,7 +21,7 @@ function setKey(now: Date): string {
 
 /**
  * Record a skipped broadcast. True the first time this broadcast is seen this
- * month, false for a repeat, null when plan limits are off or the record
+ * month, false for a repeat, null without plan billing or when the record
  * could not be made (the caller then logs as it always has).
  */
 export async function recordSkippedBroadcast(
@@ -29,7 +29,7 @@ export async function recordSkippedBroadcast(
   now: Date = new Date()
 ): Promise<boolean | null> {
   try {
-    if ((await getFeatureFlags()).planLimits !== true) return null
+    if (!(await getCloudConfig()).enabled) return null
     return await kvSetMemberClaim(setKey(now), eventId, MONTH_TTL_SECONDS)
   } catch (err) {
     log.warn({ err }, 'recording a skipped broadcast failed')
