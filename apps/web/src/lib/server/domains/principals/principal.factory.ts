@@ -65,7 +65,10 @@ async function noteMembershipChanged(executor?: Executor): Promise<void> {
   await enqueueMembershipSync(executor && executor !== db ? { executor } : undefined)
 }
 
-/** A new team seat: sync membership, and recount seats for plan limits. */
+/**
+ * A new team seat: sync membership, and recount seats for plan limits once the
+ * caller's transaction commits (`invalidatePlanLimits` waits for it).
+ */
 async function noteSeatAdded(executor?: Executor): Promise<void> {
   await noteMembershipChanged(executor)
   await invalidatePlanLimits()
