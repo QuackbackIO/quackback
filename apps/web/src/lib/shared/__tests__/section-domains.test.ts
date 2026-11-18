@@ -285,6 +285,78 @@ describe('resolveSectionHostRoute on a section host', () => {
   })
 })
 
+describe('team sign-in while a section owns /', () => {
+  // Feedback owns `/`. The team's sign-in is the dialog on `/` with a team
+  // callback; moved to the section host, it signed in with portal scope and
+  // went back to the primary domain without a session, round and round.
+  const OWNS_ROOT: SectionDomainMap = {
+    ...MAP,
+    feedback: { hostname: 'feedback.acme.com', verifiedAt: VERIFIED },
+  }
+  const signIn = (callbackUrl: string, auth = 'signin') =>
+    `?${new URLSearchParams({ auth, callbackUrl }).toString()}`
+
+  it('moves the portal home to the section host as before', () => {
+    expect(route('acme.example.com', '/', { map: OWNS_ROOT })).toEqual({
+      kind: 'redirect',
+      status: 301,
+      location: 'https://feedback.acme.com/',
+    })
+  })
+
+  it.each([
+    '/admin',
+    '/admin/feedback?post=p_1',
+    '/onboarding',
+    '/onboarding/account?step=2',
+    '/apps/zendesk/sidebar',
+    '/device?user_code=ABCD-EFGH',
+    '/oauth/consent?client_id=c1',
+    '/complete-signup/inv_1',
+  ])('keeps the sign-in for %s on the primary domain', (callbackUrl) => {
+    for (const auth of ['signin', 'signup']) {
+      expect(
+        route('acme.example.com', '/', { map: OWNS_ROOT, search: signIn(callbackUrl, auth) })
+      ).toEqual({ kind: 'pass' })
+    }
+  })
+
+  it('sends a team sign-in that reached the section host back to the primary domain', () => {
+    const search = signIn('/admin')
+    expect(route('feedback.acme.com', '/', { map: OWNS_ROOT, search })).toEqual({
+      kind: 'redirect',
+      status: 302,
+      location: `${PRIMARY}/${search}`,
+      carrySession: false,
+    })
+  })
+
+  it('still moves a portal sign-in, which belongs on the section host', () => {
+    for (const callbackUrl of ['/', '/b/ideas', '/roadmap', '/administrator', '//evil.com/admin']) {
+      const search = signIn(callbackUrl)
+      expect(route('acme.example.com', '/', { map: OWNS_ROOT, search })).toEqual({
+        kind: 'redirect',
+        status: 301,
+        location: `https://feedback.acme.com/${search}`,
+      })
+    }
+  })
+
+  it('moves the home when a team callback comes without a sign-in request', () => {
+    const search = `?${new URLSearchParams({ callbackUrl: '/admin' }).toString()}`
+    expect(route('acme.example.com', '/', { map: OWNS_ROOT, search })).toEqual({
+      kind: 'redirect',
+      status: 301,
+      location: `https://feedback.acme.com/${search}`,
+    })
+  })
+
+  it('shows the portal sign-in on the section host as before', () => {
+    const search = signIn('/b/ideas')
+    expect(route('feedback.acme.com', '/', { map: OWNS_ROOT, search })).toEqual({ kind: 'pass' })
+  })
+})
+
 describe('resolveSectionHostRoute on the primary host', () => {
   it("moves a mapped, verified section's paths to its host for good", () => {
     expect(route('acme.example.com', '/hc/articles/x', { search: '?ref=1' })).toEqual({
