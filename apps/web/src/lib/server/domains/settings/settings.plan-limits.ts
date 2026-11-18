@@ -20,6 +20,10 @@ export interface PlanLimitsSources {
   planLimitsState: unknown
   tierLimits: string | null
   cloud: StoredCloudConfig | null
+  /** Bumped on every accepted billing projection. */
+  cloudRevision: number
+  /** Bumped on every tier limits write (and other auth config writes). */
+  authConfigVersion: number
   cloudIdentity: StoredCloudIdentityProjection | null
   customCss: string | null
   helpCenterDomain: string | null
@@ -34,6 +38,8 @@ export async function readPlanLimitsSources(): Promise<PlanLimitsSources | null>
     planLimitsState: row.planLimitsState ?? null,
     tierLimits: row.tierLimits ?? null,
     cloud: row.cloud ?? null,
+    cloudRevision: row.cloudRevision ?? 0,
+    authConfigVersion: row.authConfigVersion ?? 0,
     cloudIdentity: row.cloudIdentity ?? null,
     customCss: row.customCss ?? null,
     helpCenterDomain: helpCenter.domain?.domain ?? null,

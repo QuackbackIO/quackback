@@ -69,8 +69,9 @@ export async function writeTierLimits(
     }
 
     await tx.update(settings).set({ tierLimits: serialized }).where(eq(settings.id, row.id))
-    // Tier limits decide whether identity providers register; the auth
-    // instance is rebuilt only when this version moves.
+    // Tier limits decide whether identity providers register, so the auth
+    // instance is rebuilt when this version moves; plan limits read it as the
+    // limits' revision.
     await bumpAuthConfigVersionInTx(tx)
     return { changed: true, managedByConfigFile: false }
   })

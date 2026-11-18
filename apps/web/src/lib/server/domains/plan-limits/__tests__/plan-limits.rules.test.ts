@@ -178,6 +178,17 @@ describe('the feature key space', () => {
 })
 
 describe('computePlanLimits: flag off', () => {
+  it('leaves a stored state alone, so turning the flag on again resumes it with its choices', () => {
+    const stored = {
+      ...computePlanLimits(inputs({ usage: OVER_BOARDS }), at(-30 * DAY)).nextState!,
+      keptBoardId: 'b1',
+    }
+    const result = computePlanLimits(inputs({ enabled: false, stored, usage: OVER_BOARDS }), NOW)
+    expect(result.view.phase).toBe('ok')
+    expect(result.changed).toBe(false)
+    expect(result.nextState).toBe(stored)
+  })
+
   it('is ok and stores nothing even when far over every cap', () => {
     const result = computePlanLimits(
       inputs({ enabled: false, usage: { ...OVER_BOARDS, maxTeamSeats: 9 } }),
@@ -187,14 +198,6 @@ describe('computePlanLimits: flag off', () => {
     expect(result.view.issues).toEqual([])
     expect(result.nextState).toBeNull()
     expect(result.changed).toBe(false)
-  })
-
-  it('drops a state left from a time the flag was on, so turning it on again starts afresh', () => {
-    const stored = computePlanLimits(inputs({ usage: OVER_BOARDS }), at(-30 * DAY)).nextState
-    expect(stored).not.toBeNull()
-    const result = computePlanLimits(inputs({ enabled: false, stored, usage: OVER_BOARDS }), NOW)
-    expect(result.nextState).toBeNull()
-    expect(result.changed).toBe(true)
   })
 })
 
@@ -427,6 +430,91 @@ describe('computePlanLimits: phases', () => {
     )
     expect(result.nextState?.fromFeatures.mcpServer).toBe(false)
     expect(result.nextState?.fromFeatures.aiInsights).toBe(false)
+  })
+})
+
+describe('computePlanLimits: a reader that has not seen the newer limits', () => {
+  const PRO_LIMITS = { ...FREE_LIMITS, maxBoards: null, maxTeamSeats: 5 }
+  const proFeatures = planFeatureSet(OSS_TIER_LIMITS.features, PRO_CONFIG)
+  const BASIS = { cloudRevision: 4, authConfigVersion: 2 }
+
+  it('records the inputs revision a grace was granted under', () => {
+    const state = computePlanLimits(inputs({ usage: OVER_BOARDS, basis: BASIS }), NOW).nextState
+    expect(state?.basis).toEqual(BASIS)
+  })
+
+  it('never clears a grace from limits older than the ones it was granted under', () => {
+    const stored = computePlanLimits(
+      inputs({ usage: OVER_BOARDS, basis: BASIS }),
+      at(-DAY)
+    ).nextState
+    const stale = computePlanLimits(
+      inputs({
+        plan: 'pro',
+        limits: PRO_LIMITS,
+        features: proFeatures,
+        usage: OVER_BOARDS,
+        stored,
+        basis: { cloudRevision: 3, authConfigVersion: 2 },
+      }),
+      NOW
+    )
+    expect(stale.changed).toBe(false)
+    expect(stale.nextState).toBe(stored)
+  })
+
+  it('never restarts a grace from limits older than the ones it was granted under', () => {
+    const stored = computePlanLimits(
+      inputs({ usage: OVER_BOARDS, basis: BASIS }),
+      at(-DAY)
+    ).nextState
+    const stale = computePlanLimits(
+      inputs({
+        limits: { ...FREE_LIMITS, maxBoards: 2 },
+        usage: { ...OVER_BOARDS, maxBoards: 5 },
+        stored,
+        basis: { cloudRevision: 4, authConfigVersion: 1 },
+      }),
+      NOW
+    )
+    expect(stale.changed).toBe(false)
+    expect(stale.view.since).toBe(at(-DAY).toISOString())
+  })
+
+  it('lets a reader that has seen newer limits clear or restart it', () => {
+    const stored = computePlanLimits(
+      inputs({ usage: OVER_BOARDS, basis: BASIS }),
+      at(-DAY)
+    ).nextState
+    const newer = computePlanLimits(
+      inputs({
+        plan: 'pro',
+        limits: PRO_LIMITS,
+        features: proFeatures,
+        usage: OVER_BOARDS,
+        stored,
+        basis: { cloudRevision: 5, authConfigVersion: 2 },
+      }),
+      NOW
+    )
+    expect(newer.nextState).toBeNull()
+    expect(newer.changed).toBe(true)
+  })
+
+  it('lets the same inputs change the limits on the clock (a term lapsing)', () => {
+    const stored = computePlanLimits(
+      inputs({
+        plan: 'pro',
+        limits: { ...PRO_LIMITS, maxTeamSeats: 1 },
+        features: proFeatures,
+        usage: { ...FITS, maxTeamSeats: 3 },
+        basis: BASIS,
+      }),
+      at(-DAY)
+    ).nextState
+    const lapsed = computePlanLimits(inputs({ usage: OVER_BOARDS, stored, basis: BASIS }), NOW)
+    expect(lapsed.changed).toBe(true)
+    expect(lapsed.nextState?.since).toBe(NOW.toISOString())
   })
 })
 

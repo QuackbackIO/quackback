@@ -24,18 +24,21 @@ import {
   compareAndSetPlanLimitsState,
   readPlanLimitsSources,
   readPlanLimitsStateFresh,
+  updatePlanLimitsState,
   type PlanLimitsSources,
 } from '@/lib/server/domains/settings/settings.plan-limits'
-import {
-  getTierLimits,
-  resolveTierLimitsFromRow,
-} from '@/lib/server/domains/settings/tier-limits.service'
+import { resolveTierLimitsFromRow } from '@/lib/server/domains/settings/tier-limits.service'
 import { resolveCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { parseBillingProjection } from '@/lib/server/domains/settings/cloud/billing-projection'
 import type { StoredCloudConfig, StoredPlanLimitsState } from '@/lib/shared/db-types'
 import { loadUsageCounts } from '@/lib/server/domains/billing/usage-counts'
 import { invalidatePlanLimits } from './plan-limits.cache'
-import { planFeatureSet, type PlanFeatureKey } from './plan-limits.features'
+import {
+  PLAN_FEATURES,
+  PLAN_FEATURE_KEYS,
+  planFeatureSet,
+  type PlanFeatureKey,
+} from './plan-limits.features'
 import {
   computePlanLimits,
   featureLive,
@@ -87,18 +90,29 @@ interface Context {
   inputs: Omit<PlanLimitsInputs, 'usage' | 'configured' | 'candidates'>
 }
 
+/**
+ * Everything the rules read comes from one settings row: the limits, the plan,
+ * the stored state and its compare-and-set value. That row is the shared
+ * settings cache every write drops, so two processes never judge one state
+ * against different limits (the per-process tier limits cache is not used).
+ */
 async function loadContext(now: Date, previous?: PreviousPlan | null): Promise<Context> {
-  const [flags, sources, limits] = await Promise.all([
-    getFeatureFlags(),
-    readPlanLimitsSources(),
-    getTierLimits(now),
-  ])
+  const [flags, sources] = await Promise.all([getFeatureFlags(), readPlanLimitsSources()])
+  const limits = resolveTierLimitsFromRow(
+    sources?.tierLimits ?? null,
+    sources?.cloud?.projection ?? null,
+    now
+  )
   const cloud = resolveCloudConfig(sources?.cloud ?? null, now)
   return {
     enabled: flags.planLimits === true,
     sources,
     inputs: {
       enabled: flags.planLimits === true,
+      basis: {
+        cloudRevision: sources?.cloudRevision ?? 0,
+        authConfigVersion: sources?.authConfigVersion ?? 0,
+      },
       plan: cloud.plan,
       limits,
       features: planFeatureSet(limits.features, cloud),
@@ -264,6 +278,9 @@ async function persist(expected: unknown, next: PlanLimitsState | null): Promise
     }
     return won
   } catch (err) {
+    // Fail open: the read still answers from what it computed, and the next
+    // read or the hourly slot writes the state again. Counting the failure as
+    // lost would only re-read a state that could not be written.
     log.error({ err }, 'plan limits state write failed')
     return true
   }
@@ -311,14 +328,21 @@ export async function detectPlanLimits(
 
 /**
  * Detection after a billing projection write: the projection it replaced is
- * the plan before the drop. Never throws; a failure is logged and the next
- * read detects instead.
+ * the plan before the drop. `appliedAt` is when the write began.
+ *
+ * A read can race the write and store the grace first, without the plan
+ * before (it cannot know it). A grace that began at or after `appliedAt` and
+ * has no plan before gets this one merged in under the row lock, so the
+ * replaced plan's live features still carry through the grace.
+ *
+ * Never throws; a failure is logged and the next read detects instead.
  */
 export async function detectPlanLimitsAfterProjectionWrite(
   replacedProjection: unknown,
-  now: Date = new Date()
+  appliedAt: Date = new Date()
 ): Promise<void> {
   try {
+    const now = new Date()
     const sources = await readPlanLimitsSources()
     let previous: PreviousPlan | null = null
     const replaced = parseBillingProjection(replacedProjection)
@@ -332,9 +356,25 @@ export async function detectPlanLimitsAfterProjectionWrite(
       )
     }
     await detectPlanLimits({ previous, now })
+    if (previous) await mergePreviousPlan(previous, appliedAt)
   } catch (err) {
     log.error({ err }, 'plan limits detection after a projection write failed')
   }
+}
+
+async function mergePreviousPlan(previous: PreviousPlan, appliedAt: Date): Promise<void> {
+  const wrote = await updatePlanLimitsState((current) => {
+    const state = parsePlanLimitsState(current)
+    if (!state || state.fromPlan !== null) return undefined
+    if (Date.parse(state.since) < appliedAt.getTime()) return undefined
+    const fromFeatures = { ...state.fromFeatures }
+    for (const key of PLAN_FEATURE_KEYS) {
+      if (PLAN_FEATURES[key].grace && previous.features[key]) fromFeatures[key] = true
+    }
+    const merged: PlanLimitsState = { ...state, fromPlan: previous.plan, fromFeatures }
+    return merged as unknown as StoredPlanLimitsState
+  })
+  if (wrote) await invalidatePlanLimits()
 }
 
 /** {@link detectPlanLimits} that never throws, for background triggers. */

@@ -14,8 +14,6 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   boards,
   eq,
-  inArray,
-  invitation,
   isNull,
   posts,
   principal,
@@ -29,12 +27,23 @@ import {
 } from '@/lib/server/db'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 
-const spies = vi.hoisted(() => ({ loadUsageCounts: vi.fn() }))
+const spies = vi.hoisted(() => ({ loadUsageCounts: vi.fn(), readsNoState: false }))
 
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
+// A copy of the settings read before another process stored its state.
+vi.mock('@/lib/server/domains/settings/settings.plan-limits', async (original) => {
+  const real = await original<typeof import('@/lib/server/domains/settings/settings.plan-limits')>()
+  return {
+    ...real,
+    readPlanLimitsSources: async () => {
+      const sources = await real.readPlanLimitsSources()
+      return spies.readsNoState && sources ? { ...sources, planLimitsState: null } : sources
+    },
+  }
+})
 vi.mock('@/lib/server/domains/billing/usage-counts', async (original) => {
   const real = await original<typeof import('@/lib/server/domains/billing/usage-counts')>()
   spies.loadUsageCounts.mockImplementation(real.loadUsageCounts)
@@ -49,7 +58,16 @@ import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { deleteStatusComponent } from '@/lib/server/domains/status/status.components'
 import { writeBillingProjection } from '@/lib/server/domains/settings/cloud/billing-projection.write'
 import { parseBillingProjection } from '@/lib/server/domains/settings/cloud/billing-projection'
-import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
+import {
+  getTierLimits,
+  invalidateTierLimitsCache,
+} from '@/lib/server/domains/settings/tier-limits.service'
+import { mergeTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
+import { DISABLED_CLOUD_CONFIG } from '@/lib/server/domains/settings/cloud/cloud.types'
+import { planFeatureSet } from '../plan-limits.features'
+import { limitsKeyFor } from '../plan-limits.rules'
+import { writeTierLimits } from '@/lib/server/domains/settings/tier-limits.write'
+import { compareAndSetPlanLimitsState } from '@/lib/server/domains/settings/settings.plan-limits'
 import {
   detectPlanLimitsAfterProjectionWrite,
   getPlanLimits,
@@ -130,24 +148,17 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     await fixture.begin()
     vi.useRealTimers()
     spies.loadUsageCounts.mockClear()
+    spies.readsNoState = false
     settingsId = await ensureSettings()
     await testDb.update(settings).set({ planLimitsState: null }).where(eq(settings.id, settingsId))
     await testDb.update(boards).set({ deletedAt: new Date() }).where(isNull(boards.deletedAt))
-    // Only this test's people hold seats.
-    await testDb
-      .update(principal)
-      .set({ role: 'user' })
-      .where(inArray(principal.role, ['admin', 'member']))
-    await testDb
-      .update(invitation)
-      .set({ status: 'canceled' })
-      .where(eq(invitation.status, 'pending'))
     const uid = createId('user') as UserId
     ownerId = createId('principal') as PrincipalId
     await testDb.insert(user).values({ id: uid, name: 'Acme Owner', email: `${uid}@example.com` })
     await testDb
       .insert(principal)
-      .values({ id: ownerId, userId: uid, role: 'admin', type: 'user', createdAt: new Date() })
+      // The earliest owner, whatever else the database holds.
+      .values({ id: ownerId, userId: uid, role: 'admin', type: 'user', createdAt: new Date(0) })
     small = await addBoard('Acme small', 1, new Date('2026-01-01T00:00:00.000Z'))
     big = await addBoard('Acme big', 3, new Date('2026-02-01T00:00:00.000Z'))
   })
@@ -272,6 +283,88 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     expect(again.since).toBe(first.since)
   })
 
+  it('judges the grace by the shared settings, never a stale per-process copy of the limits', async () => {
+    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    const first = await getPlanLimits()
+    expect(first.phase).toBe('grace')
+    // Another process still holds the limits from before the drop.
+    const freeRow = (await testDb.select().from(settings).where(eq(settings.id, settingsId)))[0]!
+    await testDb.update(settings).set({ tierLimits: null }).where(eq(settings.id, settingsId))
+    invalidateTierLimitsCache()
+    expect((await getTierLimits()).maxBoards).toBeNull()
+    await testDb
+      .update(settings)
+      .set({ tierLimits: freeRow.tierLimits })
+      .where(eq(settings.id, settingsId))
+    await invalidateSettingsCache()
+    expect((await getTierLimits()).maxBoards).toBeNull()
+
+    const stale = await getPlanLimits()
+    expect(stale.phase).toBe('grace')
+    expect(stale.since).toBe(first.since)
+    expect((await storedState())?.since).toBe(first.since)
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
+    const later = await getPlanLimits()
+    expect(later.phase).toBe('enforced')
+    expect(later.since).toBe(first.since)
+  })
+
+  it('writes the state only over the value it read', async () => {
+    const a = { since: 'a' }
+    expect(await compareAndSetPlanLimitsState(null, a)).toBe(true)
+    expect(await compareAndSetPlanLimitsState(null, { since: 'b' })).toBe(false)
+    expect(await storedState()).toEqual(a)
+    expect(await compareAndSetPlanLimitsState(a, null)).toBe(true)
+    expect(await storedState()).toBeNull()
+  })
+
+  it("takes the other process's grace when it loses the race to store one", async () => {
+    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    // Another process stores its grace after this one read the settings.
+    spies.readsNoState = true
+    const theirs = {
+      since: '2026-11-01T00:00:00.000Z',
+      graceEndsAt: '2026-11-08T00:00:00.000Z',
+      fromPlan: 'pro',
+      fromFeatures: {},
+      // The same limits this process reads: the race is over the same drop.
+      limitsKey: limitsKeyFor(
+        null,
+        mergeTierLimits(FREE_LIKE),
+        planFeatureSet(mergeTierLimits(FREE_LIKE).features, DISABLED_CLOUD_CONFIG)
+      ),
+    }
+    await testDb
+      .update(settings)
+      .set({ planLimitsState: theirs as never })
+      .where(eq(settings.id, settingsId))
+    const limits = await getPlanLimits()
+    spies.readsNoState = false
+    expect(limits.since).toBe(theirs.since)
+    expect(limits.fromPlan).toBe('pro')
+    expect(await storedState()).toEqual(theirs)
+  })
+
+  it('leaves the grace and its choices alone while the flag is off', async () => {
+    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    const first = await getPlanLimits()
+    expect(await setKeptBoard(small)).toEqual({ ok: true })
+    await configure({ planLimits: false, tierLimits: FREE_LIKE })
+    expect((await getPlanLimits()).phase).toBe('ok')
+    expect(await storedState()).toMatchObject({ since: first.since, keptBoardId: small })
+    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    const back = await getPlanLimits()
+    expect(back.since).toBe(first.since)
+    expect(back.keptBoardId).toBe(small)
+  })
+
+  it('bumps the limits revision on a tier limits write', async () => {
+    const [before] = await testDb.select().from(settings).where(eq(settings.id, settingsId))
+    await writeTierLimits({ maxBoards: 7 }, { writer: 'config' })
+    const [after] = await testDb.select().from(settings).where(eq(settings.id, settingsId))
+    expect(after!.authConfigVersion).toBe(before!.authConfigVersion + 1)
+  })
+
   it('clears the state when the limits are lifted', async () => {
     await configure({ planLimits: true, tierLimits: FREE_LIKE })
     await getPlanLimits()
@@ -304,16 +397,13 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it('pauses only members without a seat after the grace, never the owner', async () => {
+    const memberId = await addMember('Acme Member', null)
+    // One seat over, whatever else the database holds.
+    const { used } = await countSeatUsage()
     await configure({
       planLimits: true,
-      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: 1 },
+      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
     })
-    const uid = createId('user') as UserId
-    const memberId = createId('principal') as PrincipalId
-    await testDb.insert(user).values({ id: uid, name: 'Acme Member', email: `${uid}@example.com` })
-    await testDb
-      .insert(principal)
-      .values({ id: memberId, userId: uid, role: 'member', type: 'user', createdAt: new Date() })
     await invalidatePlanLimits()
     const { limits, candidates } = await getPlanLimitsWithCandidates()
     expect(limits.issues.map((i) => i.key)).toEqual(['maxTeamSeats'])
@@ -327,8 +417,9 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
     expect(await isSeatPaused(memberId)).toBe(true)
     expect(await isSeatPaused(ownerId)).toBe(false)
-    // The owner fills the one seat, so choosing the member as well is too many.
-    expect(await setSeatHolders([memberId])).toEqual({ ok: false, reason: 'too_many' })
+    // Choosing every member is more seats than the plan has.
+    const everyone = candidates.members!.map((m) => m.id)
+    expect(await setSeatHolders(everyone)).toEqual({ ok: false, reason: 'too_many' })
     // Someone who is not a seat (a service principal behind a key) is never paused.
     expect(await isSeatPaused(createId('principal'))).toBe(false)
   })
@@ -339,7 +430,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     await testDb.insert(user).values({ id: uid, name, email: `${uid}@example.com` })
     await testDb
       .insert(principal)
-      .values({ id, userId: uid, role: 'member', type: 'user', createdAt: new Date(0) })
+      .values({ id, userId: uid, role: 'member', type: 'user', createdAt: new Date() })
     if (lastSignIn) {
       await testDb.insert(session).values({
         id: createId('user'),
@@ -371,17 +462,19 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it('ranks seats on activity before the grace ended, so signing in later takes no seat', async () => {
-    await configure({
-      planLimits: true,
-      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: 2 },
-    })
     const earlier = await addMember('Acme Earlier', new Date(Date.now() - 2 * DAY))
     const later = await addMember('Acme Later', null)
+    await addMember('Acme Unrelated', null)
+    // Two seats over: the two newest members without recent activity.
+    const { used } = await countSeatUsage()
+    await configure({
+      planLimits: true,
+      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 2 },
+    })
     await invalidatePlanLimits()
     await getPlanLimits()
-    // After the grace, the member without a seat signs in.
+    // After the grace, a member without a seat signs in.
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
-    await addMember('Acme Unrelated', null)
     const [laterRow] = await testDb.select().from(principal).where(eq(principal.id, later))
     await testDb.insert(session).values({
       id: createId('user'),
@@ -473,6 +566,42 @@ describe.skipIf(!fixture.available)('detection on a billing projection write (re
     else process.env.QUACKBACK_INSTANCE_ID = instance
     await invalidatePlanLimits()
     await fixture.rollback()
+  })
+
+  it('fills in the replaced plan when a read stored the grace first', async () => {
+    const appliedAt = new Date(Date.now() - 1000)
+    const free = parseBillingProjection(projection(2, 'free', 1, {}))!
+    await configure({
+      planLimits: true,
+      tierLimits: null,
+      cloud: { enabled: true, projection: free },
+    })
+    // A read races the projection write and stores the grace without the old plan.
+    const raced = await getPlanLimits()
+    expect((await storedState())?.fromPlan).toBeNull()
+    await detectPlanLimitsAfterProjectionWrite(
+      projection(1, 'pro', null, { webhooks: true }),
+      appliedAt
+    )
+    const stored = await storedState()
+    expect(stored).toMatchObject({ since: raced.since, fromPlan: 'pro' })
+    expect((stored?.fromFeatures as Record<string, boolean>).webhooks).toBe(true)
+  })
+
+  it('never rewrites the plan of a grace from before the projection write', async () => {
+    const free = parseBillingProjection(projection(2, 'free', 1, {}))!
+    await configure({
+      planLimits: true,
+      tierLimits: null,
+      cloud: { enabled: true, projection: free },
+    })
+    await getPlanLimits()
+    const later = new Date(Date.now() + 1000)
+    await detectPlanLimitsAfterProjectionWrite(
+      projection(1, 'pro', null, { webhooks: true }),
+      later
+    )
+    expect((await storedState())?.fromPlan).toBeNull()
   })
 
   it('starts the grace when the new projection drops the plan, carrying the old plan', async () => {

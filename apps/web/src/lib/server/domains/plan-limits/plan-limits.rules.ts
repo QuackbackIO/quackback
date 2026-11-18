@@ -118,6 +118,8 @@ export interface PlanLimitsState {
   fromFeatures: PlanFeatureSet
   /** Identity of the limits this grace was granted against (see {@link limitsKeyFor}). */
   limitsKey: string
+  /** The inputs revision the state was written under (see {@link PlanLimitsBasis}). */
+  basis?: PlanLimitsBasis
   /** The admin's choice of the board that stays open. */
   keptBoardId?: string
   /** The admin's choice of who keeps a seat. */
@@ -141,9 +143,31 @@ export interface PreviousPlan {
   features: PlanFeatureSet
 }
 
+/**
+ * The revision of the settings the limits were read from: the billing
+ * projection's local revision and the auth config version, which every tier
+ * limits write bumps. Both only grow, so a reader whose basis is behind a
+ * state's has read older limits than the ones the state was written under.
+ */
+export interface PlanLimitsBasis {
+  cloudRevision: number
+  authConfigVersion: number
+}
+
+/** Whether `reader` has seen at least everything `state` was written under. */
+export function basisAtLeast(reader: PlanLimitsBasis, state: PlanLimitsBasis | undefined): boolean {
+  if (!state) return true
+  return (
+    reader.cloudRevision >= state.cloudRevision &&
+    reader.authConfigVersion >= state.authConfigVersion
+  )
+}
+
 export interface PlanLimitsInputs {
-  /** The rollout flag. Off: always ok, nothing stored. */
+  /** The rollout flag. Off: always ok, and a stored state is left as it is. */
   enabled: boolean
+  /** The inputs revision these limits were read under. */
+  basis?: PlanLimitsBasis
   plan: PlanId | null
   /** The effective limits now. */
   limits: TierLimits
@@ -287,11 +311,20 @@ function graceFeatures(
 
 export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimitsResult {
   if (!input.enabled) {
-    return { view: okView(input), nextState: null, changed: input.stored !== null }
+    // Turning the flag off pauses the rules; it does not forget a grace or the
+    // admin's choices.
+    return { view: okView(input), nextState: input.stored, changed: false }
   }
 
   const key = limitsKeyFor(input.plan, input.limits, input.features)
-  const sameLimits = input.stored !== null && input.stored.limitsKey === key
+  // A reader that has not seen the limits a state was written under (a stale
+  // copy of the settings) keeps the state as it is: it may neither clear the
+  // grace nor start another.
+  const behind =
+    input.stored !== null &&
+    input.basis !== undefined &&
+    !basisAtLeast(input.basis, input.stored.basis)
+  const sameLimits = input.stored !== null && (input.stored.limitsKey === key || behind)
   const used = input.usage ?? {}
   const issues = capIssues(used, input.limits, PLAN_LIMIT_ISSUE_KEYS) as PlanLimitIssue[]
   const featureIssues = featureIssuesFor(input.features, input.configured)
@@ -316,6 +349,7 @@ export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimit
         fromPlan: input.previous?.plan ?? null,
         fromFeatures: graceFeatures(input.features, input.previous, input.configured),
         limitsKey: key,
+        ...(input.basis ? { basis: input.basis } : {}),
         ...choicesOf(input.stored),
       }
   const phase: PlanLimitsPhase =
@@ -424,6 +458,18 @@ export function parsePlanLimitsState(value: unknown): PlanLimitsState | null {
     fromPlan: typeof raw.fromPlan === 'string' && isPlanId(raw.fromPlan) ? raw.fromPlan : null,
     fromFeatures,
     limitsKey: raw.limitsKey,
+  }
+  const basis = raw.basis as Record<string, unknown> | undefined
+  if (
+    basis &&
+    typeof basis === 'object' &&
+    Number.isSafeInteger(basis.cloudRevision) &&
+    Number.isSafeInteger(basis.authConfigVersion)
+  ) {
+    state.basis = {
+      cloudRevision: basis.cloudRevision as number,
+      authConfigVersion: basis.authConfigVersion as number,
+    }
   }
   if (typeof raw.keptBoardId === 'string') state.keptBoardId = raw.keptBoardId
   const seats = stringList(raw.seatHolderIds)

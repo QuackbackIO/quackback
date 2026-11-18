@@ -61,6 +61,7 @@ export async function writeBillingProjection(
   if (!expected) throw new BillingProjectionWriteError('workspace_identity_missing')
   if (workspaceKey !== expected) throw new BillingProjectionWriteError('workspace_mismatch')
 
+  const appliedAt = new Date()
   let replaced: unknown = null
   const applied = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -97,7 +98,7 @@ export async function writeBillingProjection(
     // Detect a drop now, with the replaced projection as the plan before it.
     const { detectPlanLimitsAfterProjectionWrite } =
       await import('@/lib/server/domains/plan-limits/plan-limits.service')
-    await detectPlanLimitsAfterProjectionWrite(replaced)
+    await detectPlanLimitsAfterProjectionWrite(replaced, appliedAt)
   }
   log.info(
     { workspace_key: workspaceKey, projection_version: projection.version, applied },
