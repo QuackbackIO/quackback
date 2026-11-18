@@ -25,6 +25,17 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useBillingEnabled: () => access.billingEnabled,
 }))
 
+// The settings layout loader seeds the upgrade context; tests seed the same key.
+vi.mock('@/lib/client/queries/billing', () => ({
+  billingQueries: {
+    upgradeContext: () => ({
+      queryKey: ['billing', 'upgrade-context'],
+      queryFn: async () => null,
+      staleTime: Infinity,
+    }),
+  },
+}))
+
 vi.mock('@/lib/client/hooks/use-permission', () => ({
   usePermission: (key: string) => access.permissions.has(key),
 }))
@@ -388,13 +399,18 @@ describe('empty list', () => {
   })
 })
 
-describe('set up but off on the current plan', () => {
-  const OFF_COPY =
-    'Single sign-on is set up but off on your current plan. Your team signs in with email links.'
+describe('set up but paused on the plan', () => {
+  const PAUSED_COPY =
+    'Single sign-on is paused on the Pro plan. Your team signs in with email links. It comes back when you upgrade.'
 
-  function renderSetUp(tierEnabled: boolean, providers = [buttonProvider, routedProvider]) {
+  function renderSetUp(
+    tierEnabled: boolean,
+    providers = [buttonProvider, routedProvider],
+    upgradeContext: { currentPlanName: string } | null = { currentPlanName: 'Pro' }
+  ) {
     const qc = new QueryClient()
     qc.setQueryData(['settings', 'identityProviders'], providers)
+    qc.setQueryData(['billing', 'upgrade-context'], upgradeContext)
     return render(
       <QueryClientProvider client={qc}>
         <IdentityProvidersSection tierEnabled={tierEnabled} methods={withPassword} />
@@ -402,32 +418,48 @@ describe('set up but off on the current plan', () => {
     )
   }
 
-  it('says email links stand in when an enabled provider is set up and the plan lacks SSO', () => {
+  it('names the plan and says email links stand in when an enabled provider is set up', () => {
     renderSetUp(false)
-    expect(screen.getByText(OFF_COPY)).toBeInTheDocument()
+    expect(screen.getByText(PAUSED_COPY)).toBeInTheDocument()
     // One notice, not the plain upgrade offer as well.
     expect(screen.queryByText(/Single sign-on is an Enterprise feature/)).toBeNull()
   })
 
-  it('links to Plan & billing for someone who can manage billing', () => {
+  it('offers Upgrade, linking to Plan & billing, to someone who can manage billing', () => {
     renderSetUp(false)
-    expect(screen.getByRole('link', { name: /plans/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Upgrade' })).toHaveAttribute(
       'href',
       '/admin/settings/billing'
     )
+    expect(screen.queryByText('Ask someone who manages billing to upgrade.')).toBeNull()
   })
 
-  it('shows no billing link without billing rights', () => {
+  it('asks someone without billing rights to find a billing manager', () => {
     access.permissions = new Set()
     renderSetUp(false)
-    expect(screen.getByText(OFF_COPY)).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /plans/i })).toBeNull()
+    expect(screen.getByText(PAUSED_COPY)).toBeInTheDocument()
+    expect(screen.getByText('Ask someone who manages billing to upgrade.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Upgrade' })).toBeNull()
   })
 
-  it('shows no billing link where billing is not managed in the app', () => {
+  it('leaves the plan unnamed when the plan is not known', () => {
+    renderSetUp(false, undefined, null)
+    expect(
+      screen.getByText(
+        'Single sign-on is paused. Your team signs in with email links. It comes back when you upgrade.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Pro plan/)).toBeNull()
+  })
+
+  it('offers no upgrade where billing is not managed in the app', () => {
     access.billingEnabled = false
     renderSetUp(false)
-    expect(screen.queryByRole('link', { name: /plans/i })).toBeNull()
+    expect(
+      screen.getByText('Single sign-on is paused. Your team signs in with email links.')
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Upgrade' })).toBeNull()
+    expect(screen.queryByText(/upgrade/i)).toBeNull()
   })
 
   it('keeps the providers listed', () => {
@@ -437,12 +469,12 @@ describe('set up but off on the current plan', () => {
 
   it('is absent while the plan includes SSO', () => {
     renderSetUp(true)
-    expect(screen.queryByText(OFF_COPY)).toBeNull()
+    expect(screen.queryByText(/Single sign-on is paused/)).toBeNull()
   })
 
   it('is absent when no enabled provider has its secret saved', () => {
     renderSetUp(false, [buttonProvider, { ...routedProvider, configured: false }])
-    expect(screen.queryByText(OFF_COPY)).toBeNull()
+    expect(screen.queryByText(/Single sign-on is paused/)).toBeNull()
     expect(screen.getByText(/Single sign-on is an Enterprise feature/)).toBeInTheDocument()
   })
 })
