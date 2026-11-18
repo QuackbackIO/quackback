@@ -13,6 +13,7 @@
 import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { baseUrlOverride } from '@/lib/server/base-url-override'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 
 const log = logger.child({ component: 'config' })
@@ -589,7 +590,7 @@ export const config = {
    * `BASE_URL` exactly as before.
    */
   get baseUrl() {
-    return getCurrentWorkspace()?.routing.baseUrl ?? loadConfig().baseUrl
+    return baseUrlOverride() ?? getCurrentWorkspace()?.routing.baseUrl ?? loadConfig().baseUrl
   },
   get port() {
     return loadConfig().port

@@ -103,6 +103,8 @@ async function queueNotification() {
         conversationId: conversation.id,
         senderType: 'visitor',
         authorPrincipalId: author.id,
+        authorName: 'Acme person',
+        authorEmail: person.email,
         content: 'Hello from Acme',
         createdAt: new Date().toISOString(),
       },

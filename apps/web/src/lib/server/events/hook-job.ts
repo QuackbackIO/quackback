@@ -108,10 +108,16 @@ export async function runHookJob(job: ClaimedJob): Promise<void> {
 
   let result: HookResult
   try {
-    result = await hook.run(event, target, hookConfig, {
-      jobId: idempotencyKey,
-      finalAttempt: job.attempts >= job.maxAttempts,
-    })
+    // Links in an email or notification name the default hostname while the
+    // custom domain is paused after the plan limits grace.
+    const { withPausedCustomDomainOrigin } =
+      await import('@/lib/server/domains/plan-limits/plan-limits.custom-domain')
+    result = await withPausedCustomDomainOrigin(() =>
+      hook.run(event, target, hookConfig, {
+        jobId: idempotencyKey,
+        finalAttempt: job.attempts >= job.maxAttempts,
+      })
+    )
   } catch (error) {
     if (isRetryableError(error)) throw error
     throw new TerminalJobError(error instanceof Error ? error.message : 'Unknown error')

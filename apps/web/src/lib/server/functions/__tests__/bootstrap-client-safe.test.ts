@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import {
+  FEATURE_STATES,
+  runsWithoutPlanGate,
+  setFeatureState,
+} from '@/lib/server/domains/plan-limits/__tests__/feature-states'
 
 /**
  * `getBootstrapData` is a server function: besides seeding the SSR document it
@@ -36,8 +41,20 @@ vi.mock('@/lib/server/auth/registered-providers', () => ({
   getRegisteredAuthProviders: async () => ['password'],
 }))
 vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://feedback.example' } }))
-vi.mock('@/lib/server/domains/help-center/help-center-domain.service', () => ({
-  resolveHelpCenterBaseUrl: ({ fallback }: { fallback: string }) => fallback,
+vi.mock('@/lib/server/domains/help-center/help-center-domain.service', async () => ({
+  resolveHelpCenterBaseUrl: (await import('@/lib/shared/help-center-domain'))
+    .resolveHelpCenterBaseUrl,
+}))
+vi.mock(
+  '@/lib/server/domains/plan-limits/plan-limits.service',
+  async () =>
+    (await import('@/lib/server/domains/plan-limits/__tests__/feature-states'))
+      .planLimitsServiceDouble
+)
+// The paused custom domain reads the workspace's custom hostnames from the
+// settings row: here a help center domain on top of the default host.
+vi.mock('@/lib/server/domains/settings/settings.plan-limits', () => ({
+  readPlanLimitsSources: async () => ({ cloudIdentity: null, helpCenterDomain: 'help.acme.test' }),
 }))
 vi.mock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => false }))
 vi.mock('@/lib/server/logger', () => ({
@@ -216,4 +233,54 @@ describe('getBootstrapData response', () => {
     const data = await getBootstrapData()
     expect('sectionLinks' in data).toBe(false)
   })
+})
+
+// Paid presentation paused after the plan limits grace is not rendered: the
+// custom CSS and the help center's custom domain. Nothing stored changes.
+describe('getBootstrapData and the plan limits pause', () => {
+  const css = '.acme { color: red }'
+  const hcDomain = { domain: 'help.acme.test', verifiedAt: '2026-11-01T00:00:00.000Z' }
+
+  function settingsWithPaidPresentation() {
+    return {
+      ...workspaceSettings(setupState()),
+      customCss: css,
+      helpCenterConfig: { domain: hcDomain },
+    }
+  }
+
+  beforeEach(() => {
+    hoisted.getWorkspaceSettings.mockReset()
+    hoisted.host = 'help.acme.test'
+  })
+
+  it.each(FEATURE_STATES)('renders custom CSS only while not paused (%s)', async (state) => {
+    setFeatureState(state, 'customCss')
+    hoisted.getWorkspaceSettings.mockResolvedValue(settingsWithPaidPresentation())
+    const data = (await getBootstrapData()) as unknown as { settings: { customCss: string } }
+    expect(data.settings.customCss).toBe(runsWithoutPlanGate(state) ? css : '')
+  })
+
+  it.each(FEATURE_STATES)(
+    'offers the help center custom domain only while not paused (%s)',
+    async (state) => {
+      setFeatureState(state, 'customDomain')
+      const stored = settingsWithPaidPresentation()
+      hoisted.getWorkspaceSettings.mockResolvedValue(stored)
+      const data = (await getBootstrapData()) as unknown as {
+        baseUrl: string
+        settings: { helpCenterConfig: { domain: unknown } }
+      }
+      if (runsWithoutPlanGate(state)) {
+        expect(data.settings.helpCenterConfig.domain).toEqual(hcDomain)
+        expect(data.baseUrl).toBe('https://help.acme.test')
+      } else {
+        // No default-host redirect to it, and canonical links on the default host.
+        expect(data.settings.helpCenterConfig.domain).toEqual({ domain: null, verifiedAt: null })
+        expect(data.baseUrl).toBe('https://feedback.example')
+      }
+      // The cached settings object is never written to.
+      expect(stored.helpCenterConfig.domain).toEqual(hcDomain)
+    }
+  )
 })

@@ -265,6 +265,37 @@ function clientSafeSettings(
   }
 }
 
+/**
+ * Paid presentation paused after the plan limits grace is not rendered: the
+ * custom CSS (portal, help center, widget, auth pages) and the help center's
+ * custom domain (its default-host redirect and its canonical links). Returns
+ * a copy; the stored settings and the cached object are unchanged.
+ */
+async function withPausedPresentationHidden(
+  settings: WorkspaceSettings
+): Promise<WorkspaceSettings> {
+  const hasCss = Boolean(settings.customCss)
+  const hcDomain = settings.helpCenterConfig?.domain
+  if (!hasCss && !hcDomain?.domain) return settings
+  const [{ isFeaturePaused }, { effectiveHelpCenterDomain }] = await Promise.all([
+    import('@/lib/server/domains/plan-limits/plan-limits.service'),
+    import('@/lib/server/domains/plan-limits/plan-limits.custom-domain'),
+  ])
+  const [cssPaused, domain] = await Promise.all([
+    hasCss ? isFeaturePaused('customCss') : false,
+    hcDomain?.domain ? effectiveHelpCenterDomain(hcDomain) : hcDomain,
+  ])
+  let shown = settings
+  if (cssPaused) shown = { ...shown, customCss: '' }
+  if (hcDomain?.domain && !domain) {
+    shown = {
+      ...shown,
+      helpCenterConfig: { ...shown.helpCenterConfig, domain: { domain: null, verifiedAt: null } },
+    }
+  }
+  return shown
+}
+
 let _initialized = false
 
 const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapData> => {
@@ -302,8 +333,9 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 
   // Single principal read returns both session.principalType + userRole;
   // run in parallel with the settings fetch.
-  const [{ session, role: userRole, teammate }, settings, registeredAuthProviders] =
+  const [{ session, role: userRole, teammate }, storedSettings, registeredAuthProviders] =
     await Promise.all([getSessionAndRole(), getWorkspaceSettings(), getRegisteredAuthProviders()])
+  const settings = storedSettings ? await withPausedPresentationHidden(storedSettings) : null
 
   // One-time initialization on first request.
   //
