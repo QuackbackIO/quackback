@@ -4,6 +4,7 @@
  * Schedule and retry policy live in `jobs/definitions.ts`.
  */
 import { logger } from '@/lib/server/logger'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { PORTAL_SECTIONS } from '@/lib/shared/section-domains'
 import { watchSectionDomains } from './section-domains-watch'
 import { getSectionDomains, readHostingIfSetUp } from './section-domains.service'
@@ -16,8 +17,12 @@ const log = logger.child({ component: 'section-domains-watch' })
  * plane decides when a domain is ready, so no workspace there gets a daily
  * job that does nothing. The handler makes the same checks, for a run that
  * reaches it some other way.
+ *
+ * The runner asks a gate on every pass, so a pooled process (Cloud's fleet)
+ * answers without a query.
  */
 export async function isSectionDomainsWatchDue(): Promise<boolean> {
+  if (isPooledTenancy()) return false
   const hosting = await readHostingIfSetUp()
   if (!hosting || hosting.cloud) return false
   const map = await getSectionDomains('fresh')
