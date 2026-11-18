@@ -28,7 +28,8 @@
  *    custom hostname still lands;
  *  - `/.well-known/*` discovery documents and server functions;
  *  - the `/widget` frame, so an embed whose SDK was loaded before the pause
- *    keeps the frame origin it talks to. A fresh SDK names the default host.
+ *    keeps the frame origin it talks to. A fresh SDK names the default host;
+ *  - the build's hashed `/assets/*`, served as they are on any hostname.
  *
  * Sessions are host cookies, so people signed in on the custom hostname sign
  * in again on the default one.
@@ -42,7 +43,10 @@ import {
 } from '@/lib/server/base-url-override'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
-import { readPlanLimitsSources } from '@/lib/server/domains/settings/settings.plan-limits'
+import {
+  readCustomHostnames,
+  readPlanLimitsSources,
+} from '@/lib/server/domains/settings/settings.plan-limits'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 import { isFeaturePaused } from './plan-limits.service'
 
@@ -67,11 +71,14 @@ function hostOf(origin: string): string | null {
 
 /**
  * The paused custom domain, or null when it serves (or there is none, or no
- * default hostname is known to send people to). Reads the cached settings row;
- * the plan state is read only when a custom hostname is set up. Fails open.
+ * default hostname is known to send people to). A workspace with no custom
+ * hostname answers from a set derived once per cached copy of the settings,
+ * reading nothing else; the plan state is read only when a custom hostname is
+ * set up. Fails open.
  */
 export async function pausedCustomDomain(): Promise<PausedCustomDomain | null> {
   try {
+    if ((await readCustomHostnames()).size === 0) return null
     const sources = await readPlanLimitsSources()
     if (!sources) return null
     const identity = parseIdentityProjection(sources.cloudIdentity)
@@ -120,9 +127,17 @@ function redirectable(request: Request, pathname: string): boolean {
   return true
 }
 
-/** Paths that belong to the fleet: probed constantly, never read settings for them. */
-function isFleetPath(pathname: string): boolean {
-  return pathname.startsWith('/api/health') || pathname.startsWith('/api/internal/')
+/**
+ * Paths that never read settings for this: the fleet's (probed constantly)
+ * and the build's hashed assets, which generate no links and serve the same
+ * bytes on any hostname.
+ */
+function isSkippedPath(pathname: string): boolean {
+  return (
+    pathname.startsWith('/api/health') ||
+    pathname.startsWith('/api/internal/') ||
+    pathname.startsWith('/assets/')
+  )
 }
 
 /**
@@ -138,7 +153,7 @@ export async function handlePausedCustomDomain<T>({
   next: () => Promise<T>
 }): Promise<T | Response> {
   const url = new URL(request.url)
-  if (isFleetPath(url.pathname)) return next()
+  if (isSkippedPath(url.pathname)) return next()
   const paused = await pausedCustomDomain()
   if (!paused) return next()
 

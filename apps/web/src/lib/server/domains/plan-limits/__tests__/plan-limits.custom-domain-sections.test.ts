@@ -34,9 +34,11 @@ vi.mock('@/lib/server/config', async () => {
 vi.mock('@/lib/server/workspaces/workspace-context', () => ({
   getCurrentWorkspace: () => null,
 }))
-vi.mock('@/lib/server/domains/settings/settings.plan-limits', () => ({
-  readPlanLimitsSources: async () => h.sources,
-}))
+vi.mock('@/lib/server/domains/settings/settings.plan-limits', async () =>
+  (
+    await import('@/lib/server/domains/plan-limits/__tests__/settings-plan-limits-double')
+  ).settingsPlanLimitsDouble(() => h.sources)
+)
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getWorkspaceSettings: async () => h.settings,
 }))

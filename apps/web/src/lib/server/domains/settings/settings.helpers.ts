@@ -154,6 +154,21 @@ export async function findSettingsCached(): Promise<SettingsRecord | null> {
   return getWorkspaceSettingsRow()
 }
 
+/**
+ * A value derived from the cached settings row once per cached copy of it
+ * (see `deriveFromWorkspaceSettingsRow`). Null before the workspace has one.
+ *
+ * @internal
+ */
+export async function deriveFromSettingsCached<T>(
+  name: string,
+  derive: (row: Readonly<SettingsRecord>) => T
+): Promise<T | null> {
+  // Dynamic import, as in findSettingsCached.
+  const { deriveFromWorkspaceSettingsRow } = await import('./settings.service')
+  return deriveFromWorkspaceSettingsRow(name, derive)
+}
+
 /** @internal */
 export function wrapDbError(operation: string, error: unknown): never {
   // Named refusals (402/403/404/…) must stay themselves. Wrapping a

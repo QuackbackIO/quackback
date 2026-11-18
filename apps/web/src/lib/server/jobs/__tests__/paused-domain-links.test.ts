@@ -19,8 +19,10 @@ vi.mock('@/lib/server/db', () => ({
     }
   ),
 }))
-vi.mock('@/lib/server/domains/settings/settings.plan-limits', () => ({
-  readPlanLimitsSources: async () => ({
+vi.mock('@/lib/server/domains/settings/settings.plan-limits', async () =>
+  (
+    await import('@/lib/server/domains/plan-limits/__tests__/settings-plan-limits-double')
+  ).settingsPlanLimitsDouble(() => ({
     cloudIdentity: {
       version: 1,
       displayName: 'Acme',
@@ -37,8 +39,8 @@ vi.mock('@/lib/server/domains/settings/settings.plan-limits', () => ({
       updatedAt: '2026-11-01T00:00:00.000Z',
     },
     sectionHostnames: [],
-  }),
-}))
+  }))
+)
 vi.mock(
   '@/lib/server/domains/plan-limits/plan-limits.service',
   async () =>

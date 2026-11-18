@@ -67,12 +67,14 @@ vi.mock(
 )
 // The paused custom domain reads the workspace's custom hostnames from the
 // settings row: here the help center's own host on top of the default host.
-vi.mock('@/lib/server/domains/settings/settings.plan-limits', () => ({
-  readPlanLimitsSources: async () => ({
+vi.mock('@/lib/server/domains/settings/settings.plan-limits', async () =>
+  (
+    await import('@/lib/server/domains/plan-limits/__tests__/settings-plan-limits-double')
+  ).settingsPlanLimitsDouble(() => ({
     cloudIdentity: null,
     sectionHostnames: ['help.acme.test'],
-  }),
-}))
+  }))
+)
 vi.mock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => false }))
 vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ debug: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() }) },

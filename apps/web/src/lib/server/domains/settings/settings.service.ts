@@ -1040,6 +1040,38 @@ export async function getWorkspaceSettingsRow(): Promise<SettingsRecord | null> 
   return row ? structuredClone(row) : null
 }
 
+/** Values derived from one cached copy of the settings, by name. */
+const derivedFromSettings = new WeakMap<WorkspaceSettings, Map<string, unknown>>()
+
+/**
+ * A value derived from the cached settings row, computed once per cached copy
+ * of it rather than on every read: a request shares one copy, and this process
+ * keeps it for a few seconds (local-cache.ts). A settings write replaces the
+ * copy, so the next read derives again. `derive` must not change the row, and
+ * nothing may change the value it returns, which every reader of the copy
+ * shares. `name` must say everything else the value depends on. Null before
+ * the workspace has a settings row.
+ *
+ * @internal
+ */
+export async function deriveFromWorkspaceSettingsRow<T>(
+  name: string,
+  derive: (row: Readonly<SettingsRecord>) => T
+): Promise<T | null> {
+  const settings = await memoizePerRequest(CACHE_KEYS.WORKSPACE_SETTINGS, loadWorkspaceSettings)
+  const row = settings?.settings as SettingsRecord | undefined
+  if (!settings || !row) return null
+  let derived = derivedFromSettings.get(settings)
+  if (!derived) {
+    derived = new Map()
+    derivedFromSettings.set(settings, derived)
+  }
+  if (derived.has(name)) return derived.get(name) as T
+  const value = derive(row)
+  derived.set(name, value)
+  return value
+}
+
 async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   const local = localCacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
   if (local) return local

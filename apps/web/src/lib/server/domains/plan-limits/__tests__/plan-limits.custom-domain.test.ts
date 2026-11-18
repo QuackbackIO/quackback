@@ -12,9 +12,11 @@ const h = vi.hoisted(() => ({
   baseUrl: 'https://acme.example.com',
 }))
 
-vi.mock('@/lib/server/domains/settings/settings.plan-limits', () => ({
-  readPlanLimitsSources: async () => h.sources,
-}))
+vi.mock('@/lib/server/domains/settings/settings.plan-limits', async () =>
+  (
+    await import('@/lib/server/domains/plan-limits/__tests__/settings-plan-limits-double')
+  ).settingsPlanLimitsDouble(() => h.sources)
+)
 vi.mock('@/lib/server/workspaces/workspace-context', () => ({
   getCurrentWorkspace: () => h.workspace,
 }))
@@ -37,6 +39,7 @@ vi.mock(
 )
 
 import { runWithLogContext } from '@/lib/server/log-context'
+import { readPlanLimitsSources } from '@/lib/server/domains/settings/settings.plan-limits'
 import { config } from '@/lib/server/config'
 import {
   handlePausedCustomDomain,
@@ -180,10 +183,22 @@ describe('requests on a custom hostname', () => {
     )
   })
 
-  it('reads no plan state when no custom hostname is set up', async () => {
+  it('reads neither the plan state nor the full sources on the default host with no custom hostname', async () => {
     withSources(identity([]))
     setFeatureState('enforced', 'customDomain')
-    expect((await serve(request('https://acme.example.com/'))).result).toBe('next')
+    const { result, baseUrl } = await serve(request('https://acme.example.com/'))
+    expect(result).toBe('next')
+    expect(baseUrl).toBe('https://feedback.acme.test')
+    expect(planLimitsServiceDouble.isFeaturePaused).not.toHaveBeenCalled()
+    expect(planLimitsServiceDouble.getPlanLimits).not.toHaveBeenCalled()
+    expect(readPlanLimitsSources).not.toHaveBeenCalled()
+  })
+
+  it('reads nothing for the build assets, even on a paused custom hostname', async () => {
+    setFeatureState('enforced', 'customDomain')
+    const { result } = await serve(request('https://feedback.acme.test/assets/main-abc123.js'))
+    expect(result).toBe('next')
+    expect(readPlanLimitsSources).not.toHaveBeenCalled()
     expect(planLimitsServiceDouble.isFeaturePaused).not.toHaveBeenCalled()
   })
 
