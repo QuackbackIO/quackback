@@ -1,17 +1,9 @@
 import type { StoredCloudConfig } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
 import { DISABLED_CLOUD_CONFIG, type CloudConfig } from './cloud.types'
-import { parseBillingProjection } from './billing-projection'
+import { entitlementsAt, parseBillingProjection, projectionAccessEnded } from './billing-projection'
 
 const log = logger.child({ component: 'cloud-config' })
-
-/**
- * Entitlements the Free plan always includes. Must match the plan-grant table
- * for `free` that issues projections. An ended access window falls back to
- * these rather than to nothing, so Free features survive without a new
- * projection.
- */
-const FREE_PLAN_ENTITLEMENTS: CloudConfig['entitlements'] = { aiDrafts: true, apiAccess: true }
 
 /** Resolve the latest verified projection using the caller's clock. */
 export function resolveCloudConfig(
@@ -25,9 +17,7 @@ export function resolveCloudConfig(
     return DISABLED_CLOUD_CONFIG
   }
 
-  const accessExpired =
-    projection.planLimitsExpireAt !== null &&
-    now.getTime() >= Date.parse(projection.planLimitsExpireAt)
+  const accessExpired = projectionAccessEnded(projection, now)
   const trialActive =
     projection.subscriptionStatus == null &&
     projection.trialExpiresAt !== null &&
@@ -36,7 +26,7 @@ export function resolveCloudConfig(
   return {
     enabled: true,
     plan: accessExpired ? 'free' : projection.effectivePlan,
-    entitlements: accessExpired ? { ...FREE_PLAN_ENTITLEMENTS } : projection.entitlements,
+    entitlements: entitlementsAt(projection, now),
     subscriptionStatus: projection.subscriptionStatus,
     trialStartedAt: projection.trialStartedAt,
     trialExpiresAt: projection.trialExpiresAt,
