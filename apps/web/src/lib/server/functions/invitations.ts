@@ -288,8 +288,20 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       // plain legacy role.
       // Defense-in-depth: a roleId only ever rides a member invite (send
       // enforces it); drop it for any other stored role.
-      const assignRoleId =
+      let assignRoleId =
         role === 'member' ? ((row.roleId as RoleId | null) ?? undefined) : undefined
+      // Past the plan's custom-role cap (after the plan limits grace) the
+      // invite's custom role goes to nobody new: it lands as the plain member.
+      if (assignRoleId) {
+        const { isCustomRoleHeld } = await import('@/lib/server/domains/roles/role.plan-lock')
+        if (await isCustomRoleHeld(assignRoleId)) {
+          log.info(
+            { invitation_id: invitationId },
+            'accept invitation: custom role held by the plan'
+          )
+          assignRoleId = undefined
+        }
+      }
 
       if (existingPrincipal) {
         // Promote only when the invite grants a strictly higher role. An

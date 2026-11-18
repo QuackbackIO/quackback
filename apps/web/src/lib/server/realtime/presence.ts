@@ -45,6 +45,7 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
 import type { PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { withoutPausedSeats } from '@/lib/server/domains/plan-limits/plan-limits.seats'
 
 const log = logger.child({ component: 'presence' })
 
@@ -260,7 +261,7 @@ export async function readAvailableAgentIds(): Promise<PrincipalId[] | null> {
       .select({ id: principal.id })
       .from(principal)
       .where(and(inArray(principal.id, onlineIds), eq(principal.chatAvailability, 'online')))
-    return rows.map((r) => r.id)
+    return await withoutPausedSeats(rows.map((r) => r.id))
   } catch (err) {
     log.warn({ err }, 'read available agents failed')
     return null
@@ -288,7 +289,7 @@ export async function listAvailableAgentIds(onlineIds: PrincipalId[]): Promise<P
       .select({ id: principal.id })
       .from(principal)
       .where(and(inArray(principal.id, onlineIds), eq(principal.chatAvailability, 'online')))
-    return rows.map((r) => r.id)
+    return await withoutPausedSeats(rows.map((r) => r.id))
   } catch (err) {
     log.warn({ err }, 'list available agents failed')
     return []

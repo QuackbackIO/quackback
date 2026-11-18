@@ -142,6 +142,17 @@ export interface BootstrapData {
   } | null
 }
 
+/** The session's role, `user` for a paused seat (the plan has fewer team seats than members). */
+async function roleFor(
+  principalRecord: { id: string; role: string; type: string },
+  scope: ReturnType<typeof toSessionScope>
+): Promise<Role> {
+  const role = sessionRole(principalRecord.role as Role, scope)
+  if (role === 'user') return role
+  const { roleUnlessPaused } = await import('@/lib/server/domains/plan-limits/plan-limits.seats')
+  return roleUnlessPaused(principalRecord, role)
+}
+
 // Returns both the session (with principalType) AND the user role from one
 // principal read, both shared with every other identity read in the request.
 // `teammate` is the principal's own role, read past the session's scope: true
@@ -201,7 +212,7 @@ async function getSessionAndRole(): Promise<{
           updatedAt: session.user.updatedAt.toISOString(),
         },
       },
-      role: principalRecord ? sessionRole(principalRecord.role as Role, scope) : null,
+      role: principalRecord ? await roleFor(principalRecord, scope) : null,
       teammate:
         scope !== 'widget' &&
         isTeamMember(principalRecord?.role) &&

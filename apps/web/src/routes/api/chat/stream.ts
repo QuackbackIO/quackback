@@ -39,6 +39,7 @@ import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspace
 import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { logger } from '@/lib/server/logger'
+import { isPausedTeamSeat } from '@/lib/server/domains/plan-limits/plan-limits.seats'
 
 const log = logger.child({ component: 'chat-stream' })
 
@@ -51,6 +52,8 @@ interface StreamPrincipal {
   via: 'token' | 'session'
   /** Bound audience; non-dashboard tokens and sessions are portal-tier here. */
   scope: SessionScope
+  /** A paused seat (the plan has fewer team seats than members): portal-tier too. */
+  paused: boolean
 }
 
 /** Resolve the principal for a stream from a signed token (widget) or the
@@ -62,14 +65,17 @@ async function resolveStreamPrincipal(request: Request): Promise<StreamPrincipal
     const row = await db.query.principal.findFirst({
       where: eq(principal.id, tokenPrincipal.principalId),
     })
-    if (row)
+    if (row) {
+      const paused = await isPausedTeamSeat(row)
       return {
         principalId: row.id,
-        role: row.role,
+        role: paused ? 'user' : row.role,
         type: row.type,
         via: 'token',
         scope: tokenPrincipal.scope,
+        paused,
       }
+    }
     return null
   }
 
@@ -79,12 +85,14 @@ async function resolveStreamPrincipal(request: Request): Promise<StreamPrincipal
     where: eq(principal.userId, session.user.id as never),
   })
   if (!row) return null
+  const paused = await isPausedTeamSeat(row)
   return {
     principalId: row.id,
-    role: row.role,
+    role: paused ? 'user' : row.role,
     type: row.type,
     via: 'session',
     scope: toSessionScope(session.session.scope),
+    paused,
   }
 }
 
@@ -160,7 +168,7 @@ export const Route = createFileRoute('/api/chat/stream')({
         // team authority: the set is empty, not resolved, because a teammate's
         // assignments would otherwise ride their widget or portal stream.
         const permissions: ReadonlySet<PermissionKey> =
-          me.scope === 'dashboard'
+          me.scope === 'dashboard' && !me.paused
             ? await permissionsForPrincipal(me.principalId, me.role as Role)
             : new Set()
         const wantsInboxScope = scope === 'inbox' && isTeamMember(effectiveRole)

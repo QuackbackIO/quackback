@@ -58,6 +58,11 @@ import { setEmailSender } from '@/lib/server/domains/channel-accounts/email-send
 import { resolveSender } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { permittedSendingIdentity } from '@/lib/server/domains/channel-accounts/outbound-identity'
 import { listSendingDomainSummaries } from '@/lib/server/domains/domain-proof/domains-overview'
+import {
+  addSendingAddress,
+  sendTestEmail,
+} from '@/lib/server/domains/channel-accounts/sending-address'
+import { listAvailableAgentIds } from '@/lib/server/realtime/presence'
 import { getStatusPageSnapshot, getUptimeSeries } from '@/lib/server/domains/status/status.public'
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 import { getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
@@ -243,6 +248,18 @@ describe.skipIf(!fixture.available)('seat pause (real DB)', () => {
   })
 })
 
+describe.skipIf(!fixture.available)('availability for routing (real DB)', () => {
+  it('never counts a paused seat as available, and only once enforced', async () => {
+    const memberId = await addPerson('Acme Member', 'member')
+    await inEachPhase({ maxTeamSeats: 1 }, async (phase) => {
+      const available = await listAvailableAgentIds([ownerId, memberId])
+      expect(available.sort()).toEqual(
+        phase === 'enforced' ? [ownerId] : [ownerId, memberId].sort()
+      )
+    })
+  })
+})
+
 describe.skipIf(!fixture.available)('custom roles (real DB)', () => {
   it('refuses editing a custom role only once enforced', async () => {
     const custom = await addRole('Acme Support', ['member.view'])
@@ -340,6 +357,33 @@ describe.skipIf(!fixture.available)('sending domains (real DB)', () => {
     })
     // Nothing is deleted.
     expect(await testDb.select().from(emailSendingDomains)).toHaveLength(2)
+  })
+
+  it('adds an address under a held domain on it, and says a test is paused, not unverified', async () => {
+    const [team] = await testDb
+      .select({ id: teams.id })
+      .from(teams)
+      .where(and(eq(teams.isDefault, true), isNull(teams.deletedAt)))
+      .limit(1)
+    await verifiedDomain(team!.id, 'acme.example', new Date('2026-01-01T00:00:00Z'))
+    const held = await verifiedDomain(team!.id, 'news.example', new Date('2026-02-01T00:00:00Z'))
+    await configure(true, { maxSendingDomains: 1 })
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
+    await invalidatePlanLimits()
+
+    const added = await addSendingAddress({
+      owningTeamId: team!.id,
+      address: 'updates@mail.news.example',
+    })
+    expect(added.sendingDomainId).toBe(held)
+    const err = await sendTestEmail({
+      addressId: added.id,
+      userId: createId('user') as UserId,
+      workspaceName: 'Acme',
+    }).catch((e: Error) => e.message)
+    expect(err).toBe(
+      'mail.news.example is paused on your plan. Mail from it goes from the default sender for now.'
+    )
   })
 })
 

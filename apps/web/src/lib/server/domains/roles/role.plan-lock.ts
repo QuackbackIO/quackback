@@ -7,12 +7,22 @@
  * someone onto a built-in role, stays open, since those are how the workspace
  * gets back under the cap.
  */
+import type { RoleId } from '@quackback/ids'
+import { db, eq, roles } from '@/lib/server/db'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'role-plan-lock' })
 
 /** Whether custom roles are held now. Fails open (the plan limits helpers do). */
 export async function customRolesLocked(): Promise<boolean> {
-  const { isCapEnforced } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
-  return isCapEnforced('maxCustomRoles')
+  try {
+    const { isCapEnforced } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+    return await isCapEnforced('maxCustomRoles')
+  } catch (err) {
+    log.error({ err }, 'custom role plan check failed; failing open')
+    return false
+  }
 }
 
 function lockedError(message: string): TierLimitError {
@@ -40,4 +50,19 @@ export async function assertCustomRoleAssignable(
   throw lockedError(
     "Custom roles can't be given to anyone new on your current plan. Pick a built-in role."
   )
+}
+
+/**
+ * Whether `roleId` is a custom role the plan holds now, so it goes to nobody
+ * new. For a grant made long after it was chosen (an invitation accepted after
+ * the grace), which falls back to the plain member role instead of failing.
+ */
+export async function isCustomRoleHeld(roleId: RoleId): Promise<boolean> {
+  if (!(await customRolesLocked())) return false
+  const [row] = await db
+    .select({ isSystem: roles.isSystem })
+    .from(roles)
+    .where(eq(roles.id, roleId))
+    .limit(1)
+  return !!row && !row.isSystem
 }

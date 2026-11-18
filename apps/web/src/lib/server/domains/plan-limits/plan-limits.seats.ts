@@ -13,7 +13,7 @@
 import { memoizePerRequest } from '@/lib/server/request-memo'
 import { IDENTITY_MEMO_PREFIX } from '@/lib/server/auth/request-session'
 import { isTeamMember } from '@/lib/shared/roles'
-import { isSeatPaused } from './plan-limits.service'
+import { isSeatPaused, seatHolders } from './plan-limits.service'
 
 export interface SeatCandidate {
   id: string
@@ -27,4 +27,26 @@ export async function isPausedTeamSeat(principal: SeatCandidate): Promise<boolea
   return memoizePerRequest(`${IDENTITY_MEMO_PREFIX}seat-paused:${principal.id}`, () =>
     isSeatPaused(principal.id)
   )
+}
+
+/**
+ * The role a teammate acts with: `user` when their seat is paused, else the
+ * role given. For the paths that read a principal's role straight from the
+ * row rather than through the session gates.
+ */
+export async function roleUnlessPaused<R extends string>(
+  principal: SeatCandidate,
+  role: R
+): Promise<R | 'user'> {
+  return (await isPausedTeamSeat(principal)) ? 'user' : role
+}
+
+/**
+ * `ids` without the teammates whose seats are paused, for routing and
+ * availability: a paused seat is never online for the team. Fails open.
+ */
+export async function withoutPausedSeats<T extends string>(ids: readonly T[]): Promise<T[]> {
+  if (ids.length === 0 || (await seatHolders()) === null) return [...ids]
+  const paused = await Promise.all(ids.map((id) => isSeatPaused(id)))
+  return ids.filter((_, i) => !paused[i])
 }
