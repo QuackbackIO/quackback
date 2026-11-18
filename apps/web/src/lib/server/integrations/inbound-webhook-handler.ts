@@ -13,7 +13,6 @@ import { db, integrations, eq, and } from '@/lib/server/db'
 import { getIntegration } from './index'
 import { readTextBodyOr413, MAX_WEBHOOK_BODY_BYTES } from '@/lib/server/utils/read-body'
 import { logger } from '@/lib/server/logger'
-import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.service'
 
 const log = logger.child({ component: 'inbound-webhook' })
 
@@ -89,17 +88,6 @@ export async function handleInboundWebhook(
       log.error({ err: error, integration_type: integrationType }, 'inbound github channel failed')
       return new Response('Inbox ingest failed', { status: 500 })
     }
-  }
-
-  // Paused after the plan limits grace: the delivery is acknowledged so the
-  // provider keeps the hook, but the status change is not queued. The inbox
-  // channel above keeps running: it carries customer messages.
-  if (await isFeaturePaused('integrations')) {
-    log.info(
-      { integration_type: integrationType },
-      'integrations paused on this plan; status event dropped'
-    )
-    return new Response('OK', { status: 200 })
   }
 
   try {

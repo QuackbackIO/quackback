@@ -20,7 +20,8 @@ import {
 } from '@/lib/server/db'
 import { encryptSecrets } from '../../encryption'
 import { queueHookSync } from '../hooks'
-import { runIntegrationSync } from '../worker'
+import { runIntegrationSync, sweepIntegrationSync } from '../worker'
+import { queueInboundWebhook } from '../inbound'
 import { syncTestJob } from './job'
 import { slackAppHooks } from '@/integrations/slack/server/hooks'
 import type { MessageCreatedEvent } from '@/lib/server/events/types'
@@ -226,5 +227,74 @@ describe.skipIf(!fixture.available)('provider lifecycle events while paused (rea
       where: eq(integrations.id, integration.id),
     })
     expect(after?.status).toBe('active')
+  })
+})
+
+/**
+ * Inbound changes (a tracker issue closed during the pause) are held, not
+ * dropped: the operation waits with the plan_paused reason and is queued again
+ * by the sync sweep once the plan includes integrations. One held past the
+ * maximum age is given up.
+ */
+describe.skipIf(!fixture.available)('inbound changes while paused (real DB)', () => {
+  const DAY = 24 * 60 * 60 * 1000
+
+  async function inboundOp() {
+    const [integration] = await testDb
+      .insert(integrations)
+      .values({
+        integrationType: 'linear',
+        status: 'active',
+        config: { channelId: 'team_1', webhookSecret: 'whsec_acme' },
+      })
+      .returning()
+    const op = await queueInboundWebhook(
+      integration,
+      JSON.stringify({ action: 'update', type: 'Issue' }),
+      createId('event')
+    )
+    if (!op) throw new Error('Expected an inbound operation')
+    return op
+  }
+
+  async function stored(id: string) {
+    return testDb.query.integrationSyncOperations.findFirst({ where: eq(operations.id, id) })
+  }
+
+  it('holds an inbound change while paused and applies it after an upgrade', async () => {
+    const op = await inboundOp()
+    setFeatureState('enforced', 'integrations')
+    await runIntegrationSync(syncTestJob(op.id))
+    expect(await stored(op.id)).toMatchObject({ state: 'retry_wait', errorCode: 'plan_paused' })
+
+    // Still paused: the sweep leaves it held.
+    await sweepIntegrationSync()
+    expect(await stored(op.id)).toMatchObject({ state: 'retry_wait', errorCode: 'plan_paused' })
+
+    setFeatureState('included', 'integrations')
+    await sweepIntegrationSync()
+    const resumed = await stored(op.id)
+    expect(resumed).toMatchObject({ state: 'queued', errorCode: null })
+    await runIntegrationSync(syncTestJob(op.id))
+    expect((await stored(op.id))?.state).toBe('succeeded')
+  })
+
+  it('gives up a change held past the maximum age', async () => {
+    const op = await inboundOp()
+    setFeatureState('enforced', 'integrations')
+    await runIntegrationSync(syncTestJob(op.id))
+    await testDb
+      .update(operations)
+      .set({ createdAt: new Date(Date.now() - 31 * DAY) })
+      .where(eq(operations.id, op.id))
+    await sweepIntegrationSync()
+    expect(await stored(op.id)).toMatchObject({ state: 'cancelled', errorCode: 'plan_paused' })
+  })
+
+  it('still cancels outbound feature traffic while paused', async () => {
+    const { op } = await queueNotification()
+    setFeatureState('enforced', 'integrations')
+    await runIntegrationSync(syncTestJob(op.id))
+    expect(await stored(op.id)).toMatchObject({ state: 'cancelled', errorCode: 'plan_paused' })
   })
 })

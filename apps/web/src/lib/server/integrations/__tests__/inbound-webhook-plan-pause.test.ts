@@ -1,9 +1,9 @@
 /**
- * Inbound status webhooks pause after the plan limits grace on a plan without
- * integrations. The handshake and signature check still run, and a verified
- * delivery is acknowledged with 200 so the provider keeps the hook, but the
- * status change is not queued. The inbox channel on the same webhook keeps
- * ingesting: those are customer messages and are never dropped.
+ * Inbound status webhooks are never dropped while integrations are paused
+ * after the plan limits grace: a verified delivery is queued as usual, and the
+ * sync worker holds it until the plan includes integrations (see
+ * sync/__tests__/plan-pause.db.test.ts). The inbox channel on the same
+ * webhook keeps ingesting.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -34,7 +34,6 @@ vi.mock(
 import { handleInboundWebhook } from '../inbound-webhook-handler'
 import {
   FEATURE_STATES,
-  runsWithoutPlanGate,
   setFeatureState,
 } from '@/lib/server/domains/plan-limits/__tests__/feature-states'
 
@@ -53,16 +52,13 @@ beforeEach(() => {
 })
 
 describe('inbound webhooks and the plan limits pause', () => {
-  it.each(FEATURE_STATES)(
-    'acknowledges in the %s state, queueing only while not paused',
-    async (state) => {
-      setFeatureState(state, 'integrations')
-      const res = await handleInboundWebhook(req(), 'linear')
-      expect(res.status).toBe(200)
-      expect(h.verifySignature).toHaveBeenCalledOnce()
-      expect(h.queueInboundWebhook).toHaveBeenCalledTimes(runsWithoutPlanGate(state) ? 1 : 0)
-    }
-  )
+  it.each(FEATURE_STATES)('queues a verified delivery in the %s state', async (state) => {
+    setFeatureState(state, 'integrations')
+    const res = await handleInboundWebhook(req(), 'linear')
+    expect(res.status).toBe(200)
+    expect(h.verifySignature).toHaveBeenCalledOnce()
+    expect(h.queueInboundWebhook).toHaveBeenCalledOnce()
+  })
 
   it('still refuses a bad signature while paused', async () => {
     setFeatureState('enforced', 'integrations')
@@ -76,6 +72,6 @@ describe('inbound webhooks and the plan limits pause', () => {
     const res = await handleInboundWebhook(req(), 'github')
     expect(res.status).toBe(200)
     expect(h.ingestGitHubChannelEvent).toHaveBeenCalledOnce()
-    expect(h.queueInboundWebhook).not.toHaveBeenCalled()
+    expect(h.queueInboundWebhook).toHaveBeenCalledOnce()
   })
 })
