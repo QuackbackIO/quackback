@@ -5,9 +5,16 @@
  * both authenticate through the thread's getAuthHeaders prop, so this card
  * never reaches for a surface-specific auth context).
  *
- * Compact by design: Subject (required), Details, and an Email field — the
- * same payload shape createMyTicketFn accepts, minus the type picker and
- * custom intake fields. The email is optional here: an identified visitor's
+ * Compact by design: Subject (required), Details, an Email field, and the
+ * customer-visible fields of the intake default type, with no type picker.
+ * The type is the one the server files under when none is named (the intake
+ * default, else the first intake type), and the form sends its id with the
+ * answers, so a required field is filled here and passes the server's check.
+ * With no intake types (an empty list) only the three plain inputs show. While
+ * the type list loads, the fields area shows a spinner; if the read still
+ * fails after its retries, the fields area shows the error and a Try again
+ * button, and the form cannot be sent, since the server would refuse a
+ * submit that skips a required field. The email is optional here: an identified visitor's
  * ticket links to their session principal, and an anonymous one can leave it
  * blank.
  *
@@ -18,12 +25,26 @@
  */
 import { useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
+import { ticketIntakeFormQuery } from '@/lib/client/queries/visitor-ticket-form'
+import { errorText } from '@/lib/client/error-text'
+import type { TicketIntakeType } from '@/lib/shared/tickets'
+import { TicketFormFields } from '@/components/shared/ticket-form-fields'
+import { useTicketIntakeForm } from '@/components/shared/use-ticket-intake-form'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/shared/spinner'
 import { toastError } from '@/lib/client/error-notice'
+import { BlockTicketFormLoadingRow } from './block-ticket-form-loading'
+
+const NO_TYPES: TicketIntakeType[] = []
+
+/** The type the server files under when the create names none: the intake
+ *  default, else the first intake type (resolveIntakeCreate). */
+function intakeDefaultType(types: TicketIntakeType[]): TicketIntakeType | null {
+  return types.find((t) => t.isDefault) ?? types[0] ?? null
+}
 
 export function BlockTicketForm({
   getAuthHeaders,
@@ -37,9 +58,20 @@ export function BlockTicketForm({
   const [details, setDetails] = useState('')
   const [filed, setFiled] = useState(false)
 
+  // Shares the ticket header card's cache entry. Only a successful empty list
+  // means no intake types.
+  const intakeForm = useQuery(ticketIntakeFormQuery(rpc, getAuthHeaders))
+  const types = intakeForm.data?.types ?? NO_TYPES
+  const intake = useTicketIntakeForm(types, { resolveSelectedType: intakeDefaultType })
+
   const create = useMutation({
-    mutationFn: (vars: { title: string; description?: string; email?: string }) =>
-      rpc.createMyTicket({ data: vars, headers: getAuthHeaders() }),
+    mutationFn: (vars: {
+      title: string
+      description?: string
+      email?: string
+      ticketTypeId?: string
+      fieldValues?: Record<string, unknown>
+    }) => rpc.createMyTicket({ data: vars, headers: getAuthHeaders() }),
     onSuccess: () => setFiled(true),
     onError: (error) => toastError(error, 'Failed to create ticket'),
   })
@@ -55,13 +87,22 @@ export function BlockTicketForm({
     )
   }
 
-  const canSubmit = title.trim().length > 0 && !create.isPending
+  // Only once the type list is in, so a required field is on screen first.
+  const canSubmit = title.trim().length > 0 && !create.isPending && intakeForm.isSuccess
   const submit = () => {
     if (!canSubmit) return
+    const type = intake.selectedType
+    let fieldValues: Record<string, unknown> | undefined
+    if (type) {
+      const checked = intake.validate()
+      if (!checked.ok) return
+      fieldValues = checked.values
+    }
     create.mutate({
       title: title.trim(),
       description: details.trim() || undefined,
       email: email.trim() || undefined,
+      ...(type ? { ticketTypeId: type.id, fieldValues } : {}),
     })
   }
 
@@ -97,6 +138,37 @@ export function BlockTicketForm({
           className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
       </div>
+      {intakeForm.isPending && <BlockTicketFormLoadingRow />}
+      {intakeForm.isError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive"
+        >
+          <span>
+            {errorText(
+              intakeForm.error,
+              intl.formatMessage({
+                id: 'widget.tickets.blockCard.formLoadFailed',
+                defaultMessage: "Couldn't load this form.",
+              })
+            )}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void intakeForm.refetch()}
+            disabled={intakeForm.isFetching}
+          >
+            <FormattedMessage id="widget.tickets.blockCard.retry" defaultMessage="Try again" />
+          </Button>
+        </div>
+      )}
+      <TicketFormFields
+        fields={intake.fields}
+        values={intake.fieldValues}
+        onChange={intake.setFieldValue}
+        errors={intake.fieldErrors}
+      />
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">
           <FormattedMessage id="widget.tickets.new.email" defaultMessage="Email" />

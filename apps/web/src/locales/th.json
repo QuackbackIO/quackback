@@ -104,6 +104,8 @@
   "widget.tickets.new.detailsPlaceholder": "เพิ่มข้อมูลที่ช่วยให้เราเข้าใจปัญหา",
   "widget.tickets.new.submit": "สร้างคำร้อง",
   "widget.tickets.blockCard.filed": "รับคำร้องแล้ว เราจะติดตามให้ต่อจากนี้",
+  "widget.tickets.blockCard.formLoadFailed": "โหลดแบบฟอร์มนี้ไม่ได้",
+  "widget.tickets.blockCard.retry": "ลองอีกครั้ง",
   "widget.tickets.new.email": "อีเมล",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
   "widget.tickets.recent": "คำร้องล่าสุด",

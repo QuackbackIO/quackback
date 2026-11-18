@@ -30,7 +30,12 @@ import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 import { loadTicketOr404, createTicketCore, autoReopenOnRequesterReply } from './ticket.service'
 import { emitTicketReplied } from './ticket.webhooks'
-import { buildTicketContext, ticketToDTO, toRequesterTicketDTO } from './ticket.dto'
+import {
+  buildRequesterTicketContext,
+  loadCustomerVisibleStatusIds,
+  requesterUpdatedAtSql,
+  toRequesterTicketDTO,
+} from './requester-ticket.dto'
 import { insertTicketMessage, type SendTicketMessageInput } from './ticket-message.service'
 import type { RequesterTicketDTO, TicketStageRef } from './ticket.types'
 import { resolveStage } from './ticket.lifecycle'
@@ -144,8 +149,8 @@ export async function getRequesterTicketForConversation(
     )
     .limit(1)
   if (!row) return null
-  const ctx = await buildTicketContext([row.ticket])
-  return ticketToDTO(row.ticket, ctx, 'requester')
+  const ctx = await buildRequesterTicketContext([row.ticket])
+  return toRequesterTicketDTO(row.ticket, ctx)
 }
 
 /** A Messages-list row's linked-ticket decoration: stage chip + reference. */
@@ -225,11 +230,14 @@ export interface MyTicketSummary {
   /** The pair's conversation — the row's click-through to its thread. Null on
    *  a legacy standalone ticket (pre-pair rows were never backfilled). */
   conversationId: ConversationId | null
+  /** The last change the customer can see (see `requesterUpdatedAtSql`). */
   updatedAt: string
 }
 
 /**
- * The requester's own customer tickets, newest-activity first. Ownership IS
+ * The requester's own customer tickets, latest customer-visible change first
+ * (`requesterUpdatedAtSql`, the same time the ticket header shows), so an
+ * internal note or an assignment never reorders the list. Ownership IS
  * the scope (the where clause is the requester id — no ticket.* permission
  * anywhere on this path), so a requester only ever sees their own tickets;
  * internal-only statuses project to a null stage instead of leaking. Each row
@@ -239,6 +247,7 @@ export interface MyTicketSummary {
 export async function listMyTicketSummaries(
   requesterPrincipalId: PrincipalId
 ): Promise<MyTicketSummary[]> {
+  const updatedAt = requesterUpdatedAtSql(await loadCustomerVisibleStatusIds())
   const rows = await db
     .select({
       ticketId: tickets.id,
@@ -246,7 +255,7 @@ export async function listMyTicketSummaries(
       title: tickets.title,
       statusId: tickets.statusId,
       conversationId: ticketConversations.conversationId,
-      updatedAt: tickets.updatedAt,
+      updatedAt,
     })
     .from(tickets)
     .leftJoin(
@@ -263,7 +272,7 @@ export async function listMyTicketSummaries(
         isNull(tickets.deletedAt)
       )
     )
-    .orderBy(desc(tickets.updatedAt))
+    .orderBy(desc(updatedAt), desc(tickets.id))
     .limit(50)
   if (rows.length === 0) return []
   const statusIds = [...new Set(rows.map((r) => r.statusId))]
@@ -336,7 +345,10 @@ export async function createMyTicket(
     },
     actor
   )
-  return toRequesterTicketDTO(created)
+  // Re-read through the requester projection, as the other requester reads
+  // do: the create path returns the agent DTO.
+  const row = await loadTicketOr404(created.id)
+  return toRequesterTicketDTO(row, await buildRequesterTicketContext([row]))
 }
 
 /**

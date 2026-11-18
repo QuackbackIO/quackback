@@ -100,6 +100,8 @@
   "widget.tickets.new.detailsPlaceholder": "補充任何有助於我們理解問題的資訊。",
   "widget.tickets.new.submit": "建立工單",
   "widget.tickets.blockCard.filed": "工單已建立，我們會從這裡跟進。",
+  "widget.tickets.blockCard.formLoadFailed": "無法載入此表單。",
+  "widget.tickets.blockCard.retry": "重試",
   "widget.tickets.new.email": "電子郵件",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
   "widget.tickets.recent": "最近的工單",

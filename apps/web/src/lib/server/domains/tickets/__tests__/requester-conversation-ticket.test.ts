@@ -117,9 +117,9 @@ describe.skipIf(!fixture.available)(
       expect(dto!.id).toBe(pair.ticketId)
       expect(dto!.title).toBe('Export bug')
       expect(dto!.stage.slot).toBe('in_progress')
-      // Requester audience: internal status + SLA are stripped.
-      expect(dto!.status).toBeNull()
-      expect(dto!.sla).toBeNull()
+      // Requester audience: no internal status or SLA key at all.
+      expect(dto).not.toHaveProperty('status')
+      expect(dto).not.toHaveProperty('sla')
     })
 
     it('returns null for a pair owned by someone else, an unlinked conversation, and a deleted ticket', async () => {

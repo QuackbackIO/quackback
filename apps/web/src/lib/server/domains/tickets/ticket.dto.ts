@@ -41,15 +41,9 @@ import { getStageLabels } from '../settings/settings.tickets'
 import { resolveStage } from './ticket.lifecycle'
 import { resolvePairConversationIds } from './pair-thread.service'
 import type { TicketSlaApplied } from '../sla/ticket-sla.service'
-import type {
-  TicketDTO,
-  TicketPrincipalRef,
-  TicketSlaRef,
-  TicketTypeRef,
-  RequesterTicketDTO,
-} from './ticket.types'
+import type { TicketDTO, TicketPrincipalRef, TicketSlaRef, TicketTypeRef } from './ticket.types'
 
-interface TicketDTOContext {
+export interface TicketDTOContext {
   statuses: Map<TicketStatusId, TicketStatusEntity>
   ticketTypes: Map<TicketTypeId, TicketTypeEntity>
   /** Public name for requesters, account name for agents. */
@@ -339,34 +333,35 @@ export async function buildTicketContext(rows: Ticket[]): Promise<TicketDTOConte
   }
 }
 
-/** Map a ticket row + a resolved context to its wire DTO. The default 'agent'
- *  audience gets the full shape; 'requester' strips the internal status and
- *  the SLA sliver (see RequesterTicketDTO — mirrors the conversation DTO's
- *  `side` split, which strips SLA for visitors). */
-export function ticketToDTO(row: Ticket, ctx: TicketDTOContext): TicketDTO
-export function ticketToDTO(row: Ticket, ctx: TicketDTOContext, audience: 'agent'): TicketDTO
-export function ticketToDTO(
-  row: Ticket,
-  ctx: TicketDTOContext,
-  audience: 'requester'
-): RequesterTicketDTO
-export function ticketToDTO(
-  row: Ticket,
-  ctx: TicketDTOContext,
-  audience: 'agent' | 'requester' = 'agent'
-): TicketDTO | RequesterTicketDTO {
-  const status = ctx.statuses.get(row.statusId)
+/** The customer-facing stage projection of a ticket's current status. */
+export function stageFor(
+  status: TicketStatusEntity | undefined,
+  stageLabels: TicketStageLabels
+): TicketDTO['stage'] {
   const slot = status ? resolveStage(status) : null
+  // `closed` feeds the generic-close projection (B22, see TicketStageRef):
+  // a null-stage closed status shows the customer a localized "Closed",
+  // never the internal status name.
+  return {
+    slot,
+    label: slot ? stageLabels[slot] : null,
+    closed: status?.category === 'closed',
+  }
+}
+
+/** Map a ticket row + a resolved context to its agent wire DTO. Requesters
+ *  get `toRequesterTicketDTO` (requester-ticket.dto.ts) instead, which is
+ *  built from its own allow-list. */
+export function ticketToDTO(row: Ticket, ctx: TicketDTOContext): TicketDTO {
+  const status = ctx.statuses.get(row.statusId)
   const principalFor = (id: PrincipalId | null) => {
     if (!id) return null
-    const views = ctx.principals.get(id)
-    if (!views) return fallbackAuthor(id)
-    return audience === 'agent' ? views.supportAuthor : views.publicAuthor
+    return ctx.principals.get(id)?.supportAuthor ?? fallbackAuthor(id)
   }
   const requester = principalFor(row.requesterPrincipalId)
   const assignee = principalFor(row.assigneePrincipalId)
 
-  const dto: TicketDTO = {
+  return {
     id: row.id,
     number: row.number,
     reference: formatTicketNumber(row.number),
@@ -376,14 +371,7 @@ export function ticketToDTO(
     status: status
       ? { id: status.id, name: status.name, color: status.color, category: status.category }
       : { id: row.statusId, name: 'Unknown', color: '#6b7280', category: 'open' },
-    // `closed` feeds the generic-close projection (B22, see TicketStageRef):
-    // a null-stage closed status shows the customer a localized "Closed",
-    // never the internal status name.
-    stage: {
-      slot,
-      label: slot ? ctx.stageLabels[slot] : null,
-      closed: status?.category === 'closed',
-    },
+    stage: stageFor(status, ctx.stageLabels),
     priority: row.priority,
     requester: requester
       ? {
@@ -412,13 +400,11 @@ export function ticketToDTO(
     lastMessagePreview: ctx.activity.get(row.id)?.lastMessagePreview ?? row.title,
     lastMessageAt: ctx.activity.get(row.id)?.lastMessageAt?.toISOString() ?? null,
   }
-  if (audience === 'requester') return toRequesterTicketDTO(dto)
-  return dto
 }
 
 /** Project a registry type row to its DTO ref (null when the id didn't
  *  resolve — a hard-deleted type via the FK escape hatch). */
-function toTicketTypeRef(row: TicketTypeEntity | undefined): TicketTypeRef | null {
+export function toTicketTypeRef(row: TicketTypeEntity | undefined): TicketTypeRef | null {
   if (!row) return null
   return {
     id: row.id,
@@ -433,10 +419,4 @@ function toTicketTypeRef(row: TicketTypeEntity | undefined): TicketTypeRef | nul
 /** Load + map a single ticket row (used by the write paths + getTicket). */
 export async function ticketRowToDTO(row: Ticket): Promise<TicketDTO> {
   return ticketToDTO(row, await buildTicketContext([row]))
-}
-
-/** Strip the agent-only fields (internal status, SLA sliver) from an agent
- *  DTO — the requester audience projection (see RequesterTicketDTO). */
-export function toRequesterTicketDTO(dto: TicketDTO): RequesterTicketDTO {
-  return { ...dto, status: null, sla: null }
 }

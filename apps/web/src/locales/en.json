@@ -100,6 +100,8 @@
   "widget.tickets.new.detailsPlaceholder": "Add anything that helps us understand the issue.",
   "widget.tickets.new.submit": "Create ticket",
   "widget.tickets.blockCard.filed": "Ticket filed. We'll track it from here.",
+  "widget.tickets.blockCard.formLoadFailed": "Couldn't load this form.",
+  "widget.tickets.blockCard.retry": "Try again",
   "widget.tickets.new.email": "Email",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
   "widget.tickets.recent": "Recent tickets",

@@ -471,9 +471,9 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     expect(row.type).toBe('customer')
     expect(row.title).toBe('Cannot export the report')
     expect(row.requesterPrincipalId).toBe(me)
-    // The requester projection strips the internal status/SLA fields.
-    expect(created.status).toBeNull()
-    expect(created.sla).toBeNull()
+    // The requester projection has no internal status or SLA key at all.
+    expect(created).not.toHaveProperty('status')
+    expect(created).not.toHaveProperty('sla')
 
     // The pair: one backing conversation, visitor = requester, linked 1:1.
     const [pair] = await testDb
