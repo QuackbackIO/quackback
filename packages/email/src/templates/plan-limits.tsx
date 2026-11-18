@@ -51,7 +51,8 @@ export function planLimitsSubject(
     return `${name}: some features pause after ${featuresOnlyDeadline}`
   }
   if (kind === 'start') {
-    return `Action needed: ${name} is over the ${planName ?? 'current'} plan's limits`
+    const plan = planName ? `the ${planName} plan's` : "its plan's"
+    return `Action needed: ${name} is over ${plan} limits`
   }
   if (kind === 'reminder') return `2 days left to fix ${name}'s plan limits`
   return `Some of ${name} is now paused`
@@ -96,7 +97,10 @@ function featureLine(props: PlanLimitsEmailProps): string {
   const list = featureList(props.pausingFeatures)
   const many = props.pausingFeatures.length > 1
   if (props.kind === 'enforced') {
-    return `${list} ${many ? 'are' : 'is'} paused on the ${props.planName ?? 'current'} plan.`
+    const verb = many ? 'are' : 'is'
+    return props.planName
+      ? `${list} ${verb} paused on the ${props.planName} plan.`
+      : `${list} ${verb} now paused.`
   }
   return `${list} ${many ? 'pause' : 'pauses'} after ${props.deadline}.`
 }
