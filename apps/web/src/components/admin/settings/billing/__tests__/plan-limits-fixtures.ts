@@ -109,6 +109,7 @@ function member(id: string, name: string, isOwner: boolean) {
     roleNames: [isOwner ? 'Owner' : 'Member'],
     isOwner,
     canManageBilling: isOwner,
+    isAdmin: isOwner,
     lastActiveAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
   }
