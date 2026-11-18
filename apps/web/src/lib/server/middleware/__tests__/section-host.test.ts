@@ -153,6 +153,26 @@ describe('handleSectionHost', () => {
     expect(response.headers.get('vary')).toBe('Host, Cookie')
   })
 
+  it('lets only the browser keep the permanent move, never a shared cache', async () => {
+    // On Cloud an edge-proxied custom host can reach the origin with a shared
+    // Host, so a shared cache could hand one workspace's move to another.
+    const { response } = await send('https://acme.example.com/hc/articles/x')
+    expect(response.status).toBe(301)
+    expect(response.headers.get('cache-control')).toBe('private, max-age=3600')
+  })
+
+  it('stores no other move anywhere', async () => {
+    for (const url of [
+      'https://help.acme.com/status/inc_1',
+      'https://help.acme.com/admin',
+      'https://help.acme.com/roadmap',
+    ]) {
+      const { response } = await send(url)
+      expect(response.status).toBe(302)
+      expect(response.headers.get('cache-control')).toBe('no-store')
+    }
+  })
+
   it("moves the primary domain's help center sitemap too, keeping the query", async () => {
     const { response } = await send('https://acme.example.com/hc/sitemap.xml?page=2')
     expect(response.status).toBe(301)

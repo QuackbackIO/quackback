@@ -124,8 +124,10 @@ export async function handleSectionHost<T extends NextResult>({
           // The answer depends on the session cookie as well (above).
           Vary: 'Host, Cookie',
           // A permanent move is still bounded, so a map changed later is
-          // picked up; the other moves follow the map as it is now.
-          'Cache-Control': route.status === 301 ? 'public, max-age=3600' : 'no-store',
+          // picked up; the other moves follow the map as it is now. Private:
+          // on Cloud an edge-proxied custom host can reach this server with a
+          // Host other workspaces share, so a shared cache must never keep it.
+          'Cache-Control': route.status === 301 ? 'private, max-age=3600' : 'no-store',
         },
       })
     }
