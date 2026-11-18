@@ -151,6 +151,11 @@ export function CreateArticleDialog({
   }
 
   const handleKeyDown = useKeyboardSubmit(handleSubmit)
+  // Keys typed in a portaled child dialog (New category) bubble here through the
+  // React tree; only the article's own DOM may trigger the save shortcut.
+  const handleOwnKeyDown = (e: React.KeyboardEvent) => {
+    if (e.currentTarget.contains(e.target as Node)) handleKeyDown(e)
+  }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -161,7 +166,7 @@ export function CreateArticleDialog({
       )}
       <DialogContent
         className="w-[95vw] sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl h-[85vh] p-0 gap-0 overflow-hidden flex flex-col"
-        onKeyDown={handleKeyDown}
+        onKeyDown={handleOwnKeyDown}
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">Create help article</DialogTitle>
