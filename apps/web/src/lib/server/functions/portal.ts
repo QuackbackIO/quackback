@@ -425,7 +425,8 @@ export const runFetchPublicPostDetail = createServerOnlyFn(async function runFet
     mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
     canVote,
     canComment: canComment && !boardReadOnly,
-    boardReadOnly,
+    // Sent only when set: every open board's page stays the bytes it was.
+    ...(boardReadOnly ? { boardReadOnly: true as const } : {}),
     // The board's reply rule, so a denied viewer can be told WHY the composer
     // is closed ("only the author and the team can reply") instead of getting
     // the generic no-access notice. Safe to expose: it is a public property of
@@ -757,13 +758,19 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
     log.debug({ post_id: data.postId }, 'get comments section data')
     // replyPolicy rides the denied shape too, so the response type stays one
     // object rather than a union the client has to narrow before reading it.
-    const denied = {
+    const denied: {
+      isMember: false
+      isTeamMember: false
+      canComment: false
+      boardReadOnly?: true
+      user: undefined
+      replyPolicy: ReplyPolicy
+    } = {
       isMember: false,
       isTeamMember: false,
       canComment: false,
-      boardReadOnly: false,
       user: undefined,
-      replyPolicy: 'anyone' as ReplyPolicy,
+      replyPolicy: 'anyone',
     }
     const postId = data.postId as PostId
 
@@ -828,7 +835,8 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       isMember,
       isTeamMember,
       canComment: canComment && !boardReadOnly,
-      boardReadOnly,
+      // Sent only when set: every open board's page stays the bytes it was.
+      ...(boardReadOnly ? { boardReadOnly: true as const } : {}),
       user: isMember
         ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }
         : undefined,
