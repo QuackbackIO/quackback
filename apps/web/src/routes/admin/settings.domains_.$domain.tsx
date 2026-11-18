@@ -55,7 +55,8 @@ function DomainPage() {
         row={row}
         links={domainUseLinks({ permissions })}
         setup={{
-          cloud: !!context.cloudEnabled,
+          // Section domains' own reading: a pooled workspace is Cloud before its projection lands.
+          cloud: !!context.sectionDomainsCloud,
           sectionDomains,
           sections: listedSections({
             nav: settings?.portalConfig?.nav,

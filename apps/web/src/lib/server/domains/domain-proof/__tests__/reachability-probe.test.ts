@@ -65,12 +65,30 @@ beforeEach(() => {
     })
   })
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+})
 
 const set = (type: 'A' | 'AAAA', name: string, ...answers: Answer[]) =>
   zone.records.set(`${type} ${name}`, answers)
 
 describe('probeCustomDomain', () => {
+  it('refuses on a pooled process: no lookup, no request, never verified', async () => {
+    // Inside Cloud's fleet another workspace's hostname answers, so a
+    // self-hosted check there would verify a hostname that is not ours.
+    vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+    set('A', 'help.acme.com', ['203.0.113.7'])
+    set('A', 'feedback.acme.com', ['203.0.113.7'])
+    reply = 'unreachable'
+    const { status } = await probeCustomDomain('help.acme.com', {
+      primaryOrigin: 'https://feedback.acme.com',
+    })
+    expect(status.verified).toBe(false)
+    expect(zone.asked).toEqual([])
+    expect(fetched).toEqual([])
+  })
+
   it('verifies a hostname that resolves and reaches this server', async () => {
     set('A', 'help.acme.com', ['203.0.113.7'])
     const { status, dnsAnswered } = await probeCustomDomain('help.acme.com')

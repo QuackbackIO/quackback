@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
 
 /**
  * On a section host the admin does not run, and every session there is portal
@@ -230,6 +230,28 @@ describe('the section map the browser is sent', () => {
     const data = (await getBootstrapData()) as WithSettings
     expect(data.settings.portalConfig.sectionDomains.help?.verifiedAt).toBeNull()
     expect(hoisted.helpDomainConfig).toEqual({ domain: 'help.acme.com', verifiedAt: null })
+  })
+})
+
+describe('the section domains hosting the browser is told', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('is Cloud on a pooled process before any projection, though billing is not on', async () => {
+    vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+    hoisted.host = 'acme.com'
+    const data = (await getBootstrapData()) as Bootstrap & {
+      sectionDomainsCloud: boolean
+      cloudEnabled: boolean
+    }
+    expect(data.sectionDomainsCloud).toBe(true)
+    expect(data.cloudEnabled).toBe(false)
+  })
+
+  it('is self-hosted on a single-workspace server', async () => {
+    vi.stubEnv('QUACKBACK_TENANCY', '')
+    hoisted.host = 'acme.com'
+    const data = (await getBootstrapData()) as Bootstrap & { sectionDomainsCloud: boolean }
+    expect(data.sectionDomainsCloud).toBe(false)
   })
 })
 

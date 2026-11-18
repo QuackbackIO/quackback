@@ -5,6 +5,7 @@
  * middleware can use it without the database.
  */
 import { parseIdentityProjection, type IdentityProjection } from './cloud/identity-projection'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import {
   PORTAL_SECTIONS,
   UNCONFIRMED_GRACE_MS,
@@ -14,15 +15,26 @@ import {
 
 export interface Hosting {
   cloud: boolean
-  /** The Cloud identity; null on Cloud only when it cannot be read. */
+  /** The Cloud identity; null on Cloud only when it cannot be read, or has not landed yet. */
   projection: IdentityProjection | null
 }
 
-/** Cloud when either the stored capability or the identity says so. */
-export function hostingOf(row: { cloud?: unknown; cloudIdentity?: unknown } | null): Hosting {
+/**
+ * Cloud when the process is pooled, or the stored capability or the identity
+ * says so. A pooled workspace is Cloud before either projection lands: read
+ * as self-hosted it would take any hostname and verify it with the
+ * self-hosted probe, from inside the fleet, where another workspace's
+ * hostname answers. With no identity yet nothing is routed and every write is
+ * refused (`SECTION_DOMAIN_CLOUD_UNAVAILABLE`). Section domains only:
+ * `settings.cloud` and what billing reads are not changed by this.
+ */
+export function hostingOf(
+  row: { cloud?: unknown; cloudIdentity?: unknown } | null,
+  env: Record<string, string | undefined> = process.env
+): Hosting {
   const projection = parseIdentityProjection(row?.cloudIdentity)
   const enabled = (row?.cloud as { enabled?: boolean } | null | undefined)?.enabled === true
-  return { cloud: enabled || projection !== null, projection }
+  return { cloud: isPooledTenancy(env) || enabled || projection !== null, projection }
 }
 
 /** The workspace's custom domain for `hostname` while the control plane reports it ready. */

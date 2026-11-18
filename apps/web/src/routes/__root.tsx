@@ -52,6 +52,7 @@ export interface RouterContext {
   updateBannerDismissedVersion?: BootstrapData['updateBannerDismissedVersion']
   billingEnabled?: boolean
   cloudEnabled?: boolean
+  sectionDomainsCloud?: boolean
   githubStarPrompt?: boolean
   productAnalytics?: BootstrapData['productAnalytics']
 }

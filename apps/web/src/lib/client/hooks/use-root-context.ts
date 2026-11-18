@@ -53,6 +53,16 @@ export function useCloudEnabled(): boolean {
   return useRouteContext({ from: '__root__', select: (context) => !!context.cloudEnabled })
 }
 
+/**
+ * Whether section domains work the Cloud way (`BootstrapData.sectionDomainsCloud`):
+ * the Custom domains tab and dialog read this, not `useCloudEnabled`, so a
+ * pooled workspace whose projection has not landed never offers the
+ * self-hosted record and check.
+ */
+export function useSectionDomainsCloud(): boolean {
+  return useRouteContext({ from: '__root__', select: (context) => !!context.sectionDomainsCloud })
+}
+
 export function useProductAnalyticsConfig() {
   return useRouteContext({
     from: '__root__',

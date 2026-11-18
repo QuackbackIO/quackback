@@ -110,6 +110,13 @@ export interface BootstrapData {
    */
   cloudEnabled: boolean
   /**
+   * Whether section domains are set up the Cloud way (custom domains on the
+   * control plane) rather than the self-hosted way (any hostname, verified by
+   * a probe): `hostingOf`, which also counts a pooled workspace whose
+   * projection has not landed. Not a billing signal; that is `cloudEnabled`.
+   */
+  sectionDomainsCloud: boolean
+  /**
    * Whether the one-time GitHub star prompt and the Help menu's GitHub link may
    * show: self-hosted only, never on the Cloud fleet, and not switched off.
    */
@@ -356,10 +363,10 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     primaryHost: hostOfOrigin(config.baseUrl),
   })
   // Verified as routing reads it: on Cloud, while the custom domain is ready.
-  const routableDomains = routableSectionDomains(
-    sectionDomains,
-    hostingOf((settings?.settings as { cloud?: unknown; cloudIdentity?: unknown }) ?? null)
+  const hosting = hostingOf(
+    (settings?.settings as { cloud?: unknown; cloudIdentity?: unknown }) ?? null
   )
+  const routableDomains = routableSectionDomains(sectionDomains, hosting)
   const baseUrl = resolveHelpCenterBaseUrl({
     domainConfig: helpDomainConfig(routableDomains),
     currentHost: requestHost,
@@ -404,6 +411,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     updateBannerDismissedVersion,
     billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),
     cloudEnabled: cloud.enabled,
+    sectionDomainsCloud: hosting.cloud,
     githubStarPrompt: starPromptAllowedHere(cloud.enabled),
     productAnalytics: config.productAnalytics
       ? {

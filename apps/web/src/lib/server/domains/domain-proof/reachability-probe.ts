@@ -7,8 +7,12 @@
 import { isIP } from 'node:net'
 import { interactiveResolver } from '@/lib/server/dns/resolver'
 import { isNoAnswer } from '@/lib/server/dns/lookup-outcome'
+import { logger } from '@/lib/server/logger'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { normalizeHost } from '@/lib/shared/section-domains'
 import { SEEN_HOST_HEADER } from './seen-host'
+
+const log = logger.child({ component: 'reachability-probe' })
 
 /** Same probe path the request-context middleware treats as a health check. */
 const HEALTH_PATH = '/api/health'
@@ -109,6 +113,16 @@ export async function probeCustomDomain(
   domain: string,
   { primaryOrigin }: { primaryOrigin?: string | null } = {}
 ): Promise<{ status: HelpCenterDomainStatus; dnsAnswered: boolean }> {
+  // Never on a pooled process (Cloud's fleet): there another workspace's
+  // hostname answers this request, and the control plane decides readiness.
+  // Section domains never call this on Cloud; this holds if one ever does.
+  if (isPooledTenancy()) {
+    log.warn({ hostname: domain }, 'self-hosted domain probe refused on a pooled process')
+    return {
+      status: { dnsResolved: false, instanceReachable: false, verified: false },
+      dnsAnswered: false,
+    }
+  }
   const [dns, instance] = await Promise.all([lookUp(domain), instanceAnswersOn(domain)])
   const dnsResolved = dns.outcome === 'resolved'
   const instanceReachable = instance === 'ok'

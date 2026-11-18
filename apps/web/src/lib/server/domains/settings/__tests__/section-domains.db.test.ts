@@ -349,6 +349,46 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
     })
   })
 
+  describe('a pooled workspace whose projections have not landed', () => {
+    // Cloud's fleet, before the control plane has pushed anything: no
+    // settings.cloud, no identity. It must never fall back to the self-hosted
+    // way, which would take another workspace's hostname and verify it.
+    beforeEach(async () => {
+      vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+      await seedSettings()
+    })
+    afterEach(() => vi.unstubAllEnvs())
+
+    it('refuses to set a section hostname, and writes nothing', async () => {
+      expect(await setSectionDomain('help', 'help.other.com')).toMatchObject({
+        ok: false,
+        code: 'SECTION_DOMAIN_CLOUD_UNAVAILABLE',
+      })
+      expect((await stored()).sectionDomains).toBeUndefined()
+      expect(side.ensured).toEqual([])
+    })
+
+    it('verifies nothing, and never runs the self-hosted probe', async () => {
+      await testDb.update(settings).set({
+        portalConfig: JSON.stringify({
+          sectionDomains: { help: { hostname: 'help.other.com', verifiedAt: null } },
+        }),
+      })
+      expect(await verifySectionDomain('help')).toMatchObject({ ok: true, status: null })
+      expect(side.primaryHosts).toEqual([])
+      expect((await stored()).sectionDomains.help.verifiedAt).toBeNull()
+    })
+
+    it('shows a stored hostname as not live', async () => {
+      await testDb.update(settings).set({
+        portalConfig: JSON.stringify({
+          sectionDomains: { help: { hostname: 'help.other.com', verifiedAt: NOW } },
+        }),
+      })
+      expect((await getSectionDomainsView()).sectionDomains.help?.verifiedAt).toBeNull()
+    })
+  })
+
   describe('Cloud', () => {
     beforeEach(() =>
       seedSettings({
