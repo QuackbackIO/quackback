@@ -23,7 +23,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useSetEmailSender } from '@/lib/client/mutations/channel-accounts'
-import { VerifyDomainLink, type VerifyDomainTarget } from './verify-domain-link'
 import type { EmailSenderChoiceDTO, EmailSendersDTO } from '@/lib/server/functions/channel-accounts'
 
 /** An address the page can offer, already named and checked. */
@@ -35,8 +34,6 @@ export type SenderIdentity = {
   live: boolean
   /** Not live because its domain was verified once and stopped, not because it never was. */
   lapsed?: boolean
-  /** Not live because its domain is not Verified: where to verify it. */
-  verifyDomain?: VerifyDomainTarget | null
 }
 
 type Surface = keyof EmailSendersDTO
@@ -169,19 +166,13 @@ export function SendFromCard({
       : "No default address is set, so email can't be sent until you choose one."
   // A chosen address whose domain stopped verifying (or never finished) is
   // still shown as chosen; this says what mail goes out from meanwhile.
-  const notLiveHint = (surface: Surface): React.ReactNode => {
+  const notLiveHint = (surface: Surface): string | undefined => {
     const choice = senders[surface]
     if (choice?.mode !== 'address') return undefined
     const identity = identities.find((i) => i.id === choice.id)
     const fallback = surface === 'default' ? platformFrom : resolvedDefault
     if (!identity || identity.live || !fallback) return undefined
-    const hint = `${cannotSend(identity)}, so email comes from ${fallback} ${untilWhen(identity)}.`
-    if (!identity.verifyDomain) return hint
-    return (
-      <>
-        {hint} <VerifyDomainLink target={identity.verifyDomain} inline />
-      </>
-    )
+    return `${cannotSend(identity)}, so email comes from ${fallback} ${untilWhen(identity)}.`
   }
   // The address behind the inbox, when support replies from the inbox and has
   // one: support email that is not a reply to the inbox leaves from it.

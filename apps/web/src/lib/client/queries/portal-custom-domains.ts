@@ -3,7 +3,7 @@
  * hostname and the primary domain, and on Cloud the custom domains the
  * operator routes here, whether the plan includes them, and the workspace URL.
  * The Verified domains Add custom domain offers are read only when it opens
- * (`queries/domains.ts`).
+ * (`addedDomainsQuery` in `queries/channel-accounts.ts`).
  * The tab and the Portal route's loader import this only when the tab is open,
  * so the Design tab neither ships nor fetches it.
  */

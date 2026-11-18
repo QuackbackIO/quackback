@@ -423,7 +423,7 @@ describe('address rows', () => {
     const user = await openMenu('Acme Help <help@acme.com>')
     await user.click(screen.getByRole('menuitem', { name: 'Edit name' }))
     const dialog = await screen.findByRole('dialog')
-    const name = within(dialog).getByLabelText('Sender name') as HTMLInputElement
+    const name = (await within(dialog).findByLabelText('Sender name')) as HTMLInputElement
     expect(name.value).toBe('Acme Help')
     expect(within(dialog).queryByLabelText('Email address')).toBeNull()
     fireEvent.change(name, { target: { value: 'Acme Support' } })
@@ -1187,6 +1187,8 @@ describe('the support inbox', () => {
 async function openAdd() {
   fireEvent.click(screen.getByRole('button', { name: 'Add address' }))
   const dialog = await screen.findByRole('dialog')
+  // The form loads when the dialog first opens, then the Verified domains.
+  await within(dialog).findByRole('heading', { name: 'Add address' })
   await waitFor(() => expect(dialog.querySelector('[aria-busy="true"]')).toBeNull())
   return dialog
 }
@@ -1664,19 +1666,6 @@ describe('Verify domain beside an address on an unverified domain', () => {
       name: 'Verify domain',
     })
     expect(link.getAttribute('href')).toBe('/admin/settings/domains/old.example')
-  })
-
-  it('says it beside the Send from choice that falls back too', async () => {
-    listDomains.mockResolvedValue([])
-    renderSettings({
-      view: 'workspace',
-      addresses: [oldAddress()],
-      domains: [OLD],
-      senders: { default: { mode: 'address', id: 'a1' } },
-    })
-    const card = document.getElementById('send-from') as HTMLElement
-    const link = await within(card).findByRole('link', { name: 'Verify domain' })
-    expect(link.closest('p')?.textContent).toMatch(/isn't verified yet, so email comes from/)
   })
 
   it('offers none for a Verified domain still waiting on its sending records', async () => {

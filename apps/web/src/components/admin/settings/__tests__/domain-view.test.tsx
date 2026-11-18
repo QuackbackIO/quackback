@@ -300,8 +300,8 @@ describe('domain view set up', () => {
     renderView(rowWith({}))
     setUp('Email sending')
     const dialog = screen.getByRole('dialog')
-    expect(within(dialog).getByRole('heading', { name: 'Add address' })).toBeVisible()
     expect(await within(dialog).findByText('@acme.com')).toBeVisible()
+    expect(within(dialog).getByRole('heading', { name: 'Add address' })).toBeVisible()
     expect(within(dialog).getByLabelText('Email address')).toHaveValue('')
   })
 

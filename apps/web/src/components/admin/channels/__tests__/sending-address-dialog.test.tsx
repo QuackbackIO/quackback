@@ -44,6 +44,8 @@ function open({
 
 async function dialog() {
   const d = await screen.findByRole('dialog')
+  // The form loads when the dialog first opens, then the Verified domains.
+  await within(d).findByRole('heading', { name: 'Add address' })
   await waitFor(() => expect(d.querySelector('[aria-busy="true"]')).toBeNull())
   return d
 }

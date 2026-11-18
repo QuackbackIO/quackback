@@ -15,7 +15,6 @@ import {
   type DomainUseLinks,
   type UseLink,
 } from '@/lib/shared/domains-permissions'
-import { addedDomainsQuery, verifiedDomainNames } from '@/lib/client/queries/domains'
 import { DOMAIN_USE_ORDER } from '@/lib/shared/domain-uses'
 import { verifiedThroughLabel } from '@/lib/shared/domain-proof'
 import { DomainSetupPanel } from '@/components/admin/channels/domain-setup-panel'
@@ -42,6 +41,7 @@ import { StateBadge } from '@/components/shared/state-badge'
 import { Button } from '@/components/ui/button'
 import { useRestartSendingDomainChecks } from '@/lib/client/mutations/channel-accounts'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { addedDomainsQuery, verifiedDomainNames } from '@/lib/client/queries/channel-accounts'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import {
   addDomainFn,

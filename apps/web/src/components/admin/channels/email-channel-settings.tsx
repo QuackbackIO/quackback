@@ -35,14 +35,14 @@ import {
   type SendingAddress,
 } from './sending-removal'
 import { SendingPausedNotice } from './sending-paused-notice'
-import { SendFromCard, type SenderIdentity, type SenderSurfaceKey } from './send-from-card'
+import { SendFromCard, type SenderSurfaceKey } from './send-from-card'
 import {
   useVerifyDomainLinks,
   VerifyDomainLink,
   type VerifyDomainTarget,
 } from './verify-domain-link'
-import { addedDomainsQuery, verifiedDomainNames } from '@/lib/client/queries/domains'
 import { addDomainLink } from '@/lib/shared/domains-permissions'
+import { addedDomainsQuery, verifiedDomainNames } from '@/lib/client/queries/channel-accounts'
 import {
   inboundTarget,
   oldestFirst,
@@ -74,18 +74,6 @@ import { toastError } from '@/lib/client/error-notice'
  * problem into a mystery.
  */
 const reason = (fallback: string) => (error: unknown) => toastError(error, fallback)
-
-/** Each address the Send from card offers, with Verify domain where its domain needs it. */
-function withVerifyLinks(
-  identities: SenderIdentity[],
-  addresses: SendingAddress[],
-  linkFor: (address: string | null | undefined) => VerifyDomainTarget | null
-): SenderIdentity[] {
-  return identities.map((i) => ({
-    ...i,
-    verifyDomain: linkFor(addresses.find((a) => a.id === i.id)?.address),
-  }))
-}
 
 /**
  * Settings → Email: the addresses this workspace sends from, and which of them
@@ -119,7 +107,6 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
       {view.addresses.length > 0 && (
         <SendFromCard
           {...view.sendFrom}
-          identities={withVerifyLinks(view.identities, view.addresses, verifyLinkFor)}
           rows={['default', ...surfaces]}
           // Where "Change" on a product's page lands: `SEND_FROM_ANCHOR` in
           // surface-sender-row.tsx, repeated here because importing that row
@@ -140,8 +127,6 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
 export function SupportInboxSettings({ canManageSending }: { canManageSending: boolean }) {
   const view = useEmailConfigView()
   const { data } = view
-  // Only someone who manages sending may verify a domain.
-  const verifyLinkFor = useVerifyDomainLinks(view.addresses, canManageSending)
   return (
     <div className="space-y-6">
       <SendingPausedNotice
@@ -155,7 +140,6 @@ export function SupportInboxSettings({ canManageSending }: { canManageSending: b
       />
       <SendFromCard
         {...view.sendFrom}
-        identities={withVerifyLinks(view.identities, view.addresses, verifyLinkFor)}
         rows={['support']}
         title="Replies"
         description={

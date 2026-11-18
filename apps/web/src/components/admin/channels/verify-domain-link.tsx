@@ -12,14 +12,26 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
-import { INLINE_LINK } from '@/components/admin/settings/inline-link'
-import { addedDomainsQuery } from '@/lib/client/queries/domains'
+import { addedDomainsQuery } from '@/lib/client/queries/channel-accounts'
 import { addDomainLink } from '@/lib/shared/domains-permissions'
-import { coveringName } from '@/lib/shared/custom-domains'
 
 export type VerifyDomainTarget =
   | { to: '/admin/settings/domains/$domain'; params: { domain: string } }
   | ReturnType<typeof addDomainLink>
+
+/**
+ * The closest of `names` a domain is at or under, the rule Settings > Domains
+ * reads coverage by (`coveringName`, kept out of this page's chunks).
+ */
+function closestCovering(domain: string, names: readonly string[]): string | null {
+  let best: string | null = null
+  for (const name of names) {
+    if ((domain === name || domain.endsWith(`.${name}`)) && name.length > (best?.length ?? 0)) {
+      best = name
+    }
+  }
+  return best
+}
 
 /** The domain of an address, lower-cased, or null without one. */
 const domainOfAddress = (address: string): string | null => {
@@ -55,8 +67,8 @@ export function useVerifyDomainLinks(
     const domain = domainOfAddress(address)
     if (!domain) return null
     const verified = data.filter((d) => d.verified).map((d) => d.name)
-    if (coveringName(domain, verified)) return null
-    const added = coveringName(
+    if (closestCovering(domain, verified)) return null
+    const added = closestCovering(
       domain,
       data.map((d) => d.name)
     )
@@ -66,21 +78,8 @@ export function useVerifyDomainLinks(
   }
 }
 
-/** Verify domain: a quiet button at a row's end, or a link inside a line of text. */
-export function VerifyDomainLink({
-  target,
-  inline = false,
-}: {
-  target: VerifyDomainTarget
-  inline?: boolean
-}) {
-  if (inline) {
-    return (
-      <Link {...target} className={INLINE_LINK}>
-        Verify domain
-      </Link>
-    )
-  }
+/** Verify domain, as a quiet button at a row's end. */
+export function VerifyDomainLink({ target }: { target: VerifyDomainTarget }) {
   return (
     <Button size="sm" variant="ghost" asChild>
       <Link {...target}>Verify domain</Link>
