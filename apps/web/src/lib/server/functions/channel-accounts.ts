@@ -399,21 +399,24 @@ export const createSendingAddressFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const teamId = await requireDefaultTeam()
-    // An address on a domain this workspace has not verified brings that
-    // domain with it and sends from the default until the domain is live; the
-    // send guard reads the domain, so a pending address claims nothing. See
-    // `sending-address.ts`.
+    // On a shared server the address has to be on a Verified domain, and that
+    // refusal comes back as a value the dialog shows. An accepted address
+    // brings its sending domain with it and sends from the default until that
+    // is live; the send guard reads the domain, so a pending address claims
+    // nothing. See `sending-address.ts`.
     return withDomainActionMessage('address', async () => {
-      const added = await addSendingAddress({
+      const result = await addSendingAddress({
         owningTeamId: teamId,
         address: data.address,
         senderName: data.senderName ?? null,
       })
+      if (!result.ok) return result
+      const added = result.account
       // A workspace's first address becomes its default sender, which is the
       // one time adding an address changes what email sends from: the page
       // says so.
       const madeDefault = (await getEmailSenders()).get('default')?.account?.id === added.id
-      return { ...toAccount(added), madeDefault }
+      return { ok: true as const, ...toAccount(added), madeDefault }
     })
   })
 
