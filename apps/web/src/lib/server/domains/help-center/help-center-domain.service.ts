@@ -1,97 +1,25 @@
 /**
- * Help center custom domain (domains/languages §1). OSS does not automate TLS
- * or DNS -- the operator CNAMEs their domain to this instance and terminates
- * TLS in their own proxy. This module owns:
- *  - normalizing/persisting the configured domain,
- *  - the "Verify" check (DNS resolves + the instance answers on it),
- *  - the pure host-matching helpers the router/bootstrap layer uses for the
- *    default-host -> custom-domain 301 and for domain-aware canonical URLs.
+ * Help center custom domain (domains/languages §1) on a self-hosted server.
+ * OSS does not automate TLS or DNS -- the operator CNAMEs their domain to this
+ * instance and terminates TLS in their own proxy.
+ *
+ * The domain is the help center's entry in the portal section map
+ * (section-domains.service.ts); this module is the help center settings'
+ * writer for it, behind its own permission, until custom domains are written
+ * only on Settings > Domains. Sending /hc to the domain is the section host
+ * middleware's job.
  */
-import { systemResolver } from '@/lib/server/dns/resolver'
-import { isNoAnswer } from '@/lib/server/dns/lookup-outcome'
 import { normalizeDomain } from '@/lib/server/auth/normalize-domain'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
-import { logger } from '@/lib/server/logger'
-import {
-  getHelpCenterConfig,
-  updateHelpCenterConfig,
-} from '@/lib/server/domains/settings/settings.service'
+import { helpDomainConfig } from '@/lib/shared/section-domains'
 import type { HelpCenterDomainConfig } from '@/lib/server/domains/settings/settings.types'
+import type { HelpCenterDomainStatus } from '@/lib/server/domains/domain-proof/reachability-probe'
 
-const log = logger.child({ component: 'help-center-domain' })
+export {
+  checkHelpCenterDomainStatus,
+  type HelpCenterDomainStatus,
+} from '@/lib/server/domains/domain-proof/reachability-probe'
 
-/** Same probe path the request-context middleware treats as a health check. */
-const HEALTH_PATH = '/api/health'
-const REACHABILITY_TIMEOUT_MS = 5000
-
-export interface HelpCenterDomainStatus {
-  dnsResolved: boolean
-  instanceReachable: boolean
-  verified: boolean
-}
-
-/**
- * Resolves A then AAAA records; either succeeding counts as "DNS resolves".
- * Through the shared resolver, so a nameserver that does not answer costs
- * seconds, not the system default's retry cycle.
- *
- * `absent` only when both names answered with nothing; a lookup that went
- * unanswered (timeout, server failure) leaves the answer `unknown`.
- */
-async function domainResolves(domain: string): Promise<'resolved' | 'absent' | 'unknown'> {
-  let unanswered = false
-  const lookups = [() => systemResolver.resolve4(domain), () => systemResolver.resolve6(domain)]
-  for (const lookup of lookups) {
-    try {
-      const addrs = await lookup()
-      if (addrs.length > 0) return 'resolved'
-    } catch (err) {
-      if (!isNoAnswer(err)) unanswered = true
-    }
-  }
-  return unanswered ? 'unknown' : 'absent'
-}
-
-/**
- * Whether this exact instance answers on the domain. A plain HTTPS GET to
- * the liveness path proves the CNAME + the operator's proxy both terminate
- * on us -- no shared secret needed for a v1 status check.
- */
-async function instanceAnswersOn(domain: string): Promise<boolean> {
-  try {
-    const res = await fetch(`https://${domain}${HEALTH_PATH}`, {
-      signal: AbortSignal.timeout(REACHABILITY_TIMEOUT_MS),
-    })
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
-/** The status, and whether DNS gave an answer at all. */
-async function probeHelpCenterDomain(
-  domain: string
-): Promise<{ status: HelpCenterDomainStatus; dnsAnswered: boolean }> {
-  const [dns, instanceReachable] = await Promise.all([
-    domainResolves(domain),
-    instanceAnswersOn(domain),
-  ])
-  const dnsResolved = dns === 'resolved'
-  return {
-    status: { dnsResolved, instanceReachable, verified: dnsResolved && instanceReachable },
-    dnsAnswered: dns !== 'unknown',
-  }
-}
-
-/** Read-only status check, used both by the "Verify" action and its status chip. */
-export async function checkHelpCenterDomainStatus(domain: string): Promise<HelpCenterDomainStatus> {
-  return (await probeHelpCenterDomain(domain)).status
-}
-
-/**
- * Set (or clear) the configured domain. Changing the domain always resets
- * verification -- a new hostname has never passed the check.
- */
 export const HC_DOMAIN_CLOUD_MANAGED = 'HC_DOMAIN_CLOUD_MANAGED'
 
 async function refuseCloudLocalWriter(): Promise<void> {
@@ -109,14 +37,21 @@ async function refuseCloudLocalWriter(): Promise<void> {
   }
 }
 
+const sectionDomains = () => import('@/lib/server/domains/settings/section-domains.service')
+
+/**
+ * Set (or clear) the help center's domain. A new hostname has never passed
+ * the check, so it starts unverified; the same hostname keeps its result.
+ */
 export async function setHelpCenterDomain(
   domainInput: string | null
 ): Promise<HelpCenterDomainConfig> {
+  const { setSectionDomain } = await sectionDomains()
   if (domainInput === null || domainInput.trim() === '') {
     // Clearing a domain is always allowed. Refusing it would strand a
     // downgraded workspace on a domain it can no longer manage.
-    const updated = await updateHelpCenterConfig({ domain: { domain: null, verifiedAt: null } })
-    return updated.domain
+    const cleared = await setSectionDomain('help', null)
+    return helpDomainConfig(cleared.ok ? cleared.sectionDomains : {})
   }
   // Cloud identity owns custom hostnames. The local reverse-proxy writer is
   // self-host only — even when the plan grants customDomain.
@@ -129,51 +64,30 @@ export async function setHelpCenterDomain(
   if (!normalized) {
     throw new ValidationError('HC_DOMAIN_INVALID', 'Must be a public FQDN (e.g. "help.acme.com")')
   }
-  const updated = await updateHelpCenterConfig({
-    domain: { domain: normalized, verifiedAt: null },
-  })
-  // The same domain on Settings > Domains, made in this one step; never a
-  // reason to report the help center's own write as failed.
-  const { ensureDomainForCustomDomain } =
-    await import('@/lib/server/domains/domain-proof/ensure-domain')
-  await ensureDomainForCustomDomain(normalized)
-  return updated.domain
+  // Also puts the domain on Settings > Domains.
+  const result = await setSectionDomain('help', normalized)
+  if (!result.ok) throw new ValidationError(result.code, result.message)
+  return helpDomainConfig(result.sectionDomains)
 }
 
 /**
- * Run the verify check against the currently configured domain and persist
- * the result. A previously-verified domain that stops answering is
- * un-verified again (verifiedAt cleared) so the 301 doesn't strand visitors
- * on a dead host.
+ * Run the verify check against the help center's domain and persist the
+ * result. A previously-verified domain that stops answering is un-verified
+ * again, so visitors are not sent to a dead host.
  */
 export async function verifyHelpCenterDomain(): Promise<{
   config: HelpCenterDomainConfig
   status: HelpCenterDomainStatus
 }> {
   await refuseCloudLocalWriter()
-  const current = await getHelpCenterConfig('fresh')
-  const domain = current.domain?.domain
-  if (!domain) {
+  const { verifySectionDomain } = await sectionDomains()
+  const result = await verifySectionDomain('help')
+  if (!result.ok || !result.status) {
     throw new ValidationError('HC_DOMAIN_NOT_SET', 'Set a domain before verifying it')
   }
-
-  const { status, dnsAnswered } = await probeHelpCenterDomain(domain)
-  log.info({ domain, status, dns_answered: dnsAnswered }, 'help center domain verify check')
-  // A lookup that went unanswered says nothing about the domain, so it keeps
-  // a verification it already has; only an answer can take one away.
-  const kept = !status.verified && !dnsAnswered ? (current.domain?.verifiedAt ?? null) : null
-  if (kept) {
-    log.warn({ domain }, 'help center domain lookup went unanswered; keeping its verification')
-  }
-  const verifiedAt = status.verified ? new Date().toISOString() : kept
-  const updated = await updateHelpCenterConfig({ domain: { domain, verifiedAt } })
-  return { config: updated.domain, status }
+  return { config: helpDomainConfig(result.sectionDomains), status: result.status }
 }
 
-// The pure host-matching helpers live in lib/shared (route beforeLoad code is
-// client-bundled and must not drag this server module in); re-exported here so
+// The pure host-matching helper lives in lib/shared; re-exported here so
 // server callers keep one import surface for the domain feature.
-export {
-  resolveHelpCenterDomainRedirect,
-  resolveHelpCenterBaseUrl,
-} from '@/lib/shared/help-center-domain'
+export { resolveHelpCenterBaseUrl } from '@/lib/shared/help-center-domain'

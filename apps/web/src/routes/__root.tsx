@@ -228,6 +228,11 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const acceptLanguageLocale = Route.useRouteContext({
     select: (context) => context.acceptLanguageLocale,
   })
+  // On a portal section's own hostname, the page `/` shows there; the
+  // browser router reads it off the document (section-home-rewrite.ts).
+  const sectionHome = Route.useRouteContext({
+    select: (context) => context.sectionHome ?? null,
+  })
   useSeedRootContext()
   // Portal routes can force a specific theme (light/dark) via branding config.
   // Admin and other non-portal routes always respect the user's preference.
@@ -299,6 +304,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     <html
       lang={lang}
       dir={dir}
+      data-section-home={sectionHome ?? undefined}
       className={themeClass}
       style={{ colorScheme }}
       suppressHydrationWarning

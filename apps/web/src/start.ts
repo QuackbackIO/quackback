@@ -16,6 +16,7 @@ import { requestContextMiddleware } from '@/lib/server/middleware/request-contex
 import { userContentHostMiddleware } from '@/lib/server/middleware/user-content-host'
 import { serverFnLogMiddleware } from '@/lib/server/middleware/server-fn-log'
 import { workspaceContextMiddleware } from '@/lib/server/middleware/workspace-context'
+import { sectionHostMiddleware } from '@/lib/server/middleware/section-host'
 import { auditAttributionMiddleware } from '@/lib/server/middleware/audit-attribution'
 import { expireRouteContextOnWrite } from '@/lib/client/route-context-middleware'
 import { serverFnFetch } from '@/lib/client/server-fn-fetch'
@@ -46,6 +47,8 @@ export const startInstance = createStart(() => {
     // preflight carries no credentials and needs no database.
     // The user-content host (USER_CONTENT_URL) is narrowed to stored-file
     // reads before anything else looks at the request.
+    // Section hosts (help.acme.com for the help center) are routed once the
+    // workspace, and so its settings, is known.
     // Audit attribution last: it opens the request's attribution boundary, and
     // anything it records must land in the workspace resolved above.
     requestMiddleware: [
@@ -53,6 +56,7 @@ export const startInstance = createStart(() => {
       userContentHostMiddleware,
       oauthCorsMiddleware,
       workspaceContextMiddleware,
+      sectionHostMiddleware,
       csrfMiddleware,
       auditAttributionMiddleware,
     ],

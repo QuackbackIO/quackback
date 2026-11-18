@@ -11,8 +11,11 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
           { listPublicCategories, listPublicArticles },
           { listPublicCategoriesForLocale, listPublicArticlesForCategoryLocale },
           { buildHelpCenterSitemapUrls, buildHelpCenterSitemapUrlsMultiLocale },
-          { resolveHelpCenterBaseUrl, resolveHelpCenterDomainRedirect },
+          { resolveHelpCenterBaseUrl },
           { renderSitemap },
+          { getSectionDomains },
+          { helpDomainConfig },
+          { requestWorkspaceHost },
         ] = await Promise.all([
           import('@/lib/server/config'),
           import('@/lib/server/domains/settings/settings.service'),
@@ -21,6 +24,9 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
           import('@/lib/shared/help-center-sitemap'),
           import('@/lib/shared/help-center-domain'),
           import('@/lib/server/sitemap'),
+          import('@/lib/server/domains/settings/section-domains.service'),
+          import('@/lib/shared/section-domains'),
+          import('@/lib/server/workspaces/saas-edge-host'),
         ])
 
         if (!(await isFeatureEnabled('helpCenter'))) {
@@ -37,29 +43,16 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
 
         const url = new URL(request.url)
 
-        // The help center layout 301s every /hc/* request on the default host to
-        // a verified custom domain. This handler sits outside that layout, so it
-        // applies the same redirect, or crawlers would follow the listed URLs there.
-        const customDomainRedirect = resolveHelpCenterDomainRedirect({
-          domainConfig: helpCenterConfig.domain,
-          currentHost: url.host,
-          pathname: url.pathname,
-          search: url.search,
-        })
-        if (customDomainRedirect) {
-          return new Response(null, {
-            status: 301,
-            headers: { Location: customDomainRedirect, Vary: 'Host' },
-          })
-        }
-
+        // The default host's sitemap is sent to a verified custom domain by
+        // the section host middleware before it gets here.
+        //
         // The request reaches the app over http behind the TLS proxy, so its
         // origin is not the public one. Use the same base the canonical links
         // use: the verified custom domain when the request arrived on it, else
         // the configured base URL.
         const baseUrl = resolveHelpCenterBaseUrl({
-          domainConfig: helpCenterConfig.domain,
-          currentHost: url.host,
+          domainConfig: helpDomainConfig(await getSectionDomains()),
+          currentHost: requestWorkspaceHost(request),
           fallback: config.baseUrl,
         })
         const pageParam = url.searchParams.get('page')

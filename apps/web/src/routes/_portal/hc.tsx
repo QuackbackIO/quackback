@@ -1,7 +1,4 @@
-import { createFileRoute, notFound, redirect, Outlet, useRouterState } from '@tanstack/react-router'
-import { createIsomorphicFn } from '@tanstack/react-start'
-import { getRequestHeaders } from '@tanstack/react-start/server'
-import { resolveHelpCenterDomainRedirect } from '@/lib/shared/help-center-domain'
+import { createFileRoute, notFound, Outlet, useRouterState } from '@tanstack/react-router'
 import { HelpCenterLocaleSwitcher } from '@/components/help-center/help-center-locale-switcher'
 import { parseHcLocalePath } from '@/lib/shared/help-center-url'
 import { AreaMessages } from '@/components/shared/area-messages'
@@ -9,44 +6,15 @@ import { DEFAULT_LOCALE, isRtlLocale, seedAreaMessages } from '@/lib/shared/i18n
 import type { FeatureFlags, HelpCenterConfig } from '@/lib/shared/types/settings'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
 
-/**
- * Only meaningful during SSR -- request headers aren't available on the
- * client, and a client-side nav that's already on the right host has
- * nothing to redirect. The isomorphic split keeps the server-only header
- * import out of the client bundle (import-protection denies it there);
- * swallow failures rather than block the page.
- */
-const currentRequestHost = createIsomorphicFn()
-  .client((): string | null => null)
-  .server((): string | null => {
-    try {
-      return getRequestHeaders().get('host')
-    } catch {
-      return null
-    }
-  })
-
 export const Route = createFileRoute('/_portal/hc')({
-  beforeLoad: async ({ context, location }) => {
+  beforeLoad: async ({ context }) => {
     const { settings } = context
 
     const flags = settings?.featureFlags as FeatureFlags | undefined
     if (!flags?.helpCenter) throw notFound()
 
-    const helpCenterConfig = settings?.helpCenterConfig as HelpCenterConfig | undefined
-
-    // Full-coverage 301: every /hc/* route is nested under this layout, so
-    // this is the single place the default-host -> verified-custom-domain
-    // redirect needs to live (domains/languages §1).
-    const currentHost = currentRequestHost()
-    const target = resolveHelpCenterDomainRedirect({
-      domainConfig: helpCenterConfig?.domain,
-      currentHost,
-      pathname: location.pathname,
-      // `searchStr` already includes the leading `?` when non-empty.
-      search: location.searchStr ?? '',
-    })
-    if (target) throw redirect({ href: target, statusCode: 301 })
+    // The primary domain's /hc pages move to the help center's own domain in
+    // the section host middleware (lib/server/middleware/section-host.ts).
   },
   loader: async ({ context }) => {
     const { settings } = context

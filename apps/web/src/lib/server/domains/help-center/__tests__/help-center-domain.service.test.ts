@@ -4,10 +4,20 @@ import type { HelpCenterDomainConfig } from '@/lib/server/domains/settings/setti
 const mockGetHelpCenterConfig = vi.fn()
 const mockUpdateHelpCenterConfig = vi.fn()
 
+// The help center's domain is its entry in the section map, written through
+// the real section service: the portal config here has no map yet, so the
+// help center's own setting stands in for it.
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getHelpCenterConfig: (...args: unknown[]) => mockGetHelpCenterConfig(...args),
   updateHelpCenterConfig: (...args: unknown[]) => mockUpdateHelpCenterConfig(...args),
+  getPortalConfig: async () => ({}),
+  updatePortalConfig: async () => ({}),
   getWorkspaceSettings: async () => ({ settings: { cloud: null } }),
+}))
+// A self-hosted settings row: no Cloud identity.
+vi.mock('@/lib/server/db', () => ({
+  db: { select: () => ({ from: () => ({ limit: async () => [] }) }) },
+  settings: {},
 }))
 
 // The domain the help center is set to also goes on Settings > Domains; that
@@ -27,7 +37,6 @@ vi.mock('@/lib/server/dns/resolver', () => ({
 }))
 
 const {
-  resolveHelpCenterDomainRedirect,
   resolveHelpCenterBaseUrl,
   checkHelpCenterDomainStatus,
   setHelpCenterDomain,
@@ -46,74 +55,6 @@ const unverifiedDomain: HelpCenterDomainConfig = {
   domain: 'help.acme.com',
   verifiedAt: null,
 }
-
-describe('resolveHelpCenterDomainRedirect', () => {
-  it('returns null when no domain is configured', () => {
-    expect(
-      resolveHelpCenterDomainRedirect({
-        domainConfig: { domain: null, verifiedAt: null },
-        currentHost: 'app.quackback.io',
-        pathname: '/hc',
-        search: '',
-      })
-    ).toBeNull()
-  })
-
-  it('returns null when the domain is configured but not verified', () => {
-    expect(
-      resolveHelpCenterDomainRedirect({
-        domainConfig: unverifiedDomain,
-        currentHost: 'app.quackback.io',
-        pathname: '/hc',
-        search: '',
-      })
-    ).toBeNull()
-  })
-
-  it('returns null when the request already arrived on the custom domain', () => {
-    expect(
-      resolveHelpCenterDomainRedirect({
-        domainConfig: verifiedDomain,
-        currentHost: 'help.acme.com',
-        pathname: '/hc/categories/billing',
-        search: '',
-      })
-    ).toBeNull()
-  })
-
-  it('redirects the default host to the verified custom domain, preserving path and search', () => {
-    expect(
-      resolveHelpCenterDomainRedirect({
-        domainConfig: verifiedDomain,
-        currentHost: 'app.quackback.io',
-        pathname: '/hc/articles/billing/invoices',
-        search: '?utm_source=x',
-      })
-    ).toBe('https://help.acme.com/hc/articles/billing/invoices?utm_source=x')
-  })
-
-  it('ignores the port when comparing hosts', () => {
-    expect(
-      resolveHelpCenterDomainRedirect({
-        domainConfig: verifiedDomain,
-        currentHost: 'app.quackback.io:3000',
-        pathname: '/hc',
-        search: '',
-      })
-    ).toBe('https://help.acme.com/hc')
-  })
-
-  it('returns null when no request host is available (e.g. client-side nav)', () => {
-    expect(
-      resolveHelpCenterDomainRedirect({
-        domainConfig: verifiedDomain,
-        currentHost: null,
-        pathname: '/hc',
-        search: '',
-      })
-    ).toBeNull()
-  })
-})
 
 describe('resolveHelpCenterBaseUrl', () => {
   const fallback = 'https://app.quackback.io'
@@ -207,6 +148,7 @@ describe('checkHelpCenterDomainStatus', () => {
 
 describe('setHelpCenterDomain', () => {
   beforeEach(() => {
+    mockGetHelpCenterConfig.mockResolvedValue({ domain: { domain: null, verifiedAt: null } })
     mockUpdateHelpCenterConfig.mockReset()
     mockUpdateHelpCenterConfig.mockImplementation(
       async (input: { domain: HelpCenterDomainConfig }) => ({

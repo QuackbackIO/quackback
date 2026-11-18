@@ -8,10 +8,14 @@ export const Route = createFileRoute('/robots.txt')({
           { config },
           { isFeatureEnabled, getHelpCenterConfig },
           { resolveHelpCenterPublicBaseUrl },
+          { getSectionDomains },
+          { helpDomainConfig },
         ] = await Promise.all([
           import('@/lib/server/config'),
           import('@/lib/server/domains/settings/settings.service'),
           import('@/lib/shared/help-center-domain'),
+          import('@/lib/server/domains/settings/section-domains.service'),
+          import('@/lib/shared/section-domains'),
         ])
         const baseUrl = config.baseUrl
 
@@ -23,7 +27,7 @@ export const Route = createFileRoute('/robots.txt')({
         // The default host's /hc/sitemap.xml redirects to a verified custom domain,
         // so the sitemap is advertised on that domain directly.
         const helpCenterBaseUrl = resolveHelpCenterPublicBaseUrl({
-          domainConfig: helpCenterConfig.domain,
+          domainConfig: helpDomainConfig(await getSectionDomains()),
           fallback: baseUrl,
         })
 

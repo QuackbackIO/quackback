@@ -6,6 +6,7 @@ import { DefaultErrorPage, NotFoundPage } from '@/components/shared/error-page'
 import { RoutePendingComponent } from '@/components/shared/route-pending'
 import { expireRouteContextOnInvalidate } from '@/lib/client/route-context-memo'
 import { createAutosaveMutationCache } from '@/lib/client/autosave'
+import { sectionHomeRewrite } from '@/lib/shared/section-home-rewrite'
 
 // The small client helpers that lazily loaded chunks share. Reachable from
 // here, they join the entry chunk's static closure (see the `$initial` group
@@ -39,6 +40,8 @@ export function getRouter() {
     },
     defaultErrorComponent: DefaultErrorPage,
     defaultNotFoundComponent: NotFoundPage,
+    // `/` on a portal section's own hostname shows that section's home.
+    rewrite: sectionHomeRewrite,
   })
 
   setupRouterSsrQueryIntegration({

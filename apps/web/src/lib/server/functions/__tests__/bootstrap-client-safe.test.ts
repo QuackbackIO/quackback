@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const hoisted = vi.hoisted(() => ({
   getWorkspaceSettings: vi.fn(),
   handlers: [] as Array<() => Promise<unknown>>,
+  host: 'feedback.example',
 }))
 
 vi.mock('@tanstack/react-start', () => ({
@@ -23,8 +24,9 @@ vi.mock('@tanstack/react-start', () => ({
   }),
 }))
 vi.mock('@tanstack/react-start/server', () => ({
-  getRequestHeaders: () => new Headers({ host: 'feedback.example' }),
-  getRequestUrl: () => new URL('https://feedback.example/'),
+  getRequestHeaders: () => new Headers({ host: hoisted.host }),
+  getRequestUrl: () => new URL(`https://${hoisted.host}/`),
+  getRequest: () => new Request(`https://${hoisted.host}/`, { headers: { host: hoisted.host } }),
   setResponseHeader: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
@@ -102,12 +104,14 @@ async function getBootstrapData() {
   return (await hoisted.handlers[0]!()) as {
     settings: { name: string; settings: object; statusConfig: object } | null
     onboarding: { complete: boolean; needsSetupWizard: boolean }
+    sectionHome: string | null
   }
 }
 
 describe('getBootstrapData response', () => {
   beforeEach(() => {
     hoisted.getWorkspaceSettings.mockReset()
+    hoisted.host = 'feedback.example'
   })
 
   it('carries none of the server-only settings', async () => {
@@ -159,5 +163,21 @@ describe('getBootstrapData response', () => {
 
     expect(data.settings).toBeNull()
     expect(data.onboarding).toEqual({ complete: false, needsSetupWizard: false })
+  })
+
+  it("marks a section host's document with the page / shows there", async () => {
+    const settings = workspaceSettings(setupState())
+    hoisted.getWorkspaceSettings.mockResolvedValue({
+      ...settings,
+      portalConfig: {
+        ...settings.portalConfig,
+        sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: null } },
+      },
+      featureFlags: { feedback: true, helpCenter: true },
+    })
+
+    expect((await getBootstrapData()).sectionHome).toBeNull()
+    hoisted.host = 'help.acme.com'
+    expect((await getBootstrapData()).sectionHome).toBe('/hc')
   })
 })

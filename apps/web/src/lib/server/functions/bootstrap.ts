@@ -31,6 +31,12 @@ const log = logger.child({ component: 'bootstrap' })
 
 export interface BootstrapData {
   baseUrl: string
+  /**
+   * The page `/` shows when the request came to a portal section's own
+   * hostname (`/hc` on help.acme.com), else null. The root document carries
+   * it so the browser's router matches `/` as the server did.
+   */
+  sectionHome: string | null
   session: Session | null
   /**
    * The workspace settings as a browser may see them: redacted by
@@ -193,14 +199,18 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     { getWorkspaceSettings },
     { getRegisteredAuthProviders },
     { config },
-    { getRequestHeaders, setResponseHeader },
+    { getRequest, getRequestHeaders, setResponseHeader },
     { resolveHelpCenterBaseUrl },
+    { effectiveSectionDomains, helpDomainConfig, portalSectionsEnabled, sectionHomeForHost },
+    { requestWorkspaceHost },
   ] = await Promise.all([
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/auth/registered-providers'),
     import('@/lib/server/config'),
     import('@tanstack/react-start/server'),
     import('@/lib/server/domains/help-center/help-center-domain.service'),
+    import('@/lib/shared/section-domains'),
+    import('@/lib/server/workspaces/saas-edge-host'),
   ])
 
   // Single principal read returns both session.principalType + userRole;
@@ -284,11 +294,24 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   // Canonical URLs switch to the help center's custom domain when the
   // request actually arrived on it (domains/languages §1) -- everywhere else
   // (boards, changelog, etc.) this is a no-op and baseUrl is just BASE_URL.
+  // The host the edge vouches for, never a forwarded header.
+  const requestHost = requestWorkspaceHost(getRequest())
+  const sectionDomains = effectiveSectionDomains({
+    sectionDomains: settings?.portalConfig?.sectionDomains,
+    legacyHelpDomain: settings?.helpCenterConfig?.domain,
+  })
   const baseUrl = resolveHelpCenterBaseUrl({
-    domainConfig: settings?.helpCenterConfig?.domain,
-    currentHost: headers.get('host'),
+    domainConfig: helpDomainConfig(sectionDomains),
+    currentHost: requestHost,
     fallback: config.baseUrl,
   })
+  const sectionHome = settings
+    ? sectionHomeForHost({
+        host: requestHost,
+        map: sectionDomains,
+        sectionEnabled: portalSectionsEnabled(settings),
+      })
+    : null
   const cloud = resolveCloudConfig(
     (settings?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
   )
@@ -296,6 +319,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 
   return {
     baseUrl,
+    sectionHome,
     session,
     settings: settings ? clientSafeSettings(settings) : null,
     onboarding: {

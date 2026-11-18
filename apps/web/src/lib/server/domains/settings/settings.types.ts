@@ -12,6 +12,7 @@ import type { WidgetTranslations } from '@/lib/shared/widget/translations'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 import type { OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
+import type { SectionDomainMap } from '@/lib/shared/section-domains'
 // Vite aliases this to a no-op stub for the client bundle (see
 // logger.client-stub.ts), so it is safe for this otherwise client-bundled
 // module to import it for the one server-side parse-failure log below.
@@ -369,6 +370,17 @@ export interface PortalConfig {
   nav?: PortalNavConfig
   /** Support tab (conversations on the portal). Optional — absent = disabled. */
   support?: PortalSupportConfig
+  /**
+   * The hostname each portal section is served at (help.acme.com for the help
+   * center). Read through `effectiveSectionDomains`.
+   *
+   * **Optional, and deliberately absent from {@link DEFAULT_PORTAL_CONFIG}.**
+   * Absent means the map was never written, and the help center's own domain
+   * (`helpCenterConfig.domain`, the setting this replaces) still stands in for
+   * the help entry. The first write stores the whole map, after which an empty
+   * map means no section has a hostname. Always written whole, never merged.
+   */
+  sectionDomains?: SectionDomainMap
 }
 
 /**
@@ -1018,6 +1030,8 @@ export interface UpdatePortalConfigInput {
   /** Replaced wholesale (items is an ordered array — never merged). */
   nav?: PortalNavConfig
   support?: Partial<PortalSupportConfig>
+  /** Replaced wholesale, so a section taken off the map is gone. */
+  sectionDomains?: SectionDomainMap
 }
 
 // =============================================================================

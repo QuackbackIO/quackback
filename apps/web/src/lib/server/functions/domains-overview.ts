@@ -40,9 +40,10 @@ export const getSignInDomainSummariesFn = createServerFn({ method: 'GET' }).hand
 export const getHelpCenterDomainSummaryFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<HelpCenterDomainSummary | null> => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN })
-    const { getHelpCenterConfig } = await import('@/lib/server/domains/settings/settings.service')
-    const { domain } = await getHelpCenterConfig()
-    if (!domain?.domain) return null
-    return { domain: domain.domain, verified: domain.verifiedAt !== null }
+    const { getSectionDomains } =
+      await import('@/lib/server/domains/settings/section-domains.service')
+    const help = (await getSectionDomains()).help
+    if (!help) return null
+    return { domain: help.hostname, verified: help.verifiedAt !== null }
   }
 )

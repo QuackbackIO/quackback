@@ -3,12 +3,12 @@
  * robots.txt advertises the help center sitemap where it lives. Once a custom
  * domain is verified, the default host's /hc/sitemap.xml redirects there, so
  * the advertised link points at the custom domain directly, whichever host
- * served robots.txt.
+ * served robots.txt. The help center's domain is its entry in the section map.
  */
 import { describe, it, expect, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
-  domain: { domain: null as string | null, verifiedAt: null as string | null },
+  sectionDomains: {} as Record<string, { hostname: string; verifiedAt: string | null }>,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -23,8 +23,13 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: async () => true,
   getHelpCenterConfig: async () => ({
     seo: { indexable: true },
-    domain: state.domain,
+    // The setting the map replaced, still stored: the map wins over it.
+    domain: { domain: 'old-help.acme.com', verifiedAt: '2026-09-01T00:00:00.000Z' },
   }),
+}))
+
+vi.mock('@/lib/server/domains/settings/section-domains.service', () => ({
+  getSectionDomains: async () => state.sectionDomains,
 }))
 
 import { Route } from '../robots[.]txt'
@@ -39,11 +44,11 @@ async function sitemapLines(requestUrl: string): Promise<string[]> {
   return body.split('\n').filter((line) => line.startsWith('Sitemap: '))
 }
 
-const verified = { domain: 'help.acme.com', verifiedAt: '2026-10-01T00:00:00.000Z' }
+const verified = { help: { hostname: 'help.acme.com', verifiedAt: '2026-10-01T00:00:00.000Z' } }
 
 describe('robots.txt sitemap lines', () => {
   it('advertises the help center sitemap on the base URL without a custom domain', async () => {
-    state.domain = { domain: null, verifiedAt: null }
+    state.sectionDomains = {}
     expect(await sitemapLines('https://feedback.example.com/robots.txt')).toEqual([
       'Sitemap: https://feedback.example.com/sitemap.xml',
       'Sitemap: https://feedback.example.com/hc/sitemap.xml',
@@ -51,7 +56,7 @@ describe('robots.txt sitemap lines', () => {
   })
 
   it('keeps the base URL while the custom domain is not verified', async () => {
-    state.domain = { domain: 'help.acme.com', verifiedAt: null }
+    state.sectionDomains = { help: { hostname: 'help.acme.com', verifiedAt: null } }
     expect(await sitemapLines('https://feedback.example.com/robots.txt')).toEqual([
       'Sitemap: https://feedback.example.com/sitemap.xml',
       'Sitemap: https://feedback.example.com/hc/sitemap.xml',
@@ -59,7 +64,7 @@ describe('robots.txt sitemap lines', () => {
   })
 
   it('advertises the verified custom domain when robots.txt is served on the default host', async () => {
-    state.domain = verified
+    state.sectionDomains = verified
     expect(await sitemapLines('https://feedback.example.com/robots.txt')).toEqual([
       'Sitemap: https://feedback.example.com/sitemap.xml',
       'Sitemap: https://help.acme.com/hc/sitemap.xml',
@@ -67,7 +72,7 @@ describe('robots.txt sitemap lines', () => {
   })
 
   it('advertises the verified custom domain when robots.txt is served on it', async () => {
-    state.domain = verified
+    state.sectionDomains = verified
     expect(await sitemapLines('https://help.acme.com/robots.txt')).toEqual([
       'Sitemap: https://feedback.example.com/sitemap.xml',
       'Sitemap: https://help.acme.com/hc/sitemap.xml',

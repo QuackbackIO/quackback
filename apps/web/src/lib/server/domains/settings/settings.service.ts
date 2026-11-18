@@ -692,6 +692,8 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
     if (normalizedWelcome) {
       updated.welcomeCard = mergeWelcomeCard(existing.welcomeCard, normalizedWelcome)
     }
+    // The section map replaces too, or a section taken off it would come back.
+    if (input.sectionDomains) updated.sectionDomains = input.sectionDomains
 
     await db
       .update(settings)
