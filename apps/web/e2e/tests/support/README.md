@@ -60,6 +60,17 @@ test('a teammate answers', { tag: '@core' }, async ({ asPerson, marker }) => {
   your rows by it. Never clear Mailpit and never count all messages.
 - **Settings.** Only turn things on. A spec that must turn a workspace setting
   off needs its own project or database.
+- **Timers.** A sweep runs over the whole workspace, so `runSweep(..., { asOf })`
+  also wakes, breaches or promotes other tests' rows that are due by then.
+  Prefer backdating your own row (for example `snoozed_until` in the past) and
+  sweeping at the wall clock; when a test needs `asOf`, assert only on its own
+  rows, and never assert that someone else's row did not move.
+- **Presence.** Presence assertions read one person's rows. Use a person no
+  parallel test opens the inbox as (the inbox's own stream counts as
+  presence), or seed your own teammate.
+- **One database per suite.** The support suite and the older suites
+  (`playwright.config.ts`) must not share a database: support tests leave
+  conversations behind that the older inbox spec's selectors trip over.
 
 ## The people
 

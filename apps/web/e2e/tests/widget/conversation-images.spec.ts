@@ -19,7 +19,7 @@ test.describe('Widget conversation images', () => {
       annotation: {
         type: 'quarantine',
         description:
-          'Storage works now; the post-send assertions predate the #629 attachment rendering. See QUARANTINE.md.',
+          'Storage works now; the sent image renders as a file link instead of a thumb (not traced). See QUARANTINE.md.',
       },
     },
     async ({ page }) => {

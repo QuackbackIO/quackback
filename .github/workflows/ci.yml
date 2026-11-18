@@ -664,14 +664,18 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          labels=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name')
+          # A failed lookup only means the label cannot turn the job on; the
+          # path check below still runs.
+          labels=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name' || true)
           if printf '%s\n' "$labels" | grep -qx 'run-support-e2e'; then
             echo "support=true" >> "$GITHUB_OUTPUT"
             echo 'Label run-support-e2e is set.'
             exit 0
           fi
           support_paths='^(apps/web/src/lib/server/domains/(conversation|conversation-attributes|conversation-views|tickets|inbox|sla|office-hours|notifications|teams|macros|workflows|assistant|subscriptions|channel-accounts|channels)/|apps/web/src/lib/server/(realtime|events|jobs|email|e2e-harness)/|apps/web/src/routes/(admin/inbox|admin/tickets|_portal/support|widget|api/widget|api/chat|api/e2e|api/v1/conversations|api/v1/tickets)|apps/web/src/components/(admin/inbox|conversation|widget|notifications)/|apps/web/e2e/(support|tests/support|scripts)/|apps/web/playwright[.]support[.]config[.]ts|packages/(email|widget)/|[.]github/workflows/ci[.]yml)'
-          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          # Three dots: what this branch changed since it left main, not what
+          # main changed since.
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
           if printf '%s\n' "$changed" | grep -Eq "$support_paths"; then
             echo "support=true" >> "$GITHUB_OUTPUT"
             echo 'Support paths changed:'

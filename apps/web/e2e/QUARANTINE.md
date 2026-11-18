@@ -52,18 +52,19 @@ job leaves it out, so it cannot hide new failures.
 
 Every entry has owner: unassigned and review by: 2026-12-02.
 
-### Stale after the attachment change (#629); storage is now wired
+### Storage is now wired; the sent attachment's rendering is not traced
 
 Since #629, conversation attachments upload to `/api/upload/file` (team) and
 `/api/widget/files` (widget) and become file records in object storage. The
-e2e-full and e2e-quarantine jobs now run an S3-compatible storage container, and
-with it the upload works: the tray thumb renders and the stored file reads back
-(checked locally against the same container). The tests still fail after that,
-on assertions about how a SENT attachment renders: they look for an
-`img.object-contain` thumb (or no file link), and the thread now renders a sent
-file differently. Fixing them needs the intended post-#629 rendering, so they
-stay here until someone who knows it updates the assertions. The paperclip
-label (`Attach files`) and an image-load wait were fixed on the way.
+e2e-full and e2e-quarantine jobs now run an S3-compatible storage container.
+With it (checked locally against the same container) the upload works: the
+tray thumb renders and the stored file reads back with a 200. The tests then
+fail after the reply is sent: they wait for the sent image as an
+`img.object-contain` thumb, and the thread showed it as a file link instead.
+The thread renders a single image that way (`ImageRow` in
+`attachment-list.tsx`), so either the sent file is not classed as an image
+here or the assertions are stale; not traced. The paperclip label
+(`Attach files`) and an image-load wait were fixed on the way.
 
 - `admin/conversation-images.spec.ts` › Admin conversation images › paste and
   paperclip stage the tray, then send a contain thumb. owner: unassigned,
