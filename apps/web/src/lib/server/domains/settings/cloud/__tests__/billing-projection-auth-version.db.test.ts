@@ -123,3 +123,14 @@ it('moves it when the plan expiry changes', async () => {
   })
   expect(await authConfigVersion()).toBeGreaterThan(applied)
 })
+
+it('moves it when only the single sign-on entitlement changes', async () => {
+  // Same plan, single sign-on granted on its own (as an add-on would).
+  await writeBillingProjection(WORKSPACE_KEY, {
+    ...projection(1, false),
+    effectivePlan: 'business',
+  })
+  const applied = await authConfigVersion()
+  await writeBillingProjection(WORKSPACE_KEY, { ...projection(2, true), effectivePlan: 'business' })
+  expect(await authConfigVersion()).toBeGreaterThan(applied)
+})
