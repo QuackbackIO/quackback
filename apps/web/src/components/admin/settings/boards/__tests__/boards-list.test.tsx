@@ -149,9 +149,19 @@ describe('BoardsList read-only labels', () => {
     expect(screen.getByText('Read-only on the Free plan')).toBeTruthy()
   })
 
-  it('uses the plan wording when both reasons apply', () => {
+  it('says plain Read-only when the admin set it, whatever the plan state', () => {
     render(<BoardsList boards={[bugs({ readOnly: true, planReadOnly: 'Free' })]} />)
-    expect(screen.getByText('Read-only on the Free plan')).toBeTruthy()
-    expect(screen.queryByText('Read-only')).toBeNull()
+    expect(screen.getByText('Read-only')).toBeTruthy()
+    expect(screen.queryByText('Read-only on the Free plan')).toBeNull()
+  })
+
+  it('names the plan only for a board the plan alone closes', () => {
+    render(
+      <BoardsList
+        boards={[bugs({ planReadOnly: 'Free' }), bugs({ id: 'board_3', readOnly: true })]}
+      />
+    )
+    expect(screen.getAllByText('Read-only on the Free plan')).toHaveLength(1)
+    expect(screen.getAllByText('Read-only')).toHaveLength(1)
   })
 })

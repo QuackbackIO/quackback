@@ -60,6 +60,7 @@ import {
   BOARD_READ_ONLY_MESSAGE,
   BoardReadOnlyError,
   assertBoardOpen,
+  boardClosedReason,
   importRoom,
   withVisitorPostCapCopy,
 } from '../plan-limits.board-guard'
@@ -510,6 +511,22 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
       const limits = await getPlanLimits()
       expect(limits.issues.map((i) => [i.key, i.used, i.cap])).toEqual([['maxBoards', 2, 1]])
       expect(limits.openBoardIds).toEqual([closedBoard])
+    })
+  })
+
+  describe('the reason a board is closed', () => {
+    it('is manual whenever the admin set it, even when the plan would close it too', async () => {
+      await enforce()
+      expect(await boardClosedReason(closedBoard)).toBe('plan')
+      await updateBoard(closedBoard, { readOnly: true })
+      expect(await boardClosedReason(closedBoard)).toBe('manual')
+    })
+
+    it('is manual with the flag off, and null for the open board', async () => {
+      await configure({ planLimits: false })
+      await updateBoard(closedBoard, { readOnly: true })
+      expect(await boardClosedReason(closedBoard)).toBe('manual')
+      expect(await boardClosedReason(openBoard)).toBeNull()
     })
   })
 

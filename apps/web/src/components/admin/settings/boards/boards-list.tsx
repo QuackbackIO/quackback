@@ -46,8 +46,9 @@ function postCountLabel(count: number): string {
 }
 
 /**
- * Open or Read-only. "Read-only" is an admin's own setting; "Read-only on your
- * plan" is the plan's board limit, which wins the wording when both apply.
+ * Open or Read-only. "Read-only" is an admin's own setting and wins whatever
+ * the plan state, since upgrading does not reopen such a board; "Read-only on
+ * the {Plan} plan" is only for a board the plan's board limit alone closes.
  */
 function BoardOpenBadge({
   readOnly,
@@ -65,7 +66,7 @@ function BoardOpenBadge({
   }
   return (
     <Badge size="sm" variant="secondary">
-      {planReadOnly === undefined
+      {readOnly || planReadOnly === undefined
         ? 'Read-only'
         : planReadOnly
           ? `Read-only on the ${planReadOnly} plan`
