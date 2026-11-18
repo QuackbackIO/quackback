@@ -16,11 +16,13 @@ import {
   integrations,
   integrationEventMappings,
   integrationSyncOperations as operations,
+  settings,
 } from '@/lib/server/db'
 import { encryptSecrets } from '../../encryption'
 import { queueHookSync } from '../hooks'
 import { runIntegrationSync } from '../worker'
 import { syncTestJob } from './job'
+import { slackAppHooks } from '@/integrations/slack/server/hooks'
 import type { MessageCreatedEvent } from '@/lib/server/events/types'
 import {
   FEATURE_STATES,
@@ -37,6 +39,10 @@ vi.mock('@/lib/server/secret-key', () => ({
 }))
 const deliver = vi.hoisted(() => vi.fn().mockResolvedValue({ state: 'succeeded' }))
 vi.mock('@/integrations/slack/server/hook', () => ({ slackHook: { run: deliver } }))
+// The provider's control plane registry is out of reach in a test; the local
+// disconnect is what this suite pins.
+const unregisterInstall = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock('@/lib/server/integrations/install-registry', () => ({ unregisterInstall }))
 vi.mock(
   '@/lib/server/domains/plan-limits/plan-limits.service',
   async () =>
@@ -142,5 +148,83 @@ describe.skipIf(!fixture.available)('integration sync and the plan limits pause 
       where: eq(integrations.id, integration.id),
     })
     expect(kept).toMatchObject({ status: 'active', secrets: integration.secrets })
+  })
+})
+
+/**
+ * Lifecycle events are never paused: an app uninstall or a token revocation
+ * that arrives while integrations are paused disconnects the connection
+ * exactly as it does otherwise. Feature traffic on the same channel pauses.
+ */
+describe.skipIf(!fixture.available)('provider lifecycle events while paused (real DB)', () => {
+  async function slackInstall() {
+    // The disconnect also reads the workspace's assistant settings.
+    const [existing] = await testDb.select({ id: settings.id }).from(settings).limit(1)
+    if (!existing) {
+      await testDb
+        .insert(settings)
+        .values({ name: 'Acme', slug: `acme-${createId('user')}`, createdAt: new Date() })
+    }
+    const [integration] = await testDb
+      .insert(integrations)
+      .values({
+        integrationType: 'slack',
+        status: 'active',
+        secrets: encryptSecrets({ accessToken: 'acme-token' }),
+        config: { workspaceId: 'T1', botUserId: 'Ubot' },
+        connectedAt: new Date('2026-01-01T00:00:00.000Z'),
+      })
+      .returning()
+    return integration
+  }
+
+  async function deliver(event: Record<string, unknown>) {
+    const raw = JSON.stringify({
+      type: 'event_callback',
+      team_id: 'T1',
+      event_id: createId('event'),
+      event_time: Math.floor(Date.now() / 1000),
+      event,
+    })
+    await slackAppHooks.handle('events', raw, 'application/json')
+    const op = await testDb.query.integrationSyncOperations.findFirst({
+      where: eq(operations.kind, 'app-hook'),
+      orderBy: (o, { desc }) => [desc(o.createdAt)],
+    })
+    if (!op) throw new Error('Expected a queued app event')
+    await runIntegrationSync(syncTestJob(op.id))
+    return testDb.query.integrationSyncOperations.findFirst({ where: eq(operations.id, op.id) })
+  }
+
+  it.each([...FEATURE_STATES])('an uninstall disconnects in the %s state', async (state) => {
+    const integration = await slackInstall()
+    setFeatureState(state, 'integrations')
+    await deliver({ type: 'app_uninstalled' })
+    const after = await testDb.query.integrations.findFirst({
+      where: eq(integrations.id, integration.id),
+    })
+    expect(after?.status).toBe('disconnected')
+    expect(unregisterInstall).toHaveBeenCalledOnce()
+  })
+
+  it('a token revocation for the bot disconnects while paused', async () => {
+    const integration = await slackInstall()
+    setFeatureState('enforced', 'integrations')
+    await deliver({ type: 'tokens_revoked', tokens: { bot: ['Ubot'] } })
+    const after = await testDb.query.integrations.findFirst({
+      where: eq(integrations.id, integration.id),
+    })
+    expect(after?.status).toBe('disconnected')
+  })
+
+  it('a message to the app pauses', async () => {
+    const integration = await slackInstall()
+    setFeatureState('enforced', 'integrations')
+    const op = await deliver({ type: 'message', channel_type: 'im', user: 'U1', text: 'hi' })
+    expect(op).toMatchObject({ state: 'cancelled', errorCode: 'plan_paused' })
+    const after = await testDb.query.integrations.findFirst({
+      where: eq(integrations.id, integration.id),
+    })
+    expect(after?.status).toBe('active')
   })
 })

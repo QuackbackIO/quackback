@@ -266,7 +266,10 @@ export interface IntegrationDefinition {
       verifiedAt?: number
     }) => boolean
     deliveryId: (kind: string, rawBody: string, contentType: string | null) => string | null
-    // Optional transaction keeps receipt and durable enqueue atomic.
+    // Optional transaction keeps receipt and durable enqueue atomic. A queued
+    // event that removes or invalidates the connection (an uninstall, a token
+    // revocation) sets `lifecycle: true` on its data, so it is processed even
+    // while integrations are paused after the plan limits grace.
     handle: (
       kind: string,
       rawBody: string,

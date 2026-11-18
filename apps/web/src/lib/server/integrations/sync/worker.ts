@@ -42,6 +42,17 @@ import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.se
 
 const log = logger.child({ component: 'integration-sync' })
 
+/** A provider app event its handler marked as connection lifecycle (see `appHooks.handle`). */
+function isLifecycleEvent(operation: Parameters<typeof readSyncPayload>[0]): boolean {
+  if (operation.kind !== 'app-hook' || !operation.payload) return false
+  try {
+    const payload = readSyncPayload(operation)
+    return payload.executor === 'app-hook' && payload.data?.lifecycle === true
+  } catch {
+    return false
+  }
+}
+
 export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
   const id = job.payload.operationId
   if (typeof id !== 'string') return
@@ -52,8 +63,10 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
   if (!claim) return
   // Paused after the plan limits grace: the operation is settled, not left
   // queued, so nothing is sent now or replayed after an upgrade. The
-  // connection and its tokens are kept.
-  if (await isFeaturePaused('integrations')) {
+  // connection and its tokens are kept. A provider lifecycle event (an
+  // uninstall, a token revocation) always runs: it changes the connection
+  // itself, not feature traffic.
+  if (!isLifecycleEvent(claim.operation) && (await isFeaturePaused('integrations'))) {
     log.info(
       { operationId: id, provider: claim.operation.provider },
       'integrations paused on this plan; sync cancelled'
