@@ -100,6 +100,10 @@ function useCloudDomains(
 
 const NO_DOMAINS: WebAddress[] = []
 
+/** Cloud: asks the control plane to look at a custom domain again. */
+const refreshCloudDomain = (hostname: string) =>
+  mutateCloudCustomDomainFn({ data: { action: 'refresh', hostname } })
+
 export default function PortalCustomDomainsTab({
   cloud,
   onLeave,
@@ -169,6 +173,7 @@ export default function PortalCustomDomainsTab({
               : undefined
           }
           onAddDomain={operator ? goToAddDomain : undefined}
+          refreshCloudDomain={cloud ? refreshCloudDomain : undefined}
         />
       )}
       {operator && (

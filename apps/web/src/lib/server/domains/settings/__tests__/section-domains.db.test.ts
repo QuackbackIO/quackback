@@ -404,5 +404,56 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
       expect(view.sectionDomains.help).toEqual({ hostname: 'help.acme.com', verifiedAt: null })
       expect(view.primaryHost).toBe('acme.example.com')
     })
+
+    describe('a section saved while its custom domain was pending', () => {
+      const WORKSPACE_KEY = 'ws_section_domains_test'
+      let previousInstanceId: string | undefined
+      beforeEach(() => {
+        previousInstanceId = process.env.QUACKBACK_INSTANCE_ID
+        process.env.QUACKBACK_INSTANCE_ID = WORKSPACE_KEY
+      })
+      afterEach(() => {
+        if (previousInstanceId === undefined) delete process.env.QUACKBACK_INSTANCE_ID
+        else process.env.QUACKBACK_INSTANCE_ID = previousInstanceId
+      })
+
+      /** The control plane's next projection, written the way it always is. */
+      async function project(version: number, statusReadiness: string | null) {
+        const { writeIdentityProjection } = await import('../cloud/identity-projection.write')
+        const identity = cloudIdentity([
+          { hostname: 'acme.com', readiness: 'ready', isPrimary: true },
+          ...(statusReadiness ? [{ hostname: 'status.acme.com', readiness: statusReadiness }] : []),
+        ]) as unknown as Parameters<typeof writeIdentityProjection>[1]
+        await writeIdentityProjection(WORKSPACE_KEY, { ...identity, version })
+      }
+
+      it('goes live when the projection says its domain is ready, with no Verify', async () => {
+        await setSectionDomain('status', 'status.acme.com')
+        expect((await getSectionDomainsView()).sectionDomains.status?.verifiedAt).toBeNull()
+
+        await project(2, 'ready')
+
+        expect((await getSectionDomainsView()).sectionDomains.status?.verifiedAt).toEqual(
+          expect.any(String)
+        )
+        // Nothing was written to the map: readiness alone decides.
+        expect((await stored()).sectionDomains.status.verifiedAt).toBeNull()
+      })
+
+      it('goes down when a ready domain turns failed, or is removed', async () => {
+        await project(2, 'ready')
+        await setSectionDomain('status', 'status.acme.com')
+        expect((await getSectionDomainsView()).sectionDomains.status?.verifiedAt).toEqual(
+          expect.any(String)
+        )
+
+        await project(3, 'failed')
+        expect((await getSectionDomainsView()).sectionDomains.status?.verifiedAt).toBeNull()
+
+        await project(4, 'ready')
+        await project(5, null)
+        expect((await getSectionDomainsView()).sectionDomains.status?.verifiedAt).toBeNull()
+      })
+    })
   })
 })

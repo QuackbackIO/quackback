@@ -27,6 +27,7 @@ import { shouldRunWorkers } from '@/lib/server/process-role'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { analyticsWorkspaceKey } from '@/lib/shared/analytics-identity'
 import type { SectionLinks } from '@/lib/shared/section-links'
+import type { SectionDomainMap } from '@/lib/shared/section-domains'
 
 const log = logger.child({ component: 'bootstrap' })
 
@@ -213,9 +214,24 @@ async function getSessionAndRole(): Promise<{
  * client-side navigation as well as into the SSR document, so it is scrubbed
  * here rather than by the route that asked.
  */
-function clientSafeSettings(settings: WorkspaceSettings): WorkspaceSettings {
+/**
+ * The settings as the browser gets them. The section map is the one routing
+ * uses (`routableSectionDomains`), so every page shows a section's domain as
+ * live exactly when it is: on Cloud that is while the control plane reports
+ * its custom domain ready, which the raw settings row is not sent to say.
+ */
+function clientSafeSettings(
+  settings: WorkspaceSettings,
+  sectionDomains: SectionDomainMap
+): WorkspaceSettings {
   const redacted = redactSettingsForClient(settings)
-  return { ...redacted, settings: {} as WorkspaceSettings['settings'] }
+  return {
+    ...redacted,
+    ...(redacted.portalConfig
+      ? { portalConfig: { ...redacted.portalConfig, sectionDomains } }
+      : {}),
+    settings: {} as WorkspaceSettings['settings'],
+  }
 }
 
 let _initialized = false
@@ -239,6 +255,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     { requestWorkspaceHost },
     { sectionOriginsOf },
     { compactSectionLinks },
+    { hostingOf, routableSectionDomains },
   ] = await Promise.all([
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/auth/registered-providers'),
@@ -249,6 +266,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     import('@/lib/server/workspaces/saas-edge-host'),
     import('@/lib/server/domains/settings/section-links'),
     import('@/lib/shared/section-links'),
+    import('@/lib/server/domains/settings/section-domains.hosting'),
   ])
 
   // Single principal read returns both session.principalType + userRole;
@@ -337,8 +355,13 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     // BASE_URL's host; `baseUrl` below is the help host on the help host.
     primaryHost: hostOfOrigin(config.baseUrl),
   })
+  // Verified as routing reads it: on Cloud, while the custom domain is ready.
+  const routableDomains = routableSectionDomains(
+    sectionDomains,
+    hostingOf((settings?.settings as { cloud?: unknown; cloudIdentity?: unknown }) ?? null)
+  )
   const baseUrl = resolveHelpCenterBaseUrl({
-    domainConfig: helpDomainConfig(sectionDomains),
+    domainConfig: helpDomainConfig(routableDomains),
     currentHost: requestHost,
     fallback: config.baseUrl,
   })
@@ -366,7 +389,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     sectionHome,
     ...(sectionLinks ? { sectionLinks } : {}),
     session,
-    settings: settings ? clientSafeSettings(settings) : null,
+    settings: settings ? clientSafeSettings(settings, routableDomains) : null,
     onboarding: {
       complete: isOnboardingComplete(setupState),
       needsSetupWizard: needsCloudOnboardingWizard(setupState),

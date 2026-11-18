@@ -209,3 +209,54 @@ describe('a section hostname that is the primary domain', () => {
     expect(await sectionHostOrigin('acme.example.com')).toBeNull()
   })
 })
+
+describe('on Cloud, a section saved while its custom domain was pending', () => {
+  // Routing, links and sign-in follow the control plane's readiness alone:
+  // the stored verification is never what holds a domain back or keeps it up.
+  function cloudWith(readiness: string | null, verifiedAt: string | null = null) {
+    return workspace({
+      sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt } },
+      cloud: {
+        cloud: { enabled: true },
+        cloudIdentity: {
+          version: 1,
+          displayName: 'Acme',
+          canonicalOrigin: PRIMARY,
+          platformHostname: 'acme.example.com',
+          customDomains: readiness
+            ? [
+                {
+                  hostname: 'help.acme.com',
+                  readiness,
+                  isPrimary: false,
+                  updatedAt: VERIFIED,
+                },
+              ]
+            : [],
+          updatedAt: VERIFIED,
+        },
+      },
+    })
+  }
+
+  it('is not live while its domain is pending', async () => {
+    state.settings = cloudWith('pending')
+    expect((await getSectionOrigins()).help).toBe(PRIMARY)
+    expect((await getSignInSectionOrigins()).help).toBe(PRIMARY)
+  })
+
+  it('goes live when its domain turns ready, with no Verify', async () => {
+    state.settings = cloudWith('ready')
+    expect((await getSectionOrigins()).help).toBe('https://help.acme.com')
+    expect((await getSignInSectionOrigins()).help).toBe('https://help.acme.com')
+    expect(await sectionHostOrigin('help.acme.com')).toBe('https://help.acme.com')
+  })
+
+  it('goes down when a ready domain turns failed or is removed, though once verified', async () => {
+    for (const readiness of ['failed', 'pending', null]) {
+      state.settings = cloudWith(readiness, VERIFIED)
+      expect((await getSectionOrigins()).help).toBe(PRIMARY)
+      expect((await getSignInSectionOrigins()).help).toBe(PRIMARY)
+    }
+  })
+})

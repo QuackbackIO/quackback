@@ -15,6 +15,7 @@ const hoisted = vi.hoisted(() => ({
   handlers: [] as Array<() => Promise<unknown>>,
   host: 'feedback.acme.com',
   cookie: 'better-auth.session_token=tok' as string | null,
+  helpDomainConfig: null as { domain: string | null; verifiedAt: string | null } | null,
 }))
 
 vi.mock('@tanstack/react-start', () => ({
@@ -48,7 +49,16 @@ vi.mock('@/lib/server/auth/registered-providers', () => ({
 }))
 vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://acme.com' } }))
 vi.mock('@/lib/server/domains/help-center/help-center-domain.service', () => ({
-  resolveHelpCenterBaseUrl: ({ fallback }: { fallback: string }) => fallback,
+  resolveHelpCenterBaseUrl: ({
+    fallback,
+    domainConfig,
+  }: {
+    fallback: string
+    domainConfig: { domain: string | null; verifiedAt: string | null }
+  }) => {
+    hoisted.helpDomainConfig = domainConfig
+    return fallback
+  },
 }))
 vi.mock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => false }))
 vi.mock('@/lib/server/logger', () => ({
@@ -162,6 +172,64 @@ describe('the admin link for a teammate on a section host', () => {
     const data = await getBootstrapData()
     expect('primaryAdminUrl' in data).toBe(false)
     expect(data.userRole).toBe('admin')
+  })
+})
+
+describe('the section map the browser is sent', () => {
+  // The admin's pages read the map from the bootstrap. On Cloud the browser
+  // is never sent the identity that says which custom domains are ready, so
+  // the map arrives as routing reads it.
+  function cloudSettings(readiness: string) {
+    return {
+      ...settings,
+      settings: {
+        ...settings.settings,
+        cloud: { enabled: true },
+        cloudIdentity: {
+          version: 1,
+          displayName: 'Acme',
+          canonicalOrigin: 'https://acme.com',
+          platformHostname: 'acme.example.com',
+          customDomains: [
+            {
+              hostname: 'help.acme.com',
+              readiness,
+              isPrimary: false,
+              updatedAt: '2026-11-02T00:00:00.000Z',
+            },
+          ],
+          updatedAt: '2026-11-02T00:00:00.000Z',
+        },
+      },
+      portalConfig: { sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: null } } },
+      featureFlags: { feedback: true, helpCenter: true },
+    }
+  }
+
+  type WithSettings = Bootstrap & {
+    settings: { portalConfig: { sectionDomains: Record<string, { verifiedAt: string | null }> } }
+  }
+
+  it('shows a section live once its custom domain is ready, with no Verify', async () => {
+    hoisted.host = 'acme.com'
+    hoisted.getWorkspaceSettings.mockResolvedValue(cloudSettings('ready'))
+    const data = (await getBootstrapData()) as WithSettings
+    expect(data.settings.portalConfig.sectionDomains.help?.verifiedAt).toBe(
+      '2026-11-02T00:00:00.000Z'
+    )
+    // The help center's canonical URLs move to its domain with it.
+    expect(hoisted.helpDomainConfig).toEqual({
+      domain: 'help.acme.com',
+      verifiedAt: '2026-11-02T00:00:00.000Z',
+    })
+  })
+
+  it('shows it not live while the custom domain is pending', async () => {
+    hoisted.host = 'acme.com'
+    hoisted.getWorkspaceSettings.mockResolvedValue(cloudSettings('pending'))
+    const data = (await getBootstrapData()) as WithSettings
+    expect(data.settings.portalConfig.sectionDomains.help?.verifiedAt).toBeNull()
+    expect(hoisted.helpDomainConfig).toEqual({ domain: 'help.acme.com', verifiedAt: null })
   })
 })
 

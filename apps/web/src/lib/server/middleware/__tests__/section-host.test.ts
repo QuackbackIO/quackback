@@ -384,3 +384,36 @@ describe('handleSectionHost when a section names the primary domain', () => {
     expect(context).toBeUndefined()
   })
 })
+
+describe('handleSectionHost on Cloud, for a section saved while its domain was pending', () => {
+  function cloudWith(readiness: string) {
+    return workspace({
+      sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: null } },
+      cloud: {
+        cloud: { enabled: true },
+        cloudIdentity: {
+          version: 1,
+          displayName: 'Acme',
+          canonicalOrigin: 'https://acme.example.com',
+          platformHostname: 'acme.example.com',
+          customDomains: [
+            { hostname: 'help.acme.com', readiness, isPrimary: false, updatedAt: VERIFIED },
+          ],
+          updatedAt: VERIFIED,
+        },
+      },
+    })
+  }
+
+  it('keeps visitors on the primary domain while the domain is pending', async () => {
+    state.settings = cloudWith('pending')
+    expect((await send('https://acme.example.com/hc')).response).toBe(PASSED)
+  })
+
+  it('sends visitors there once the domain is ready, with no Verify', async () => {
+    state.settings = cloudWith('ready')
+    const { response } = await send('https://acme.example.com/hc')
+    expect(response.status).toBe(301)
+    expect(response.headers.get('location')).toBe('https://help.acme.com/hc')
+  })
+})

@@ -97,6 +97,7 @@ export function SectionDomainsCard({
   onMakePrimary,
   onAddDomain,
   onAddVerifiedDomain,
+  refreshCloudDomain,
 }: {
   view: SectionDomainsView
   /** The sections to row, in nav order (`listedSections`). */
@@ -118,6 +119,8 @@ export function SectionDomainsCard({
   onAddDomain?: () => void
   /** Go to Settings > Domains to add one; only for a viewer who may. */
   onAddVerifiedDomain?: (section: PortalSection) => void
+  /** Cloud: asks the control plane to look at a custom domain again, before Verify reads it. */
+  refreshCloudDomain?: (hostname: string) => Promise<unknown>
 }) {
   const map = view.sectionDomains
   const primary = view.primaryHost ?? ''
@@ -144,6 +147,9 @@ export function SectionDomainsCard({
 
   const verify = (section: PortalSection) =>
     run(async () => {
+      // Cloud: the control plane looks again first, as the dialog's Verify does.
+      const hostname = map[section]?.hostname
+      if (cloud && hostname && refreshCloudDomain) await refreshCloudDomain(hostname)
       const result = await verifySectionDomainFn({ data: { section } })
       if (result.ok && result.status) {
         const status = result.status

@@ -23,6 +23,7 @@ const calls = vi.hoisted(() => ({
     loadVerifiedDomains?: () => Promise<readonly string[]>
     loadCloudRecords?: (hostname: string) => Promise<unknown[]>
     onAddVerifiedDomain?: (section: string) => void
+    refreshCloudDomain?: (hostname: string) => Promise<unknown>
   },
 }))
 
@@ -73,6 +74,7 @@ vi.mock('@/components/admin/settings/section-domains-card', () => ({
   }: {
     readyHostnames: readonly string[]
     onMakePrimary?: (hostname: string) => void
+    refreshCloudDomain?: (hostname: string) => Promise<unknown>
     cloudHostnames?: readonly string[]
     loadVerifiedDomains?: () => Promise<readonly string[]>
     onAddVerifiedDomain?: (section: string) => void
@@ -179,6 +181,16 @@ describe('the Custom domains tab on Cloud', () => {
 
     await waitFor(() => expect(assign).toHaveBeenCalledTimes(1))
     expect(calls.order).toEqual(['leave', 'assign'])
+  })
+
+  it("gives the card's row Verify the control plane's refresh", async () => {
+    const { mutateCloudCustomDomainFn } = await import('@/lib/server/functions/cloud-identity')
+    renderTab()
+    await screen.findByText('Make primary')
+    await calls.card.refreshCloudDomain?.('help.acme.com')
+    expect(mutateCloudCustomDomainFn).toHaveBeenCalledWith({
+      data: { action: 'refresh', hostname: 'help.acme.com' },
+    })
   })
 
   it('tells the Domain verification card which domains a section uses', async () => {
