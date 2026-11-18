@@ -6,11 +6,13 @@
  * counted on the monthly email meter (`PlanLimitsEmail` is exempt in
  * `@quackback/email`'s mail classes).
  *
- * Each is sent at most once per grace. The stored state records which went
- * out (`emailsSent`) and is replaced when a new grace starts, so a restart or
- * a retry never repeats one and a new drop sends again. A send claims its
- * kind under the row lock before any mail leaves; when every recipient fails
- * the claim is released, so the next hourly slot tries again.
+ * Each is sent at most once per recipient per grace. The stored state records
+ * who has had each email (`emailRecipients`) and which are complete
+ * (`emailsSent`), and is replaced when a new grace starts, so a restart or a
+ * retry never repeats one and a new drop sends again. A send claims its
+ * recipients under the row lock before any mail leaves and marks them sent
+ * after; a failed recipient gives its claim back so the next hourly slot sends
+ * only to those still missing, and a claim left by a crash lapses.
  */
 import type { PlanLimitsEmailKind as EmailKind, PlanLimitsEmailRow } from '@quackback/email'
 import type { AccountEmail } from '@quackback/email/recipient'
@@ -23,6 +25,7 @@ import { PLAN_FEATURE_LINKS } from './plan-limits.features'
 import {
   parsePlanLimitsState,
   type PlanLimitIssueKey,
+  type PlanLimitsState,
   type PlanLimitsEmailKind,
   type PlanLimitsView,
 } from './plan-limits.rules'
@@ -99,37 +102,95 @@ export function pausingFeatureLabels(view: PlanLimitsView): string[] {
     .filter((label): label is string => label !== undefined)
 }
 
-async function updateEmailsSent(
+/** An unfinished claim older than this is treated as lost (a crash mid-send) and taken again. */
+const CLAIM_LEASE_MS = 15 * 60 * 1000
+
+type Recipients = NonNullable<PlanLimitsState['emailRecipients']>[EmailKind]
+
+/** Change the record of one email under the row lock; false when the grace moved on or nothing changed. */
+async function updateRecord(
   since: string,
-  change: (sent: EmailKind[]) => EmailKind[] | null
+  kind: EmailKind,
+  change: (
+    recipients: NonNullable<Recipients>,
+    complete: boolean
+  ) => { recipients: NonNullable<Recipients>; complete?: boolean } | null
 ): Promise<boolean> {
   let changed = false
   await updatePlanLimitsState((current) => {
     const state = parsePlanLimitsState(current)
     if (!state || state.since !== since) return undefined
-    const next = change(state.emailsSent ?? [])
+    const complete = state.emailsSent?.includes(kind) === true
+    const next = change({ ...(state.emailRecipients?.[kind] ?? {}) }, complete)
     if (!next) return undefined
     changed = true
-    return { ...state, emailsSent: next } as unknown as StoredPlanLimitsState
+    const emailRecipients = { ...state.emailRecipients, [kind]: next.recipients }
+    const emailsSent =
+      next.complete && !complete ? [...(state.emailsSent ?? []), kind] : state.emailsSent
+    return {
+      ...state,
+      emailRecipients,
+      ...(emailsSent ? { emailsSent } : {}),
+    } as unknown as StoredPlanLimitsState
   })
   return changed
 }
 
-/** Take the right to send `kind` for the grace that began at `since`. True for exactly one caller. */
-export function claimPlanLimitsEmail(kind: PlanLimitsEmailKind, since: string): Promise<boolean> {
-  return updateEmailsSent(since, (sent) => (sent.includes(kind) ? null : [...sent, kind]))
-}
-
-/** Give back a claim whose emails all failed, so a later slot sends it. */
-export function releasePlanLimitsEmail(kind: PlanLimitsEmailKind, since: string): Promise<boolean> {
-  return updateEmailsSent(since, (sent) =>
-    sent.includes(kind) ? sent.filter((k) => k !== kind) : null
-  )
+/**
+ * Take the right to send `kind` to each of `ids` for the grace that began at
+ * `since`. Returns the ids this caller now holds: not yet sent, and not held by
+ * a live claim of another sender. Empty when the email is complete or nothing
+ * is left to send.
+ */
+export async function claimPlanLimitsEmail(
+  kind: PlanLimitsEmailKind,
+  since: string,
+  ids: readonly string[],
+  now: Date = new Date()
+): Promise<string[]> {
+  let held: string[] = []
+  await updateRecord(since, kind, (recipients, complete) => {
+    if (complete) return null
+    held = ids.filter((id) => {
+      const entry = recipients[id]
+      if (!entry) return true
+      return entry.status === 'claimed' && now.getTime() - Date.parse(entry.at) >= CLAIM_LEASE_MS
+    })
+    if (held.length === 0) {
+      // Everyone has had it: the email is complete.
+      return ids.every((id) => recipients[id]?.status === 'sent')
+        ? { recipients, complete: true }
+        : null
+    }
+    for (const id of held) recipients[id] = { status: 'claimed', at: now.toISOString() }
+    return { recipients }
+  })
+  return held
 }
 
 /**
- * Send the email due for `view`, if it has not gone out for this grace.
- * Returns the kind sent, or null when nothing was due or sent.
+ * Record the outcome of a send: `sent` ids are done, `failed` ids give their
+ * claim back so a later slot retries them. The email is complete once every
+ * recipient in `all` has had it.
+ */
+export function settlePlanLimitsEmail(
+  kind: PlanLimitsEmailKind,
+  since: string,
+  outcome: { sent: readonly string[]; failed: readonly string[]; all: readonly string[] },
+  now: Date = new Date()
+): Promise<boolean> {
+  return updateRecord(since, kind, (recipients) => {
+    for (const id of outcome.sent) recipients[id] = { status: 'sent', at: now.toISOString() }
+    for (const id of outcome.failed) delete recipients[id]
+    const complete = outcome.all.every((id) => recipients[id]?.status === 'sent')
+    return { recipients, complete }
+  })
+}
+
+/**
+ * Send the email due for `view` to each billing manager who has not had it for
+ * this grace. Returns the kind when at least one recipient was sent it now, or
+ * null when nothing was due or sent.
  */
 export async function sendPlanLimitsEmails(
   view: PlanLimitsView,
@@ -137,6 +198,9 @@ export async function sendPlanLimitsEmails(
 ): Promise<PlanLimitsEmailKind | null> {
   const kind = dueEmailKind(view, now)
   if (!kind || !view.since || !view.graceEndsAt) return null
+  // The hourly slot lands here for every workspace in grace or enforced: a
+  // complete email costs one cached read, no lookups and no lock.
+  if (view.emailsSent?.includes(kind)) return null
 
   const { isEmailConfigured, sendPlanLimitsEmail } = await import('@quackback/email')
   if (!isEmailConfigured()) return null
@@ -152,7 +216,9 @@ export async function sendPlanLimitsEmails(
   }
   if (recipients.length === 0) return null
 
-  if (!(await claimPlanLimitsEmail(kind, view.since))) return null
+  const all = recipients.map((r) => r.principalId)
+  const held = new Set(await claimPlanLimitsEmail(kind, view.since, all, now))
+  if (held.size === 0) return null
 
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { getBaseUrl } = await import('@/lib/server/config')
@@ -170,20 +236,21 @@ export async function sendPlanLimitsEmails(
     planUrl: base ? `${base}/admin/settings/billing` : null,
   }
 
-  let sent = 0
+  const sent: string[] = []
+  const failed: string[] = []
   for (const { principalId, to } of recipients) {
+    if (!held.has(principalId)) continue
     try {
       await sendPlanLimitsEmail({ to, ...props })
-      sent += 1
+      sent.push(principalId)
     } catch (err) {
+      failed.push(principalId)
       log.warn({ err, kind, principal_id: principalId }, 'plan limits email failed')
     }
   }
-  if (sent === 0) {
-    await releasePlanLimitsEmail(kind, view.since)
-    return null
-  }
-  log.info({ kind, recipients: sent }, 'plan limits email sent')
+  await settlePlanLimitsEmail(kind, view.since, { sent, failed, all }, now)
+  if (sent.length === 0) return null
+  log.info({ kind, recipients: sent.length, failed: failed.length }, 'plan limits email sent')
   return kind
 }
 

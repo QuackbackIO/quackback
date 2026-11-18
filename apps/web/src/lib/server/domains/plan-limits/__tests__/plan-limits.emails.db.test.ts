@@ -20,6 +20,7 @@ import {
 } from '@/lib/server/db'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 
+const lookups = vi.hoisted(() => ({ resolve: vi.fn(), managers: vi.fn() }))
 const mail = vi.hoisted(() => ({
   configured: true,
   sendPlanLimitsEmail: vi.fn(async (_params: unknown) => ({ sent: true })),
@@ -49,6 +50,25 @@ vi.mock('@/lib/server/domains/settings/settings.plan-limits', async (original) =
       expect(await real.compareAndSetPlanLimitsState(expected, rival)).toBe(true)
       return real.compareAndSetPlanLimitsState(expected, next)
     },
+  }
+})
+vi.mock('@/lib/server/email/recipient', async (original) => {
+  const real = await original<typeof import('@/lib/server/email/recipient')>()
+  lookups.resolve.mockImplementation(real.resolveAccountRecipient)
+  return {
+    ...real,
+    resolveAccountRecipient: (...args: Parameters<typeof real.resolveAccountRecipient>) =>
+      lookups.resolve(...args),
+  }
+})
+vi.mock('@/lib/server/domains/channel-accounts/sending-domain-notify', async (original) => {
+  const real =
+    await original<typeof import('@/lib/server/domains/channel-accounts/sending-domain-notify')>()
+  lookups.managers.mockImplementation(real.managersHolding)
+  return {
+    ...real,
+    managersHolding: (...args: Parameters<typeof real.managersHolding>) =>
+      lookups.managers(...args),
   }
 })
 vi.mock('@quackback/email', async (original) => ({
@@ -195,17 +215,38 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
     expect(deadlineText(at, new Date('2027-01-02T00:00:00.000Z')).deadline).toBe('Nov 23, 2026')
   })
 
-  it('lets one caller claim an email per grace and refuses a stale grace', async () => {
+  it('lets one caller claim each recipient per grace and refuses a stale grace', async () => {
     await configure({ planLimits: true })
     const view = await getPlanLimits()
     await settle()
     const since = view.since!
-    // The background send already took 'start'; reminder is free exactly once.
-    expect(await claimPlanLimitsEmail('start', since)).toBe(false)
-    expect(await claimPlanLimitsEmail('reminder', since)).toBe(true)
-    expect(await claimPlanLimitsEmail('reminder', since)).toBe(false)
-    expect(await claimPlanLimitsEmail('enforced', '2020-01-01T00:00:00.000Z')).toBe(false)
-    expect((await storedState())?.emailsSent).toEqual(['start', 'reminder'])
+    const [p1] = await testDb
+      .select({ id: principal.id })
+      .from(principal)
+      .where(eq(principal.role, 'admin'))
+    const id = p1!.id as string
+    // The background send already took 'start' for everyone.
+    expect(await claimPlanLimitsEmail('start', since, [id])).toEqual([])
+    expect(await claimPlanLimitsEmail('reminder', since, [id])).toEqual([id])
+    // A live claim is not taken twice; a stale grace claims nothing.
+    expect(await claimPlanLimitsEmail('reminder', since, [id])).toEqual([])
+    expect(await claimPlanLimitsEmail('enforced', '2020-01-01T00:00:00.000Z', [id])).toEqual([])
+    expect((await storedState())?.emailsSent).toEqual(['start'])
+  })
+
+  it('takes a claim again once its lease has lapsed, as after a crash mid-send', async () => {
+    await configure({ planLimits: true })
+    const view = await getPlanLimits()
+    await settle()
+    const since = view.since!
+    const now = new Date()
+    expect(await claimPlanLimitsEmail('reminder', since, ['p1'], now)).toEqual(['p1'])
+    expect(await claimPlanLimitsEmail('reminder', since, ['p1'], new Date(+now + 60_000))).toEqual(
+      []
+    )
+    expect(
+      await claimPlanLimitsEmail('reminder', since, ['p1'], new Date(+now + 16 * 60_000))
+    ).toEqual(['p1'])
   })
 
   it('keeps the record through the foundation write paths', async () => {
@@ -352,27 +393,75 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
     await configure({ planLimits: true, maxBoards: 0 })
     const second = await getPlanLimits()
     expect(second.phase).toBe('grace')
-    expect(await sendPlanLimitsEmails(second)).toBe('start')
+    // The new grace's own trigger sends its start email; nothing more follows.
+    await vi.waitFor(() => expect(sentKinds()).toEqual(['start', 'start']), { timeout: 8000 })
+    expect(await sendPlanLimitsEmails(await getPlanLimits())).toBeNull()
     expect(sentKinds()).toEqual(['start', 'start'])
   })
 
-  it('releases its claim when every send fails, so the next slot retries', async () => {
-    await configure({ planLimits: true })
-    const view = await getPlanLimits()
-    await settle()
-    // Start from a record with nothing sent, as before the first trigger.
+  async function resetRecord() {
+    const { emailsSent: _a, emailRecipients: _b, ...rest } = (await storedState()) ?? {}
     await testDb
       .update(settings)
-      .set({ planLimitsState: { ...(await storedState()), emailsSent: [] } as never })
+      .set({ planLimitsState: rest as never })
       .where(eq(settings.id, settingsId))
     await invalidateSettingsCache()
     mail.sendPlanLimitsEmail.mockClear()
-    mail.sendPlanLimitsEmail.mockRejectedValueOnce(new Error('provider down'))
+  }
 
+  const recipientOf = (call: unknown[]) => (call[0] as { to: string }).to
+
+  it('retries only the recipients that failed, and sends nothing once all have it', async () => {
+    const second = await addPerson('owner', 'admin')
+    await configure({ planLimits: true })
+    const view = await getPlanLimits()
+    await settle()
+    await resetRecord()
+    mail.sendPlanLimitsEmail.mockImplementation(async (params: unknown) => {
+      if ((params as { to: string }).to === second) throw new Error('provider down')
+      return { sent: true }
+    })
+
+    expect(await sendPlanLimitsEmails(view)).toBe('start')
+    expect(mail.sendPlanLimitsEmail.mock.calls.map(recipientOf).sort()).toEqual(
+      [billingEmail, second].sort()
+    )
+    expect((await storedState())?.emailsSent ?? []).toEqual([])
+
+    mail.sendPlanLimitsEmail.mockClear()
+    mail.sendPlanLimitsEmail.mockImplementation(async () => ({ sent: true }))
+    expect(await sendPlanLimitsEmails(view)).toBe('start')
+    expect(mail.sendPlanLimitsEmail.mock.calls.map(recipientOf)).toEqual([second])
+    expect((await storedState())?.emailsSent).toEqual(['start'])
+
+    mail.sendPlanLimitsEmail.mockClear()
+    expect(await sendPlanLimitsEmails(await getPlanLimits())).toBeNull()
+    expect(mail.sendPlanLimitsEmail).not.toHaveBeenCalled()
+  })
+
+  it('retries everyone when every send fails', async () => {
+    await configure({ planLimits: true })
+    const view = await getPlanLimits()
+    await settle()
+    await resetRecord()
+    mail.sendPlanLimitsEmail.mockRejectedValueOnce(new Error('provider down'))
     expect(await sendPlanLimitsEmails(view)).toBeNull()
     expect((await storedState())?.emailsSent ?? []).toEqual([])
     expect(await sendPlanLimitsEmails(view)).toBe('start')
     expect(mail.sendPlanLimitsEmail).toHaveBeenCalledTimes(2)
+  })
+
+  it('makes no recipient lookups once the email is complete', async () => {
+    await configure({ planLimits: true })
+    await getPlanLimits()
+    await settle()
+    lookups.resolve.mockClear()
+    lookups.managers.mockClear()
+    const view = await getPlanLimits()
+    expect(view.emailsSent).toEqual(['start'])
+    expect(await sendPlanLimitsEmails(view)).toBeNull()
+    expect(lookups.resolve).not.toHaveBeenCalled()
+    expect(lookups.managers).not.toHaveBeenCalled()
   })
 })
 

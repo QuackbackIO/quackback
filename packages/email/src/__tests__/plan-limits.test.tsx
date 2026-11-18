@@ -80,6 +80,17 @@ describe('PlanLimitsEmail', () => {
     expect(text).not.toMatch(BANNED)
   })
 
+  it('says features pause, not "Fix 0 issues", when no cap is over', async () => {
+    const props = { ...base, rows: [], kind: 'start' as const }
+    const text = visibleText(await render(PlanLimitsEmail(props)))
+    expect(text).toContain('Some features pause on Wed, Nov 25')
+    expect(text).toContain('Upgrade to keep everything.')
+    expect(text).not.toMatch(/Fix \d+ issue/)
+    expect(planLimitsSubject('start', 'Acme Support', 'Free', 'Nov 25')).toBe(
+      'Some features pause on Nov 25'
+    )
+  })
+
   it('falls back to Compare plans when the earlier plan is unknown', async () => {
     const text = visibleText(
       await render(PlanLimitsEmail({ ...base, kind: 'start', fromPlanName: null }))

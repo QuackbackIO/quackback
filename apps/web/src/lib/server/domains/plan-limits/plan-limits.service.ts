@@ -280,15 +280,15 @@ export async function evaluate(options: {
       // Another process wrote first: its state stands. Recompute from it.
       const fresh = parsePlanLimitsState(await readPlanLimitsStateFresh())
       result = computePlanLimits({ ...toInputs(snapshot), stored: fresh }, now)
-    } else if (
-      result.nextState &&
-      result.view.phase === 'grace' &&
-      result.nextState.since !== context.inputs.stored?.since
-    ) {
-      // This process stored a new grace (a reader that merely adopts the stored
-      // one does not get here): tell the billing managers now, not at the next slot.
+    } else if (result.nextState && result.view.phase === 'grace') {
+      // This process won the write of a changed, non-empty state, which is only
+      // ever a new grace (an unchanged state is never written, and a reader that
+      // merely adopts the stored one lost the write): tell the billing managers
+      // now, not at the next hourly slot.
       const view = result.view
-      void import('./plan-limits.emails').then((m) => m.sendPlanLimitsEmailsQuietly(view))
+      void import('./plan-limits.emails')
+        .then((m) => m.sendPlanLimitsEmailsQuietly(view))
+        .catch((err) => log.warn({ err }, 'plan limits start email trigger failed'))
     }
   }
   return { view: result.view, snapshot }

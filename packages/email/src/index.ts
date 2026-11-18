@@ -1060,7 +1060,12 @@ export async function sendPlanLimitsEmail(params: SendPlanLimitsParams): Promise
   log.debug({ kind: props.kind }, 'sending plan limits email')
   return sendEmail({
     to,
-    subject: planLimitsSubject(props.kind, props.workspaceName, props.planName),
+    subject: planLimitsSubject(
+      props.kind,
+      props.workspaceName,
+      props.planName,
+      props.rows.length === 0 ? props.deadline : undefined
+    ),
     react: PlanLimitsEmail(props),
     emailType: 'PlanLimitsEmail',
     preview: { kind: props.kind },

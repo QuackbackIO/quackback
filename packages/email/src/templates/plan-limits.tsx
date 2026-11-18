@@ -42,9 +42,14 @@ function issues(count: number): string {
 export function planLimitsSubject(
   kind: PlanLimitsEmailKind,
   workspaceName: string | undefined,
-  planName: string | null | undefined
+  planName: string | null | undefined,
+  /** Set when only features pause and no cap is over: the date, as in a sentence. */
+  featuresOnlyDeadline?: string
 ): string {
   const name = workspaceName ?? 'Your workspace'
+  if (featuresOnlyDeadline && kind === 'start') {
+    return `Some features pause on ${featuresOnlyDeadline}`
+  }
   if (kind === 'start') {
     return `Action needed: ${name} is over the ${planName ?? 'current'} plan's limits`
   }
@@ -54,6 +59,7 @@ export function planLimitsSubject(
 
 function heading(props: PlanLimitsEmailProps): string {
   if (props.kind === 'enforced') return planLimitsSubject(props.kind, props.workspaceName, null)
+  if (props.rows.length === 0) return `Some features pause on ${props.deadlineHeading}`
   return `Fix ${issues(props.rows.length)} by ${props.deadlineHeading}`
 }
 
@@ -62,6 +68,9 @@ function intro(props: PlanLimitsEmailProps): string {
   const plan = props.planName ? `the ${props.planName} plan` : 'its plan'
   if (props.kind === 'enforced') {
     return `${name} is still over the limits of ${plan}, so the items below are now paused.`
+  }
+  if (props.rows.length === 0) {
+    return `${name} is over the limits of ${plan}. Upgrade to keep everything.`
   }
   return `${name} is over the limits of ${plan}. Fix ${issues(props.rows.length)} by ${props.deadline}, or upgrade to keep everything.`
 }

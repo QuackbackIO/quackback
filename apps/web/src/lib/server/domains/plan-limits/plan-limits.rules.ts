@@ -161,7 +161,18 @@ export interface PlanLimitsState {
    * most once per grace.
    */
   emailsSent?: PlanLimitsEmailKind[]
+  /**
+   * Per email, who it went to or is being sent to, so a retry sends only to
+   * recipients that have not had it. A recipient is claimed before the send
+   * and marked sent after; an unfinished claim lapses (see plan-limits.emails.ts).
+   * A kind in `emailsSent` is complete and needs no entry.
+   */
+  emailRecipients?: PlanLimitsEmailRecipients
 }
+
+export type PlanLimitsEmailRecipients = Partial<
+  Record<PlanLimitsEmailKind, Record<string, { status: 'claimed' | 'sent'; at: string }>>
+>
 
 export const PLAN_LIMITS_EMAIL_KINDS = ['start', 'reminder', 'enforced'] as const
 export type PlanLimitsEmailKind = (typeof PLAN_LIMITS_EMAIL_KINDS)[number]
@@ -242,6 +253,8 @@ export interface PlanLimitsView {
   features: PlanFeatureSet
   /** Null outside grace and enforcement. */
   fromFeatures: PlanFeatureSet | null
+  /** Which plan limits emails are complete for this grace; absent when none are. */
+  emailsSent?: PlanLimitsEmailKind[]
   /** Boards that stay open. Null when boards are not over (every board is open). */
   openBoardIds: string[] | null
   keptBoardId: string | null
@@ -447,6 +460,7 @@ export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimit
       featureIssues,
       features: input.features,
       fromFeatures: nextState.fromFeatures,
+      ...(nextState.emailsSent ? { emailsSent: nextState.emailsSent } : {}),
       openBoardIds,
       keptBoardId: openBoardIds?.[0] ?? null,
       seatHolderIds:
@@ -518,6 +532,24 @@ function stringList(value: unknown): string[] | undefined {
   return value.filter((item): item is string => typeof item === 'string')
 }
 
+function parseEmailRecipients(value: unknown): PlanLimitsEmailRecipients | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const out: PlanLimitsEmailRecipients = {}
+  for (const kind of PLAN_LIMITS_EMAIL_KINDS) {
+    const entries = (value as Record<string, unknown>)[kind]
+    if (!entries || typeof entries !== 'object' || Array.isArray(entries)) continue
+    const kept: Record<string, { status: 'claimed' | 'sent'; at: string }> = {}
+    for (const [id, entry] of Object.entries(entries)) {
+      const e = entry as { status?: unknown; at?: unknown } | null
+      if ((e?.status === 'claimed' || e?.status === 'sent') && isIso(e.at)) {
+        kept[id] = { status: e.status, at: e.at }
+      }
+    }
+    if (Object.keys(kept).length > 0) out[kind] = kept
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 /** Read a stored state, or null when absent or malformed. */
 export function parsePlanLimitsState(value: unknown): PlanLimitsState | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -565,5 +597,7 @@ export function parsePlanLimitsState(value: unknown): PlanLimitsState | null {
     (PLAN_LIMITS_EMAIL_KINDS as readonly string[]).includes(k)
   )
   if (sent && sent.length > 0) state.emailsSent = sent
+  const recipients = parseEmailRecipients(raw.emailRecipients)
+  if (recipients) state.emailRecipients = recipients
   return state
 }
