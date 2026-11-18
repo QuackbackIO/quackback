@@ -488,6 +488,14 @@ export function featureLive(
   return view.phase === 'grace' && view.fromFeatures?.[key] === true
 }
 
+/** Whether a feature is paused: only with the flag on, when it is not live. */
+export function featurePaused(
+  view: Pick<PlanLimitsView, 'enabled' | 'phase' | 'features' | 'fromFeatures'>,
+  key: PlanFeatureKey
+): boolean {
+  return view.enabled && !featureLive(view, key)
+}
+
 // ---------------------------------------------------------------------------
 // Stored state
 // ---------------------------------------------------------------------------

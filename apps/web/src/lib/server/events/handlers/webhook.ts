@@ -22,6 +22,7 @@ import {
 import { db, webhooks, eq } from '@/lib/server/db'
 import { decryptWebhookSecret } from '@/lib/server/domains/webhooks/encryption'
 import { logger } from '@/lib/server/logger'
+import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.service'
 
 export type { WebhookTarget, WebhookConfig }
 
@@ -38,6 +39,17 @@ export const webhookHook: HookHandler = {
     ctx?: HookRunContext
   ): Promise<HookResult> {
     const { webhookId } = config as WebhookConfig
+
+    // Paused after the plan limits grace on a plan without webhooks. The event
+    // is dropped, not held: success ends the job without a retry, and the
+    // endpoint, its secret and its failure count are left as they are.
+    if (await isFeaturePaused('webhooks')) {
+      log.info(
+        { event_type: event.type, webhook_id: webhookId },
+        'webhooks paused on this plan; event dropped'
+      )
+      return { success: true }
+    }
 
     // Idempotency: if BullMQ is re-running this job after a worker crash,
     // skip the delivery — the previous attempt already POSTed (and the

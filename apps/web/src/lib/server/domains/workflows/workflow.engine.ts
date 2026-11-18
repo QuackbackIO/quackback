@@ -28,6 +28,7 @@ import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { boundedServiceActor } from '@/lib/server/policy/service-actor'
 import { logger } from '@/lib/server/logger'
+import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import { runWithAuditAttribution, workflowAttribution } from '@/lib/server/audit/attribution'
 import { isUniqueViolation } from '@/lib/server/utils'
 import { applyAction, type ResolvedBlockDeps } from './action.executor'
@@ -159,6 +160,8 @@ export async function runWorkflow(
   ctx: ConditionContext,
   opts: RunWorkflowOptions
 ): Promise<WorkflowRun | null> {
+  // Paused after the plan limits grace: no run starts, by trigger or by hand.
+  if (await isFeaturePaused('workflows')) return null
   const graph = readGraph(workflow.graph)
   const plan = walkWorkflow(graph, ctx)
   if (plan.actions.length === 0 && plan.status !== 'waiting') {
@@ -544,6 +547,11 @@ export async function resumeWorkflowRun(
 
     const workflow = claimed.conversationId ? await getWorkflow(claimed.workflowId) : null
     if (workflow && workflow.status !== 'live') {
+      return await settleTerminal(claimed, 'interrupted')
+    }
+    // Paused after the plan limits grace: a run in flight stops at this step
+    // boundary, the same way it does for a workflow paused by hand.
+    if (await isFeaturePaused('workflows')) {
       return await settleTerminal(claimed, 'interrupted')
     }
 

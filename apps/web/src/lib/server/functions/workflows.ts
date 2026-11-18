@@ -453,6 +453,9 @@ export const runWorkflowManuallyFn = createServerFn({ method: 'POST' })
     if (!workflow || workflow.status !== 'live') {
       return { ok: false, reason: 'not_live' }
     }
+    // Paused after the plan limits grace reads as not live to the inbox.
+    const { isFeaturePaused } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+    if (await isFeaturePaused('workflows')) return { ok: false, reason: 'not_live' }
     const conversationId = data.conversationId as ConversationId
 
     if (

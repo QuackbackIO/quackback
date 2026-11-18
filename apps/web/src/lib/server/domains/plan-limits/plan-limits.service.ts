@@ -44,6 +44,7 @@ import {
 import {
   computePlanLimits,
   featureLive,
+  featurePaused,
   needsUsage,
   parsePlanLimitsState,
   type PlanLimitIssueKey,
@@ -435,8 +436,7 @@ export async function isFeatureLive(key: PlanFeatureKey): Promise<boolean> {
 /** True only with the flag on, when the feature is not live (see {@link isFeatureLive}). */
 export async function isFeaturePaused(key: PlanFeatureKey): Promise<boolean> {
   const view = await viewOrNull()
-  if (!view || !view.enabled) return false
-  return !featureLive(view, key)
+  return view ? featurePaused(view, key) : false
 }
 
 function enforcedOver(view: PlanLimits | null, key: PlanLimitIssueKey): boolean {
