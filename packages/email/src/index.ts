@@ -73,7 +73,7 @@ import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 import {
   PlanLimitsEmail,
-  planLimitsTitle,
+  planLimitsSubject,
   type PlanLimitsEmailProps,
 } from './templates/plan-limits'
 import {
@@ -1060,14 +1060,14 @@ export async function sendPlanLimitsEmail(params: SendPlanLimitsParams): Promise
   log.debug({ kind: props.kind }, 'sending plan limits email')
   return sendEmail({
     to,
-    subject: planLimitsTitle(props.kind, props.rows.length, props.graceEnds),
+    subject: planLimitsSubject(props.kind, props.workspaceName, props.planName),
     react: PlanLimitsEmail(props),
     emailType: 'PlanLimitsEmail',
     preview: { kind: props.kind },
   })
 }
 
-export { PlanLimitsEmail, planLimitsTitle } from './templates/plan-limits'
+export { PlanLimitsEmail, planLimitsSubject } from './templates/plan-limits'
 export type {
   PlanLimitsEmailKind,
   PlanLimitsEmailProps,

@@ -62,7 +62,7 @@ import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-li
 import { detectPlanLimits, getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
 import { setKeptBoard } from '../plan-limits.choosers'
 import { readPlanLimitsSources } from '@/lib/server/domains/settings/settings.plan-limits'
-import { claimPlanLimitsEmail, sendPlanLimitsEmails } from '../plan-limits.emails'
+import { claimPlanLimitsEmail, deadlineText, sendPlanLimitsEmails } from '../plan-limits.emails'
 import { recordSkippedBroadcast, skippedBroadcastCount } from '../plan-limits.broadcasts'
 import { planLimitsPage } from '../plan-limits.page'
 
@@ -184,6 +184,15 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
     expect(params.rows).toEqual([expect.objectContaining({ label: 'Boards', used: 2, cap: 1 })])
     expect(params.limitsUrl).toBe('https://app.example.com/admin/settings/billing/limits')
     expect((await storedState())?.emailsSent).toEqual(['start'])
+  })
+
+  it('formats the deadline inline and for headings, with the year only when it differs', () => {
+    const at = new Date('2026-11-23T10:00:00.000Z')
+    expect(deadlineText(at, new Date('2026-11-18T00:00:00.000Z'))).toEqual({
+      deadline: 'Nov 23',
+      deadlineHeading: 'Mon, Nov 23',
+    })
+    expect(deadlineText(at, new Date('2027-01-02T00:00:00.000Z')).deadline).toBe('Nov 23, 2026')
   })
 
   it('lets one caller claim an email per grace and refuses a stale grace', async () => {

@@ -19,10 +19,12 @@ export interface PlanLimitsEmailProps {
   workspaceName?: string
   /** The plan the workspace is on now; absent when unknown. */
   planName?: string | null
-  /** The plan it had before, named on the secondary link when known. */
+  /** The plan it had before, named on the upgrade link when known. */
   fromPlanName?: string | null
-  /** The date the grace ends, already formatted. */
-  graceEnds: string
+  /** The deadline as it reads in a sentence, e.g. "Nov 23". */
+  deadline: string
+  /** The deadline as it reads in a heading, e.g. "Mon, Nov 23". */
+  deadlineHeading: string
   rows: readonly PlanLimitsEmailRow[]
   /** Names of the paid features that pause. */
   pausingFeatures: readonly string[]
@@ -31,40 +33,56 @@ export interface PlanLimitsEmailProps {
   logoUrl?: string
 }
 
-function things(count: number): string {
-  return `${count} ${count === 1 ? 'thing' : 'things'}`
+function issues(count: number): string {
+  const n = Math.max(count, 1)
+  return `${n} ${n === 1 ? 'issue' : 'issues'}`
 }
 
-/** The subject and heading of a plan limits email. */
-export function planLimitsTitle(
+/** The subject of a plan limits email. */
+export function planLimitsSubject(
   kind: PlanLimitsEmailKind,
-  count: number,
-  graceEnds: string
+  workspaceName: string | undefined,
+  planName: string | null | undefined
 ): string {
-  const fix = `Fix ${things(Math.max(count, 1))} by ${graceEnds}`
-  if (kind === 'start') return fix
-  if (kind === 'reminder') return `2 days left. ${fix}`
-  return 'Plan limits now apply'
+  const name = workspaceName ?? 'Your workspace'
+  if (kind === 'start') {
+    return `Action needed: ${name} is over the ${planName ?? 'current'} plan's limits`
+  }
+  if (kind === 'reminder') return `2 days left to fix ${name}'s plan limits`
+  return `Some of ${name} is now paused`
+}
+
+function heading(props: PlanLimitsEmailProps): string {
+  if (props.kind === 'enforced') return planLimitsSubject(props.kind, props.workspaceName, null)
+  return `Fix ${issues(props.rows.length)} by ${props.deadlineHeading}`
 }
 
 function intro(props: PlanLimitsEmailProps): string {
   const name = props.workspaceName ?? 'Your workspace'
   const plan = props.planName ? `the ${props.planName} plan` : 'its plan'
   if (props.kind === 'enforced') {
-    return `The grace period for ${name} ended on ${props.graceEnds}. It still uses more than ${plan} includes, so the extras are now paused.`
+    return `${name} is still over the limits of ${plan}, so the items below are now paused.`
   }
-  const days = props.kind === 'reminder' ? '2 days left. ' : ''
-  return `${days}${name} uses more than ${plan} includes. Everything keeps working until ${props.graceEnds}.`
+  return `${name} is over the limits of ${plan}. Fix ${issues(props.rows.length)} by ${props.deadline}, or upgrade to keep everything.`
+}
+
+function featureLine(props: PlanLimitsEmailProps): string {
+  const list = props.pausingFeatures.join(', ')
+  const many = props.pausingFeatures.length > 1
+  if (props.kind === 'enforced') {
+    return `${list} ${many ? 'are' : 'is'} paused on the ${props.planName ?? 'current'} plan.`
+  }
+  return `${list} ${many ? 'pause' : 'pauses'} on ${props.deadline}.`
 }
 
 /**
  * Sent to the people who manage billing when a workspace is over its plan's
- * limits: when the grace starts, two days before it ends, and once it has
- * ended and the extras are paused.
+ * limits: when it is first seen over, two days before the deadline, and once
+ * the deadline has passed and the items are paused.
  */
 export function PlanLimitsEmail(props: PlanLimitsEmailProps) {
   const { kind, rows, pausingFeatures, limitsUrl, planUrl, workspaceName, logoUrl } = props
-  const title = planLimitsTitle(kind, rows.length, props.graceEnds)
+  const title = heading(props)
   return (
     <EmailLayout preview={title} logoUrl={logoUrl}>
       <Heading style={typography.h1}>{title}</Heading>
@@ -76,33 +94,30 @@ export function PlanLimitsEmail(props: PlanLimitsEmailProps) {
           </Text>
         ))}
         {pausingFeatures.length > 0 ? (
-          <Text style={typography.text}>
-            <strong>{pausingFeatures.join(', ')}</strong>{' '}
-            {kind === 'enforced' ? 'are paused' : 'pause'}.
-          </Text>
+          <Text style={typography.text}>{featureLine(props)}</Text>
         ) : null}
       </Section>
       <Text style={typography.text}>
         {kind === 'enforced'
-          ? 'Nothing is deleted. Fix each item, or move to a plan that includes them, and it is restored.'
-          : 'Nothing is deleted. Fix each item, or choose a plan that includes them, and everything stays as it is.'}
+          ? 'Nothing is deleted. It comes back when you upgrade.'
+          : 'Nothing is deleted.'}
       </Text>
       {limitsUrl ? (
         <Section style={{ margin: '24px 0' }}>
           <Button style={button.primary} href={limitsUrl}>
-            {kind === 'enforced' ? 'Restore what is paused' : 'Review what to fix'}
+            Review issues
           </Button>
         </Section>
       ) : null}
       {planUrl ? (
         <Text style={typography.text}>
           <Link href={planUrl} style={utils.link}>
-            {props.fromPlanName ? `Keep ${props.fromPlanName}` : 'See plans'}
+            {props.fromPlanName ? `Upgrade to ${props.fromPlanName}` : 'Compare plans'}
           </Link>
         </Text>
       ) : null}
       <TransactionalFooter>
-        You&apos;re receiving this because you manage billing
+        You&apos;re getting this because you manage billing
         {workspaceName ? ` for ${workspaceName}` : ''}.
       </TransactionalFooter>
     </EmailLayout>

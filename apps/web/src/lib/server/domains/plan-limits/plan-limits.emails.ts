@@ -32,13 +32,41 @@ const log = logger.child({ component: 'plan-limits-emails' })
 const REMINDER_LEAD_MS = 2 * 24 * 60 * 60 * 1000
 
 /** How each cap reads in the email: its name and what happens to the excess. */
-const ISSUE_COPY: Record<PlanLimitIssueKey, { label: string; one: string; many: string }> = {
-  maxBoards: { label: 'Boards', one: 'becomes read-only', many: 'become read-only' },
-  maxTeamSeats: { label: 'Team seats', one: 'loses admin access', many: 'lose admin access' },
-  maxStatusComponents: { label: 'Status components', one: 'is hidden', many: 'are hidden' },
-  maxCustomRoles: { label: 'Custom roles', one: 'is locked', many: 'are locked' },
-  maxSendingDomains: { label: 'Sending domains', one: 'stops sending', many: 'stop sending' },
-  maxHelpCenterLocales: { label: 'Help center languages', one: 'is locked', many: 'are locked' },
+const ISSUE_COPY: Record<PlanLimitIssueKey, { label: string; effect: (n: number) => string }> = {
+  maxBoards: {
+    label: 'Boards',
+    effect: (n) => `${n} ${n === 1 ? 'board becomes' : 'boards become'} read-only`,
+  },
+  maxTeamSeats: {
+    label: 'Team seats',
+    effect: (n) =>
+      `${n} ${n === 1 ? 'teammate loses' : 'teammates lose'} admin access until a seat frees up`,
+  },
+  maxStatusComponents: {
+    label: 'Status components',
+    effect: (n) => `${n} hidden from your status page`,
+  },
+  maxCustomRoles: { label: 'Custom roles', effect: (n) => `${n} locked` },
+  maxSendingDomains: { label: 'Sending domains', effect: (n) => `${n} paused` },
+  maxHelpCenterLocales: { label: 'Help center languages', effect: (n) => `${n} locked` },
+}
+
+/**
+ * The deadline as it reads inline ("Nov 23") and in a heading ("Mon, Nov 23"),
+ * in UTC so every reader sees the same day. The year appears only when it
+ * differs from the current one.
+ */
+export function deadlineText(at: Date, now: Date): { deadline: string; deadlineHeading: string } {
+  const year = at.getUTCFullYear() === now.getUTCFullYear() ? {} : { year: 'numeric' as const }
+  const format = (extra: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat('en', {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+      ...year,
+      ...extra,
+    }).format(at)
+  return { deadline: format({}), deadlineHeading: format({ weekday: 'short' }) }
 }
 
 /** The email due now for this state, or null when none is. */
@@ -59,7 +87,7 @@ export function emailRows(view: PlanLimitsView): PlanLimitsEmailRow[] {
       label: copy.label,
       used: issue.used,
       cap: issue.cap,
-      effect: `${excess} ${excess === 1 ? copy.one : copy.many}`,
+      effect: copy.effect(excess),
     }
   })
 }
@@ -113,7 +141,7 @@ export async function sendPlanLimitsEmails(
   const { isEmailConfigured, sendPlanLimitsEmail } = await import('@quackback/email')
   if (!isEmailConfigured()) return null
 
-  const { managersHolding, formatDeadline } =
+  const { managersHolding } =
     await import('@/lib/server/domains/channel-accounts/sending-domain-notify')
   const managers = (await managersHolding(PERMISSIONS.BILLING_MANAGE)).filter((m) => m.userId)
   const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
@@ -135,7 +163,7 @@ export async function sendPlanLimitsEmails(
     workspaceName: workspace?.settings?.name,
     planName: view.plan ? PLAN_CATALOGUE[view.plan].name : null,
     fromPlanName: view.fromPlan ? PLAN_CATALOGUE[view.fromPlan].name : null,
-    graceEnds: formatDeadline(new Date(view.graceEndsAt)),
+    ...deadlineText(new Date(view.graceEndsAt), now),
     rows: emailRows(view),
     pausingFeatures: pausingFeatureLabels(view),
     limitsUrl: base ? `${base}/admin/settings/billing/limits` : null,
