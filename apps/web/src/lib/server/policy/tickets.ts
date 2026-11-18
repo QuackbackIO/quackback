@@ -29,9 +29,12 @@ import {
  * Shared by conversationFilter.
  */
 export function teamsForActor(principalId: string): SQL {
-  // The WHERE uses drizzle `eq` (not a raw `= ${id}`) so the principal TypeID is
-  // run through the column's driver mapping to its stored uuid form.
-  return sql`SELECT ${teamMembers.teamId} FROM ${teamMembers} WHERE ${eq(teamMembers.principalId, principalId as never)}`
+  // The inner table's columns are written raw. The relational query builder
+  // (`db.query.x.findFirst/findMany`) remaps every column object in a where
+  // onto its root table, which turned `team_members.team_id` into
+  // `conversations.team_id`. The id goes in as a param encoded by the column,
+  // so the principal TypeID still reaches Postgres as its stored uuid.
+  return sql`SELECT "team_members"."team_id" FROM "team_members" WHERE "team_members"."principal_id" = ${sql.param(principalId, teamMembers.principalId)}`
 }
 
 /**
