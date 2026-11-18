@@ -461,13 +461,24 @@ describe('assistant hand-off bell', () => {
     expect(recipientsOf(target)).toEqual([w.onTeam.id])
   })
 
-  it('without a team: only the teammates who see every conversation', async () => {
+  it('with no team and no assignee: every teammate who can view conversations, as the Unassigned queue', async () => {
     const w = await seedWorld()
     const { conversation } = await seedConversation({})
     const target = await getAssistantHandedOffTargets(
       handedOff(conversation.id as ConversationId, w.service.id)
     )
-    expect(within(w, recipientsOf(target))).toEqual(sorted(w.manager.id, w.actor.id))
+    expect(within(w, recipientsOf(target))).toEqual(
+      sorted(w.manager.id, w.actor.id, w.onTeam.id, w.elsewhere.id, w.solo.id)
+    )
+  })
+
+  it('with no team, assigned to someone: the assignee and the teammates who see every conversation', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.solo.id })
+    const target = await getAssistantHandedOffTargets(
+      handedOff(conversation.id as ConversationId, w.service.id)
+    )
+    expect(within(w, recipientsOf(target))).toEqual(sorted(w.manager.id, w.actor.id, w.solo.id))
   })
 })
 
@@ -561,14 +572,28 @@ describe('new-message bell and email', () => {
     expect(within(w, recipientsOf(target))).toEqual(sorted(w.manager.id, w.actor.id, w.onTeam.id))
   })
 
-  it('bell: an unassigned conversation reaches only teammates who see every conversation', async () => {
+  it('bell: an unassigned conversation with no team reaches every teammate who can view conversations', async () => {
     const w = await seedWorld()
     const to = { assignee: null, team: null }
     const { conversation } = await seedConversation(to)
     const target = await getMessageCreatedTargets(
       messageCreated(conversation.id as ConversationId, to, true)
     )
-    expect(within(w, recipientsOf(target))).toEqual(sorted(w.manager.id, w.actor.id))
+    // The scoped teammates see the Unassigned queue; a teammate with no inbox
+    // keys, a removed teammate and a service principal still hear nothing.
+    expect(within(w, recipientsOf(target))).toEqual(
+      sorted(w.manager.id, w.actor.id, w.onTeam.id, w.elsewhere.id, w.solo.id)
+    )
+  })
+
+  it('bell: a conversation assigned to someone else with no team skips the other scoped teammates', async () => {
+    const w = await seedWorld()
+    const to = { assignee: w.solo.id, team: null }
+    const { conversation } = await seedConversation(to)
+    const target = await getMessageCreatedTargets(
+      messageCreated(conversation.id as ConversationId, to, true)
+    )
+    expect(within(w, recipientsOf(target))).toEqual(sorted(w.manager.id, w.actor.id, w.solo.id))
   })
 
   it('first-message bell: a teammate routing just assigned hears, though the event predates routing', async () => {
@@ -880,6 +905,39 @@ describe('presence gate on a follow-up visitor message', () => {
     expect(sendEmail).not.toHaveBeenCalled()
 
     expect(await belled(followUp(conversation.id as ConversationId))).toEqual([])
+  })
+
+  it('on an unassigned conversation with no team, an online scoped teammate holds back both', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({})
+    await goOnline(w.elsewhere.id)
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'Anyone there?',
+      authorName: 'Visitor',
+      isFirstMessage: false,
+    })
+    expect(sendEmail).not.toHaveBeenCalled()
+
+    expect(await belled(followUp(conversation.id as ConversationId))).toEqual([])
+  })
+
+  it('on a conversation assigned to someone else with no team, another online scoped teammate does not', async () => {
+    const w = await seedWorld()
+    const { conversation } = await seedConversation({ assignee: w.solo.id })
+    await goOnline(w.elsewhere.id)
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'Anyone there?',
+      authorName: 'Visitor',
+      isFirstMessage: false,
+    })
+    const emailed = sendEmail.mock.calls.map(([options]) => options.to as string)
+    expect(emailed).toContain(w.solo.email)
+
+    expect(await belled(followUp(conversation.id as ConversationId))).toContain(w.solo.id)
   })
 
   it('a teammate set to Away who can see the conversation does not silence the bell or email, even with the inbox open', async () => {

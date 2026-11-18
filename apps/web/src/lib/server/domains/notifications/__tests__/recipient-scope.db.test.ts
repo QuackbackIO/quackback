@@ -111,7 +111,8 @@ describe('inScopeRecipients for a conversation', () => {
 
   it('reads the current row, not what the caller last saw', async () => {
     const { world, team } = await seedWorld()
-    const { conversation } = await seedConversation({ assignee: null, team: null })
+    // Someone else's, with no team: out of a scoped teammate's scope.
+    const { conversation } = await seedConversation({ assignee: world.assignee.id, team: null })
 
     const before = await inScopeRecipients(
       { kind: 'conversation', id: conversation.id as ConversationId },
