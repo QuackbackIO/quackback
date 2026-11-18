@@ -19,12 +19,25 @@ const baseDeps = (): ReconcileDeps => ({
   })),
   updateSettings: vi.fn(async () => {}),
   applyTierLimits: vi.fn(async () => true),
+  applyRolloutFlags: vi.fn(async () => true),
   createSettings: vi.fn(async () => {}),
   invalidateSettingsCache: vi.fn(async () => {}),
   invalidateTierLimitsCache: vi.fn(async () => {}),
 })
 
 describe('reconcileFileIntoDb', () => {
+  it('turns operator rollout flags on and off from the file', async () => {
+    const deps = baseDeps()
+    await reconcileFileIntoDb({ rollout: { planLimits: true } }, deps)
+    expect(deps.applyRolloutFlags).toHaveBeenCalledWith({ planLimits: true })
+  })
+
+  it('leaves rollout flags alone when the file does not name them', async () => {
+    const deps = baseDeps()
+    await reconcileFileIntoDb({ workspace: { name: 'Old', slug: 'old' } }, deps)
+    expect(deps.applyRolloutFlags).not.toHaveBeenCalled()
+  })
+
   it('writes workspace fields and records the config intent for the locked state update', async () => {
     const deps = baseDeps()
     await reconcileFileIntoDb(

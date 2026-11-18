@@ -53,6 +53,8 @@ export interface ReconcileDeps {
    * Apply the file's `tierLimits` block through `writeTierLimits`.
    */
   applyTierLimits: (limits: Record<string, unknown> | null) => Promise<boolean>
+  /** Apply the file's `rollout` flags to the feature flags; true when one changed. */
+  applyRolloutFlags: (flags: { planLimits?: boolean }) => Promise<boolean>
   invalidateSettingsCache: () => Promise<void>
   invalidateTierLimitsCache: () => Promise<void>
   /** Post-reconcile status reporter. Optional so unit tests don't have
@@ -123,6 +125,10 @@ export async function reconcileFileIntoDb(
       tierLimitsChanged = await deps.applyTierLimits(spec.tierLimits)
     }
   }
+
+  // Rollout flags write through the feature flags seam, which invalidates its
+  // own caches and detects plan limits when they turn on.
+  if (spec.rollout !== undefined) await deps.applyRolloutFlags(spec.rollout)
 
   const pathsChanged = !arrayEquals(newPaths, current.managedFieldPaths)
   const hasFieldUpdates = Object.keys(update).length > 1 // > 1 because managedFieldPaths is always set
