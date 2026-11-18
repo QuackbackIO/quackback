@@ -35,7 +35,7 @@ import {
 import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
-import { PlanFeatureNotice } from '@/components/admin/settings/plan-feature-notice'
+import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
 import { DraftBar } from '@/components/admin/settings/draft-bar'
 import { ThemeModeTiles } from '@/components/admin/settings/branding/theme-mode-tiles'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -771,5 +771,23 @@ function FontSelectGroup({ category }: { category: FontCategory }) {
         </SelectItem>
       ))}
     </SelectGroup>
+  )
+}
+
+/**
+ * The paused notice. The flag check lives in this route rather than a shared
+ * module, so with the plan limits flag off the page loads no extra chunk.
+ */
+const PlanFeatureNoticeBody = lazy(
+  () => import('@/components/admin/settings/plan-feature-notice-body')
+)
+
+function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
+  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
+  if (!enabled) return null
+  return (
+    <Suspense fallback={null}>
+      <PlanFeatureNoticeBody feature={feature} />
+    </Suspense>
   )
 }

@@ -1,11 +1,12 @@
-import { useState, useTransition } from 'react'
+import { useState, useTransition, lazy, Suspense } from 'react'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, useRouter, useNavigate, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
-import { PlanFeatureNotice } from '@/components/admin/settings/plan-feature-notice'
+import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
 import { HeaderLinksCard } from '@/components/admin/settings/help-center/header-links-card'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Label } from '@/components/ui/label'
@@ -150,5 +151,23 @@ function HelpCenterSettingsPage() {
         </TabsContent>
       </Tabs>
     </SettingsPage>
+  )
+}
+
+/**
+ * The paused notice. The flag check lives in this route rather than a shared
+ * module, so with the plan limits flag off the page loads no extra chunk.
+ */
+const PlanFeatureNoticeBody = lazy(
+  () => import('@/components/admin/settings/plan-feature-notice-body')
+)
+
+function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
+  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
+  if (!enabled) return null
+  return (
+    <Suspense fallback={null}>
+      <PlanFeatureNoticeBody feature={feature} />
+    </Suspense>
   )
 }

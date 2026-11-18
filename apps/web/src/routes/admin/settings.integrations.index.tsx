@@ -1,9 +1,11 @@
+import { lazy, Suspense } from 'react'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
-import { PlanFeatureNotice } from '@/components/admin/settings/plan-feature-notice'
+import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationsSettingsBody } from '@/components/admin/settings/integrations/integrations-settings-body'
 import { readBatch } from '@/lib/client/queries/read-batch'
@@ -48,5 +50,23 @@ function IntegrationsPage() {
         integrations={integrations}
       />
     </SettingsPage>
+  )
+}
+
+/**
+ * The paused notice. The flag check lives in this route rather than a shared
+ * module, so with the plan limits flag off the page loads no extra chunk.
+ */
+const PlanFeatureNoticeBody = lazy(
+  () => import('@/components/admin/settings/plan-feature-notice-body')
+)
+
+function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
+  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
+  if (!enabled) return null
+  return (
+    <Suspense fallback={null}>
+      <PlanFeatureNoticeBody feature={feature} />
+    </Suspense>
   )
 }

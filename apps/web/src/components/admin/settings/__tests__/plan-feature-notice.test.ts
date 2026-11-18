@@ -7,7 +7,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/server/functions/plan-limits', () => ({ getPlanLimitsFn: vi.fn() }))
 
+import * as body from '../plan-feature-notice-body'
 import { planFeatureNotice, type PlanNoticeState } from '../plan-feature-notice-body'
+import * as leaf from '../plan-feature-notice-state'
 import { formatFirstRenderDate } from '@/components/ui/local-date'
 
 const state = (over: Partial<PlanNoticeState> = {}): PlanNoticeState => ({
@@ -165,6 +167,32 @@ describe('planFeatureNotice', () => {
     }
     for (const text of texts) {
       for (const word of BANNED) expect(text).not.toMatch(word)
+    }
+  })
+})
+
+// The body keeps its own copy of the query key and the rule so it shares no
+// runtime module with the Custom domains tab. The copies must agree, or the
+// tab and the notice disagree about whether the notice shows.
+describe('the body and the leaf agree', () => {
+  it('use the same query key', () => {
+    expect(body.PLAN_FEATURE_NOTICE_QUERY_KEY).toEqual(leaf.PLAN_FEATURE_NOTICE_QUERY_KEY)
+  })
+
+  it.each<[string, PlanNoticeState | null | undefined]>([
+    ['no state', undefined],
+    ['null state', null],
+    ['rules off', state({ enabled: false })],
+    ['nothing over', state({ phase: 'ok' })],
+    ['in the grace', state({ phase: 'grace' })],
+    ['paused', state()],
+    ['another feature over', state({ featureIssues: [{ key: 'webhooks' }] })],
+    ['nothing listed', state({ featureIssues: [] })],
+  ])('give the same answer with %s', (_, value) => {
+    for (const feature of ['workflows', 'webhooks']) {
+      expect(body.planFeatureNoticeApplies(feature, value)).toBe(
+        leaf.planFeatureNoticeApplies(feature, value)
+      )
     }
   })
 })

@@ -1,6 +1,8 @@
 /**
  * When a paid feature's settings page carries the paused notice. A leaf, so
- * the page can ask without loading the notice's body.
+ * the page can ask without loading the notice's body. The body keeps its own
+ * copy of the query key and the rule, so the two never share a runtime module
+ * (a parity test holds them together).
  */
 
 /** The query the notice and the pages that defer to it share. */

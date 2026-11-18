@@ -1,6 +1,6 @@
 /**
  * The paused notice itself, loaded only for a workspace with the plan limits
- * flag on (see plan-feature-notice.tsx): its query, copy and markup never
+ * flag on (each page checks the flag first): its query, copy and markup never
  * reach a page otherwise.
  */
 import { Link } from '@tanstack/react-router'
@@ -12,13 +12,26 @@ import {
   type LocalDateFormatter,
 } from '@/components/ui/local-date'
 import { getPlanLimitsFn } from '@/lib/server/functions/plan-limits'
-import {
-  PLAN_FEATURE_NOTICE_QUERY_KEY,
-  planFeatureNoticeApplies,
-  type PlanNoticeState,
-} from './plan-feature-notice-state'
+import type { PlanNoticeState } from './plan-feature-notice-state'
 
 export type { PlanNoticeState }
+
+// The query key and the rule below match plan-feature-notice-state.ts, a
+// parity test holds them together. They are copied rather than imported: a
+// module shared with the Custom domains tab, which loads that one, would
+// become a chunk of its own and cost that tab a request with the flag off.
+
+/** The query the notice and the pages that defer to it share. */
+export const PLAN_FEATURE_NOTICE_QUERY_KEY = ['plan-limits', 'feature-notice'] as const
+
+/** Whether the notice shows for `feature` (see plan-feature-notice-state.ts). */
+export function planFeatureNoticeApplies(
+  feature: string,
+  state: PlanNoticeState | null | undefined
+): boolean {
+  if (!state?.enabled || state.phase === 'ok') return false
+  return state.featureIssues.some((issue) => issue.key === feature)
+}
 
 /** The paid features whose settings pages carry the notice. */
 export type PlanNoticeFeature =

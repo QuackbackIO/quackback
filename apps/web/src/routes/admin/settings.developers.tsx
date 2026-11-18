@@ -6,7 +6,7 @@ import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { z } from 'zod'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
-import { PlanFeatureNotice } from '@/components/admin/settings/plan-feature-notice'
+import type { PlanNoticeFeature } from '@/components/admin/settings/plan-feature-notice-body'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { WorkspaceKeysSettings } from '@/components/admin/settings/api-keys/workspace-keys-settings'
@@ -17,7 +17,7 @@ import { McpServerSettings } from '@/components/admin/settings/mcp/mcp-server-se
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
-import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
+import { useBaseUrl, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
 
 // The two guides are long and sit on the Webhooks and MCP tabs, so they load
@@ -164,5 +164,23 @@ function ApiPage() {
         )}
       </Tabs>
     </SettingsPage>
+  )
+}
+
+/**
+ * The paused notice. The flag check lives in this route rather than a shared
+ * module, so with the plan limits flag off the page loads no extra chunk.
+ */
+const PlanFeatureNoticeBody = lazy(
+  () => import('@/components/admin/settings/plan-feature-notice-body')
+)
+
+function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
+  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
+  if (!enabled) return null
+  return (
+    <Suspense fallback={null}>
+      <PlanFeatureNoticeBody feature={feature} />
+    </Suspense>
   )
 }
