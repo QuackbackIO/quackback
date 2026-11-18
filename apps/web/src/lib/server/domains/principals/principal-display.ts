@@ -5,7 +5,19 @@
  * rule is a principal concern, not a conversation one; the `ConversationAuthorDTO`
  * name is historical.
  */
-import { db, principal, user, eq, inArray, type ServiceMetadata } from '@/lib/server/db'
+import {
+  and,
+  apiKeys,
+  db,
+  eq,
+  inArray,
+  principal,
+  sql,
+  user,
+  type ServiceMetadata,
+} from '@/lib/server/db'
+import { alias } from 'drizzle-orm/pg-core'
+import { SINGLE_WORKSPACE_NAMESPACE } from '@/lib/server/workspaces/workspace-keyed'
 import type { PrincipalId } from '@quackback/ids'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
@@ -105,7 +117,68 @@ async function selectAuthorRows(
     .where(inArray(principal.id, unique))
   // The same read answers whether each author is a test customer.
   for (const row of rows) rememberTestOwner(row)
-  return rows
+  return showPersonalKeysAsCreator(rows)
+}
+
+/**
+ * The kv key recording when this database reached the release that treats a
+ * personal key's replies as its creator's. Written once by the migration
+ * `0316_personal_key_reply_cutoff`, and read the same way by the shared reply
+ * rule (`messages/reply-rule.ts`), so what a key's messages show and how they
+ * count follow one rule.
+ */
+export const PERSONAL_KEY_CUTOFF_KV_KEY = 'api-keys:personal-reply-cutoff'
+
+/**
+ * A personal API key acts as the teammate who created it, so what it writes
+ * shows that teammate's name and avatar rather than the key's own name. Only
+ * the display fields change: the author's `principalId` stays the key's
+ * service principal, which is what the message rows store and what the audit
+ * trail and the reply-timing rules read.
+ *
+ * Only a personal key made at or after the cutoff above shows its creator.
+ * Every key older than API key kinds was marked personal, and the bots built
+ * on those keys keep their own name, just as their replies stay automated.
+ * With no cutoff recorded, every key keeps its own name. A workspace key
+ * belongs to nobody and keeps its own name, as does a personal key whose
+ * creator was deleted. Costs one read, and only when a batch has an API key
+ * author in it.
+ */
+async function showPersonalKeysAsCreator<T extends AuthorRow>(rows: T[]): Promise<T[]> {
+  const keyIds = rows.filter((row) => row.serviceMetadata?.kind === 'api_key').map((row) => row.id)
+  if (keyIds.length === 0) return rows
+  const keyCreator = alias(principal, 'key_creator')
+  const creators = await db
+    .select({
+      keyPrincipalId: apiKeys.principalId,
+      displayName: keyCreator.displayName,
+      accountName: user.name,
+      avatarUrl: keyCreator.avatarUrl,
+      avatarKey: keyCreator.avatarKey,
+      userImage: user.image,
+      userImageKey: user.imageKey,
+    })
+    .from(apiKeys)
+    .innerJoin(keyCreator, eq(keyCreator.id, apiKeys.createdById))
+    .leftJoin(user, eq(user.id, keyCreator.userId))
+    .where(
+      and(
+        inArray(apiKeys.principalId, keyIds),
+        eq(apiKeys.kind, 'personal'),
+        // The migration writes the cutoff under the single-workspace namespace
+        // in every database (each workspace has its own), so this is a
+        // primary-key lookup. With no row the comparison is null: no key matches.
+        sql`${apiKeys.createdAt} >= (select (value #>> '{}')::timestamptz from kv_store
+          where workspace_key = ${SINGLE_WORKSPACE_NAMESPACE}
+            and key = ${PERSONAL_KEY_CUTOFF_KV_KEY} and expires_at > now())`
+      )
+    )
+  if (creators.length === 0) return rows
+  const byKey = new Map(creators.map(({ keyPrincipalId, ...display }) => [keyPrincipalId, display]))
+  return rows.map((row) => {
+    const creator = byKey.get(row.id)
+    return creator ? { ...row, ...creator } : row
+  })
 }
 
 /**

@@ -72,6 +72,7 @@ import {
   type ConversationSide,
   type AgentConversationMessageDTO,
   type ConversationMessageDTO,
+  type ConversationAuthorDTO,
 } from '@/lib/shared/conversation/types'
 import {
   applyVisitorReopenStatus,
@@ -146,6 +147,18 @@ function systemActor(): Actor {
     principalType: 'service',
     segmentIds: new Set<SegmentId>(),
   }
+}
+
+/**
+ * The caller's author with the name the thread shows for it, for webhooks and
+ * workflow events. The caller's name can be stale or, for a personal API key,
+ * the key's own name where the thread shows its creator.
+ */
+function withShownName(
+  input: ConversationAuthorInput,
+  shown: Pick<ConversationAuthorDTO, 'displayName'>
+): ConversationAuthorInput {
+  return { ...input, displayName: shown.displayName ?? input.displayName }
 }
 
 /** Normalize a captured email; returns undefined when it isn't plausibly one. */
@@ -732,10 +745,12 @@ export async function startAgentConversation(
     attachments,
   })
 
-  void emitConversationCreated(actor, agent, txResult.conversation)
+  // Events carry the name the customer saw (a personal key shows its creator).
+  const eventAuthor = withShownName(agent, authored.publicAuthor)
+  void emitConversationCreated(actor, eventAuthor, txResult.conversation)
   // isFirstMessage only matters for a VISITOR message (the team bell's
   // anti-spam gate) — this is an agent-composed opening message, so false.
-  void emitMessageCreated(actor, agent, txResult.message, txResult.conversation, false)
+  void emitMessageCreated(actor, eventAuthor, txResult.message, txResult.conversation, false)
 
   return { conversation: agentDTO, message: messageDTO, created: true }
 }
@@ -901,8 +916,14 @@ export async function sendAgentMessage(
   })
 
   // isFirstMessage only matters for a VISITOR message — this is an agent
-  // reply, so false.
-  void emitMessageCreated(actor, agent, txResult.message, txResult.conversation, false)
+  // reply, so false. The event carries the name the customer saw.
+  void emitMessageCreated(
+    actor,
+    withShownName(agent, authored.publicAuthor),
+    txResult.message,
+    txResult.conversation,
+    false
+  )
   if (
     txResult.previousAgentPrincipalId === null &&
     txResult.conversation.assignedAgentPrincipalId !== null
@@ -990,8 +1011,9 @@ export async function addAgentNote(
   // broadcast below), so its DTO is shaped as an AgentConversationMessageDTO
   // like sendAgentMessage's — a fresh note has no reactions/flags/suggestion/
   // translation yet, so those are known-empty rather than re-read from the DB.
+  const noteAuthor = await resolveAuthor(agent)
   const messageDTO: AgentConversationMessageDTO = {
-    ...toMessageDTO(message, await resolveAuthor(agent)),
+    ...toMessageDTO(message, noteAuthor),
     reactions: [],
     flaggedAt: null,
     postSuggestion: null,
@@ -1010,7 +1032,7 @@ export async function addAgentNote(
     conversationId,
     mentionedIds: extractMentions(safeContentJson),
     authorPrincipalId: agent.principalId,
-    authorName: agent.displayName ?? 'A teammate',
+    authorName: noteAuthor.displayName ?? agent.displayName ?? 'A teammate',
     content,
   })
 
@@ -1022,7 +1044,7 @@ export async function addAgentNote(
   // conversation with this payload).
   const noteConversation = await loadConversationOr404(conversationId)
   const conversationDTO = await conversationToDTO(noteConversation, 'agent')
-  void emitMessageNoteCreated(actor, agent, message, noteConversation)
+  void emitMessageNoteCreated(actor, withShownName(agent, noteAuthor), message, noteConversation)
   return { conversation: conversationDTO, message: messageDTO }
 }
 
