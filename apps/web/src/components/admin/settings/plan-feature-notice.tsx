@@ -66,8 +66,13 @@ const COPY: Record<PlanNoticeFeature, { pausing: string; paused: string; kept: s
   },
 }
 
+/** The grace end as a calendar day: it is stored at a UTC instant. */
 function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  })
 }
 
 /**
