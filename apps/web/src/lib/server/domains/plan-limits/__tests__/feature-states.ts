@@ -86,6 +86,7 @@ function flagOffView(): PlanLimitsView {
     plan: null,
     since: null,
     graceEndsAt: null,
+    deadlineDay: null,
     fromPlan: null,
     issues: [],
     infoRows: [],

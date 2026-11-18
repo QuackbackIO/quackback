@@ -15,6 +15,7 @@ const state = (over: Partial<PlanNoticeState> = {}): PlanNoticeState => ({
   phase: 'enforced',
   planName: 'Free',
   graceEndsAt: '2026-11-25T12:00:00.000Z',
+  deadlineDay: '2026-11-24',
   featureIssues: [{ key: 'workflows' }],
   canManageBilling: true,
   ...over,
@@ -34,12 +35,12 @@ describe('planFeatureNotice', () => {
     })
   })
 
-  it('names the day it pauses, in the viewer locale, with no weekday', () => {
+  it('names the last day before it pauses, in the viewer locale, with no weekday', () => {
     expect(planFeatureNotice('workflows', state({ phase: 'grace' }), usFormat, NOW)?.text).toBe(
-      'Workflows pause on Nov 25. Runs waiting at that point stop.'
+      'Workflows pause after Nov 24. Runs waiting at that point stop.'
     )
     expect(planFeatureNotice('workflows', state({ phase: 'grace' }), gbFormat, NOW)?.text).toBe(
-      'Workflows pause on 25 Nov. Runs waiting at that point stop.'
+      'Workflows pause after 24 Nov. Runs waiting at that point stop.'
     )
     expect(
       planFeatureNotice(
@@ -48,19 +49,20 @@ describe('planFeatureNotice', () => {
         usFormat,
         NOW
       )?.text
-    ).toBe('Webhooks pause on Nov 25.')
+    ).toBe('Webhooks pause after Nov 24.')
   })
 
   it('adds the year only when the day is in another year', () => {
     const graceEndsAt = '2027-01-02T12:00:00.000Z'
+    const deadlineDay = '2027-01-01'
     expect(
       planFeatureNotice(
         'customCss',
-        state({ phase: 'grace', graceEndsAt, featureIssues: [{ key: 'customCss' }] }),
+        state({ phase: 'grace', graceEndsAt, deadlineDay, featureIssues: [{ key: 'customCss' }] }),
         usFormat,
         NOW
       )?.text
-    ).toBe('Custom CSS pauses on Jan 2, 2027.')
+    ).toBe('Custom CSS pauses after Jan 1, 2027.')
   })
 
   it('never says "the current plan" when the plan has no name', () => {

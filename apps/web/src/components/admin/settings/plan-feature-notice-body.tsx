@@ -29,6 +29,8 @@ export interface PlanNoticeState {
   phase: 'ok' | 'grace' | 'enforced'
   planName: string | null
   graceEndsAt: string | null
+  /** The last full day to fix, a plain YYYY-MM-DD date. */
+  deadlineDay: string | null
   featureIssues: ReadonlyArray<{ key: string }>
   canManageBilling: boolean
 }
@@ -75,13 +77,15 @@ const COPY: Record<
 }
 
 /**
- * The day the feature pauses, as a sentence names it: "Nov 23" by the viewer's
- * locale, with the year only when it is not this year, at the UTC day the
- * grace end is stored at.
+ * The last full day before the feature pauses, as a sentence names it: "Nov
+ * 23" by the viewer's locale, with the year only when it is not this year. It
+ * is a plain calendar date, so it is formatted in UTC and reads the same in
+ * every zone.
  */
-function deadline(iso: string, format: LocalDateFormatter, now: Date): string {
-  const sameYear = new Date(iso).getUTCFullYear() === now.getUTCFullYear()
-  return format(iso, {
+function deadline(day: string, format: LocalDateFormatter, now: Date): string {
+  const date = new Date(`${day}T12:00:00.000Z`)
+  const sameYear = date.getUTCFullYear() === now.getUTCFullYear()
+  return format(date, {
     month: 'short',
     day: 'numeric',
     ...(sameYear ? {} : { year: 'numeric' }),
@@ -104,8 +108,8 @@ export function planFeatureNotice(
   const copy = COPY[feature]
   // A feature set up past the plan is live until the deadline and paused after.
   const sentences =
-    state.phase === 'grace' && state.graceEndsAt
-      ? [`${copy.pausing} on ${deadline(state.graceEndsAt, format, now)}.`, copy.pausingNote]
+    state.phase === 'grace' && state.deadlineDay
+      ? [`${copy.pausing} after ${deadline(state.deadlineDay, format, now)}.`, copy.pausingNote]
       : [
           state.planName ? `${copy.paused} on the ${state.planName} plan.` : `${copy.paused}.`,
           copy.back,
