@@ -37,13 +37,21 @@
  *    `Cache-Control: no-store`; the finish lands on returnTo, so the token is
  *    gone from the address bar and from history. Nothing here logs a token.
  *  - Failure lands on the target page signed out, never on an error page.
+ *  - One sign-in, one sign-out. Each carried session records the sign-in it
+ *    came from, and signing out on any host ends every session of that
+ *    sign-in (section-session-family.ts).
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
-import { and, db, eq, gt, like, lt, session, verification } from '@/lib/server/db'
+import { and, db, eq, gt, like, lt, or, session, verification } from '@/lib/server/db'
 import type { UserId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
 import { getSignInSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import {
+  SESSION_LINK_PREFIX,
+  recordHandoffSession,
+  sweepEndedLinks,
+} from './section-session-family'
 import { normalizeHost } from '@/lib/shared/section-domains'
 import { SECTION_HANDOFF_PATH, handoffReturnTo } from '@/lib/shared/section-handoff'
 import type { SectionOrigins } from '@/lib/shared/section-links'
@@ -255,8 +263,10 @@ export async function mintSectionHandoff(request: Request): Promise<Response> {
 }
 
 /**
- * Tokens never finished (a closed tab, a lost network) are left behind. Each
- * mint clears the expired ones, so they never pile up. Best effort.
+ * Tokens never finished (a closed tab, a lost network) are left behind, and so
+ * are the family rows of carried sessions that expired (they end with their
+ * session). Each mint clears the expired ones, so they never pile up. Best
+ * effort.
  */
 async function sweepExpiredTokens(): Promise<void> {
   try {
@@ -264,7 +274,10 @@ async function sweepExpiredTokens(): Promise<void> {
       .delete(verification)
       .where(
         and(
-          like(verification.identifier, `${TOKEN_IDENTIFIER_PREFIX}%`),
+          or(
+            like(verification.identifier, `${TOKEN_IDENTIFIER_PREFIX}%`),
+            like(verification.identifier, `${SESSION_LINK_PREFIX}%`)
+          ),
           lt(verification.expiresAt, new Date())
         )
       )
@@ -316,9 +329,15 @@ async function liveSourceSession(stored: StoredHandoff): Promise<{ expiresAt: Da
  * A new session for the user, portal scope, ending no later than the source
  * session. Created through the auth library so its hooks and token format
  * apply; the scope is then read back, so a session that is not portal scope
- * is never installed.
+ * is never installed. It is recorded as part of the source's sign-in, so
+ * signing out on any host ends it (section-session-family.ts); a session
+ * that could not be recorded is not installed either.
  */
-async function createPortalSession(userId: string, expiresAt: Date): Promise<string | null> {
+async function createPortalSession(
+  userId: string,
+  sourceSessionId: string,
+  expiresAt: Date
+): Promise<string | null> {
   const { getAuth } = await import('@/lib/server/auth')
   const context = await (await getAuth()).$context
   const created = (await context.internalAdapter.createSession(
@@ -326,7 +345,7 @@ async function createPortalSession(userId: string, expiresAt: Date): Promise<str
     false,
     { scope: 'portal', expiresAt },
     true
-  )) as { id?: string; token?: string } | null
+  )) as { id?: string; token?: string; expiresAt?: unknown } | null
   if (!created?.id || !created.token) return null
   await db.update(session).set({ scope: 'portal' }).where(eq(session.id, created.id))
   const [row] = await db
@@ -334,7 +353,17 @@ async function createPortalSession(userId: string, expiresAt: Date): Promise<str
     .from(session)
     .where(eq(session.id, created.id))
     .limit(1)
-  if (row?.scope === 'portal') return created.token
+  if (row?.scope === 'portal') {
+    const endsAt = created.expiresAt instanceof Date ? created.expiresAt : expiresAt
+    try {
+      if (await recordHandoffSession(created.id, sourceSessionId, userId, endsAt)) {
+        return created.token
+      }
+      log.info({ reason: 'signed_out_meanwhile' }, 'section handoff session not installed')
+    } catch (err) {
+      log.error(errorKind(err), 'section handoff session not recorded; not installed')
+    }
+  }
   await db.delete(session).where(eq(session.id, created.id))
   return null
 }
@@ -402,7 +431,7 @@ export async function finishSectionHandoff(request: Request): Promise<Response> 
   const cookies = await (async () => {
     const source = await liveSourceSession(stored)
     if (!source) return 'source_session_ended' as const
-    const token = await createPortalSession(stored.u, source.expiresAt)
+    const token = await createPortalSession(stored.u, stored.sid, source.expiresAt)
     if (!token) return null
     return installSession(token, returnTo, primaryOrigin)
   })().catch((err: unknown) => {
@@ -413,5 +442,7 @@ export async function finishSectionHandoff(request: Request): Promise<Response> 
   if (!cookies) return signedOut('session_not_installed')
 
   log.info({ outcome: 'installed' }, 'section handoff finished')
+  // Housekeeping for this sign-in's family, once the session is in place.
+  await sweepEndedLinks(stored.sid)
   return redirect(returnTo, [...cookies, clearState])
 }
