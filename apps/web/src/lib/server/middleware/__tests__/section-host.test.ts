@@ -103,7 +103,7 @@ describe('handleSectionHost', () => {
     const { response } = await send('https://acme.example.com/hc/articles/x?ref=1')
     expect(response.status).toBe(301)
     expect(response.headers.get('location')).toBe('https://help.acme.com/hc/articles/x?ref=1')
-    expect(response.headers.get('vary')).toBe('Host')
+    expect(response.headers.get('vary')).toBe('Host, Cookie')
   })
 
   it("moves the primary domain's help center sitemap too, keeping the query", async () => {
@@ -117,7 +117,7 @@ describe('handleSectionHost', () => {
     expect(response.status).toBe(302)
     expect(response.headers.get('location')).toBe('https://status.acme.com/status/inc_1')
     expect(response.headers.get('cache-control')).toBe('no-store')
-    expect(response.headers.get('vary')).toBe('Host')
+    expect(response.headers.get('vary')).toBe('Host, Cookie')
   })
 
   it('sends a section host to the primary domain while its section is off', async () => {
@@ -188,5 +188,55 @@ describe('handleSectionHost', () => {
       },
     })
     expect((await send('https://acme.example.com/hc')).response).toBe(PASSED)
+  })
+})
+
+describe('handleSectionHost for a signed-in visitor', () => {
+  const SIGNED_IN = { cookie: 'theme=dark; better-auth.session_token=abc.sig' }
+
+  it('carries the session through the handoff when moving to a section host', async () => {
+    const { response } = await send('https://acme.example.com/hc/articles/x?ref=1', {
+      headers: SIGNED_IN,
+    })
+    expect(response.status).toBe(302)
+    const location = new URL(response.headers.get('location')!)
+    expect(location.origin).toBe('https://help.acme.com')
+    expect(location.pathname).toBe('/auth/section-handoff')
+    expect(location.searchParams.get('from')).toBe('acme.example.com')
+    expect(location.searchParams.get('returnTo')).toBe('/hc/articles/x?ref=1')
+    // Per viewer: never a cached permanent move.
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('vary')).toContain('Cookie')
+  })
+
+  it('carries the secure-prefixed session cookie too', async () => {
+    const { response } = await send('https://help.acme.com/status/inc_1', {
+      headers: { cookie: '__Secure-better-auth.session_token=abc.sig' },
+    })
+    const location = new URL(response.headers.get('location')!)
+    expect(location.origin).toBe('https://status.acme.com')
+    expect(location.pathname).toBe('/auth/section-handoff')
+    expect(location.searchParams.get('from')).toBe('help.acme.com')
+    expect(location.searchParams.get('returnTo')).toBe('/status/inc_1')
+  })
+
+  it('carries the session back to the primary domain', async () => {
+    state.settings = workspace({
+      sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } },
+    })
+    const { response } = await send('https://help.acme.com/roadmap', { headers: SIGNED_IN })
+    const location = new URL(response.headers.get('location')!)
+    expect(location.origin).toBe('https://acme.example.com')
+    expect(location.pathname).toBe('/auth/section-handoff')
+    expect(location.searchParams.get('from')).toBe('help.acme.com')
+    expect(location.searchParams.get('returnTo')).toBe('/roadmap')
+  })
+
+  it('keeps the plain move for a visitor with no session cookie', async () => {
+    const { response } = await send('https://acme.example.com/hc/articles/x', {
+      headers: { cookie: 'theme=dark; not-better-auth.session_token_x=1' },
+    })
+    expect(response.status).toBe(301)
+    expect(response.headers.get('location')).toBe('https://help.acme.com/hc/articles/x')
   })
 })

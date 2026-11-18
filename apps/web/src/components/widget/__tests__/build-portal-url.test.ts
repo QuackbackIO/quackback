@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { appendWidgetOtt, buildPortalUrl } from '../build-portal-url'
+import { appendWidgetOtt, buildPortalUrl, widgetChangelogUrl } from '../build-portal-url'
 
 describe('buildPortalUrl', () => {
   const baseUrl = 'https://feedback.example.com'
@@ -84,5 +84,48 @@ describe('appendWidgetOtt', () => {
     expect(appendWidgetOtt('https://feedback.example.com/changelog/changelog_1', true, null)).toBe(
       'https://feedback.example.com/changelog/changelog_1'
     )
+  })
+})
+
+describe('widgetChangelogUrl', () => {
+  const origin = 'https://acme.com'
+  const origins = {
+    primary: 'https://acme.com',
+    feedback: 'https://acme.com',
+    roadmap: 'https://acme.com',
+    changelog: 'https://updates.acme.com',
+    help: 'https://acme.com',
+    support: 'https://acme.com',
+    status: 'https://acme.com',
+  }
+
+  it("links an anonymous visitor straight to the changelog's own host", () => {
+    expect(
+      widgetChangelogUrl({ origin, entryId: 'cl_1', origins, isIdentified: false, ott: null })
+    ).toBe('https://updates.acme.com/changelog/cl_1')
+  })
+
+  it('links to the widget origin when the changelog has no host of its own', () => {
+    expect(
+      widgetChangelogUrl({
+        origin,
+        entryId: 'cl_1',
+        origins: { ...origins, changelog: 'https://acme.com' },
+        isIdentified: false,
+        ott: null,
+      })
+    ).toBe('https://acme.com/changelog/cl_1')
+    expect(
+      widgetChangelogUrl({ origin, entryId: 'cl_1', origins: null, isIdentified: false, ott: null })
+    ).toBe('https://acme.com/changelog/cl_1')
+  })
+
+  it('signs an identified visitor in on the widget origin, and the move on carries the session', () => {
+    // widget-handoff sets the session on this origin and lands on
+    // /changelog/cl_1 here, which the section host middleware sends through
+    // the section handoff to the changelog's host.
+    expect(
+      widgetChangelogUrl({ origin, entryId: 'cl_1', origins, isIdentified: true, ott: 'ott-1' })
+    ).toBe('https://acme.com/auth/widget-handoff?ott=ott-1&returnTo=%2Fchangelog%2Fcl_1')
   })
 })

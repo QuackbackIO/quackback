@@ -5,8 +5,10 @@
  * Runs after workspace resolution, so the settings read is the workspace's.
  * The decision is `resolveSectionHostRoute` (lib/shared/section-domains.ts):
  *
- *  - `redirect`: answered here, with `Vary: Host`, since the same path answers
- *    differently on each host.
+ *  - `redirect`: answered here, with `Vary: Host, Cookie`, since the same path
+ *    answers differently on each host. A visitor carrying a session cookie is
+ *    sent through the sign-in handoff on the other host (section-handoff.ts),
+ *    so they arrive signed in.
  *  - `rewrite-home` and `pass`: the app answers, and the response it makes is
  *    handed back untouched. On a section's host the app is told the section's
  *    home through the request context, and the router's URL rewrite
@@ -33,6 +35,7 @@ import {
   sectionForPath,
   sectionHomeForHost,
 } from '@/lib/shared/section-domains'
+import { carriesSessionCookie, handoffForMove } from '@/lib/shared/section-handoff'
 
 /** What this middleware tells the app about the request. */
 export interface SectionHostContext {
@@ -96,16 +99,31 @@ export async function handleSectionHost<T extends NextResult>({
       const sectionHome = sectionHomeForHost({ host, map, sectionEnabled })
       return sectionHome ? next({ context: { sectionHome } }) : next()
     }
-    case 'redirect':
+    case 'redirect': {
+      // A visitor who may be signed in crosses hosts through the handoff, so
+      // they arrive signed in: sessions are host-only cookies. Per viewer, so
+      // never cached.
+      const handoff =
+        host && carriesSessionCookie(request.headers.get('cookie'))
+          ? handoffForMove(route.location, host)
+          : null
+      if (handoff) {
+        return new Response(null, {
+          status: 302,
+          headers: { Location: handoff, Vary: 'Host, Cookie', 'Cache-Control': 'no-store' },
+        })
+      }
       return new Response(null, {
         status: route.status,
         headers: {
           Location: route.location,
-          Vary: 'Host',
+          // The answer depends on the session cookie as well (above).
+          Vary: 'Host, Cookie',
           // A permanent move is still bounded, so a map changed later is
           // picked up; the other moves follow the map as it is now.
           'Cache-Control': route.status === 301 ? 'public, max-age=3600' : 'no-store',
         },
       })
+    }
   }
 }

@@ -26,7 +26,7 @@ import { guardBetterAuthUserCreation } from './signup-policy'
 import { assignSessionScope } from './session-audience'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { accountDisplayName } from '@/lib/shared/greeting-name'
-import { workspaceAuthTrustedOrigins } from './trusted-origins'
+import { authTrustedOrigins } from './trusted-origins'
 import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
 import { reconcileMcpOauthClientScopes } from './reconcile-mcp-oauth-client-scopes'
 import { HTTP_DISABLED_AUTH_PATHS } from './http-disabled-paths'
@@ -495,7 +495,7 @@ async function createAuth() {
     baseURL,
 
     // https://better-auth.com/docs/reference/security#dynamic-origin-list
-    trustedOrigins: async (request) => workspaceAuthTrustedOrigins(request),
+    trustedOrigins: async (request) => authTrustedOrigins(request),
 
     // Tell Better-Auth about non-standard columns on `user` so the
     // OAuth `mapProfileToUser` return shape is allowed through and

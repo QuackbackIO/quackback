@@ -55,6 +55,16 @@ export function inlineKey(file: string, surface: string, callee: string): string
   return `${file}::${surface}::${callee}`
 }
 
+/**
+ * Reach a permission has beyond the surfaces it gates: settings that decide
+ * where sign-in may go. Rendered into MATRIX.md, so a change is reviewed as
+ * an access-control change.
+ */
+export const SESSION_REACH: Partial<Record<PermissionKey, string>> = {
+  [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]:
+    'Maps section hostnames. Each verified section host (on Cloud a ready custom domain; self-hosted, one whose lookups still answer) becomes a trusted sign-in origin and a host a signed-in session can be carried to through the section handoff. A carried session is a new portal-scope session for the same person: it never holds team permissions, so it cannot open /admin or pass a permission gate.',
+}
+
 /** `requireTeamAuth()` wraps `requireAuth({ permission: POST_APPROVE })`. */
 export const ALIAS_RESOLUTIONS: Record<string, PermissionKey> = {
   requireTeamAuth: PERMISSIONS.POST_APPROVE,

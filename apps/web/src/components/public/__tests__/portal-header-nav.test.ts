@@ -278,4 +278,26 @@ describe('crossHostTabHref', () => {
   it('keeps every tab a client-side link when the origins are unknown', () => {
     expect(crossHostTabHref('help', '/hc', null)).toBeNull()
   })
+
+  it('sends a signed-in viewer through the sign-in handoff on the other host', () => {
+    const href = new URL(
+      crossHostTabHref('help', '/hc', { origins, hostOrigin: PRIMARY }, { signedIn: true })!
+    )
+    expect(href.origin).toBe('https://help.acme.com')
+    expect(href.pathname).toBe('/auth/section-handoff')
+    expect(href.searchParams.get('from')).toBe('acme.example.com')
+    expect(href.searchParams.get('returnTo')).toBe('/')
+  })
+
+  it('keeps the plain link for a signed-out viewer', () => {
+    expect(
+      crossHostTabHref('help', '/hc', { origins, hostOrigin: PRIMARY }, { signedIn: false })
+    ).toBe('https://help.acme.com/')
+  })
+
+  it('keeps a same-host tab a client-side link for a signed-in viewer', () => {
+    expect(
+      crossHostTabHref('roadmap', '/roadmap', { origins, hostOrigin: PRIMARY }, { signedIn: true })
+    ).toBeNull()
+  })
 })

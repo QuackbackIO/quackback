@@ -412,8 +412,10 @@ const NavTab = memo(
   function NavTab({ item, unread }: { item: BuiltInNavItem; unread: number }) {
     const intl = useIntl()
     // A tab for a section served on another host (help.acme.com) is a plain
-    // link there: a client-side navigation would never reach the server.
-    const crossHostHref = crossHostTabHref(item.type, item.to, useSectionLinks())
+    // link there: a client-side navigation would never reach the server. A
+    // signed-in viewer goes through the sign-in handoff on that host.
+    const signedIn = useSessionContext()?.user != null
+    const crossHostHref = crossHostTabHref(item.type, item.to, useSectionLinks(), { signedIn })
     const isActive = useRouterState({
       select: (s) => !crossHostHref && isTabActive(item.to, s.location.pathname),
     })

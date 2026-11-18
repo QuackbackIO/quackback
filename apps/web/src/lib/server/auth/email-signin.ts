@@ -52,6 +52,13 @@ export async function requestEmailSignin(opts: {
   email: string
   /** Path the user lands on after a successful magic-link click. */
   callbackURL: string
+  /**
+   * The origin the link signs in on, when the sign-in started on a section
+   * host (https://help.acme.com): sessions are host-only, so the link must
+   * land where the visitor is. The caller vouches for it; absent, the
+   * primary domain.
+   */
+  linkOrigin?: string
 }): Promise<void> {
   // "Require SSO", in front of the mint. The link minted below is redeemed at
   // `/magic-link/verify`, whose address travels inside the token, so the
@@ -146,7 +153,7 @@ export async function requestEmailSignin(opts: {
       email: opts.email,
       callbackPath,
       errorCallbackPath,
-      portalUrl: config.baseUrl,
+      portalUrl: opts.linkOrigin ?? config.baseUrl,
     }),
     auth.api.createVerificationOTP({
       body: { email: opts.email, type: 'sign-in' },
