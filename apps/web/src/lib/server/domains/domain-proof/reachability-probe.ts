@@ -57,10 +57,16 @@ async function lookUp(domain: string): Promise<Lookup> {
 }
 
 /** The addresses the primary domain is served at: its own, when BASE_URL names an address. */
-async function primaryAddresses(primaryHost: string): Promise<string[]> {
-  const bare = primaryHost.replace(/^\[(.*)\]$/, '$1')
+async function primaryAddresses(primaryOrigin: string): Promise<string[]> {
+  let host: string
+  try {
+    host = new URL(primaryOrigin).hostname
+  } catch {
+    return []
+  }
+  const bare = host.replace(/^\[(.*)\]$/, '$1')
   if (isIP(bare)) return [bare]
-  return (await lookUp(primaryHost)).addresses
+  return (await lookUp(bare)).addresses
 }
 
 /**
@@ -91,7 +97,7 @@ async function instanceAnswersOn(domain: string): Promise<'ok' | 'unreachable' |
 /**
  * The status, and whether DNS gave an answer at all.
  *
- * With `primaryHost`, a hostname this server cannot reach itself through is
+ * With `primaryOrigin` (BASE_URL), a hostname this server cannot reach itself through is
  * still taken as reaching it when it resolves to an address the primary
  * domain resolves to. A server behind NAT without hairpinning, or one whose
  * egress to its own public address is blocked, can never fetch its own
@@ -101,14 +107,14 @@ async function instanceAnswersOn(domain: string): Promise<'ok' | 'unreachable' |
  */
 export async function probeCustomDomain(
   domain: string,
-  { primaryHost }: { primaryHost?: string | null } = {}
+  { primaryOrigin }: { primaryOrigin?: string | null } = {}
 ): Promise<{ status: HelpCenterDomainStatus; dnsAnswered: boolean }> {
   const [dns, instance] = await Promise.all([lookUp(domain), instanceAnswersOn(domain)])
   const dnsResolved = dns.outcome === 'resolved'
   const instanceReachable = instance === 'ok'
   const dnsAnswered = dns.outcome !== 'unknown'
-  if (dnsResolved && instance === 'unreachable' && primaryHost) {
-    const ours = new Set(await primaryAddresses(primaryHost))
+  if (dnsResolved && instance === 'unreachable' && primaryOrigin) {
+    const ours = new Set(await primaryAddresses(primaryOrigin))
     if (dns.addresses.some((address) => ours.has(address))) {
       return {
         status: { dnsResolved, instanceReachable, verified: true, sharesPrimaryAddress: true },

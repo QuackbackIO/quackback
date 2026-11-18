@@ -35,7 +35,6 @@ import { probeCustomDomain } from '@/lib/server/domains/domain-proof/reachabilit
 import {
   PORTAL_SECTIONS,
   UNCONFIRMED_GRACE_MS,
-  hostOfOrigin,
   type SectionDomain,
   type SectionDomainMap,
 } from '@/lib/shared/section-domains'
@@ -87,13 +86,13 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 /** Whether the hostname reaches this server, checked once more after a miss. */
 async function answers(
   hostname: string,
-  primaryHost: string | null,
+  primaryOrigin: string,
   wait: (ms: number) => Promise<void>
 ): Promise<boolean> {
-  const first = await probeCustomDomain(hostname, { primaryHost })
+  const first = await probeCustomDomain(hostname, { primaryOrigin })
   if (first.status.verified) return true
   await wait(SECTION_RECHECK_DELAY_MS)
-  const second = await probeCustomDomain(hostname, { primaryHost })
+  const second = await probeCustomDomain(hostname, { primaryOrigin })
   if (!second.status.verified) {
     log.info(
       { hostname, status: second.status, dns_answered: second.dnsAnswered },
@@ -178,12 +177,12 @@ export async function watchSectionDomains(
   if (verified.length === 0) return result
 
   const wait = opts.wait ?? sleep
-  const primaryHost = hostOfOrigin(getBaseUrl())
+  const primaryOrigin = getBaseUrl()
   // Each check can take seconds; the hostnames are few, so they run together.
   const decisions = await Promise.all(
     verified.map(async ({ section, entry }) => {
       try {
-        const answered = await answers(entry.hostname, primaryHost, wait)
+        const answered = await answers(entry.hostname, primaryOrigin, wait)
         return { section, entry, decision: decide(entry, answered, now) }
       } catch (err) {
         // One hostname's failure must not stop the others being judged.

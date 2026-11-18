@@ -250,7 +250,7 @@ export async function verifySectionDomain(
       await import('@/lib/server/domains/domain-proof/reachability-probe')
     // A hairpin install, which cannot reach itself through the hostname, is
     // verified by the hostname resolving to the primary domain's address.
-    const probe = await probeCustomDomain(entry.hostname, { primaryHost: currentPrimaryHost() })
+    const probe = await probeCustomDomain(entry.hostname, { primaryOrigin: getBaseUrl() })
     status = probe.status
     const kept = !status.verified && !probe.dnsAnswered ? entry.verifiedAt : null
     verifiedAt = status.verified ? new Date().toISOString() : kept

@@ -43,9 +43,9 @@ const probe = vi.hoisted(() => ({
   during: null as null | (() => Promise<void>),
 }))
 vi.mock('@/lib/server/domains/domain-proof/reachability-probe', () => ({
-  probeCustomDomain: async (hostname: string, opts?: { primaryHost?: string | null }) => {
+  probeCustomDomain: async (hostname: string, opts?: { primaryOrigin?: string | null }) => {
     probe.asked.push(hostname)
-    probe.primaryHosts.push(opts?.primaryHost)
+    probe.primaryHosts.push(opts?.primaryOrigin)
     const during = probe.during
     probe.during = null
     if (during) await during()
@@ -243,7 +243,7 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
   it("hands the probe the primary domain's host, so a hairpin install is not a miss", async () => {
     await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
     await run()
-    expect(probe.primaryHosts).toEqual(['feedback.acme.com'])
+    expect(probe.primaryHosts).toEqual(['https://feedback.acme.com'])
   })
 
   it('checks a miss once more, and changes nothing when the second check answers', async () => {

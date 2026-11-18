@@ -91,7 +91,7 @@ describe('probeCustomDomain', () => {
     set('A', 'feedback.acme.com', ['203.0.113.7'])
     seenHost = 'feedback.acme.com'
     const { status } = await probeCustomDomain('help.acme.com', {
-      primaryHost: 'feedback.acme.com',
+      primaryOrigin: 'https://feedback.acme.com',
     })
     expect(status).toEqual({ dnsResolved: true, instanceReachable: false, verified: false })
   })
@@ -121,7 +121,7 @@ describe('probeCustomDomain', () => {
     it('is verified when it shares an IPv4 address with the primary domain', async () => {
       set('A', 'help.acme.com', ['198.51.100.1', '203.0.113.7'])
       const { status } = await probeCustomDomain('help.acme.com', {
-        primaryHost: 'feedback.acme.com',
+        primaryOrigin: 'https://feedback.acme.com',
       })
       expect(status).toEqual({
         dnsResolved: true,
@@ -134,7 +134,7 @@ describe('probeCustomDomain', () => {
     it('is verified when it shares an IPv6 address', async () => {
       set('AAAA', 'help.acme.com', ['2001:db8::7'])
       const { status } = await probeCustomDomain('help.acme.com', {
-        primaryHost: 'feedback.acme.com',
+        primaryOrigin: 'https://feedback.acme.com',
       })
       expect(status.verified).toBe(true)
     })
@@ -142,19 +142,20 @@ describe('probeCustomDomain', () => {
     it('is verified against a BASE_URL that names an address', async () => {
       set('A', 'help.acme.com', ['192.0.2.10'])
       expect(
-        (await probeCustomDomain('help.acme.com', { primaryHost: '192.0.2.10' })).status.verified
+        (await probeCustomDomain('help.acme.com', { primaryOrigin: 'https://192.0.2.10:8443' }))
+          .status.verified
       ).toBe(true)
       set('AAAA', 'status.acme.com', ['2001:db8::10'])
       expect(
-        (await probeCustomDomain('status.acme.com', { primaryHost: '[2001:db8::10]' })).status
-          .verified
+        (await probeCustomDomain('status.acme.com', { primaryOrigin: 'https://[2001:db8::10]/' }))
+          .status.verified
       ).toBe(true)
     })
 
     it('is not verified at an address the primary domain does not have', async () => {
       set('A', 'help.acme.com', ['198.51.100.1'])
       const { status } = await probeCustomDomain('help.acme.com', {
-        primaryHost: 'feedback.acme.com',
+        primaryOrigin: 'https://feedback.acme.com',
       })
       expect(status).toEqual({ dnsResolved: true, instanceReachable: false, verified: false })
     })
@@ -164,7 +165,7 @@ describe('probeCustomDomain', () => {
       reply = 'error-page'
       set('A', 'help.acme.com', ['203.0.113.7'])
       const { status } = await probeCustomDomain('help.acme.com', {
-        primaryHost: 'feedback.acme.com',
+        primaryOrigin: 'https://feedback.acme.com',
       })
       expect(status.verified).toBe(false)
     })

@@ -39,8 +39,8 @@ vi.mock('@/lib/server/config', async (importOriginal) => ({
   getBaseUrl: () => 'https://feedback.acme.com',
 }))
 vi.mock('@/lib/server/domains/domain-proof/reachability-probe', () => ({
-  probeCustomDomain: async (_hostname: string, opts?: { primaryHost?: string | null }) => {
-    side.primaryHosts.push(opts?.primaryHost)
+  probeCustomDomain: async (_hostname: string, opts?: { primaryOrigin?: string | null }) => {
+    side.primaryHosts.push(opts?.primaryOrigin)
     return { status: side.status, dnsAnswered: side.dnsAnswered }
   },
 }))
@@ -204,7 +204,7 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
     it("hands the probe the primary domain's host, so a hairpin install can verify", async () => {
       await setSectionDomain('status', 'status.acme.com')
       await verifySectionDomain('status')
-      expect(side.primaryHosts).toEqual(['feedback.acme.com'])
+      expect(side.primaryHosts).toEqual(['https://feedback.acme.com'])
     })
 
     it("forgets the daily run's first miss once a person's Verify has checked", async () => {
