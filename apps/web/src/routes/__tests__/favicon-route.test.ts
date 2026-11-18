@@ -1,31 +1,21 @@
 // @vitest-environment node
 /**
  * Pages without their own icon link (admin, onboarding) make the browser ask
- * for /favicon.ico. There is no such file, so before setup is finished the
- * onboarding guard used to answer it with a redirect into the setup page.
- * The route answers it with the app's icon instead.
+ * for /favicon.ico. Without a real file there, the request reached the page
+ * router, and before setup was finished the onboarding guard redirected it
+ * into the setup page. Static files in public/ are served ahead of the router,
+ * the way /logo.png already is.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { describe, it, expect } from 'vitest'
 
-vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: (path: string) => (opts: unknown) => ({ path, options: opts }),
-}))
-
-import { Route } from '../favicon[.]ico'
-
-type Handlers = { GET: (args: { request: Request }) => Promise<Response> | Response }
-const { GET } = (Route as unknown as { options: { server: { handlers: Handlers } } }).options.server
-  .handlers
+const favicon = fileURLToPath(new URL('../../../public/favicon.ico', import.meta.url))
 
 describe('/favicon.ico', () => {
-  it('redirects to the app icon, not into onboarding', async () => {
-    const response = await GET({ request: new Request('https://acme.example/favicon.ico') })
-    expect(response.status).toBe(302)
-    expect(response.headers.get('Location')).toBe('/logo.png')
-  })
-
-  it('lets browsers cache the answer', async () => {
-    const response = await GET({ request: new Request('https://acme.example/favicon.ico') })
-    expect(response.headers.get('Cache-Control')).toMatch(/max-age=\d+/)
+  it('is a real icon file served from public/', () => {
+    const bytes = readFileSync(favicon)
+    // ICO header: reserved 0, type 1 (icon).
+    expect([...bytes.subarray(0, 4)]).toEqual([0, 0, 1, 0])
   })
 })
