@@ -36,6 +36,7 @@ import {
 } from '@/lib/client/queries/portal-custom-domains'
 import { useHasPermission, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { toastError } from '@/lib/client/error-notice'
+import { addedDomainsQuery, verifiedDomainNames } from '@/lib/client/queries/domains'
 
 /** Go to the Domain verification card and its Domain field, where a Cloud custom domain is added. */
 function goToAddDomain() {
@@ -113,7 +114,7 @@ export default function PortalCustomDomainsTab({
   const cloudDomains = useCloudDomains(operator?.domains ?? NO_DOMAINS, onChanged, onLeave)
   // Add custom domain reads the Verified domains when it opens, not with the tab.
   const loadVerifiedDomains = useCallback(
-    () => queryClient.fetchQuery(portalCustomDomainsQueries.verifiedDomains()),
+    async () => verifiedDomainNames(await queryClient.fetchQuery(addedDomainsQuery())),
     [queryClient]
   )
   // The records a Cloud custom domain needs, read fresh for Add custom domain's DNS step.

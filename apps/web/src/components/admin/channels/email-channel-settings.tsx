@@ -6,8 +6,9 @@
  * support replies come from. An address on a domain that is not live yet
  * carries that domain's setup panel under it.
  */
-import { useRef, useState } from 'react'
-import { Link } from '@tanstack/react-router'
+import { useCallback, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Link, useRouter } from '@tanstack/react-router'
 import { EnvelopeIcon, GlobeAltIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -34,7 +35,14 @@ import {
   type SendingAddress,
 } from './sending-removal'
 import { SendingPausedNotice } from './sending-paused-notice'
-import { SendFromCard, type SenderSurfaceKey } from './send-from-card'
+import { SendFromCard, type SenderIdentity, type SenderSurfaceKey } from './send-from-card'
+import {
+  useVerifyDomainLinks,
+  VerifyDomainLink,
+  type VerifyDomainTarget,
+} from './verify-domain-link'
+import { addedDomainsQuery, verifiedDomainNames } from '@/lib/client/queries/domains'
+import { addDomainLink } from '@/lib/shared/domains-permissions'
 import {
   inboundTarget,
   oldestFirst,
@@ -67,6 +75,18 @@ import { toastError } from '@/lib/client/error-notice'
  */
 const reason = (fallback: string) => (error: unknown) => toastError(error, fallback)
 
+/** Each address the Send from card offers, with Verify domain where its domain needs it. */
+function withVerifyLinks(
+  identities: SenderIdentity[],
+  addresses: SendingAddress[],
+  linkFor: (address: string | null | undefined) => VerifyDomainTarget | null
+): SenderIdentity[] {
+  return identities.map((i) => ({
+    ...i,
+    verifyDomain: linkFor(addresses.find((a) => a.id === i.id)?.address),
+  }))
+}
+
 /**
  * Settings → Email: the addresses this workspace sends from, and which of them
  * the default and each product that is on uses.
@@ -74,6 +94,8 @@ const reason = (fallback: string) => (error: unknown) => toastError(error, fallb
 export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly SenderSurfaceKey[] }) {
   const view = useEmailConfigView()
   const { data } = view
+  // This page is settings.manage's, which adds and verifies domains too.
+  const verifyLinkFor = useVerifyDomainLinks(view.addresses, true)
   return (
     <div className="space-y-6">
       <SendingPausedNotice
@@ -90,12 +112,14 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
         addressMode={view.addressMode}
         ownDomains={view.ownDomains}
         loaded={data !== undefined}
+        verifyLinkFor={verifyLinkFor}
       />
       {/* With no address there is nothing to choose between, so the card
           waits for one rather than showing a row of single-option selects. */}
       {view.addresses.length > 0 && (
         <SendFromCard
           {...view.sendFrom}
+          identities={withVerifyLinks(view.identities, view.addresses, verifyLinkFor)}
           rows={['default', ...surfaces]}
           // Where "Change" on a product's page lands: `SEND_FROM_ANCHOR` in
           // surface-sender-row.tsx, repeated here because importing that row
@@ -116,6 +140,8 @@ export function WorkspaceEmailSettings({ surfaces }: { surfaces: readonly Sender
 export function SupportInboxSettings({ canManageSending }: { canManageSending: boolean }) {
   const view = useEmailConfigView()
   const { data } = view
+  // Only someone who manages sending may verify a domain.
+  const verifyLinkFor = useVerifyDomainLinks(view.addresses, canManageSending)
   return (
     <div className="space-y-6">
       <SendingPausedNotice
@@ -129,6 +155,7 @@ export function SupportInboxSettings({ canManageSending }: { canManageSending: b
       />
       <SendFromCard
         {...view.sendFrom}
+        identities={withVerifyLinks(view.identities, view.addresses, verifyLinkFor)}
         rows={['support']}
         title="Replies"
         description={
@@ -371,6 +398,7 @@ function SendingAddressesSection({
   addressMode,
   ownDomains: platformDomains,
   loaded,
+  verifyLinkFor,
 }: {
   addresses: SendingAddress[]
   domains: SendingDomainDTO[]
@@ -388,10 +416,19 @@ function SendingAddressesSection({
   ownDomains: readonly string[]
   /** Whether the config has arrived, so an empty list really is empty. */
   loaded: boolean
+  /** Where Verify domain goes for an address whose domain is not Verified. */
+  verifyLinkFor: (address: string | null | undefined) => VerifyDomainTarget | null
 }) {
   const available = addressMode !== 'unavailable'
   const guardPermitsAny = addressMode === 'any'
   const [dialog, setDialog] = useState<SendingAddressDialogTarget | null>(null)
+  const queryClient = useQueryClient()
+  const router = useRouter()
+  // Add address reads the Verified domains when it opens, not with the page.
+  const loadVerifiedDomains = useCallback(
+    async () => verifiedDomainNames(await queryClient.fetchQuery(addedDomainsQuery())),
+    [queryClient]
+  )
   // The Add address button on show (the card's, or the empty card's), and
   // whether it opened the dialog: focus goes back to it when the dialog
   // closes. A rename opens from a row's menu, which takes focus back itself.
@@ -486,6 +523,7 @@ function SendingAddressesSection({
           // Testable wherever real sends would use the address: a live domain,
           // or any address on a server whose guard permits every From.
           const testable = guardPermitsAny || (!!domain && phase === 'live')
+          const verifyDomain = testable ? null : verifyLinkFor(a.address)
           const items = [
             {
               label: 'Edit name',
@@ -542,6 +580,8 @@ function SendingAddressesSection({
                     >
                       Send test
                     </Button>
+                  ) : verifyDomain ? (
+                    <VerifyDomainLink target={verifyDomain} />
                   ) : undefined
                 }
                 actions={items}
@@ -618,8 +658,11 @@ function SendingAddressesSection({
         target={dialog}
         workspaceName={workspaceName}
         domains={domains}
-        setsUpDomains={addressMode === 'verified-domains'}
+        addressMode={addressMode}
         ownDomains={platformDomains}
+        loadVerifiedDomains={loadVerifiedDomains}
+        // Through the router, as leaving the page goes, so a blocker asks first.
+        onAddDomain={() => void router.navigate(addDomainLink())}
         onClose={() => setDialog(null)}
         finalFocus={() => (openedByAdd.current ? addButton.current : true)}
       />

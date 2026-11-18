@@ -46,7 +46,9 @@ const removeDomainByName = vi.fn()
 const addDomainByName = vi.fn()
 const removeSignIn = vi.fn()
 const setSectionDomain = vi.fn()
+const listDomains = vi.fn(async () => [{ name: 'acme.com', verified: true }])
 vi.mock('@/lib/server/functions/domains', () => ({
+  listDomainsFn: () => listDomains(),
   addDomainFn: addDomainByName,
   checkDomainOwnershipFn: checkOwnership,
   removeDomainFn: removeDomainByName,
@@ -294,12 +296,13 @@ describe('domain view set up', () => {
   const setUp = (title: string) =>
     fireEvent.click(within(useRow(title)).getByRole('button', { name: 'Set up' }))
 
-  it('opens Add address with the domain filled in for email', () => {
+  it('opens Add address on this domain for email, when it is Verified', async () => {
     renderView(rowWith({}))
     setUp('Email sending')
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByRole('heading', { name: 'Add address' })).toBeVisible()
-    expect(within(dialog).getByLabelText('Email address')).toHaveValue('@acme.com')
+    expect(await within(dialog).findByText('@acme.com')).toBeVisible()
+    expect(within(dialog).getByLabelText('Email address')).toHaveValue('')
   })
 
   /** The Add custom domain dialog, its address typed as asked, then Add. */

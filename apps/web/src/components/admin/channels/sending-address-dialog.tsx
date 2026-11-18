@@ -2,16 +2,44 @@
  * Add a sending address, or rename one: its email address (on add) and the
  * sender name its mail goes out under, which starts as the workspace name.
  *
- * As the address is typed the dialog says what its domain means: one already
- * verified sends at once, a new one brings DNS records to add next. Under the
- * name it shows the sender line a recipient will see.
+ * An address is built on the workspace's Verified domains, as Add custom
+ * domain builds a hostname: the local part is typed, the domain picked (tiles
+ * for a few, a select for more) and shown fixed after the field. One Verified
+ * domain is picked already.
+ *
+ * - Cloud (`verified-domains`): only a Verified domain. With none yet, Add
+ *   domain goes to Settings > Domains, for a viewer who may add one.
+ * - Self-hosted (`any`): Type an address reveals the free field, since the
+ *   server's own mail setup is the limit there. With the domains unreadable,
+ *   the free field is all there is, as before.
+ * - `unavailable`: the free field, unchanged.
+ *
+ * As the address forms the dialog says what its sending domain means: one
+ * already live sends at once, one not set up brings DNS records next. Under
+ * the name it shows the sender line a recipient will see.
  */
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { VisibilityTiles } from '@/components/admin/settings/visibility-tiles'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import {
+  MAX_DOMAIN_TILES,
+  NoVerifiedDomains,
+  SuffixField,
+  useVerifiedDomains,
+} from '@/components/admin/settings/verified-domain-picker'
 import {
   Dialog,
   DialogContent,
@@ -24,7 +52,10 @@ import {
   useCreateSendingAddress,
   useUpdateSendingAddressName,
 } from '@/lib/client/mutations/channel-accounts'
-import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
+import type {
+  EmailChannelConfigDTO,
+  SendingDomainDTO,
+} from '@/lib/server/functions/channel-accounts'
 import { errorText } from '@/lib/client/error-text'
 import { addressDomainStanding } from './sending-domain-view'
 
@@ -49,19 +80,35 @@ export const ownDomains = (...addresses: Array<string | null | undefined>): stri
     return domain ? [domain] : []
   })
 
+/** Which addresses the server takes: see `SendingAddressMode`. */
+type AddressMode = EmailChannelConfigDTO['addressMode']
+
 /** What the dialog needs to read an address's domain as the server will. */
 type DomainContext = {
   /** The workspace's sending domains, in whatever state. */
   domains?: SendingDomainDTO[]
   /**
-   * Whether an address on a domain not seen before brings DNS records to add,
-   * and waits for them before it sends: true where the server is shared and
-   * can set domains up.
+   * `verified-domains`: shared, so an address has to be on a Verified domain
+   * and waits for its sending records before it sends. `any`: one workspace,
+   * any address. `unavailable`: no custom addresses. Absent reads as `any`.
    */
-  setsUpDomains?: boolean
+  addressMode?: AddressMode
   /** Domains that need no setup: the platform's own, which it already sends from. */
   ownDomains?: readonly string[]
+  /** Reads the workspace's Verified domains; without it, or when it fails, they are unreadable. */
+  loadVerifiedDomains?: () => Promise<readonly string[]>
+  /** Goes to Settings > Domains with Add domain open; only for a viewer who may add one. */
+  onAddDomain?: () => void
 }
+
+/** The choice that reveals the free field, where the server takes any address. */
+const TYPED = 'typed'
+const TYPE_AN_ADDRESS = 'Type an address'
+const ASK_AN_ADMIN = 'Ask an admin to verify your domain.'
+const ADDRESS_HEADING = 'sending-address-heading'
+
+/** The local part as typed: anything from an @ on is the picked domain's to say. */
+const localPart = (typed: string): string => typed.trim().split('@')[0] ?? ''
 
 export function SendingAddressDialog({
   target,
@@ -119,7 +166,7 @@ function domainNote(
     return { text: `${domain} needs attention. This address can send once it's fixed.` }
   }
   return {
-    text: `${domain} is new here. Next you'll add its DNS records, and email keeps coming from your current address until they're found.`,
+    text: `Next you'll add DNS records so email can send from ${domain}. Until they're found, it comes from your current address.`,
   }
 }
 
@@ -129,8 +176,10 @@ function SendingAddressForm({
   onClose,
   onAdded,
   domains = [],
-  setsUpDomains = false,
+  addressMode = 'any',
   ownDomains = [],
+  loadVerifiedDomains,
+  onAddDomain,
 }: {
   target: SendingAddressDialogTarget
   workspaceName: string
@@ -139,9 +188,16 @@ function SendingAddressForm({
 } & DomainContext) {
   const create = useCreateSendingAddress()
   const rename = useUpdateSendingAddressName()
-  const [address, setAddress] = useState(
-    target.kind === 'add' && target.domain ? `@${target.domain}` : ''
-  )
+  const adding = target.kind === 'add'
+  const setsUpDomains = addressMode === 'verified-domains'
+  // Cloud takes only a Verified domain; self-hosted offers them first.
+  const picks = adding && addressMode !== 'unavailable'
+  const verified = useVerifiedDomains(picks ? loadVerifiedDomains : undefined)
+  const asked = target.kind === 'add' ? target.domain?.toLowerCase() : undefined
+  // The choice made here; until one is, the domain asked for or the only one.
+  const [picked, setPicked] = useState<string | null>(null)
+  const [local, setLocal] = useState('')
+  const [address, setAddress] = useState(asked ? `@${asked}` : '')
   const [senderName, setSenderName] = useState(
     target.kind === 'rename' ? (target.senderName ?? workspaceName) : workspaceName
   )
@@ -149,8 +205,30 @@ function SendingAddressForm({
   // first, the plan's limit), and a toast is gone before it is read.
   const [error, setError] = useState<string | null>(null)
   const pending = create.isPending || rename.isPending
-  const adding = target.kind === 'add'
-  const typed = adding ? address.trim() : target.address
+
+  const offered = picks && Array.isArray(verified) ? verified : []
+  const loading = picks && verified === undefined
+  // The free field alone: where nothing is picked, or self-hosted with the
+  // domains unreadable. Self-hosted also offers it as Type an address.
+  const freeOnly = !picks || (verified === null && !setsUpDomains)
+  const offersTyped = picks && !setsUpDomains
+  const fallbackPick =
+    (asked && offered.includes(asked) ? asked : null) ??
+    (offered.length === 1 ? offered[0] : null) ??
+    (asked && offersTyped && offered.length > 0 ? TYPED : null)
+  const choice = picked ?? fallbackPick ?? ''
+  const typing = freeOnly || choice === TYPED
+  const chosenDomain = !typing && offered.includes(choice) ? choice : null
+  // The empty state stands in for the field: there is nothing to add yet.
+  const noneYet = picks && !loading && offered.length === 0 && !freeOnly && choice !== TYPED
+
+  const typed = !adding
+    ? target.address
+    : typing
+      ? address.trim()
+      : chosenDomain && localPart(local)
+        ? `${localPart(local)}@${chosenDomain}`
+        : ''
   const found = adding ? addressDomainStanding(typed, domains) : null
   // The platform's own domain is neither new nor set up: nothing to say.
   const standing = found && !ownDomains.includes(found.domain) ? found : null
@@ -165,9 +243,16 @@ function SendingAddressForm({
     const name = storedName(senderName, workspaceName)
     if (target.kind === 'add') {
       create.mutate(
-        { address: address.trim(), senderName: name },
+        { address: typed, senderName: name },
         {
           onSuccess: (added) => {
+            // Refused as a value, worded by the server for this dialog: on
+            // Cloud, a domain that is not Verified (any more). Not an error.
+            if (!added.ok) {
+              const { message: refusal } = added
+              setError(refusal)
+              return
+            }
             // The one time adding an address changes what email sends from, so
             // it is said rather than left to be noticed.
             if (added.madeDefault) toast.success(`${added.address} is now your default address.`)
@@ -183,6 +268,130 @@ function SendingAddressForm({
         { onSuccess: onClose, onError: (e) => setError(errorText(e, "Couldn't save the name.")) }
       )
     }
+  }
+
+  const pick = (next: string) => {
+    setPicked(next)
+    setError(null)
+  }
+  const textLink = (label: string, onClick: () => void) => (
+    <button type="button" className={`${INLINE_LINK} text-[13px]`} onClick={onClick}>
+      {label}
+    </button>
+  )
+  const freeField = (labelled: boolean) => (
+    <Input
+      id="sending-address"
+      type="email"
+      value={address}
+      onChange={(e) => {
+        setAddress(e.target.value)
+        setError(null)
+      }}
+      placeholder="help@yourcompany.com"
+      aria-label={labelled ? undefined : 'Email address'}
+      aria-describedby={note ? 'sending-address-domain' : undefined}
+      autoFocus
+    />
+  )
+  const localField = (domain: string, autoFocus = false) => (
+    <SuffixField
+      id="sending-address-local"
+      value={local}
+      suffix={`@${domain}`}
+      label="Email address"
+      placeholder="help"
+      disabled={pending}
+      autoFocus={autoFocus}
+      onChange={(value) => {
+        setLocal(value)
+        setError(null)
+      }}
+    />
+  )
+
+  let addressField: ReactNode = null
+  if (!adding) {
+    addressField = null
+  } else if (loading) {
+    addressField = <Skeleton className="h-9 w-full" aria-busy="true" />
+  } else if (freeOnly) {
+    addressField = freeField(true)
+  } else if (offered.length === 0) {
+    // No Verified domain yet: Add domain first. Self-hosted may type an address instead.
+    addressField = (
+      <div className="space-y-2">
+        {choice === TYPED ? (
+          freeField(true)
+        ) : (
+          <NoVerifiedDomains
+            onAddDomain={
+              onAddDomain && verified !== null
+                ? () => {
+                    onClose()
+                    onAddDomain()
+                  }
+                : undefined
+            }
+            note={setsUpDomains ? ASK_AN_ADMIN : undefined}
+          />
+        )}
+        {offersTyped && choice !== TYPED && textLink(TYPE_AN_ADDRESS, () => pick(TYPED))}
+      </div>
+    )
+  } else if (offered.length === 1) {
+    // One Verified domain: the field alone, the domain fixed after it.
+    addressField =
+      choice === TYPED ? (
+        <div className="space-y-2">
+          {freeField(false)}
+          {textLink(`Use ${offered[0]}`, () => pick(offered[0]))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {localField(offered[0], true)}
+          {offersTyped && textLink(TYPE_AN_ADDRESS, () => pick(TYPED))}
+        </div>
+      )
+  } else {
+    const items = [
+      ...offered.map((name) => ({ value: name, title: name })),
+      ...(offersTyped ? [{ value: TYPED, title: TYPE_AN_ADDRESS }] : []),
+    ]
+    const fieldFor = (value: string) =>
+      value !== choice ? null : (
+        <div className="ps-10">{value === TYPED ? freeField(false) : localField(value, true)}</div>
+      )
+    addressField =
+      items.length > MAX_DOMAIN_TILES ? (
+        <div className="space-y-2">
+          <Select value={choice || null} onValueChange={(next) => pick(String(next))}>
+            <SelectTrigger aria-labelledby={ADDRESS_HEADING} className="w-full" disabled={pending}>
+              <SelectValue placeholder="Choose a domain" />
+            </SelectTrigger>
+            <SelectContent>
+              {items.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {choice === TYPED ? freeField(false) : chosenDomain ? localField(chosenDomain) : null}
+        </div>
+      ) : (
+        <div data-slot="domain-choices">
+          <VisibilityTiles
+            name="sending-domain"
+            value={choice}
+            onChange={pick}
+            options={items}
+            disabled={pending}
+            aria-labelledby={ADDRESS_HEADING}
+            renderAfter={fieldFor}
+          />
+        </div>
+      )
   }
 
   return (
@@ -203,16 +412,14 @@ function SendingAddressForm({
       <div className="space-y-3 py-4">
         {adding && (
           <div className="space-y-1.5">
-            <Label htmlFor="sending-address">Email address</Label>
-            <Input
-              id="sending-address"
-              type="email"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="help@yourcompany.com"
-              aria-describedby={note ? 'sending-address-domain' : undefined}
-              autoFocus
-            />
+            {freeOnly || (choice === TYPED && offered.length === 0) ? (
+              <Label htmlFor="sending-address">Email address</Label>
+            ) : (
+              <p id={ADDRESS_HEADING} className="text-sm font-medium">
+                Email address
+              </p>
+            )}
+            {addressField}
             {note && (
               <p
                 id="sending-address-domain"
@@ -255,9 +462,12 @@ function SendingAddressForm({
         <Button type="button" variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={pending || (adding && !address.trim())}>
-          {!adding ? 'Save' : bringsRecords ? 'Add and show records' : 'Add address'}
-        </Button>
+        {/* Nothing to add while the empty state asks for a domain first. */}
+        {!noneYet && (
+          <Button type="submit" disabled={pending || (adding && !typed)}>
+            {!adding ? 'Save' : bringsRecords ? 'Add and show records' : 'Add address'}
+          </Button>
+        )}
       </DialogFooter>
     </form>
   )
