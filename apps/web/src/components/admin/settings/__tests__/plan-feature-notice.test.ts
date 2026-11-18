@@ -22,14 +22,14 @@ const state = (over: Partial<PlanNoticeState> = {}): PlanNoticeState => ({
 describe('planFeatureNotice', () => {
   it('says the feature is paused and kept after the grace', () => {
     expect(planFeatureNotice('workflows', state())).toEqual({
-      text: "Workflows are paused on the Free plan. They're kept and start again when you upgrade.",
+      text: "Workflows are paused on the Free plan. They're kept and start again when you upgrade. Runs that were waiting have stopped.",
       showPlans: true,
     })
   })
 
   it('names the day it pauses during the grace', () => {
     expect(planFeatureNotice('workflows', state({ phase: 'grace' }))?.text).toBe(
-      'Workflows pause on 25 Nov unless you choose a plan.'
+      'Workflows pause on 25 Nov unless you choose a plan. Runs waiting at that point stop.'
     )
   })
 

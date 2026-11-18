@@ -28,7 +28,10 @@ export interface PlanNoticeState {
   canManageBilling: boolean
 }
 
-const COPY: Record<PlanNoticeFeature, { pausing: string; paused: string; kept: string }> = {
+const COPY: Record<
+  PlanNoticeFeature,
+  { pausing: string; paused: string; kept: string; pausingNote?: string }
+> = {
   webhooks: {
     pausing: 'Webhooks pause',
     paused: 'Webhooks are paused',
@@ -37,7 +40,8 @@ const COPY: Record<PlanNoticeFeature, { pausing: string; paused: string; kept: s
   workflows: {
     pausing: 'Workflows pause',
     paused: 'Workflows are paused',
-    kept: "They're kept and start again when you upgrade.",
+    kept: "They're kept and start again when you upgrade. Runs that were waiting have stopped.",
+    pausingNote: 'Runs waiting at that point stop.',
   },
   integrations: {
     pausing: 'Integrations pause',
@@ -90,7 +94,7 @@ export function planFeatureNotice(
   // A feature set up past the plan is live through the grace and paused after.
   const text =
     state.phase === 'grace' && state.graceEndsAt
-      ? `${copy.pausing} on ${shortDate(state.graceEndsAt)} unless you choose a plan.`
+      ? `${copy.pausing} on ${shortDate(state.graceEndsAt)} unless you choose a plan.${copy.pausingNote ? ` ${copy.pausingNote}` : ''}`
       : `${copy.paused} on ${plan}. ${copy.kept}`
   return { text, showPlans: state.canManageBilling }
 }
