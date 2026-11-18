@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { getTourContextFn, markTourSeenFn } from '@/lib/server/functions/onboarding-progress'
 import { useFeatureFlags, usePermissions } from '@/lib/client/hooks/use-root-context'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { cn } from '@/lib/shared/utils'
@@ -137,11 +138,19 @@ export function ProductTourRunner({
         goals: fetched?.goals ?? ['product_feedback'],
         feedbackPrivate: fetched?.feedbackPrivate ?? false,
         modules: {
-          feedback: isProductEnabled(flags, 'feedback'),
-          changelog: isProductEnabled(flags, 'changelog'),
+          // A module's stop sits on its sidebar item, which is hidden from a
+          // viewer who cannot open the page.
+          feedback:
+            isProductEnabled(flags, 'feedback') && canOpenAdminPage(permissions, '/admin/feedback'),
+          changelog:
+            isProductEnabled(flags, 'changelog') &&
+            canOpenAdminPage(permissions, '/admin/changelog'),
           support: isProductEnabled(flags, 'support'),
-          helpCenter: isProductEnabled(flags, 'helpCenter'),
-          status: isProductEnabled(flags, 'status'),
+          helpCenter:
+            isProductEnabled(flags, 'helpCenter') &&
+            canOpenAdminPage(permissions, '/admin/help-center'),
+          status:
+            isProductEnabled(flags, 'status') && canOpenAdminPage(permissions, '/admin/status'),
         },
         permissions,
         narrow: window.matchMedia?.(NARROW_QUERY).matches ?? false,

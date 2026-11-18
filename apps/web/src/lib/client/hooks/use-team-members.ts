@@ -18,3 +18,7 @@ export function teamMembersQuery() {
 export function useTeamMembers(options?: { enabled?: boolean }) {
   return useQuery({ ...teamMembersQuery(), enabled: options?.enabled })
 }
+
+// The admin pages' gated roster lives with the other gated catalogues, so a
+// page that reads several of them loads one module.
+export { useAdminTeamMembers } from '@/lib/client/hooks/use-admin-catalogues'

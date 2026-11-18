@@ -19,6 +19,11 @@ const hoisted = vi.hoisted(() => ({
   mockGetTierLimits: vi.fn(),
   mockGetWorkspaceSettings: vi.fn(),
   mockFetchCatalogue: vi.fn(),
+  mockWarn: vi.fn(),
+}))
+
+vi.mock('@/lib/server/logger', () => ({
+  logger: { child: () => ({ warn: hoisted.mockWarn, debug: vi.fn(), error: vi.fn() }) },
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
@@ -67,6 +72,33 @@ beforeEach(async () => {
   hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: null } })
   if (handlers.length === 0) await import('../plan-notice')
   getPlanNoticeHandler = handlers[0]
+})
+
+describe('getPlanNotice — a failed read', () => {
+  it('logs a warning and still fails, so the layout can show no notice', async () => {
+    hoisted.mockRequireAuth.mockResolvedValueOnce({
+      user: { id: 'usr_admin' },
+      principal: { id: 'prn_admin', role: 'admin' },
+      permissions: [PERMISSIONS.MEMBER_VIEW],
+    })
+    const failure = new Error('settings read failed')
+    hoisted.mockGetTierLimits.mockRejectedValueOnce(failure)
+
+    await expect(getPlanNoticeHandler()).rejects.toThrow('settings read failed')
+
+    expect(hoisted.mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: failure }),
+      expect.any(String)
+    )
+  })
+
+  it('does not log a refused caller', async () => {
+    hoisted.mockRequireAuth.mockRejectedValueOnce(new Error('Access denied: Not a team member'))
+
+    await expect(getPlanNoticeHandler()).rejects.toThrow(/denied/i)
+
+    expect(hoisted.mockWarn).not.toHaveBeenCalled()
+  })
 })
 
 describe('getPlanNotice — team-member gate', () => {

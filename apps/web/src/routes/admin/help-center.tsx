@@ -3,6 +3,7 @@ import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 import { helpCenterSearchSchema } from '@/components/admin/help-center/help-center-search'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { AdminPageGate } from '@/components/admin/admin-page-gate'
 
 export const Route = createFileRoute('/admin/help-center')({
   head: adminPageHead('Help center'),
@@ -17,5 +18,9 @@ export const Route = createFileRoute('/admin/help-center')({
 })
 
 function HelpCenterLayout() {
-  return <Outlet />
+  return (
+    <AdminPageGate page="/admin/help-center">
+      <Outlet />
+    </AdminPageGate>
+  )
 }

@@ -14,7 +14,7 @@ import {
   flattenUsers,
 } from '@/lib/client/hooks/use-users-queries'
 import { useRemovePortalUser } from '@/lib/client/mutations'
-import { useSegments, type SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
+import { useAdminSegments, type SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
 import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
 import {
@@ -138,7 +138,7 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
   })
 
   // Segments data
-  const { data: segments, isLoading: isLoadingSegments } = useSegments()
+  const { data: segments, isLoading: isLoadingSegments } = useAdminSegments()
   const { data: customAttributes } = useUserAttributes()
   const { data: companyAttributes } = useCompanyAttributes()
 

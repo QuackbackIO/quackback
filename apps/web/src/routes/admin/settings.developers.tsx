@@ -2,7 +2,8 @@ import { lazy, Suspense } from 'react'
 import { ClientOnly, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { usePermission } from '@/lib/client/hooks/use-permission'
 import { z } from 'zod'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -37,6 +38,14 @@ const searchSchema = z.object({
 
 type ApiTab = 'keys' | 'webhooks' | 'mcp'
 
+/** The tabs beyond Keys a viewer may open, by the permission each one's read needs. */
+function developerTabs(permissions: readonly string[] | undefined) {
+  return {
+    webhooks: !!permissions?.includes(PERMISSIONS.WEBHOOK_VIEW),
+    mcp: !!permissions?.includes(PERMISSIONS.SETTINGS_MANAGE),
+  }
+}
+
 export const Route = createFileRoute('/admin/settings/developers')({
   head: adminPageHead('Developers settings'),
   validateSearch: searchSchema,
@@ -44,16 +53,19 @@ export const Route = createFileRoute('/admin/settings/developers')({
     assertRoutePermission(context.permissions, PERMISSIONS.API_KEY_MANAGE)
 
     const { queryClient } = context
-    // All three tabs are preloaded so switching tabs never round-trips
-    // for data: every payload is small and admin-only.
+    // Every tab the viewer may open is preloaded so switching tabs never
+    // round-trips for data: every payload is small and admin-only. Webhooks
+    // need webhook.view and the MCP settings settings.manage, neither of which
+    // api_key.manage implies; without one, its tab is not shown.
     const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const tabs = developerTabs(context.permissions)
     const ensure = readBatch(queryClient)
     const [, entitlements] = await Promise.all([
       Promise.all([
         ensure(adminQueries.apiKeys()),
-        ensure(adminQueries.webhooks()),
-        ensure(settingsQueries.developerConfig()),
+        tabs.webhooks ? ensure(adminQueries.webhooks()) : undefined,
+        tabs.mcp ? ensure(settingsQueries.developerConfig()) : undefined,
       ]),
       listEntitlementsFn(),
       ensureBillingCatalogue(queryClient, context.billingEnabled),
@@ -66,14 +78,23 @@ export const Route = createFileRoute('/admin/settings/developers')({
 
 function ApiPage() {
   const search = Route.useSearch()
-  const tab: ApiTab = search.tab ?? 'keys'
   const navigate = useNavigate()
+  const canViewWebhooks = usePermission(PERMISSIONS.WEBHOOK_VIEW)
+  const canManageMcp = usePermission(PERMISSIONS.SETTINGS_MANAGE)
+  const requested: ApiTab = search.tab ?? 'keys'
+  const tab: ApiTab =
+    (requested === 'webhooks' && !canViewWebhooks) || (requested === 'mcp' && !canManageMcp)
+      ? 'keys'
+      : requested
 
   const apiKeysQuery = useSuspenseQuery(adminQueries.apiKeys())
   const workspaceKeys = apiKeysQuery.data.keys.filter((k) => k.kind === 'workspace')
   const personalKeys = apiKeysQuery.data.keys.filter((k) => k.kind === 'personal')
-  const webhooksQuery = useSuspenseQuery(adminQueries.webhooks())
-  const developerConfigQuery = useSuspenseQuery(settingsQueries.developerConfig())
+  const webhooksQuery = useQuery({ ...adminQueries.webhooks(), enabled: canViewWebhooks })
+  const developerConfigQuery = useQuery({
+    ...settingsQueries.developerConfig(),
+    enabled: canManageMcp,
+  })
 
   const baseUrl = useBaseUrl()
   const { webhooksEntitled, mcpEntitled } = Route.useLoaderData()
@@ -98,8 +119,8 @@ function ApiPage() {
       >
         <TabsList>
           <TabsTrigger value="keys">Keys</TabsTrigger>
-          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
-          <TabsTrigger value="mcp">MCP</TabsTrigger>
+          {canViewWebhooks && <TabsTrigger value="webhooks">Webhooks</TabsTrigger>}
+          {canManageMcp && <TabsTrigger value="mcp">MCP</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="keys" className="space-y-6">
@@ -114,27 +135,31 @@ function ApiPage() {
           <ApiReferenceCard apiBaseUrl={apiBaseUrl} />
         </TabsContent>
 
-        <TabsContent value="webhooks" className="space-y-6">
-          <WebhooksSettings webhooks={webhooksQuery.data} entitled={webhooksEntitled} />
-          <Suspense fallback={null}>
-            <WebhookVerificationGuide />
-          </Suspense>
-        </TabsContent>
+        {webhooksQuery.data && (
+          <TabsContent value="webhooks" className="space-y-6">
+            <WebhooksSettings webhooks={webhooksQuery.data} entitled={webhooksEntitled} />
+            <Suspense fallback={null}>
+              <WebhookVerificationGuide />
+            </Suspense>
+          </TabsContent>
+        )}
 
-        <TabsContent value="mcp" className="space-y-6">
-          <SettingsCard>
-            <McpServerSettings
-              entitled={mcpEntitled}
-              initialEnabled={developerConfigQuery.data.mcpEnabled}
-              initialDynamicRegistrationEnabled={
-                developerConfigQuery.data.oauthDynamicClientRegistrationEnabled
-              }
-            />
-          </SettingsCard>
-          <Suspense fallback={null}>
-            <McpSetupGuide endpointUrl={mcpEndpointUrl} />
-          </Suspense>
-        </TabsContent>
+        {developerConfigQuery.data && (
+          <TabsContent value="mcp" className="space-y-6">
+            <SettingsCard>
+              <McpServerSettings
+                entitled={mcpEntitled}
+                initialEnabled={developerConfigQuery.data.mcpEnabled}
+                initialDynamicRegistrationEnabled={
+                  developerConfigQuery.data.oauthDynamicClientRegistrationEnabled
+                }
+              />
+            </SettingsCard>
+            <Suspense fallback={null}>
+              <McpSetupGuide endpointUrl={mcpEndpointUrl} />
+            </Suspense>
+          </TabsContent>
+        )}
       </Tabs>
     </SettingsPage>
   )

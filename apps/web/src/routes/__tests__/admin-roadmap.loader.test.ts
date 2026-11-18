@@ -6,6 +6,7 @@
  */
 import { QueryClient } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ALL_PERMISSIONS } from '@/lib/shared/permissions'
 
 const { ran } = vi.hoisted(() => ({ ran: [] as string[] }))
 
@@ -66,6 +67,7 @@ const runLoader = (queryClient: QueryClient) =>
       queryClient,
       user: { name: 'Ada', email: 'ada@example.com' },
       principal: { id: 'principal_1' },
+      permissions: ALL_PERMISSIONS,
     },
     location: { search: {} },
   })

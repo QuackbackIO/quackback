@@ -345,6 +345,28 @@ describe('API Responses', () => {
       expect(handleDomainError(err).status).toBe(404)
     })
 
+    it.each([
+      ['TICKET_NOT_FOUND', 'Ticket ticket_123 not found', 'Ticket not found'],
+      ['CONVERSATION_NOT_FOUND', 'Conversation not found', 'Conversation not found'],
+    ])('should name the resource once for %s', async (code, message, expected) => {
+      const response = handleDomainError(new NotFoundError(code, message))
+      expect(response.status).toBe(404)
+      const body = (await response.json()) as ErrorBody
+      expect(body.error).toEqual({ code: 'NOT_FOUND', message: expected })
+    })
+
+    it('should not say not found twice for an unmapped code whose message already says it', async () => {
+      const response = handleDomainError(new NotFoundError('WIDGET_NOT_FOUND', 'Widget not found'))
+      const body = (await response.json()) as ErrorBody
+      expect(body.error.message).toBe('Widget not found')
+    })
+
+    it('should still name a bare resource in an unmapped not-found message', async () => {
+      const response = handleDomainError(new NotFoundError('WIDGET_NOT_FOUND', 'Widget'))
+      const body = (await response.json()) as ErrorBody
+      expect(body.error.message).toBe('Widget not found')
+    })
+
     // WWW-Authenticate header on 401
     it('should include WWW-Authenticate header on unauthorizedResponse', () => {
       const response = handleDomainError({ code: 'API_UNAUTHORIZED', message: 'Invalid key' })

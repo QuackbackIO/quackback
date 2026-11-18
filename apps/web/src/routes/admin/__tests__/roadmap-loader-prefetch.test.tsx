@@ -11,6 +11,7 @@ import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ALL_PERMISSIONS } from '@/lib/shared/permissions'
 import type { PostStatusId, RoadmapId } from '@quackback/ids'
 
 const calls: string[] = []
@@ -88,6 +89,7 @@ async function fetchesAfterLoader(
       queryClient: client,
       user: { name: 'Ada', email: 'ada@example.com' },
       principal: { id: 'principal_1', role: 'admin' },
+      permissions: ALL_PERMISSIONS,
     },
     location: { search },
   })
@@ -137,6 +139,7 @@ describe('/admin/roadmap loader', () => {
       queryClient: client,
       user: { name: 'Ada', email: 'ada@example.com' },
       principal: { id: 'principal_1', role: 'admin' },
+      permissions: ALL_PERMISSIONS,
     }
     await loader({ context, location: { search: { search: 'dark mode' } } })
     await loader({ context, location: { search: { roadmap: 'roadmap_dates' } } })

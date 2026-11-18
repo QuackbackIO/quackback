@@ -12,6 +12,8 @@ import {
   statusComponents,
   statusIncidents,
   statusSubscriptions,
+  teamMembers,
+  teams,
   user,
 } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -203,6 +205,35 @@ describe('whether Home has real data', () => {
     }
     expect(await asksForShipped(false)).toBe(false)
     expect(await asksForShipped(true)).toBe(true)
+  })
+
+  it('lets a teammate who sees only their own and their team’s conversations open Home', async () => {
+    const support = { ...flags, helpCenter: false, changelog: false, supportInbox: true }
+    const scoped = {
+      principalId,
+      role: 'member',
+      permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+    } as unknown as Actor
+    const [mine, other] = await testDb
+      .insert(teams)
+      .values([{ name: 'Acme billing' }, { name: 'Acme shipping' }])
+      .returning()
+    await testDb.insert(teamMembers).values({ teamId: mine!.id, principalId })
+    const visitorPrincipalId = await customer()
+
+    await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId, channel: 'messenger', assignedTeamId: other!.id })
+    expect(
+      (await getAdminOverview({ actor: scoped, flags: support, probeRealData: true })).hasRealData
+    ).toBe(false)
+
+    await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId, channel: 'messenger', assignedTeamId: mine!.id })
+    expect(
+      (await getAdminOverview({ actor: scoped, flags: support, probeRealData: true })).hasRealData
+    ).toBe(true)
   })
 
   it('reports real data without probing once the workspace is past its launch window', async () => {

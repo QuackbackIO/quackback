@@ -55,6 +55,7 @@ import {
   canOpenSettings,
 } from '@/components/admin/settings/settings-nav-sections'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { ENTITY_ICONS } from '@/components/admin/entity-icon'
@@ -184,9 +185,19 @@ const RAIL_ITEMS: RailItem[] = [
   { label: 'Users', labelId: 'admin.nav.users', href: '/admin/users', icon: UsersIcon },
 ]
 
-/** The rail items a viewer sees: the products that are on. */
-export function buildRailItems(flags: Partial<FeatureFlags> | undefined): RailItem[] {
-  return RAIL_ITEMS.filter((item) => !item.product || isProductEnabled(flags, item.product))
+/**
+ * The rail items a viewer sees: the products that are on, and the pages the
+ * viewer can open (the same check the pages themselves make).
+ */
+export function buildRailItems(
+  flags: Partial<FeatureFlags> | undefined,
+  permissions: ReadonlySet<string> | readonly string[]
+): RailItem[] {
+  return RAIL_ITEMS.filter(
+    (item) =>
+      (!item.product || isProductEnabled(flags, item.product)) &&
+      canOpenAdminPage(permissions, item.href)
+  )
 }
 
 /**
@@ -328,7 +339,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   const orgLogo = branding?.logoUrl ?? branding?.headerLogoUrl ?? '/logo.png'
   const orgName = branding?.name ?? 'Quackback'
 
-  const railItems = buildRailItems(flags)
+  const railItems = buildRailItems(flags, permissions)
   // Posts and comments waiting for review. Shown on Feedback when there are any.
   const feedbackEnabled = isProductEnabled(flags, 'feedback')
   const canReviewPosts = usePermission(PERMISSIONS.POST_APPROVE)
@@ -373,7 +384,8 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   const siblingsQuery = useQuery({
     queryKey: ['admin', 'owner-workspaces'],
     queryFn: () => listOwnerWorkspacesFn(),
-    enabled: Boolean(billingEnabled),
+    // The list needs settings.manage; anyone else would only be refused.
+    enabled: Boolean(billingEnabled) && permissions.has(PERMISSIONS.SETTINGS_MANAGE),
   })
   const siblings = siblingsQuery.data ?? []
 

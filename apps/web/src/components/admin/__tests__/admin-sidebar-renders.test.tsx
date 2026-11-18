@@ -150,7 +150,11 @@ describe('AdminSidebar renders', () => {
   it('renders nothing for a search-only navigation', async () => {
     adminAnswer = {
       principal: { role: 'admin' },
-      permissions: [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.WORKFLOW_MANAGE],
+      permissions: [
+        PERMISSIONS.AI_CUSTOMER_MANAGE,
+        PERMISSIONS.WORKFLOW_MANAGE,
+        PERMISSIONS.POST_VIEW_PRIVATE,
+      ],
     }
     const { router, container } = await mount()
     expect(activeHrefs(container)).toEqual(['/admin/feedback'])
@@ -169,7 +173,11 @@ describe('AdminSidebar renders', () => {
   it('moves the highlight between pages without rendering the items again', async () => {
     adminAnswer = {
       principal: { role: 'admin' },
-      permissions: [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.WORKFLOW_MANAGE],
+      permissions: [
+        PERMISSIONS.AI_CUSTOMER_MANAGE,
+        PERMISSIONS.WORKFLOW_MANAGE,
+        PERMISSIONS.POST_VIEW_PRIVATE,
+      ],
     }
     const { router, container } = await mount()
     const before = { ...iconRenders }

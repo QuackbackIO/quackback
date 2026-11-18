@@ -11,6 +11,7 @@ import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ALL_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 const calls: string[] = []
 function stub<T>(name: string, value: T) {
@@ -52,7 +53,7 @@ const { usePortalInvites } = await import('@/components/admin/users/use-portal-i
 const { companiesDirectoryQueries } = await import('@/lib/client/queries/users-page')
 
 type LoaderFn = (ctx: {
-  context: { principal: { role: string }; queryClient: QueryClient }
+  context: { principal: { role: string }; permissions: PermissionKey[]; queryClient: QueryClient }
 }) => Promise<unknown>
 const loader = (Route as unknown as { options: { loader: LoaderFn } }).options.loader
 
@@ -86,7 +87,9 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 async function mountAfterLoader(role: string) {
-  await loader({ context: { principal: { role }, queryClient: client } })
+  await loader({
+    context: { principal: { role }, permissions: ALL_PERMISSIONS, queryClient: client },
+  })
   const warmed = [...calls].sort()
   calls.length = 0
   renderHook(() => usePageReads(role), { wrapper })

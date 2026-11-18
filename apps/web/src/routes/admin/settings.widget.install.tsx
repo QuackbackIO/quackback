@@ -15,7 +15,10 @@ export const Route = createFileRoute('/admin/settings/widget/install')({
     await Promise.all([
       ensure(settingsQueries.widgetSecret()),
       ensure(settingsQueries.widgetConfig()),
-      ensure(adminQueries.onboardingStatus()),
+      // The install status needs member.view, which settings.manage does not.
+      context.permissions?.includes(PERMISSIONS.MEMBER_VIEW)
+        ? ensure(adminQueries.onboardingStatus())
+        : undefined,
     ])
   },
   component: WidgetInstallPage,

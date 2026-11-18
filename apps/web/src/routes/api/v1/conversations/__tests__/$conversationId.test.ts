@@ -84,6 +84,10 @@ describe('GET /api/v1/conversations/:id', () => {
       params: { conversationId: CONV_ID },
     })
     expect(res.status).toBe(404)
+    expect((await res.json()).error).toEqual({
+      code: 'NOT_FOUND',
+      message: 'Conversation not found',
+    })
   })
 
   it('400s on a malformed id', async () => {

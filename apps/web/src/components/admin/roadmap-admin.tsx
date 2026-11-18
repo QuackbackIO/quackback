@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from '@tanstack/react-router'
-import { useSuspenseQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
+import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import {
   DndContext,
   DragOverlay,
@@ -24,8 +24,8 @@ import { useRoadmapDateBuckets } from '@/lib/client/hooks/use-roadmaps-query'
 import { useRoadmapSelection } from './use-roadmap-selection'
 import { useRoadmapFilters } from './roadmap/use-roadmap-filters'
 import { useChangePostStatusId, useSetPostEta } from '@/lib/client/mutations/posts'
-import { useSegments } from '@/lib/client/hooks/use-segments-queries'
-import { adminQueries } from '@/lib/client/queries/admin'
+import { useAdminSegments } from '@/lib/client/hooks/use-segments-queries'
+import { useAdminBoards, useAdminTags } from '@/lib/client/hooks/use-admin-catalogues'
 import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import { Route } from '@/routes/admin/roadmap'
 import type { RoadmapViewPost, RoadmapPostsListResult } from '@/lib/shared/types'
@@ -55,9 +55,9 @@ export function RoadmapAdmin() {
     useRoadmapFilters()
 
   // Reference data for filter UI (pre-fetched in route loader)
-  const { data: boards } = useSuspenseQuery(adminQueries.boards())
-  const { data: tags } = useSuspenseQuery(adminQueries.tags())
-  const { data: segments } = useSegments()
+  const { data: boards = [] } = useAdminBoards()
+  const { data: tags = [] } = useAdminTags()
+  const { data: segments } = useAdminSegments()
   const { data: roadmaps } = useRoadmaps()
   const { selectedRoadmapId, setSelectedRoadmap } = useRoadmapSelection(roadmaps)
   const changeStatus = useChangePostStatusId()

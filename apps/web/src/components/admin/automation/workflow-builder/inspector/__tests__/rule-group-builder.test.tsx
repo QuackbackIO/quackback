@@ -19,7 +19,7 @@ import { RuleGroupBuilder } from '../rule-group-builder'
 import type { GraphCondition } from '../../../workflow-graph'
 
 vi.mock('@/lib/client/hooks/use-team-members', () => ({
-  useTeamMembers: () => ({ data: [] }),
+  useAdminTeamMembers: () => ({ data: [] }),
 }))
 vi.mock('@/components/admin/conversation/inbox-nav-sidebar', () => ({
   useInboxTeams: () => ({ data: [] }),

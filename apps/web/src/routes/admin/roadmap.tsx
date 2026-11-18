@@ -4,6 +4,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import type { RoadmapId } from '@quackback/ids'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { readBatch } from '@/lib/client/queries/read-batch'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { RoadmapAdmin } from '@/components/admin/roadmap-admin'
 import { RoadmapModal } from '@/components/admin/roadmap-modal'
 import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
@@ -59,13 +60,16 @@ export const Route = createFileRoute('/admin/roadmap')({
       queryClient: typeof context.queryClient
     }
 
-    // The lists the columns, filters and cards read, in one request.
+    // The lists the columns, filters and cards read, in one request. Each
+    // needs a permission of its own, so each is warmed only for a viewer the
+    // server will serve it to.
+    const can = (permission: PermissionKey) => (context.permissions ?? []).includes(permission)
     const ensure = readBatch(queryClient)
     await Promise.all([
-      ensure(adminQueries.statuses()),
-      ensure(adminQueries.boards()),
-      ensure(adminQueries.tags()),
-      ensure(adminQueries.segments()),
+      can(PERMISSIONS.STATUS_VIEW) ? ensure(adminQueries.statuses()) : undefined,
+      can(PERMISSIONS.BOARD_MANAGE) ? ensure(adminQueries.boards()) : undefined,
+      can(PERMISSIONS.TAG_VIEW) ? ensure(adminQueries.tags()) : undefined,
+      can(PERMISSIONS.SEGMENT_VIEW) ? ensure(adminQueries.segments()) : undefined,
       warmRoadmapBoard(queryClient, location.search as Record<string, unknown>).catch(
         () => undefined
       ),

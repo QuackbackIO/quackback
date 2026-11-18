@@ -18,12 +18,16 @@ import { TrustedSendersCard } from '@/components/admin/settings/trusted-senders-
 import { SupportInboxSettings } from '@/components/admin/channels/email-channel-settings'
 import { useHasPermission } from '@/lib/client/hooks/use-root-context'
 import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 /** Rows of email activity shown before "View all activity". */
 const ACTIVITY_PREVIEW_ROWS = 5
 
 export function EmailChannelPage() {
   const canManageSending = useHasPermission(EMAIL_SENDING_PERMISSION)
+  // The spam filter and trusted senders are read and saved with
+  // settings.manage, which channel_account.manage does not imply.
+  const canManageSpamFilter = useHasPermission(PERMISSIONS.SETTINGS_MANAGE)
   return (
     <SettingsPage
       page="/admin/settings/channels/email"
@@ -34,8 +38,8 @@ export function EmailChannelPage() {
       ]}
     >
       <SupportInboxSettings canManageSending={canManageSending} />
-      <AiSpamFilterCard />
-      <TrustedSendersSection />
+      {canManageSpamFilter && <AiSpamFilterCard />}
+      {canManageSpamFilter && <TrustedSendersSection />}
       <AutoAckCard />
       <EmailActivityCard />
     </SettingsPage>

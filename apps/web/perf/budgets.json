@@ -141,8 +141,8 @@
     "ui:admin-open-post": {
       "dbQueries": 17,
       "serverRequests": 1,
-      "requests": 73,
-      "jsRequests": 71,
+      "requests": 74,
+      "jsRequests": 72,
       "jsKB": 305.6,
       "htmlTransferKB": 0,
       "componentRenders": 562
@@ -159,8 +159,8 @@
     "ui:admin-nav-feedback-to-roadmap": {
       "dbQueries": 18,
       "serverRequests": 2,
-      "requests": 64,
-      "jsRequests": 62,
+      "requests": 65,
+      "jsRequests": 63,
       "jsKB": 115.2,
       "htmlTransferKB": 0,
       "componentRenders": 455
@@ -177,8 +177,8 @@
     "ui:admin-hover-nav-feedback-to-roadmap": {
       "dbQueries": 18,
       "serverRequests": 2,
-      "requests": 64,
-      "jsRequests": 62,
+      "requests": 65,
+      "jsRequests": 63,
       "jsKB": 115.2,
       "htmlTransferKB": 0,
       "componentRenders": 455

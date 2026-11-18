@@ -6,7 +6,7 @@
  */
 import { QueryClient } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ALL_PERMISSIONS } from '@/lib/shared/permissions'
 
 const calls: string[] = []
 function stub<T>(name: string, value: T) {
@@ -61,8 +61,8 @@ beforeEach(() => {
 })
 
 describe('warmFeedbackPage', () => {
-  it('warms the segment filter and the viewer votes with the rest of the page', async () => {
-    await warmFeedbackPage(client, [PERMISSIONS.SEGMENT_VIEW])
+  it('warms the segment filter and the viewer votes with the rest of the page, for a viewer who may read all of it', async () => {
+    await warmFeedbackPage(client, ALL_PERMISSIONS)
 
     expect(client.getQueryData(adminQueries.segments().queryKey)).toEqual([{ id: 'segment_1' }])
     expect(client.getQueryData(votedPostsKeys.byWorkspace())).toEqual(new Set(['post_1']))
