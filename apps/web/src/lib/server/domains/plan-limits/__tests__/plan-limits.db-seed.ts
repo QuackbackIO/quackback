@@ -31,6 +31,8 @@ import {
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
+import { featureFlagsWrite } from '@/lib/server/domains/settings/settings.service'
+import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 
 export const DAY = 24 * 60 * 60 * 1000
 
@@ -191,4 +193,40 @@ export function projection(
     renewalAt: null,
     cancellationAt: null,
   }
+}
+
+/**
+ * Every column the running-feature counts read back to what a new workspace
+ * stores: no widget, portal or help center config, no custom CSS, no custom
+ * domains, and the default modules (Support off).
+ */
+export async function freshDefaults(settingsId: WorkspaceId): Promise<void> {
+  await testDb
+    .update(settings)
+    .set({
+      widgetConfig: null,
+      portalConfig: null,
+      helpCenterConfig: null,
+      customCss: null,
+      cloudIdentity: null,
+    } as never)
+    .where(eq(settings.id, settingsId))
+  await invalidateSettingsCache()
+}
+
+/** Turn product modules on the way Settings > General does, side effects included. */
+export async function turnOn(settingsId: WorkspaceId, flags: Partial<FeatureFlags>): Promise<void> {
+  const [row] = await testDb.select().from(settings).where(eq(settings.id, settingsId))
+  const { patch } = featureFlagsWrite(row!, flags)
+  await testDb.update(settings).set(patch).where(eq(settings.id, settingsId))
+  await invalidateSettingsCache()
+}
+
+/** Write a column straight, as a settings save would, and drop the caches. */
+export async function setColumns(
+  settingsId: WorkspaceId,
+  values: Partial<typeof settings.$inferInsert>
+): Promise<void> {
+  await testDb.update(settings).set(values).where(eq(settings.id, settingsId))
+  await invalidateSettingsCache()
 }

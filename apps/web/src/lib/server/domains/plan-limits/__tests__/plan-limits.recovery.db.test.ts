@@ -9,6 +9,10 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import { boards, eq, inArray, isNull, sql, statusComponents, webhooks } from '@/lib/server/db'
 import type { BoardId, PrincipalId, WorkspaceId } from '@quackback/ids'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
+import { DISABLED_CLOUD_CONFIG } from '@/lib/server/domains/settings/cloud/cloud.types'
+import { planFeatureSet } from '../plan-limits.features'
+
+const ALL_FEATURES = planFeatureSet(OSS_TIER_LIMITS.features, DISABLED_CLOUD_CONFIG)
 
 const cache = vi.hoisted(() => new Map<string, unknown>())
 
@@ -28,6 +32,7 @@ vi.mock('@/lib/server/db', async (original) => ({
 }))
 
 import {
+  detectPlanLimits,
   getPlanLimits,
   invalidatePlanLimits,
   isBoardOpen,
@@ -195,6 +200,10 @@ describe.skipIf(!fixture.available)('plan limits recovery (real DB)', () => {
     // A config path still sees the plan's own answer.
     expect(await isFeatureLive('webhooks')).toBe(false)
     await addWebhook()
+    // Set up on a plan that never had webhooks: it never ran, so nothing pauses.
+    expect((await getPlanLimits()).phase).toBe('ok')
+    // The drop from a plan that had them.
+    await detectPlanLimits({ previous: { plan: 'pro', features: ALL_FEATURES } })
     expect((await getPlanLimits()).phase).toBe('grace')
     expect(await isFeaturePaused('webhooks')).toBe(false)
     later(8)

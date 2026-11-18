@@ -1,18 +1,38 @@
 /**
- * The plan limits loaders against a real database: what counts as set up
- * (the custom domain in use across the identity projection and every section
- * hostname, custom CSS, active webhooks) and which rows are candidates for
- * the choosers (never a deleted board or status component).
+ * The plan limits loaders against a real database: what counts as running
+ * (custom domains serving visitors, custom CSS beyond the generated theme,
+ * the assistant only where it answers, translation only with a model, active
+ * webhooks and integrations, registered sign-in providers, live workflows)
+ * and which rows are candidates for the choosers (never a deleted board or
+ * status component).
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { boards, eq, sql, statusComponents, webhooks } from '@/lib/server/db'
+import {
+  boards,
+  eq,
+  identityProvider,
+  integrationPlatformCredentials,
+  integrations,
+  isNull,
+  sql,
+  statusComponents,
+  webhooks,
+  workflows,
+} from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
-import type { StoredCloudIdentityProjection } from '@/lib/shared/db-types'
+import { generateReadableCSS } from '@/lib/shared/theme/generator'
+import { unbrandedTheme } from '@/lib/shared/theme/expand'
 
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
+vi.mock('@/lib/server/cache', async (original) => ({
+  ...(await original<typeof import('@/lib/server/cache')>()),
+  cacheGet: async () => null,
+  cacheSet: async () => {},
+  cacheDel: async () => {},
 }))
 
 import {
@@ -26,34 +46,20 @@ import { addBoard, addOwner, addStatusComponent, ensureSettings } from './plan-l
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
 
-const NOW = '2026-11-01T00:00:00.000Z'
-
-function identity(...hostnames: string[]): StoredCloudIdentityProjection {
-  return {
-    version: 1,
-    displayName: 'Acme',
-    canonicalOrigin: 'https://acme.example.com',
-    platformHostname: 'acme.example.com',
-    updatedAt: NOW,
-    customDomains: hostnames.map((hostname) => ({
-      hostname,
-      readiness: 'ready',
-      isPrimary: false,
-      updatedAt: NOW,
-    })),
-  } as unknown as StoredCloudIdentityProjection
-}
-
 function sources(over: Partial<ConfiguredFeatureSources> = {}): ConfiguredFeatureSources {
   return {
     customCss: null,
-    cloudIdentity: null,
-    sectionHostnames: [],
+    liveCustomDomains: [],
     autoTranslate: false,
     assistantResponds: false,
+    visitorChatLive: false,
+    assistantModel: false,
+    translationModel: false,
     ...over,
   }
 }
+
+const ANSWERING = { assistantResponds: true, assistantModel: true, visitorChatLive: true }
 
 describe.skipIf(!fixture.available)('plan limits loaders (real DB)', () => {
   let ownerId: PrincipalId
@@ -66,34 +72,89 @@ describe.skipIf(!fixture.available)('plan limits loaders (real DB)', () => {
   })
   afterEach(() => fixture.rollback())
 
-  it('counts a custom domain set only on a section', async () => {
+  it('counts each live custom hostname once', async () => {
     const configured = await loadConfiguredFeatures(
-      sources({ sectionHostnames: ['help.acme.com'] })
+      sources({ liveCustomDomains: ['help.acme.com', 'status.acme.com', 'help.acme.com'] })
     )
-    expect(configured.customDomain).toBe(1)
-  })
-
-  it('counts each hostname once across the identity projection and the sections', async () => {
-    const configured = await loadConfiguredFeatures(
-      sources({
-        cloudIdentity: identity('feedback.acme.com', 'help.acme.com'),
-        sectionHostnames: ['help.acme.com', 'status.acme.com'],
-      })
-    )
-    expect(configured.customDomain).toBe(3)
+    expect(configured.customDomain).toBe(2)
     expect((await loadConfiguredFeatures(sources())).customDomain).toBe(0)
   })
 
-  it('counts custom CSS only when it has content, and the assistant and translation only when on', async () => {
+  it('counts custom CSS only beyond the theme the appearance editor generates', async () => {
     expect((await loadConfiguredFeatures(sources({ customCss: '  \n ' }))).customCss).toBe(0)
-    const on = await loadConfiguredFeatures(
-      sources({ customCss: 'body { color: red }', assistantResponds: true, autoTranslate: true })
-    )
-    expect(on).toMatchObject({ customCss: 1, aiAssistant: 1, aiArticleTranslation: 1 })
-    expect(await loadConfiguredFeatures(sources())).toMatchObject({
-      aiAssistant: 0,
-      aiArticleTranslation: 0,
+    const generated = generateReadableCSS(unbrandedTheme('light'), unbrandedTheme('dark'), 'user')
+    expect((await loadConfiguredFeatures(sources({ customCss: generated }))).customCss).toBe(0)
+    const extra = `${generated}\n\n.acme-card { border-radius: 0 }`
+    expect((await loadConfiguredFeatures(sources({ customCss: extra }))).customCss).toBe(1)
+  })
+
+  it('counts the assistant only when replies are on, a model is set and a visitor can reach it', async () => {
+    expect((await loadConfiguredFeatures(sources(ANSWERING))).aiAssistant).toBe(1)
+    for (const off of ['assistantResponds', 'assistantModel', 'visitorChatLive'] as const) {
+      const configured = await loadConfiguredFeatures(sources({ ...ANSWERING, [off]: false }))
+      expect(configured.aiAssistant, off).toBe(0)
+    }
+  })
+
+  it('counts the assistant a live workflow hands conversations to, with no chat surface open', async () => {
+    const closed = sources({ ...ANSWERING, visitorChatLive: false })
+    const workflow = (status: 'live' | 'draft', type: string) => ({
+      name: 'Acme triage',
+      class: 'customer_facing' as const,
+      status,
+      triggerType: 'conversation.created',
+      graph: { nodes: [{ id: 'n1', type }] },
     })
+    await testDb.update(workflows).set({ status: 'paused' }).where(isNull(workflows.deletedAt))
+    await testDb
+      .insert(workflows)
+      .values([workflow('draft', 'let_assistant_answer'), workflow('live', 'message')])
+    expect((await loadConfiguredFeatures(closed)).aiAssistant).toBe(0)
+    await testDb.insert(workflows).values(workflow('live', 'let_assistant_answer'))
+    expect((await loadConfiguredFeatures(closed)).aiAssistant).toBe(1)
+    expect(
+      (await loadConfiguredFeatures({ ...closed, assistantResponds: false })).aiAssistant
+    ).toBe(0)
+  })
+
+  it('counts translation only when it is on and a model is set', async () => {
+    const on = sources({ autoTranslate: true, translationModel: true })
+    expect((await loadConfiguredFeatures(on)).aiArticleTranslation).toBe(1)
+    expect(
+      (await loadConfiguredFeatures({ ...on, translationModel: false })).aiArticleTranslation
+    ).toBe(0)
+    expect(
+      (await loadConfiguredFeatures({ ...on, autoTranslate: false })).aiArticleTranslation
+    ).toBe(0)
+  })
+
+  it('counts a sign-in provider only when it is on and has a saved credential', async () => {
+    await testDb.update(identityProvider).set({ enabled: false })
+    const provider = (registrationId: string, enabled: boolean) => ({
+      registrationId,
+      label: 'Acme SSO',
+      clientId: 'acme-client',
+      enabled,
+    })
+    await testDb
+      .insert(identityProvider)
+      .values([provider('acme-on', true), provider('acme-off', false), provider('acme-bare', true)])
+    await testDb.insert(integrationPlatformCredentials).values([
+      { integrationType: 'auth_acme-on', secrets: 'x' },
+      { integrationType: 'auth_acme-off', secrets: 'x' },
+    ])
+    expect((await loadConfiguredFeatures(sources())).sso).toBe(1)
+  })
+
+  it('counts active integrations, not pending or disconnected ones', async () => {
+    await testDb.update(integrations).set({ status: 'disconnected' })
+    await testDb.insert(integrations).values([
+      { integrationType: 'acme_one', status: 'pending' },
+      { integrationType: 'acme_two', status: 'disconnected' },
+    ])
+    expect((await loadConfiguredFeatures(sources())).integrations).toBe(0)
+    await testDb.insert(integrations).values({ integrationType: 'acme_three', status: 'active' })
+    expect((await loadConfiguredFeatures(sources())).integrations).toBe(1)
   })
 
   it('counts active webhooks, not switched-off or deleted ones', async () => {

@@ -89,6 +89,7 @@ import { limitsKeyFor } from '../plan-limits.rules'
 import { writeTierLimits } from '@/lib/server/domains/settings/tier-limits.write'
 import { compareAndSetPlanLimitsState } from '@/lib/server/domains/settings/settings.plan-limits'
 import {
+  detectPlanLimits,
   detectPlanLimitsAfterProjectionWrite,
   getPlanLimits,
   getPlanLimitsWithCandidates,
@@ -413,6 +414,14 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
       events: ['post.created'],
       createdById: ownerId,
     } as never)
+    await invalidatePlanLimits()
+    // The plan before had webhooks; later reads know it from the stored grace.
+    await detectPlanLimits({
+      previous: {
+        plan: 'pro',
+        features: planFeatureSet(OSS_TIER_LIMITS.features, DISABLED_CLOUD_CONFIG),
+      },
+    })
     await invalidatePlanLimits()
     const limits = await getPlanLimits()
     expect(limits.featureIssues).toEqual([{ key: 'webhooks', count: 1 }])

@@ -19,7 +19,9 @@ import { CACHE_KEYS, cacheGet, cacheSet } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
 import { memoizePerRequest, rememberPerRequest } from '@/lib/server/request-memo'
 import { getFeatureFlags } from '@/lib/server/domains/settings/settings.service'
-import { getMessengerConfig } from '@/lib/server/domains/settings/settings.widget'
+import { config } from '@/lib/server/config'
+import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
+import { getChatModel } from '@/lib/server/domains/ai/models'
 import {
   compareAndSetPlanLimitsState,
   readPlanLimitsSources,
@@ -148,6 +150,22 @@ async function readSnapshot(): Promise<PlanLimitsSnapshot> {
   return (await memoizePerRequest(INPUTS_KEY, () => cacheGet<PlanLimitsSnapshot>(INPUTS_KEY))) ?? {}
 }
 
+/**
+ * The check the assistant and article translation make before a model call:
+ * an AI client and the feature's chat model. A config that cannot load runs
+ * no model.
+ */
+function modelConfigured(feature: 'assistant' | 'helpCenterTranslate'): boolean {
+  try {
+    return (
+      isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) &&
+      getChatModel(feature) !== null
+    )
+  } catch {
+    return false
+  }
+}
+
 async function loadPart(
   part: SnapshotPart,
   sources: PlanLimitsSources | null,
@@ -157,14 +175,15 @@ async function loadPart(
     case 'usage':
       return { usage: await loadUsageCounts() }
     case 'configured': {
-      const messenger = await getMessengerConfig()
       return {
         configured: await loadConfiguredFeatures({
           customCss: sources?.customCss ?? null,
-          cloudIdentity: sources?.cloudIdentity ?? null,
-          sectionHostnames: sources?.sectionHostnames ?? [],
+          liveCustomDomains: sources?.liveCustomDomains ?? [],
           autoTranslate: sources?.autoTranslate ?? false,
-          assistantResponds: messenger.assistant?.respond === true,
+          assistantResponds: sources?.assistantResponds ?? false,
+          visitorChatLive: sources?.visitorChatLive ?? false,
+          assistantModel: modelConfigured('assistant'),
+          translationModel: modelConfigured('helpCenterTranslate'),
         }),
       }
     }

@@ -1,9 +1,10 @@
 /**
- * The section hostnames the plan limits read (the custom domain in use, and
- * the hosts a paused custom domain keeps serving), against a real database
- * rolled back after each test. They are the section map every reader uses:
- * the help center's own domain before the map is first written, the map once
- * it is, and never the primary domain.
+ * The custom hostnames the plan limits count as in use, against a real
+ * database rolled back after each test. They come from the section map every
+ * reader uses (the help center's own domain before the map is first written,
+ * the map once it is, never the primary domain), and only while routing
+ * sends visitors there: verified, and the section on. Every hostname the map
+ * names, verified or not, is read too.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
@@ -46,6 +47,7 @@ async function seed(values: Partial<typeof settings.$inferInsert>) {
 
 const legacyHelp = (domain: string) =>
   JSON.stringify({ enabled: true, domain: { domain, verifiedAt: NOW } })
+const HELP_ON = JSON.stringify({ feedback: true, helpCenter: true })
 const portal = (sectionDomains: Record<string, { hostname: string; verifiedAt: string | null }>) =>
   JSON.stringify({ sectionDomains })
 
@@ -55,28 +57,69 @@ describe.skipIf(!fixture.available)('plan limits section hostnames (real DB)', (
   afterAll(fixture.close)
 
   it("reads the help center's own domain before the section map is written", async () => {
-    await seed({ helpCenterConfig: legacyHelp('help.acme.com') })
-    expect((await readPlanLimitsSources())?.sectionHostnames).toEqual(['help.acme.com'])
+    await seed({ helpCenterConfig: legacyHelp('help.acme.com'), featureFlags: HELP_ON })
+    expect((await readPlanLimitsSources())?.liveCustomDomains).toEqual(['help.acme.com'])
   })
 
-  it('reads every section in the map, verified or not, and not a help domain the map replaced', async () => {
+  it('reads verified sections in the map, not pending ones, nor a help domain the map replaced', async () => {
     await seed({
+      featureFlags: JSON.stringify({ feedback: true, helpCenter: true, statusPage: true }),
       helpCenterConfig: legacyHelp('old-help.acme.com'),
       portalConfig: portal({
         help: { hostname: 'help.acme.com', verifiedAt: NOW },
         status: { hostname: 'status.acme.com', verifiedAt: null },
       }),
     })
-    expect((await readPlanLimitsSources())?.sectionHostnames).toEqual([
-      'help.acme.com',
-      'status.acme.com',
-    ])
+    const sources = await readPlanLimitsSources()
+    expect(sources?.liveCustomDomains).toEqual(['help.acme.com'])
+    // Every hostname the map names, verified or not, for the hosts a paused domain keeps.
+    expect(sources?.sectionHostnames).toEqual(['help.acme.com', 'status.acme.com'])
+  })
+
+  it('leaves out a verified section whose section is off', async () => {
+    await seed({
+      featureFlags: JSON.stringify({ feedback: true, helpCenter: false }),
+      portalConfig: portal({ help: { hostname: 'help.acme.com', verifiedAt: NOW } }),
+    })
+    expect((await readPlanLimitsSources())?.liveCustomDomains).toEqual([])
   })
 
   it('leaves out a section that names the primary domain', async () => {
     await seed({
+      featureFlags: HELP_ON,
       portalConfig: portal({ help: { hostname: 'feedback.acme.com', verifiedAt: NOW } }),
     })
+    expect((await readPlanLimitsSources())?.liveCustomDomains).toEqual([])
     expect((await readPlanLimitsSources())?.sectionHostnames).toEqual([])
+  })
+
+  it('reads custom domains the identity projection reports ready, unless parked on a section that is off', async () => {
+    const domain = (hostname: string, readiness: string, isPrimary = false) => ({
+      hostname,
+      readiness,
+      isPrimary,
+      updatedAt: NOW,
+    })
+    await seed({
+      featureFlags: JSON.stringify({ feedback: true, helpCenter: false }),
+      portalConfig: portal({ help: { hostname: 'help.acme.com', verifiedAt: NOW } }),
+      cloudIdentity: {
+        version: 1,
+        displayName: 'Acme',
+        canonicalOrigin: 'https://acme.example.com',
+        platformHostname: 'acme.example.com',
+        updatedAt: NOW,
+        customDomains: [
+          domain('ideas.acme.com', 'ready', true),
+          domain('roadmap.acme.com', 'ready'),
+          domain('soon.acme.com', 'pending'),
+          domain('help.acme.com', 'ready'),
+        ],
+      } as never,
+    })
+    expect((await readPlanLimitsSources())?.liveCustomDomains.sort()).toEqual([
+      'ideas.acme.com',
+      'roadmap.acme.com',
+    ])
   })
 })

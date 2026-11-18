@@ -305,34 +305,47 @@ function infoRows(used: Record<string, number>, limits: TierLimits): PlanLimitIn
   return rows
 }
 
+/**
+ * Paid features running past the plan. A feature is an issue only when it
+ * could have run: the plan before the drop included it, read from `previous`
+ * or from the grace already stored for these limits. One set up on a plan
+ * that never had it was never running, so there is nothing to pause.
+ */
 function featureIssuesFor(
   features: PlanFeatureSet,
-  configured: ConfiguredFeatures | null
+  configured: ConfiguredFeatures | null,
+  hadBefore: Partial<PlanFeatureSet>
 ): PlanFeatureIssue[] {
   if (!configured) return []
   const issues: PlanFeatureIssue[] = []
   for (const key of PLAN_FEATURE_KEYS) {
     const count = configured[key] ?? 0
-    if (count > 0 && !features[key]) issues.push({ key, count })
+    if (count > 0 && !features[key] && hadBefore[key] === true) issues.push({ key, count })
   }
   return issues
 }
 
-/**
- * Grace features live at first detection: what the plan before had, what the
- * current plan has, and what is set up and running. A feature that stops at
- * once on a drop is never carried.
- */
-function graceFeatures(
-  features: PlanFeatureSet,
+/** What the plan before the drop included, from `previous` and the stored grace. */
+function featuresBefore(
   previous: PreviousPlan | null,
-  configured: ConfiguredFeatures | null
-): PlanFeatureSet {
+  stored: PlanLimitsState | null
+): Partial<PlanFeatureSet> {
+  const set: Partial<PlanFeatureSet> = {}
+  for (const key of PLAN_FEATURE_KEYS) {
+    set[key] = previous?.features[key] === true || stored?.fromFeatures[key] === true
+  }
+  return set
+}
+
+/**
+ * Grace features live at first detection: what the plan before had and what
+ * the current plan has. A feature that stops at once on a drop is never
+ * carried, nor one no plan here ever ran.
+ */
+function graceFeatures(features: PlanFeatureSet, previous: PreviousPlan | null): PlanFeatureSet {
   const set = {} as PlanFeatureSet
   for (const key of PLAN_FEATURE_KEYS) {
-    set[key] =
-      PLAN_FEATURES[key].grace &&
-      (features[key] || previous?.features[key] === true || (configured?.[key] ?? 0) > 0)
+    set[key] = PLAN_FEATURES[key].grace && (features[key] || previous?.features[key] === true)
   }
   return set
 }
@@ -355,7 +368,11 @@ export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimit
   const sameLimits = input.stored !== null && (input.stored.limitsKey === key || behind)
   const used = input.usage ?? {}
   const issues = capIssues(used, input.limits, PLAN_LIMIT_ISSUE_KEYS) as PlanLimitIssue[]
-  const featureIssues = featureIssuesFor(input.features, input.configured)
+  const featureIssues = featureIssuesFor(
+    input.features,
+    input.configured,
+    featuresBefore(input.previous, sameLimits ? input.stored : null)
+  )
   const rows = infoRows(used, input.limits)
 
   if (issues.length === 0 && featureIssues.length === 0) {
@@ -375,7 +392,7 @@ export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimit
         since: now.toISOString(),
         graceEndsAt: graceEndFor(now).toISOString(),
         fromPlan: input.previous?.plan ?? null,
-        fromFeatures: graceFeatures(input.features, input.previous, input.configured),
+        fromFeatures: graceFeatures(input.features, input.previous),
         limitsKey: key,
         ...(input.basis ? { basis: input.basis } : {}),
         ...choicesOf(input.stored),

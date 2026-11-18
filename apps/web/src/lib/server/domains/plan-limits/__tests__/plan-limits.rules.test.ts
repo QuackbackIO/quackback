@@ -304,6 +304,8 @@ describe('computePlanLimits: issues and info rows', () => {
   it('lists paid features that are set up but not in the plan, with their counts', () => {
     const result = computePlanLimits(
       inputs({
+        // The plan before had every feature, so each one set up was running.
+        previous: { plan: 'enterprise', features: ALL_LIVE },
         configured: { webhooks: 2, workflows: 3, customCss: 1, mcpServer: 0, aiDrafts: 4 },
       }),
       NOW
@@ -471,14 +473,14 @@ describe('computePlanLimits: phases', () => {
     expect(result.view.graceEndsAt).toBe(at(7 * DAY).toISOString())
   })
 
-  it('keeps what was running at first detection live through the grace when the plan before is unknown', () => {
+  it('carries nothing set up into the grace when the plan before is unknown', () => {
     const result = computePlanLimits(
       inputs({ usage: OVER_BOARDS, configured: { webhooks: 1 } }),
       NOW
     )
     expect(result.nextState?.fromPlan).toBeNull()
-    expect(result.nextState?.fromFeatures.webhooks).toBe(true)
-    expect(result.nextState?.fromFeatures.workflows).toBe(false)
+    expect(result.nextState?.fromFeatures.webhooks).toBe(false)
+    expect(result.view.featureIssues).toEqual([])
   })
 
   it('never carries an at-once feature into the grace', () => {

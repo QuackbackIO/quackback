@@ -31,7 +31,9 @@ import { permissionsForPrincipals } from '@/lib/server/policy/permissions'
 import { PERMISSIONS, SYSTEM_ROLES } from '@/lib/shared/permissions'
 import type { Role } from '@/lib/shared/roles'
 import type { PrincipalId } from '@quackback/ids'
-import type { StoredCloudIdentityProjection } from '@/lib/shared/db-types'
+import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
+import { getConfiguredIntegrationTypes } from '@/lib/server/domains/platform-credentials/platform-credential.service'
+import { advancedCssRemainder } from '@/lib/shared/theme/generator'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import type { PlanFeatureKey } from './plan-limits.features'
 import type {
@@ -71,54 +73,92 @@ const iso = (value: Date | string | null | undefined): string | null =>
 const countOf = async (query: Promise<{ count: number }[]>): Promise<number> =>
   (await query)[0]?.count ?? 0
 
-/** The settings row fields {@link loadConfiguredFeatures} reads. */
+/** What {@link loadConfiguredFeatures} reads besides the database. */
 export interface ConfiguredFeatureSources {
   customCss: string | null
-  cloudIdentity: StoredCloudIdentityProjection | null
-  /** Every hostname a portal section names (see `PlanLimitsSources`). */
-  sectionHostnames: readonly string[]
+  /** Custom hostnames serving visitors now (see `PlanLimitsSources`). */
+  liveCustomDomains: readonly string[]
+  /** Translation is on with languages to translate into (see `PlanLimitsSources`). */
   autoTranslate: boolean
   assistantResponds: boolean
+  /** The widget Messages tab or portal chats is open to visitors. */
+  visitorChatLive: boolean
+  /** An AI client and the assistant's chat model are configured. */
+  assistantModel: boolean
+  /** An AI client and the translation model are configured. */
+  translationModel: boolean
 }
 
-/** How much of each paid feature is set up, so the page can say what pauses. */
+/**
+ * How much of each paid feature is running now, so the page can say what
+ * pauses. Each count is the runtime's own gate without the plan's: a default
+ * value, a switched-off record or a surface no visitor can reach is not
+ * running, so it never counts.
+ */
 export async function loadConfiguredFeatures(
   sources: ConfiguredFeatureSources
 ): Promise<ConfiguredFeatures> {
   const counter = sql<number>`count(*)::int`
-  const [liveWorkflows, activeWebhooks, connected, ssoProviders] = await Promise.all([
-    countOf(
-      db
-        .select({ count: counter })
-        .from(workflows)
-        .where(and(eq(workflows.status, 'live'), isNull(workflows.deletedAt)))
-    ),
-    countOf(
-      db
-        .select({ count: counter })
-        .from(webhooks)
-        .where(and(eq(webhooks.status, 'active'), isNull(webhooks.deletedAt)))
-    ),
-    countOf(
-      db.select({ count: counter }).from(integrations).where(eq(integrations.status, 'active'))
-    ),
-    countOf(
-      db.select({ count: counter }).from(identityProvider).where(eq(identityProvider.enabled, true))
-    ),
-  ])
-  const hostnames = new Set(sources.cloudIdentity?.customDomains?.map((d) => d.hostname) ?? [])
-  for (const hostname of sources.sectionHostnames) hostnames.add(hostname)
+  const live = and(eq(workflows.status, 'live'), isNull(workflows.deletedAt))
+  const [liveWorkflows, handsToAssistant, activeWebhooks, connected, ssoProviders] =
+    await Promise.all([
+      countOf(db.select({ count: counter }).from(workflows).where(live)),
+      // A live workflow with a "Let the assistant answer" step runs the
+      // assistant on any conversation it fires on.
+      countOf(
+        db
+          .select({ count: counter })
+          .from(workflows)
+          .where(
+            and(
+              live,
+              sql`jsonb_path_exists(${workflows.graph}, '$.nodes[*] ? (@.type == "let_assistant_answer")')`
+            )
+          )
+      ),
+      countOf(
+        db
+          .select({ count: counter })
+          .from(webhooks)
+          .where(and(eq(webhooks.status, 'active'), isNull(webhooks.deletedAt)))
+      ),
+      countOf(
+        db.select({ count: counter }).from(integrations).where(eq(integrations.status, 'active'))
+      ),
+      registeredSsoProviders(),
+    ])
+  const assistantAnswers =
+    sources.assistantResponds &&
+    sources.assistantModel &&
+    (sources.visitorChatLive || handsToAssistant > 0)
   const configured: Partial<Record<PlanFeatureKey, number>> = {
     workflows: liveWorkflows,
     webhooks: activeWebhooks,
     integrations: connected,
     sso: ssoProviders,
-    customDomain: hostnames.size,
-    customCss: sources.customCss?.trim() ? 1 : 0,
-    aiAssistant: sources.assistantResponds ? 1 : 0,
-    aiArticleTranslation: sources.autoTranslate ? 1 : 0,
+    customDomain: new Set(sources.liveCustomDomains).size,
+    // Theme declarations the appearance editor generates are not custom CSS.
+    customCss: advancedCssRemainder(sources.customCss ?? '') ? 1 : 0,
+    aiAssistant: assistantAnswers ? 1 : 0,
+    aiArticleTranslation: sources.autoTranslate && sources.translationModel ? 1 : 0,
   }
   return configured
+}
+
+/**
+ * Providers sign-in registers: switched on, with a saved credential. The same
+ * test as `getRegisteredOidcProviderIds`, without its plan gate.
+ */
+async function registeredSsoProviders(): Promise<number> {
+  const [providers, credentials] = await Promise.all([
+    db
+      .select({ registrationId: identityProvider.registrationId })
+      .from(identityProvider)
+      .where(eq(identityProvider.enabled, true)),
+    getConfiguredIntegrationTypes(),
+  ])
+  return providers.filter((p) => credentials.has(`${AUTH_CREDENTIAL_PREFIX}${p.registrationId}`))
+    .length
 }
 
 /** Live boards with their post counts and newest post. */
