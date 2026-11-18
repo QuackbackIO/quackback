@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Signing in while the custom domain is paused after the plan limits grace:
  * a sign-in requested on either hostname mails a magic link on the workspace's

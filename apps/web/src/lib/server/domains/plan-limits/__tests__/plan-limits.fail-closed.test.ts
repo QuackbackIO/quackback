@@ -56,6 +56,13 @@ describe('a plan limits read error', () => {
     }
   )
 
+  it.each(['sso', 'integrations', 'customCss'] as const)(
+    'keeps %s live, which its tier flag alone gated',
+    async (key) => {
+      expect(await isFeatureLive(key)).toBe(true)
+    }
+  )
+
   it.each(['webhooks', 'workflows', 'integrations', 'customDomain', 'customCss'] as const)(
     'never pauses %s, which had no plan gate before',
     async (key) => {

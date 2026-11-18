@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * A paused custom domain: after the plan limits grace on a plan without custom
  * domains, requests on a custom hostname get a temporary redirect to the workspace's own
@@ -260,6 +261,42 @@ describe('requests on a custom hostname', () => {
     h.sources = null
     setFeatureState('enforced', 'customDomain')
     expect((await serve(request('https://feedback.acme.test/'))).result).toBe('next')
+  })
+
+  it('fails open, with links as configured, when a read throws', async () => {
+    setFeatureState('enforced', 'customDomain')
+    vi.mocked(readPlanLimitsSources).mockRejectedValueOnce(new Error('settings row unavailable'))
+    const { result, baseUrl } = await serve(request('https://feedback.acme.test/'))
+    expect(result).toBe('next')
+    expect(baseUrl).toBe('https://feedback.acme.test')
+  })
+
+  it('redirects a HEAD request like a GET', async () => {
+    setFeatureState('enforced', 'customDomain')
+    const { result } = await serve(request('https://feedback.acme.test/b/ideas', 'HEAD'))
+    expect((result as Response).status).toBe(307)
+  })
+
+  it.each(['/api/health', '/api/internal/usage'])(
+    'reads nothing for %s, which the fleet probes',
+    async (path) => {
+      setFeatureState('enforced', 'customDomain')
+      expect((await serve(request(`https://feedback.acme.test${path}`))).result).toBe('next')
+      expect(readPlanLimitsSources).not.toHaveBeenCalled()
+    }
+  )
+
+  it('never sends one custom hostname to another when no default hostname is known', async () => {
+    // The configured origin is itself custom, so it is not a default to send people to.
+    withSources(identity(['feedback.acme.test', 'www.acme.test'], null))
+    setFeatureState('enforced', 'customDomain')
+    expect((await serve(request('https://www.acme.test/b/ideas'))).result).toBe('next')
+  })
+
+  it('never redirects the default hostname to itself, even when it is also listed as custom', async () => {
+    withSources(identity(['feedback.acme.test', 'acme.example.com']))
+    setFeatureState('enforced', 'customDomain')
+    expect((await serve(request('https://acme.example.com/b/ideas'))).result).toBe('next')
   })
 })
 

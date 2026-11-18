@@ -52,6 +52,7 @@ import { __setJobDefinitionsForTests } from '../definitions'
 import { claimJobs, enqueueJob } from '../job-queue'
 import { resetJobHandlers, runJob } from '../runner'
 import { config, resetConfig } from '@/lib/server/config'
+import { readPlanLimitsSources } from '@/lib/server/domains/settings/settings.plan-limits'
 import {
   FEATURE_STATES,
   setFeatureState,
@@ -108,5 +109,38 @@ describe('job links and the paused custom domain', () => {
     expect(seen).toEqual([
       state === 'enforced' ? 'https://acme.example.com' : 'https://feedback.acme.test',
     ])
+  })
+})
+
+describe('a job with no workspace to ask under pooled routing', () => {
+  it('runs as usual and reads no settings for the custom domain', async () => {
+    setFeatureState('enforced', 'customDomain')
+    const q = uniqueQueue('paused-domain-pooled')
+    created.push(q)
+    let ran = false
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        maxAttempts: 1,
+        leaseMs: 30_000,
+        handler: async () => async () => {
+          ran = true
+        },
+      },
+    ])
+    await enqueueJob({ queue: q, maxAttempts: 1 })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: 30_000 }] })
+    if (!job) throw new Error('fixture fault: the job was not claimed')
+    vi.mocked(readPlanLimitsSources).mockClear()
+    Object.assign(process.env, {
+      QUACKBACK_TENANCY: 'pooled',
+      QUACKBACK_CONTROL_DATABASE_URL: 'postgresql://app@localhost:5432/control',
+    })
+    delete process.env.DATABASE_URL
+    resetConfig()
+    expect(config.isPooledTenancy).toBe(true)
+    expect(await runJob(job)).toBe('succeeded')
+    expect(ran).toBe(true)
+    expect(readPlanLimitsSources).not.toHaveBeenCalled()
   })
 })

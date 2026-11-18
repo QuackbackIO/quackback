@@ -61,14 +61,16 @@ describe('usePlanFeatureNoticeShown', () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     )
-    return renderHook(() => usePlanFeatureNoticeShown(feature), { wrapper })
+    return { client, ...renderHook(() => usePlanFeatureNoticeShown(feature), { wrapper }) }
   }
 
   it('is false and asks nothing with the flag off', async () => {
     h.flags = { planLimits: false }
     h.getPlanLimitsFn.mockReset()
-    const { result } = shown('customDomain')
-    await Promise.resolve()
+    const { result, client } = shown('customDomain')
+    // No fetch starts at all, and none lands after the query's own import.
+    expect(client.isFetching()).toBe(0)
+    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(result.current).toBe(false)
     expect(h.getPlanLimitsFn).not.toHaveBeenCalled()
   })

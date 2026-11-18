@@ -1,4 +1,5 @@
 // @vitest-environment node
+// @vitest-environment node
 /**
  * A paused custom domain with portal sections on their own hosts.
  *
@@ -203,6 +204,18 @@ describe('a paused custom domain with the help center on its own host', () => {
     workspace(['help.acme.test'])
     expect((await serve(`${DEFAULT}/hc/articles/refunds`)).response).toBeNull()
     expect((await serve('https://help.acme.test/hc/articles/refunds')).response).toBeNull()
+  })
+})
+
+describe('a section host the custom domain list does not name', () => {
+  it('is still left out of links while paused', async () => {
+    h.baseUrl = DEFAULT
+    workspace(['help.acme.test'])
+    h.sources = { ...h.sources!, cloudIdentity: null }
+    h.settings = { ...h.settings!, settings: {} }
+    const served = await serve('https://help.acme.test/hc/articles/refunds')
+    expect(served.response).toBeNull()
+    expect(served.helpLink).toBe(DEFAULT)
   })
 })
 

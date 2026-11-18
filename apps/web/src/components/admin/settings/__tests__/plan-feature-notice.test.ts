@@ -52,6 +52,17 @@ describe('planFeatureNotice', () => {
     ).toBe('Webhooks pause after Nov 24.')
   })
 
+  it.each(['Pacific/Kiritimati', 'Etc/GMT+12'])(
+    'names the same day for a viewer in %s, never converted to their zone',
+    (timeZone) => {
+      const inZone = (date: unknown, options?: Intl.DateTimeFormatOptions) =>
+        formatFirstRenderDate(date as string, { timeZone, ...options }, 'en-US')
+      expect(planFeatureNotice('workflows', state({ phase: 'grace' }), inZone, NOW)?.text).toBe(
+        'Workflows pause after Nov 24. Runs waiting at that point stop.'
+      )
+    }
+  )
+
   it('adds the year only when the day is in another year', () => {
     const graceEndsAt = '2027-01-02T12:00:00.000Z'
     const deadlineDay = '2027-01-01'
@@ -111,5 +122,49 @@ describe('planFeatureNotice', () => {
     expect(
       planFeatureNotice(feature, state({ featureIssues: [{ key: feature }] }), usFormat, NOW)?.text
     ).toBe(text)
+  })
+
+  // The plan limits glossary: words never shown to users.
+  const BANNED = [
+    /grace/i,
+    /frozen/i,
+    /\bheld\b/i,
+    /switch/i,
+    /enforce/i,
+    /current plan/i,
+    /choose a plan/i,
+    /keep pro/i,
+    /\u2014/,
+    /!/,
+  ]
+  const FEATURES = [
+    'webhooks',
+    'workflows',
+    'integrations',
+    'customDomain',
+    'customCss',
+    'aiAssistant',
+    'aiArticleTranslation',
+  ] as const
+
+  it.each(FEATURES)('words every %s notice by the glossary', (feature) => {
+    const texts: string[] = []
+    for (const phase of ['grace', 'enforced'] as const) {
+      for (const planName of ['Free', null]) {
+        for (const canManageBilling of [true, false]) {
+          const notice = planFeatureNotice(
+            feature,
+            state({ phase, planName, canManageBilling, featureIssues: [{ key: feature }] }),
+            usFormat,
+            NOW
+          )
+          if (!notice) throw new Error(`no notice for ${feature} in ${phase}`)
+          texts.push(notice.text)
+        }
+      }
+    }
+    for (const text of texts) {
+      for (const word of BANNED) expect(text).not.toMatch(word)
+    }
   })
 })

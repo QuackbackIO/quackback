@@ -151,6 +151,28 @@ describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (rea
     )
   })
 
+  it('grace: setting up more is refused on the current plan, while what exists runs', async () => {
+    await configure(true, 'free')
+    expect((await getPlanLimits()).phase).toBe('grace')
+    expect(await isFeatureLive('webhooks')).toBe(true)
+    expect(await isFeatureLive('workflows')).toBe(true)
+    const { createWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
+    const { createWorkflow } = await import('@/lib/server/domains/workflows/workflow.service')
+    await expect(
+      createWebhook(
+        { url: 'https://example.com/hook2', events: ['post.created'] } as never,
+        createId('principal') as PrincipalId
+      )
+    ).rejects.toMatchObject({ name: expect.stringMatching(/Entitlement|TierLimit/) })
+    await expect(
+      createWorkflow({
+        name: 'Acme more',
+        class: 'background',
+        triggerType: 'conversation.created',
+      } as never)
+    ).rejects.toMatchObject({ name: expect.stringMatching(/Entitlement|TierLimit/) })
+  })
+
   it('enforced: every one of them pauses after the grace', async () => {
     await configure(true, 'free')
     await getPlanLimits()
@@ -165,6 +187,45 @@ describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (rea
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
     expect(await isFeaturePaused('webhooks')).toBe(true)
     await configure(true, 'enterprise')
+    expect(await answers()).toEqual(every(false, true))
+  })
+
+  it('pauses at the grace end exactly, not a moment before', async () => {
+    await configure(true, 'free')
+    const { graceEndsAt } = await getPlanLimits()
+    const end = Date.parse(graceEndsAt!)
+    vi.useFakeTimers({ toFake: ['Date'], now: end - 1 })
+    expect(await answers()).toEqual(
+      every(false, true, { mcpServer: { paused: true, live: false } })
+    )
+    vi.setSystemTime(end)
+    expect(await answers()).toEqual(every(true, false))
+  })
+
+  it('upgrade during the grace: nothing pauses at the old grace end', async () => {
+    await configure(true, 'free')
+    await getPlanLimits()
+    await configure(true, 'enterprise')
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
+    expect((await getPlanLimits()).phase).toBe('ok')
+    expect(await answers()).toEqual(every(false, true))
+  })
+
+  it('an install without plan billing never pauses, with the flag on', async () => {
+    await testDb
+      .update(settings)
+      .set({
+        featureFlags: JSON.stringify({ feedback: true, planLimits: true }),
+        tierLimits: null,
+        cloud: null,
+      })
+      .where(eq(settings.id, settingsId))
+    invalidateTierLimitsCache()
+    await invalidateSettingsCache()
+    await invalidatePlanLimits()
+    expect((await getPlanLimits()).phase).toBe('ok')
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 30 * DAY })
+    expect((await getPlanLimits()).phase).toBe('ok')
     expect(await answers()).toEqual(every(false, true))
   })
 })

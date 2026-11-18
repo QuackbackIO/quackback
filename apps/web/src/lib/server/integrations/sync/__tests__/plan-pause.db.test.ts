@@ -291,6 +291,17 @@ describe.skipIf(!fixture.available)('inbound changes while paused (real DB)', ()
     expect(await stored(op.id)).toMatchObject({ state: 'cancelled', errorCode: 'plan_paused' })
   })
 
+  it('gives up a change already past the maximum age when the worker reaches it', async () => {
+    const op = await inboundOp()
+    await testDb
+      .update(operations)
+      .set({ createdAt: new Date(Date.now() - 31 * DAY) })
+      .where(eq(operations.id, op.id))
+    setFeatureState('enforced', 'integrations')
+    await runIntegrationSync(syncTestJob(op.id))
+    expect(await stored(op.id)).toMatchObject({ state: 'cancelled', errorCode: 'plan_paused' })
+  })
+
   it('still cancels outbound feature traffic while paused', async () => {
     const { op } = await queueNotification()
     setFeatureState('enforced', 'integrations')
