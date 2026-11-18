@@ -1681,11 +1681,17 @@ describe('Verify domain beside an address on an unverified domain', () => {
 
   it('offers none for a Verified domain still waiting on its sending records', async () => {
     listDomains.mockResolvedValue([{ name: 'old.example', verified: true }])
-    renderSettings({ view: 'workspace', addresses: [oldAddress()], domains: [OLD] })
-    await waitFor(() => expect(listDomains).toHaveBeenCalled())
-    // Its setup panel is the next step.
-    expect(panels()).toHaveLength(1)
-    expect(screen.queryByRole('link', { name: 'Verify domain' })).toBeNull()
+    const other = domain({ id: 'dom_other', domain: 'other.example' })
+    renderSettings({
+      view: 'workspace',
+      addresses: [oldAddress(), address('a2', 'help@other.example', 'dom_other', null, false)],
+      domains: [OLD, other],
+    })
+    // The domains are read: the address on a domain not added gets its link.
+    await within(row('Acme <help@other.example>')).findByRole('link', { name: 'Verify domain' })
+    // The Verified one's setup panel is its next step.
+    expect(within(row('Acme <help@old.example>')).queryByRole('link')).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'Verify domain' })).toHaveLength(1)
   })
 
   it('reads nothing more while every address can send', () => {
