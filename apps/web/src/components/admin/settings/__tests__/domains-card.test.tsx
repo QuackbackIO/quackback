@@ -43,6 +43,30 @@ const base = {
 } as const
 
 describe('<DomainsCard>', () => {
+  it('says when the custom domains could not be read, and adds none until they are', () => {
+    render(
+      <DomainsCard
+        entitled
+        domains={[]}
+        domainsUnavailable
+        hostname="help.example.com"
+        pending={false}
+        error={null}
+        onHostnameChange={vi.fn()}
+        onAdd={vi.fn()}
+        onRefresh={vi.fn()}
+        onMakePrimary={vi.fn()}
+        onRemove={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('alert').textContent).toBe(
+      "Couldn't load your custom domains. Try again."
+    )
+    expect((screen.getByRole('button', { name: 'Add domain' }) as HTMLButtonElement).disabled).toBe(
+      true
+    )
+  })
+
   it('offers Make primary for a ready domain no section uses, and never for one a section uses', () => {
     const ready = (hostname: string) =>
       ({ ...base, hostname, readiness: 'ready', ownershipTxt: null }) as CustomDomainInstruction

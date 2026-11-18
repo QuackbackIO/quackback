@@ -669,6 +669,24 @@ describe('Cloud: a hostname not yet a custom domain', () => {
     expect(within(dialog).getByRole('button', { name: 'Copy name _qb.help' })).toBeVisible()
   })
 
+  it('says so when the custom domains could not be read, and adds nothing', async () => {
+    // A failed read is not "no custom domains": a hostname already added would
+    // look new, and Save would add it again.
+    setSectionDomain.mockResolvedValue(pending('help', 'help.acme.com'))
+    const dialog = cloud({ cloudDomainsUnavailable: true })
+    choose(dialog, 'Help center')
+    await within(dialog).findByLabelText('Name in front of acme.com')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      "Couldn't load your custom domains. Try again."
+    )
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
+    save(dialog)
+    fireEvent.submit(within(dialog).getByRole('button', { name: 'Save' }).closest('form')!)
+    await act(async () => {})
+    expect(mutateCloudCustomDomain).not.toHaveBeenCalled()
+    expect(setSectionDomain).not.toHaveBeenCalled()
+  })
+
   it('does not add one that is a custom domain already', async () => {
     setSectionDomain.mockResolvedValue(pending('help', 'help.acme.com'))
     const dialog = cloud({ cloudHostnames: ['help.acme.com'] })

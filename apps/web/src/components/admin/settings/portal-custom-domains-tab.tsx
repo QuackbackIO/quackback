@@ -159,6 +159,7 @@ export default function PortalCustomDomainsTab({
             .filter((d) => d.readiness === 'ready' && !d.isPrimary)
             .map((d) => d.hostname)}
           cloudHostnames={cloudDomains.domains.map((d) => d.hostname)}
+          cloudDomainsUnavailable={operator?.domainsUnavailable ?? false}
           loadVerifiedDomains={loadVerifiedDomains}
           loadCloudRecords={cloud ? loadCloudRecords : undefined}
           // Through the router, so unsaved Design changes ask first, as leaving the page does.
@@ -192,6 +193,7 @@ export default function PortalCustomDomainsTab({
 /** Hostnames an operator routes to this workspace, set up on this tab. */
 function OperatorHostnames({
   entitled,
+  domainsUnavailable,
   cloudIdentity: initialCloudIdentity,
   sectionDomains,
   cloud,
@@ -241,6 +243,7 @@ function OperatorHostnames({
       <DomainsCard
         entitled={entitled}
         domains={domains}
+        domainsUnavailable={domainsUnavailable}
         hostname={hostname}
         pending={mutation.isPending}
         error={mutation.error}

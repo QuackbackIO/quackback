@@ -18,8 +18,11 @@ const calls = vi.hoisted(() => ({
   navigate: vi.fn(),
   sectionDomains: {} as Record<string, { hostname: string; verifiedAt: string | null }>,
   usedBySection: undefined as ((hostname: string) => boolean) | undefined,
+  domainsFail: false,
+  domainsUnavailable: undefined as boolean | undefined,
   card: {} as {
     cloudHostnames?: readonly string[]
+    cloudDomainsUnavailable?: boolean
     loadVerifiedDomains?: () => Promise<readonly string[]>
     loadCloudRecords?: (hostname: string) => Promise<unknown[]>
     onAddVerifiedDomain?: (section: string) => void
@@ -38,6 +41,7 @@ vi.mock('@/lib/server/functions/domains', () => ({
 vi.mock('@/lib/server/functions/cloud-identity', () => ({
   getCloudCustomDomainsFn: vi.fn(async () => {
     calls.domainLists++
+    if (calls.domainsFail) throw new Error('control plane unavailable')
     return calls.domains
   }),
   getCloudIdentityFn: vi.fn(async () => null),
@@ -93,11 +97,14 @@ vi.mock('@/components/admin/settings/domains-cards', () => ({
   DomainsCard: ({
     onRefresh,
     usedBySection,
+    domainsUnavailable,
   }: {
     onRefresh: (hostname: string) => void
     usedBySection?: (hostname: string) => boolean
+    domainsUnavailable?: boolean
   }) => {
     calls.usedBySection = usedBySection
+    calls.domainsUnavailable = domainsUnavailable
     return (
       <button type="button" onClick={() => onRefresh('help.acme.com')}>
         Verify domain
@@ -138,6 +145,8 @@ beforeEach(() => {
   calls.card = {}
   calls.sectionDomains = {}
   calls.usedBySection = undefined
+  calls.domainsFail = false
+  calls.domainsUnavailable = undefined
 })
 
 afterEach(() => {
@@ -181,6 +190,22 @@ describe('the Custom domains tab on Cloud', () => {
 
     await waitFor(() => expect(assign).toHaveBeenCalledTimes(1))
     expect(calls.order).toEqual(['leave', 'assign'])
+  })
+
+  it('tells both cards when the custom domains could not be read, and reads them again next time', async () => {
+    calls.domainsFail = true
+    renderTab()
+    await screen.findByText('Verify domain')
+    expect(calls.card.cloudDomainsUnavailable).toBe(true)
+    expect(calls.card.cloudHostnames).toEqual([])
+    expect(calls.domainsUnavailable).toBe(true)
+
+    // Not kept as an answer: the next use reads them again.
+    calls.domainsFail = false
+    await act(() => queryClient.prefetchQuery(portalCustomDomainsQueries.tab(true)))
+    await waitFor(() => expect(calls.card.cloudDomainsUnavailable).toBe(false))
+    expect(calls.card.cloudHostnames).toEqual(['help.acme.com'])
+    expect(calls.domainsUnavailable).toBe(false)
   })
 
   it("gives the card's row Verify the control plane's refresh", async () => {

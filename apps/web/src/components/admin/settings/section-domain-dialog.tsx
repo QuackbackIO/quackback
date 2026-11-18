@@ -53,6 +53,7 @@ import { errorText } from '@/lib/client/error-text'
 import { setSectionDomainFn, verifySectionDomainFn } from '@/lib/server/functions/section-domains'
 import { mutateCloudCustomDomainFn } from '@/lib/server/functions/cloud-identity'
 import {
+  CUSTOM_DOMAINS_UNREADABLE,
   usedForLabel,
   type CustomDomainUsedFor,
   type PortalSection,
@@ -118,6 +119,12 @@ export interface SectionDomainDialogProps {
   readyHostnames: readonly string[]
   /** Cloud: every custom domain's hostname, ready or not; any other is added first. */
   cloudHostnames?: readonly string[]
+  /**
+   * Cloud: the custom domains could not be read. The lists above are then
+   * empty, not known to be empty, so nothing is saved: a hostname already
+   * added would look new and be added again.
+   */
+  cloudDomainsUnavailable?: boolean
   /** On a domain's page: the name is typed in front of this domain. */
   suffix?: string
   /** Reads the workspace's Verified domains; without it a section takes a typed hostname. */
@@ -350,6 +357,7 @@ function SectionDomainForm({
   primaryHost,
   readyHostnames,
   cloudHostnames = [],
+  cloudDomainsUnavailable = false,
   suffix,
   loadVerifiedDomains,
   loadCloudRecords,
@@ -452,10 +460,12 @@ function SectionDomainForm({
     sectionDomainState(currentEntry) !== 'verified' &&
     sectionHostname() === currentEntry.hostname
 
+  const unreadable = cloud && cloudDomainsUnavailable
   const canSave =
-    usedFor === 'portal'
+    !unreadable &&
+    (usedFor === 'portal'
       ? !!picked
-      : !loading && !unchanged && (chosen === OTHER ? !!typed.trim() : !!chosenOption)
+      : !loading && !unchanged && (chosen === OTHER ? !!typed.trim() : !!chosenOption))
 
   /** The DNS step for a hostname the section has, with the zone and records it is shown in. */
   const openDns = async (section: PortalSection, hostname: string, entry: SectionDomain) => {
@@ -769,6 +779,11 @@ function SectionDomainForm({
         data-slot="section-domain-body"
         className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1"
       >
+        {unreadable && (
+          <p role="alert" className="text-sm text-destructive">
+            {CUSTOM_DOMAINS_UNREADABLE}
+          </p>
+        )}
         {changing && initial ? (
           <div
             data-slot="used-for-detail"

@@ -90,6 +90,7 @@ export function SectionDomainsCard({
   cloud,
   readyHostnames,
   cloudHostnames,
+  cloudDomainsUnavailable,
   loadVerifiedDomains,
   loadCloudRecords,
   canAdd,
@@ -108,6 +109,8 @@ export function SectionDomainsCard({
   readyHostnames: readonly string[]
   /** Cloud: every custom domain's hostname, ready or not. */
   cloudHostnames?: readonly string[]
+  /** Cloud: the custom domains could not be read, so the two lists above are not known. */
+  cloudDomainsUnavailable?: boolean
   /** Reads the Verified domains Add custom domain offers. */
   loadVerifiedDomains?: () => Promise<readonly string[]>
   /** Cloud: reads the DNS records a custom domain needs. */
@@ -305,6 +308,7 @@ export function SectionDomainsCard({
             primaryHost={view.primaryHost}
             readyHostnames={readyHostnames}
             cloudHostnames={cloudHostnames}
+            cloudDomainsUnavailable={cloudDomainsUnavailable}
             loadVerifiedDomains={loadVerifiedDomains}
             loadCloudRecords={loadCloudRecords}
             onAddVerifiedDomain={onAddVerifiedDomain}

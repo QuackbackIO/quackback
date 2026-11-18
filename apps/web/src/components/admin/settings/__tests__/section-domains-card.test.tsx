@@ -39,6 +39,7 @@ function renderCard({
   canAdd = true,
   onChanged = vi.fn(),
   refreshCloudDomain,
+  cloudDomainsUnavailable,
 }: {
   map?: SectionDomainMap
   sections?: PortalSection[]
@@ -47,6 +48,7 @@ function renderCard({
   canAdd?: boolean
   onChanged?: () => void
   refreshCloudDomain?: (hostname: string) => Promise<unknown>
+  cloudDomainsUnavailable?: boolean
 } = {}) {
   return render(
     <SectionDomainsCard
@@ -58,6 +60,7 @@ function renderCard({
       canAdd={canAdd}
       onChanged={onChanged}
       refreshCloudDomain={refreshCloudDomain}
+      cloudDomainsUnavailable={cloudDomainsUnavailable}
     />
   )
 }
@@ -294,6 +297,15 @@ describe('Custom domains card', () => {
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('Used for')
     expect(within(dialog).queryByLabelText('Domain')).toBeNull()
+  })
+
+  it('on Cloud, tells Add custom domain when the custom domains could not be read', async () => {
+    renderCard({ cloud: true, cloudDomainsUnavailable: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom domain' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      "Couldn't load your custom domains. Try again."
+    )
   })
 
   it('offers no way to add one without the plan', () => {

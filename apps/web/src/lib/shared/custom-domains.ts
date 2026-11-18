@@ -22,6 +22,9 @@ const USED_FOR_LABEL: Record<CustomDomainUsedFor, string> = {
   status: 'Status',
 }
 
+/** What the admin pages say when the Cloud custom domains could not be read. */
+export const CUSTOM_DOMAINS_UNREADABLE = "Couldn't load your custom domains. Try again."
+
 /** What a custom domain is used for, as the admin pages name it. */
 export function usedForLabel(usedFor: CustomDomainUsedFor): string {
   return USED_FOR_LABEL[usedFor]
