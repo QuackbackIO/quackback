@@ -33,6 +33,24 @@ vi.mock('@/lib/server/config', async (original) => ({
   ...(await original<typeof import('@/lib/server/config')>()),
   getBaseUrl: () => 'https://app.example.com/',
 }))
+// While `race.lose` is set, another process stores the same drop's grace
+// first, so this process's compare-and-set finds a changed row and loses.
+const race = vi.hoisted(() => ({ lose: false, rivalSince: null as string | null }))
+vi.mock('@/lib/server/domains/settings/settings.plan-limits', async (original) => {
+  const real = await original<typeof import('@/lib/server/domains/settings/settings.plan-limits')>()
+  return {
+    ...real,
+    compareAndSetPlanLimitsState: async (
+      expected: unknown,
+      next: Parameters<typeof real.compareAndSetPlanLimitsState>[1]
+    ) => {
+      if (!race.lose || !next) return real.compareAndSetPlanLimitsState(expected, next)
+      const rival = { ...next, since: race.rivalSince ?? next.since }
+      expect(await real.compareAndSetPlanLimitsState(expected, rival)).toBe(true)
+      return real.compareAndSetPlanLimitsState(expected, next)
+    },
+  }
+})
 vi.mock('@quackback/email', async (original) => ({
   ...(await original<typeof import('@quackback/email')>()),
   isEmailConfigured: () => mail.configured,
@@ -225,6 +243,25 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
     await settleQuietly()
     expect(view.since).toBe(since)
     expect(mail.sendPlanLimitsEmail).not.toHaveBeenCalled()
+  })
+
+  it('does not send the start email from a process that loses the race to store the grace', async () => {
+    await configure({ planLimits: true })
+    race.lose = true
+    race.rivalSince = new Date(Date.now() - 1000).toISOString()
+    try {
+      const view = await getPlanLimits()
+      await settleQuietly()
+      // The rival's grace stands and its own detection sends the start email.
+      expect(view.phase).toBe('grace')
+      expect(view.since).toBe(race.rivalSince)
+      expect((await storedState())?.since).toBe(race.rivalSince)
+      expect(mail.sendPlanLimitsEmail).not.toHaveBeenCalled()
+      expect((await storedState())?.emailsSent ?? []).toEqual([])
+    } finally {
+      race.lose = false
+      race.rivalSince = null
+    }
   })
 
   it('sends nothing with the flag off', async () => {
