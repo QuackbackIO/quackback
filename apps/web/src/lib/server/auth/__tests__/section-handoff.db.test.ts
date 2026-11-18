@@ -14,7 +14,7 @@
  * Every write rolls back with the fixture transaction. Like every *.db.test.ts
  * it is skipped when no Postgres is reachable.
  */
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
@@ -63,6 +63,8 @@ const hoisted = vi.hoisted(() => {
     /** When set, the session lookup fails with this error. */
     failSession: null as Error | null,
     requestHeaders: new Headers(),
+    /** When set, the hosts sign-in may use; a host missing here is only kept. */
+    signInOrigins: null as Record<string, string> | null,
     origins: {
       primary: 'https://acme.com',
       feedback: 'https://acme.com',
@@ -77,7 +79,7 @@ const hoisted = vi.hoisted(() => {
 
 vi.mock('@/lib/server/logger', () => ({ logger: hoisted.log }))
 vi.mock('@/lib/server/domains/settings/section-links', () => ({
-  getSignInSectionOrigins: async () => hoisted.origins,
+  getSignInSectionOrigins: async () => hoisted.signInOrigins ?? hoisted.origins,
   getSectionOrigins: async () => hoisted.origins,
 }))
 // The real auth instance, with one fault switch on its session lookup.
@@ -195,6 +197,7 @@ describe.skipIf(!fixture.available)('section handoff', () => {
     await fixture.begin()
     hoisted.logCalls.length = 0
     hoisted.failSession = null
+    hoisted.signInOrigins = null
     hoisted.requestHeaders = new Headers()
     await ensureMcpOauthResource({
       db: testDb as unknown as Parameters<typeof ensureMcpOauthResource>[0]['db'],
@@ -776,6 +779,64 @@ describe.skipIf(!fixture.available)('section handoff', () => {
       expect(await sessionOf(help)).toBeNull()
       expect(await sessionOf(sourceCookie)).toBeNull()
       expect(await linkRows()).toBe(0)
+    })
+
+    /**
+     * The library skips its Origin check under NODE_ENV=test. The kept-host
+     * tests are about that check, so they turn it on for their requests.
+     */
+    async function checkingOrigins() {
+      const context = (await (await getAuth()).$context) as { skipOriginCheck: unknown }
+      const before = context.skipOriginCheck
+      context.skipOriginCheck = false
+      onTestFinished(() => {
+        context.skipOriginCheck = before
+      })
+    }
+
+    it('signs out on a host kept while its lookups go unanswered, and ends the sign-in everywhere', async () => {
+      await checkingOrigins()
+      const help = await carry(PRIMARY, sourceCookie, HELP)
+      // The DNS check fails: the host is still served but no longer one sign-in may use.
+      hoisted.signInOrigins = { ...hoisted.origins, help: 'https://acme.com' }
+
+      await signOut(HELP, help)
+
+      expect(await sessionOf(help)).toBeNull()
+      expect(await sessionOf(sourceCookie)).toBeNull()
+      expect(await linkRows()).toBe(0)
+    })
+
+    it('still refuses a sign-in posted from a kept host, and a callback URL back to it', async () => {
+      await checkingOrigins()
+      hoisted.signInOrigins = { ...hoisted.origins, help: 'https://acme.com' }
+      const auth = await getAuth()
+      const signIn = (origin: string, callbackURL?: string) =>
+        auth.handler(
+          new Request(`https://${origin}/api/auth/sign-in/email`, {
+            method: 'POST',
+            headers: {
+              host: origin,
+              origin: `https://${origin}`,
+              'content-type': 'application/json',
+              // A browser that has been here before sends its cookies, and the origin is checked.
+              cookie: 'qb_seen=1',
+            },
+            body: JSON.stringify({
+              email: 'owner@example.com',
+              password: 'not-the-password',
+              ...(callbackURL ? { callbackURL } : {}),
+            }),
+          })
+        )
+
+      const fromKept = await signIn(HELP)
+      expect(fromKept.status).toBe(403)
+      expect(await fromKept.text()).toMatch(/INVALID_ORIGIN|origin/i)
+
+      const backToKept = await signIn(PRIMARY, `https://${HELP}/hc`)
+      expect(backToKept.status).toBe(403)
+      expect(await backToKept.text()).toMatch(/callback/i)
     })
 
     it('signing out on the primary domain signs the visitor out on every section host', async () => {

@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "Iniciar sesión",
   "portal.header.auth.signUp": "Registrarse",
   "portal.header.auth.signOut": "Cerrar sesión",
+  "portal.header.auth.signOutFailed": "No se pudo cerrar tu sesión. Inténtalo de nuevo.",
   "portal.header.auth.settings": "Configuración",
   "portal.header.auth.admin": "Administración",
   "portal.header.theme.toggleLabel": "Cambiar tema",

@@ -224,6 +224,7 @@
   "portal.header.auth.logIn": "เข้าสู่ระบบ",
   "portal.header.auth.signUp": "สมัครสมาชิก",
   "portal.header.auth.signOut": "ออกจากระบบ",
+  "portal.header.auth.signOutFailed": "ออกจากระบบไม่สำเร็จ ลองอีกครั้ง",
   "portal.header.auth.settings": "การตั้งค่า",
   "portal.header.auth.admin": "ผู้ดูแลระบบ",
   "portal.header.auth.accountMenu": "เปิดเมนูบัญชี",

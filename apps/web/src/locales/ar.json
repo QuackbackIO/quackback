@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "تسجيل الدخول",
   "portal.header.auth.signUp": "إنشاء حساب",
   "portal.header.auth.signOut": "تسجيل الخروج",
+  "portal.header.auth.signOutFailed": "تعذّر تسجيل خروجك. حاول مرة أخرى.",
   "portal.header.auth.settings": "الإعدادات",
   "portal.header.auth.admin": "الإدارة",
   "portal.header.theme.toggleLabel": "تبديل المظهر",

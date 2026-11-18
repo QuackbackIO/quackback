@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "Log in",
   "portal.header.auth.signUp": "Sign up",
   "portal.header.auth.signOut": "Sign out",
+  "portal.header.auth.signOutFailed": "Couldn't sign you out. Try again.",
   "portal.header.auth.settings": "Settings",
   "portal.header.auth.admin": "Admin",
   "portal.header.theme.toggleLabel": "Toggle theme",

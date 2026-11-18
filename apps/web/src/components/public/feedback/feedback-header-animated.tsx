@@ -25,7 +25,7 @@ import { BoardCustomFields } from '@/components/public/feedback/board-custom-fie
 import { PostingToBoard } from '@/components/public/feedback/posting-to-board'
 import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
 import type { BoardSettings } from '@/lib/shared/db-types'
-import { signOut } from '@/lib/client/auth-client'
+import { SIGN_OUT_FAILED, signOutChecked } from '@/lib/client/sign-out-checked'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
 import { PUBLIC_FEEDBACK_EDITOR_FEATURES } from '@/components/public/feedback/feedback-editor-features'
@@ -492,7 +492,10 @@ export function FeedbackHeaderAnimated({
                     type="button"
                     className="text-primary hover:underline"
                     onClick={async () => {
-                      await signOut()
+                      if (!(await signOutChecked())) {
+                        toast.error(intl.formatMessage(SIGN_OUT_FAILED))
+                        return
+                      }
                       removeViewerScopedPortalQueries(queryClient)
                       router.invalidate()
                     }}

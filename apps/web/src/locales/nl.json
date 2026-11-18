@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "Inloggen",
   "portal.header.auth.signUp": "Registreren",
   "portal.header.auth.signOut": "Uitloggen",
+  "portal.header.auth.signOutFailed": "Uitloggen is niet gelukt. Probeer het opnieuw.",
   "portal.header.auth.settings": "Instellingen",
   "portal.header.auth.admin": "Beheer",
   "portal.header.theme.toggleLabel": "Thema wisselen",

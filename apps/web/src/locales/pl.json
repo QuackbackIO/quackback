@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "Zaloguj się",
   "portal.header.auth.signUp": "Zarejestruj się",
   "portal.header.auth.signOut": "Wyloguj się",
+  "portal.header.auth.signOutFailed": "Nie udało się Cię wylogować. Spróbuj ponownie.",
   "portal.header.auth.settings": "Ustawienia",
   "portal.header.auth.admin": "Administracja",
   "portal.header.theme.toggleLabel": "Przełącz motyw",

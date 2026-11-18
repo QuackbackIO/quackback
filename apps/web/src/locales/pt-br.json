@@ -208,6 +208,7 @@
   "portal.header.auth.logIn": "Entrar",
   "portal.header.auth.signUp": "Criar conta",
   "portal.header.auth.signOut": "Sair",
+  "portal.header.auth.signOutFailed": "Não foi possível sair. Tente novamente.",
   "portal.header.auth.settings": "Configurações",
   "portal.header.auth.admin": "Admin",
   "portal.header.theme.toggleLabel": "Alternar tema",

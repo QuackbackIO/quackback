@@ -9,7 +9,8 @@ import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { isTeamMember, Role } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
-import { signOut } from '@/lib/client/auth-client'
+import { SIGN_OUT_FAILED, signOutChecked } from '@/lib/client/sign-out-checked'
+import { toast } from 'sonner'
 import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import { stashSsoAttempt } from '@/lib/client/sso-attempt-stash'
 import { signinErrorLanding } from '@/lib/shared/auth-prompt'
@@ -179,7 +180,11 @@ export function PortalHeader({
   }
 
   const handleSignOut = async () => {
-    await signOut()
+    // A refused sign-out leaves the visitor signed in: say so, and stay put.
+    if (!(await signOutChecked())) {
+      toast.error(intl.formatMessage(SIGN_OUT_FAILED))
+      return
+    }
     // Clear user-scoped caches: vote highlights, and every viewer-scoped
     // payload (a team member's internal tags must not outlive their session).
     queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
