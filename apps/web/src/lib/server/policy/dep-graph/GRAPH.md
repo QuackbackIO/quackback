@@ -147,6 +147,7 @@ Edges (152):
 - help-center -> principals
 - help-center -> settings
 - import -> principals
+- import -> settings
 - inbox -> conversation
 - inbox -> tickets
 - macros -> conversation
