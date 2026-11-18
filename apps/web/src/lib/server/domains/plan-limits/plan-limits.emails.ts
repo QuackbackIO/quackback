@@ -19,6 +19,7 @@ import type { AccountEmail } from '@quackback/email/recipient'
 import { logger } from '@/lib/server/logger'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { StoredPlanLimitsState } from '@/lib/shared/db-types'
+import { PLAN_LIMITS_PATH } from '@/lib/shared/billing/plan-limits-path'
 import { updatePlanLimitsState } from '@/lib/server/domains/settings/settings.plan-limits'
 import { PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { PLAN_FEATURE_LINKS } from './plan-limits.features'
@@ -248,7 +249,7 @@ export async function sendPlanLimitsEmails(
     ),
     rows: emailRows(view),
     pausingFeatures: pausingFeatureLabels(view),
-    limitsUrl: base ? `${base}/admin/settings/billing/limits` : null,
+    limitsUrl: base ? `${base}${PLAN_LIMITS_PATH}` : null,
     planUrl: base ? `${base}/admin/settings/billing` : null,
   }
 
