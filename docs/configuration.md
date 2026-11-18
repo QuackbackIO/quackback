@@ -45,7 +45,7 @@ curl -X POST https://feedback.example.com/api/v1/setup \
   -d '{"workspaceName":"Acme","adminEmail":"you@example.com","adminName":"You"}'
 ```
 
-The response creates the workspace and its first admin, and includes that admin's first API key. It is shown once, so store it. The admin has no password; they can sign in later with an emailed link or code once email is configured. The endpoint exists only while the install has no admin. After that it answers `404` and the token opens nothing, so you can remove `SETUP_TOKEN`. If `adminEmail` already has an account, it is promoted only when its address is verified (otherwise `409`), and its sessions are ended. It is rate limited, every attempt is logged, and setup and refused attempts are written to the audit log.
+The response creates the workspace and its first admin, and includes the workspace's first API key. It is shown once, so store it. It is a workspace key with the Owner role and every scope, recorded as made by the admin, so replies sent with it count as automated, never as the admin's own, and do not meet response targets. Because it is a workspace key, it keeps working after the first admin leaves: once setup is done, rotate it or revoke it under Settings → Developers → Keys. The admin has no password; they can sign in later with an emailed link or code once email is configured. The endpoint exists only while the install has no admin. After that it answers `404` and the token opens nothing, so you can remove `SETUP_TOKEN`. If `adminEmail` already has an account, it is promoted only when its address is verified (otherwise `409`), and its sessions are ended. It is rate limited, every attempt is logged, and setup and refused attempts are written to the audit log.
 
 ## Signing in headless clients
 

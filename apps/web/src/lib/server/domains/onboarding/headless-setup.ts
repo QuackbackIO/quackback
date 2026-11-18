@@ -5,7 +5,7 @@
  * `SETUP_TOKEN` (or reads the one the server prints on first boot) and calls
  * `POST /api/v1/setup` once. The request creates the first admin and the
  * workspace through the same code the wizard's workspace step runs
- * ({@link setupWorkspaceForUser}), then mints that admin's first API key.
+ * ({@link setupWorkspaceForUser}), then mints the workspace's first API key.
  *
  * The token is the operator's word that they own the install, so it works only
  * while there is nobody to own it yet: the moment a human admin exists, or the
@@ -14,11 +14,14 @@
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
-import type { PrincipalId, UserId } from '@quackback/ids'
-import { db, eq, principal, session, user } from '@/lib/server/db'
+import type { PrincipalId, RoleId, UserId } from '@quackback/ids'
+import type { Role } from '@/lib/shared/roles'
+import { db, eq, principal, roles, session, user } from '@/lib/server/db'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { createApiKey } from '@/lib/server/domains/api-keys/api-key.service'
 import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
+import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
+import { SYSTEM_ROLES } from '@/lib/shared/permissions'
 import {
   findHumanAdmin,
   isOpenToBootstrapClaim,
@@ -150,8 +153,14 @@ export type HeadlessSetupResult =
   | { ok: false; reason: 'already_set_up' | 'account_unverified' }
 
 /**
- * Creates the first admin and the workspace, and mints the admin's first API
- * key. The caller has already verified the setup token.
+ * Creates the first admin and the workspace, and mints the setup key. The
+ * caller has already verified the setup token.
+ *
+ * The setup key is a workspace key with the Owner role, not the admin's
+ * personal key: a personal key acts as its creator, so a bot replying through
+ * it would count as the admin's own reply and meet first-response and SLA
+ * targets at once. A workspace key's replies stay automated. The admin is
+ * recorded as its creator.
  */
 export async function runHeadlessSetup(
   input: HeadlessSetupInput,
@@ -188,14 +197,28 @@ export async function runHeadlessSetup(
 
   const admin = await db.query.principal.findFirst({
     where: eq(principal.userId, userId),
-    columns: { id: true },
+    columns: { id: true, role: true },
   })
   if (!admin) throw new Error('Setup finished without an admin principal')
   const principalId = admin.id as PrincipalId
+  const adminRole = admin.role as Role
 
+  const [owner] = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(eq(roles.key, SYSTEM_ROLES.OWNER))
+    .limit(1)
+  if (!owner) throw new Error('Setup finished without the Owner role')
   const { apiKey, plainTextKey } = await createApiKey(
-    { name: 'Setup key', scopes: API_KEY_SCOPES },
-    principalId
+    { name: 'Setup key', scopes: API_KEY_SCOPES, kind: 'workspace', roleId: owner.id as RoleId },
+    principalId,
+    // The grant ceiling reads the principal as stored, so a setup that somehow
+    // left no admin tier is refused rather than handed an Owner key.
+    {
+      role: adminRole,
+      permissions: [...(await permissionsForPrincipal(principalId, adminRole))],
+    },
+    { source: 'setup_token' }
   )
 
   await recordAuditEvent({

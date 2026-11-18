@@ -6,52 +6,18 @@
  * reorder, so the clocks read them rather than trusting the order the jobs
  * arrive in.
  *
- * The split is the one recordSlaFromEvent makes on the event: a human reply is
- * a public agent message from anyone but a service principal (the assistant,
- * API keys and workflow blocks never satisfy a response clock), and every
- * other public message opens a next-response cycle: a visitor's, or a service
- * principal's. Internal notes and system notices are neither.
- *
- * One known difference from the event: a reply sent through the REST API with
- * an older API key whose principal is a person is stored exactly like that
- * person's inbox reply, so the rows count it as a human reply, while its own
- * event carries a service actor. Its own reaction settles no first response,
- * but it does settle an armed next-response cycle at its own time, since the
- * cycles are rebuilt from the rows. A later human reply's reaction then settles
- * the first response at that API reply's time too. The row records nothing
- * that tells the two apart.
+ * The split is the shared reply rule (`lib/server/messages/reply-rule.ts`),
+ * the one recordSlaFromEvent applies to the message's author: a human reply
+ * is a public agent message from anyone but an automated service principal
+ * (the assistant, workspace API keys and workflow blocks never satisfy a
+ * response clock; a personal API key's reply is its creator's), and every
+ * other public message opens a next-response cycle: a visitor's, or an
+ * automated service's. Internal notes and system notices are neither.
  */
-import {
-  db,
-  and,
-  asc,
-  desc,
-  eq,
-  gt,
-  gte,
-  lt,
-  or,
-  sql,
-  conversationMessages,
-  principal,
-} from '@/lib/server/db'
+import { db, and, asc, desc, eq, gt, gte, lt, or, sql, conversationMessages } from '@/lib/server/db'
+import { humanReply, cycleOpener } from '@/lib/server/messages/reply-rule'
 import type { SQL } from 'drizzle-orm'
 import type { ConversationId } from '@quackback/ids'
-
-/**
- * Whether the message's author is a service principal. A membership test
- * against the (few) service principals rather than a join: a join lets the
- * planner hash the whole principal table for a long conversation, whatever
- * the time bound. A message without a principal is not a service's.
- */
-const byService = sql`coalesce(${conversationMessages.principalId} in (select ${principal.id} from ${principal} where ${principal.type} = 'service'), false)`
-
-const humanReply = and(eq(conversationMessages.senderType, 'agent'), sql`not ${byService}`)
-
-const cycleOpener = or(
-  eq(conversationMessages.senderType, 'visitor'),
-  and(eq(conversationMessages.senderType, 'agent'), byService)
-)
 
 async function earliestMessageTime(
   conversationId: ConversationId,

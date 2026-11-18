@@ -530,7 +530,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     expect(requesterPrincipalId).toBeNull()
   })
 
-  it('closing stamps resolvedAt + firstResponseAt; reopening clears resolvedAt and counts the reopen', async () => {
+  it('closing stamps resolvedAt; reopening clears resolvedAt and counts the reopen', async () => {
     await seedSettings()
     const { open, closed } = await seedStatuses()
     const actor = await messageAuthorActor()
@@ -542,17 +542,25 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     const afterClose = await readTicket(id)
     expect(afterClose.resolvedAt).not.toBeNull()
     expect(afterClose.reopenedCount).toBe(0)
-    // First agent action stamped the first response.
-    expect(afterClose.firstResponseAt).not.toBeNull()
-    const stampedAt = afterClose.firstResponseAt
 
     // Reopen: move back out to an open status.
     await setTicketStatus(id, open.id, actor)
     const afterReopen = await readTicket(id)
     expect(afterReopen.resolvedAt).toBeNull()
     expect(afterReopen.reopenedCount).toBe(1)
-    // The first-response stamp is once-only, never overwritten on later actions.
-    expect(afterReopen.firstResponseAt?.getTime()).toBe(stampedAt?.getTime())
+  })
+
+  it('status, assignee and priority changes never set the first response', async () => {
+    await seedSettings()
+    const { closed } = await seedStatuses()
+    const actor = await messageAuthorActor()
+    const created = await createTicket({ type: 'customer', title: 'Billing issue' }, actor)
+
+    await setTicketStatus(created.id, closed.id, actor)
+    await assignTicket(created.id, { assigneePrincipalId: actor.principalId }, actor)
+    await setTicketPriority(created.id, 'urgent', actor)
+
+    expect((await readTicket(created.id)).firstResponseAt).toBeNull()
   })
 
   it('assignment is independent: assigning a team never clears the teammate (no-clear)', async () => {

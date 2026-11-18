@@ -20,8 +20,9 @@
  *   drained after a rollback runs old jobs late. So these reactions read the
  *   database rather than rely on the order: the response clocks read the
  *   conversation's messages (`domains/sla/sla.messages.ts`), a pause or resume
- *   checks the entity's current status, and the pair-ticket reopen leaves a
- *   later status move standing. That narrows what a late or retried reaction
+ *   checks the entity's current status, the pair-ticket reopen leaves a
+ *   later status move standing, and a ticket's first response is recomputed
+ *   from the message rows. That narrows what a late or retried reaction
  *   can do without removing it; JOBS.md §10 lists what can still differ from
  *   an in-order run. Its handler is `event-reactions-queue.ts`.
  * - `event-summaries` holds the close summaries: slow AI calls that do not
@@ -52,6 +53,9 @@ export const EVENT_REACTIONS = {
     // A visitor message on a conversation paired with a customer ticket
     // reopens that ticket.
     'pair-ticket-reopen': ['message.created'],
+    // A message added to or deleted from a conversation paired with a
+    // customer ticket recomputes that ticket's first response.
+    'ticket-first-response': ['message.created', 'message.deleted'],
     // Confirm the assistant's resolution off a positive first CSAT rating.
     'assistant-csat-confirm': ['conversation.csat_submitted'],
   },
@@ -103,8 +107,8 @@ export function reactionQueuesFor(type: string): ReactionQueue[] {
  * that throws then fails the job, which retries the event's reactions on that
  * queue: they are idempotent against a repeat of the same event. The SLA
  * reaction throws on purpose, so a transient fault in a recorder is retried
- * rather than lost. The pair-ticket reopen, the CSAT confirm and the summaries
- * are best-effort: they log and swallow their own errors, so only the events
+ * rather than lost. The pair-ticket reopen, the ticket first-response
+ * recompute, the CSAT confirm and the summaries are best-effort: they log and swallow their own errors, so only the events
  * read and the deadline below fail their jobs.
  *
  * The reactions share a deadline (REACTION_DEADLINE_MS). Past it the job fails

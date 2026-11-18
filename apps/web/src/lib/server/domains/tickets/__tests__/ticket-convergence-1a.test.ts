@@ -337,8 +337,9 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       // Redirect invariants: the ticket's activity ordering bump survives…
       const ticket = await readTicket(ticketId)
       expect(ticket.updatedAt?.toISOString()).toBe(message.createdAt)
-      // …but first_response_at is deliberately NOT stamped — the
-      // conversation's first-response machinery owns the pair's timeline.
+      // …but first_response_at is not written in the send itself: the
+      // ticket-first-response reaction to the conversation's message.created
+      // works it out (event-reactions-ticket-first-response.test.ts).
       expect(ticket.firstResponseAt).toBeNull()
 
       // `message.created` fired on the conversation (the SLA event hook's
@@ -422,9 +423,9 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       expect(message.ticketId).toBe(ticketId)
       expect(message.conversationId).toBeNull()
       expect(convEmit.emitMessageCreated).not.toHaveBeenCalled()
-      // Legacy behavior: the ticket-side first_response_at stamp still fires
-      // on the un-redirected path.
-      expect((await readTicket(ticketId)).firstResponseAt).not.toBeNull()
+      // A back-office ticket has no customer, so a teammate's reply is never
+      // its first response.
+      expect((await readTicket(ticketId)).firstResponseAt).toBeNull()
     })
 
     it('leaves a STANDALONE customer ticket reply ticket-parented (pre-1b legacy)', async () => {

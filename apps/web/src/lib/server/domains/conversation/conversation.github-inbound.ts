@@ -184,6 +184,19 @@ async function applyGitHubCommentDelete(githubCommentId: string) {
     conversationId: row.conversationId,
     messageId: row.id,
   })
+  // No message.deleted is emitted here, and the deleted row can be a
+  // teammate's reply delivered to GitHub, so a paired ticket's first response
+  // is recomputed directly. Best-effort, because the delete already landed.
+  try {
+    const { syncPairTicketFirstResponse } =
+      await import('@/lib/server/domains/tickets/ticket-first-response')
+    await syncPairTicketFirstResponse(row.conversationId, { ...row, change: 'removed' })
+  } catch (err) {
+    log.warn(
+      { err, conversation_id: row.conversationId, message_id: row.id },
+      'ticket first response recompute after a GitHub comment delete failed'
+    )
+  }
 }
 
 async function applyGitHubIssueState(

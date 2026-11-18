@@ -6,5 +6,6 @@
  * shared backfill test (`__tests__/batched.test.ts`).
  */
 import type { BatchedBackfill } from './batched'
+import { ticketFirstResponseBackfill } from '@/lib/server/domains/tickets/ticket-first-response.backfill'
 
-export const BATCHED_BACKFILLS: readonly BatchedBackfill[] = []
+export const BATCHED_BACKFILLS: readonly BatchedBackfill[] = [ticketFirstResponseBackfill]
