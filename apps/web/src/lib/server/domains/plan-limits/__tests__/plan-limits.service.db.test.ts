@@ -509,6 +509,37 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     expect(await isSeatPaused(later)).toBe(true)
   })
 
+  it('keeps the admin a seat when nobody holds the owner role or billing rights', async (ctx) => {
+    // As a seeded workspace leaves it: the admin holds the Admin role, which
+    // cannot manage billing, and no one holds Owner.
+    const [adminRole] = await testDb.select().from(roles).where(eq(roles.key, 'admin')).limit(1)
+    if (!adminRole) ctx.skip()
+    await testDb
+      .insert(principalRoleAssignments)
+      .values({ principalId: ownerId, roleId: adminRole!.id } as never)
+    const active = await addMember('Acme Active', new Date(Date.now() - DAY))
+    const { used } = await countSeatUsage()
+    await configure({
+      planLimits: true,
+      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
+    })
+    await invalidatePlanLimits()
+    const { candidates } = await getPlanLimitsWithCandidates()
+    const admin = candidates.members?.find((m) => m.id === ownerId)
+    expect(admin).toMatchObject({ isOwner: false, canManageBilling: false, isAdmin: true })
+    // Other test files can leave owners or admins committed; the rule is only
+    // observable without them.
+    const others = (candidates.members ?? []).filter((m) => m.id !== ownerId && m.id !== active)
+    if (others.some((m) => m.isOwner || m.canManageBilling || m.isAdmin)) ctx.skip()
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
+    expect(await isSeatPaused(ownerId)).toBe(false)
+    // The guarantee holds for a choice too: the admin plus the cap is too many.
+    expect(await setSeatHolders(candidates.members!.map((m) => m.id))).toEqual({
+      ok: false,
+      reason: 'too_many',
+    })
+  })
+
   it('reads an owner role assignment as the owner', async () => {
     await configure({
       planLimits: true,

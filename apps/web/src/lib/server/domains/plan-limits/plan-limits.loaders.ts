@@ -222,6 +222,7 @@ export async function loadMemberChoices(activeBefore: Date | null = null): Promi
       email: p.email ?? null,
       roleNames: held.map((r) => r.name),
       isOwner,
+      isAdmin: p.role === 'admin',
       canManageBilling:
         permissionSets.get(p.id as PrincipalId)?.has(PERMISSIONS.BILLING_MANAGE) ?? false,
       lastActiveAt: iso(p.lastSignInAt),

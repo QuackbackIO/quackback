@@ -16,6 +16,8 @@ export interface MemberCandidate {
   id: string
   isOwner: boolean
   canManageBilling: boolean
+  /** Holds the admin team role (the legacy `admin` principal role). */
+  isAdmin: boolean
   lastActiveAt: string | null
   createdAt: string
 }
@@ -69,17 +71,31 @@ function byRecentActivity(a: MemberCandidate, b: MemberCandidate): number {
 }
 
 /**
- * Members who always keep a seat: the owner (the earliest, when several) and,
- * when the owner cannot manage billing, the most recently active member who
- * can, so someone can always choose a plan. They count toward the cap and go
- * past it only when they alone fill it.
+ * Members who always keep a seat, so someone can always choose a plan:
+ *
+ * 1. the earliest owner, when there is one;
+ * 2. when no one guaranteed so far can manage billing, the earliest member who
+ *    can;
+ * 3. when no member can manage billing at all, the earliest admin.
+ *
+ * Whether or not an owner exists, this always names someone who can manage
+ * billing when anyone can. They count toward the cap and go past it only when
+ * they alone fill it.
  */
 export function guaranteedSeatHolders(members: readonly MemberCandidate[]): string[] {
-  const owners = members.filter((m) => m.isOwner).sort((a, b) => byCreated(a, b) || byId(a, b))
-  const billing = members.filter((m) => m.canManageBilling).sort(byRecentActivity)
+  const earliest = (list: MemberCandidate[]) =>
+    list.sort((a, b) => byCreated(a, b) || byId(a, b))[0]
   const guaranteed: MemberCandidate[] = []
-  if (owners[0]) guaranteed.push(owners[0])
-  if (!guaranteed.some((m) => m.canManageBilling) && billing[0]) guaranteed.push(billing[0])
+  const owner = earliest(members.filter((m) => m.isOwner))
+  if (owner) guaranteed.push(owner)
+  if (!guaranteed.some((m) => m.canManageBilling)) {
+    const billing = earliest(members.filter((m) => m.canManageBilling))
+    if (billing) guaranteed.push(billing)
+  }
+  if (!members.some((m) => m.canManageBilling)) {
+    const admin = earliest(members.filter((m) => m.isAdmin))
+    if (admin && !guaranteed.includes(admin)) guaranteed.push(admin)
+  }
   return guaranteed.map((m) => m.id)
 }
 

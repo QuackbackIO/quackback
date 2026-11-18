@@ -56,6 +56,7 @@ const candidates = {
       roleNames: [],
       isOwner: true,
       canManageBilling: true,
+      isAdmin: true,
       lastActiveAt: null,
       createdAt: '',
     },

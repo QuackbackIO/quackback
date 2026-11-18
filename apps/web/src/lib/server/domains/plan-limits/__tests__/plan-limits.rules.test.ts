@@ -13,6 +13,7 @@ import {
 } from '../plan-limits.features'
 import {
   PLAN_LIMITS_GRACE_MS,
+  guaranteedSeatHolders,
   computePlanLimits,
   featureLive,
   limitsKeyFor,
@@ -618,6 +619,7 @@ describe('seatHolderOrder', () => {
     over: Partial<{
       isOwner: boolean
       canManageBilling: boolean
+      isAdmin: boolean
       lastActiveAt: string | null
       createdAt: string
     }> = {}
@@ -625,6 +627,7 @@ describe('seatHolderOrder', () => {
     id,
     isOwner: false,
     canManageBilling: false,
+    isAdmin: false,
     lastActiveAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     ...over,
@@ -675,6 +678,29 @@ describe('seatHolderOrder', () => {
       member('m_billing', { canManageBilling: true }),
     ]
     expect(seatHolderOrder(members, 1)).toEqual(['m_billing'])
+  })
+
+  it('with no owner, keeps the earliest member who can manage billing, not the most active', () => {
+    const members = [
+      member('m_billing_new', {
+        canManageBilling: true,
+        createdAt: '2026-06-01T00:00:00.000Z',
+        lastActiveAt: '2026-11-17T00:00:00.000Z',
+      }),
+      member('m_billing_old', { canManageBilling: true, createdAt: '2026-02-01T00:00:00.000Z' }),
+      member('m_active', { lastActiveAt: '2026-11-18T00:00:00.000Z' }),
+    ]
+    expect(seatHolderOrder(members, 1)).toEqual(['m_billing_old'])
+  })
+
+  it('with no owner and nobody who can manage billing, keeps the earliest admin', () => {
+    const members = [
+      member('m_admin_new', { isAdmin: true, createdAt: '2026-06-01T00:00:00.000Z' }),
+      member('m_admin_old', { isAdmin: true, createdAt: '2026-02-01T00:00:00.000Z' }),
+      member('m_active', { lastActiveAt: '2026-11-18T00:00:00.000Z' }),
+    ]
+    expect(seatHolderOrder(members, 1)).toEqual(['m_admin_old'])
+    expect(guaranteedSeatHolders(members)).toEqual(['m_admin_old'])
   })
 
   it('keeps one owner when there are several, the earliest', () => {
