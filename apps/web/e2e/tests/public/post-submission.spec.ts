@@ -909,16 +909,10 @@ test.describe('Submission States and Integration', () => {
   })
 
   test('post submits to the current board context', async () => {
-    // Pick the Feature Requests board in the filter panel (#777), then sort
-    // by newest so the new post is near the top.
-    await globalPage.goto('/')
-    await globalPage.waitForLoadState('networkidle')
-    await globalPage
-      .getByRole('group', { name: 'Boards' })
-      .getByRole('button', { name: /^Feature Requests/ })
-      .click()
-    await expect(globalPage).toHaveURL(/board=features/)
-    await globalPage.goto(`${new URL(globalPage.url()).pathname}?board=features&sort=new`)
+    // Open the Feature Requests board view, newest first, by URL. The filter
+    // panel (#777) folds boards past the first six behind "N more", and other
+    // specs add boards, so the panel button is not always on screen.
+    await globalPage.goto('/?board=features&sort=new')
     await globalPage.waitForLoadState('networkidle')
 
     const uniqueTitle = `Feature Requests Board Post ${Date.now()}`

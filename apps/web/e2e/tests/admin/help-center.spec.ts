@@ -401,7 +401,7 @@ test.describe('Help Center article editor toolbar', () => {
     const url = await createAndOpenArticle(page, `Toolbar Test ${Date.now()}`)
     if (!url) return
 
-    const editor = page.locator('.ProseMirror[contenteditable="true"]')
+    const editor = articleModal(page).locator('.ProseMirror[contenteditable="true"]')
     await expect(editor).toBeVisible({ timeout: 10000 })
 
     // Type some text to select
@@ -423,7 +423,7 @@ test.describe('Help Center article editor toolbar', () => {
     const url = await createAndOpenArticle(page, `Bold Test ${Date.now()}`)
     if (!url) return
 
-    const editor = page.locator('.ProseMirror[contenteditable="true"]')
+    const editor = articleModal(page).locator('.ProseMirror[contenteditable="true"]')
     await expect(editor).toBeVisible({ timeout: 10000 })
 
     await editor.click()
@@ -440,7 +440,7 @@ test.describe('Help Center article editor toolbar', () => {
     const url = await createAndOpenArticle(page, `Italic Test ${Date.now()}`)
     if (!url) return
 
-    const editor = page.locator('.ProseMirror[contenteditable="true"]')
+    const editor = articleModal(page).locator('.ProseMirror[contenteditable="true"]')
     await expect(editor).toBeVisible({ timeout: 10000 })
 
     await editor.click()
@@ -456,7 +456,7 @@ test.describe('Help Center article editor toolbar', () => {
     const url = await createAndOpenArticle(page, `Slash Menu Test ${Date.now()}`)
     if (!url) return
 
-    const editor = page.locator('.ProseMirror[contenteditable="true"]')
+    const editor = articleModal(page).locator('.ProseMirror[contenteditable="true"]')
     await expect(editor).toBeVisible({ timeout: 10000 })
 
     // Click at end of editor to position cursor, then press Enter for new line
