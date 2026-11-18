@@ -23,6 +23,7 @@ function notification(overrides: Partial<SerializedNotification>): SerializedNot
     actorName: null,
     actorAvatarUrl: null,
     audience: null,
+    section: null,
     params: {},
     readAt: null,
     archivedAt: null,

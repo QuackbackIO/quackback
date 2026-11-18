@@ -48,7 +48,7 @@ const config = {
 describe('DomainsLanguagesTab', () => {
   afterEach(cleanup)
 
-  it("shows the help center's custom domain read-only, set on Settings > Domains", () => {
+  it("shows the help center's custom domain read-only, set on Settings > Portal", () => {
     render(<DomainsLanguagesTab config={config} />)
     expect(screen.getByTestId('section-domain')).toHaveTextContent('help')
     expect(screen.queryByLabelText('Domain')).toBeNull()

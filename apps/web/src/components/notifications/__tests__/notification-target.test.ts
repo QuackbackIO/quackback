@@ -25,6 +25,7 @@ function buildNotification(overrides: Partial<SerializedNotification>): Serializ
     actorName: null,
     actorAvatarUrl: null,
     audience: null,
+    section: null,
     readAt: null,
     archivedAt: null,
     createdAt: new Date().toISOString(),
@@ -221,6 +222,12 @@ describe('getNotificationTarget', () => {
     expect(getNotificationTarget(buildNotification({ type: 'domain_needs_attention' }))).toEqual({
       to: '/admin/settings/domains',
     })
+  })
+
+  it("routes a section's custom domain bell to the Custom domains tab of Settings > Portal", () => {
+    expect(
+      getNotificationTarget(buildNotification({ type: 'domain_needs_attention', section: 'help' }))
+    ).toEqual({ to: '/admin/settings/portal', search: { tab: 'custom-domains' } })
   })
 
   it('routes changelog_published with a changelogId to the specific entry', () => {

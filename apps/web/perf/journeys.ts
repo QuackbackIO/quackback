@@ -218,6 +218,8 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'office-hours',
     'people',
     'portal',
+    // The Custom domains tab, whose code and reads load only when it is open.
+    'portal?tab=custom-domains',
     'security/authentication',
     'security/sso/new',
     'skills',

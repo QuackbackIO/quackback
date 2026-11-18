@@ -1413,6 +1413,7 @@
   "ask.destination.settings_ticket-statuses": "Ticketstatus",
   "ask.destination.settings_general": "Allgemein",
   "ask.destination.settings_domains": "Domains",
+  "ask.destination.settings_portal_custom-domains": "Benutzerdefinierte Domains",
   "ask.destination.settings_email": "E-Mail",
   "ask.destination.settings_widget": "Widget",
   "ask.destination.settings_members": "Mitglieder & Teams",

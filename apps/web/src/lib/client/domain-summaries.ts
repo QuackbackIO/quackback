@@ -30,9 +30,12 @@ export interface DomainSummaries {
 
 export async function loadDomainSummaries({
   permissions,
+  sectionDomains: withSections = true,
 }: {
   permissions?: readonly string[]
   cloudEnabled?: boolean
+  /** The Domains list rows no section map; a domain's own page lists its custom domains. */
+  sectionDomains?: boolean
 }): Promise<DomainSummaries> {
   const can = (permission: string) => permissions?.includes(permission) ?? false
   const [sending, signIn, sectionDomains, added] = await Promise.all([
@@ -42,7 +45,7 @@ export async function loadDomainSummaries({
     can(PERMISSIONS.AUTH_MANAGE)
       ? getSignInDomainSummariesFn().catch(() => [] as SignInDomainSummary[])
       : ([] as SignInDomainSummary[]),
-    can(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)
+    withSections && can(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)
       ? getSectionDomainsFn().catch(() => null)
       : (null as SectionDomainsView | null),
     DOMAINS_PAGE_PERMISSIONS.some(can)

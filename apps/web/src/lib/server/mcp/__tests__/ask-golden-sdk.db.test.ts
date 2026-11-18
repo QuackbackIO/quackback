@@ -213,6 +213,40 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
       }
     })
   })
+  it('opens Custom domains on Settings > Portal for a holder of settings.custom_domain only', async () => {
+    await fixture.run(async (database) => {
+      const seeded = await seedAskGoldenFixture(database, 'owner')
+      const owner = await openAskSdkHarness({
+        ...seeded.auth,
+        scopes: ['read:settings'],
+        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]),
+      })
+      try {
+        const result = await owner.call('navigate_workspace', { destination: 'custom_domains' })
+        expect(result.isError, JSON.stringify(result.content)).not.toBe(true)
+        expect(parseAskSdkResult(result)).toMatchObject({
+          navigation: {
+            href: '/admin/settings/portal?tab=custom-domains',
+            label: 'Custom domains',
+          },
+        })
+      } finally {
+        await owner.close()
+      }
+      const branding = await openAskSdkHarness({
+        ...seeded.auth,
+        scopes: ['read:settings'],
+        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.SETTINGS_BRANDING]),
+      })
+      try {
+        expect(
+          (await branding.call('navigate_workspace', { destination: 'custom_domains' })).isError
+        ).toBe(true)
+      } finally {
+        await branding.close()
+      }
+    })
+  })
   it('keeps invitation authority stricter than viewing the members page', async () => {
     await fixture.run(async (database) => {
       const seeded = await seedAskGoldenFixture(database, 'owner')

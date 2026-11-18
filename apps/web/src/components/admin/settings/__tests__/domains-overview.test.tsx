@@ -40,7 +40,7 @@ const DomainList = ({ rows, links }: { rows: DomainRows; links: Links }) => (
 )
 type DomainRows = ReturnType<typeof domainRows>
 type Links = ReturnType<typeof domainUseLinks>
-const { domainUseLinks, CUSTOM_DOMAINS_ANCHOR } = await import('@/lib/shared/domains-permissions')
+const { domainUseLinks } = await import('@/lib/shared/domains-permissions')
 
 afterEach(cleanup)
 
@@ -132,15 +132,15 @@ describe('use links', () => {
     expect(Object.keys(linksFor([EMAIL_SENDING_PERMISSION]))).toEqual(['email'])
     expect(Object.keys(linksFor([PERMISSIONS.AUTH_MANAGE]))).toEqual(['signIn'])
     expect(Object.keys(linksFor([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]))).toEqual(['customDomain'])
-    // Help center access alone sets up no custom domain: they are written on Settings > Domains.
+    // Help center access alone sets up no custom domain: they are written on Settings > Portal.
     expect(linksFor([PERMISSIONS.HELP_CENTER_MANAGE]).customDomain).toBeUndefined()
   })
 
-  it('lands Custom domain on the custom domains card of the Domains page, on Cloud and self-hosted', () => {
+  it('lands Custom domain on the Custom domains tab of Settings > Portal, on Cloud and self-hosted', () => {
     const links = linksFor([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])
     expect(links.customDomain).toEqual({
-      to: '/admin/settings/domains',
-      hash: CUSTOM_DOMAINS_ANCHOR,
+      to: '/admin/settings/portal',
+      search: { tab: 'custom-domains' },
     })
   })
 

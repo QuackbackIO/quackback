@@ -1,6 +1,7 @@
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { AI_ANY_PERMISSIONS } from '@/lib/shared/ai-permissions'
 import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
+import { PORTAL_PAGE_PERMISSIONS } from '@/lib/shared/portal-settings-tabs'
 import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
 import {
@@ -249,13 +250,15 @@ export function buildNavSections(
         {
           ...navPage('/admin/settings/domains'),
           anyOf: DOMAINS_PAGE_PERMISSIONS,
-          overview: { owner: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN },
+          // Adding a domain is the setup on the page itself; custom domains are on Portal.
+          overview: { owner: PERMISSIONS.SETTINGS_MANAGE },
         },
         { ...navPage('/admin/settings/email'), permission: EMAIL_SENDING_PERMISSION },
         { ...navPage('/admin/settings/notifications') },
         {
           ...navPage('/admin/settings/portal'),
-          permission: PERMISSIONS.SETTINGS_BRANDING,
+          // Its Design tab opens to settings.branding, its Custom domains tab to settings.custom_domain.
+          anyOf: PORTAL_PAGE_PERMISSIONS,
         },
         {
           ...navPage('/admin/settings/widget'),

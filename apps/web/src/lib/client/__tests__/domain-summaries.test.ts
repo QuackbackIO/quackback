@@ -72,7 +72,18 @@ describe('domain summaries', () => {
     expect(added).not.toHaveBeenCalled()
   })
 
-  it('reads the section domains on Cloud too, where they are set on the same page', async () => {
+  it('reads no section map for the Domains list, which rows only the domains the workspace owns', async () => {
+    const result = await loadDomainSummaries({
+      permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN],
+      cloudEnabled: false,
+      sectionDomains: false,
+    })
+    expect(result.sectionDomains).toBeNull()
+    expect(sections).not.toHaveBeenCalled()
+    expect(added).toHaveBeenCalled()
+  })
+
+  it("reads the section domains on Cloud too, for a domain's own page", async () => {
     const result = await loadDomainSummaries({
       permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN],
       cloudEnabled: true,

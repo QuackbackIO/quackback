@@ -1,8 +1,18 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { ClientOnly, createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react'
+import { z } from 'zod'
+import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
+import { ClientOnly, createFileRoute, Link, useBlocker, useRouter } from '@tanstack/react-router'
+import { useQueryClient, useSuspenseQuery, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import {
@@ -70,31 +80,165 @@ import type {
 } from '@/lib/shared/types/settings'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
-import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import {
+  useCloudEnabled,
+  useSessionContext,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { SETTINGS_PAGES } from '@/lib/shared/settings-pages'
+import {
+  PORTAL_PAGE_PERMISSIONS,
+  PORTAL_SETTINGS_PATH,
+  PORTAL_TAB_LABELS,
+  PORTAL_TABS,
+  portalTabsFor,
+  resolvePortalTab,
+  type PortalTab,
+} from '@/lib/shared/portal-settings-tabs'
+
+/**
+ * Two tabs, in the `?tab=` pattern of the other settings pages:
+ *  - `design`          the portal's look, tabs and welcome message (settings.branding),
+ *                      saved from the save bar
+ *  - `custom-domains`  each section's domain (settings.custom_domain), saved from its
+ *                      own dialog. Its code and reads load only when it opens.
+ */
+const searchSchema = z.object({
+  tab: z.enum(PORTAL_TABS).optional(),
+})
+
+const loadCustomDomainsTab = () => import('@/components/admin/settings/portal-custom-domains-tab')
+const PortalCustomDomainsTab = lazy(loadCustomDomainsTab)
+
+/** The Custom domains tab's code and reads, fetched together when it opens. */
+async function warmCustomDomainsTab(queryClient: QueryClient, cloud: boolean) {
+  const [{ portalCustomDomainsQueries }] = await Promise.all([
+    import('@/lib/client/queries/portal-custom-domains'),
+    loadCustomDomainsTab(),
+  ])
+  await queryClient.ensureQueryData(portalCustomDomainsQueries.tab(cloud))
+}
+
+/**
+ * The same, read ahead when the pointer or focus reaches the tab. A tab switch
+ * keeps the page's route match, so the router reads nothing ahead of it; this
+ * does, and the tab then opens on data already in hand. A failed read waits
+ * for the tab, which shows it.
+ */
+function readCustomDomainsTabAhead(queryClient: QueryClient, cloud: boolean) {
+  void Promise.all([
+    import('@/lib/client/queries/portal-custom-domains'),
+    loadCustomDomainsTab(),
+  ]).then(([{ portalCustomDomainsQueries }]) =>
+    queryClient.prefetchQuery(portalCustomDomainsQueries.tab(cloud))
+  )
+}
 
 export const Route = createFileRoute('/admin/settings/portal')({
   head: adminPageHead('Portal settings'),
-  loader: async ({ context }) => {
-    // Portal config reads/writes require settings.branding, which non-admin
-    // team roles lack. Gate the page instead of letting managers land on a
-    // shell full of 403s.
-    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_BRANDING)
+  validateSearch: searchSchema,
+  loader: async ({ context, location }) => {
+    // Each tab opens to its own permission, which non-admin team roles lack.
+    // Gate the page instead of letting managers land on a shell full of 403s.
+    assertRouteAnyPermission(context.permissions, PORTAL_PAGE_PERMISSIONS)
+    const tabs = portalTabsFor(context.permissions)
+    const tab = resolvePortalTab((location.search as { tab?: PortalTab }).tab, tabs)
 
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const ensure = readBatch(context.queryClient)
     await Promise.all([
-      ensure(settingsQueries.branding()),
-      ensure(settingsQueries.logo()),
-      ensure(settingsQueries.customCss()),
-      ensure(settingsQueries.portalConfig()),
+      // The Design drafts live on the page, so they are read on either tab.
+      ...(tabs.includes('design')
+        ? [
+            ensure(settingsQueries.branding()),
+            ensure(settingsQueries.logo()),
+            ensure(settingsQueries.customCss()),
+            ensure(settingsQueries.portalConfig()),
+          ]
+        : []),
+      tab === 'custom-domains'
+        ? warmCustomDomainsTab(context.queryClient, !!context.cloudEnabled)
+        : null,
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
+    return { tabs }
   },
-  component: PortalPage,
+  component: PortalSettingsRoute,
 })
 
-function PortalPage() {
+function PortalSettingsRoute() {
+  const { tabs } = Route.useLoaderData()
+  const search = Route.useSearch()
+  const tab = resolvePortalTab(search.tab, tabs)
+  if (tabs.includes('design')) return <PortalPage tab={tab} tabs={tabs} />
+  // settings.custom_domain alone: the Custom domains tab is the page.
+  return (
+    <SettingsPage page="/admin/settings/portal">
+      <PortalTabBar tab={tab} tabs={tabs} />
+      <CustomDomainsPanel />
+    </SettingsPage>
+  )
+}
+
+/**
+ * The tab bar, shown when the viewer has both tabs. A tab the viewer lacks the
+ * permission for is not there at all. Kept apart from the open tab, so editing
+ * a draft on Design does not render it again.
+ */
+const PortalTabBar = memo(function PortalTabBar({
+  tab,
+  tabs,
+}: {
+  tab: PortalTab
+  tabs: readonly PortalTab[]
+}) {
+  const queryClient = useQueryClient()
+  const cloud = useCloudEnabled()
+  if (tabs.length < 2) return null
+  const readAhead = () => readCustomDomainsTabAhead(queryClient, cloud)
+  // Links drawn with the tab slots, like a module's tabs, not <Tabs> as other settings pages use: on this page <Tabs> added 1.5 KB of HTML (over the ceiling), 3 KB of JS and a chunk.
+  return (
+    <nav
+      aria-label={SETTINGS_PAGES[PORTAL_SETTINGS_PATH].label}
+      data-slot="tabs-list"
+      data-variant="line"
+      className="scrollbar-none relative flex items-center overflow-x-auto"
+    >
+      {tabs.map((value) => (
+        <Link
+          key={value}
+          to={PORTAL_SETTINGS_PATH}
+          // Design is the default, so its link carries no tab.
+          search={value === 'design' ? {} : { tab: value }}
+          replace
+          data-slot="tabs-trigger"
+          data-variant="line"
+          data-active={value === tab ? '' : undefined}
+          aria-current={value === tab ? 'page' : undefined}
+          className="inline-flex shrink-0 items-center text-sm whitespace-nowrap transition-colors"
+          {...(value === 'custom-domains' && value !== tab
+            ? { onMouseEnter: readAhead, onFocus: readAhead, onTouchStart: readAhead }
+            : {})}
+        >
+          {PORTAL_TAB_LABELS[value]}
+        </Link>
+      ))}
+    </nav>
+  )
+})
+
+/** The Custom domains tab, its code and reads loaded when it opens. */
+function CustomDomainsPanel({ onLeave }: { onLeave?: () => void }) {
+  const cloudEnabled = useCloudEnabled()
+  return (
+    <Suspense fallback={null}>
+      <PortalCustomDomainsTab cloud={cloudEnabled} onLeave={onLeave} />
+    </Suspense>
+  )
+}
+
+function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] }) {
   const router = useRouter()
   const settings = useWorkspaceSettings()
   const session = useSessionContext()
@@ -154,12 +298,19 @@ function PortalPage() {
   const isDirty = themeDirty || welcomeDirty || navDirty
 
   // Navigating away with unsaved edits prompts; closing the tab warns too.
+  // Moving between this page's tabs keeps the drafts, so it does not.
+  // A Cloud change on Custom domains can send the browser to the new primary
+  // domain after the change is made; the drafts are not asked about then.
+  const leaving = useRef(false)
+  const markLeaving = useCallback(() => {
+    leaving.current = true
+  }, [])
   useBlocker({
-    shouldBlockFn: () => {
-      if (!isDirty || saving) return false
+    shouldBlockFn: ({ current, next }) => {
+      if (!isDirty || saving || leaving.current || next.pathname === current.pathname) return false
       return !window.confirm('You have unsaved portal changes. Leave without saving?')
     },
-    enableBeforeUnload: () => isDirty,
+    enableBeforeUnload: () => isDirty && !leaving.current,
   })
 
   const handleSave = useStableCallback(async () => {
@@ -240,7 +391,7 @@ function PortalPage() {
     ) as ReadonlySet<string>
   }, [settings, session])
 
-  // A tab served at its own domain shows it under the tab; the domain is set on Settings > Domains.
+  // A tab served at its own domain shows it under the tab; the domain is set on the Custom domains tab.
   const sectionHosts = useMemo(
     () =>
       servedSectionHosts(
@@ -269,94 +420,101 @@ function PortalPage() {
     [brandingConfig, customCss, config, logoData]
   )
 
-  return (
-    <SettingsPage page="/admin/settings/portal" width="wide">
-      {/* Controls left, live portal preview right (sticky). */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-6 items-start">
-        <div className="space-y-4 min-w-0">
-          <SettingsCard
-            title="Appearance"
-            description="Theme, color palette and typography, also applied to the embedded widget."
-          >
-            <AppearanceSettings
-              themeMode={state.themeMode}
-              setThemeMode={state.setThemeMode}
-              activePresetId={state.activePresetId}
-              setPreset={state.setPreset}
-              font={state.font}
-              currentFontId={state.currentFontId}
-              setFont={state.setFont}
-              radius={state.radius}
-              setRadius={state.setRadius}
-              cssText={state.cssText}
-              setCssText={state.setCssText}
-            />
-          </SettingsCard>
+  const navigation = (
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-6 items-start">
+      <div className="space-y-4 min-w-0">
+        <SettingsCard
+          title="Appearance"
+          description="Theme, color palette and typography, also applied to the embedded widget."
+        >
+          <AppearanceSettings
+            themeMode={state.themeMode}
+            setThemeMode={state.setThemeMode}
+            activePresetId={state.activePresetId}
+            setPreset={state.setPreset}
+            font={state.font}
+            currentFontId={state.currentFontId}
+            setFont={state.setFont}
+            radius={state.radius}
+            setRadius={state.setRadius}
+            cssText={state.cssText}
+            setCssText={state.setCssText}
+          />
+        </SettingsCard>
 
-          <SettingsCard
-            title="Navigation"
-            description="The portal's top tabs. They apply to the help center and status pages too."
-          >
-            <PortalNavEditor
-              items={navItems}
-              onChange={setNavItems}
-              gatedTypes={gatedTypes}
-              onReset={resetNavItems}
-              sectionHosts={sectionHosts}
-            />
-            <p className="mt-3 text-xs text-muted-foreground">
-              Renamed tabs show your text in every language; untouched labels stay translated.
-            </p>
-          </SettingsCard>
+        <SettingsCard
+          title="Navigation"
+          description="The portal's top tabs. They apply to the help center and status pages too."
+        >
+          <PortalNavEditor
+            items={navItems}
+            onChange={setNavItems}
+            gatedTypes={gatedTypes}
+            onReset={resetNavItems}
+            sectionHosts={sectionHosts}
+            linkSectionHosts={tabs.includes('custom-domains')}
+          />
+          <p className="mt-3 text-xs text-muted-foreground">
+            Renamed tabs show your text in every language; untouched labels stay translated.
+          </p>
+        </SettingsCard>
 
-          <SettingsCard
-            title="Welcome message"
-            description="Shown above the post list on your portal home. Leave empty to show nothing."
-          >
-            <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
-          </SettingsCard>
-        </div>
-
-        {/* ── Live portal preview ── */}
-        <div className="xl:sticky xl:top-6 min-w-0 self-start">
-          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="text-sm font-medium whitespace-nowrap">Live preview</span>
-            <div className="ms-auto flex flex-wrap items-center gap-1.5">
-              <PreviewControls
-                previewMode={state.previewMode}
-                previewModeDisabled={state.previewModeDisabled}
-                setPreviewMode={state.setPreviewMode}
-                viewport={viewport}
-                setViewport={setViewport}
-              />
-              <Button variant="outline" size="sm" asChild className="whitespace-nowrap">
-                <a href="/" target="_blank" rel="noopener noreferrer">
-                  Open portal
-                  <NewTabHint />
-                  <ArrowTopRightOnSquareIcon className="size-3.5 ms-1.5" />
-                </a>
-              </Button>
-            </div>
-          </div>
-
-          {/* The iframe waits for hydration; ClientOnly re-renders only itself then. */}
-          <ClientOnly>
-            <PortalPreview
-              theme={state.previewMode}
-              refreshKey={refreshKey}
-              draftCss={state.cssText}
-              cssDirty={themeDirty}
-              draft={previewDraft}
-              draftDirty={welcomeDirty || navDirty}
-              viewport={viewport}
-              workspaceName={workspaceName}
-              faviconUrl={logoData?.url ?? null}
-            />
-          </ClientOnly>
-        </div>
+        <SettingsCard
+          title="Welcome message"
+          description="Shown above the post list on your portal home. Leave empty to show nothing."
+        >
+          <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
+        </SettingsCard>
       </div>
 
-      <DraftBar dirty={isDirty} saving={saving} onSave={handleSave} onDiscard={handleDiscard} />
+      {/* ── Live portal preview ── */}
+      <div className="xl:sticky xl:top-6 min-w-0 self-start">
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="text-sm font-medium whitespace-nowrap">Live preview</span>
+          <div className="ms-auto flex flex-wrap items-center gap-1.5">
+            <PreviewControls
+              previewMode={state.previewMode}
+              previewModeDisabled={state.previewModeDisabled}
+              setPreviewMode={state.setPreviewMode}
+              viewport={viewport}
+              setViewport={setViewport}
+            />
+            <Button variant="outline" size="sm" asChild className="whitespace-nowrap">
+              <a href="/" target="_blank" rel="noopener noreferrer">
+                Open portal
+                <NewTabHint />
+                <ArrowTopRightOnSquareIcon className="size-3.5 ms-1.5" />
+              </a>
+            </Button>
+          </div>
+        </div>
+
+        {/* The iframe waits for hydration; ClientOnly re-renders only itself then. */}
+        <ClientOnly>
+          <PortalPreview
+            theme={state.previewMode}
+            refreshKey={refreshKey}
+            draftCss={state.cssText}
+            cssDirty={themeDirty}
+            draft={previewDraft}
+            draftDirty={welcomeDirty || navDirty}
+            viewport={viewport}
+            workspaceName={workspaceName}
+            faviconUrl={logoData?.url ?? null}
+          />
+        </ClientOnly>
+      </div>
+    </div>
+  )
+
+  return (
+    <SettingsPage page="/admin/settings/portal" width={tab === 'design' ? 'wide' : 'form'}>
+      <PortalTabBar tab={tab} tabs={tabs} />
+      {tab === 'design' ? navigation : <CustomDomainsPanel onLeave={markLeaving} />}
+      {/* Custom domains save from their own dialog; the drafts wait on the Design tab. */}
+      {tab === 'design' && (
+        <DraftBar dirty={isDirty} saving={saving} onSave={handleSave} onDiscard={handleDiscard} />
+      )}
       <UpgradeModal
         open={upgrade !== null}
         onOpenChange={(open) => {

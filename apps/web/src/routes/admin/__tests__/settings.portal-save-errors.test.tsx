@@ -14,6 +14,7 @@ const { toast, rootContext, saveFails, saveError } = vi.hoisted(() => ({
   rootContext: {
     settings: { name: 'Acme', featureFlags: { feedback: true, changelog: true } },
     session: null,
+    permissions: ['settings.branding'],
   },
   saveFails: { value: true },
   saveError: { value: new Error('nope') as Error },
@@ -26,11 +27,17 @@ vi.mock('@tanstack/react-router', async () => {
     await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
   return {
     ...actual,
-    createFileRoute: () => (options: Record<string, unknown>) => ({ options }),
+    createFileRoute: () => (options: Record<string, unknown>) => ({
+      options,
+      useLoaderData: () => ({ tabs: ['design'] }),
+      useSearch: () => ({}),
+      useNavigate: () => vi.fn(),
+    }),
     useRouteContext: ({ select }: { select: (context: typeof rootContext) => unknown }) =>
       select(rootContext),
     useRouter: () => ({ invalidate: vi.fn() }),
     useBlocker: () => undefined,
+    useSearch: () => ({}),
     ClientOnly: () => null,
     Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
   }

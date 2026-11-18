@@ -7,8 +7,8 @@
  * Recipients are every teammate holding `settings.custom_domain`, the
  * permission Verify is gated on. A bell for each, respecting their in-app
  * preference, as the same "domain needs attention" type a domain added by name
- * uses, so it opens Settings > Domains. A failure here is logged and never
- * undoes what it reports.
+ * uses. The bell names its section, so it opens the Custom domains tab of
+ * Settings > Portal. A failure here is logged and never undoes what it reports.
  */
 import { logger } from '@/lib/server/logger'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -21,14 +21,19 @@ import {
 
 const log = logger.child({ component: 'section-domains-notify' })
 
-async function ring(hostname: string, title: string, body: string): Promise<void> {
+async function ring(
+  section: PortalSection,
+  hostname: string,
+  title: string,
+  body: string
+): Promise<void> {
   try {
     const managers = await managersHolding(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)
     if (managers.length === 0) return
     await ringManagers(managers, 'domain_needs_attention', {
       title,
       body,
-      metadata: { domain: hostname, audience: 'admin' },
+      metadata: { domain: hostname, audience: 'admin', section },
     })
   } catch (err) {
     log.warn({ err, hostname }, 'section domain notification failed')
@@ -46,6 +51,7 @@ export async function notifySectionDomainNotAnswering(
   deadline: Date
 ): Promise<void> {
   await ring(
+    section,
     hostname,
     `${hostname} needs attention`,
     `The ${usedForLabel(section)} domain is not answering. Fix its DNS by ${formatDeadline(deadline)} to keep it verified.`
@@ -58,6 +64,7 @@ export async function notifySectionDomainLapsed(
   hostname: string
 ): Promise<void> {
   await ring(
+    section,
     hostname,
     `${hostname} is no longer verified`,
     `${usedForLabel(section)} is back on the primary domain. Fix the DNS, then verify it again.`

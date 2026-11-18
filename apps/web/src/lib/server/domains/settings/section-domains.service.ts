@@ -81,7 +81,7 @@ export async function getSectionDomains(
   })
 }
 
-/** What Settings > Domains shows: each section's hostname as visitors are routed, and the primary domain. */
+/** What the Custom domains tab shows: each section's hostname as visitors are routed, and the primary domain. */
 export interface SectionDomainsView {
   /**
    * The map as routing reads it: on Cloud a hostname whose custom domain is

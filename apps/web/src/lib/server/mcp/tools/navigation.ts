@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { buildAskDestinations } from '@/lib/shared/ask-destinations'
 import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
+import { CUSTOM_DOMAINS_HREF } from '@/lib/shared/portal-settings-tabs'
 import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 import { getFeatureFlags } from '@/lib/server/domains/settings/settings.service'
 import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
@@ -62,6 +63,11 @@ export const WORKSPACE_NAVIGATION = {
   domains: {
     href: '/admin/settings/domains',
     anyOf: DOMAINS_PAGE_PERMISSIONS,
+    scope: 'read:settings',
+  },
+  custom_domains: {
+    href: CUSTOM_DOMAINS_HREF,
+    permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
     scope: 'read:settings',
   },
   email: {
@@ -141,7 +147,7 @@ export function registerNavigationTools(server: McpServer, auth: McpAuthContext)
     permissions: ({ destination }, toolAuth) => [
       navigationPermission(WORKSPACE_NAVIGATION[destination], heldPermissions(toolAuth)),
     ],
-    description: `Return an allowed workspace deep link without changing anything. Use this for operator-managed workspace names, billing or plans, authentication or SSO, domains, members or roles, API keys, integration OAuth, installing a site snippet, creating a board, portal header customization, and every delete request. These areas cannot be changed from chat. Never invent a URL. A delete request opens its product page for a person to review.
+    description: `Return an allowed workspace deep link without changing anything. Use this for operator-managed workspace names, billing or plans, authentication or SSO, verified domains, custom domains, members or roles, API keys, integration OAuth, installing a site snippet, creating a board, portal header customization, and every delete request. These areas cannot be changed from chat. Never invent a URL. A delete request opens its product page for a person to review.
 Examples:
 {"destination":"members"}
 {"destination":"install_messenger"}

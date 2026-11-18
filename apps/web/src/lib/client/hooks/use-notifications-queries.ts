@@ -60,6 +60,8 @@ export interface SerializedNotification {
   /** Which app this row's deep link belongs to (from metadata, ticket bells only):
    *  'portal' for the requester, 'admin' for agent watchers; null on older rows. */
   audience: 'admin' | 'portal' | null
+  /** The portal section a custom domain bell is about (from metadata); null otherwise. */
+  section: string | null
   /** Lets the bell word the title and body in the reader's language. */
   params?: NotificationTextParams
   readAt: string | null

@@ -5,8 +5,22 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ to, hash, children, ...rest }: { to: string; hash?: string; children: ReactNode }) => (
-    <a href={`${to}${hash ? `#${hash}` : ''}`} {...rest}>
+  Link: ({
+    to,
+    search,
+    hash,
+    children,
+    ...rest
+  }: {
+    to: string
+    search?: Record<string, string>
+    hash?: string
+    children: ReactNode
+  }) => (
+    <a
+      href={`${to}${search ? `?${new URLSearchParams(search)}` : ''}${hash ? `#${hash}` : ''}`}
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -19,7 +33,7 @@ afterEach(cleanup)
 const AT = '2026-11-01T00:00:00.000Z'
 
 describe('a product page custom domain', () => {
-  it("shows the section's own domain, read-only, with the way to change it on Settings > Domains", () => {
+  it("shows the section's own domain, read-only, with the way to change it on Settings > Portal", () => {
     render(
       <SectionDomainCard
         section="help"
@@ -34,7 +48,7 @@ describe('a product page custom domain', () => {
     expect(screen.queryByText('Pending')).toBeNull()
     expect(screen.getByRole('link', { name: 'Custom domains' })).toHaveAttribute(
       'href',
-      '/admin/settings/domains#custom-domains'
+      '/admin/settings/portal?tab=custom-domains'
     )
   })
 

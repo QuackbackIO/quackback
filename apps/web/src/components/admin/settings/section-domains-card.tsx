@@ -1,12 +1,13 @@
 /**
- * The Custom domains card on Settings > Domains: the primary domain (Portal)
+ * The Custom domains card on Settings > Portal, Custom domains: the primary domain (Portal)
  * first, naming the sections it also serves, then one row per section with a
  * domain of its own, in nav order. Each section row is verified, changed and
  * removed from its menu; Add custom domain asks what the domain is used for
  * first. A self-hosted primary domain is BASE_URL, so its row is fixed.
  *
  * On a self-hosted server a hostname not yet verified shows the CNAME it needs.
- * On Cloud the records belong to the custom domain itself, on the card below.
+ * On Cloud the records belong to the custom domain itself, on the Domain
+ * verification card below.
  */
 import { Fragment, lazy, Suspense, useState } from 'react'
 import { Button } from '@/components/ui/button'

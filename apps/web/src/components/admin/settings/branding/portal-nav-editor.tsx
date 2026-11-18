@@ -1,4 +1,5 @@
 import { memo, useId } from 'react'
+import { Link } from '@tanstack/react-router'
 import {
   DndContext,
   closestCenter,
@@ -41,6 +42,7 @@ import {
 import type { PortalNavItemConfig } from '@/lib/shared/types/settings'
 import type { PortalSection } from '@/lib/shared/custom-domains'
 import { PORTAL_SECTIONS, type SectionDomainMap } from '@/lib/shared/section-domains'
+import { CUSTOM_DOMAINS_LINK } from '@/lib/shared/portal-settings-tabs'
 
 const TYPE_ICONS: Record<string, typeof ChatBubbleLeftIcon> = {
   feedback: ChatBubbleLeftIcon,
@@ -75,8 +77,10 @@ interface PortalNavEditorProps {
   /** Built-in types whose product is currently disabled (rows render inert). */
   gatedTypes: ReadonlySet<string>
   onReset: () => void
-  /** The hostname a tab's section is served at, when it has one of its own (set on Settings > Domains). */
+  /** The hostname a tab's section is served at, when it has one of its own (set on the Custom domains tab). */
   sectionHosts?: Partial<Record<PortalSection, string>>
+  /** The viewer has the Custom domains tab: each domain line links there. */
+  linkSectionHosts?: boolean
 }
 
 /**
@@ -90,6 +94,7 @@ export const PortalNavEditor = memo(function PortalNavEditor({
   gatedTypes,
   onReset,
   sectionHosts,
+  linkSectionHosts = false,
 }: PortalNavEditorProps) {
   const dndId = useId()
   const sensors = useSensors(
@@ -137,6 +142,7 @@ export const PortalNavEditor = memo(function PortalNavEditor({
                 item={item}
                 gated={item.type !== 'link' && gatedTypes.has(item.type)}
                 host={item.type !== 'link' ? sectionHosts?.[item.type] : undefined}
+                linkHost={linkSectionHosts}
                 onPatch={(patch) => updateItem(item.id, patch)}
                 onRemove={() => removeItem(item.id)}
               />
@@ -161,6 +167,7 @@ function NavRow({
   item,
   gated,
   host,
+  linkHost,
   onPatch,
   onRemove,
 }: {
@@ -168,6 +175,8 @@ function NavRow({
   gated: boolean
   /** The tab's own domain, shown as one quiet line under it. */
   host?: string
+  /** The line links to the Custom domains tab, where the domain is set. */
+  linkHost: boolean
   onPatch: (patch: Partial<PortalNavItemConfig>) => void
   onRemove: () => void
 }) {
@@ -283,7 +292,17 @@ function NavRow({
           // Lined up with the label's text: grip, icon and the input's own padding.
           className="mt-0.5 truncate ps-[3.8125rem] text-xs text-muted-foreground"
         >
-          {host}
+          {linkHost ? (
+            <Link
+              to={CUSTOM_DOMAINS_LINK.to}
+              search={CUSTOM_DOMAINS_LINK.search}
+              className="hover:text-foreground hover:underline"
+            >
+              {host}
+            </Link>
+          ) : (
+            host
+          )}
         </p>
       )}
     </div>

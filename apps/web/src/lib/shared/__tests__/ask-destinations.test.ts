@@ -59,6 +59,25 @@ describe('Ask destinations', () => {
     expect(paths).toContain('/admin/settings/domains')
     expect(paths).toContain('/admin/settings/widget/install')
   })
+  it('finds custom domains on the Custom domains tab of Settings > Portal', () => {
+    const [first] = searchAskDestinations('custom domain', options)
+    expect(first).toMatchObject({
+      href: '/admin/settings/portal?tab=custom-domains',
+      defaultMessage: 'Custom domains',
+      messageId: 'ask.destination.settings_portal_custom-domains',
+    })
+    // Domains stays, for the domains the workspace verified.
+    expect(searchAskDestinations('domains', options).map((item) => item.href)).toContain(
+      '/admin/settings/domains'
+    )
+    // Only a holder of settings.custom_domain is offered it.
+    const branding = buildAskDestinations({
+      ...options,
+      permissions: new Set([PERMISSIONS.SETTINGS_BRANDING]),
+    }).map((item) => item.href)
+    expect(branding).toContain('/admin/settings/portal')
+    expect(branding).not.toContain('/admin/settings/portal?tab=custom-domains')
+  })
   it('searches translated labels and keywords without a model or server dependency', () => {
     expect(searchAskDestinations('invite', options)[0]?.href).toBe('/admin/settings/members')
     expect(

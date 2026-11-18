@@ -1,6 +1,6 @@
 import { PERMISSIONS, type PermissionKey } from './permissions'
 import { EMAIL_SENDING_PERMISSION } from './email-sending-permissions'
-import { CUSTOM_DOMAINS_ANCHOR } from './section-domains'
+import { CUSTOM_DOMAINS_LINK } from './portal-settings-tabs'
 
 export type DomainUse = 'email' | 'customDomain' | 'signIn'
 
@@ -13,7 +13,7 @@ export const DOMAIN_USE_PERMISSION = {
 
 /**
  * Who can open the Domains page: a holder of any permission that owns one of
- * the kinds of domain it lists (web addresses, email sending, sign-in).
+ * the kinds of domain it lists (custom domains, email sending, sign-in).
  * Kept apart from the settings nav so a route loader can read it without
  * pulling the page registry into the app entry.
  */
@@ -23,10 +23,7 @@ export const DOMAINS_PAGE_PERMISSIONS = [
   DOMAIN_USE_PERMISSION.signIn,
 ] as const satisfies readonly PermissionKey[]
 
-/** The Custom domains card on the Domains page, where each section's domain is set. */
-export { CUSTOM_DOMAINS_ANCHOR }
-
-/** The Cloud card where a hostname is added and its DNS records are checked. */
+/** The Cloud card, on the Custom domains tab, where a hostname is added and its DNS records are checked. */
 export const DOMAIN_VERIFICATION_ANCHOR = 'domain-verification'
 
 export interface UseLink {
@@ -41,8 +38,8 @@ export type DomainUseLinks = Partial<Record<DomainUse, UseLink>>
 /**
  * The setup page for each use, gated by that page's own permission. Email and
  * Sign-in sit behind no product. Custom domains are set up on the Custom
- * domains card of this page, on Cloud and self-hosted alike; product pages
- * show their section's domain read-only, with a link here.
+ * domains tab of Settings > Portal, on Cloud and self-hosted alike; product
+ * pages show their section's domain read-only, with a link there.
  */
 export function domainUseLinks({
   permissions,
@@ -53,7 +50,7 @@ export function domainUseLinks({
   const links: DomainUseLinks = {}
   if (can(EMAIL_SENDING_PERMISSION)) links.email = { to: '/admin/settings/email' }
   if (can(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)) {
-    links.customDomain = { to: '/admin/settings/domains', hash: CUSTOM_DOMAINS_ANCHOR }
+    links.customDomain = { to: CUSTOM_DOMAINS_LINK.to, search: { ...CUSTOM_DOMAINS_LINK.search } }
   }
   if (can(PERMISSIONS.AUTH_MANAGE)) {
     links.signIn = { to: '/admin/settings/security/authentication', search: { tab: 'sign-in' } }

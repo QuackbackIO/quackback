@@ -79,6 +79,8 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
         // can route the requester to the portal thread and agents to the
         // admin inbox. Absent on pre-watchers rows.
         const audience = n.metadata?.audience
+        // A section's custom domain bell names the section (section-domains-notify).
+        const section = n.metadata?.section
         return {
           id: n.id,
           principalId: n.principalId,
@@ -94,6 +96,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
           actorName: typeof actorName === 'string' ? actorName : null,
           actorAvatarUrl: typeof actorAvatarUrl === 'string' ? actorAvatarUrl : null,
           audience: audience === 'admin' || audience === 'portal' ? audience : null,
+          section: typeof section === 'string' ? section : null,
           params: notificationTextParams(n.metadata),
           readAt: n.readAt?.toISOString() ?? null,
           archivedAt: n.archivedAt?.toISOString() ?? null,

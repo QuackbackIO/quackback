@@ -9,15 +9,21 @@ const updateRouting = vi.fn()
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     to,
+    search,
     children,
     className,
     ...rest
   }: {
     to: string
+    search?: Record<string, string>
     children: React.ReactNode
     className?: string
   }) => (
-    <a href={to} className={className} {...rest}>
+    <a
+      href={`${to}${search ? `?${new URLSearchParams(search)}` : ''}`}
+      className={className}
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -99,7 +105,7 @@ describe('ChannelsHubPage', () => {
     expect(screen.getByText('Custom domain')).toBeTruthy()
     expect(screen.getByText('support.acme.com')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Custom domains' }).getAttribute('href')).toBe(
-      '/admin/settings/domains'
+      '/admin/settings/portal?tab=custom-domains'
     )
   })
 

@@ -279,7 +279,7 @@ describe('domain view uses', () => {
     expect(useRow('Custom domains')).toHaveTextContent('help.acme.com · Help center')
     expect(
       within(useRow('Custom domains')).getByRole('link', { name: 'Custom domains' })
-    ).toHaveAttribute('href', '/admin/settings/domains#custom-domains')
+    ).toHaveAttribute('href', '/admin/settings/portal?tab=custom-domains')
   })
 
   it('never says live, mail or Security', () => {
@@ -546,11 +546,11 @@ describe('domain view permissions', () => {
     expect(visibleDomainUses(all)).toEqual(['email', 'customDomain', 'signIn'])
   })
 
-  it('links the custom domain to the Custom domains card only', () => {
+  it('links the custom domain to the Custom domains tab of Settings > Portal only', () => {
     renderView(all(), { permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN] })
     expect(useTitles()).toEqual(['Custom domains'])
     expect(screen.getAllByRole('link').map((l) => l.getAttribute('href'))).toEqual([
-      '/admin/settings/domains#custom-domains',
+      '/admin/settings/portal?tab=custom-domains',
     ])
   })
 })

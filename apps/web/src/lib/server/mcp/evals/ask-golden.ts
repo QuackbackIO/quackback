@@ -85,9 +85,9 @@ export const ASK_GOLDEN_CASES: readonly AskGoldenCase[] = [
     request: 'Add a custom domain',
     profile: 'owner',
     tool: 'navigate_workspace',
-    arguments: { destination: 'domains' },
+    arguments: { destination: 'custom_domains' },
     expected: 'navigation',
-    expectedHref: '/admin/settings/domains',
+    expectedHref: '/admin/settings/portal?tab=custom-domains',
   },
   {
     id: '19',
