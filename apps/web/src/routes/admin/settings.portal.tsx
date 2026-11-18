@@ -35,6 +35,7 @@ import {
 import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { PlanFeatureNotice } from '@/components/admin/settings/plan-feature-notice'
 import { DraftBar } from '@/components/admin/settings/draft-bar'
 import { ThemeModeTiles } from '@/components/admin/settings/branding/theme-mode-tiles'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -177,6 +178,7 @@ function PortalSettingsRoute() {
   return (
     <SettingsPage page="/admin/settings/portal">
       <PortalTabBar tab={tab} tabs={tabs} />
+      <PlanFeatureNotice feature="customDomain" />
       <CustomDomainsPanel />
     </SettingsPage>
   )
@@ -513,6 +515,7 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
   return (
     <SettingsPage page="/admin/settings/portal" width={tab === 'design' ? 'wide' : 'form'}>
       <PortalTabBar tab={tab} tabs={tabs} />
+      <PlanFeatureNotice feature={tab === 'design' ? 'customCss' : 'customDomain'} />
       {tab === 'design' ? navigation : <CustomDomainsPanel onLeave={markLeaving} />}
       {/* Custom domains save from their own dialog; the drafts wait on the Design tab. */}
       {tab === 'design' && (

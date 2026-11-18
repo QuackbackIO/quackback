@@ -3,6 +3,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { PlanFeatureNotice } from '@/components/admin/settings/plan-feature-notice'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationsSettingsBody } from '@/components/admin/settings/integrations/integrations-settings-body'
 import { readBatch } from '@/lib/client/queries/read-batch'
@@ -40,6 +41,7 @@ function IntegrationsPage() {
 
   return (
     <SettingsPage page="/admin/settings/integrations" width="wide">
+      <PlanFeatureNotice feature="integrations" />
       <IntegrationsSettingsBody
         enabled={integrationsEnabled}
         catalog={catalogQuery.data}

@@ -6,6 +6,7 @@ import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { z } from 'zod'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { PlanFeatureNotice } from '@/components/admin/settings/plan-feature-notice'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { WorkspaceKeysSettings } from '@/components/admin/settings/api-keys/workspace-keys-settings'
@@ -103,6 +104,7 @@ function ApiPage() {
 
   return (
     <SettingsPage page="/admin/settings/developers">
+      <PlanFeatureNotice feature="webhooks" />
       <Tabs
         value={tab}
         onValueChange={(next) => {

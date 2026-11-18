@@ -10,6 +10,7 @@ import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { PlanFeatureNotice } from '@/components/admin/settings/plan-feature-notice'
 
 export const Route = createFileRoute('/admin/settings/workflows')({
   head: adminPageHead('Workflows settings'),
@@ -58,6 +59,7 @@ function WorkflowsPage() {
   const { workflowsEntitled } = Route.useLoaderData()
   return (
     <WorkflowsManager entitled={workflowsEntitled} after={<AbandonedJourneyAutoCloseCard />}>
+      <PlanFeatureNotice feature="workflows" />
       <WhoRepliesFirstCard />
     </WorkflowsManager>
   )

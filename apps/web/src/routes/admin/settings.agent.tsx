@@ -19,6 +19,7 @@ import { AgentKnowledgeCard } from '@/components/admin/automation/assistant-know
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
 
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { PlanFeatureNotice } from '@/components/admin/settings/plan-feature-notice'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { Button } from '@/components/ui/button'
@@ -121,6 +122,7 @@ function AssistantAgentSettings() {
           />
         }
       >
+        <PlanFeatureNotice feature="aiAssistant" />
         {settingsQuery.isPending ? (
           <div className="rounded-xl border bg-card p-6" role="status">
             <p className="text-sm text-muted-foreground">
