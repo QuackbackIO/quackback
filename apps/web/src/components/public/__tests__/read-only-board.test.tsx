@@ -55,21 +55,12 @@ const NOTE = "This board isn't taking new feedback right now."
 const PLAN_WORDS = /plan|upgrade|billing|limit|tier/i
 
 describe('the read-only note', () => {
-  it('says the board is not taking feedback and offers an open board', () => {
-    wrap(<ReadOnlyBoardNote shareBoard={{ name: 'Feature requests', slug: 'features' }} />)
+  it('says the board is not taking feedback, with no link and no plan words', () => {
+    wrap(<ReadOnlyBoardNote />)
     const note = screen.getByTestId('read-only-board-note')
-    expect(note).toHaveTextContent(`${NOTE} Share it in Feature requests.`)
-    expect(screen.getByRole('link', { name: 'Feature requests' })).toHaveAttribute(
-      'href',
-      '/?board=features'
-    )
-    expect(note.textContent).not.toMatch(PLAN_WORDS)
-  })
-
-  it('leaves out the link when there is no open board to point at', () => {
-    wrap(<ReadOnlyBoardNote shareBoard={null} />)
-    expect(screen.getByTestId('read-only-board-note')).toHaveTextContent(NOTE)
+    expect(note).toHaveTextContent(NOTE)
     expect(screen.queryByRole('link')).toBeNull()
+    expect(note.textContent).not.toMatch(PLAN_WORDS)
   })
 })
 

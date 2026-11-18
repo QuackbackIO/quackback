@@ -2276,9 +2276,7 @@
   "admin.integrations.oauthError.elsewhere": "Этот аккаунт {name} уже подключён к другому рабочему пространству Quackback.",
   "admin.integrations.oauthError.failed": "Подключение к {name} не завершилось. Попробуйте подключить ещё раз.",
   "portal.feedback.readOnly": "В этой категории сейчас не принимаются новые предложения.",
-  "portal.feedback.readOnlyShare": "Отправьте его в {board}.",
   "portal.postCard.vote.ariaClosed": "{count, plural, one {# голос} few {# голоса} many {# голосов} other {# голоса}}, голосование закрыто",
   "widget.voteButton.ariaClosed": "{count, plural, one {# голос} few {# голоса} many {# голосов} other {# голоса}}, голосование закрыто",
-  "widget.readOnly": "В этой категории сейчас не принимаются новые предложения.",
-  "widget.readOnlyShare": "Отправьте его в {board}."
+  "widget.readOnly": "В этой категории сейчас не принимаются новые предложения."
 }

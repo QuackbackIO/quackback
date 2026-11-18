@@ -52,8 +52,6 @@ export interface ComposerPlan<B extends ComposerBoard> {
   boards: B[]
   /** Whether the composer stands down for the note (a read-only board, or nothing to post to). */
   readOnly: boolean
-  /** A board to point at instead, when the server named one. */
-  shareBoard: B | null
 }
 
 /**
@@ -63,16 +61,11 @@ export interface ComposerPlan<B extends ComposerBoard> {
  */
 export function planComposer<B extends ComposerBoard>(
   boards: B[],
-  permissions: Record<string, { readOnly?: boolean; shareBoardId?: string | null }> | undefined,
+  permissions: Record<string, { readOnly?: boolean }> | undefined,
   lockedBoardId: string | undefined
 ): ComposerPlan<B> {
   const open = boards.filter((board) => !permissions?.[board.id]?.readOnly)
   const locked = lockedBoardId ? permissions?.[lockedBoardId] : undefined
   const readOnly = (boards.length > 0 && open.length === 0) || !!locked?.readOnly
-  const shareId = locked?.shareBoardId ?? open[0]?.id
-  return {
-    boards: open,
-    readOnly,
-    shareBoard: readOnly ? (boards.find((board) => board.id === shareId) ?? null) : null,
-  }
+  return { boards: open, readOnly }
 }

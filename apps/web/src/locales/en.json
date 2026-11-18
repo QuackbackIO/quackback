@@ -2276,9 +2276,7 @@
   "admin.integrations.oauthError.elsewhere": "This {name} account is already connected to another Quackback workspace.",
   "admin.integrations.oauthError.failed": "The connection to {name} didn't finish. Try connecting again.",
   "portal.feedback.readOnly": "This board isn't taking new feedback right now.",
-  "portal.feedback.readOnlyShare": "Share it in {board}.",
   "portal.postCard.vote.ariaClosed": "{count, plural, one {# vote} other {# votes}}, voting closed",
   "widget.voteButton.ariaClosed": "{count, plural, one {# vote} other {# votes}}, voting closed",
-  "widget.readOnly": "This board isn't taking new feedback right now.",
-  "widget.readOnlyShare": "Share it in {board}."
+  "widget.readOnly": "This board isn't taking new feedback right now."
 }

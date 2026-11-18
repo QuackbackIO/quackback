@@ -69,10 +69,8 @@ import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters
 
 import { serializePublicBoard } from '@/lib/server/domains/boards/board.serialize'
 import type { BoardPermission } from '@/lib/shared/types/boards'
-import {
-  isBoardOpenFor,
-  readOnlyBoardState,
-} from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
+import { isBoardOpenFor } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
+import { openBoardIds } from '@/lib/server/domains/plan-limits/plan-limits.service'
 
 const log = logger.child({ component: 'portal' })
 
@@ -119,30 +117,19 @@ async function buildBoardPermissions(
   allowAnonymous: boolean
 ): Promise<Record<string, BoardPermission>> {
   const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
-  const { open, postsPaused } = await readOnlyBoardState()
+  const open = await openBoardIds()
   const caps = new Map(
     boards.map((b) => [b.id, boardCapabilitiesForActor(actor, b.access, allowAnonymous)])
   )
   // A read-only board (set by an admin, or frozen by the plan) shows its posts
-  // and takes nothing; visitors are pointed at a board that does, unless new
-  // posts are stopped everywhere.
+  // and takes nothing.
   const isClosed = (b: { id: string; readOnly?: boolean }) =>
     !!b.readOnly || (open !== null && !open.includes(b.id))
-  const anyClosed = boards.some(isClosed)
-  let shareBoardId: string | null = null
-  if (anyClosed) {
-    // Prefer one the viewer can post to now; a visitor who must sign in first
-    // is still pointed at an open board they can see.
-    const visibleOpen = boards.filter((b) => !isClosed(b))
-    const target = visibleOpen.find((b) => caps.get(b.id)?.canSubmit) ?? visibleOpen[0]
-    // The posts cap is read only when there is a board to point at.
-    if (target && !(await postsPaused())) shareBoardId = target.id
-  }
   const map: Record<string, BoardPermission> = {}
   for (const b of boards) {
     const c = caps.get(b.id)!
     map[b.id] = isClosed(b)
-      ? { canSubmit: false, canVote: false, readOnly: true, shareBoardId }
+      ? { canSubmit: false, canVote: false, readOnly: true }
       : { canSubmit: c.canSubmit, canVote: c.canVote }
   }
   return map

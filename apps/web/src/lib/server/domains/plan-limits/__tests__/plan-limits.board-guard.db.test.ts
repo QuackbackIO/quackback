@@ -357,53 +357,15 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
       await invalidateSettingsCache()
     })
 
-    it('marks a read-only board, closes its votes and posts, and points at the open board', async () => {
+    it('marks a read-only board and closes its votes and posts', async () => {
       await enforce()
       const { permissions } = await runFetchBoardCapabilities(null)
       expect(permissions[closedBoard]).toEqual({
         canSubmit: false,
         canVote: false,
         readOnly: true,
-        shareBoardId: openBoard,
       })
       expect(permissions[openBoard]).toEqual({ canSubmit: true, canVote: true })
-    })
-
-    it('points a visitor who must sign in first at the open board anyway', async () => {
-      await testDb
-        .update(boards)
-        .set({
-          access: {
-            ...DEFAULT_BOARD_ACCESS,
-            view: 'anonymous',
-            vote: 'authenticated',
-            submit: 'authenticated',
-          },
-        })
-        .where(inArray(boards.id, [openBoard, closedBoard]))
-      await enforce()
-      const { permissions } = await runFetchBoardCapabilities(null)
-      expect(permissions[openBoard]?.canSubmit).toBe(false)
-      expect(permissions[closedBoard]).toMatchObject({ readOnly: true, shareBoardId: openBoard })
-    })
-
-    it('offers no board to post to at exactly the posts cap, where a post is refused', async () => {
-      await configure({ planLimits: true, tierLimits: { ...FREE_LIKE, maxPosts: 4 } })
-      await getPlanLimits()
-      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
-      const { permissions } = await runFetchBoardCapabilities(null)
-      expect(permissions[closedBoard]).toMatchObject({ readOnly: true, shareBoardId: null })
-    })
-
-    it('offers no board to post to while new posts are stopped at the posts cap', async () => {
-      await configure({
-        planLimits: true,
-        tierLimits: { ...FREE_LIKE, maxPosts: 1 },
-      })
-      await getPlanLimits()
-      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
-      const { permissions } = await runFetchBoardCapabilities(null)
-      expect(permissions[closedBoard]).toMatchObject({ readOnly: true, shareBoardId: null })
     })
 
     it('says nothing about read-only boards in grace or with the flag off', async () => {
@@ -477,7 +439,7 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
       await expect(newComment(closedPost)).resolves.toBeDefined()
     })
 
-    it('tells the portal, and points at an open board that is not read-only', async () => {
+    it('tells the portal that a manually read-only board is read-only', async () => {
       const third = await addBoard('Acme third', 0, new Date('2026-03-01T00:00:00.000Z'))
       await testDb.update(boards).set({ readOnly: true }).where(eq(boards.id, openBoard))
       const open = {
@@ -497,8 +459,8 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
         .where(eq(settings.id, settingsId))
       await invalidateSettingsCache()
       const { permissions } = await runFetchBoardCapabilities(null)
-      expect(permissions[closedBoard]).toMatchObject({ readOnly: true, shareBoardId: third.id })
-      expect(permissions[openBoard]).toMatchObject({ readOnly: true, shareBoardId: third.id })
+      expect(permissions[closedBoard]).toMatchObject({ readOnly: true })
+      expect(permissions[openBoard]).toMatchObject({ readOnly: true })
       expect(permissions[third.id]).toEqual({ canSubmit: true, canVote: true })
     })
 

@@ -260,7 +260,9 @@ vi.mock('@/lib/server/sanitize-tiptap', () => ({
 // Every board is open: this suite is about the portal gate, not read-only boards.
 vi.mock('@/lib/server/domains/plan-limits/plan-limits.board-guard', () => ({
   isBoardOpenFor: vi.fn(async () => true),
-  readOnlyBoardState: vi.fn(async () => ({ open: null, postsPaused: false })),
+}))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+  openBoardIds: vi.fn(async () => null),
 }))
 
 vi.mock('@/lib/shared/errors', () => ({

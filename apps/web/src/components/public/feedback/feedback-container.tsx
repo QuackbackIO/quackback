@@ -474,7 +474,7 @@ export function FeedbackContainer({
       <div className="flex gap-6 lg:gap-8">
         <div className="flex-1 min-w-0">
           {composer.readOnly ? (
-            <ReadOnlyBoardNote shareBoard={composer.shareBoard} />
+            <ReadOnlyBoardNote />
           ) : (
             <FeedbackHeader
               workspaceName={workspaceName}

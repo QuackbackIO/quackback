@@ -2276,9 +2276,7 @@
   "admin.integrations.oauthError.elsewhere": "Ce compte {name} est déjà connecté à un autre espace de travail Quackback.",
   "admin.integrations.oauthError.failed": "La connexion à {name} n'a pas abouti. Réessayez de vous connecter.",
   "portal.feedback.readOnly": "Cette catégorie n'accepte pas de nouveaux retours pour le moment.",
-  "portal.feedback.readOnlyShare": "Partagez-le dans {board}.",
   "portal.postCard.vote.ariaClosed": "{count, plural, one {# vote} other {# votes}}, vote fermé",
   "widget.voteButton.ariaClosed": "{count, plural, one {# vote} other {# votes}}, vote fermé",
-  "widget.readOnly": "Cette catégorie n'accepte pas de nouveaux retours pour le moment.",
-  "widget.readOnlyShare": "Partagez-le dans {board}."
+  "widget.readOnly": "Cette catégorie n'accepte pas de nouveaux retours pour le moment."
 }

@@ -2276,9 +2276,7 @@
   "admin.integrations.oauthError.elsewhere": "Esta cuenta de {name} ya está conectada a otro espacio de trabajo de Quackback.",
   "admin.integrations.oauthError.failed": "La conexión con {name} no se completó. Vuelve a intentar conectar.",
   "portal.feedback.readOnly": "Esta categoría no admite comentarios nuevos por ahora.",
-  "portal.feedback.readOnlyShare": "Compártelo en {board}.",
   "portal.postCard.vote.ariaClosed": "{count, plural, one {# voto} other {# votos}}, votación cerrada",
   "widget.voteButton.ariaClosed": "{count, plural, one {# voto} other {# votos}}, votación cerrada",
-  "widget.readOnly": "Esta categoría no admite comentarios nuevos por ahora.",
-  "widget.readOnlyShare": "Compártelo en {board}."
+  "widget.readOnly": "Esta categoría no admite comentarios nuevos por ahora."
 }

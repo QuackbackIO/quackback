@@ -627,11 +627,9 @@ export function WidgetHomeAnimated({
     [boardPermissions]
   )
   const canPost = boardPermissions?.[selectedBoardId]?.canSubmit ?? false
-  // A read-only board takes no posts: the footer says so, with a way to post
-  // to a board that does, and the submit button goes away.
+  // A read-only board takes no posts: the footer says so and the submit
+  // button goes away.
   const selectedReadOnly = boardPermissions?.[selectedBoardId]?.readOnly ?? false
-  const shareBoard =
-    boards.find((b) => b.id === boardPermissions?.[selectedBoardId]?.shareBoardId) ?? null
   // An identified viewer denied by the selected board's submit tier (segments/
   // team) is an authorization failure — surface it instead of "Posting as X".
   // An anonymous visitor on a members-only board must sign in via the host
@@ -1076,32 +1074,10 @@ export function WidgetHomeAnimated({
                     <div className="flex items-center justify-between px-3 py-2">
                       <p className="text-[11px] text-muted-foreground truncate me-2">
                         {selectedReadOnly ? (
-                          <>
-                            <FormattedMessage
-                              id="widget.readOnly"
-                              defaultMessage="This board isn't taking new feedback right now."
-                            />
-                            {shareBoard && (
-                              <>
-                                {' '}
-                                <FormattedMessage
-                                  id="widget.readOnlyShare"
-                                  defaultMessage="Share it in {board}."
-                                  values={{
-                                    board: (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleComposeBoardChange(shareBoard.id)}
-                                        className="font-medium text-foreground hover:underline"
-                                      >
-                                        {shareBoard.name}
-                                      </button>
-                                    ),
-                                  }}
-                                />
-                              </>
-                            )}
-                          </>
+                          <FormattedMessage
+                            id="widget.readOnly"
+                            defaultMessage="This board isn't taking new feedback right now."
+                          />
                         ) : submitNoAccess ? (
                           <FormattedMessage
                             id="widget.home.posting.noAccess"

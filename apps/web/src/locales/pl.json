@@ -2276,9 +2276,7 @@
   "admin.integrations.oauthError.elsewhere": "To konto {name} jest już połączone z innym obszarem roboczym Quackback.",
   "admin.integrations.oauthError.failed": "Połączenie z {name} nie zostało ukończone. Spróbuj połączyć ponownie.",
   "portal.feedback.readOnly": "Ta tablica nie przyjmuje teraz nowych opinii.",
-  "portal.feedback.readOnlyShare": "Podziel się nią w {board}.",
   "portal.postCard.vote.ariaClosed": "{count, plural, one {# głos} few {# głosy} many {# głosów} other {# głosu}}, głosowanie zamknięte",
   "widget.voteButton.ariaClosed": "{count, plural, one {# głos} few {# głosy} many {# głosów} other {# głosu}}, głosowanie zamknięte",
-  "widget.readOnly": "Ta tablica nie przyjmuje teraz nowych opinii.",
-  "widget.readOnlyShare": "Podziel się nią w {board}."
+  "widget.readOnly": "Ta tablica nie przyjmuje teraz nowych opinii."
 }

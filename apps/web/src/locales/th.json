@@ -2276,9 +2276,7 @@
   "admin.integrations.oauthError.elsewhere": "บัญชี {name} นี้เชื่อมต่อกับพื้นที่ทำงาน Quackback อื่นอยู่แล้ว",
   "admin.integrations.oauthError.failed": "การเชื่อมต่อกับ {name} ไม่เสร็จสมบูรณ์ ลองเชื่อมต่ออีกครั้ง",
   "portal.feedback.readOnly": "บอร์ดนี้ยังไม่รับความคิดเห็นใหม่ในขณะนี้",
-  "portal.feedback.readOnlyShare": "แชร์ไว้ใน {board}",
   "portal.postCard.vote.ariaClosed": "{count, plural, other {# โหวต}}, ปิดการโหวตแล้ว",
   "widget.voteButton.ariaClosed": "{count, plural, other {# โหวต}}, ปิดการโหวตแล้ว",
-  "widget.readOnly": "บอร์ดนี้ยังไม่รับความคิดเห็นใหม่ในขณะนี้",
-  "widget.readOnlyShare": "แชร์ไว้ใน {board}"
+  "widget.readOnly": "บอร์ดนี้ยังไม่รับความคิดเห็นใหม่ในขณะนี้"
 }

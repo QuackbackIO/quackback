@@ -14,13 +14,11 @@
 import { toUuid } from '@quackback/ids'
 import type { SQL } from 'drizzle-orm'
 import { db, and, boards, eq, isNull, posts, sql } from '@/lib/server/db'
-import { notTestPrincipal } from '@/lib/server/test-data'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { BOARD_READ_ONLY_MESSAGE } from '@/lib/shared/board-read-only'
 import type { BoardId, PostId } from '@quackback/ids'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
-import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
-import { evaluate, getPlanLimits, openBoardIds } from './plan-limits.service'
+import { getPlanLimits, openBoardIds } from './plan-limits.service'
 
 export const BOARD_READ_ONLY_CODE = 'BOARD_READ_ONLY'
 export { BOARD_READ_ONLY_MESSAGE }
@@ -115,43 +113,6 @@ export async function planOpenBoardsSql(): Promise<SQL> {
 /** Refuses a vote on a post whose board is read-only. */
 export async function assertPostBoardOpen(postId: PostId): Promise<void> {
   if (!(await isPostBoardOpen(postId))) throw new BoardReadOnlyError()
-}
-
-/**
- * Whether a new post would be refused at the posts cap, as `createPost` counts.
- * With the limits in force this reads the plan limits' cached usage; otherwise
- * it counts, and only when the plan has a posts cap at all.
- */
-async function postsCapReached(): Promise<boolean> {
-  try {
-    const { maxPosts } = await getTierLimits()
-    if (maxPosts === null) return false
-    if ((await getPlanLimits()).enabled) {
-      const { snapshot } = await evaluate({ now: new Date(), persist: false })
-      const used = snapshot.usage?.maxPosts
-      if (used !== undefined) return used >= maxPosts
-    }
-    const [row] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(posts)
-      .where(and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId)))
-    return (row?.count ?? 0) >= maxPosts
-  } catch {
-    return false
-  }
-}
-
-/**
- * What the portal and widget need to draw read-only boards: the boards the plan
- * keeps open (null when it keeps all) and whether new posts are stopped at the
- * posts cap, read only when asked. It names no plan, so it is safe to send to a
- * visitor.
- */
-export async function readOnlyBoardState(): Promise<{
-  open: string[] | null
-  postsPaused: () => Promise<boolean>
-}> {
-  return { open: await openBoardIds(), postsPaused: postsCapReached }
 }
 
 /**

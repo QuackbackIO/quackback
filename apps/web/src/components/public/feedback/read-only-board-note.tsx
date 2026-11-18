@@ -1,16 +1,10 @@
 import { FormattedMessage } from 'react-intl'
-import { Link } from '@tanstack/react-router'
-
-interface ReadOnlyBoardNoteProps {
-  /** A board to post to instead, when there is one. */
-  shareBoard?: { name: string; slug: string } | null
-}
 
 /**
  * Stands in for the composer on a board that shows its posts and takes none.
  * Quiet on purpose, and it never says why.
  */
-export function ReadOnlyBoardNote({ shareBoard }: ReadOnlyBoardNoteProps): React.ReactElement {
+export function ReadOnlyBoardNote(): React.ReactElement {
   return (
     <p
       data-testid="read-only-board-note"
@@ -20,26 +14,6 @@ export function ReadOnlyBoardNote({ shareBoard }: ReadOnlyBoardNoteProps): React
         id="portal.feedback.readOnly"
         defaultMessage="This board isn't taking new feedback right now."
       />
-      {shareBoard && (
-        <>
-          {' '}
-          <FormattedMessage
-            id="portal.feedback.readOnlyShare"
-            defaultMessage="Share it in {board}."
-            values={{
-              board: (
-                <Link
-                  to="/"
-                  search={{ board: shareBoard.slug }}
-                  className="font-medium text-foreground hover:underline"
-                >
-                  {shareBoard.name}
-                </Link>
-              ),
-            }}
-          />
-        </>
-      )}
     </p>
   )
 }
