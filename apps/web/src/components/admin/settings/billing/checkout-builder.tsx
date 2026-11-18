@@ -109,13 +109,7 @@ export function CheckoutBuilder(props: {
             data-settings-card=""
             className="divide-y divide-border/50 overflow-hidden border-y border-t-transparent"
           >
-            {freePlan && freeAction ? (
-              <FreePlanRow
-                plan={freePlan}
-                action={freeAction}
-                currentPlanName={overview.planName}
-              />
-            ) : null}
+            {freePlan && freeAction ? <FreePlanRow plan={freePlan} action={freeAction} /> : null}
             {paidPlans.map((plan) => (
               <PlanRow
                 key={plan.id}
@@ -271,11 +265,7 @@ function PlanRow(props: {
   )
 }
 
-function FreePlanRow(props: {
-  plan: CataloguePlan
-  action: BillingPlanAction
-  currentPlanName?: string
-}) {
+function FreePlanRow(props: { plan: CataloguePlan; action: BillingPlanAction }) {
   const [open, setOpen] = useState(false)
   const current = props.action.kind === 'current'
   return (
@@ -303,11 +293,7 @@ function FreePlanRow(props: {
             </Button>
             {open ? (
               <Suspense fallback={null}>
-                <FreeDowngradeDialog
-                  open
-                  onOpenChange={setOpen}
-                  currentPlanName={props.currentPlanName}
-                />
+                <FreeDowngradeDialog open onOpenChange={setOpen} />
               </Suspense>
             ) : null}
           </div>
@@ -468,7 +454,6 @@ function OrderSummary(props: {
             action={props.action}
             canAct={canAct}
             trialDays={props.trialDays}
-            currentPlanName={overview.planName}
           />
           <p className="text-[12px] leading-snug text-muted-foreground">
             {!canAct
@@ -501,7 +486,6 @@ function SummaryAction(props: {
   action: BillingPlanAction | null
   canAct: boolean
   trialDays: number
-  currentPlanName?: string
 }) {
   const { plan, action } = props
   if (props.brandingOnly && props.canAct) {
@@ -536,7 +520,6 @@ function SummaryAction(props: {
         planId={action.planId}
         period={props.period}
         branding={props.branding}
-        currentPlanName={props.currentPlanName}
       />
     )
   }
@@ -571,7 +554,6 @@ function PaidDowngradeAction(props: {
   planId: string
   period: BillingPeriod
   branding: boolean
-  currentPlanName?: string
 }) {
   const [open, setOpen] = useState(false)
   return (
@@ -586,7 +568,6 @@ function PaidDowngradeAction(props: {
             onOpenChange={setOpen}
             planId={props.planId}
             planName={props.planName}
-            currentPlanName={props.currentPlanName}
             checkout={{
               period: props.period,
               branding: props.branding,

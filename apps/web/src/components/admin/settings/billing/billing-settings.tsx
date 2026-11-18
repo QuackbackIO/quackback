@@ -167,7 +167,6 @@ export function BillingPlansView(props: {
                 index={index}
                 subscribeIsContinuation={Boolean(overview.trialActive || overview.trialEnded)}
                 onSubscribe={setSubscribePlanId}
-                currentPlanName={overview.planName}
                 currentPlanId={overview.plan}
               />
             ))}
@@ -232,6 +231,9 @@ function CurrentPlanCard(props: {
     (overview.trialActive || overview.trialEnded) &&
     catalogue?.plans.some((entry) => entry.id === subscribePlanId)
   )
+  // canSubscribe requires this catalogue entry, so the button always names a plan.
+  const subscribePlanName =
+    catalogue?.plans.find((entry) => entry.id === subscribePlanId)?.name ?? trialPlanName
   const daysLeft =
     overview.trialActive && overview.trialExpiresAt ? daysUntil(overview.trialExpiresAt) : null
   const statusLabel = overview.trialActive
@@ -290,7 +292,7 @@ function CurrentPlanCard(props: {
           ) : null}
           {canSubscribe && subscribePlanId ? (
             <Button size="sm" type="button" onClick={() => props.onSubscribe(subscribePlanId)}>
-              Continue with {trialPlanName ?? 'a paid plan'}
+              Upgrade to {subscribePlanName}
             </Button>
           ) : null}
           {overview.canManageBilling ? <PortalButton label="Manage billing" /> : null}
@@ -625,7 +627,6 @@ function PlanCard(props: {
   index: number
   subscribeIsContinuation: boolean
   onSubscribe: (planId: PaidPlanId) => void
-  currentPlanName?: string
   currentPlanId?: string | null
 }) {
   const { plan, period, action } = props
@@ -686,7 +687,6 @@ function PlanCard(props: {
           period={period}
           subscribeIsContinuation={props.subscribeIsContinuation}
           onSubscribe={props.onSubscribe}
-          currentPlanName={props.currentPlanName}
           currentPlanId={props.currentPlanId}
         />
       </div>
@@ -701,7 +701,6 @@ function PlanActionButton(props: {
   period: 'monthly' | 'annual'
   subscribeIsContinuation: boolean
   onSubscribe: (planId: PaidPlanId) => void
-  currentPlanName?: string
   currentPlanId?: string | null
 }) {
   const { action } = props
@@ -725,13 +724,7 @@ function PlanActionButton(props: {
     )
   }
   if (action.kind === 'downgrade') {
-    return (
-      <DowngradeButton
-        planId={action.planId}
-        planName={props.planName}
-        currentPlanName={props.currentPlanName}
-      />
-    )
+    return <DowngradeButton planId={action.planId} planName={props.planName} />
   }
   if (action.kind === 'subscribe') {
     return (
@@ -742,11 +735,12 @@ function PlanActionButton(props: {
         variant="outline"
         onClick={() => props.onSubscribe(action.planId)}
       >
-        {props.subscribeIsContinuation
-          ? `Continue with ${props.planName}`
-          : props.currentPlanId && isPlanDowngrade(props.currentPlanId, action.planId)
-            ? `Downgrade to ${props.planName}`
-            : `Upgrade to ${props.planName}`}
+        {/* Paying after a trial upgrades from the trial, whichever plan was trialed. */}
+        {!props.subscribeIsContinuation &&
+        props.currentPlanId &&
+        isPlanDowngrade(props.currentPlanId, action.planId)
+          ? `Downgrade to ${props.planName}`
+          : `Upgrade to ${props.planName}`}
       </Button>
     )
   }
@@ -800,7 +794,7 @@ function TrialButton(props: { planId: PaidPlanId; planName: string; trialDays: n
   )
 }
 
-function DowngradeButton(props: { planId: string; planName: string; currentPlanName?: string }) {
+function DowngradeButton(props: { planId: string; planName: string }) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -820,7 +814,6 @@ function DowngradeButton(props: { planId: string; planName: string; currentPlanN
             onOpenChange={setOpen}
             planId={props.planId}
             planName={props.planName}
-            currentPlanName={props.currentPlanName}
           />
         </Suspense>
       ) : null}

@@ -26,10 +26,8 @@ export function PlanDowngradeDialog(props: {
   planId: string
   planName: string
   checkout?: PlanDowngradeCheckout
-  /** The way out. An ended trial has no current plan to keep, so it goes back to the plans. */
+  /** The way out: Cancel, or back to the plans after an ended trial. */
   cancelLabel?: string
-  /** The plan the workspace is on, for "Keep {plan}". */
-  currentPlanName?: string
 }) {
   const [issues, setIssues] = useState<PlanDowngradeIssue[]>([])
   const [info, setInfo] = useState<PlanCapInfo[]>([])
@@ -146,8 +144,7 @@ export function PlanDowngradeDialog(props: {
             variant={blocked && !loading && !error ? 'default' : 'outline'}
             onClick={() => props.onOpenChange(false)}
           >
-            {props.cancelLabel ??
-              (props.currentPlanName ? `Keep ${props.currentPlanName}` : 'Cancel')}
+            {props.cancelLabel ?? 'Cancel'}
           </Button>
           {blocked && !loading && !error ? null : loading || error ? (
             <Button type="button" variant="outline" disabled>
@@ -191,7 +188,6 @@ export function FreeDowngradeDialog(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   cancelLabel?: string
-  currentPlanName?: string
 }) {
   return <PlanDowngradeDialog {...props} planId="free" planName="Free" />
 }

@@ -86,6 +86,13 @@ const paidOverview: BillingProjectionOverview = {
   hideBranding: false,
 }
 
+/** The plan card at the top of the page, found by the plan name in its heading. */
+function currentPlanCard(planName: string): HTMLElement {
+  const card = screen.getByRole('heading', { level: 2, name: planName }).closest('section')
+  if (!card) throw new Error(`no plan card for ${planName}`)
+  return card
+}
+
 function renderView(
   overrides: {
     overview?: BillingProjectionOverview
@@ -256,7 +263,7 @@ describe('BillingPlansView', () => {
     expect(screen.queryByRole('button', { name: 'Downgrade to Free' })).not.toBeInTheDocument()
   })
 
-  it('shows trial expiry, Continue with the plan, and included seats', () => {
+  it('shows trial expiry, Upgrade to the trialed plan, and included seats', () => {
     renderView({
       overview: {
         ...paidOverview,
@@ -275,7 +282,9 @@ describe('BillingPlansView', () => {
     expect(screen.getAllByText('Trial').length).toBeGreaterThan(0)
     expect(screen.getByText(/Trial ends/)).toBeInTheDocument()
     expect(screen.getByText('3 of 5 seats included with Pro')).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Continue with Pro' }).length).toBeGreaterThan(0)
+    const card = currentPlanCard('Pro')
+    expect(within(card).getByRole('button', { name: 'Upgrade to Pro' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add seats' })).not.toBeInTheDocument()
   })
 
@@ -324,7 +333,7 @@ describe('BillingPlansView', () => {
     expect(screen.getByRole('button', { name: 'Continue to payment' })).toBeInTheDocument()
   })
 
-  it('does not offer Continue when the catalogue did not load', () => {
+  it('does not offer Upgrade on the plan card when the catalogue did not load', () => {
     renderView({
       catalogue: null,
       overview: {
@@ -341,10 +350,10 @@ describe('BillingPlansView', () => {
         seats: { used: 4, pending: 1, members: 3, purchased: null },
       },
     })
-    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
+    expect(within(currentPlanCard('Pro')).queryByRole('button', { name: /Upgrade to/ })).toBeNull()
   })
 
-  it('does not offer Continue with a historical trial on a paid plan', () => {
+  it('does not offer Upgrade on the plan card for a historical trial on a paid plan', () => {
     renderView({
       overview: {
         ...paidOverview,
@@ -353,7 +362,9 @@ describe('BillingPlansView', () => {
         trialPlanName: null,
       },
     })
-    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
+    expect(
+      within(currentPlanCard(paidOverview.planName)).queryByRole('button', { name: /Upgrade to/ })
+    ).toBeNull()
   })
 
   it('shows annual monthly equivalent from the catalogue', () => {
@@ -414,6 +425,14 @@ describe('BillingPlansView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue to payment' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(document.querySelector('form input[name="billingPeriod"]')).toHaveValue('monthly')
+  })
+
+  it('closes the downgrade dialog with Cancel, never by naming the plan to keep', async () => {
+    renderView()
+    fireEvent.click(screen.getByRole('button', { name: 'Downgrade to Pro' }))
+    const dialog = await screen.findByRole('dialog', {}, { timeout: 5000 })
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: /^Keep/ })).toBeNull()
   })
 
   it('offers no top-up on any usage meter, even when the emails meter is at its limit', () => {
