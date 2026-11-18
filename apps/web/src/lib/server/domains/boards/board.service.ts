@@ -253,6 +253,9 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
 
+  // Which board the plan keeps open depends on which boards are read-only.
+  if (updatedBoard.readOnly !== existingBoard.readOnly) await invalidatePlanLimits()
+
   return updatedBoard
 }
 

@@ -47,18 +47,20 @@ vi.mock('@/lib/server/events/dispatch', async (original) => ({
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import { runFetchBoardCapabilities } from '@/lib/server/functions/portal'
+import { updateBoard } from '@/lib/server/domains/boards/board.service'
 import { createPost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost, addVoteOnBehalf } from '@/lib/server/domains/posts/post.voting'
 import { changeBoard } from '@/lib/server/domains/posts/post.board'
 import { createComment } from '@/lib/server/domains/comments/comment.service'
 import { processBatch } from '@/lib/server/domains/import/import-service'
 import { ImportUserResolver } from '@/lib/server/domains/import/user-resolver'
-import { getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
+import { getPlanLimits, invalidatePlanLimits, openBoardIds } from '../plan-limits.service'
 import { setKeptBoard } from '../plan-limits.choosers'
 import {
   BOARD_READ_ONLY_MESSAGE,
   BoardReadOnlyError,
   assertBoardOpen,
+  importRoom,
   withVisitorPostCapCopy,
 } from '../plan-limits.board-guard'
 
@@ -417,6 +419,13 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
       })
     })
 
+    it('lists boards to the widget without the read-only flag', async () => {
+      await testDb.update(boards).set({ readOnly: true }).where(eq(boards.id, closedBoard))
+      const { boards: listed } = await runFetchBoardCapabilities(null)
+      expect(listed.length).toBeGreaterThan(0)
+      for (const board of listed) expect(Object.keys(board).sort()).toEqual(['id', 'name', 'slug'])
+    })
+
     it('never puts plan words in what it sends', async () => {
       await enforce()
       const { permissions } = await runFetchBoardCapabilities(null)
@@ -504,6 +513,57 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
     })
   })
 
+  describe('taking a vote back on a read-only board', () => {
+    it('lets a voter remove their own vote, and refuses adding one', async () => {
+      await voteOnPost(closedPost, voterId)
+      await updateBoard(closedBoard, { readOnly: true })
+      await expect(voteOnPost(closedPost, voterId)).resolves.toMatchObject({ voted: false })
+      await expect(voteOnPost(closedPost, voterId)).rejects.toBeInstanceOf(BoardReadOnlyError)
+      const [row] = await testDb.select().from(posts).where(eq(posts.id, closedPost))
+      expect(row.voteCount).toBe(0)
+    })
+
+    it('the same holds when the plan keeps the board read-only', async () => {
+      await voteOnPost(closedPost, voterId)
+      await enforce()
+      await expect(voteOnPost(closedPost, voterId)).resolves.toMatchObject({ voted: false })
+      await expect(voteOnPost(closedPost, voterId)).rejects.toBeInstanceOf(BoardReadOnlyError)
+    })
+  })
+
+  describe('merging into a post on a read-only board', () => {
+    it('stays allowed: merging is an admin action', async () => {
+      await updateBoard(closedBoard, { readOnly: true })
+      const { mergePost } = await import('@/lib/server/domains/posts/post.merge')
+      await expect(mergePost(openPost, closedPost, ownerId)).resolves.toBeDefined()
+    })
+  })
+
+  describe('setting the open board read-only through the services', () => {
+    it('opens another board at once, without waiting for the cached counts', async () => {
+      await enforce()
+      expect(await openBoardIds()).toEqual([openBoard])
+      await updateBoard(openBoard, { readOnly: true })
+      expect(await openBoardIds()).toEqual([closedBoard])
+    })
+
+    it('does not keep a chosen board open once it is set read-only', async () => {
+      await configure({ planLimits: true })
+      expect(await setKeptBoard(openBoard)).toEqual({ ok: true })
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
+      expect(await openBoardIds()).toEqual([openBoard])
+      await updateBoard(openBoard, { readOnly: true })
+      expect(await openBoardIds()).toEqual([closedBoard])
+    })
+
+    it('refuses to keep a board open that an admin set read-only', async () => {
+      await configure({ planLimits: true })
+      await updateBoard(closedBoard, { readOnly: true })
+      expect(await setKeptBoard(closedBoard)).toEqual({ ok: false, reason: 'read_only' })
+      expect(await setKeptBoard(openBoard)).toEqual({ ok: true })
+    })
+  })
+
   describe('import voters of refused rows', () => {
     const voter = { email: 'refused-voter@example.com', name: 'Acme Voter' }
     const voterRows = (board: string) => [
@@ -553,6 +613,18 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
       expect(result.imported).toBe(1)
       expect(result.errors).toHaveLength(2)
       expect(result.skipped).toBe(2)
+    })
+
+    it('spends one shared room across the batches of a run', async () => {
+      await configure({ planLimits: true, tierLimits: { ...OSS_TIER_LIMITS, maxPosts: 5 } })
+      const room = await importRoom()
+      expect(room.posts).toBe(1)
+      const resolver = new ImportUserResolver()
+      const first = await processBatch(rows(1), openBoard, 0, resolver, null, undefined, room)
+      const second = await processBatch(rows(1), openBoard, 1, resolver, null, undefined, room)
+      expect(first.imported).toBe(1)
+      expect(second.imported).toBe(0)
+      expect(second.errors).toHaveLength(1)
     })
 
     it('does not create a board past the boards cap, and refuses the rows that needed it', async () => {

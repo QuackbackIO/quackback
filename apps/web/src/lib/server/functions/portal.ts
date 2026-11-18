@@ -67,6 +67,7 @@ import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters'
 
+import { serializePublicBoard } from '@/lib/server/domains/boards/board.serialize'
 import type { BoardPermission } from '@/lib/shared/types/boards'
 import {
   isBoardOpenFor,
@@ -129,12 +130,13 @@ async function buildBoardPermissions(
     !!b.readOnly || (open !== null && !open.includes(b.id))
   const anyClosed = boards.some(isClosed)
   let shareBoardId: string | null = null
-  if (anyClosed && !(await postsPaused())) {
+  if (anyClosed) {
     // Prefer one the viewer can post to now; a visitor who must sign in first
     // is still pointed at an open board they can see.
     const visibleOpen = boards.filter((b) => !isClosed(b))
-    shareBoardId =
-      (visibleOpen.find((b) => caps.get(b.id)?.canSubmit) ?? visibleOpen[0])?.id ?? null
+    const target = visibleOpen.find((b) => caps.get(b.id)?.canSubmit) ?? visibleOpen[0]
+    // The posts cap is read only when there is a board to point at.
+    if (target && !(await postsPaused())) shareBoardId = target.id
   }
   const map: Record<string, BoardPermission> = {}
   for (const b of boards) {
@@ -615,12 +617,6 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
  * boardPermissions / boardCapabilitiesForActor and never reads board.access,
  * so shipping it would leak segmentation structure (#191).
  */
-function serializePublicBoard<
-  B extends { access: unknown; settings: unknown; readOnly?: boolean },
->({ access: _access, readOnly: _readOnly, ...board }: B) {
-  return { ...board, settings: (board.settings ?? {}) as BoardSettings }
-}
-
 function serializePublicRoadmap(r: Awaited<ReturnType<typeof listPublicRoadmaps>>[number]) {
   return {
     id: r.id,

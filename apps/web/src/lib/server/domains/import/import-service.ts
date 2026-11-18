@@ -36,6 +36,7 @@ import { openBoardIds } from '@/lib/server/domains/plan-limits/plan-limits.servi
 import {
   BOARD_READ_ONLY_MESSAGE,
   importRoom,
+  type ImportRoom,
 } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 import type { ImportInput, ImportResult, ImportRowError, ImportVoterRecord } from './types'
 import { ImportUserResolver } from './user-resolver'
@@ -125,7 +126,9 @@ export async function processBatch(
   startIndex: number,
   userResolver: ImportUserResolver,
   batchTagId?: PostTagId | null,
-  voters?: Record<string, ImportVoterRecord[]>
+  voters?: Record<string, ImportVoterRecord[]>,
+  /** The room left under the plan's caps. A run passes one object and every batch spends from it. */
+  runRoom?: ImportRoom
 ): Promise<BatchResult> {
   const result: BatchResult = {
     imported: 0,
@@ -163,12 +166,13 @@ export async function processBatch(
   // While boards are read-only no board is created: a new one is not kept open.
   // Otherwise boards stop at the plan's cap, as a single board create does.
   const open = await openBoardIds()
-  const room = await importRoom()
+  const room = runRoom ?? (await importRoom())
   let boardRoom = room.boards
   for (const [slug, name] of boardsToCreate) {
     if (open !== null || ctx.boardMap.has(slug)) continue
     if (boardRoom !== null && boardRoom <= 0) continue
     if (boardRoom !== null) boardRoom--
+    room.boards = boardRoom
     const id = createId('board')
     await db.insert(boards).values({ id, name, slug })
     ctx.boardMap.set(slug, { id, slug })
@@ -256,6 +260,7 @@ export async function processBatch(
       refuse(index, room.postsRefusal, 'title')
     }
   }
+  if (room.posts !== null) room.posts -= toInsert.length
 
   // A post already on a read-only board keeps its content and votes.
   if ((open !== null || ctx.readOnlyBoardIds.size > 0) && toUpdate.length > 0) {
@@ -495,6 +500,8 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
 
   // Single UserResolver instance shared across all batches (caches email->principalId lookups)
   const userResolver = new ImportUserResolver()
+  // The plan's caps are read once; each batch spends from what is left.
+  const room = await importRoom()
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE)
@@ -504,7 +511,8 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
       i,
       userResolver,
       data.batchTagId,
-      data.voters
+      data.voters,
+      room
     )
     result = mergeResults(result, batchResult)
   }

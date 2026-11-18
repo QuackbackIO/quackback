@@ -71,7 +71,9 @@ export function openBoardOrder(
         byId(a, b)
     )
     .map((board) => board.id)
-  return keepFirst(keptBoardId ? [keptBoardId] : [], ordered, cap)
+  // A chosen board an admin has since set read-only would leave every board closed.
+  const chosen = boards.find((board) => board.id === keptBoardId)
+  return keepFirst(chosen && !chosen.readOnly ? [chosen.id] : [], ordered, cap)
 }
 
 function byRecentActivity(a: MemberCandidate, b: MemberCandidate): number {

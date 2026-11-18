@@ -11,6 +11,8 @@
  * Like the other runtime helpers it fails open: with the flag off, or when the
  * plan limits cannot be read, every board is open.
  */
+import { toUuid } from '@quackback/ids'
+import type { SQL } from 'drizzle-orm'
 import { db, and, boards, eq, isNull, posts, sql } from '@/lib/server/db'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import { ForbiddenError } from '@/lib/shared/errors'
@@ -20,7 +22,7 @@ import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { loadUsageCounts } from '@/lib/server/domains/billing/usage-counts'
-import { getPlanLimits, openBoardIds } from './plan-limits.service'
+import { evaluate, getPlanLimits, openBoardIds } from './plan-limits.service'
 
 export const BOARD_READ_ONLY_CODE = 'BOARD_READ_ONLY'
 export { BOARD_READ_ONLY_MESSAGE }
@@ -99,16 +101,38 @@ export async function isPostBoardOpen(postId: PostId): Promise<boolean> {
   return decider === null || (await boardClosedReason(decider.id, decider.readOnly)) === null
 }
 
+/**
+ * The boards the plan keeps open as a uuid array for a vote query, or a null
+ * array when it keeps all of them (the flag is off, or nothing is over).
+ */
+export async function planOpenBoardsSql(): Promise<SQL> {
+  const open = await openBoardIds()
+  if (open === null) return sql`NULL::uuid[]`
+  return sql`ARRAY[${sql.join(
+    open.map((id) => sql`${toUuid(id)}::uuid`),
+    sql`, `
+  )}]::uuid[]`
+}
+
 /** Refuses a vote on a post whose board is read-only. */
 export async function assertPostBoardOpen(postId: PostId): Promise<void> {
   if (!(await isPostBoardOpen(postId))) throw new BoardReadOnlyError()
 }
 
-/** Whether a new post would be refused at the posts cap, counted as `createPost` counts. */
+/**
+ * Whether a new post would be refused at the posts cap, as `createPost` counts.
+ * With the limits in force this reads the plan limits' cached usage; otherwise
+ * it counts, and only when the plan has a posts cap at all.
+ */
 async function postsCapReached(): Promise<boolean> {
   try {
     const { maxPosts } = await getTierLimits()
     if (maxPosts === null) return false
+    if ((await getPlanLimits()).enabled) {
+      const { snapshot } = await evaluate({ now: new Date(), persist: false })
+      const used = snapshot.usage?.maxPosts
+      if (used !== undefined) return used >= maxPosts
+    }
     const [row] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(posts)
