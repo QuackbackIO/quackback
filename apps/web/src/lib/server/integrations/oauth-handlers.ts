@@ -24,6 +24,8 @@ import {
   isValidWorkspaceDomain,
 } from './oauth'
 import { logger } from '@/lib/server/logger'
+import { assertTierFeature } from '@/lib/server/domains/settings/tier-enforce'
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { readTextBodyOr413 } from '@/lib/server/utils/read-body'
 import { oauthFragmentBridge } from './oauth-fragment'
 import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
@@ -31,6 +33,24 @@ import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
 const log = logger.child({ component: 'oauth' })
 
 const FALLBACK_URL = 'https://quackback.io'
+
+/**
+ * The support channel's GitHub page connects through the same OAuth flow. It
+ * is a channel, not an integration, and is not gated by the `integrations`
+ * plan feature.
+ */
+const CHANNEL_GITHUB_PATH = '/admin/settings/channels/github'
+
+/** The refusal when the plan does not include integrations, or null when it does. */
+async function integrationsPlanRefusal(): Promise<TierLimitError | null> {
+  try {
+    await assertTierFeature('integrations', 'Integrations')
+    return null
+  } catch (err) {
+    if (err instanceof TierLimitError) return err
+    throw err
+  }
+}
 
 interface OAuthState {
   type: string
@@ -83,6 +103,11 @@ export async function handleOAuthConnect(
 
   if (Date.now() - stateData.ts > STATE_EXPIRY_MS) {
     return Response.json({ error: 'State expired' }, { status: 400 })
+  }
+
+  if (stateData.returnPath !== CHANNEL_GITHUB_PATH) {
+    const refusal = await integrationsPlanRefusal()
+    if (refusal) return Response.json(refusal.toResponseBody(), { status: refusal.statusCode })
   }
 
   // Fetch platform credentials from DB
@@ -162,11 +187,15 @@ export async function handleOAuthCallback(
   const { returnDomain, principalId } = stateData
   const workspaceUrl = `https://${returnDomain}`
   const returnPath =
-    stateData.returnPath === '/admin/settings/channels/github' ? stateData.returnPath : settingsPath
+    stateData.returnPath === CHANNEL_GITHUB_PATH ? stateData.returnPath : settingsPath
   const fail = (reason: string) => errorUrl(workspaceUrl, reason, returnPath)
 
   if (!isValidWorkspaceDomain(returnDomain)) {
     return redirectResponse(errorUrl(FALLBACK_URL, 'invalid_workspace'))
+  }
+
+  if (returnPath !== CHANNEL_GITHUB_PATH && (await integrationsPlanRefusal())) {
+    return redirectResponse(fail('plan_required'))
   }
 
   if (providerError) {
