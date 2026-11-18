@@ -248,7 +248,9 @@ export async function verifySectionDomain(
   } else {
     const { probeCustomDomain } =
       await import('@/lib/server/domains/domain-proof/reachability-probe')
-    const probe = await probeCustomDomain(entry.hostname)
+    // A hairpin install, which cannot reach itself through the hostname, is
+    // verified by the hostname resolving to the primary domain's address.
+    const probe = await probeCustomDomain(entry.hostname, { primaryHost: currentPrimaryHost() })
     status = probe.status
     const kept = !status.verified && !probe.dnsAnswered ? entry.verifiedAt : null
     verifiedAt = status.verified ? new Date().toISOString() : kept
@@ -262,7 +264,8 @@ export async function verifySectionDomain(
     )
   }
 
-  const { unconfirmedSince: _previous, ...rest } = entry
+  // A person's check stands in for the daily run's: its first miss is forgotten.
+  const { unconfirmedSince: _previous, missedAt: _missed, ...rest } = entry
   const next: SectionDomainMap = {
     ...current,
     [section]: { ...rest, verifiedAt, ...(unconfirmedSince ? { unconfirmedSince } : {}) },

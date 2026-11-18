@@ -359,8 +359,8 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
   },
   {
     // The daily re-check that each verified section hostname on a self-hosted
-    // server still reaches it: a miss (checked twice) marks it unconfirmed, so
-    // sign-in stops there while routing keeps its grace, and one still failing
+    // server still reaches it: misses on two runs in a row mark it unconfirmed,
+    // so sign-in stops there while routing keeps its grace, and one still failing
     // after the grace stops being verified. The gate is shut on Cloud, where
     // the control plane decides when a domain is ready, before the server is
     // set up, and without a verified section hostname, so none of those

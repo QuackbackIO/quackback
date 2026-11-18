@@ -23,6 +23,7 @@ const side = vi.hoisted(() => ({
   entitled: true,
   status: { dnsResolved: true, instanceReachable: true, verified: true },
   dnsAnswered: true,
+  primaryHosts: [] as (string | null | undefined)[],
 }))
 vi.mock('@/lib/server/domains/domain-proof/ensure-domain', () => ({
   ensureDomainForCustomDomain: async (hostname: string) => {
@@ -38,7 +39,10 @@ vi.mock('@/lib/server/config', async (importOriginal) => ({
   getBaseUrl: () => 'https://feedback.acme.com',
 }))
 vi.mock('@/lib/server/domains/domain-proof/reachability-probe', () => ({
-  probeCustomDomain: async () => ({ status: side.status, dnsAnswered: side.dnsAnswered }),
+  probeCustomDomain: async (_hostname: string, opts?: { primaryHost?: string | null }) => {
+    side.primaryHosts.push(opts?.primaryHost)
+    return { status: side.status, dnsAnswered: side.dnsAnswered }
+  },
 }))
 
 const { getSectionDomains, getSectionDomainsView, setSectionDomain, verifySectionDomain } =
@@ -97,6 +101,7 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
     side.entitled = true
     side.status = { dnsResolved: true, instanceReachable: true, verified: true }
     side.dnsAnswered = true
+    side.primaryHosts = []
     await fixture.begin()
   })
   afterEach(fixture.rollback)
@@ -194,6 +199,27 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
       const entry = (await getSectionDomains()).status
       expect(entry?.hostname).toBe('status.acme.com')
       expect(entry?.verifiedAt).toEqual(expect.any(String))
+    })
+
+    it("hands the probe the primary domain's host, so a hairpin install can verify", async () => {
+      await setSectionDomain('status', 'status.acme.com')
+      await verifySectionDomain('status')
+      expect(side.primaryHosts).toEqual(['feedback.acme.com'])
+    })
+
+    it("forgets the daily run's first miss once a person's Verify has checked", async () => {
+      await seedSettings({
+        portalConfig: JSON.stringify({
+          sectionDomains: {
+            help: { hostname: 'help.acme.com', verifiedAt: NOW, missedAt: NOW },
+          },
+        }),
+      })
+      await verifySectionDomain('help')
+      expect((await stored()).sectionDomains.help).toEqual({
+        hostname: 'help.acme.com',
+        verifiedAt: expect.any(String),
+      })
     })
 
     it('takes the verification away when the hostname stops answering', async () => {

@@ -28,6 +28,13 @@ export interface SectionDomain {
    * sign-in is never carried there.
    */
   unconfirmedSince?: string | null
+  /**
+   * Self-hosted only: when a daily re-check first found the hostname not
+   * reaching this server. Only a second run that misses marks it
+   * `unconfirmedSince`; a run that answers clears it. Neither routing nor
+   * sign-in reads it.
+   */
+  missedAt?: string | null
 }
 
 /**
