@@ -133,6 +133,21 @@ export async function expectLandscapeContainThumb(button: Locator) {
 /** The displayed <img> decoded real bytes (not a broken-image / filename chip). */
 export async function expectLoadedImage(img: Locator) {
   await img.waitFor({ state: 'visible' })
+  // A real upload is fetched from storage after the element appears, so wait
+  // for the browser to finish loading it before judging the decode.
+  await img
+    .evaluate(
+      (el) =>
+        el instanceof HTMLImageElement && !el.complete
+          ? new Promise<void>((resolve) => {
+              el.addEventListener('load', () => resolve(), { once: true })
+              el.addEventListener('error', () => resolve(), { once: true })
+            })
+          : undefined,
+      undefined,
+      { timeout: 10_000 }
+    )
+    .catch(() => undefined)
   const loaded = await img.evaluate((el) => {
     if (!(el instanceof HTMLImageElement)) return { ok: false, reason: 'not an img' }
     return {

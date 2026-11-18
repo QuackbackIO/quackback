@@ -19,7 +19,7 @@ test.describe('Widget conversation images', () => {
       annotation: {
         type: 'quarantine',
         description:
-          'Needs object storage: since #629 widget uploads go to /api/widget/files and are stored as file records, which route stubs cannot stand in for. CI has no storage.',
+          'Storage works now; the post-send assertions predate the #629 attachment rendering. See QUARANTINE.md.',
       },
     },
     async ({ page }) => {
@@ -42,7 +42,7 @@ test.describe('Widget conversation images', () => {
 
       const [chooser] = await Promise.all([
         page.waitForEvent('filechooser'),
-        page.getByRole('button', { name: 'Attach image' }).click(),
+        page.getByRole('button', { name: 'Attach files' }).click(),
       ])
       await chooser.setFiles({
         name: 'widget-clip.png',
