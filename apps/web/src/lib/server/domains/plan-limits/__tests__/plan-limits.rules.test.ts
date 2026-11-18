@@ -911,6 +911,9 @@ describe('computePlanLimits: fixed issues', () => {
     const first = computePlanLimits(inputs({ usage: OVER_THREE }), at(-30 * DAY))
     const parsed = parsePlanLimitsState(JSON.parse(JSON.stringify(first.nextState)))
     expect(parsed?.overKeys).toEqual(['maxBoards', 'maxTeamSeats', 'maxStatusComponents'])
+    // A chooser write parses the state and adds its choice.
+    const chosen = parsePlanLimitsState(JSON.parse(JSON.stringify({ ...parsed, keptBoardId: 'b' })))
+    expect(chosen?.overKeys).toEqual(parsed?.overKeys)
     expect(
       parsePlanLimitsState({ ...first.nextState, overKeys: ['maxBoards', 'nope', 3] })?.overKeys
     ).toEqual(['maxBoards'])
@@ -920,5 +923,43 @@ describe('computePlanLimits: fixed issues', () => {
     )
     expect(next.nextState?.since).toBe(NOW.toISOString())
     expect(next.nextState?.overKeys).toEqual(['maxBoards'])
+  })
+})
+
+describe('computePlanLimits: the fixed-caps list through every write path', () => {
+  const OVER_THREE = { ...FITS, maxBoards: 5, maxTeamSeats: 3, maxStatusComponents: 4 }
+  const AT = { cloudRevision: 5, authConfigVersion: 2 }
+  const first = () =>
+    computePlanLimits(inputs({ usage: OVER_THREE, basis: AT }), at(-2 * DAY)).nextState!
+
+  it('keeps the list when a reader behind the basis sees other limits', () => {
+    const stored = first()
+    const behind = computePlanLimits(
+      inputs({
+        usage: { ...OVER_THREE, maxTeamSeats: 1 },
+        stored,
+        basis: { cloudRevision: 4, authConfigVersion: 2 },
+        limits: { ...FREE_LIMITS, maxBoards: 2 },
+      }),
+      NOW
+    )
+    expect(behind.nextState).toBe(stored)
+    expect(behind.nextState?.overKeys).toEqual(['maxBoards', 'maxTeamSeats', 'maxStatusComponents'])
+    expect(behind.view.fixedIssues).toEqual([{ key: 'maxTeamSeats', used: 1, cap: 1 }])
+  })
+
+  it('keeps the list while the flag is off, and uses it again once on', () => {
+    const stored = first()
+    const off = computePlanLimits(inputs({ enabled: false, usage: OVER_BOARDS, stored }), NOW)
+    expect(off.changed).toBe(false)
+    expect(off.nextState?.overKeys).toEqual(stored.overKeys)
+    const on = computePlanLimits(
+      inputs({ usage: OVER_BOARDS, stored: off.nextState, basis: AT }),
+      NOW
+    )
+    expect(on.view.fixedIssues?.map((row) => row.key)).toEqual([
+      'maxTeamSeats',
+      'maxStatusComponents',
+    ])
   })
 })
