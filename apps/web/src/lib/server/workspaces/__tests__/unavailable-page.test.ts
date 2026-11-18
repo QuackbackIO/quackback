@@ -36,6 +36,19 @@ describe('unavailableResponse', () => {
     expect(html).toContain('t1.example.com has been deleted by the team that ran it.')
   })
 
+  it('rings a focused link in a 2px grey outline, with no yellow halo', async () => {
+    vi.stubEnv('QUACKBACK_CONTROL_PLANE_URL', 'https://app.example.com/')
+    const html = await (
+      await unavailableResponse(browser(), 'paused', { status: 503, host: 't1.example.com' })
+    ).text()
+    const focus = html.match(/\.btn:focus-visible\{([^}]*)\}/)?.[1]
+    expect(focus).toBe('outline:2px solid var(--muted);outline-offset:2px')
+    // The duck logo stays yellow; the stylesheet has no yellow left in it.
+    const style = html.match(/<style>([\s\S]*?)<\/style>/)?.[1]
+    expect(style).toBeDefined()
+    expect(style).not.toMatch(/--duck|#f7cc29/i)
+  })
+
   it('never links to a control plane that is not https', async () => {
     vi.stubEnv('QUACKBACK_CONTROL_PLANE_URL', 'http://app.example.com')
     const html = await (

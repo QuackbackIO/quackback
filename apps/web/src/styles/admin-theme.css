@@ -83,7 +83,7 @@
   --chart-4: #1d9999;
   --border: #e8e5dc;
   --input: #8a887f;
-  --ring: #111111;
+  --ring: var(--muted-foreground);
   --metric-posts: #111111;
   --metric-votes: #111111;
   --metric-comments: #111111;
@@ -98,7 +98,7 @@
   --sidebar-accent: #ffffff;
   --sidebar-accent-foreground: #111111;
   --sidebar-border: #e8e5dc;
-  --sidebar-ring: #111111;
+  --sidebar-ring: var(--muted-foreground);
   --font-sans: 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -133,8 +133,7 @@
   --chrome-active-text: #111111;
   --chrome-active-icon: #111111;
   --chrome-pane-active-background: #f7f6f2;
-  --chrome-focus: #111111;
-  --focus-halo: 0 0 0 5px #f7cc29;
+  --chrome-focus: var(--muted-foreground);
   --duck: #f7cc29;
   --duck-ink: #111111;
   --block: #111111;
@@ -181,7 +180,7 @@
   --metric-visits: #f2f2f2;
   --border: #2a2a2a;
   --input: #767676;
-  --ring: #f2f2f2;
+  --ring: var(--muted-foreground);
   --sidebar: #121212;
   --sidebar-foreground: #f2f2f2;
   --sidebar-primary: #f2f2f2;
@@ -189,7 +188,7 @@
   --sidebar-accent: #1b1b1b;
   --sidebar-accent-foreground: #f2f2f2;
   --sidebar-border: #2a2a2a;
-  --sidebar-ring: #f2f2f2;
+  --sidebar-ring: var(--muted-foreground);
   --shadow-sm: 0 0 0 1px #2a2a2a;
   --shadow: 0 0 0 1px #2a2a2a;
   --shadow-md: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
@@ -211,22 +210,22 @@
   --chrome-active-text: #f2f2f2;
   --chrome-active-icon: #f7cc29;
   --chrome-pane-active-background: #222222;
-  --chrome-focus: #f2f2f2;
+  --chrome-focus: var(--muted-foreground);
   --block: #222222;
   --block-ink: #f2f2f2;
   --scrim: rgba(0, 0, 0, 0.75);
 }
 
-/* The site focus ring: an ink outline with a duck halo. It replaces the ring-* box-shadow
-   focus styles under the admin. */
+/* The focus ring: a 2px muted grey outline, offset 2px, with no halo. Never ink, duck or a
+   brand colour. It replaces the ring-* box-shadow focus styles under the admin. */
 :root:has([data-admin-shell]) :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
-  box-shadow: var(--focus-halo);
+  box-shadow: none;
 }
 
 /* In the work canvas, rows, tiles and tabs sit flush with the edge of clipping panels and the
-   canvas itself clips, so an offset ring and halo were cut to a sliver. Focus there is a 2px ink
+   canvas itself clips, so an offset ring was cut to a sliver. Focus there is a 2px grey
    outline drawn inside the element. Compact controls (buttons, switches, checkboxes, radios) sit
    in padded rows and keep the full ring, which an inset outline would lose in an ink fill. The
    rail, side panes and popovers keep the ring everywhere. Fields, menu rows and options are
@@ -270,9 +269,9 @@
   box-shadow: none;
 }
 
-/* Text fields take a quieter focus: their own edge becomes a 2px ink edge, with no offset
-   outline and no halo. The full ring stacked on a bordered field read as three rings, and a
-   duck glow over the dark sheet turned olive. Buttons and links keep the ink-and-duck ring. */
+/* Text fields take a quieter focus: their own edge becomes a 2px grey edge, with no offset
+   outline. The full ring stacked on a bordered field read as three rings. Buttons and links
+   keep the offset ring. */
 :root:has([data-admin-shell])
   :is(
     input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit']),
