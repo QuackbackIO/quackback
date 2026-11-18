@@ -375,3 +375,32 @@ describe('each gated read in an admin page loader', () => {
     }
   )
 })
+
+/** A custom support role: its own and its team's conversations and tickets, nothing else. */
+const BILLING_AGENT: PermissionKey[] = [
+  PERMISSIONS.CONVERSATION_VIEW,
+  PERMISSIONS.TICKET_VIEW,
+  PERMISSIONS.CONVERSATION_REPLY,
+  PERMISSIONS.TICKET_REPLY,
+  PERMISSIONS.CONVERSATION_NOTE,
+  PERMISSIONS.TICKET_NOTE,
+  PERMISSIONS.CONVERSATION_SET_STATUS,
+  PERMISSIONS.TICKET_SET_STATUS,
+]
+
+/** Pages whose main read a role lacks: [role, page, permissions]. */
+const CLOSED_PAGES: Array<[string, string, readonly PermissionKey[]]> = [
+  ['a support-only custom role', 'feedback.index', BILLING_AGENT],
+  ['a support-only custom role', 'users', BILLING_AGENT],
+  ['a support-only custom role', 'help-center.index', BILLING_AGENT],
+  ['the built-in Contributor', 'help-center.index', SYSTEM_ROLE_PERMISSIONS.contributor],
+]
+
+describe('an admin page a role cannot open', () => {
+  it.each(CLOSED_PAGES)('for %s, %s loads without reading anything', async (_role, page, held) => {
+    const { loaded, warmed } = await runPage(page, held)
+
+    await expect(loaded).resolves.toBeDefined()
+    expect(warmed).toEqual([])
+  })
+})

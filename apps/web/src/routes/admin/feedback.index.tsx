@@ -12,6 +12,8 @@ import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { errorMessage } from '@/components/shared/error-page'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { AdminPageGate } from '@/components/admin/admin-page-gate'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 
 export const Route = createFileRoute('/admin/feedback/')({
   head: adminPageHead('Feedback'),
@@ -36,8 +38,11 @@ export const Route = createFileRoute('/admin/feedback/')({
     }
 
     // Awaited so the document hydrates instead of racing a fire-and-forget
-    // prefetch.
-    await warmFeedbackPage(queryClient, permissions)
+    // prefetch. A viewer who cannot read posts gets the no-access state and
+    // no reads.
+    if (canOpenAdminPage(permissions, '/admin/feedback')) {
+      await warmFeedbackPage(queryClient, permissions)
+    }
 
     return {
       currentUser: {
@@ -47,7 +52,11 @@ export const Route = createFileRoute('/admin/feedback/')({
       },
     }
   },
-  component: FeedbackIndexPage,
+  component: () => (
+    <AdminPageGate page="/admin/feedback">
+      <FeedbackIndexPage />
+    </AdminPageGate>
+  ),
 })
 
 function FeedbackErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {

@@ -2,10 +2,14 @@ import { createFileRoute } from '@tanstack/react-router'
 import { HelpCenterList } from '@/components/admin/help-center/help-center-list'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { helpCenterSearchSchema } from '@/components/admin/help-center/help-center-search'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 
 export const Route = createFileRoute('/admin/help-center/')({
   loader: async ({ context, location }) => {
     const { queryClient } = context
+    // A viewer who cannot manage the help center gets the no-access state
+    // (from the layout) and no reads.
+    if (!canOpenAdminPage(context.permissions ?? [], '/admin/help-center')) return {}
     // The article list the URL opens, read the way the finder reads it. The
     // deleted-items and performance views read other lists.
     const parsed = helpCenterSearchSchema.safeParse(location.search)

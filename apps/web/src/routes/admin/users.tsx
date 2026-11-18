@@ -6,6 +6,8 @@ import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { errorMessage } from '@/components/shared/error-page'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { AdminPageGate } from '@/components/admin/admin-page-gate'
+import { canOpenAdminPage } from '@/lib/shared/admin-page-access'
 
 const searchSchema = z.object({
   search: z.string().optional(),
@@ -64,16 +66,26 @@ export const Route = createFileRoute('/admin/users')({
       queryClient: typeof context.queryClient
     }
 
+    // A viewer who cannot read people gets the no-access state and no reads.
+    const permissions = context.permissions ?? []
+    if (!canOpenAdminPage(permissions, '/admin/users')) {
+      return { currentMemberRole: principal.role }
+    }
+
     // Imported here rather than at the top: route loaders ship in the entry
     // chunk every page loads.
     const { warmUsersPage } = await import('@/lib/client/queries/users-page')
-    await warmUsersPage(queryClient, principal.role, context.permissions ?? [])
+    await warmUsersPage(queryClient, principal.role, permissions)
 
     return {
       currentMemberRole: principal.role,
     }
   },
-  component: UsersPage,
+  component: () => (
+    <AdminPageGate page="/admin/users">
+      <UsersPage />
+    </AdminPageGate>
+  ),
 })
 
 function UsersErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
