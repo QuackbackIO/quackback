@@ -1,8 +1,8 @@
 /**
  * The plan gate on the MCP server, driven through the real request entry point:
  *
- *   handleMcpRequest -> (operator switch) -> auth -> requireEntitlement
- *     -> getCloudConfig -> getWorkspaceSettings -> resolveCloudConfig
+ *   handleMcpRequest -> (operator switch) -> auth -> isFeatureLive('mcpServer')
+ *     -> getPlanLimits -> getCloudConfig -> getWorkspaceSettings -> resolveCloudConfig
  *     -> refuse or connect the transport
  *
  * The oracle for "allowed" is the transport actually being reached, not merely
@@ -11,7 +11,7 @@
  * everything when cloud is absent and a fixture that forgot to enable cloud
  * would pass against unwired code.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import type { ApiKey } from '@/lib/server/domains/api-keys'
 import type { ApiKeyId, PrincipalId } from '@quackback/ids'
@@ -24,7 +24,10 @@ const hoisted = vi.hoisted(() => ({
   mockHandleRequest: vi.fn(),
 }))
 
-vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+// The gate reads the plan limits view through the real settings readers; the
+// planLimits flag is off, so the answer is the plan's own grant.
+vi.mock('@/lib/server/domains/settings/settings.service', async (original) => ({
+  ...(await original<typeof import('@/lib/server/domains/settings/settings.service')>()),
   getDeveloperConfig: hoisted.mockGetDeveloperConfig,
   getWorkspaceSettings: hoisted.mockGetWorkspaceSettings,
 }))
@@ -54,10 +57,42 @@ vi.mock('@/lib/server/config', () => ({
   config: { baseUrl: 'https://example.com' },
 }))
 
+// The plan limits view reads the settings row itself, so the stored cloud
+// block is written to a real settings row as well as served to the settings
+// service mock: both readers see the same plan, as they do in production.
+vi.mock('@/lib/server/db', async (original) => ({
+  ...(await original<typeof import('@/lib/server/db')>()),
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
+
+import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import { eq, settings } from '@/lib/server/db'
+import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
+import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
+import { invalidatePlanLimits } from '@/lib/server/domains/plan-limits/plan-limits.cache'
 import { handleMcpRequest } from '../handler'
 
-function withCloud(cloud: unknown): void {
+const fixture = await createDbTestFixture()
+afterAll(fixture.close)
+beforeEach(fixture.begin)
+afterEach(fixture.rollback)
+
+async function withCloud(cloud: unknown): Promise<void> {
   hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { id: 'ws_1', cloud } })
+  const [row] = await testDb.select({ id: settings.id }).from(settings).limit(1)
+  if (row) {
+    await testDb
+      .update(settings)
+      .set({ cloud: cloud as never, tierLimits: null })
+      .where(eq(settings.id, row.id))
+  } else {
+    await testDb
+      .insert(settings)
+      .values({ name: 'Acme', slug: 'acme', createdAt: new Date(), cloud: cloud as never })
+  }
+  invalidateTierLimitsCache()
+  await invalidateSettingsCache()
+  await invalidatePlanLimits()
 }
 
 function mcpRequest(): Request {
@@ -84,21 +119,21 @@ beforeEach(() => {
   })
 })
 
-describe('handleMcpRequest — no cloud config', () => {
+describe.skipIf(!fixture.available)('handleMcpRequest — no cloud config', () => {
   it.each([
     ['no cloud block at all', null],
     ['an explicitly disabled block', { enabled: false, plan: 'free' }],
   ])('serves the request with %s', async (_label, cloud) => {
-    withCloud(cloud)
+    await withCloud(cloud)
     const response = await handleMcpRequest(mcpRequest())
     expect(response.status).toBe(200)
     expect(hoisted.mockCreateMcpServer).toHaveBeenCalledOnce()
   })
 })
 
-describe('handleMcpRequest — plan gate', () => {
+describe.skipIf(!fixture.available)('handleMcpRequest — plan gate', () => {
   it('refuses with 402 on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud(storedCloud('free'))
+    await withCloud(storedCloud('free'))
 
     const response = await handleMcpRequest(mcpRequest())
 
@@ -122,24 +157,24 @@ describe('handleMcpRequest — plan gate', () => {
   })
 
   it('serves the request on a plan that includes it', async () => {
-    withCloud(storedCloud('pro'))
+    await withCloud(storedCloud('pro'))
     const response = await handleMcpRequest(mcpRequest())
     expect(response.status).toBe(200)
     expect(hoisted.mockCreateMcpServer).toHaveBeenCalledOnce()
   })
 
   it('honours an explicit override in either direction', async () => {
-    withCloud(storedCloud('free', { mcpServer: true }))
+    await withCloud(storedCloud('free', { mcpServer: true }))
     expect((await handleMcpRequest(mcpRequest())).status).toBe(200)
 
-    withCloud(storedCloud('enterprise', { mcpServer: false }))
+    await withCloud(storedCloud('enterprise', { mcpServer: false }))
     expect((await handleMcpRequest(mcpRequest())).status).toBe(402)
   })
 
   it('does not disclose the plan to an unauthenticated caller', async () => {
     // A 402 naming the workspace's plan is an answer only a caller who already
     // authenticated should get; an anonymous probe still sees the 401.
-    withCloud(storedCloud('free'))
+    await withCloud(storedCloud('free'))
     const response = await handleMcpRequest(
       new Request('https://example.com/api/mcp', { method: 'POST' })
     )

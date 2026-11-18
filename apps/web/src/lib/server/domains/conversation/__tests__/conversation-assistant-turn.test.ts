@@ -58,10 +58,12 @@ const mockEnforceAiTokenBudget = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   enforceAiTokenBudget: mockEnforceAiTokenBudget,
 }))
-const mockRequireEntitlement = vi.hoisted(() => vi.fn(async () => {}))
-vi.mock('@/lib/server/domains/settings/cloud/entitlements', () => ({
-  requireEntitlement: mockRequireEntitlement,
-}))
+vi.mock(
+  '@/lib/server/domains/plan-limits/plan-limits.service',
+  async () =>
+    (await import('@/lib/server/domains/plan-limits/__tests__/feature-states'))
+      .planLimitsServiceDouble
+)
 vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
   getOfficeHoursSchedule: vi.fn(async () => ({ enabled: false, timezone: 'UTC', intervals: [] })),
 }))
@@ -228,9 +230,15 @@ vi.mock('@/lib/server/db', () => {
 
 import { shouldConsiderAssistant } from '../conversation.service'
 import {
+  previewAssistantTurnForConversation,
   runAssistantTurnForConversation,
   __resetAssistantPrincipalMemo,
 } from '@/lib/server/domains/assistant/assistant.orchestrator'
+import {
+  FEATURE_STATES,
+  runsWithPlanGate,
+  setFeatureState,
+} from '@/lib/server/domains/plan-limits/__tests__/feature-states'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
 const CONV = 'conversation_1' as ConversationId
@@ -313,7 +321,7 @@ beforeEach(() => {
   assistantMock.openInvolvement.mockResolvedValue({ id: 'assistant_involvement_1' })
   getMessengerConfig.mockResolvedValue({ assistant: { respond: true, name: 'Quinn' } })
   mockEnforceAiTokenBudget.mockResolvedValue(undefined)
-  mockRequireEntitlement.mockResolvedValue(undefined)
+  setFeatureState('included', 'aiAssistant')
   mockIsFeatureEnabled.mockResolvedValue(false)
   mockGetLiveWorkflowReferencedAttributeKeys.mockResolvedValue(new Set())
   mockClassifyConversationAttributes.mockResolvedValue([])
@@ -359,23 +367,28 @@ describe('runAssistantTurnForConversation gate', () => {
     expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
   })
 
-  it('does not run when the workspace is not entitled to the AI assistant', async () => {
-    const { EntitlementRequiredError } = await import('@/lib/server/errors/entitlement-error')
-    mockRequireEntitlement.mockRejectedValue(
-      new EntitlementRequiredError({
-        entitlement: 'aiAssistant',
-        friendly: 'The AI assistant',
-        friendlyIsPlural: false,
-        requiredPlanArticle: 'a',
-        currentPlan: 'free',
-        currentPlanName: 'Free',
-        requiredPlan: 'pro',
-        requiredPlanName: 'Pro',
-      })
+  // The plan gate reads isFeatureLive: today's answer with the flag off, kept
+  // live through the plan limits grace, off after it.
+  it.each(FEATURE_STATES)(
+    'answers in the %s state only while the plan includes it',
+    async (state) => {
+      setFeatureState(state, 'aiAssistant')
+      assistantMock.runAssistantTurn.mockResolvedValue(answered({}))
+      await runAssistantTurnForConversation(CONV)
+      if (runsWithPlanGate(state)) {
+        expect(assistantMock.runAssistantTurn).toHaveBeenCalledOnce()
+      } else {
+        expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
+        expect(assistantMock.ensureAssistantPrincipal).not.toHaveBeenCalled()
+      }
+    }
+  )
+
+  it.each(FEATURE_STATES)('previews in the %s state as declined once it stops', async (state) => {
+    setFeatureState(state, 'aiAssistant')
+    expect(await previewAssistantTurnForConversation(CONV)).toBe(
+      runsWithPlanGate(state) ? 'eligible' : 'declined'
     )
-    await runAssistantTurnForConversation(CONV)
-    expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
-    expect(assistantMock.ensureAssistantPrincipal).not.toHaveBeenCalled()
   })
 
   it('stays silent after a handoff even before the first teammate reply', async () => {

@@ -7,7 +7,8 @@
  *
  * The states:
  *  - `flagOff`:  the flag is off and the plan lacks the feature (today's gate).
- *  - `grace`:    over the plan, in the grace, and the feature was live before.
+ *  - `grace`:    over the plan, in the grace, and the feature was live before
+ *                (a grace feature stays live; any other key stops at once).
  *  - `enforced`: over the plan, after the grace.
  *  - `included`: the flag is on and the plan includes the feature (an upgrade).
  *
@@ -20,6 +21,7 @@
  */
 import { vi } from 'vitest'
 import {
+  PLAN_FEATURES,
   PLAN_FEATURE_KEYS,
   type PlanFeatureKey,
   type PlanFeatureSet,
@@ -40,6 +42,13 @@ function set(value: boolean): PlanFeatureSet {
   return Object.fromEntries(PLAN_FEATURE_KEYS.map((k) => [k, value])) as PlanFeatureSet
 }
 
+/** What the rules record as live at first detection: grace features only. */
+function graceSet(): PlanFeatureSet {
+  return Object.fromEntries(
+    PLAN_FEATURE_KEYS.map((k) => [k, PLAN_FEATURES[k].grace])
+  ) as PlanFeatureSet
+}
+
 type FeatureView = Pick<PlanLimitsView, 'enabled' | 'phase' | 'features' | 'fromFeatures'>
 
 /** The view a helper sees for `key` under the current state. */
@@ -56,9 +65,9 @@ export function featureView(key: PlanFeatureKey): FeatureView {
     case 'flagOff':
       return { enabled: false, phase: 'ok', features: set(false), fromFeatures: null }
     case 'grace':
-      return { enabled: true, phase: 'grace', features: set(false), fromFeatures: set(true) }
+      return { enabled: true, phase: 'grace', features: set(false), fromFeatures: graceSet() }
     case 'enforced':
-      return { enabled: true, phase: 'enforced', features: set(false), fromFeatures: set(true) }
+      return { enabled: true, phase: 'enforced', features: set(false), fromFeatures: graceSet() }
     case 'included':
       return { enabled: true, phase: 'ok', features: set(true), fromFeatures: null }
   }
@@ -79,7 +88,7 @@ export function runsWithoutPlanGate(state: FeatureState): boolean {
   return state !== 'enforced'
 }
 
-/** Whether a path should run in `state`, for a path that already gated on the plan. */
+/** Whether a grace feature's path should run in `state`, for a path that already gated on the plan. */
 export function runsWithPlanGate(state: FeatureState): boolean {
   return state === 'grace' || state === 'included'
 }
