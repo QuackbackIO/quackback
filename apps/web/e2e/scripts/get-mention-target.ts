@@ -3,8 +3,8 @@
  *
  * Returns JSON `{ principalId, displayName }` for a non-demo, mention-eligible
  * principal (type 'user', role admin|member|user). Seed creates 30 sample
- * users with random names from a fixed name pool; this script just picks
- * the first one that isn't the demo user.
+ * users with random names from a fixed name pool; this script picks the
+ * first one that isn't the demo user and whose name no one else has.
  *
  * Usage: bun get-mention-target.ts [excludeEmail]
  */
@@ -25,6 +25,9 @@ async function getTarget(): Promise<{ principalId: string; displayName: string }
       AND p.role IN ('admin', 'member', 'user')
       AND p.display_name IS NOT NULL
       AND length(p.display_name) > 0
+      -- The seed draws names from a small pool, so two users can share one.
+      -- The test finds the picker row by name, so the name must be unique.
+      AND (SELECT count(*) FROM principal p2 WHERE p2.display_name = p.display_name) = 1
     ORDER BY u.email ASC
     LIMIT 1
   `

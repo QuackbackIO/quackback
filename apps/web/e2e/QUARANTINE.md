@@ -26,7 +26,9 @@ job leaves it out, so it cannot hide new failures.
 - `e2e-full` runs with `--grep-invert @quarantine`.
 - `e2e-quarantine` runs nightly with `--grep @quarantine`. It never fails the
   workflow. Its job summary lists every quarantined test, its result and its
-  cause, so a test that starts to pass is easy to see.
+  cause, so a test that starts to pass is easy to see. It runs each test
+  apart from the rest of its file, so one pass there does not prove a fix:
+  run the whole file before you lift a quarantine.
 - Every quarantined test has an entry below with an owner and a review date. On
   the review date, fix the test, fix the product, or delete the test with a
   reason. Do not extend the date without a reason in the entry.
@@ -60,7 +62,9 @@ service.
   button and recovery-code link. The seeded provider's discovery URL cannot be
   reached, so the provider is skipped. With password and magic link turned off,
   `GET /` then fails with "Provider not found" and shows the error page. The
-  page should fall back instead of failing. owner: unassigned, review by:
+  page should fall back instead of failing. This failed every time locally,
+  also with the file run alone, but passed on its own in the first CI
+  quarantine run, so the cause is not confirmed. owner: unassigned, review by:
   2026-12-02.
 
 ### Suspected product bugs
@@ -69,13 +73,16 @@ service.
   With the People field focused (it focuses itself when the dialog opens), the
   first click on Cancel does not close the Add people dialog; a second click
   does. The dialog code (`add-people-dialog.tsx`) looks right, so the
-  combobox's blur or outside-click handling may take the first click. owner:
-  unassigned, review by: 2026-12-02.
+  combobox's blur or outside-click handling may take the first click. It
+  failed in its file locally but passed on its own in the first CI quarantine
+  run, so the cause is not confirmed. owner: unassigned, review by:
+  2026-12-02.
 - `public/post-submission.spec.ts` › Board Selector › board selector defaults to
   filtered board when filter is active. On a direct load of `/?board=features`
   the composer does not open on the first attempt, even after 15 seconds of
   clicks; the retry passes. Not traced; possibly a hydration race in the
-  composer. owner: unassigned, review by: 2026-12-02.
+  composer. It passed on its own in the first CI quarantine run. owner:
+  unassigned, review by: 2026-12-02.
 
 ### Needs a product decision
 
