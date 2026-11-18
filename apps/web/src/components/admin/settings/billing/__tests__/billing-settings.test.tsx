@@ -157,6 +157,14 @@ describe('BillingPlansView', () => {
     expect(screen.getByText(/Wird am .*zurückgesetzt/)).toBeInTheDocument()
   })
 
+  it('calls the seat meter Team seats, as every other surface does', () => {
+    renderView({
+      overview: { ...paidOverview, seats: { ...paidOverview.seats!, purchased: 10 } },
+    })
+    expect(screen.getByText('Team seats', { selector: 'div' })).toBeInTheDocument()
+    expect(screen.queryByText('Seats', { selector: 'div' })).toBeNull()
+  })
+
   it('keeps only the monthly reset copy outside a trial', () => {
     renderView()
     expect(screen.queryByText(/Resets /)).not.toBeInTheDocument()

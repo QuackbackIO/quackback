@@ -7,9 +7,11 @@
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 import {
   PLAN_FEATURES,
+  type PlanFeatureDefinition,
   type PlanFeatureKey,
 } from '@/lib/server/domains/plan-limits/plan-limits.features'
 import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
+import { PLAN_ONLY_FEATURES } from '@/lib/server/domains/settings/tier-limits.types'
 import { PLAN_NUMERIC_CAPS, type PlanCapKey } from './plan-downgrade'
 
 /**
@@ -183,10 +185,13 @@ function pausedClause(issue: { key: string; used: number; cap: number }): string
 /** Feature names that take a plural verb. */
 const PLURAL_FEATURES = new Set<PlanFeatureKey>(['webhooks', 'workflows', 'integrations'])
 
+/** At most two clauses as a sentence, then a count of the rest: "A and B. 2 more things are paused." */
 function joinClauses(clauses: string[]): string {
   if (clauses.length <= 1) return clauses[0] ?? ''
-  if (clauses.length === 2) return `${clauses[0]} and ${clauses[1]}`
-  return `${clauses[0]}, ${clauses[1]} and more`
+  const two = `${clauses[0]} and ${clauses[1]}`
+  const rest = clauses.length - 2
+  if (rest === 0) return two
+  return `${two}. ${plural(rest, 'more thing is', 'more things are')} paused`
 }
 
 /** "4 boards are read-only and webhooks are paused", from the caps first, then features. */
@@ -269,7 +274,7 @@ function capLine(key: PlanCapKey, cap: number | null): string {
  * unlimited), then the paused features it includes.
  */
 export function keepEverythingLines(
-  limits: Pick<PlanLimitsPage, 'issues' | 'infoRows' | 'featureIssues' | 'fromPlan'>,
+  limits: Pick<PlanLimitsPage, 'issues' | 'infoRows' | 'featureIssues'>,
   target: PlanId
 ): string[] {
   const caps = PLAN_NUMERIC_CAPS[target]
@@ -292,14 +297,8 @@ export function keepEverythingLines(
     // A cap of none says nothing the plan keeps.
     if (keys.has(key) && caps[key] !== 0) lines.push(capLine(key, caps[key]))
   }
-  // A feature the plan grants, or any the plan before had when the target is
-  // that plan (tier features carry no grant to check).
-  const grants = new Set<string>(PLAN_CATALOGUE[target].grants)
   const features = limits.featureIssues
-    .filter((feature) => {
-      const entitlement = PLAN_FEATURES[feature.key].entitlement
-      return entitlement ? grants.has(entitlement) : limits.fromPlan === target
-    })
+    .filter((feature) => planIncludesFeature(target, feature.key))
     .map((feature, index) => (index === 0 ? feature.label : lowerFirst(feature.label)))
   if (features.length > 0) lines.push(joinAll(features))
   return lines.slice(0, 5)
@@ -308,4 +307,38 @@ export function keepEverythingLines(
 function joinAll(items: string[]): string {
   if (items.length <= 1) return items[0] ?? ''
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+/**
+ * Whether a catalogue plan includes a paid feature: its grant, or for a
+ * feature no grant carries, the plan's own feature flag.
+ */
+export function planIncludesFeature(plan: PlanId, key: PlanFeatureKey): boolean {
+  const definition: PlanFeatureDefinition = PLAN_FEATURES[key]
+  if (definition.entitlement) return PLAN_CATALOGUE[plan].grants.includes(definition.entitlement)
+  const flag = definition.tierFeature as keyof (typeof PLAN_ONLY_FEATURES)[PlanId] | null
+  return flag !== null && PLAN_ONLY_FEATURES[plan][flag] === true
+}
+
+const PLANS_BY_RANK = (Object.keys(PLAN_CATALOGUE) as PlanId[]).sort(
+  (a, b) => PLAN_CATALOGUE[a].rank - PLAN_CATALOGUE[b].rank
+)
+
+/**
+ * The plan that keeps everything: the lowest plan above the current one whose
+ * caps fit every cap over and which includes every paused feature. The top
+ * plan when none does; null on the top plan or with no plan.
+ */
+export function keepEverythingPlan(
+  limits: Pick<PlanLimitsPage, 'plan' | 'issues' | 'featureIssues'>
+): PlanId | null {
+  if (!limits.plan) return null
+  const current = PLAN_CATALOGUE[limits.plan].rank
+  const higher = PLANS_BY_RANK.filter((plan) => PLAN_CATALOGUE[plan].rank > current)
+  const covers = (plan: PlanId) =>
+    limits.issues.every((issue) => {
+      const cap = PLAN_NUMERIC_CAPS[plan][issue.key as PlanCapKey]
+      return cap === undefined || cap === null || issue.used <= cap
+    }) && limits.featureIssues.every((feature) => planIncludesFeature(plan, feature.key))
+  return higher.find(covers) ?? higher[higher.length - 1] ?? null
 }

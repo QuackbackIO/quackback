@@ -334,7 +334,7 @@ function EndedSeatsRow(props: { overview: BillingProjectionOverview }) {
   return (
     <div className="flex flex-col gap-2.5 border-t border-border/50 px-6 py-5">
       <div className="flex items-baseline justify-between gap-3">
-        <div className="text-[13px] font-medium">Seats</div>
+        <div className="text-[13px] font-medium">Team seats</div>
         <div className="font-mono text-[12px] text-muted-foreground tabular-nums">
           {used} of {cap} used
         </div>
@@ -356,7 +356,7 @@ function SeatsBlock(props: { overview: BillingProjectionOverview; purchased: num
   return (
     <div className="flex flex-col gap-2.5 border-t border-border/50 px-6 py-5">
       <div className="flex items-baseline justify-between gap-3">
-        <div className="text-[13px] font-medium">Seats</div>
+        <div className="text-[13px] font-medium">Team seats</div>
         <div className="font-mono text-[12px] text-muted-foreground tabular-nums">
           {used} of {props.purchased} used
         </div>

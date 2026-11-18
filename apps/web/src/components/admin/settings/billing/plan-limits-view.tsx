@@ -11,6 +11,7 @@ import {
   infoRowNote,
   isPlanLimitsOver,
   keepEverythingLines,
+  keepEverythingPlan,
   planLimitsShownDay,
 } from '@/lib/shared/billing/plan-limits-copy'
 import { daysUntil } from '@/lib/shared/billing/trial-state'
@@ -55,20 +56,6 @@ const KEEPS_WORKING = [
   'Status subscribers',
   'Copilot drafts',
 ]
-
-const PLAN_ORDER = ['free', 'pro', 'business', 'enterprise'] as const
-
-/** The plan that keeps everything: the one before the drop, else the next one up. */
-export function keepEverythingPlan(
-  plan: string | null,
-  fromPlan: string | null
-): (typeof PLAN_ORDER)[number] | null {
-  const rank = (id: string | null) => (id ? PLAN_ORDER.indexOf(id as never) : -1)
-  const current = rank(plan)
-  if (current < 0) return null
-  if (rank(fromPlan) > current) return fromPlan as (typeof PLAN_ORDER)[number]
-  return PLAN_ORDER[current + 1] ?? null
-}
 
 /**
  * The Plan limits page: the deadline, every cap over the plan with its fixes,
@@ -143,7 +130,7 @@ export function PlanLimitsView(props: {
     note: infoRowNote(row),
   }))
   const total = issueRows.length + fixedRows.length
-  const target = keepEverythingPlan(limits.plan, limits.fromPlan)
+  const target = keepEverythingPlan(limits)
   const targetName = target ? planName(target, props.catalogue) : null
   const canChoose = limits.canManageBilling && target !== null && isPaidPlanId(target)
 

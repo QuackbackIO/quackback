@@ -18,7 +18,8 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock('@/lib/server/functions/plan-limits', () => hoisted)
 
-const { PlanLimitsView, keepEverythingPlan } = await import('../plan-limits-view')
+const { PlanLimitsView } = await import('../plan-limits-view')
+const { keepEverythingPlan } = await import('@/lib/shared/billing/plan-limits-copy')
 const { planLimitsQueries } = await import('@/lib/client/queries/plan-limits')
 
 afterEach(cleanup)
@@ -56,7 +57,7 @@ describe('PlanLimitsView', () => {
     expect(card).toHaveTextContent('1 of 5 fixed')
     expect(within(card).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1')
     // The upgrade is in the card too on a phone, where the plan aside sits at the bottom.
-    expect(within(card).getByRole('link', { name: 'Upgrade to Pro' }).className).toMatch(
+    expect(within(card).getByRole('link', { name: 'Upgrade to Business' }).className).toMatch(
       /lg:hidden/
     )
     cleanup()
@@ -132,21 +133,23 @@ describe('PlanLimitsView', () => {
 
   it('offers the plan that keeps everything with the checkout, for a billing manager', () => {
     mount(overLimits())
-    const aside = document.querySelector('[data-plan-limits-keep="pro"]') as HTMLElement
-    expect(within(aside).getByRole('link', { name: 'Upgrade to Pro' })).toHaveAttribute(
+    const aside = document.querySelector('[data-plan-limits-keep="business"]') as HTMLElement
+    expect(within(aside).getByRole('link', { name: 'Upgrade to Business' })).toHaveAttribute(
       'href',
       expect.stringContaining('/admin/settings/billing/checkout')
     )
     expect(within(aside).getByRole('link', { name: 'Compare plans' })).toBeInTheDocument()
-    // What the plan keeps, from the rows on the page: no custom roles line,
-    // since Pro includes none.
+    expect(aside).toHaveTextContent('Everything above stays as it is.')
+    expect(aside).not.toHaveTextContent('The plan you had')
+    // What the plan keeps, from the rows on the page.
     const lines = [...aside.querySelectorAll('[data-plan-limits-keep-lines] li')].map(
       (li) => li.textContent
     )
     expect(lines).toEqual([
       'Unlimited boards and posts',
-      'Up to 5 team seats',
-      'Up to 10 status components',
+      'Up to 20 team seats',
+      'Up to 25 status components',
+      'Up to 5 custom roles',
       'Webhooks',
     ])
   })
@@ -165,7 +168,7 @@ describe('PlanLimitsView', () => {
     expect(within(row('maxBoards')).getByRole('link', { name: 'Manage boards' })).toBeVisible()
     expect(within(row('maxTeamSeats')).queryByRole('button')).toBeNull()
     expect(within(row('maxTeamSeats')).queryByRole('link')).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Upgrade to Pro' })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Upgrade to/ })).toBeNull()
     expect(screen.getByText('Ask someone who manages billing to upgrade.')).toBeInTheDocument()
   })
 
@@ -180,12 +183,37 @@ describe('PlanLimitsView', () => {
 })
 
 describe('keepEverythingPlan', () => {
-  it('is the plan before the drop when higher, else the next plan up', () => {
-    expect(keepEverythingPlan('free', 'business')).toBe('business')
-    expect(keepEverythingPlan('free', null)).toBe('pro')
-    expect(keepEverythingPlan('pro', 'free')).toBe('business')
-    expect(keepEverythingPlan('enterprise', null)).toBeNull()
-    expect(keepEverythingPlan(null, 'pro')).toBeNull()
+  const page = (over: Partial<PlanLimitsPage>) =>
+    overLimits({ issues: [], featureIssues: [], fromPlan: null, ...over })
+  const sso = { key: 'sso' as const, count: 1, label: 'Single sign-on', href: '/x' }
+  const customCss = { key: 'customCss' as const, count: 1, label: 'Custom CSS', href: '/x' }
+
+  it('is the lowest plan above the current one that covers every cap and feature over it', () => {
+    // Pro includes no custom roles, so the fixture's custom role needs Business.
+    expect(keepEverythingPlan(overLimits())).toBe('business')
+    expect(keepEverythingPlan(page({ issues: overLimits().issues.slice(0, 1) }))).toBe('pro')
+    expect(keepEverythingPlan(page({}))).toBe('pro')
+    expect(keepEverythingPlan(page({ fromPlan: 'pro', featureIssues: [sso] }))).toBe('enterprise')
+    expect(keepEverythingPlan(page({ featureIssues: [customCss] }))).toBe('business')
+    expect(keepEverythingPlan(page({ plan: 'pro' }))).toBe('business')
+    expect(keepEverythingPlan(page({ plan: 'enterprise' }))).toBeNull()
+    expect(keepEverythingPlan(page({ plan: null }))).toBeNull()
+  })
+
+  it('offers Enterprise for paused single sign-on, never the plan before when it lacks it', () => {
+    mount(overLimits({ issues: [], featureIssues: [sso], fromPlan: 'pro', fromPlanName: 'Pro' }))
+    const aside = document.querySelector('[data-plan-limits-keep]') as HTMLElement
+    expect(aside).toHaveAttribute('data-plan-limits-keep', 'enterprise')
+    expect(within(aside).getByRole('link', { name: 'Upgrade to Enterprise' })).toBeInTheDocument()
+    expect(aside).not.toHaveTextContent('The plan you had')
+    expect(within(aside).getByText('Single sign-on')).toBeInTheDocument()
+  })
+
+  it('says it is the plan you had only when it is', () => {
+    mount(overLimits({ issues: overLimits().issues.slice(0, 1), fromPlan: 'pro' }))
+    expect(document.querySelector('[data-plan-limits-keep="pro"]')).toHaveTextContent(
+      'The plan you had. Everything above stays as it is.'
+    )
   })
 })
 

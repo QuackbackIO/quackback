@@ -107,7 +107,25 @@ describe('PlanLimitsBanner', () => {
     expect(screen.getByText("Your workspace is over the Free plan's limits.")).toBeInTheDocument()
     expect(
       screen.getByText(
-        '4 boards are read-only, 2 teammates have no admin access and more. They come back when you upgrade.'
+        '4 boards are read-only and 2 teammates have no admin access. 1 more thing is paused. They come back when you upgrade.'
+      )
+    ).toBeInTheDocument()
+    cleanup()
+    render(
+      <PlanLimitsBanner
+        limits={limits({
+          phase: 'enforced',
+          featureIssues: [
+            webhooks,
+            { key: 'customCss', count: 1, label: 'Custom CSS', href: '/x' },
+          ],
+        })}
+        pathname="/admin"
+      />
+    )
+    expect(
+      screen.getByText(
+        '4 boards are read-only and 2 teammates have no admin access. 2 more things are paused. They come back when you upgrade.'
       )
     ).toBeInTheDocument()
     cleanup()
