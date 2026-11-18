@@ -18,17 +18,18 @@ import {
 } from '@/lib/server/db'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
+import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
+import { PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import type { ImportInput } from './types'
 import { ImportUserResolver } from './user-resolver'
 import { BATCH_SIZE, IMPORT_LINK_TYPE, loadRowContext, resolveRows } from './import-row-resolver'
 
-function fitMessage(friendly: string, max: number, current: number, adding: number): string {
-  const room = Math.max(0, max - current)
-  return (
-    `This import would add ${adding} ${friendly}, but your plan allows ${max} and you have ` +
-    `${current}. Only ${room} more fit. Reduce the import or upgrade your plan.`
-  )
+/** "Not imported: the Free plan allows 1 board." Names the plan when billing sets the cap. */
+async function refusalMessage(noun: 'board' | 'post', max: number): Promise<string> {
+  const { plan } = await getCloudConfig()
+  const who = plan ? `the ${PLAN_CATALOGUE[plan].name} plan` : 'this workspace'
+  return `Not imported: ${who} allows ${max} ${noun}${max === 1 ? '' : 's'}.`
 }
 
 /**
@@ -77,7 +78,7 @@ export async function assertImportWithinPlanLimits(
         limit: 'maxBoards',
         current,
         max: limits.maxBoards,
-        message: fitMessage('boards', limits.maxBoards, current, boardsToCreate.size),
+        message: await refusalMessage('board', limits.maxBoards),
       })
     }
   }
@@ -104,7 +105,7 @@ export async function assertImportWithinPlanLimits(
         limit: 'maxPosts',
         current,
         max: limits.maxPosts,
-        message: fitMessage('posts', limits.maxPosts, current, adding),
+        message: await refusalMessage('post', limits.maxPosts),
       })
     }
   }

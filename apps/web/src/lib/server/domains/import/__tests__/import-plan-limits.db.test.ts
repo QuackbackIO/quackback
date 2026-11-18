@@ -1,7 +1,7 @@
 /**
  * Real-DB coverage for plan caps on the CSV import pipeline: a run that would
  * create more boards or posts than the plan allows is refused before anything
- * is written, with an error that says how many fit.
+ * is written, with an error that names the plan and its cap.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type BoardId, type PrincipalId } from '@quackback/ids'
@@ -19,7 +19,13 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: vi.fn(),
 }))
 
+vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
+  getCloudConfig: vi.fn(),
+}))
+
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
+import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
+import { DISABLED_CLOUD_CONFIG } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { processImport } from '../import-service'
 
 const fixture = await createDbTestFixture({
@@ -29,11 +35,15 @@ const fixture = await createDbTestFixture({
   },
 })
 
+const allows = (cap: number, noun: string) => `${cap} ${noun}${cap === 1 ? '' : 's'}`
+
 const suffix = () => Math.random().toString(36).slice(2, 8)
 
-function csv(rows: { title: string; board?: string }[]): string {
-  const lines = ['title,content,board,author_name']
-  for (const r of rows) lines.push(`${r.title},body,${r.board ?? ''},Alice`)
+type Row = { title: string; board?: string; sourceId?: string }
+
+function csv(rows: Row[]): string {
+  const lines = ['title,content,board,author_name,source_id']
+  for (const r of rows) lines.push(`${r.title},body,${r.board ?? ''},Alice,${r.sourceId ?? ''}`)
   return Buffer.from(lines.join('\n')).toString('base64')
 }
 
@@ -48,7 +58,7 @@ async function seedBoard(): Promise<BoardId> {
   return id
 }
 
-async function runImport(boardId: BoardId, rows: { title: string; board?: string }[]) {
+async function runImport(boardId: BoardId, rows: Row[]) {
   const userId = createId('user')
   const principalId = createId('principal') as PrincipalId
   await testDb
@@ -74,6 +84,11 @@ describe.skipIf(!fixture.available)('import plan caps', () => {
   beforeEach(async () => {
     await fixture.begin()
     vi.mocked(getTierLimits).mockResolvedValue(OSS_TIER_LIMITS)
+    vi.mocked(getCloudConfig).mockResolvedValue({
+      ...DISABLED_CLOUD_CONFIG,
+      enabled: true,
+      plan: 'free',
+    })
   })
   afterEach(() => fixture.rollback())
   afterAll(() => fixture.close())
@@ -84,7 +99,7 @@ describe.skipIf(!fixture.available)('import plan caps', () => {
     expect(result.imported).toBe(3)
   })
 
-  it('refuses up front when the posts would pass maxPosts, naming how many fit', async () => {
+  it('refuses up front when the posts would pass maxPosts, naming the plan and its cap', async () => {
     const boardId = await seedBoard()
     const before = await count(posts)
     vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxPosts: before + 2 })
@@ -95,7 +110,10 @@ describe.skipIf(!fixture.available)('import plan caps', () => {
 
     expect(err).toBeInstanceOf(TierLimitError)
     expect((err as TierLimitError).limit).toBe('maxPosts')
-    expect((err as TierLimitError).message).toContain('2')
+    expect((err as TierLimitError).max).toBe(before + 2)
+    expect((err as TierLimitError).message).toBe(
+      `Not imported: the Free plan allows ${allows(before + 2, 'post')}.`
+    )
     expect(await count(posts)).toBe(before)
   })
 
@@ -121,6 +139,9 @@ describe.skipIf(!fixture.available)('import plan caps', () => {
 
     expect(err).toBeInstanceOf(TierLimitError)
     expect((err as TierLimitError).limit).toBe('maxBoards')
+    expect((err as TierLimitError).message).toBe(
+      `Not imported: the Free plan allows ${allows(boardsBefore, 'board')}.`
+    )
     expect(await count(boards)).toBe(boardsBefore)
     expect(await count(posts)).toBe(postsBefore)
   })
@@ -133,5 +154,60 @@ describe.skipIf(!fixture.available)('import plan caps', () => {
 
     const result = await runImport(boardId, [{ title: 'a', board: existing.slug }])
     expect(result.imported).toBe(1)
+  })
+
+  it('allows a new board that lands exactly on maxBoards', async () => {
+    const boardId = await seedBoard()
+    const boardsBefore = await count(boards)
+    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxBoards: boardsBefore + 1 })
+
+    const result = await runImport(boardId, [{ title: 'a', board: `New One ${suffix()}` }])
+    expect(result.imported).toBe(1)
+    expect(await count(boards)).toBe(boardsBefore + 1)
+  })
+
+  it('does not count soft-deleted posts against maxPosts', async () => {
+    const boardId = await seedBoard()
+    await runImport(boardId, [{ title: 'gone' }])
+    await testDb.update(posts).set({ deletedAt: new Date() })
+    const live = await testDb
+      .select({ n: sql<number>`count(*)::int` })
+      .from(posts)
+      .where(sql`${posts.deletedAt} is null`)
+    vi.mocked(getTierLimits).mockResolvedValue({
+      ...OSS_TIER_LIMITS,
+      maxPosts: (live[0]?.n ?? 0) + 1,
+    })
+
+    const result = await runImport(boardId, [{ title: 'b' }])
+    expect(result.imported).toBe(1)
+  })
+
+  it('does not count rows that update a previously imported post', async () => {
+    const boardId = await seedBoard()
+    const sourceId = `src-${suffix()}`
+    await runImport(boardId, [{ title: 'first', sourceId }])
+    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxPosts: await count(posts) })
+
+    const result = await runImport(boardId, [{ title: 'again', sourceId }])
+    expect(result.updated).toBe(1)
+
+    const err = await runImport(boardId, [{ title: 'again', sourceId }, { title: 'new' }]).catch(
+      (e) => e
+    )
+    expect(err).toBeInstanceOf(TierLimitError)
+  })
+
+  it('names no plan when the limits come from the instance configuration', async () => {
+    const boardId = await seedBoard()
+    const before = await count(posts)
+    vi.mocked(getCloudConfig).mockResolvedValue(DISABLED_CLOUD_CONFIG)
+    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxPosts: before })
+
+    const err = await runImport(boardId, [{ title: 'a' }]).catch((e) => e)
+    expect(err).toBeInstanceOf(TierLimitError)
+    expect((err as TierLimitError).message).toBe(
+      `Not imported: this workspace allows ${allows(before, 'post')}.`
+    )
   })
 })
