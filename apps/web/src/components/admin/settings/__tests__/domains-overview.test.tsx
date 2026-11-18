@@ -166,7 +166,6 @@ describe('a sending domain the plan holds back', () => {
       now: NOW,
       sending: [sending({ paused: true, pausedPlanName: 'Free', localParts: ['help@'] })],
       signIn: [],
-      helpCenterDomain: null,
     })
     expect(rows[0]?.uses[0]?.detail).toBe(
       'Paused on the Free plan. Email goes from your default address.'
@@ -175,7 +174,6 @@ describe('a sending domain the plan holds back', () => {
       now: NOW,
       sending: [sending({ localParts: ['help@'] })],
       signIn: [],
-      helpCenterDomain: null,
     })
     expect(kept[0]?.uses[0]?.detail).toBe('help@')
   })

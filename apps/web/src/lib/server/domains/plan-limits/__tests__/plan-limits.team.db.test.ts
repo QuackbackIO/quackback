@@ -375,9 +375,10 @@ describe.skipIf(!fixture.available)('sending domains (real DB)', () => {
       owningTeamId: team!.id,
       address: 'updates@mail.news.example',
     })
-    expect(added.sendingDomainId).toBe(held)
+    if (!added.ok) throw new Error(added.message)
+    expect(added.account.sendingDomainId).toBe(held)
     const err = await sendTestEmail({
-      addressId: added.id,
+      addressId: added.account.id,
       userId: createId('user') as UserId,
       workspaceName: 'Acme',
     }).catch((e: Error) => e.message)
