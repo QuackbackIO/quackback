@@ -33,57 +33,60 @@ export interface PlanNoticeState {
   canManageBilling: boolean
 }
 
+const THEY_COME_BACK = 'They come back when you upgrade.'
+const IT_COMES_BACK = 'It comes back when you upgrade.'
+
+/** Each feature's subject, as it starts a sentence, and what follows. */
 const COPY: Record<
   PlanNoticeFeature,
-  { pausing: string; paused: string; kept: string; pausingNote?: string }
+  { pausing: string; paused: string; back: string; after?: string; pausingNote?: string }
 > = {
-  webhooks: {
-    pausing: 'Webhooks pause',
-    paused: 'Webhooks are paused',
-    kept: "They're kept and start again when you upgrade.",
-  },
+  webhooks: { pausing: 'Webhooks pause', paused: 'Webhooks are paused', back: THEY_COME_BACK },
   workflows: {
     pausing: 'Workflows pause',
     paused: 'Workflows are paused',
-    kept: "They're kept and start again when you upgrade. Runs that were waiting have stopped.",
+    back: THEY_COME_BACK,
+    after: 'Runs that were waiting have stopped.',
     pausingNote: 'Runs waiting at that point stop.',
   },
   integrations: {
     pausing: 'Integrations pause',
     paused: 'Integrations are paused',
-    kept: 'They stay connected and start again when you upgrade.',
+    back: THEY_COME_BACK,
   },
   customDomain: {
     pausing: 'Your custom domain pauses',
     paused: 'Your custom domain is paused',
-    kept: "It's kept and serves again when you upgrade.",
+    back: IT_COMES_BACK,
   },
-  customCss: {
-    pausing: 'Custom CSS pauses',
-    paused: 'Custom CSS is paused',
-    kept: "It's kept and applies again when you upgrade.",
-  },
+  customCss: { pausing: 'Custom CSS pauses', paused: 'Custom CSS is paused', back: IT_COMES_BACK },
   aiAssistant: {
     pausing: 'The AI assistant pauses',
     paused: 'The AI assistant is paused',
-    kept: 'Conversations go to your team. It answers again when you upgrade.',
+    back: IT_COMES_BACK,
+    after: 'Conversations go to your team.',
   },
   aiArticleTranslation: {
     pausing: 'AI article translation pauses',
     paused: 'AI article translation is paused',
-    kept: 'Published translations stay, and it starts again when you upgrade.',
+    back: IT_COMES_BACK,
+    after: 'Published translations stay.',
   },
 }
 
 /**
- * The grace end as a day, as every plan limits surface names it ("Tue 25 Nov"
- * or "Tue, Nov 25" by the viewer's locale), at the UTC instant it is stored at.
+ * The day the feature pauses, as a sentence names it: "Nov 23" by the viewer's
+ * locale, with the year only when it is not this year, at the UTC day the
+ * grace end is stored at.
  */
-const DEADLINE_FORMAT: Intl.DateTimeFormatOptions = {
-  weekday: 'short',
-  day: 'numeric',
-  month: 'short',
-  timeZone: 'UTC',
+function deadline(iso: string, format: LocalDateFormatter, now: Date): string {
+  const sameYear = new Date(iso).getUTCFullYear() === now.getUTCFullYear()
+  return format(iso, {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+    timeZone: 'UTC',
+  })
 }
 
 /**
@@ -93,18 +96,22 @@ const DEADLINE_FORMAT: Intl.DateTimeFormatOptions = {
 export function planFeatureNotice(
   feature: PlanNoticeFeature,
   state: PlanNoticeState | null | undefined,
-  format: LocalDateFormatter = formatFirstRenderDate
+  format: LocalDateFormatter = formatFirstRenderDate,
+  now: Date = new Date()
 ): { text: string; showPlans: boolean } | null {
   if (!state?.enabled || state.phase === 'ok') return null
   if (!state.featureIssues.some((issue) => issue.key === feature)) return null
   const copy = COPY[feature]
-  const plan = state.planName ? `the ${state.planName} plan` : 'your current plan'
-  // A feature set up past the plan is live through the grace and paused after.
-  const text =
+  // A feature set up past the plan is live until the deadline and paused after.
+  const sentences =
     state.phase === 'grace' && state.graceEndsAt
-      ? `${copy.pausing} on ${format(state.graceEndsAt, DEADLINE_FORMAT)} unless you choose a plan.${copy.pausingNote ? ` ${copy.pausingNote}` : ''}`
-      : `${copy.paused} on ${plan}. ${copy.kept}`
-  return { text, showPlans: state.canManageBilling }
+      ? [`${copy.pausing} on ${deadline(state.graceEndsAt, format, now)}.`, copy.pausingNote]
+      : [
+          state.planName ? `${copy.paused} on the ${state.planName} plan.` : `${copy.paused}.`,
+          copy.back,
+          copy.after,
+        ]
+  return { text: sentences.filter(Boolean).join(' '), showPlans: state.canManageBilling }
 }
 
 export default function PlanFeatureNoticeBody({ feature }: { feature: PlanNoticeFeature }) {
@@ -129,7 +136,7 @@ export default function PlanFeatureNoticeBody({ feature }: { feature: PlanNotice
               search={{ checkout: undefined, billing_error: undefined }}
               className="font-medium text-foreground underline underline-offset-2"
             >
-              See plans
+              Upgrade
             </Link>
           </>
         )}

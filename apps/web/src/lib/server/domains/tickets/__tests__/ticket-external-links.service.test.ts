@@ -738,11 +738,15 @@ describe.skipIf(!fixture.available)('Create issue and the plan limits pause (rea
   it('refuses while integrations are paused, with a plain message and no operation', async () => {
     const { actor, ticketId } = await ready()
     setFeatureState('enforced', 'integrations')
+    const { planLimitsServiceDouble } =
+      await import('@/lib/server/domains/plan-limits/__tests__/feature-states')
+    const view = await planLimitsServiceDouble.getPlanLimits()
+    planLimitsServiceDouble.getPlanLimits.mockResolvedValueOnce({ ...view, plan: 'free' })
     const refusal = await createIssueForTicket(ticketId, 'github', actor).catch((e: unknown) => e)
     expect(refusal).toBeInstanceOf(TierLimitError)
     expect(refusal).toMatchObject({
       code: 'INTEGRATIONS_PAUSED',
-      message: 'Integrations are paused on your current plan, so issues cannot be created.',
+      message: "Integrations are paused on the Free plan, so you can't create issues right now.",
     })
     expect(
       await testDb.query.integrationSyncOperations.findMany({

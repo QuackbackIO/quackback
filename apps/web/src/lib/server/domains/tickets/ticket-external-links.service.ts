@@ -324,13 +324,19 @@ export async function createIssueForTicket(
     )
   // Refused up front while integrations are paused after the plan limits
   // grace, so the ticket's create identity is not spent on a cancelled sync.
-  const { isFeaturePaused } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  const { isFeaturePaused, getPlanLimits } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.service')
   if (await isFeaturePaused('integrations')) {
-    const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
+    const [{ TierLimitError }, { PLAN_CATALOGUE }, { plan }] = await Promise.all([
+      import('@/lib/server/errors/tier-limit-error'),
+      import('@/lib/server/domains/settings/cloud/cloud.types'),
+      getPlanLimits(),
+    ])
+    const onPlan = plan ? ` on the ${PLAN_CATALOGUE[plan].name} plan` : ''
     throw new TierLimitError({
       limit: 'integrations',
       code: 'INTEGRATIONS_PAUSED',
-      message: 'Integrations are paused on your current plan, so issues cannot be created.',
+      message: `Integrations are paused${onPlan}, so you can't create issues right now.`,
     })
   }
   const { queueSyncOperation } = await import('@/lib/server/integrations/sync/ledger')

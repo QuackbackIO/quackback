@@ -20,30 +20,61 @@ const state = (over: Partial<PlanNoticeState> = {}): PlanNoticeState => ({
   ...over,
 })
 
+const NOW = new Date('2026-11-18T09:00:00.000Z')
+const usFormat = (date: unknown, options?: Intl.DateTimeFormatOptions) =>
+  formatFirstRenderDate(date as string, options, 'en-US')
+const gbFormat = (date: unknown, options?: Intl.DateTimeFormatOptions) =>
+  formatFirstRenderDate(date as string, options, 'en-GB')
+
 describe('planFeatureNotice', () => {
-  it('says the feature is paused and kept after the grace', () => {
-    expect(planFeatureNotice('workflows', state())).toEqual({
-      text: "Workflows are paused on the Free plan. They're kept and start again when you upgrade. Runs that were waiting have stopped.",
+  it('says the feature is paused on the plan and comes back on upgrade', () => {
+    expect(planFeatureNotice('workflows', state(), usFormat, NOW)).toEqual({
+      text: 'Workflows are paused on the Free plan. They come back when you upgrade. Runs that were waiting have stopped.',
       showPlans: true,
     })
   })
 
-  it('names the day it pauses during the grace, in the viewer locale', () => {
-    // The formatter the component passes: the viewer's locale, as on every
-    // other plan limits surface, at the stored UTC day.
-    const usFormat = (date: unknown, options?: Intl.DateTimeFormatOptions) =>
-      formatFirstRenderDate(date as string, options, 'en-US')
-    expect(planFeatureNotice('workflows', state({ phase: 'grace' }), usFormat)?.text).toBe(
-      'Workflows pause on Wed, Nov 25 unless you choose a plan. Runs waiting at that point stop.'
+  it('names the day it pauses, in the viewer locale, with no weekday', () => {
+    expect(planFeatureNotice('workflows', state({ phase: 'grace' }), usFormat, NOW)?.text).toBe(
+      'Workflows pause on Nov 25. Runs waiting at that point stop.'
     )
-    const gbFormat = (date: unknown, options?: Intl.DateTimeFormatOptions) =>
-      formatFirstRenderDate(date as string, options, 'en-GB')
-    expect(planFeatureNotice('workflows', state({ phase: 'grace' }), gbFormat)?.text).toBe(
-      'Workflows pause on Wed 25 Nov unless you choose a plan. Runs waiting at that point stop.'
+    expect(planFeatureNotice('workflows', state({ phase: 'grace' }), gbFormat, NOW)?.text).toBe(
+      'Workflows pause on 25 Nov. Runs waiting at that point stop.'
     )
+    expect(
+      planFeatureNotice(
+        'webhooks',
+        state({ phase: 'grace', featureIssues: [{ key: 'webhooks' }] }),
+        usFormat,
+        NOW
+      )?.text
+    ).toBe('Webhooks pause on Nov 25.')
   })
 
-  it('links to plans only for billing managers', () => {
+  it('adds the year only when the day is in another year', () => {
+    const graceEndsAt = '2027-01-02T12:00:00.000Z'
+    expect(
+      planFeatureNotice(
+        'customCss',
+        state({ phase: 'grace', graceEndsAt, featureIssues: [{ key: 'customCss' }] }),
+        usFormat,
+        NOW
+      )?.text
+    ).toBe('Custom CSS pauses on Jan 2, 2027.')
+  })
+
+  it('never says "the current plan" when the plan has no name', () => {
+    expect(
+      planFeatureNotice(
+        'customCss',
+        state({ planName: null, featureIssues: [{ key: 'customCss' }] }),
+        usFormat,
+        NOW
+      )?.text
+    ).toBe('Custom CSS is paused. It comes back when you upgrade.')
+  })
+
+  it('offers Upgrade only to billing managers', () => {
     expect(planFeatureNotice('workflows', state({ canManageBilling: false }))?.showPlans).toBe(
       false
     )
@@ -59,33 +90,24 @@ describe('planFeatureNotice', () => {
   })
 
   it.each([
-    [
-      'webhooks',
-      "Webhooks are paused on the Free plan. They're kept and start again when you upgrade.",
-    ],
-    [
-      'integrations',
-      'Integrations are paused on the Free plan. They stay connected and start again when you upgrade.',
-    ],
+    ['webhooks', 'Webhooks are paused on the Free plan. They come back when you upgrade.'],
+    ['integrations', 'Integrations are paused on the Free plan. They come back when you upgrade.'],
     [
       'customDomain',
-      "Your custom domain is paused on the Free plan. It's kept and serves again when you upgrade.",
+      'Your custom domain is paused on the Free plan. It comes back when you upgrade.',
     ],
-    [
-      'customCss',
-      "Custom CSS is paused on the Free plan. It's kept and applies again when you upgrade.",
-    ],
+    ['customCss', 'Custom CSS is paused on the Free plan. It comes back when you upgrade.'],
     [
       'aiAssistant',
-      'The AI assistant is paused on the Free plan. Conversations go to your team. It answers again when you upgrade.',
+      'The AI assistant is paused on the Free plan. It comes back when you upgrade. Conversations go to your team.',
     ],
     [
       'aiArticleTranslation',
-      'AI article translation is paused on the Free plan. Published translations stay, and it starts again when you upgrade.',
+      'AI article translation is paused on the Free plan. It comes back when you upgrade. Published translations stay.',
     ],
   ] as const)('has its own sentence for %s', (feature, text) => {
-    expect(planFeatureNotice(feature, state({ featureIssues: [{ key: feature }] }))?.text).toBe(
-      text
-    )
+    expect(
+      planFeatureNotice(feature, state({ featureIssues: [{ key: feature }] }), usFormat, NOW)?.text
+    ).toBe(text)
   })
 })
