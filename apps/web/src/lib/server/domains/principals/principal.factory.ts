@@ -396,11 +396,12 @@ export async function setPrincipalRole(
   if (roleMoved && shouldSyncMembership({ type, fromRole, toRole: role })) {
     await noteMembershipChanged(opts.executor)
   }
-  const keys = userId ? [CACHE_KEYS.PRINCIPAL_BY_USER(userId)] : []
+  const keys: string[] = userId ? [CACHE_KEYS.PRINCIPAL_BY_USER(userId)] : []
+  // Seats and billing rights are counted from people's roles, so a person's
+  // role change recounts them; inside a caller's transaction, after it commits.
+  if (type === 'user') keys.push(CACHE_KEYS.PLAN_LIMITS_INPUTS)
   if (!opts.executor) for (const k of keys) await cacheDel(k)
   const scopeChanged = target !== undefined && (target.role !== role || reassign)
-  // Seats and billing rights are counted from people's roles.
-  if (type === 'user') await invalidatePlanLimits()
   return { cacheKeysToBust: keys, scopeChangedFor: scopeChanged ? target?.id : undefined }
 }
 
@@ -506,8 +507,6 @@ export async function updatePrincipalFields(
   const userId = await resolveUserId(ref, exec, opts)
   const keys = userId ? [CACHE_KEYS.PRINCIPAL_BY_USER(userId)] : []
   if (!opts.executor) for (const k of keys) await cacheDel(k)
-  // Seats count human principals only.
-  await invalidatePlanLimits()
   return { cacheKeysToBust: keys }
 }
 

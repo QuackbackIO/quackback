@@ -12,6 +12,7 @@ import {
   inArray,
   integrations,
   isNull,
+  lt,
   max,
   principal,
   principalRoleAssignments,
@@ -155,11 +156,16 @@ export async function loadBoardChoices(): Promise<BoardChoice[]> {
  * Seat holders: the same people `countSeatUsage` counts as members (human
  * admin and member principals). Pending invites count toward the cap but are
  * not people yet, so they hold no seat.
+ *
+ * Recent activity ranks the default seat holders, so it is read as it stood
+ * before `activeBefore` (the grace end): a member without a seat who signs in
+ * after it cannot take one from someone who has it.
  */
-export async function loadMemberChoices(): Promise<MemberChoice[]> {
+export async function loadMemberChoices(activeBefore: Date | null = null): Promise<MemberChoice[]> {
   const lastSession = db
     .select({ userId: session.userId, lastSignInAt: max(session.createdAt).as('last_sign_in_at') })
     .from(session)
+    .where(activeBefore ? lt(session.createdAt, activeBefore) : undefined)
     .groupBy(session.userId)
     .as('last_session')
   const people = await db

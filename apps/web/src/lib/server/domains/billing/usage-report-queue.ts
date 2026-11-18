@@ -14,6 +14,7 @@ import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { logger } from '@/lib/server/logger'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { TerminalJobError } from '@/lib/server/jobs/definitions'
+import { detectPlanLimitsQuietly } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import {
   enqueueUsageReport,
@@ -53,8 +54,6 @@ export async function runUsageReport(job: ClaimedJob): Promise<void> {
     // The hourly slot, at this workspace's stable offset, doubles as plan
     // limits detection, so a drop on the clock (a term lapsing) starts its
     // grace without anyone visiting. It never fails the slot.
-    const { detectPlanLimitsQuietly } =
-      await import('@/lib/server/domains/plan-limits/plan-limits.service')
     await detectPlanLimitsQuietly()
     await enqueueUsageReport({ month })
     return

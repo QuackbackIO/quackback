@@ -15,7 +15,7 @@ vi.mock('@/lib/server/functions/auth-helpers', async (original) => ({
   ...(await original<typeof import('@/lib/server/functions/auth-helpers')>()),
   requireAuth: hoisted.requireAuth,
 }))
-vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.choosers', () => ({
   setKeptBoard: (id: string) => hoisted.setKeptBoard(id),
   setSeatHolders: (ids: string[]) => hoisted.setSeatHolders(ids),
 }))
@@ -39,7 +39,7 @@ vi.mock('@tanstack/react-start', () => ({
 
 await import('../plan-limits')
 // Declaration order: get, board, seats, status components, sending domains.
-const [, setKeptBoard, setSeatHolders] = handlers
+const [getPlanLimits, setKeptBoard, setSeatHolders] = handlers
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -67,6 +67,12 @@ describe('plan limits choosers', () => {
       /Access denied/
     )
     expect(hoisted.setSeatHolders).not.toHaveBeenCalled()
+  })
+
+  it('reads the page only for a teammate who can see members, never a portal user', async () => {
+    hoisted.requireAuth.mockRejectedValue(new Error('Access denied'))
+    await expect(getPlanLimits!({ data: {} })).rejects.toThrow(/Access denied/)
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: PERMISSIONS.MEMBER_VIEW })
   })
 
   it('needs a signed-in teammate', async () => {

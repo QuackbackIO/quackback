@@ -145,6 +145,28 @@ describe('the feature key space', () => {
     expect(planFeatureSet(OSS_TIER_LIMITS.features, FREE_CONFIG).webhooks).toBe(false)
   })
 
+  it("follows the one gate today's runtime path reads for single sign-on and MCP", () => {
+    // Single sign-on: the provider list reads the tier flag alone.
+    const ssoTierOnly = planFeatureSet(
+      { ...OSS_TIER_LIMITS.features, customOidcProvider: true },
+      FREE_CONFIG
+    )
+    expect(ssoTierOnly.sso).toBe(true)
+    expect(
+      planFeatureSet(
+        { ...OSS_TIER_LIMITS.features, customOidcProvider: false },
+        DISABLED_CLOUD_CONFIG
+      ).sso
+    ).toBe(false)
+    // MCP: the handler reads the entitlement alone.
+    const mcpEntitled = planFeatureSet(
+      { ...OSS_TIER_LIMITS.features, mcpServer: false },
+      PRO_CONFIG
+    )
+    expect(mcpEntitled.mcpServer).toBe(true)
+    expect(planFeatureSet(OSS_TIER_LIMITS.features, FREE_CONFIG).mcpServer).toBe(false)
+  })
+
   it('keeps grace to features that run on their own, not the ones that stop at once', () => {
     expect(PLAN_FEATURES.mcpServer.grace).toBe(false)
     expect(PLAN_FEATURES.aiInsights.grace).toBe(false)
@@ -460,6 +482,11 @@ describe('limitsKeyFor', () => {
     expect(limitsKeyFor('free', { ...FREE_LIMITS, apiRequestsPerMinute: 5 }, FREE_FEATURES)).toBe(
       base
     )
+    // Free's own grants arriving (a lapsed term read with none, then an explicit
+    // Free projection) are the same drop, not a new one.
+    expect(
+      limitsKeyFor('free', FREE_LIMITS, { ...FREE_FEATURES, aiDrafts: false, apiAccess: false })
+    ).toBe(base)
   })
 })
 
@@ -534,9 +561,15 @@ describe('seatHolderOrder', () => {
     ])
   })
 
-  it('always keeps the owner, past the cap if the choice leaves them out', () => {
-    const members = [member('m_owner', { isOwner: true, canManageBilling: true }), member('m_a')]
-    expect(seatHolderOrder(members, 1, ['m_a'])).toEqual(['m_owner', 'm_a'])
+  it('counts the owner toward the cap, so a choice never adds a seat past it', () => {
+    const members = [
+      member('m_owner', { isOwner: true, canManageBilling: true }),
+      member('m_a'),
+      member('m_b'),
+    ]
+    expect(seatHolderOrder(members, 1, ['m_a'])).toEqual(['m_owner'])
+    expect(seatHolderOrder(members, 2, ['m_a'])).toEqual(['m_owner', 'm_a'])
+    expect(seatHolderOrder(members, 2, ['m_a', 'm_b'])).toEqual(['m_owner', 'm_a'])
   })
 
   it('always keeps someone who can manage billing, even when the owner cannot', () => {

@@ -14,11 +14,14 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   boards,
   eq,
+  inArray,
+  invitation,
   isNull,
   posts,
   principal,
   principalRoleAssignments,
   roles,
+  session,
   settings,
   statusComponents,
   user,
@@ -41,6 +44,8 @@ vi.mock('@/lib/server/domains/billing/usage-counts', async (original) => {
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { updateFeatureFlags } from '@/lib/server/domains/settings/settings.service'
 import { deleteBoard } from '@/lib/server/domains/boards/board.service'
+import { removeTeamMember } from '@/lib/server/domains/principals/principal.service'
+import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { deleteStatusComponent } from '@/lib/server/domains/status/status.components'
 import { writeBillingProjection } from '@/lib/server/domains/settings/cloud/billing-projection.write'
 import { parseBillingProjection } from '@/lib/server/domains/settings/cloud/billing-projection'
@@ -55,9 +60,8 @@ import {
   isFeaturePaused,
   isSeatPaused,
   openBoardIds,
-  setKeptBoard,
-  setSeatHolders,
 } from '../plan-limits.service'
+import { setKeptBoard, setSeatHolders } from '../plan-limits.choosers'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -129,6 +133,15 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     settingsId = await ensureSettings()
     await testDb.update(settings).set({ planLimitsState: null }).where(eq(settings.id, settingsId))
     await testDb.update(boards).set({ deletedAt: new Date() }).where(isNull(boards.deletedAt))
+    // Only this test's people hold seats.
+    await testDb
+      .update(principal)
+      .set({ role: 'user' })
+      .where(inArray(principal.role, ['admin', 'member']))
+    await testDb
+      .update(invitation)
+      .set({ status: 'canceled' })
+      .where(eq(invitation.status, 'pending'))
     const uid = createId('user') as UserId
     ownerId = createId('principal') as PrincipalId
     await testDb.insert(user).values({ id: uid, name: 'Acme Owner', email: `${uid}@example.com` })
@@ -314,10 +327,73 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
     expect(await isSeatPaused(memberId)).toBe(true)
     expect(await isSeatPaused(ownerId)).toBe(false)
-    // Choosing the member keeps them, and the owner keeps a seat past the cap.
-    expect(await setSeatHolders([memberId])).toEqual({ ok: true })
-    expect(await isSeatPaused(memberId)).toBe(false)
-    expect(await isSeatPaused(ownerId)).toBe(false)
+    // The owner fills the one seat, so choosing the member as well is too many.
+    expect(await setSeatHolders([memberId])).toEqual({ ok: false, reason: 'too_many' })
+    // Someone who is not a seat (a service principal behind a key) is never paused.
+    expect(await isSeatPaused(createId('principal'))).toBe(false)
+  })
+
+  async function addMember(name: string, lastSignIn: Date | null): Promise<PrincipalId> {
+    const uid = createId('user') as UserId
+    const id = createId('principal') as PrincipalId
+    await testDb.insert(user).values({ id: uid, name, email: `${uid}@example.com` })
+    await testDb
+      .insert(principal)
+      .values({ id, userId: uid, role: 'member', type: 'user', createdAt: new Date(0) })
+    if (lastSignIn) {
+      await testDb.insert(session).values({
+        id: createId('user'),
+        token: createId('user'),
+        userId: uid,
+        createdAt: lastSignIn,
+        updatedAt: lastSignIn,
+        expiresAt: new Date(lastSignIn.getTime() + 30 * DAY),
+      } as never)
+    }
+    return id
+  }
+
+  it('shows the fix at once when a member is removed through the member service', async () => {
+    const memberId = await addMember('Acme Member', null)
+    // One seat over, whatever else the database holds.
+    const { used } = await countSeatUsage()
+    await configure({
+      planLimits: true,
+      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
+    })
+    await invalidatePlanLimits()
+    await getPlanLimits()
+    expect((await getPlanLimits()).issues.map((i) => i.key)).toEqual(['maxTeamSeats'])
+    await removeTeamMember(memberId, ownerId, null, undefined, { granterRole: 'admin' })
+    const [row] = await testDb.select().from(principal).where(eq(principal.id, memberId))
+    expect(row?.role).toBe('user')
+    expect((await getPlanLimits()).issues).toEqual([])
+  })
+
+  it('ranks seats on activity before the grace ended, so signing in later takes no seat', async () => {
+    await configure({
+      planLimits: true,
+      tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: 2 },
+    })
+    const earlier = await addMember('Acme Earlier', new Date(Date.now() - 2 * DAY))
+    const later = await addMember('Acme Later', null)
+    await invalidatePlanLimits()
+    await getPlanLimits()
+    // After the grace, the member without a seat signs in.
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
+    await addMember('Acme Unrelated', null)
+    const [laterRow] = await testDb.select().from(principal).where(eq(principal.id, later))
+    await testDb.insert(session).values({
+      id: createId('user'),
+      token: createId('user'),
+      userId: laterRow!.userId!,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      expiresAt: new Date(Date.now() + DAY),
+    } as never)
+    await invalidatePlanLimits()
+    expect(await isSeatPaused(earlier)).toBe(false)
+    expect(await isSeatPaused(later)).toBe(true)
   })
 
   it('reads an owner role assignment as the owner', async () => {

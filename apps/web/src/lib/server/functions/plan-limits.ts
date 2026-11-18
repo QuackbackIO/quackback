@@ -23,7 +23,8 @@ const idSchema = z.string().min(1).max(200)
 const idsSchema = z.object({ ids: z.array(idSchema).max(500) })
 
 export const getPlanLimitsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const { permissions } = await requireAuth()
+  // Every teammate, not a portal user: the same gate as the plan notice.
+  const { permissions } = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
   const { getPlanLimitsWithCandidates } =
     await import('@/lib/server/domains/plan-limits/plan-limits.service')
   const { planLimitsPage } = await import('@/lib/server/domains/plan-limits/plan-limits.page')
@@ -38,7 +39,7 @@ export const setKeptBoardFn = createServerFn({ method: 'POST' })
       PERMISSIONS.BILLING_MANAGE,
       PERMISSIONS.SETTINGS_MANAGE,
     ])
-    const { setKeptBoard } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+    const { setKeptBoard } = await import('@/lib/server/domains/plan-limits/plan-limits.choosers')
     return setKeptBoard(data.boardId)
   })
 
@@ -49,7 +50,7 @@ export const setSeatHoldersFn = createServerFn({ method: 'POST' })
       PERMISSIONS.BILLING_MANAGE,
       PERMISSIONS.MEMBER_MANAGE,
     ])
-    const { setSeatHolders } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+    const { setSeatHolders } = await import('@/lib/server/domains/plan-limits/plan-limits.choosers')
     return setSeatHolders(data.ids)
   })
 
@@ -61,7 +62,7 @@ export const setVisibleStatusComponentsFn = createServerFn({ method: 'POST' })
       PERMISSIONS.STATUS_PAGE_MANAGE,
     ])
     const { setVisibleStatusComponents } =
-      await import('@/lib/server/domains/plan-limits/plan-limits.service')
+      await import('@/lib/server/domains/plan-limits/plan-limits.choosers')
     return setVisibleStatusComponents(data.ids)
   })
 
@@ -73,6 +74,6 @@ export const setKeptSendingDomainsFn = createServerFn({ method: 'POST' })
       PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
     ])
     const { setKeptSendingDomains } =
-      await import('@/lib/server/domains/plan-limits/plan-limits.service')
+      await import('@/lib/server/domains/plan-limits/plan-limits.choosers')
     return setKeptSendingDomains(data.ids)
   })

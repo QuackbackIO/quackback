@@ -26,6 +26,7 @@ import {
 import type { TierLimits } from '@/lib/server/domains/settings/tier-limits.types'
 import { isPlanId, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
 import {
+  guaranteedSeatHolders,
   openBoardOrder,
   seatHolderOrder,
   sendingDomainOrder,
@@ -45,6 +46,7 @@ import {
 export const PLAN_LIMITS_GRACE_MS = 7 * 24 * 60 * 60 * 1000
 
 export {
+  guaranteedSeatHolders,
   openBoardOrder,
   seatHolderOrder,
   sendingDomainOrder,
@@ -223,7 +225,9 @@ export function needsUsage(
 
 /**
  * Identity of a set of limits: the plan, the caps that need a fix, and the
- * features that are off. A grace belongs to one of these.
+ * grace features that are off (the only ones that can raise a feature issue).
+ * A grace belongs to one of these, so a change that cannot put the workspace
+ * over (a meter, an at-once feature such as AI drafts) never starts another.
  */
 export function limitsKeyFor(
   plan: PlanId | null,
@@ -231,7 +235,7 @@ export function limitsKeyFor(
   features: PlanFeatureSet
 ): string {
   const caps = PLAN_LIMIT_ISSUE_KEYS.map((key) => limits[key])
-  const off = PLAN_FEATURE_KEYS.filter((key) => !features[key])
+  const off = PLAN_FEATURE_KEYS.filter((key) => PLAN_FEATURES[key].grace && !features[key])
   return JSON.stringify([plan, caps, off])
 }
 

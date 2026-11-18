@@ -69,41 +69,36 @@ function byRecentActivity(a: MemberCandidate, b: MemberCandidate): number {
 }
 
 /**
- * Members who keep a seat. The owner (the earliest, when several) and at least
- * one member who can manage billing always keep one, past the cap if need be,
- * so someone can always choose a plan. The admin's choice fills the cap;
- * without one the default is owners, then billing managers, then the most
- * recently active.
+ * Members who always keep a seat: the owner (the earliest, when several) and,
+ * when the owner cannot manage billing, the most recently active member who
+ * can, so someone can always choose a plan. They count toward the cap and go
+ * past it only when they alone fill it.
+ */
+export function guaranteedSeatHolders(members: readonly MemberCandidate[]): string[] {
+  const owners = members.filter((m) => m.isOwner).sort((a, b) => byCreated(a, b) || byId(a, b))
+  const billing = members.filter((m) => m.canManageBilling).sort(byRecentActivity)
+  const guaranteed: MemberCandidate[] = []
+  if (owners[0]) guaranteed.push(owners[0])
+  if (!guaranteed.some((m) => m.canManageBilling) && billing[0]) guaranteed.push(billing[0])
+  return guaranteed.map((m) => m.id)
+}
+
+/**
+ * Members who keep a seat: the guaranteed ones, then the admin's choice, then
+ * owners, billing managers and the most recently active, up to the cap.
  */
 export function seatHolderOrder(
   members: readonly MemberCandidate[],
   cap: number,
   chosen?: readonly string[]
 ): string[] {
-  const owners = members.filter((m) => m.isOwner).sort((a, b) => byCreated(a, b) || byId(a, b))
-  const billing = members.filter((m) => m.canManageBilling).sort(byRecentActivity)
-  const guaranteed: MemberCandidate[] = []
-  if (owners[0]) guaranteed.push(owners[0])
-  if (!guaranteed.some((m) => m.canManageBilling) && billing[0]) guaranteed.push(billing[0])
-  const guaranteedIds = guaranteed.map((m) => m.id)
+  const guaranteed = guaranteedSeatHolders(members)
   const defaults = [
-    ...owners,
-    ...billing,
+    ...members.filter((m) => m.isOwner).sort((a, b) => byCreated(a, b) || byId(a, b)),
+    ...members.filter((m) => m.canManageBilling).sort(byRecentActivity),
     ...members.filter((m) => !m.isOwner && !m.canManageBilling).sort(byRecentActivity),
   ].map((m) => m.id)
-
-  const known = new Set(members.map((m) => m.id))
-  const picked = (chosen ?? []).filter((id) => known.has(id))
-  if (picked.length === 0) {
-    return keepFirst(guaranteedIds, defaults, Math.max(cap, guaranteedIds.length))
-  }
-  const out = [...guaranteedIds]
-  for (const id of [...new Set(picked)].slice(0, cap)) if (!out.includes(id)) out.push(id)
-  for (const id of defaults) {
-    if (out.length >= cap) break
-    if (!out.includes(id)) out.push(id)
-  }
-  return out
+  return keepFirst([...guaranteed, ...(chosen ?? [])], defaults, Math.max(cap, guaranteed.length))
 }
 
 /** Status components that stay public: the chosen ones, then display order. */

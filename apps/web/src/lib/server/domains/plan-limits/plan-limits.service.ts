@@ -24,7 +24,6 @@ import {
   compareAndSetPlanLimitsState,
   readPlanLimitsSources,
   readPlanLimitsStateFresh,
-  updatePlanLimitsState,
   type PlanLimitsSources,
 } from '@/lib/server/domains/settings/settings.plan-limits'
 import {
@@ -137,7 +136,8 @@ async function readSnapshot(): Promise<PlanLimitsSnapshot> {
 
 async function loadPart(
   part: SnapshotPart,
-  sources: PlanLimitsSources | null
+  sources: PlanLimitsSources | null,
+  stored: PlanLimitsState | null
 ): Promise<Partial<PlanLimitsSnapshot>> {
   switch (part) {
     case 'usage':
@@ -156,8 +156,10 @@ async function loadPart(
     }
     case 'boards':
       return { boards: await loadBoardChoices() }
-    case 'members':
-      return { members: await loadMemberChoices() }
+    case 'members': {
+      const graceEnd = stored ? new Date(stored.graceEndsAt) : null
+      return { members: await loadMemberChoices(graceEnd) }
+    }
     case 'statusComponents':
       return { statusComponents: await loadStatusComponentChoices() }
     case 'sendingDomains':
@@ -168,12 +170,13 @@ async function loadPart(
 /** The snapshot with every part in `parts` present, loading and caching what is missing. */
 async function snapshotWith(
   parts: readonly SnapshotPart[],
-  sources: PlanLimitsSources | null
+  sources: PlanLimitsSources | null,
+  stored: PlanLimitsState | null
 ): Promise<PlanLimitsSnapshot> {
   const snapshot = await readSnapshot()
   const missing = parts.filter((part) => snapshot[part] === undefined)
   if (missing.length === 0) return snapshot
-  const loaded = await Promise.all(missing.map((part) => loadPart(part, sources)))
+  const loaded = await Promise.all(missing.map((part) => loadPart(part, sources, stored)))
   const merged: PlanLimitsSnapshot = Object.assign({}, snapshot, ...loaded)
   await cacheSet(INPUTS_KEY, merged, INPUTS_TTL_SECONDS)
   rememberPerRequest(INPUTS_KEY, merged)
@@ -187,12 +190,13 @@ const CANDIDATE_PART: Partial<Record<PlanLimitIssueKey, SnapshotPart>> = {
   maxSendingDomains: 'sendingDomains',
 }
 
-interface Evaluation {
+export interface Evaluation {
   view: PlanLimitsView
   snapshot: PlanLimitsSnapshot
 }
 
-async function evaluate(options: {
+/** @internal The evaluation with its inputs, for the choosers. */
+export async function evaluate(options: {
   now: Date
   previous?: PreviousPlan | null
   persist: boolean
@@ -212,7 +216,8 @@ async function evaluate(options: {
   const featuresOff = Object.values(context.inputs.features).some((on) => !on)
   let snapshot = await snapshotWith(
     featuresOff ? ['usage', 'configured'] : ['usage'],
-    context.sources
+    context.sources,
+    context.inputs.stored
   )
   const toInputs = (s: PlanLimitsSnapshot): PlanLimitsInputs => ({
     ...base,
@@ -230,7 +235,7 @@ async function evaluate(options: {
     .map((issue) => CANDIDATE_PART[issue.key])
     .filter((part): part is SnapshotPart => part !== undefined)
   if (needed.some((part) => snapshot[part] === undefined)) {
-    snapshot = await snapshotWith(needed, context.sources)
+    snapshot = await snapshotWith(needed, context.sources, context.inputs.stored)
     result = computePlanLimits(toInputs(snapshot), now)
   }
 
@@ -407,10 +412,21 @@ export async function seatHolders(): Promise<string[] | null> {
   return enforcedOver(view, 'maxTeamSeats') ? view!.seatHolderIds : null
 }
 
-/** True only after grace, for a member over the seat cap without a seat. */
+/**
+ * True only after grace, for a team member (a seat) without a seat holder's
+ * place. Anyone who is not a seat (a service principal behind an API key, a
+ * portal user) is never paused by this.
+ */
 export async function isSeatPaused(principalId: string): Promise<boolean> {
-  const holders = await seatHolders()
-  return holders !== null && !holders.includes(principalId)
+  try {
+    const { view, snapshot } = await evaluate({ now: new Date(), persist: true })
+    if (!enforcedOver(view, 'maxTeamSeats') || !view.seatHolderIds) return false
+    const isSeat = snapshot.members?.some((m) => m.id === principalId) ?? false
+    return isSeat && !view.seatHolderIds.includes(principalId)
+  } catch (err) {
+    log.error({ err }, 'plan limits read failed; failing open')
+    return false
+  }
 }
 
 /** Status components the public page shows, or null when it shows them all. */
@@ -434,79 +450,4 @@ export async function activeSendingDomainIds(): Promise<string[] | null> {
 export async function isSendingDomainActive(domainId: string): Promise<boolean> {
   const active = await activeSendingDomainIds()
   return active === null || active.includes(domainId)
-}
-
-// ---------------------------------------------------------------------------
-// Choosers
-// ---------------------------------------------------------------------------
-
-export type PlanLimitsChoiceResult =
-  { ok: true } | { ok: false; reason: 'not_over' | 'unknown' | 'too_many' }
-
-type ChoiceField =
-  'keptBoardId' | 'seatHolderIds' | 'visibleStatusComponentIds' | 'sendingDomainIds'
-
-async function choose(
-  key: PlanLimitIssueKey,
-  part: SnapshotPart,
-  ids: readonly string[],
-  write: (state: PlanLimitsState) => PlanLimitsState
-): Promise<PlanLimitsChoiceResult> {
-  await invalidatePlanLimits()
-  const { view, snapshot } = await evaluate({ now: new Date(), persist: true })
-  const issue = view.issues.find((i) => i.key === key)
-  if (!view.enabled || !issue) return { ok: false, reason: 'not_over' }
-  const known = new Set((snapshot[part] as { id: string }[] | undefined)?.map((c) => c.id) ?? [])
-  if (ids.some((id) => !known.has(id))) return { ok: false, reason: 'unknown' }
-  if (new Set(ids).size > issue.cap) return { ok: false, reason: 'too_many' }
-  const wrote = await updatePlanLimitsState((current) => {
-    const state = parsePlanLimitsState(current)
-    if (!state) return undefined
-    return write(state) as unknown as StoredPlanLimitsState
-  })
-  if (!wrote) return { ok: false, reason: 'not_over' }
-  await invalidatePlanLimits()
-  return { ok: true }
-}
-
-function withChoice<K extends ChoiceField>(
-  field: K,
-  value: PlanLimitsState[K]
-): (state: PlanLimitsState) => PlanLimitsState {
-  return (state) => ({ ...state, [field]: value })
-}
-
-/** Keep `boardId` open after grace. */
-export function setKeptBoard(boardId: string): Promise<PlanLimitsChoiceResult> {
-  return choose('maxBoards', 'boards', [boardId], withChoice('keptBoardId', boardId))
-}
-
-/**
- * Who keeps a seat after grace, up to the cap. The owner and one billing
- * manager keep theirs whatever the choice (see `seatHolderOrder`).
- */
-export function setSeatHolders(principalIds: readonly string[]): Promise<PlanLimitsChoiceResult> {
-  const ids = [...new Set(principalIds)]
-  return choose('maxTeamSeats', 'members', ids, withChoice('seatHolderIds', ids))
-}
-
-/** Status components that stay on the public page after grace, up to the cap. */
-export function setVisibleStatusComponents(
-  componentIds: readonly string[]
-): Promise<PlanLimitsChoiceResult> {
-  const ids = [...new Set(componentIds)]
-  return choose(
-    'maxStatusComponents',
-    'statusComponents',
-    ids,
-    withChoice('visibleStatusComponentIds', ids)
-  )
-}
-
-/** Sending domains that keep sending after grace, up to the cap. */
-export function setKeptSendingDomains(
-  domainIds: readonly string[]
-): Promise<PlanLimitsChoiceResult> {
-  const ids = [...new Set(domainIds)]
-  return choose('maxSendingDomains', 'sendingDomains', ids, withChoice('sendingDomainIds', ids))
 }

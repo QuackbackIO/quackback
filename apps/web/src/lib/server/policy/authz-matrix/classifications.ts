@@ -109,9 +109,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   // Plan limits: every teammate sees what is over the plan; each chooser takes
   // billing rights or the permission that manages what it picks.
-  'lib/server/functions/plan-limits.ts::getPlanLimitsFn': END_USER(
-    'read-only plan limits state for the Plan limits page and banner; team members only (requireAuth refuses non-team principals), and candidate lists are filtered to the choosers the caller may use'
-  ),
   'lib/server/functions/plan-limits.ts::setKeptBoardFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.SETTINGS_MANAGE],
     'choose the board that stays open: billing rights or whoever manages boards'
