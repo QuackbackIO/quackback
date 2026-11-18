@@ -1,4 +1,5 @@
 import {
+  Component,
   Suspense,
   useCallback,
   useEffect,
@@ -6,6 +7,7 @@ import {
   memo,
   useRef,
   useState,
+  type ReactNode,
   type RefObject,
 } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
@@ -270,9 +272,37 @@ const WidgetPostRow = memo(
 // The board picker shows only once the visitor starts writing, so its select
 // and positioning code load behind this boundary, warmed when the title gets
 // focus, instead of in the widget's first load.
-const boardSelect = lazyWithPreload(() => import('./widget-board-select'), 'WidgetBoardSelect')
-const WidgetBoardSelect = boardSelect.Component
-const preloadBoardSelect = boardSelect.preload
+function loadBoardSelect() {
+  return lazyWithPreload(() => import('./widget-board-select'), 'WidgetBoardSelect')
+}
+// React keeps a failed lazy component failed, so a failure swaps in a fresh
+// one and the next time the row mounts it tries the import again.
+let boardSelect = loadBoardSelect()
+const preloadBoardSelect = () => boardSelect.preload()
+
+/**
+ * Keeps a picker that failed to load (a widget left open across a deploy, its
+ * old chunk gone) inside the "Posting to" row: the row shows the placeholder,
+ * the draft stays, and Post still goes to the board the composer chose.
+ */
+class BoardSelectBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch() {
+    boardSelect = loadBoardSelect()
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
 
 /** The picker's closed trigger, drawn without the select while it loads. */
 function BoardSelectPlaceholder({ name }: { name: string | undefined }) {
@@ -864,6 +894,10 @@ export function WidgetHomeAnimated({
   }
 
   const canSubmitForm = hasTitle && selectedBoardId && canPost
+  const WidgetBoardSelect = boardSelect.Component
+  const boardPlaceholder = (
+    <BoardSelectPlaceholder name={boards.find((b) => b.id === selectedBoardId)?.name} />
+  )
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
@@ -895,19 +929,15 @@ export function WidgetHomeAnimated({
                         defaultMessage="Posting to"
                       />
                     </span>
-                    <Suspense
-                      fallback={
-                        <BoardSelectPlaceholder
-                          name={boards.find((b) => b.id === selectedBoardId)?.name}
+                    <BoardSelectBoundary fallback={boardPlaceholder}>
+                      <Suspense fallback={boardPlaceholder}>
+                        <WidgetBoardSelect
+                          boards={boards}
+                          value={selectedBoardId}
+                          onValueChange={handleComposeBoardChange}
                         />
-                      }
-                    >
-                      <WidgetBoardSelect
-                        boards={boards}
-                        value={selectedBoardId}
-                        onValueChange={handleComposeBoardChange}
-                      />
-                    </Suspense>
+                      </Suspense>
+                    </BoardSelectBoundary>
                   </div>
                 </m.div>
               )}
