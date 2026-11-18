@@ -46,17 +46,23 @@ const { probeCustomDomain } = await import('../reachability-probe')
 
 type Reply = 'ok' | 'unreachable' | 'error-page'
 let reply: Reply = 'ok'
+/** The host the answer says this server saw; undefined sends no such header. */
+let seenHost: string | undefined
 const fetched: string[] = []
 
 beforeEach(() => {
   zone.records = new Map()
   zone.asked = []
   reply = 'ok'
+  seenHost = undefined
   fetched.length = 0
   vi.stubGlobal('fetch', async (url: string) => {
     fetched.push(url)
     if (reply === 'unreachable') throw new TypeError('fetch failed')
-    return new Response('{}', { status: reply === 'ok' ? 200 : 502 })
+    return new Response('{}', {
+      status: reply === 'ok' ? 200 : 502,
+      headers: seenHost === undefined ? {} : { 'x-quackback-host': seenHost },
+    })
   })
 })
 afterEach(() => vi.unstubAllGlobals())
@@ -71,6 +77,23 @@ describe('probeCustomDomain', () => {
     expect(status).toEqual({ dnsResolved: true, instanceReachable: true, verified: true })
     expect(dnsAnswered).toBe(true)
     expect(fetched).toEqual(['https://help.acme.com/api/health'])
+  })
+
+  it('verifies when this server says it saw the hostname asked for, in any case', async () => {
+    set('A', 'help.acme.com', ['203.0.113.7'])
+    seenHost = 'Help.Acme.com'
+    expect((await probeCustomDomain('help.acme.com')).status.verified).toBe(true)
+  })
+
+  it('does not verify behind a proxy that hands this server another Host', async () => {
+    // A plain GET passes there, yet routing never sees the hostname.
+    set('A', 'help.acme.com', ['203.0.113.7'])
+    set('A', 'feedback.acme.com', ['203.0.113.7'])
+    seenHost = 'feedback.acme.com'
+    const { status } = await probeCustomDomain('help.acme.com', {
+      primaryHost: 'feedback.acme.com',
+    })
+    expect(status).toEqual({ dnsResolved: true, instanceReachable: false, verified: false })
   })
 
   it('reads DNS through the resolver that tries twice', async () => {

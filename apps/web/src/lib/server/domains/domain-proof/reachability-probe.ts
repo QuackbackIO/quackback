@@ -7,6 +7,8 @@
 import { isIP } from 'node:net'
 import { interactiveResolver } from '@/lib/server/dns/resolver'
 import { isNoAnswer } from '@/lib/server/dns/lookup-outcome'
+import { normalizeHost } from '@/lib/shared/section-domains'
+import { SEEN_HOST_HEADER } from './seen-host'
 
 /** Same probe path the request-context middleware treats as a health check. */
 const HEALTH_PATH = '/api/health'
@@ -64,10 +66,13 @@ async function primaryAddresses(primaryHost: string): Promise<string[]> {
 /**
  * Whether this exact instance answers on the domain. A plain HTTPS GET to
  * the liveness path proves the CNAME + the operator's proxy both terminate
- * on us -- no shared secret needed for a v1 status check.
+ * on us -- no shared secret needed for a v1 status check. The answer names
+ * the host this server saw (`SEEN_HOST_HEADER`); one that names another host
+ * came through a proxy that rewrites Host, where no section is ever served.
+ * An answer that names none passes, as one from a server before the header.
  *
  * `unreachable` when no answer came at all (refused, timed out, TLS failed);
- * `other` when something answered, but not with this server's OK.
+ * `other` when something answered, but not this server on this hostname.
  */
 async function instanceAnswersOn(domain: string): Promise<'ok' | 'unreachable' | 'other'> {
   let res: Response
@@ -78,7 +83,9 @@ async function instanceAnswersOn(domain: string): Promise<'ok' | 'unreachable' |
   } catch {
     return 'unreachable'
   }
-  return res.ok ? 'ok' : 'other'
+  if (!res.ok) return 'other'
+  const seen = res.headers.get(SEEN_HOST_HEADER)
+  return seen === null || normalizeHost(seen) === normalizeHost(domain) ? 'ok' : 'other'
 }
 
 /**
