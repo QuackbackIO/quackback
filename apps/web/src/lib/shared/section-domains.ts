@@ -21,8 +21,10 @@ export interface SectionDomain {
   verifiedAt: string | null
   /**
    * Self-hosted only: since when the verification has been kept without an
-   * answer (the DNS lookup went unanswered). Absent while the hostname is
-   * confirmed. Routing keeps a bounded grace; sign-in is never carried there.
+   * answer (a Verify whose DNS lookup went unanswered, or a daily re-check
+   * that found the hostname not reaching this server, `section-domains-watch`).
+   * Absent while the hostname is confirmed. Routing keeps a bounded grace;
+   * sign-in is never carried there.
    */
   unconfirmedSince?: string | null
 }
@@ -35,8 +37,8 @@ export type SectionDomainState = 'verified' | 'pending' | 'not-answering'
 
 /**
  * Verified once it reaches this server; pending until then. A verification
- * kept while the hostname's lookups go unanswered (self-hosted) is "not
- * answering", whether or not its grace has run out.
+ * kept while the hostname does not answer (self-hosted) is "not answering",
+ * whether or not its grace has run out.
  */
 export function sectionDomainState(entry: SectionDomain): SectionDomainState {
   if (entry.unconfirmedSince) return 'not-answering'

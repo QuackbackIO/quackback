@@ -5,7 +5,8 @@
  * On Cloud a section's hostname must be one of the workspace's custom domains,
  * and it is verified while that domain is ready. On a self-hosted server any
  * public name may be given, and it is verified once DNS resolves and this
- * server answers on it. Either way the section choice is kept here; the
+ * server answers on it, then checked again daily (`section-domains-watch.ts`).
+ * Either way the section choice is kept here; the
  * control plane only knows the hostname routes to the workspace.
  *
  * Refusals are returned as values so the settings page can show them.
@@ -105,7 +106,8 @@ export async function getSectionDomainsView(): Promise<SectionDomainsView> {
   return { sectionDomains: routableSectionDomains(map, hosting), primaryHost: primaryHost(hosting) }
 }
 
-async function readHosting(): Promise<Hosting> {
+/** Where the workspace is hosted, read fresh from its settings row. */
+export async function readHosting(): Promise<Hosting> {
   const [row] = await db
     .select({ cloud: settings.cloud, cloudIdentity: settings.cloudIdentity })
     .from(settings)
@@ -117,7 +119,7 @@ async function readHosting(): Promise<Hosting> {
  * Writes the whole map. On a self-hosted server the help center's own setting
  * is kept in step for one release, so a server rolled back still has it.
  */
-async function writeSectionDomains(map: SectionDomainMap, hosting: Hosting): Promise<void> {
+export async function writeSectionDomains(map: SectionDomainMap, hosting: Hosting): Promise<void> {
   await updatePortalConfig({ sectionDomains: map })
   if (!hosting.cloud) await updateHelpCenterConfig({ domain: helpDomainConfig(map) })
 }
