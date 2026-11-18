@@ -424,6 +424,39 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
     })
   })
 
+  describe('import voters of refused rows', () => {
+    const voter = { email: 'refused-voter@example.com', name: 'Acme Voter' }
+    const voterRows = (board: string) => [
+      { title: 'Acme one', content: 'x', author_name: 'Acme Fan', board, source_id: 'src-v' },
+    ]
+    const userCount = async () =>
+      (await testDb.select().from(user).where(eq(user.email, voter.email))).length
+
+    it('creates no user for the voters of a row refused for a read-only board', async () => {
+      await enforce()
+      await processBatch(voterRows(closedBoard), openBoard, 0, new ImportUserResolver(), null, {
+        'src-v': [voter],
+      })
+      expect(await userCount()).toBe(0)
+    })
+
+    it('creates no user for the voters of a row refused at the posts cap', async () => {
+      await configure({ planLimits: true, tierLimits: { ...OSS_TIER_LIMITS, maxPosts: 4 } })
+      await processBatch(voterRows(openBoard), openBoard, 0, new ImportUserResolver(), null, {
+        'src-v': [voter],
+      })
+      expect(await userCount()).toBe(0)
+    })
+
+    it('still resolves the voters of a row that is imported', async () => {
+      await configure({ planLimits: false })
+      await processBatch(voterRows(openBoard), openBoard, 0, new ImportUserResolver(), null, {
+        'src-v': [voter],
+      })
+      expect(await userCount()).toBe(1)
+    })
+  })
+
   describe('import under the caps', () => {
     const rows = (n: number, extra: Record<string, string> = {}) =>
       Array.from({ length: n }, (_, i) => ({

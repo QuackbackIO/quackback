@@ -16,7 +16,7 @@ export interface BoardLimits {
 
 export const getBoardLimitsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<BoardLimits> => {
-    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
     const { getPlanLimits, openBoardIds } =
       await import('@/lib/server/domains/plan-limits/plan-limits.service')
     const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')

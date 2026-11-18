@@ -66,9 +66,13 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
   // Queries
   const postQuery = useSuspenseQuery(adminQueries.postDetail(postId))
   const { data: tags = [] } = useQuery(adminQueries.tags())
+  const { data: boardLimits } = useQuery(adminQueries.boardLimits())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
 
   const post = postQuery.data as PostDetails
+  // A read-only board takes no comments, team notes included.
+  const boardReadOnly =
+    boardLimits?.openBoardIds != null && !boardLimits.openBoardIds.includes(post.board.id)
 
   // UI state
   const [isUpdating, setIsUpdating] = useState(false)
@@ -172,6 +176,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
               onUnpinComment={() => unpinComment.mutate()}
               isPinPending={pinComment.isPending || unpinComment.isPending}
               adminUser={{ name: currentUser.name, email: currentUser.email }}
+              boardReadOnly={boardReadOnly}
             />
           </Suspense>
         </div>

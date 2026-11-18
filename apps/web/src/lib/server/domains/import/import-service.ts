@@ -296,7 +296,8 @@ export async function processBatch(
   // Rows whose source_id has no entry here fall back to vote-count backfill.
   const votersBySourceId = new Map<string, { principalId: PrincipalId; createdAt: Date | null }[]>()
   if (voters) {
-    for (const { row } of validRows) {
+    // Only rows that will be written: a refused row creates no one.
+    for (const { row } of [...toInsert, ...toUpdate]) {
       if (!row.sourceId) continue
       const rowVoters = voters[row.sourceId]
       if (!rowVoters?.length) continue

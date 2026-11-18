@@ -100,6 +100,7 @@ export const PostModalContent = memo(function PostModalContent({
   const { data: tags = [] } = useQuery(adminQueries.tags())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
   const { data: boards = [] } = useQuery(adminQueries.boards())
+  const { data: boardLimits } = useQuery(adminQueries.boardLimits())
 
   // Owner (assignee) control — gated on post.set_owner. The roster is fetched
   // via the same post.set_owner-gated fn the portal uses; the current owner is
@@ -115,6 +116,9 @@ export const PostModalContent = memo(function PostModalContent({
   })
 
   const post = postQuery.data as PostDetails
+  // A read-only board takes no comments, team notes included.
+  const boardReadOnly =
+    boardLimits?.openBoardIds != null && !boardLimits.openBoardIds.includes(post.board.id)
 
   // "Show more comments" — appends the next keyset page into the same
   // ['inbox','detail',postId] cache the admin comment mutations patch.
@@ -520,6 +524,7 @@ export const PostModalContent = memo(function PostModalContent({
                     onUnpinComment={() => unpinComment.mutate()}
                     isPinPending={pinComment.isPending || unpinComment.isPending}
                     adminUser={{ name: currentUser.name, email: currentUser.email }}
+                    boardReadOnly={boardReadOnly}
                     statuses={statuses}
                     currentStatusId={post.statusId}
                     isTeamMember
