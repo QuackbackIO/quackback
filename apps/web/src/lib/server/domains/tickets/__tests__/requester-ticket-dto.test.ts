@@ -350,8 +350,16 @@ describe.skipIf(!fixture.available)('requester ticket DTO and customer-visible t
     await assignTicket(older.ticketId, { assigneePrincipalId: agent.principalId }, agent)
     await setTicketPriority(older.ticketId, 'urgent', agent)
 
-    // The assignment wrote a non-internal system line on the conversation,
-    // so the system-row exclusion is what keeps the time still.
+    // Assignment notices are internal now, so seed a public system line
+    // directly (as older notices were): the system-row exclusion is what keeps
+    // the time still.
+    await testDb.insert(conversationMessages).values({
+      conversationId: older.conversationId,
+      principalId: null,
+      senderType: 'system',
+      content: 'Conversation status updated',
+      isInternal: false,
+    })
     const systemRows = await testDb
       .select({ id: conversationMessages.id })
       .from(conversationMessages)
