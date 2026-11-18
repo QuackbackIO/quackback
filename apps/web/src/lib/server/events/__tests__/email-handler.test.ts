@@ -301,6 +301,29 @@ describe('emailHook', () => {
       })
     })
 
+    it('warns on every delivery when the skipped broadcast cannot be recorded', async () => {
+      emailLog.warn.mockClear()
+      recordSkippedBroadcast.mockReset()
+      recordSkippedBroadcast.mockResolvedValue(null)
+      emailBudgetAvailable.mockResolvedValue(false)
+      const event = {
+        id: 'evt-broadcast-2',
+        type: 'changelog.published',
+        timestamp: new Date().toISOString(),
+        actor: { type: 'user', displayName: 'Test User' },
+      } as EventData
+      const config = { workspaceName: 'TestWorkspace', changelogTitle: 'May', changelogUrl: 'u' }
+
+      await emailHook.run(event, baseTarget, config)
+      await emailHook.run(event, baseTarget, config)
+
+      const warned = emailLog.warn.mock.calls.filter(
+        ([fields]) => (fields as { broadcast_skipped?: boolean }).broadcast_skipped === true
+      )
+      expect(warned).toHaveLength(2)
+      expect(mockChangelogPublishedEmail).not.toHaveBeenCalled()
+    })
+
     it('still sends feedback status mail when the broadcast budget is exhausted', async () => {
       emailBudgetAvailable.mockResolvedValueOnce(false)
       mockStatusChangeEmail.mockResolvedValue({ sent: true })

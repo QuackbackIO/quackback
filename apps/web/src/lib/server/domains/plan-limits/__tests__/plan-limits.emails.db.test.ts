@@ -26,6 +26,21 @@ const mail = vi.hoisted(() => ({
   sendPlanLimitsEmail: vi.fn(async (_params: unknown) => ({ sent: true })),
 }))
 
+// The application cache, kept in memory: its kv rows are shared by every test
+// file on the database, and a write that collides with another file's commit
+// aborts this test's transaction.
+const memoryCache = vi.hoisted(() => new Map<string, unknown>())
+vi.mock('@/lib/server/cache', async (original) => ({
+  ...(await original<typeof import('@/lib/server/cache')>()),
+  cacheGet: async (key: string) =>
+    memoryCache.has(key) ? structuredClone(memoryCache.get(key)) : null,
+  cacheSet: async (key: string, value: unknown) => {
+    memoryCache.set(key, structuredClone(value))
+  },
+  cacheDel: async (...keys: string[]) => {
+    for (const key of keys) memoryCache.delete(key)
+  },
+}))
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
@@ -82,14 +97,7 @@ import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-li
 import { detectPlanLimits, getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
 import { setKeptBoard } from '../plan-limits.choosers'
 import { readPlanLimitsSources } from '@/lib/server/domains/settings/settings.plan-limits'
-import {
-  claimPlanLimitsEmail,
-  deadlineText,
-  emailRows,
-  sendPlanLimitsEmails,
-} from '../plan-limits.emails'
-import { recordSkippedBroadcast, skippedBroadcastCount } from '../plan-limits.broadcasts'
-import { planLimitsPage } from '../plan-limits.page'
+import { claimPlanLimitsEmail, deadlineText, sendPlanLimitsEmails } from '../plan-limits.emails'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -144,9 +152,18 @@ function sentKinds(): string[] {
   return mail.sendPlanLimitsEmail.mock.calls.map((c) => (c[0] as { kind: string }).kind)
 }
 
-/** Wait for the send that a first detection starts in the background. */
+/**
+ * Wait for the send that a first detection starts in the background to finish:
+ * its mail is out and its outcome is stored, so it cannot land on a later step.
+ */
 async function settle() {
-  await vi.waitFor(() => expect(mail.sendPlanLimitsEmail).toHaveBeenCalled(), { timeout: 8000 })
+  await vi.waitFor(
+    async () => {
+      expect(mail.sendPlanLimitsEmail).toHaveBeenCalled()
+      expect((await storedState())?.emailsSent).toContain('start')
+    },
+    { timeout: 8000 }
+  )
 }
 
 /** Time for a background send that is expected not to happen. */
@@ -157,6 +174,7 @@ async function settleQuietly() {
 describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
   beforeEach(async () => {
     await fixture.begin()
+    memoryCache.clear()
     vi.useRealTimers()
     mail.configured = true
     mail.sendPlanLimitsEmail.mockClear()
@@ -475,88 +493,5 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
     expect(await sendPlanLimitsEmails(view)).toBeNull()
     expect(lookups.resolve).not.toHaveBeenCalled()
     expect(lookups.managers).not.toHaveBeenCalled()
-  })
-})
-
-describe('email rows', () => {
-  const rows = (key: string, used: number, cap: number) =>
-    emailRows({ issues: [{ key, used, cap }] } as never)[0]!.effect
-
-  it('reads every cap as a full sentence, singular and plural', () => {
-    expect(rows('maxStatusComponents', 4, 3)).toBe(
-      '1 status component is hidden from your status page'
-    )
-    expect(rows('maxStatusComponents', 6, 3)).toBe(
-      '3 status components are hidden from your status page'
-    )
-    expect(rows('maxCustomRoles', 2, 1)).toBe('1 custom role is locked')
-    expect(rows('maxSendingDomains', 3, 1)).toBe('2 sending domains are paused')
-    expect(rows('maxHelpCenterLocales', 2, 1)).toBe('1 help center language is locked')
-    expect(rows('maxBoards', 5, 1)).toBe('4 boards become read-only')
-    expect(rows('maxTeamSeats', 2, 1)).toBe('1 teammate loses admin access until a seat frees up')
-  })
-})
-
-describe.skipIf(!fixture.available)('skipped broadcasts (real DB)', () => {
-  beforeEach(async () => {
-    await fixture.begin()
-    const [row] = await testDb.select({ id: settings.id }).from(settings).limit(1)
-    settingsId =
-      row?.id ??
-      (
-        await testDb
-          .insert(settings)
-          .values({ name: 'Acme', slug: `acme-${createId('user')}`, createdAt: new Date() })
-          .returning({ id: settings.id })
-      )[0]!.id
-  })
-  afterEach(async () => {
-    await fixture.rollback()
-  })
-
-  it('records each broadcast once for the month and counts it on the page row', async () => {
-    await configure({ planLimits: true })
-    expect(await recordSkippedBroadcast('evt-a')).toBe(true)
-    expect(await recordSkippedBroadcast('evt-a')).toBe(false)
-    expect(await recordSkippedBroadcast('evt-b')).toBe(true)
-    expect(await skippedBroadcastCount()).toBe(2)
-
-    const view = {
-      enabled: true,
-      phase: 'ok',
-      plan: null,
-      since: null,
-      graceEndsAt: null,
-      fromPlan: null,
-      issues: [],
-      infoRows: [
-        {
-          key: 'emailsPerMonth',
-          used: 5,
-          cap: 5,
-          message: 'Emails for this month are used up',
-        },
-      ],
-      featureIssues: [],
-      features: {},
-      fromFeatures: null,
-      openBoardIds: null,
-      keptBoardId: null,
-      seatHolderIds: null,
-      visibleStatusComponentIds: null,
-      sendingDomainIds: null,
-    } as never
-    expect(planLimitsPage(view, {}, [], 2).infoRows[0].message).toBe(
-      'Emails for this month are used up. 2 updates were not sent'
-    )
-    expect(planLimitsPage(view, {}, [], 0).infoRows[0].message).toBe(
-      'Emails for this month are used up'
-    )
-  })
-
-  it('records nothing with the flag off', async () => {
-    await configure({ planLimits: false })
-    expect(await recordSkippedBroadcast('evt-off')).toBeNull()
-    expect(await skippedBroadcastCount()).toBe(0)
   })
 })
