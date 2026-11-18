@@ -97,4 +97,22 @@ describe('planLimitsPage', () => {
     ])
     expect(page).not.toHaveProperty('fromFeatures')
   })
+
+  it('links the custom domain to the Custom domains tab of Settings > Portal, and custom CSS to Settings > Portal', () => {
+    const page = planLimitsPage(
+      {
+        ...view,
+        featureIssues: [
+          { key: 'customDomain', count: 1 },
+          { key: 'customCss', count: 1 },
+        ],
+      },
+      candidates,
+      []
+    )
+    expect(page.featureIssues.map((issue) => issue.href)).toEqual([
+      '/admin/settings/portal?tab=custom-domains',
+      '/admin/settings/portal',
+    ])
+  })
 })

@@ -18,6 +18,7 @@
 
 import type { TierFeatureFlags } from '@/lib/server/domains/settings/tier-limits.types'
 import type { CloudConfig, EntitlementKey } from '@/lib/server/domains/settings/cloud/cloud.types'
+import { CUSTOM_DOMAINS_HREF, PORTAL_SETTINGS_PATH } from '@/lib/shared/portal-settings-tabs'
 
 export interface PlanFeatureDefinition {
   tierFeature: keyof TierFeatureFlags | null
@@ -89,12 +90,12 @@ export function planFeatureSet(features: TierFeatureFlags, config: CloudConfig):
 /** Where each paid feature that can pause is set up, and its name on the Plan limits page. */
 export const PLAN_FEATURE_LINKS: Partial<Record<PlanFeatureKey, { label: string; href: string }>> =
   {
-    customDomain: { label: 'Custom domain', href: '/admin/settings/domains' },
+    customDomain: { label: 'Custom domain', href: CUSTOM_DOMAINS_HREF },
     sso: { label: 'Single sign-on', href: '/admin/settings/security/sso' },
     webhooks: { label: 'Webhooks', href: '/admin/settings/developers' },
     workflows: { label: 'Workflows', href: '/admin/settings/workflows' },
     integrations: { label: 'Integrations', href: '/admin/settings/integrations' },
-    customCss: { label: 'Custom CSS', href: '/admin/settings/branding' },
+    customCss: { label: 'Custom CSS', href: PORTAL_SETTINGS_PATH },
     aiAssistant: { label: 'AI assistant', href: '/admin/settings/agent' },
     aiArticleTranslation: {
       label: 'AI article translation',
