@@ -10,18 +10,15 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import { boards, isNull, settings } from '@/lib/server/db'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 
-type Handler = () => Promise<unknown>
-const hoisted = vi.hoisted(() => ({ handlers: [] as Handler[], usageFails: false }))
+const hoisted = vi.hoisted(() => ({ usageFails: false }))
 
 vi.mock('@tanstack/react-start', async (original) => ({
   ...(await original<typeof import('@tanstack/react-start')>()),
+  // A server function is its handler here, so the test calls it directly.
   createServerFn: () => {
     const chain = {
       validator: () => chain,
-      handler(fn: Handler) {
-        hoisted.handlers.push(fn)
-        return chain
-      },
+      handler: (fn: () => Promise<unknown>) => fn,
     }
     return chain
   },
@@ -58,11 +55,8 @@ afterAll(fixture.close)
 const DAY = 24 * 60 * 60 * 1000
 
 type Row = { id: string; planReadOnly?: string; atCap?: { cap: number } }
-// fetchBoardsFn registers first, fetchBoardsWithCountsFn second.
-const list = async () => {
-  expect(fetchBoardsWithCountsFn).toBeDefined()
-  return (await hoisted.handlers[1]()) as Row[]
-}
+const list = async () =>
+  (await (fetchBoardsWithCountsFn as unknown as () => Promise<unknown>)()) as Row[]
 
 let openBoard: BoardId
 let closedBoard: BoardId
