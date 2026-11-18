@@ -46,7 +46,7 @@ function isOver(limits: PlanLimitsPage | null | undefined): limits is PlanLimits
   return Boolean(limits?.enabled) && (limits?.phase === 'grace' || limits?.phase === 'enforced')
 }
 
-/** The summary the banner keeps fresh, else the one the admin loader read; null with the flag off. */
+/** The summary the banner keeps fresh, else the one the admin loader read; null without plan billing. */
 function usePlanLimits(): PlanLimitsPage | null {
   // The narrowed notice opens no Plan limits page, so this page links to none.
   const loaded = useLoaderData({

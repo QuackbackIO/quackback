@@ -97,11 +97,11 @@ interface AdminSidebarProps {
   latestVersion?: LatestVersionResult | null
   /** A running trial shows here quietly until its last days. */
   planNotice?: PlanNotice | null
-  /** The plan limits state, only while their flag is on; null otherwise. */
+  /** The plan limits state, only with plan billing on; null otherwise. */
   planLimits?: PlanLimitsPage | PlanLimitsNotice | null
 }
 
-/** The plan limits line, in the banner's chunk, which only a workspace with the flag loads. */
+/** The plan limits line, in the banner's chunk, which only a workspace with plan billing loads. */
 const PlanLimitsQuietLive = lazy(() =>
   import('@/components/admin/plan-limits/plan-limits-banner').then((module) => ({
     default: module.PlanLimitsQuietLive,

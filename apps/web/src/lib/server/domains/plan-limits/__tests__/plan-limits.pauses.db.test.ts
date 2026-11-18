@@ -5,7 +5,7 @@
  * (feature-states.ts mirrors these). Each drop to Free starts from a plan
  * that had them all, as a lapse does.
  *
- *  - flag off: nothing pauses; the plan gates answer as they always have.
+ *  - no plan billing: every feature runs and nothing pauses.
  *  - grace: the grace features keep running; MCP stops at once.
  *  - enforced: every one of them pauses.
  *  - included: a plan with them all, nothing paused.
@@ -17,6 +17,21 @@ import { eq, integrations, principal, settings, user, webhooks, workflows } from
 import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import { DISABLED_CLOUD_CONFIG, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
+
+// The application cache, kept in memory: its kv rows are shared by every test
+// file on the database, and a write that collides with another file's commit
+// aborts this test's transaction.
+const cache = vi.hoisted(() => new Map<string, unknown>())
+vi.mock('@/lib/server/cache', async (original) => ({
+  ...(await original<typeof import('@/lib/server/cache')>()),
+  cacheGet: async (key: string) => (cache.has(key) ? structuredClone(cache.get(key)) : null),
+  cacheSet: async (key: string, value: unknown) => {
+    cache.set(key, structuredClone(value))
+  },
+  cacheDel: async (...keys: string[]) => {
+    for (const key of keys) cache.delete(key)
+  },
+}))
 
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
@@ -63,13 +78,14 @@ function useAiModel() {
   resetConfig()
 }
 
-async function configure(planLimits: boolean, plan: PlanId) {
+/** `planBilling` off is an install without plan billing, where `plan` means nothing. */
+async function configure(planBilling: boolean, plan: PlanId) {
   await testDb
     .update(settings)
     .set({
-      featureFlags: JSON.stringify({ feedback: true, supportInbox: true, planLimits }),
+      featureFlags: JSON.stringify({ feedback: true, supportInbox: true }),
       tierLimits: null,
-      cloud: storedCloud(plan) as never,
+      cloud: (planBilling ? storedCloud(plan) : null) as never,
     })
     .where(eq(settings.id, settingsId))
   invalidateTierLimitsCache()
@@ -151,6 +167,7 @@ function every(paused: boolean, live: boolean, overrides: Record<string, object>
 describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (real DB)', () => {
   beforeEach(async () => {
     await fixture.begin()
+    cache.clear()
     vi.useRealTimers()
     const [row] = await testDb.select({ id: settings.id }).from(settings).limit(1)
     settingsId =
@@ -173,9 +190,9 @@ describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (rea
     await fixture.rollback()
   })
 
-  it('flag off: nothing pauses and the plan gates answer as before', async () => {
+  it('no plan billing: every feature runs and nothing pauses', async () => {
     await configure(false, 'free')
-    expect(await answers()).toEqual(every(false, false))
+    expect(await answers()).toEqual(every(false, true))
   })
 
   it('grace: the grace features keep running and MCP stops at once', async () => {
@@ -243,11 +260,11 @@ describe.skipIf(!fixture.available)('runtime pause answers on the Free plan (rea
     expect(await answers()).toEqual(every(false, true))
   })
 
-  it('an install without plan billing never pauses, with the flag on', async () => {
+  it('an install without plan billing never pauses, however long it runs', async () => {
     await testDb
       .update(settings)
       .set({
-        featureFlags: JSON.stringify({ feedback: true, planLimits: true }),
+        featureFlags: JSON.stringify({ feedback: true, supportInbox: true }),
         tierLimits: null,
         cloud: null,
       })

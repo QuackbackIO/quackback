@@ -180,8 +180,8 @@ describe('the feature key space', () => {
   })
 })
 
-describe('computePlanLimits: flag off', () => {
-  it('leaves a stored state alone, so turning the flag on again resumes it with its choices', () => {
+describe('computePlanLimits: no plan billing', () => {
+  it('leaves a stored state alone, so plan billing on again resumes it with its choices', () => {
     const stored = {
       ...computePlanLimits(inputs({ usage: OVER_BOARDS }), at(-30 * DAY)).nextState!,
       keptBoardId: 'b1',
@@ -468,7 +468,7 @@ describe('computePlanLimits: phases', () => {
     expect(onPro.nextState?.keptBoardId).toBe('board_1')
   })
 
-  it('gives a workspace already over when the flag turns on its grace from first detection', () => {
+  it('gives a workspace already over its grace from first detection', () => {
     const result = computePlanLimits(inputs({ usage: OVER_BOARDS, stored: null }), NOW)
     expect(result.view.graceEndsAt).toBe(at(7 * DAY).toISOString())
   })
@@ -588,7 +588,7 @@ describe('featureLive', () => {
     features: planFeatureSet(OSS_TIER_LIMITS.features, PRO_CONFIG),
   }
 
-  it('is the current plan when the flag is off', () => {
+  it('is the current plan without plan billing', () => {
     expect(
       featureLive(
         { enabled: false, phase: 'ok', features: FREE_FEATURES, fromFeatures: null },
@@ -948,7 +948,7 @@ describe('computePlanLimits: the fixed-caps list through every write path', () =
     expect(behind.view.fixedIssues).toEqual([{ key: 'maxTeamSeats', used: 1, cap: 1 }])
   })
 
-  it('keeps the list while the flag is off, and uses it again once on', () => {
+  it('keeps the list without plan billing, and uses it again once on', () => {
     const stored = first()
     const off = computePlanLimits(inputs({ enabled: false, usage: OVER_BOARDS, stored }), NOW)
     expect(off.changed).toBe(false)

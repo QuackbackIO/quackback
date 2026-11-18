@@ -96,7 +96,7 @@ describe('planFeatureNotice', () => {
   })
 
   it.each([
-    ['the flag is off', state({ enabled: false })],
+    ['there is no plan billing', state({ enabled: false })],
     ['nothing is over the plan', state({ phase: 'ok' })],
     ['this feature is not set up past the plan', state({ featureIssues: [{ key: 'webhooks' }] })],
     ['the state has not loaded', undefined],

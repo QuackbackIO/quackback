@@ -1,7 +1,7 @@
 /**
- * The paused notice itself, loaded only for a workspace with the plan limits
- * flag on (each page checks the flag first): its query, copy and markup never
- * reach a page otherwise.
+ * The paused notice itself, loaded only for a workspace with plan billing on
+ * (each page checks first): its query, copy and markup never reach a page
+ * otherwise.
  */
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -102,8 +102,8 @@ function deadline(day: string, format: LocalDateFormatter, now: Date): string {
 }
 
 /**
- * The notice for `feature`, or null when there is nothing to say: the flag is
- * off, nothing is over the plan, or this feature is not set up past it.
+ * The notice for `feature`, or null when there is nothing to say: no plan
+ * billing, nothing is over the plan, or this feature is not set up past it.
  */
 export function planFeatureNotice(
   feature: PlanNoticeFeature,

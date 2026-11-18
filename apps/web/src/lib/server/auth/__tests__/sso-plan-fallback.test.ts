@@ -22,8 +22,9 @@ const state = vi.hoisted(() => ({
   configuredTypes: new Set<string>(),
 }))
 
-vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
-  getTierLimits: async () => ({ features: { customOidcProvider: state.ssoInPlan } }),
+// Whether single sign-on is live comes from plan limits.
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+  isFeatureLive: async (key: string) => key !== 'sso' || state.ssoInPlan,
 }))
 
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({

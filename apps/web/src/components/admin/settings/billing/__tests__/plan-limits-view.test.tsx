@@ -178,7 +178,7 @@ describe('PlanLimitsView', () => {
     expect(screen.getByText('Ask someone who manages billing to upgrade.')).toBeInTheDocument()
   })
 
-  it('says the workspace fits when nothing is over, and when the flag is off', () => {
+  it('says the workspace fits when nothing is over, and without plan billing', () => {
     mount(overLimits({ phase: 'ok', issues: [], graceEndsAt: null, deadlineDay: null }))
     expect(screen.getByText('Your workspace fits the Free plan.')).toBeInTheDocument()
     cleanup()

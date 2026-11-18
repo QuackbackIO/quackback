@@ -3,7 +3,7 @@
  * paused seats, held custom roles, held sending domains, held help center
  * languages and hidden status components. Each hook is driven through the
  * real plan limits state, so each case shows it refusing (or falling back)
- * once enforced, and doing nothing in the grace or with the flag off.
+ * once enforced, and doing nothing in the grace or without plan billing.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -40,6 +40,21 @@ import {
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 import { DEFAULT_HELP_CENTER_CONFIG } from '@/lib/server/domains/settings/settings.types'
 
+// The application cache, kept in memory: its kv rows are shared by every test
+// file on the database, and a write that collides with another file's commit
+// aborts this test's transaction.
+const cache = vi.hoisted(() => new Map<string, unknown>())
+vi.mock('@/lib/server/cache', async (original) => ({
+  ...(await original<typeof import('@/lib/server/cache')>()),
+  cacheGet: async (key: string) => (cache.has(key) ? structuredClone(cache.get(key)) : null),
+  cacheSet: async (key: string, value: unknown) => {
+    cache.set(key, structuredClone(value))
+  },
+  cacheDel: async (...keys: string[]) => {
+    for (const key of keys) cache.delete(key)
+  },
+}))
+
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
@@ -68,6 +83,7 @@ import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 import { getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
 import { isPausedTeamSeat } from '../plan-limits.seats'
 import { heldHelpCenterLocales } from '../plan-limits.locales'
+import { planBillingOn } from './plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -87,13 +103,13 @@ const UNCAPPED = {
   maxStatusComponents: null,
 }
 
-async function configure(planLimits: boolean, caps: Record<string, number>) {
+/** `planBilling` off is an install without plan billing. */
+async function configure(planBilling: boolean, caps: Record<string, number>) {
   await testDb
     .update(settings)
     .set({
-      featureFlags: JSON.stringify({ feedback: true, planLimits }),
       tierLimits: JSON.stringify({ ...UNCAPPED, ...caps }),
-      cloud: null,
+      cloud: (planBilling ? planBillingOn() : null) as never,
     })
     .where(eq(settings.id, settingsId))
   invalidateTierLimitsCache()
@@ -103,7 +119,7 @@ async function configure(planLimits: boolean, caps: Record<string, number>) {
   await getPlanLimits()
 }
 
-/** The three states every hook is checked in: flag off, grace, and enforced. */
+/** The three states every hook is checked in: no plan billing, grace, and enforced. */
 async function inEachPhase(
   caps: Record<string, number>,
   check: (phase: 'off' | 'grace' | 'enforced') => Promise<void>
@@ -149,6 +165,7 @@ async function assign(principalId: PrincipalId, roleId: RoleId) {
 beforeEach(async () => {
   await fixture.begin()
   vi.useRealTimers()
+  cache.clear()
   const [row] = await testDb.select({ id: settings.id }).from(settings).limit(1)
   settingsId =
     row?.id ??
@@ -382,8 +399,9 @@ describe.skipIf(!fixture.available)('sending domains (real DB)', () => {
       userId: createId('user') as UserId,
       workspaceName: 'Acme',
     }).catch((e: Error) => e.message)
-    // No billing projection here, so the plan goes unnamed.
-    expect(err).toBe('mail.news.example is paused. Email goes from your default address.')
+    expect(err).toBe(
+      'mail.news.example is paused on the Free plan. Email goes from your default address.'
+    )
   })
 })
 

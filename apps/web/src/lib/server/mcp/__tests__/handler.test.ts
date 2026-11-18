@@ -2991,7 +2991,7 @@ describe('MCP HTTP Handler', () => {
 // so it stops at once on a drop, and the refusal is the same 402 body as the
 // entitlement gate it replaced.
 describe('MCP plan gate and the plan limits pause', () => {
-  it.each(['flagOff', 'grace', 'enforced', 'included'] as const)(
+  it.each(['tierOff', 'grace', 'enforced', 'included'] as const)(
     'in the %s state',
     async (state) => {
       const { setFeatureState } =
@@ -3022,7 +3022,7 @@ describe('MCP plan gate and the plan limits pause', () => {
           })
         }
       } finally {
-        setFeatureState('flagOff')
+        setFeatureState('tierOff')
         vi.mocked(getWorkspaceSettings).mockResolvedValue(null)
       }
     }

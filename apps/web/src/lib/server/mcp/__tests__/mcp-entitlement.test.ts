@@ -24,8 +24,8 @@ const hoisted = vi.hoisted(() => ({
   mockHandleRequest: vi.fn(),
 }))
 
-// The gate reads the plan limits view through the real settings readers; the
-// planLimits flag is off, so the answer is the plan's own grant.
+// The gate reads the plan limits view through the real settings readers. MCP
+// has no grace after a drop, so the answer is the plan's own grant.
 vi.mock('@/lib/server/domains/settings/settings.service', async (original) => ({
   ...(await original<typeof import('@/lib/server/domains/settings/settings.service')>()),
   getDeveloperConfig: hoisted.mockGetDeveloperConfig,

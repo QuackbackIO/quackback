@@ -86,10 +86,8 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
     return { authConfig: { oauth: fixture().oauth } }
   },
 }))
-vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
-  getTierLimits: async () => ({
-    features: { customOidcProvider: fixture().customOidcProvider },
-  }),
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+  isFeatureLive: async (key: string) => key === 'sso' && fixture().customOidcProvider,
 }))
 vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service', () => ({
   getConfiguredIntegrationTypes: async () => new Set(fixture().configuredTypes),
@@ -231,8 +229,8 @@ describe('REGISTERED_AUTH_PROVIDERS does not cross workspaces', () => {
 describe('the shared OIDC gate underneath it', () => {
   // getRegisteredOidcProviderIds is what the ENFORCEMENT path reads
   // (isHardBound / isAuthMethodAllowed), not just the UI mirror. It takes no
-  // cache, but it reads getTierLimits() — which is itself a §4 cache — so a
-  // leak there would surface here as a provider registering on the wrong plan.
+  // cache, but it reads plan limits, which are cached per workspace, so a leak
+  // there would surface here as a provider registering on the wrong plan.
   it('gates on the ACTIVE workspace’s tier flag, not a neighbour’s', async () => {
     hoisted.fixtures.set(BRAVO_ID, { ...BRAVO, customOidcProvider: false })
 

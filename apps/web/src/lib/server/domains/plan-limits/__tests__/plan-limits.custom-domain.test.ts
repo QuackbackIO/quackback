@@ -103,7 +103,7 @@ beforeEach(() => {
   h.workspace = null
   h.baseUrl = 'https://feedback.acme.test'
   withSources(identity(['feedback.acme.test']))
-  setFeatureState('flagOff')
+  setFeatureState('tierOff')
 })
 
 describe('requests on a custom hostname', () => {

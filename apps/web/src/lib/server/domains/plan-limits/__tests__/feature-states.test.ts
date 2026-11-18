@@ -12,8 +12,8 @@ describe('planLimitsServiceDouble', () => {
     expect(Object.keys(planLimitsServiceDouble).sort()).toEqual(Object.keys(real).sort())
   })
 
-  it('answers as the flag being off for everything but the features it is told about', async () => {
-    setFeatureState('flagOff')
+  it('answers as without plan billing for everything but the features it is told about', async () => {
+    setFeatureState('tierOff')
     const d = planLimitsServiceDouble
     expect(await d.isSeatPaused('principal_1')).toBe(false)
     expect(await d.isBoardOpen('board_1')).toBe(true)

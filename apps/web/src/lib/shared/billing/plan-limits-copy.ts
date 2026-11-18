@@ -247,7 +247,7 @@ export interface PlanLimitsBannerCopy {
 }
 
 /**
- * The admin banner's words, or null when it shows nothing: the flag is off,
+ * The admin banner's words, or null when it shows nothing: no plan billing,
  * nothing is over, or only paused features remain once enforced (each of
  * those pages carries its own line, and an ended trial keeps its strip).
  */

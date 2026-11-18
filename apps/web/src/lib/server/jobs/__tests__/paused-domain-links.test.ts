@@ -76,7 +76,7 @@ beforeEach(() => {
 afterEach(() => {
   process.env = saved
   resetConfig()
-  setFeatureState('flagOff')
+  setFeatureState('tierOff')
   __setJobDefinitionsForTests(null)
   resetJobHandlers()
 })

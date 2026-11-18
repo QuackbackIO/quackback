@@ -49,7 +49,7 @@ beforeEach(() => {
   widget.stored = {}
   widget.customCss = null
   setEntitled(true)
-  setFeatureState('flagOff')
+  setFeatureState('tierOff')
 })
 
 describe('getPublicServerConfig visitor tracking', () => {

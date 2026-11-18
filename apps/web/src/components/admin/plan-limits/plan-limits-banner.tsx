@@ -145,7 +145,7 @@ export type PlanLimitsInitial = PlanLimitsPage | PlanLimitsNotice
  * The state the admin loader read, kept fresh by its query: a chooser
  * invalidates it, so the banner and the sidebar line tick down at once. A
  * viewer without `member.view` reads the narrowed notice under its own key.
- * Only mounted while the flag is on (see `routes/admin.tsx`).
+ * Only mounted with plan billing on (see `routes/admin.tsx`).
  */
 function useLiveLimits(initial: PlanLimitsInitial): PlanLimitsInitial {
   const { data } = useQuery({

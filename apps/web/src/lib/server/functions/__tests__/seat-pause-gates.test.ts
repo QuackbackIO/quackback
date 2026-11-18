@@ -4,8 +4,8 @@
  *
  * The plan limits answer is a stand-in keyed on the principal it is asked
  * about, exactly as the real `isSeatPaused` is; whether that answer is right
- * (owner and billing rights never paused, inert in grace and with the flag
- * off) is proved against a real database in plan-limits.team.db.test.ts.
+ * (owner and billing rights never paused, inert in grace and without plan
+ * billing) is proved against a real database in plan-limits.team.db.test.ts.
  * Here: what each gate does with it.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'

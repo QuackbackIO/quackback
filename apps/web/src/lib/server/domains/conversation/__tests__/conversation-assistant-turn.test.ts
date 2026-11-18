@@ -367,7 +367,7 @@ describe('runAssistantTurnForConversation gate', () => {
     expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
   })
 
-  // The plan gate reads isFeatureLive: today's answer with the flag off, kept
+  // The plan gate reads isFeatureLive: the plan's own answer without plan billing, kept
   // live through the plan limits grace, off after it.
   it.each(FEATURE_STATES)(
     'answers in the %s state only while the plan includes it',

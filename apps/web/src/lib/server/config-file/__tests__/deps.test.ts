@@ -66,15 +66,6 @@ vi.mock('../report-status', () => ({
   makeReportStatus: () => vi.fn(),
 }))
 
-const flags = vi.hoisted(() => ({
-  current: { planLimits: false } as Record<string, boolean>,
-  update: vi.fn(async (_input: Record<string, boolean>) => ({})),
-}))
-vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getFeatureFlags: async () => flags.current,
-  updateFeatureFlags: (input: Record<string, boolean>) => flags.update(input),
-}))
-
 const { makeReconcileDeps } = await import('../deps')
 
 beforeEach(() => {
@@ -120,21 +111,5 @@ describe('createSettings', () => {
     const flags = JSON.parse(String(hoisted.insertValuesCalls[0].featureFlags))
     expect(flags.helpCenter).toBe(true)
     expect(flags.supportInbox).toBe(false)
-  })
-})
-
-describe('applyRolloutFlags', () => {
-  it('writes the plan limits flag through the internal settings write, which accepts it', async () => {
-    flags.current = { planLimits: false }
-    const deps = makeReconcileDeps()
-    await expect(deps.applyRolloutFlags({ planLimits: true })).resolves.toBe(true)
-    expect(flags.update).toHaveBeenCalledWith({ planLimits: true })
-  })
-
-  it('writes nothing when the flag already matches', async () => {
-    flags.current = { planLimits: true }
-    const deps = makeReconcileDeps()
-    await expect(deps.applyRolloutFlags({ planLimits: true })).resolves.toBe(false)
-    expect(flags.update).not.toHaveBeenCalled()
   })
 })

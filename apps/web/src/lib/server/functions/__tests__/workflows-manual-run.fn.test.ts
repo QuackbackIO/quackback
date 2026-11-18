@@ -157,7 +157,7 @@ describe('runWorkflowManuallyFn and the plan limits pause', () => {
       expect(result).toEqual({ ok: false, reason: 'not_live' })
       expect(hoisted.runWorkflow).not.toHaveBeenCalled()
     }
-    setFeatureState('flagOff')
+    setFeatureState('tierOff')
   })
 })
 

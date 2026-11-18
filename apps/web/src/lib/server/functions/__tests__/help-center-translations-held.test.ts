@@ -99,7 +99,7 @@ describe('help center translation writes', () => {
     expect(hoisted.writes).toHaveLength(calls.length)
   })
 
-  it('write every language in the grace and with the flag off', async () => {
+  it('write every language in the grace and without plan billing', async () => {
     for (const view of [
       { ...ENFORCED, phase: 'grace' },
       { ...ENFORCED, enabled: false, phase: 'ok', issues: [] },
