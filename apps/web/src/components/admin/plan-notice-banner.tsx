@@ -1,10 +1,7 @@
-import { lazy, Suspense } from 'react'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage } from 'react-intl'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { isQuietTrial, presentPlanNotice } from '@/lib/shared/plan-notice'
-
-const ChoiceDue = lazy(() => import('./plan-notice-choice-due'))
 
 interface PlanNoticeBannerProps {
   notice: PlanNotice | null
@@ -48,11 +45,6 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
                 : `${view.daysLeft} day${view.daysLeft === 1 ? '' : 's'} left`}
             </span>
           </>
-        )}
-        {ended && view.choiceDueAt && (
-          <Suspense fallback={null}>
-            <ChoiceDue at={view.choiceDueAt} />
-          </Suspense>
         )}
         {view.message && (
           // A strip with no button has nothing but its message to say, so it

@@ -7,8 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 
 vi.mock('@/lib/client/queries/billing', () => ({
-  beginPlanDowngradeFn: vi.fn(() => new Promise(() => {})),
-  cancelPlanDowngradeFn: vi.fn(),
   billingQueries: { all: ['billing'] },
 }))
 
@@ -35,12 +33,7 @@ const overview: BillingProjectionOverview = {
   hideBranding: false,
 }
 
-function renderPage(
-  props: {
-    overview?: BillingProjectionOverview
-    pending?: { planId: string; planName: string }
-  } = {}
-) {
+function renderPage(props: { overview?: BillingProjectionOverview } = {}) {
   render(
     <IntlProvider locale="en" messages={{}}>
       <QueryClientProvider client={new QueryClient()}>
@@ -48,7 +41,6 @@ function renderPage(
           overview={props.overview ?? overview}
           catalogue={null}
           catalogueError={null}
-          pending={props.pending ?? null}
         />
       </QueryClientProvider>
     </IntlProvider>
@@ -65,20 +57,12 @@ afterEach(() => {
 })
 
 describe('TrialExpiredBilling lead', () => {
-  it('says the trial ended, what to choose, and that admin stays open during the grace period', () => {
-    vi.setSystemTime(new Date(Date.parse(EXPIRED) + 3_600_000))
+  it('says the trial ended and what to choose, and holds no page back', () => {
+    vi.setSystemTime(new Date(Date.parse(EXPIRED) + 72 * 3_600_000))
     renderPage()
     expect(screen.getByRole('heading', { name: 'Your Pro trial has ended' })).toBeInTheDocument()
     expect(screen.getByText(/keep Pro, or switch to Free/)).toBeInTheDocument()
-    expect(screen.getByText(/The rest of admin stays open until/)).toBeInTheDocument()
-  })
-
-  it('says admin waits on the choice once the grace period is over', () => {
-    vi.setSystemTime(new Date(Date.parse(EXPIRED) + 72 * 3_600_000))
-    renderPage()
-    expect(
-      screen.getByText('The rest of admin opens again as soon as you choose a plan.')
-    ).toBeInTheDocument()
+    expect(screen.queryByText(/rest of admin/)).not.toBeInTheDocument()
   })
 
   it('has honest copy when the trial plan is unknown', () => {
@@ -87,14 +71,5 @@ describe('TrialExpiredBilling lead', () => {
     expect(screen.getByRole('heading', { name: 'Your trial has ended' })).toBeInTheDocument()
     expect(screen.queryByText(/your plan/)).not.toBeInTheDocument()
     expect(screen.getByText(/pick a paid plan, or switch to Free/)).toBeInTheDocument()
-  })
-
-  it('speaks to someone who already chose Free', () => {
-    vi.setSystemTime(new Date(Date.parse(EXPIRED) + 72 * 3_600_000))
-    renderPage({ pending: { planId: 'free', planName: 'Free' } })
-    expect(screen.getByText(/You chose Free/)).toBeInTheDocument()
-    expect(
-      screen.getByText(/only this page and the pages that fix those limits are open/)
-    ).toBeInTheDocument()
   })
 })

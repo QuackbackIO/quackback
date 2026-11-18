@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { trialEndedNotice, trialNotice } from '../commercial-notice'
 import type { CloudConfig } from '../cloud.types'
-import { TRIAL_CHOICE_GATE_FROM } from '@/lib/shared/billing/trial-state'
 
 const NOW = new Date('2026-08-20T12:00:00.000Z')
 
@@ -45,17 +44,15 @@ describe('trialEndedNotice', () => {
     trialExpiresAt: '2026-08-19T00:00:00.000Z',
   })
 
-  it('asks a billing manager to choose, and says by when', () => {
+  it('asks a billing manager to choose, with no deadline', () => {
     const notice = trialEndedNotice(ended, { trialPlanName: 'Pro', now: NOW })
     expect(notice).toMatchObject({
       label: 'Pro trial ended',
       ended: true,
       actionLabel: 'Choose a plan',
       actionUrl: '/admin/settings/billing',
-      choiceDueAt: new Date(
-        Math.max(Date.parse('2026-08-21T00:00:00.000Z'), TRIAL_CHOICE_GATE_FROM)
-      ).toISOString(),
     })
+    expect(notice).not.toHaveProperty('choiceDueAt')
     expect(notice?.message).toBe(
       'Choose how this workspace continues: keep Pro, or switch to Free.'
     )

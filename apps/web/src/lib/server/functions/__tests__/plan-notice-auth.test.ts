@@ -11,7 +11,6 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { TRIAL_CHOICE_GATE_FROM } from '@/lib/shared/billing/trial-state'
 import type { StoredCloudConfig } from '@/lib/shared/db-types'
 
 const hoisted = vi.hoisted(() => ({
@@ -244,9 +243,6 @@ describe('getPlanNotice — the trial countdown', () => {
         label: 'Business trial ended',
         ended: true,
         actionLabel: 'Choose a plan',
-        choiceDueAt: new Date(
-          Math.max(Date.parse(ENDS) + 2 * 86_400_000, TRIAL_CHOICE_GATE_FROM)
-        ).toISOString(),
       })
     )
   })

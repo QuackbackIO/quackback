@@ -33,18 +33,9 @@ describe('PlanNoticeBanner', () => {
     expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument()
   })
 
-  it('says when the choice is due while the grace period runs', async () => {
-    const due = new Date(Date.now() + 36 * 3_600_000)
-    render(<PlanNoticeBanner notice={{ ...ENDED, choiceDueAt: due.toISOString() }} />)
-    expect(await screen.findByText(/Choose by/)).toBeInTheDocument()
-    expect(document.querySelector('time')).toHaveAttribute('dateTime', due.toISOString())
-  })
-
-  it('drops the deadline once it has passed', () => {
-    const past = new Date(Date.now() - 60_000).toISOString()
-    render(<PlanNoticeBanner notice={{ ...ENDED, choiceDueAt: past }} />)
+  it('names no deadline: an ended trial holds nothing back', () => {
+    render(<PlanNoticeBanner notice={ENDED} />)
     expect(screen.queryByText(/Choose by/)).not.toBeInTheDocument()
-    expect(screen.getByText('Pro trial ended')).toBeInTheDocument()
   })
 
   it('shows a teammate who cannot choose a quiet strip with no button', () => {
