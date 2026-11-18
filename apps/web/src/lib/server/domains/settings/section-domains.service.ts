@@ -129,11 +129,16 @@ export async function getSectionDomainsView(): Promise<SectionDomainsView> {
 
 /** Where the workspace is hosted, read fresh from its settings row. */
 export async function readHosting(): Promise<Hosting> {
+  return (await readHostingIfSetUp()) ?? hostingOf(null)
+}
+
+/** As `readHosting`, or null before the workspace is set up and has no settings row. */
+export async function readHostingIfSetUp(): Promise<Hosting | null> {
   const [row] = await db
     .select({ cloud: settings.cloud, cloudIdentity: settings.cloudIdentity })
     .from(settings)
     .limit(1)
-  return hostingOf(row ?? null)
+  return row ? hostingOf(row) : null
 }
 
 /**

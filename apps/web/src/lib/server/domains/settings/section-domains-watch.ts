@@ -33,7 +33,7 @@ import {
 import type { PortalSection } from '@/lib/shared/custom-domains'
 import {
   getSectionDomains,
-  readHosting,
+  readHostingIfSetUp,
   readStoredSectionDomains,
   writeSectionDomains,
 } from './section-domains.service'
@@ -111,16 +111,18 @@ function unchanged(a: SectionDomain | undefined, b: SectionDomain): boolean {
 
 /**
  * Check every verified section hostname and keep what was found. Cheap when
- * idle: one settings read on Cloud, two on a self-hosted server with no
- * section hostname, and no write unless something changed.
+ * idle: one settings read on Cloud or before the workspace is set up, two on a
+ * self-hosted server with no section hostname, and no write unless something
+ * changed.
  */
 export async function watchSectionDomains(
   now: Date = new Date(),
   opts: { wait?: (ms: number) => Promise<void> } = {}
 ): Promise<SectionDomainWatchResult> {
   const result: SectionDomainWatchResult = { checked: 0, unconfirmed: 0, confirmed: 0, lapsed: 0 }
-  const hosting = await readHosting()
-  if (hosting.cloud) return result
+  const hosting = await readHostingIfSetUp()
+  // Not set up yet (no settings row), or Cloud: nothing to check.
+  if (!hosting || hosting.cloud) return result
 
   const judged = await getSectionDomains('fresh')
   const verified = PORTAL_SECTIONS.flatMap((section) => {

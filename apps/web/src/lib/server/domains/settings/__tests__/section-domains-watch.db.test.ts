@@ -286,6 +286,13 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
     })
   })
 
+  it('does nothing on a server not yet set up, which has no settings row', async () => {
+    await testDb.delete(settings)
+
+    expect(await run()).toEqual({ checked: 0, unconfirmed: 0, confirmed: 0, lapsed: 0 })
+    expect(probe.asked).toEqual([])
+  })
+
   it('leaves Cloud alone: there the control plane decides when a domain is ready', async () => {
     await seed(
       { help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } },
