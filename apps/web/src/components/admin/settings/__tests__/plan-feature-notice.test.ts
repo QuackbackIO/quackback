@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/server/functions/plan-limits', () => ({ getPlanLimitsFn: vi.fn() }))
 
-import { planFeatureNotice, type PlanNoticeState } from '../plan-feature-notice'
+import { planFeatureNotice, type PlanNoticeState } from '../plan-feature-notice-body'
 import { formatFirstRenderDate } from '@/components/ui/local-date'
 
 const state = (over: Partial<PlanNoticeState> = {}): PlanNoticeState => ({
