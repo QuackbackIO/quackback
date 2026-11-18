@@ -1,6 +1,6 @@
 /**
  * A paused custom domain: after the plan limits grace on a plan without custom
- * domains, requests on a custom hostname get a 301 to the workspace's own
+ * domains, requests on a custom hostname get a temporary redirect to the workspace's own
  * hostname with the same path and query, and links generated while serving
  * name that hostname. Domain records are never touched.
  */
@@ -26,6 +26,7 @@ vi.mock('@/lib/server/config', async () => {
         return baseUrlOverride() ?? h.baseUrl
       },
     },
+    configuredBaseUrl: () => h.baseUrl,
   }
 })
 vi.mock(
@@ -111,11 +112,13 @@ describe('requests on a custom hostname', () => {
     if (state === 'enforced') {
       expect(called).toBe(false)
       const response = result as Response
-      expect(response.status).toBe(301)
+      // Temporary: the pause ends on upgrade, so neither browsers nor
+      // search engines may treat the move as permanent.
+      expect(response.status).toBe(307)
       expect(response.headers.get('location')).toBe(
         'https://acme.example.com/b/ideas?sort=top&page=2'
       )
-      // A cached 301 would outlive an upgrade.
+      // A cached redirect would outlive an upgrade.
       expect(response.headers.get('cache-control')).toBe('no-store')
     } else {
       expect(result).toBe('next')
@@ -217,14 +220,26 @@ describe('requests on a custom hostname', () => {
     )
   })
 
-  it('redirects a help center custom domain to the default origin', async () => {
+  // The default host used to send /hc/* to the help center domain with a
+  // permanent redirect that browsers cache. Redirecting that domain back to
+  // the default host would loop, so it keeps serving in place while paused.
+  it('serves a help center custom domain in place, so a cached redirect to it cannot loop', async () => {
     h.baseUrl = 'https://acme.example.com'
     withSources(null, 'help.acme.test')
     setFeatureState('enforced', 'customDomain')
-    const { result } = await serve(request('https://help.acme.test/hc/refunds?q=1'))
-    expect((result as Response).headers.get('location')).toBe(
-      'https://acme.example.com/hc/refunds?q=1'
-    )
+    const { result, baseUrl } = await serve(request('https://help.acme.test/hc/refunds?q=1'))
+    expect(result).toBe('next')
+    // Links generated there still name the default host.
+    expect(baseUrl).toBe('https://acme.example.com')
+  })
+
+  it('serves the help center domain in place even when it is also a workspace custom domain', async () => {
+    withSources(identity(['feedback.acme.test', 'help.acme.test']), 'help.acme.test')
+    setFeatureState('enforced', 'customDomain')
+    expect((await serve(request('https://help.acme.test/hc/x'))).result).toBe('next')
+    expect(
+      ((await serve(request('https://feedback.acme.test/hc/x'))).result as Response).status
+    ).toBe(307)
   })
 
   it('fails open when the settings cannot be read', async () => {

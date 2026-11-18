@@ -40,7 +40,10 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 vi.mock('@/lib/server/auth/registered-providers', () => ({
   getRegisteredAuthProviders: async () => ['password'],
 }))
-vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://feedback.example' } }))
+vi.mock('@/lib/server/config', () => ({
+  config: { baseUrl: 'https://feedback.example' },
+  configuredBaseUrl: () => 'https://feedback.example',
+}))
 vi.mock('@/lib/server/domains/help-center/help-center-domain.service', async () => ({
   resolveHelpCenterBaseUrl: (await import('@/lib/shared/help-center-domain'))
     .resolveHelpCenterBaseUrl,

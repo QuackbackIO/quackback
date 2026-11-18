@@ -1,11 +1,17 @@
 /**
  * The custom domain while it is paused after the plan limits grace.
  *
- * A request on a custom hostname gets a 301 to the workspace's own hostname,
- * same path and query, and every link generated meanwhile (`config.baseUrl`:
- * email, the widget SDK, sitemaps, auth callbacks) names that hostname. The
- * domain records are never touched, so the custom hostname serves again the
- * moment the plan includes it.
+ * A request on a custom hostname gets a temporary redirect (307, never
+ * cached) to the workspace's own hostname, same path and query, and every link
+ * generated meanwhile (`config.baseUrl`: email, the widget SDK, sitemaps)
+ * names that hostname. The domain records are never touched, so the custom
+ * hostname serves again the moment the plan includes it.
+ *
+ * The help center's custom domain is the exception: it keeps serving in place.
+ * The default host used to send `/hc/*` there with a permanent redirect that
+ * browsers cache, so sending that domain back to the default host would loop.
+ * While paused, the default host stops redirecting to it and no link,
+ * canonical, sitemap or robots.txt names it.
  *
  * Host resolution runs before any workspace scope exists, so the decision is
  * made by a request middleware that runs right after it, inside the scope.
@@ -23,7 +29,7 @@
  * Sessions are host cookies, so people signed in on the custom hostname sign
  * in again on the default one.
  */
-import { config } from '@/lib/server/config'
+import { configuredBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { runWithBaseUrlOverride, setRequestBaseUrlOverride } from '@/lib/server/base-url-override'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
@@ -37,8 +43,10 @@ const log = logger.child({ component: 'plan-limits-domain' })
 export interface PausedCustomDomain {
   /** The workspace's own origin, which serves while the custom domain is paused. */
   defaultOrigin: string
-  /** Lower-case hostnames that redirect to it. */
+  /** Every lower-case custom hostname: links never name these while paused. */
   customHostnames: ReadonlySet<string>
+  /** The custom hostnames that redirect to the default origin (not the help center's). */
+  redirectHostnames: ReadonlySet<string>
 }
 
 function hostOf(origin: string): string | null {
@@ -69,7 +77,7 @@ export async function pausedCustomDomain(): Promise<PausedCustomDomain | null> {
     if (!defaultHost) {
       // No platform hostname: the configured origin is the default when it is
       // not itself one of the custom hostnames.
-      const base = hostOf(workspace?.routing.baseUrl ?? config.baseUrl)
+      const base = hostOf(workspace?.routing.baseUrl ?? configuredBaseUrl())
       defaultHost = base && !custom.has(base) ? base : null
     }
     if (!defaultHost) return null
@@ -81,7 +89,9 @@ export async function pausedCustomDomain(): Promise<PausedCustomDomain | null> {
     if (custom.size === 0) return null
 
     if (!(await isFeaturePaused('customDomain'))) return null
-    return { defaultOrigin: `https://${defaultHost}`, customHostnames: custom }
+    const redirectHostnames = new Set(custom)
+    if (sources.helpCenterDomain) redirectHostnames.delete(sources.helpCenterDomain.toLowerCase())
+    return { defaultOrigin: `https://${defaultHost}`, customHostnames: custom, redirectHostnames }
   } catch (err) {
     log.error({ err }, 'paused custom domain check failed; serving as usual')
     return null
@@ -125,16 +135,16 @@ export async function handlePausedCustomDomain<T>({
   if (!paused) return next()
 
   const host = requestWorkspaceHost(request)?.toLowerCase() ?? null
-  if (host && paused.customHostnames.has(host) && redirectable(request, url.pathname)) {
+  if (host && paused.redirectHostnames.has(host) && redirectable(request, url.pathname)) {
     return new Response(null, {
-      status: 301,
+      status: 307,
       headers: {
         location: `${paused.defaultOrigin}${url.pathname}${url.search}`,
         'cache-control': 'no-store',
       },
     })
   }
-  if (paused.customHostnames.has(hostOf(config.baseUrl) ?? '')) {
+  if (paused.customHostnames.has(hostOf(configuredBaseUrl()) ?? '')) {
     setRequestBaseUrlOverride(paused.defaultOrigin)
   }
   return next()
@@ -143,7 +153,7 @@ export async function handlePausedCustomDomain<T>({
 /** Run background work (an email, a notification) with links on the default hostname while paused. */
 export async function withPausedCustomDomainOrigin<T>(fn: () => Promise<T>): Promise<T> {
   const paused = await pausedCustomDomain()
-  if (!paused || !paused.customHostnames.has(hostOf(config.baseUrl) ?? '')) return fn()
+  if (!paused || !paused.customHostnames.has(hostOf(configuredBaseUrl()) ?? '')) return fn()
   return runWithBaseUrlOverride(paused.defaultOrigin, fn)
 }
 

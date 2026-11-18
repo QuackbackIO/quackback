@@ -590,7 +590,7 @@ export const config = {
    * `BASE_URL` exactly as before.
    */
   get baseUrl() {
-    return baseUrlOverride() ?? getCurrentWorkspace()?.routing.baseUrl ?? loadConfig().baseUrl
+    return baseUrlOverride() ?? configuredBaseUrl()
   },
   get port() {
     return loadConfig().port
@@ -904,6 +904,16 @@ export const config = {
 export function validateRuntimeConfig(): void {
   if (isBuildTime()) return
   loadConfig()
+}
+
+/**
+ * The workspace's own configured origin, ignoring a per-request override (a
+ * paused custom domain). For anything built once and cached past the request
+ * that built it, such as the auth instance, so an override never outlives the
+ * request that set it.
+ */
+export function configuredBaseUrl(): string {
+  return getCurrentWorkspace()?.routing.baseUrl ?? loadConfig().baseUrl
 }
 
 /**

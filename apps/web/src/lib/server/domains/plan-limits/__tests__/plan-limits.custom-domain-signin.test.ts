@@ -152,9 +152,9 @@ describe('signing in while the custom domain is paused', () => {
     expect(await serve(link.searchParams.get('callbackURL')!)).toBe('served')
   })
 
-  it('redirects a signed-in visit on the custom host once, to a page that is then served', async () => {
+  it('redirects a signed-in visit on the custom host once, temporarily, to a page that is then served', async () => {
     const first = (await serve('https://feedback.acme.test/admin/feedback?view=new')) as Response
-    expect(first.status).toBe(301)
+    expect(first.status).toBe(307)
     const location = first.headers.get('location')!
     expect(location).toBe('https://acme.example.com/admin/feedback?view=new')
     expect(await serve(location)).toBe('served')
