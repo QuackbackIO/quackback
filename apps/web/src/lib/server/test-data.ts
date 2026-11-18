@@ -87,16 +87,30 @@ export async function activeTestOwnerOf(
   return row?.userId && row.type === 'user' && isTeamMember(row.role) ? owner : null
 }
 
-/** A conversation is test when its visitor is a test customer. */
+/** The owner and team of a test conversation, for a caller that publishes it. */
+export interface TestConversationRow {
+  assignedAgentPrincipalId: string | null
+  assignedTeamId: string | null
+}
+
+/**
+ * A conversation is test when its visitor is a test customer. Returns its
+ * owner and team when it is, so a caller that publishes the thread needs no
+ * second read, and null when it is not (truthy exactly when it is test).
+ */
 export async function isTestConversation(
   conversationId: string,
   executor: Database | Transaction = db
-): Promise<boolean> {
+): Promise<TestConversationRow | null> {
   const row = await executor.query.conversations.findFirst({
     where: eq(conversations.id, conversationId as never),
-    columns: { visitorPrincipalId: true },
+    columns: { visitorPrincipalId: true, assignedAgentPrincipalId: true, assignedTeamId: true },
   })
-  return !!row && (await isTestCustomer(row.visitorPrincipalId, executor))
+  if (!row || !(await isTestCustomer(row.visitorPrincipalId, executor))) return null
+  return {
+    assignedAgentPrincipalId: row.assignedAgentPrincipalId,
+    assignedTeamId: row.assignedTeamId,
+  }
 }
 
 /** A post is test when a test customer authored it. */

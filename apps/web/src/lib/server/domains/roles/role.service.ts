@@ -51,6 +51,9 @@ import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
+import { publishInboxScopeChanged } from '@/lib/server/realtime/inbox-scope-invalidate'
+import { roleHolders } from './role.holders'
+import { SCOPE_VIEW_KEYS } from '@/lib/server/policy/row-scope'
 
 const log = logger.child({ component: 'role-service' })
 
@@ -181,16 +184,6 @@ async function lockRoleRow(tx: Transaction, roleId: RoleId): Promise<void> {
  * delete/reassign needs its own per-scope pass (a workspace target can't
  * stand in for a team grant).
  */
-async function assignmentCount(exec: Executor, roleId: RoleId): Promise<number> {
-  const [row] = await exec
-    .select({ count: sql<number>`count(*)`.as('count') })
-    .from(principalRoleAssignments)
-    .where(
-      and(eq(principalRoleAssignments.roleId, roleId), isNull(principalRoleAssignments.teamId))
-    )
-  return Number(row?.count ?? 0)
-}
-
 async function assertNotHeldByEditor(roleId: RoleId, editor: RoleEditor, verb: string) {
   const [held] = await db
     .select({ id: principalRoleAssignments.id })
@@ -325,7 +318,7 @@ export async function updateRole(
   }
 
   let auditedBeforeCount = 0
-  await db.transaction(async (tx) => {
+  const holders = await db.transaction(async (tx) => {
     // Lock the role row so concurrent edits serialize: without it two diffs
     // against the same stale snapshot union-merge instead of last-write-wins.
     await lockRoleRow(tx, roleId)
@@ -382,7 +375,14 @@ export async function updateRole(
         )
       }
     }
+    // Only a change to a key the inbox scope rule reads can move anyone's scope.
+    const moved = [...(nextKeys ?? [])].filter((k) => !current.has(k))
+    if (nextKeys) moved.push(...[...current].filter((k) => !nextKeys.has(k)))
+    const touchesScope = moved.some((k) => SCOPE_VIEW_KEYS.includes(k))
+    return touchesScope ? (await roleHolders(tx, roleId)).all : []
   })
+  // After the commit: every holder's open inbox stream reloads its keys.
+  publishInboxScopeChanged(holders)
 
   if (audit) {
     await recordAuditEvent({
@@ -444,12 +444,15 @@ export async function deleteRole(
   }
 
   let holders = 0
+  let holderIds: PrincipalId[] = []
   await db.transaction(async (tx) => {
     // Lock the role row: a concurrent assignment insert (updateMemberRole)
     // takes FOR KEY SHARE on it, so the two serialize instead of a fresh
     // holder slipping in after the reassign snapshot and being cascade-lost.
     await lockRoleRow(tx, roleId)
-    holders = await assignmentCount(tx, roleId)
+    const held = await roleHolders(tx, roleId)
+    holders = held.workspaceWide.length
+    holderIds = held.all
     if (holders > 0 && !reassignTo) {
       throw new ValidationError(
         'ROLE_IN_USE',
@@ -458,28 +461,22 @@ export async function deleteRole(
     }
 
     if (reassignTo && holders > 0) {
-      const rows = await tx
-        .select({ principalId: principalRoleAssignments.principalId })
-        .from(principalRoleAssignments)
-        .where(
-          and(eq(principalRoleAssignments.roleId, roleId), isNull(principalRoleAssignments.teamId))
+      await tx
+        .insert(principalRoleAssignments)
+        .values(
+          held.workspaceWide.map((principalId) => ({
+            principalId,
+            roleId: reassignTo as RoleId,
+            grantedByPrincipalId: editor.principalId,
+          }))
         )
-      if (rows.length > 0) {
-        await tx
-          .insert(principalRoleAssignments)
-          .values(
-            rows.map((r) => ({
-              principalId: r.principalId,
-              roleId: reassignTo as RoleId,
-              grantedByPrincipalId: editor.principalId,
-            }))
-          )
-          .onConflictDoNothing()
-      }
+        .onConflictDoNothing()
     }
     // Cascade clears role_permissions and any remaining assignment rows.
     await tx.delete(roles).where(eq(roles.id, roleId))
   })
+  // After the commit: each former holder now holds the reassigned role.
+  publishInboxScopeChanged(holderIds)
 
   if (audit) {
     await recordAuditEvent({

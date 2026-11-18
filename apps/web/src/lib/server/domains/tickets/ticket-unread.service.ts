@@ -227,6 +227,8 @@ export async function markTicketUnreadFromMessage(
 
   const watermark = unreadWatermarkFromAnchor(ticket.assigneeLastReadAt, message.createdAt)
   await db.update(tickets).set({ assigneeLastReadAt: watermark }).where(eq(tickets.id, ticketId))
+  // No envelope: `ticket` was read before this write. The publish reads its
+  // owner at send time.
   publishTicketEvent(ticketId, {
     kind: 'ticket_read',
     ticketId,

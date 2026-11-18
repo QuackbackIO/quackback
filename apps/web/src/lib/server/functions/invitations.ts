@@ -20,6 +20,7 @@ import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { getSession } from '@/lib/server/auth/session'
 import { cacheDel } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
+import { publishInboxScopeChanged } from '@/lib/server/realtime/inbox-scope-invalidate'
 
 const log = logger.child({ component: 'invitations' })
 
@@ -238,6 +239,9 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
     // inside this transaction (settings row lock + member count) so two
     // racing accepts cannot both create a seat.
     const cacheKeysToBust: string[] = []
+    // A role write inside this transaction says whose inbox scope it moved;
+    // the signal goes out only after the commit, so a reload reads the new rows.
+    const scopeChangedFor: PrincipalId[] = []
     const claimed = await db.transaction(async (tx) => {
       if (!alreadySeated) {
         const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
@@ -297,12 +301,13 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         const grantsCustom =
           assignRoleId != null && role === 'member' && existingPrincipal.role !== 'admin'
         if (promotes || grantsCustom) {
-          const { cacheKeysToBust: keys } = await setPrincipalRole(
+          const result = await setPrincipalRole(
             { principalId: existingPrincipal.id as PrincipalId },
             promotes ? role : 'member',
             { executor: tx, assignRoleId }
           )
-          cacheKeysToBust.push(...keys)
+          cacheKeysToBust.push(...result.cacheKeysToBust)
+          if (result.scopeChangedFor) scopeChangedFor.push(result.scopeChangedFor)
         }
         if (displayName) {
           await syncPrincipalProfileById(existingPrincipal.id as PrincipalId, { displayName }, tx)
@@ -316,12 +321,13 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
           tx
         )
         if (assignRoleId) {
-          const { cacheKeysToBust: keys } = await setPrincipalRole(
-            { principalId: created.id as PrincipalId },
-            role,
-            { executor: tx, assignRoleId, knownUserId: userId }
-          )
-          cacheKeysToBust.push(...keys)
+          const result = await setPrincipalRole({ principalId: created.id as PrincipalId }, role, {
+            executor: tx,
+            assignRoleId,
+            knownUserId: userId,
+          })
+          cacheKeysToBust.push(...result.cacheKeysToBust)
+          if (result.scopeChangedFor) scopeChangedFor.push(result.scopeChangedFor)
         }
       }
 
@@ -335,6 +341,7 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
 
     // Bust the principal cache only after the role write is committed.
     await Promise.all(cacheKeysToBust.map((key) => cacheDel(key)))
+    publishInboxScopeChanged(scopeChangedFor)
 
     log.debug({ invitation_id: invitationId, role: claimed.role }, 'accept invitation: claimed')
 

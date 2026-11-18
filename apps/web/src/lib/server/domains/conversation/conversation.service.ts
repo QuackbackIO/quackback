@@ -93,6 +93,9 @@ import {
   publishConversationUpdate,
   publishTyping,
 } from '@/lib/server/realtime/conversation-channels'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
+import { conversationScopeOf } from '@/lib/server/realtime/inbox-envelope'
+import { publishInboxRemoval } from '@/lib/server/realtime/inbox-publish'
 import {
   validateContent,
   preview,
@@ -473,7 +476,8 @@ export async function sendVisitorMessage(
   publishConversationMessage(
     txResult.conversation.id,
     { visitor: visitorMessage, agent: agentMessage },
-    { conversationUpdated: created }
+    { conversationUpdated: created },
+    conversationScopeOf(txResult.conversation)
   )
 
   // A rating given in the thread is recorded now, whether or not a workflow
@@ -688,7 +692,8 @@ export async function startAgentConversation(
   publishConversationMessage(
     txResult.conversation.id,
     { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
-    { conversationUpdated: true }
+    { conversationUpdated: true },
+    conversationScopeOf(txResult.conversation)
   )
 
   // Always email the first message — fire-and-forget; a delivery failure never
@@ -836,11 +841,24 @@ export async function sendAgentMessage(
   // strips them from the visitor's copy.
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
 
-  await publishConversationUpdate(conversationDTO.id, conversationDTO)
+  // A reply that claims an unassigned conversation takes it out of the
+  // Unassigned queue, so the update names it as it was: every other scoped
+  // teammate who held it gets its removal.
+  const claimed =
+    txResult.previousAgentPrincipalId == null &&
+    txResult.conversation.assignedAgentPrincipalId != null
+  await publishConversationUpdate(
+    conversationDTO.id,
+    conversationDTO,
+    claimed
+      ? conversationScopeOf({ ...txResult.conversation, assignedAgentPrincipalId: null })
+      : undefined
+  )
   publishConversationMessage(
     txResult.conversation.id,
     { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
-    { conversationUpdated: true }
+    { conversationUpdated: true },
+    conversationScopeOf(txResult.conversation)
   )
 
   // P2-D.1: surface translatedFrom on the DTO returned to the sending agent,
@@ -1333,6 +1351,9 @@ export async function deleteConversationPermanently(
     throw new ValidationError('VALIDATION_ERROR', 'Conversation is not marked as spam')
   }
   await db.delete(conversations).where(eq(conversations.id, conversationId))
+  // The owner and team read before the delete, so every inbox that held the
+  // row drops it now.
+  publishInboxRemoval({ kind: 'conversation', id: conversationId }, conversationScopeOf(existing))
   log.info({ conversation_id: conversationId }, 'conversation permanently deleted')
 }
 
@@ -1526,7 +1547,18 @@ export async function routeUnassignedConversation(
   return assignRoutedConversation(conversation)
 }
 
-async function assignRoutedConversation(conversation: Conversation): Promise<PrincipalId | null> {
+/**
+ * The published update names the conversation's owner and team before the
+ * claim, so every inbox that held it and no longer does gets its removal. By
+ * default that is the row as passed, still unassigned (the Unassigned queue a
+ * scoped teammate sees). A caller that cleared the assignee just before
+ * routing (the offline requeue) passes the owner it cleared instead, so the
+ * teammate who lost the conversation gets the removal.
+ */
+async function assignRoutedConversation(
+  conversation: Conversation,
+  prev: ScopedRow = conversationScopeOf(conversation)
+): Promise<PrincipalId | null> {
   // Test threads belong to the teammate trying them out; they never take a
   // colleague's routing slot.
   if (await testOwnerOf(conversation.visitorPrincipalId)) return null
@@ -1544,7 +1576,7 @@ async function assignRoutedConversation(conversation: Conversation): Promise<Pri
     .returning()
   if (!assigned) return null
   await emitAssignmentSystemMessage(assigned.id, assignedPrincipalId)
-  await publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'))
+  await publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'), prev)
   // Auto-routing only ever touches the agent column — the team side reports
   // no change (still-current value as its own "previous").
   void emitConversationAssigned(systemActor(), assigned, null, assigned.assignedTeamId ?? null)
@@ -1592,7 +1624,7 @@ export async function assignConversation(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  await publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto, conversationScopeOf(existing))
   if (agentPrincipalId) {
     await emitAssignmentSystemMessage(conversationId, agentPrincipalId, attribution)
   }
@@ -1661,7 +1693,7 @@ export async function assignTeam(
     .returning()
 
   const dto = await conversationToDTO(updated, 'agent')
-  await publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto, conversationScopeOf(existing))
 
   if (team) {
     await emitTeamAssignmentSystemMessage(conversationId, team.name)
@@ -1755,8 +1787,14 @@ export async function requeueUnansweredOnAgentOffline(
     // in parallel) so the load-aware strategy sees each prior assignment and
     // spreads the batch across the online team instead of piling it onto one.
     for (const conversation of updated) {
+      // The offline agent held these; the published update names them as the
+      // previous assignee so their inbox stream removes the row.
+      const prev = conversationScopeOf({
+        ...conversation,
+        assignedAgentPrincipalId: agentPrincipalId,
+      })
       // assignRoutedConversation broadcasts the assigned DTO itself on success.
-      if (await assignRoutedConversation(conversation)) continue
+      if (await assignRoutedConversation(conversation, prev)) continue
       // Not re-routed: broadcast the CURRENT row (re-read), so a reassignment
       // that landed during the await isn't clobbered by a stale "unassigned" DTO.
       const [current] = await db
@@ -1765,7 +1803,7 @@ export async function requeueUnansweredOnAgentOffline(
         .where(eq(conversations.id, conversation.id))
         .limit(1)
       if (current)
-        await publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'))
+        await publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'), prev)
     }
   } catch (err) {
     log.warn({ err }, 'requeue unanswered on agent offline failed')
@@ -2025,7 +2063,13 @@ export async function signalTyping(conversationId: ConversationId, actor: Actor)
   const conversation = await assertConversationVisible(conversationId, actor)
   const side = conversationSideFor(conversation, actor)
   // The typist id rides along so the stream layer can drop the typist's own echo.
-  publishTyping(conversationId, side, new Date().toISOString(), actor.principalId)
+  publishTyping(
+    conversationId,
+    side,
+    new Date().toISOString(),
+    actor.principalId,
+    conversationScopeOf(conversation)
+  )
 }
 
 /** Mark a conversation read up to now for the actor's side of it. */
@@ -2041,6 +2085,8 @@ export async function markConversationRead(
     .update(conversations)
     .set(side === 'agent' ? { agentLastReadAt: now } : { visitorLastReadAt: now })
     .where(eq(conversations.id, conversation.id))
+  // No envelope: `conversation` was read before this write. The publish reads
+  // its owner at send time.
   publishConversationEvent(conversationId, {
     kind: 'read',
     conversationId,
@@ -2059,6 +2105,8 @@ async function applyAgentUnreadWatermark(
     .update(conversations)
     .set({ agentLastReadAt: watermark })
     .where(eq(conversations.id, conversation.id))
+  // No envelope: `conversation` is the caller's earlier read. The publish
+  // reads its owner at send time.
   publishAgentConversationEvent({
     kind: 'read',
     conversationId: conversation.id,
@@ -2292,7 +2340,8 @@ export async function appendAssistantReply(
       visitor: toMessageDTO(txResult.message, authored.publicAuthor, author.principalId),
       agent: messageDTO,
     },
-    { conversationUpdated: true }
+    { conversationUpdated: true },
+    conversationScopeOf(txResult.conversation)
   )
   // isFirstMessage only matters for a VISITOR message — this is Quinn's own
   // reply, so false.

@@ -12,6 +12,8 @@ import { isTestPrincipalSql } from '@/lib/server/test-data'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import type { Actor } from '@/lib/server/policy/types'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
+import { publishInboxRemovals } from '@/lib/server/realtime/inbox-publish'
+import { deletedRowScope } from '@/lib/server/realtime/inbox-envelope'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'test-data-retention' })
@@ -25,13 +27,13 @@ export function isTestThreadSql(visitorPrincipalId: SQLWrapper): SQL {
 
 /** Every test conversation the actor can see, with the test tickets paired to them. */
 export async function deleteTestConversations(actor: Actor): Promise<number> {
-  return db.transaction(async (tx) => {
+  const removed = await db.transaction(async (tx) => {
     const doomed = tx
       .select({ id: conversations.id })
       .from(conversations)
       .where(and(conversationFilter(actor), isTestThreadSql(conversations.visitorPrincipalId)))
     // A pair ticket's requester is the same test customer; delete it with its thread.
-    await tx
+    const ticketRows = await tx
       .delete(tickets)
       .where(
         and(
@@ -45,23 +47,61 @@ export async function deleteTestConversations(actor: Actor): Promise<number> {
           )
         )
       )
-    const rows = await tx
+      .returning({
+        id: tickets.id,
+        assigneePrincipalId: tickets.assigneePrincipalId,
+        teamId: tickets.assigneeTeamId,
+      })
+    const conversationRows = await tx
       .delete(conversations)
       .where(and(conversationFilter(actor), isTestThreadSql(conversations.visitorPrincipalId)))
-      .returning({ id: conversations.id })
-    log.info({ deleted: rows.length }, 'test conversations deleted')
-    return rows.length
+      .returning({
+        id: conversations.id,
+        assigneePrincipalId: conversations.assignedAgentPrincipalId,
+        teamId: conversations.assignedTeamId,
+      })
+    return { ticketRows, conversationRows }
   })
+  // After the commit, with each row's owner and team as the delete found
+  // them, so every inbox that held a row drops it.
+  await publishInboxRemovals('ticket', removed.ticketRows)
+  await publishInboxRemovals('conversation', removed.conversationRows)
+  log.info({ deleted: removed.conversationRows.length }, 'test conversations deleted')
+  return removed.conversationRows.length
 }
 
-async function sweepBatches(statement: () => SQL, batchSize: number): Promise<number> {
+/**
+ * Run a sweep statement until a batch comes back short. A table the inbox
+ * lists (`inboxKind`) has each deleted row's removal published, with the
+ * owner and team the statement returned.
+ */
+async function sweepBatches(
+  statement: () => SQL,
+  batchSize: number,
+  inboxKind?: 'conversation' | 'ticket'
+): Promise<number> {
   let deleted = 0
   for (;;) {
-    const batch = getExecuteRows<{ id: string }>(await db.execute(statement())).length
-    deleted += batch
-    if (batch < batchSize) return deleted
+    const rows = getExecuteRows<{ id: string; assignee: string | null; team: string | null }>(
+      await db.execute(statement())
+    )
+    if (inboxKind) {
+      await publishInboxRemovals(
+        inboxKind,
+        rows.map((r) => deletedRowScope(inboxKind, r))
+      )
+    }
+    deleted += rows.length
+    if (rows.length < batchSize) return deleted
   }
 }
+
+/** The owner and team columns of the tables the inbox lists, as a sweep returns them. */
+const SCOPE_COLUMNS = {
+  conversations: sql`, assigned_agent_principal_id AS assignee, assigned_team_id AS team`,
+  tickets: sql`, assignee_principal_id AS assignee, assignee_team_id AS team`,
+  posts: sql``,
+} as const
 
 /** One table's test rows older than the cutoff, found through their author's identity. */
 function sweepStatement(
@@ -78,7 +118,7 @@ function sweepStatement(
         AND doomed.created_at < ${cutoffIso}::timestamptz
       LIMIT ${batchSize}
     )
-    RETURNING id`
+    RETURNING id${SCOPE_COLUMNS[table]}`
 }
 
 export async function sweepTestData(opts?: {
@@ -91,11 +131,13 @@ export async function sweepTestData(opts?: {
 
   const ticketCount = await sweepBatches(
     sweepStatement('tickets', 'requester_principal_id', cutoffIso, batchSize),
-    batchSize
+    batchSize,
+    'ticket'
   )
   const conversationCount = await sweepBatches(
     sweepStatement('conversations', 'visitor_principal_id', cutoffIso, batchSize),
-    batchSize
+    batchSize,
+    'conversation'
   )
   const postCount = await sweepBatches(
     sweepStatement('posts', 'principal_id', cutoffIso, batchSize),

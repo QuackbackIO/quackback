@@ -67,6 +67,8 @@ import { ticketFtsMatch } from './ticket-search.service'
 import { statusTransition, resolveStage } from './ticket.lifecycle'
 import { resolvePairConversationId } from './pair-thread.service'
 import { createTicketCore, publishTicketUpdated } from './ticket-intake.service'
+import { ticketScopeOf } from '@/lib/server/realtime/inbox-envelope'
+import { publishInboxRemoval } from '@/lib/server/realtime/inbox-publish'
 import type {
   CreateTicketInput,
   AssignTicketInput,
@@ -844,7 +846,7 @@ export async function assignTicket(
   // Realtime signal (unified inbox §3.2, M3): unconditional, unlike the
   // webhook below — an inbox row re-render on a no-op re-assign is harmless,
   // while a missed signal on an actual reorder-relevant change is not.
-  const dto = await publishTicketUpdated(updated)
+  const dto = await publishTicketUpdated(updated, ticketScopeOf(existing))
 
   // Only signal when an assignee actually moved (a no-op re-assign must not fire).
   if (
@@ -1024,9 +1026,10 @@ export async function softDeleteTicket(id: TicketId, actor: Actor): Promise<void
       principalId: actor.principalId,
       type: 'ticket.deleted',
     })
-    // Realtime signal (unified inbox §3.2, M3): the list re-query already
-    // excludes a deleted ticket via ticketFilter, so the refetch this triggers
-    // is what actually makes the row disappear for every other viewer.
-    await publishTicketUpdated(updated)
+    // Every inbox that held the ticket drops it now. The owner and team are
+    // the ones the delete left untouched, so they are what the row held before
+    // it. No `ticket_updated` goes to the inbox: patched in after the removal,
+    // it would put the deleted ticket back in an open pane.
+    publishInboxRemoval({ kind: 'ticket', id }, ticketScopeOf(updated))
   }
 }

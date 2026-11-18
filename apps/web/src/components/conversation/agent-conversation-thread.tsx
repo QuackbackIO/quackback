@@ -1073,6 +1073,11 @@ export function AgentConversationThread({
   }
 
   const sendMutation = useMutation({
+    // Keyed by conversation so the inbox can hold this send's own echo until
+    // the response lands (thread-echo.ts). A ticket send has no key.
+    mutationKey: isTicket
+      ? undefined
+      : conversationKeys.agentSend(conversationId ?? INACTIVE_CONVERSATION_ID),
     mutationFn: (vars: {
       content: string
       contentJson: JSONContent | null

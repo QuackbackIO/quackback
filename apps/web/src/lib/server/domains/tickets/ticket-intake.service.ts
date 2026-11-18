@@ -38,6 +38,8 @@ import type { Actor } from '@/lib/server/policy/types'
 import { ValidationError, InternalError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
+import type { ScopedRow } from '@/lib/server/policy/row-scope'
+import { ticketScopeOf } from '@/lib/server/realtime/inbox-envelope'
 import { emitTicketCreated } from './ticket.webhooks'
 import { ticketRowToDTO } from './ticket.dto'
 import { recordTicketActivityAwaited } from './ticket-activity.service'
@@ -60,9 +62,16 @@ const MAX_TITLE_LENGTH = 300
  * the create path (this module); ticket.service.ts's other mutators import it
  * from here so the tail exists exactly once.
  */
-export async function publishTicketUpdated(row: Ticket): Promise<TicketDTO> {
+export async function publishTicketUpdated(row: Ticket, prev?: ScopedRow): Promise<TicketDTO> {
   const dto = await ticketRowToDTO(row)
-  publishTicketEvent(row.id, { kind: 'ticket_updated', ticket: dto })
+  // The row is the one just written, so it is its own scope envelope. A write
+  // that can move the ticket out of someone's scope (assign) passes the owner
+  // and team it had before, so their inbox stream removes the row.
+  publishTicketEvent(
+    row.id,
+    { kind: 'ticket_updated', ticket: dto },
+    { ...ticketScopeOf(row), prev }
+  )
   return dto
 }
 
