@@ -20,6 +20,7 @@ import { auditAttributionMiddleware } from '@/lib/server/middleware/audit-attrib
 import { expireRouteContextOnWrite } from '@/lib/client/route-context-middleware'
 import { serverFnFetch } from '@/lib/client/server-fn-fetch'
 import { liftErrorReferenceOnFailure } from '@/lib/client/error-reference-middleware'
+import { typedErrorSerializationAdapter } from '@/lib/shared/typed-error-serialization'
 
 /**
  * Same-origin protection for server functions, matching the framework default.
@@ -70,5 +71,8 @@ export const startInstance = createStart(() => {
     // In the browser, a 5xx that did not come from the function itself fails
     // the call instead of resolving as its result (see server-fn-fetch.ts).
     serverFns: { fetch: serverFnFetch },
+    // A typed error below 500 reaches the browser with its code and status,
+    // not its message alone (see typed-error-serialization.ts).
+    serializationAdapters: [typedErrorSerializationAdapter],
   }
 })

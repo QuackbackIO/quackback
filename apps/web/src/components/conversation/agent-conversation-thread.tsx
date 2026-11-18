@@ -109,7 +109,11 @@ import type {
   AgentConversationMessageDTO,
   ConversationDTO,
 } from '@/lib/shared/conversation/types'
-import type { InboxItemRef, LinkedTicketSummary } from '@/lib/shared/inbox/items'
+import {
+  isHiddenTicketLink,
+  type InboxItemRef,
+  type LinkedTicketSummary,
+} from '@/lib/shared/inbox/items'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import {
   formatTicketNumber,
@@ -639,7 +643,11 @@ export function AgentConversationThread({
     ...inboxQueries.conversationTicketLink(conversationId ?? INACTIVE_CONVERSATION_ID),
     enabled: !isTicket && !!conversationId && !!convThread,
   })
-  const linkedTicketId = linkedTicketSummary?.id ?? null
+  // A pair the viewer cannot open reads as `{ hidden: true }`: there is a
+  // ticket, so no Create ticket is offered, and nothing about it is shown.
+  const pairHidden = isHiddenTicketLink(linkedTicketSummary)
+  const linkedTicketId =
+    linkedTicketSummary && !isHiddenTicketLink(linkedTicketSummary) ? linkedTicketSummary.id : null
   const { data: linkedTicketFull } = useQuery({
     ...inboxQueries.ticketDetail(linkedTicketId ?? INACTIVE_TICKET_ID),
     // No `ticket.view` → the detail fn can only 403 (B24): skip the fetch and
@@ -1345,9 +1353,9 @@ export function AgentConversationThread({
   useEffect(() => {
     if (createTicketToken !== undefined && createTicketToken !== createTicketTokenRef.current) {
       createTicketTokenRef.current = createTicketToken
-      if (!isTicket) setCreateTicketOpen(true)
+      if (!isTicket && !pairHidden) setCreateTicketOpen(true)
     }
-  }, [createTicketToken, isTicket])
+  }, [createTicketToken, isTicket, pairHidden])
 
   // Save for later (star/bookmark icon, both kinds): the pragmatic thread-
   // level affordance — flags the LATEST message, reusing the same per-message
@@ -1493,7 +1501,8 @@ export function AgentConversationThread({
         staleTime: 0,
       })
       .then((linked) => {
-        if (linked && linked.statusCategory !== 'closed') setCloseConfirmTicket(linked)
+        if (linked && !isHiddenTicketLink(linked) && linked.statusCategory !== 'closed')
+          setCloseConfirmTicket(linked)
         else closeConversationMutation.mutate('closed')
       })
       // A failed freshness check must not block the close — fall back to the
@@ -1969,7 +1978,7 @@ export function AgentConversationThread({
             <TicketStatusChip status={panelTicket.status} />
           </span>
         ))}
-      {!isTicket && showTickets && !panelTicket && (
+      {!isTicket && showTickets && !panelTicket && !pairHidden && (
         <button
           type="button"
           title="Create ticket"
@@ -2465,6 +2474,7 @@ export function AgentConversationThread({
           item={item}
           conversation={conversation}
           ticket={panelTicket}
+          pairHidden={pairHidden}
           onChanged={refreshThread}
           onSelectItem={onSelectItem}
           onTrackAsFeedback={handleTrackAsFeedback}
@@ -2482,6 +2492,7 @@ export function AgentConversationThread({
           item={item}
           conversation={conversation}
           ticket={panelTicket}
+          pairHidden={pairHidden}
           onChanged={refreshThread}
           onSelectItem={selectFromSheet}
           onTrackAsFeedback={handleTrackAsFeedback}

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockAuth = vi.fn()
 const mockListTickets = vi.fn()
-const mockGetTicket = vi.fn()
+const mockGetTicketForActor = vi.fn()
 const mockAssertVisible = vi.fn()
 const mockListMessages = vi.fn()
 
@@ -14,7 +14,7 @@ vi.mock('@/lib/server/domains/api/auth', () => ({
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   listTickets: (...a: unknown[]) => mockListTickets(...a),
-  getTicket: (...a: unknown[]) => mockGetTicket(...a),
+  getTicketForActor: (...a: unknown[]) => mockGetTicketForActor(...a),
   assertTicketVisible: (...a: unknown[]) => mockAssertVisible(...a),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
@@ -115,8 +115,7 @@ describe('GET /api/v1/tickets', () => {
 
 describe('GET /api/v1/tickets/:id', () => {
   it('returns the serialized ticket', async () => {
-    mockAssertVisible.mockResolvedValue({ id: TICKET_ID })
-    mockGetTicket.mockResolvedValue(ticketDTO)
+    mockGetTicketForActor.mockResolvedValue(ticketDTO)
     const res = await getHandler(DetailRoute)({
       request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
       params: { ticketId: TICKET_ID },
@@ -134,17 +133,18 @@ describe('GET /api/v1/tickets/:id', () => {
       scopePrincipalId: 'principal_creator',
     })
     const { NotFoundError } = await import('@/lib/shared/errors')
-    mockAssertVisible.mockRejectedValue(new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found'))
+    mockGetTicketForActor.mockRejectedValue(
+      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+    )
     const res = await getHandler(DetailRoute)({
       request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
       params: { ticketId: TICKET_ID },
     })
     expect(res.status).toBe(404)
-    expect(mockAssertVisible).toHaveBeenCalledWith(
+    expect(mockGetTicketForActor).toHaveBeenCalledWith(
       TICKET_ID,
       expect.objectContaining({ principalType: 'service', scopePrincipalId: 'principal_creator' })
     )
-    expect(mockGetTicket).not.toHaveBeenCalled()
   })
 
   it('rejects a malformed ticket id before hitting the domain', async () => {
@@ -153,7 +153,7 @@ describe('GET /api/v1/tickets/:id', () => {
       params: { ticketId: 'not-a-typeid' },
     })
     expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(mockGetTicket).not.toHaveBeenCalled()
+    expect(mockGetTicketForActor).not.toHaveBeenCalled()
   })
 })
 

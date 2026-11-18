@@ -346,8 +346,9 @@ export async function createMyTicket(
     actor
   )
   // Re-read through the requester projection, as the other requester reads
-  // do: the create path returns the agent DTO.
-  const row = await loadTicketOr404(created.id)
+  // do: the create path returns the agent DTO. The read is the requester's
+  // own ownership-scoped loader, like every other requester read.
+  const row = await loadOwnedTicketOr404(created.id, principalId)
   return toRequesterTicketDTO(row, await buildRequesterTicketContext([row]))
 }
 

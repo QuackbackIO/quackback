@@ -41,7 +41,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { ValidationError, ForbiddenError, ConflictError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
-import { loadTicketOr404 } from './ticket.service'
+import { assertTicketVisible, loadTicketOr404 } from './ticket.service'
 import { emitTicketSystemMessage } from './ticket-message.service'
 import { resolvePairConversationId } from './pair-thread.service'
 
@@ -249,7 +249,8 @@ export async function linkTicketToIssue(
   integrationType = 'github'
 ): Promise<TicketExternalLinkDTO> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'link this ticket')
-  await loadTicketOr404(ticketId)
+  await assertTicketVisible(ticketId, actor)
+  // A visible test-data ticket is still refused: it never syncs out.
   if (!(await syncSourceForActor({ sourceType: 'ticket', sourceId: ticketId }, actor)))
     throw new ForbiddenError('FORBIDDEN', 'Ticket unavailable')
 
@@ -307,6 +308,7 @@ export async function createIssueForTicket(
   actor: Actor
 ): Promise<{ operationId: string; state: string }> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'create an issue for this ticket')
+  await assertTicketVisible(ticketId, actor)
   if (
     !actor.principalId ||
     !(await syncSourceForActor({ sourceType: 'ticket', sourceId: ticketId }, actor))
@@ -406,6 +408,7 @@ export async function unlinkTicketIssue(
   actor: Actor
 ): Promise<void> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'unlink this ticket')
+  await assertTicketVisible(ticketId, actor)
   if (!(await syncSourceForActor({ sourceType: 'ticket', sourceId: ticketId }, actor)))
     throw new ForbiddenError('FORBIDDEN', 'Ticket unavailable')
 

@@ -67,6 +67,7 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
 // ticket-activity.service.test.ts with backed principals.
 vi.mock('../ticket-activity.service', () => ({
   recordTicketActivity: vi.fn(),
+  recordTicketActivityAwaited: vi.fn().mockResolvedValue(undefined),
   listTicketActivity: vi.fn().mockResolvedValue([]),
 }))
 

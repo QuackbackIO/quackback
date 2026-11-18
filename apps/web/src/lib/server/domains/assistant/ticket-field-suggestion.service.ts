@@ -61,6 +61,8 @@ import {
 // (assistant.runtime imports ticket.service/ticket-message.service;
 // assistant.thread imports pair-thread.service and conversation.query).
 import { getTicketType } from '@/lib/server/domains/tickets/ticket-type.service'
+import { isTicketVisibleTo } from '@/lib/server/domains/tickets/ticket.service'
+import type { Actor } from '@/lib/server/policy/types'
 import {
   listPairThreadMessages,
   resolvePairTicketIdForConversation,
@@ -201,7 +203,8 @@ export function validateSuggestedValues(
  */
 export async function suggestTicketFieldValues(
   conversationId: ConversationId,
-  ticketTypeId: TicketTypeId
+  ticketTypeId: TicketTypeId,
+  actor: Actor
 ): Promise<TicketFieldSuggestionResult> {
   const model = getChatModel('assistant')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
@@ -222,7 +225,10 @@ export async function suggestTicketFieldValues(
   // flakiness — propagate it (mirrors createTicketFn's resolution).
   const type = await getTicketType(ticketTypeId)
 
-  const pairTicketId = await resolvePairTicketIdForConversation(conversationId)
+  // A paired ticket the caller cannot open is not grounded on: its thread
+  // carries internal notes from outside their scope.
+  const pairId = await resolvePairTicketIdForConversation(conversationId)
+  const pairTicketId = pairId && (await isTicketVisibleTo(pairId, actor)) ? pairId : null
   const messages = pairTicketId
     ? (await listPairThreadMessages(pairTicketId, { all: true, includeInternal: true })).messages
     : await listConversationMessagesForGrounding(conversationId, { includeInternal: true })

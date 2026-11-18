@@ -79,6 +79,9 @@ export interface TicketEmbedRow {
    *  IS its conversation thread). Null for internal ticket types
    *  (back_office/tracker are never conversation-linked). */
   conversationId: string | null
+  /** Whether the viewer's ticket filter admits the ticket: a teammate sees the
+   *  card only for a ticket they could open in the inbox. */
+  teamVisible: boolean
   /** Public stage label (Received / In progress / …), or null when the status
    *  maps to no public stage. Never the internal status name. */
   statusLabel: string | null
@@ -90,8 +93,8 @@ export interface TicketEmbedRow {
 /**
  * Whether `actor` may see a ticket embed, and (if so) the row to project. The
  * card resolves ONLY for:
- *   - a team member (mirrors how a post embed resolves through the same portal
- *     read path for a teammate viewer), or
+ *   - a team member whose ticket filter admits the ticket (`teamVisible`), the
+ *     same set the inbox shows them, or
  *   - the ticket's own requester on a `customer` ticket — the same ownership
  *     gate `loadOwnedTicketOr404` enforces for the portal ticket page.
  * Everyone else (a different visitor, an anonymous viewer, a requester of some
@@ -100,7 +103,7 @@ export interface TicketEmbedRow {
  */
 export function scopeTicketEmbed(ticket: TicketEmbedRow, actor: Actor): TicketEmbedRow | null {
   if (ticket.deletedAt) return null
-  if (isTeamMember(actor.role)) return ticket
+  if (isTeamMember(actor.role) && ticket.teamVisible) return ticket
   if (
     ticket.type === 'customer' &&
     actor.principalId != null &&

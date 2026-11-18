@@ -15,7 +15,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import type { AgentConversationPanel } from '@/lib/shared/conversation/agent-panels'
 import type { AgentConversationPanels } from '@/lib/server/functions/conversation-panels'
-import type { LinkedTicketSummary } from '@/lib/shared/inbox/items'
+import { isHiddenTicketLink, type ConversationTicketLink } from '@/lib/shared/inbox/items'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { inboxQueries, ticketQueries } from '@/lib/client/queries/inbox'
 import { isDetailPanelShown } from '@/lib/client/conversation/detail-panel'
@@ -76,7 +76,9 @@ function panelEntries(
   )
   const visitor = cached?.conversation.visitor.principalId
   const linkEntry = e.ticketLink(conversationId)
-  const link = client.getQueryData<LinkedTicketSummary | null>(linkEntry.queryKey)
+  const cachedLink = client.getQueryData<ConversationTicketLink | null>(linkEntry.queryKey)
+  // A pair the viewer cannot open has no ticket reads to seed.
+  const link = isHiddenTicketLink(cachedLink) ? null : cachedLink
   // The panel's own reads are only worth loading where the panel shows.
   const shown = isDetailPanelShown()
   const forVisitor = (make: (principalId: PrincipalId) => ReadEntry) =>

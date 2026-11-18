@@ -5,7 +5,7 @@
  * with different assignees/teams via `testDb` and asserts which a given actor's
  * filter admits — no `db` mock (nothing under test reads the global db).
  */
-import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type TypeId, type UserId } from '@quackback/ids'
 
 type TeamId = TypeId<'team'>
@@ -20,12 +20,21 @@ import {
   ticketStatuses,
   principal,
   user,
+  settings,
   and,
   inArray,
 } from '@/lib/server/db'
 import { PERMISSIONS, type PermissionKey } from '@/lib/server/db'
 import { ticketFilter } from '../tickets'
+import { getTicketForActor } from '@/lib/server/domains/tickets/ticket.service'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'
+
+// The per-item check reads through the app's `db`; point it at the rollback
+// transaction so it sees the seeded rows.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -34,6 +43,8 @@ const fixture = await createDbTestFixture({
     await db.select({ id: ticketStatuses.id }).from(ticketStatuses).limit(0)
   },
 })
+
+afterAll(fixture.close)
 
 const suffix = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -115,7 +126,6 @@ async function visibleLabels(actor: Actor, world: Awaited<ReturnType<typeof seed
 describe.skipIf(!fixture.available)('ticketFilter (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
   afterEach(fixture.rollback)
-  afterAll(fixture.close)
 
   it('service principals see ALL non-deleted tickets (deleted excluded)', async () => {
     const world = await seedWorld()
@@ -222,5 +232,67 @@ describe.skipIf(!fixture.available)('ticketFilter (real DB, rolled back)', () =>
     for (const actor of [service, viewAll, memberA]) {
       expect((await visibleLabels(actor, world)).has('deletedSelfA')).toBe(false)
     }
+  })
+})
+
+describe('getTicketForActor (real DB, rolled back)', () => {
+  beforeEach(async () => {
+    expect(fixture.available).toBe(true)
+    await fixture.begin()
+    // The DTO reads the workspace's stage labels.
+    await testDb
+      .insert(settings)
+      .values({ name: 'Acme', slug: `acme-${suffix()}`, createdAt: new Date() })
+  })
+  afterEach(fixture.rollback)
+
+  /** The labels the per-item check opens for an actor; NotFound for the rest. */
+  async function openableLabels(actor: Actor, world: Awaited<ReturnType<typeof seedWorld>>) {
+    const opened = new Set<string>()
+    for (const [label, id] of Object.entries(world.ids)) {
+      try {
+        const dto = await getTicketForActor(id as TicketId, actor)
+        expect(dto.id).toBe(id)
+        opened.add(label)
+      } catch (error) {
+        expect(error).toMatchObject({ code: 'TICKET_NOT_FOUND', statusCode: 404 })
+      }
+    }
+    return opened
+  }
+
+  it('opens exactly what the list filter admits, for every audience', async () => {
+    const world = await seedWorld()
+    const audiences: Actor[] = [
+      buildActor({ principalId: createId('principal') as PrincipalId, principalType: 'service' }),
+      buildActor({
+        principalId: createId('principal') as PrincipalId,
+        permissions: new Set([PERMISSIONS.TICKET_VIEW_ALL]),
+      }),
+      buildActor({ principalId: world.actorA, permissions: new Set([PERMISSIONS.TICKET_VIEW]) }),
+      buildActor({ principalId: world.actorB, permissions: new Set([PERMISSIONS.TICKET_VIEW]) }),
+      buildActor({
+        principalId: createId('principal') as PrincipalId,
+        principalType: 'service',
+        scopePrincipalId: world.actorA,
+        permissions: new Set([PERMISSIONS.TICKET_VIEW]),
+      }),
+      ANONYMOUS_ACTOR,
+    ]
+    for (const actor of audiences) {
+      expect(await openableLabels(actor, world)).toEqual(await visibleLabels(actor, world))
+    }
+  })
+
+  it("gives a scoped teammate NotFound for another team's ticket", async () => {
+    const world = await seedWorld()
+    const memberA = buildActor({
+      principalId: world.actorA,
+      permissions: new Set([PERMISSIONS.TICKET_VIEW]),
+    })
+    await expect(getTicketForActor(world.ids.teamY, memberA)).rejects.toMatchObject({
+      code: 'TICKET_NOT_FOUND',
+    })
+    expect((await getTicketForActor(world.ids.teamX, memberA)).id).toBe(world.ids.teamX)
   })
 })

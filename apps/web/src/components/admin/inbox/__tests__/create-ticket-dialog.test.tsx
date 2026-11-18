@@ -182,7 +182,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 it.each(['code', 'message'] as const)(
-  'localizes the protected test link conflict by %s while keeping the created ticket visible',
+  'reads the protected test link conflict by its code only (%s) while keeping the created ticket visible',
   async (kind) => {
     const onCreated = vi.fn()
     const onOpenChange = vi.fn()
@@ -217,7 +217,13 @@ it.each(['code', 'message'] as const)(
       sourceConversationId: 'conversation_acme',
     })
     await handlers.onSuccess({ id: 'ticket_acme' })
-    expect(mocks.toastWarning).toHaveBeenCalledExactlyOnceWith('Acme localized link conflict')
+    // The code arrives with the server error; a bare message, even the same
+    // words, is any other link failure.
+    expect(mocks.toastWarning).toHaveBeenCalledExactlyOnceWith(
+      kind === 'code'
+        ? 'Acme localized link conflict'
+        : "Ticket created, but couldn't link it: Test and real conversations need separate tickets."
+    )
     expect(onCreated).toHaveBeenCalledExactlyOnceWith('ticket_acme')
     expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false)
     expect(onChanged).toHaveBeenCalledOnce()
