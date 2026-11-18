@@ -813,6 +813,9 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   'routes/api/widget/identify.ts::POST::isTeamMember': NOT_A_GATE(
     'skips overwriting a teammate dashboard profile from the host-app JWT; identify still mints a widget-scoped customer session'
   ),
+  'lib/server/functions/bootstrap.ts::getSessionAndRole::isTeamMember': NOT_A_GATE(
+    'sends a teammate on a section host the primary admin address for a plain link; the presented role stays portal-tier'
+  ),
   'lib/server/functions/widget-auth.ts::getWidgetSession::isTeamMember': NOT_A_GATE(
     'sets canPortalHandoff from the stored role; presented session role stays portal-tier'
   ),
