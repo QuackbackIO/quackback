@@ -11,7 +11,7 @@ import {
   type PlanFeatureKey,
 } from '@/lib/server/domains/plan-limits/plan-limits.features'
 import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
-import { PLAN_ONLY_FEATURES } from '@/lib/server/domains/settings/tier-limits.types'
+import { PLAN_ONLY_FEATURES } from '@/lib/server/domains/settings/plan-only-features'
 import { PLAN_NUMERIC_CAPS, type PlanCapKey } from './plan-downgrade'
 
 /**

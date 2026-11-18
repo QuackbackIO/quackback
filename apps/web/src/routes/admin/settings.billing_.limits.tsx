@@ -19,7 +19,10 @@ export const Route = createFileRoute('/admin/settings/billing_/limits')({
   head: adminPageHead('Plan limits'),
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.MEMBER_VIEW)
-    await context.queryClient.ensureQueryData(planLimitsQueries.page())
+    // Loaded on demand so the queries and their server functions stay out of
+    // the entry chunk every admin page downloads.
+    const { planLimitsQueries: queries } = await import('@/lib/client/queries/plan-limits')
+    await context.queryClient.ensureQueryData(queries.page())
     return {}
   },
   component: PlanLimitsPage,

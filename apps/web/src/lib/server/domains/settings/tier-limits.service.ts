@@ -2,7 +2,8 @@ import { db, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { settingsLocalTtlMs } from '@/lib/server/local-cache'
-import { OSS_TIER_LIMITS, PLAN_ONLY_FEATURES, type TierLimits } from './tier-limits.types'
+import { OSS_TIER_LIMITS, type TierLimits } from './tier-limits.types'
+import { PLAN_ONLY_FEATURES } from './plan-only-features'
 import {
   entitlementsAt,
   parseBillingProjection,
