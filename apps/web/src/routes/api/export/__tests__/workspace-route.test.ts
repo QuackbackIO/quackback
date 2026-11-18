@@ -88,11 +88,12 @@ describe('POST /api/export/workspace', () => {
     expect(hoisted.mockCreateExportRun).not.toHaveBeenCalled()
   })
 
-  it('rejects when the tier gate is off', async () => {
+  it('starts the export on a plan without analytics exports', async () => {
     hoisted.mockGetTierLimits.mockResolvedValue({ features: { analyticsExports: false } })
     const res = await handleStartWorkspaceExport(makeRequest())
-    expect(res.status).toBe(402)
-    expect(hoisted.mockCreateExportRun).not.toHaveBeenCalled()
+    expect(res.status).toBe(202)
+    expect(hoisted.mockCreateExportRun).toHaveBeenCalledTimes(1)
+    expect(hoisted.mockEnqueue).toHaveBeenCalledTimes(1)
   })
 
   it('returns 409 while another export is in flight', async () => {

@@ -102,10 +102,12 @@ describe('GET /api/export/runs/{runId}/download', () => {
     expect(res.status).toBe(403)
   })
 
-  it('rejects when the tier gate is off', async () => {
+  it('downloads a finished run on a plan without analytics exports', async () => {
     hoisted.mockGetTierLimits.mockResolvedValue({ features: { analyticsExports: false } })
+    hoisted.mockGetExportRun.mockResolvedValue(completedRun())
     const res = await handleDownloadExportRun(RUN_ID, makeRequest())
-    expect(res.status).toBe(402)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location')).toBe('https://s3.test/presigned')
   })
 
   it('400s on a malformed run id', async () => {
