@@ -79,6 +79,8 @@ vi.mock('../section-domains-notify', () => ({
 }))
 
 const { watchSectionDomains } = await import('../section-domains-watch')
+const { isSectionDomainsWatchDue } = await import('../section-domains-watch-queue')
+const { JOB_DEFINITIONS } = await import('@/lib/server/jobs/definitions')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -283,6 +285,44 @@ describe.skipIf(!fixture.available)('section domain watch (real DB, rolled back)
       hostname: 'help.acme.com',
       verifiedAt: VERIFIED,
       unconfirmedSince: NOW.toISOString(),
+    })
+  })
+
+  describe('the schedule gate', () => {
+    // A shut gate writes no job row at all, so Cloud, where the control plane
+    // decides when a domain is ready, gets no daily no-op per workspace.
+    it('is shut on Cloud, even with a verified section hostname', async () => {
+      await seed(
+        { help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } },
+        { cloud: { enabled: true } as typeof settings.$inferInsert.cloud }
+      )
+      expect(await isSectionDomainsWatchDue()).toBe(false)
+    })
+
+    it('is shut before the server is set up', async () => {
+      await testDb.delete(settings)
+      expect(await isSectionDomainsWatchDue()).toBe(false)
+    })
+
+    it('is shut on a self-hosted server with no verified section hostname', async () => {
+      await seed({ status: { hostname: 'status.acme.com', verifiedAt: null } })
+      expect(await isSectionDomainsWatchDue()).toBe(false)
+    })
+
+    it('is open on a self-hosted server with a verified section hostname', async () => {
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      expect(await isSectionDomainsWatchDue()).toBe(true)
+    })
+
+    it('is the gate the daily schedule runs behind', async () => {
+      const def = JOB_DEFINITIONS.find((d) => d.name === 'section-domains-watch')
+      await seed(
+        { help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } },
+        { cloud: { enabled: true } as typeof settings.$inferInsert.cloud }
+      )
+      expect(await def?.cronEnabled?.()).toBe(false)
+      await seed({ help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } })
+      expect(await def?.cronEnabled?.()).toBe(true)
     })
   })
 

@@ -361,12 +361,17 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     // The daily re-check that each verified section hostname on a self-hosted
     // server still reaches it: a miss (checked twice) marks it unconfirmed, so
     // sign-in stops there while routing keeps its grace, and one still failing
-    // after the grace stops being verified. Returns after one settings read on
-    // Cloud, where the control plane decides when a domain is ready, and after
-    // two in a workspace without a section hostname. Its own minute, and capped
-    // across the fleet because each hostname costs DNS lookups and a request.
+    // after the grace stops being verified. The gate is shut on Cloud, where
+    // the control plane decides when a domain is ready, before the server is
+    // set up, and without a verified section hostname, so none of those
+    // writes a daily job row. Its own minute, and capped across the fleet
+    // because each hostname costs DNS lookups and a request.
     name: 'section-domains-watch',
     cron: '55 6 * * *',
+    cronEnabled: () =>
+      import('@/lib/server/domains/settings/section-domains-watch-queue').then((m) =>
+        m.isSectionDomainsWatchDue()
+      ),
     fleetConcurrency: 4,
     maxAttempts: 3,
     handler: () =>
