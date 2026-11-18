@@ -64,6 +64,14 @@ vi.mock('../help-center-translate-queue', () => ({
   enqueueHelpCenterTranslateJob: (...args: unknown[]) => mockEnqueueHelpCenterTranslateJob(...args),
 }))
 
+// The languages the plan holds back past its cap after the grace, as the real
+// helper answers: the additional languages after the first (cap - 1).
+const heldCap = vi.hoisted(() => ({ cap: null as number | null }))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.locales', () => ({
+  heldHelpCenterLocales: async (additional: readonly string[]) =>
+    heldCap.cap === null ? [] : additional.slice(Math.max(0, heldCap.cap - 1)),
+}))
+
 const { buildTranslationPrompt, translateArticleForLocale, queueAutoTranslateOnPublish } =
   await import('../help-center-auto-translate.service')
 
@@ -141,6 +149,26 @@ describe('translateArticleForLocale', () => {
     expect(result).toEqual({ pausedUntil: budget.windowEnd })
     expect(mockChat).not.toHaveBeenCalled()
     expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+  })
+
+  it('stops translating into a language the plan holds back, and only that one', async () => {
+    heldCap.cap = 2
+    mockGetHelpCenterConfig.mockResolvedValue({
+      autoTranslate: { protectedTerms: [] },
+      locales: { default: 'en', additional: ['fr', 'de'], chrome: {} },
+    })
+    mockGetArticleById.mockResolvedValue({ title: 'Refunds', description: null, content: 'x' })
+    mockChat.mockResolvedValue({ title: 'T', content: 'C' })
+    try {
+      expect(await translateArticleForLocale('article_1' as KbArticleId, 'de')).toBeUndefined()
+      expect(mockChat).not.toHaveBeenCalled()
+      expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+
+      await translateArticleForLocale('article_1' as KbArticleId, 'fr')
+      expect(mockUpsertArticleTranslation).toHaveBeenCalledOnce()
+    } finally {
+      heldCap.cap = null
+    }
   })
 
   it('translates normally while allowance remains', async () => {

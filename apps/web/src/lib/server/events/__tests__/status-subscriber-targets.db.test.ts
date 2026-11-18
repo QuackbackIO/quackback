@@ -40,6 +40,16 @@ vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
     .mockImplementation(async (ids: string[]) => new Map(ids.map((id) => [id, `tok-${id}`]))),
 }))
 
+// The components the plan lets the public page show: null (all of them)
+// unless a case hides some, as the real helper answers past the plan's cap.
+const planVisible = vi.hoisted(() => ({ ids: null as string[] | null }))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@/lib/server/domains/plan-limits/plan-limits.service')
+  >()),
+  visibleStatusComponentIds: async () => planVisible.ids,
+}))
+
 import {
   principal,
   segments,
@@ -194,8 +204,29 @@ describe.skipIf(!fixture.available)('status incident emails (execution-level)', 
       { principalId: P_PICKER, scope: 'components', componentIds: [BILLING], source: 'self_serve' },
     ])
   })
-  afterEach(fixture.rollback)
+  afterEach(async () => {
+    planVisible.ids = null
+    await fixture.rollback()
+  })
   afterAll(fixture.close)
+
+  it('leaves a component the plan hides out of every email, and tells no one who followed only it', async () => {
+    planVisible.ids = [API]
+    const targets = await getStatusSubscriberTargets(incidentCreated, context)
+    expect(emailedComponents(targets)).toEqual({
+      [MEMBER_EMAIL]: [{ name: `API ${runSuffix}`, status: 'Degraded performance' }],
+      [OUTSIDER_EMAIL]: [{ name: `API ${runSuffix}`, status: 'Degraded performance' }],
+    })
+    const notified = targets
+      .filter((t) => t.type === 'notification')
+      .flatMap((t) => (t.target as { principalIds: string[] }).principalIds)
+    expect(notified).not.toContain(P_PICKER)
+  })
+
+  it('tells no one about an incident on hidden components alone', async () => {
+    planVisible.ids = []
+    expect(await getStatusSubscriberTargets(incidentCreated, context)).toEqual([])
+  })
 
   it('sends no subscriber email or bell for a publication made without emailing subscribers', async () => {
     const created = incidentCreated as unknown as { data: { incident: object } }

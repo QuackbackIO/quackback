@@ -2130,7 +2130,16 @@ export async function getStatusSubscriberTargets(
           )
         )
     : []
-  const affectedById = new Map(affected.map((c) => [String(c.id), c]))
+  // Components the plan hides from the public page (past its cap, after the
+  // grace) are left out of subscriber notifications the same way: never
+  // listed, never followed. An incident on hidden components alone tells nobody.
+  const { visibleStatusComponentIds } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  const planVisible = affected.length > 0 ? await visibleStatusComponentIds() : null
+  const shownAffected =
+    planVisible === null ? affected : affected.filter((c) => planVisible.includes(String(c.id)))
+  if (affected.length > 0 && shownAffected.length === 0) return []
+  const affectedById = new Map(shownAffected.map((c) => [String(c.id), c]))
   // In the order the incident lists them.
   const affectedInOrder = affectedComponentIds
     .map((id) => affectedById.get(String(id)))
@@ -2199,7 +2208,9 @@ export async function getStatusSubscriberTargets(
     const impact = deriveViewerImpact(
       incident.impact as StatusIncidentImpact,
       visibleAffected.map((c) => c.linkedStatus ?? c.liveStatus),
-      visibleAffected.length < affectedInOrder.length
+      // Partial against every affected component, hidden ones included, as
+      // the page works it out (toPublicIncident).
+      visibleAffected.length < affected.length
     )
     return [{ ...p, visibleAffected, impact }]
   })

@@ -60,6 +60,27 @@ describe('isEntitlementError', () => {
   })
 })
 
+describe('the paused-seat page', () => {
+  afterEach(cleanup)
+
+  it('shows the paused seat, with a way to sign out, for the paused-seat denial', () => {
+    render(<DefaultErrorPage error={{ message: 'Access denied: Your seat is paused' }} />)
+    expect(screen.getByRole('heading', { name: 'Your seat is paused' })).toBeTruthy()
+    expect(
+      screen.getByText(
+        "This workspace's plan includes fewer team seats than it has members. An owner can choose who keeps a seat or upgrade."
+      )
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
+  })
+
+  it('keeps the plain access page for every other denial', () => {
+    render(<DefaultErrorPage error={new Error('Access denied: Not a team member')} />)
+    expect(screen.queryByText('Your seat is paused')).toBeNull()
+    expect(screen.getByText("You don't have access")).toBeTruthy()
+  })
+})
+
 describe('DefaultErrorPage', () => {
   afterEach(() => cleanup())
 

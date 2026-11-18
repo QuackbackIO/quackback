@@ -146,6 +146,13 @@ export async function translateArticleForLocale(
   }
 
   const helpCenterConfig = await getHelpCenterConfig()
+  // A language the plan holds back is not translated into.
+  const { heldHelpCenterLocales } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.locales')
+  if ((await heldHelpCenterLocales(helpCenterConfig.locales?.additional ?? [])).includes(locale)) {
+    log.info({ article_id: articleId, locale }, 'auto-translate skipped: language held by the plan')
+    return
+  }
   const protectedTerms = helpCenterConfig.autoTranslate?.protectedTerms ?? []
 
   const article = await getArticleById(articleId)

@@ -55,6 +55,7 @@ const sending = (over: Partial<Parameters<typeof domainRows>[0]['sending'][0]>) 
   autoCheckUntil: null,
   localParts: [],
   ownershipProven: false,
+  paused: false,
   ...over,
 })
 
@@ -156,6 +157,25 @@ describe('use links', () => {
       to: '/admin/settings/security/authentication',
       search: { tab: 'sign-in' },
     })
+  })
+})
+
+describe('a sending domain the plan holds back', () => {
+  it('says once that its mail goes from the default sender', () => {
+    const rows = domainRows({
+      now: NOW,
+      sending: [sending({ paused: true, localParts: ['help@'] })],
+      signIn: [],
+      helpCenterDomain: null,
+    })
+    expect(rows[0]?.uses[0]?.detail).toBe('Paused on your plan. Mail goes from the default sender.')
+    const kept = domainRows({
+      now: NOW,
+      sending: [sending({ localParts: ['help@'] })],
+      signIn: [],
+      helpCenterDomain: null,
+    })
+    expect(kept[0]?.uses[0]?.detail).toBe('help@')
   })
 })
 

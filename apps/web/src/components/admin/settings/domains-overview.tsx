@@ -82,7 +82,11 @@ export const PHASE_STATE = {
   'not-found': 'attention',
 } as const satisfies Record<DomainPhase, BadgeState | null>
 
+/** The quiet line a sending domain held back by the plan carries. */
+export const SENDING_PAUSED_DETAIL = 'Paused on your plan. Mail goes from the default sender.'
+
 function sendingDetail(domain: SendingDomainSummary): string | undefined {
+  if (domain.paused) return SENDING_PAUSED_DETAIL
   const parts = [domain.localParts.join(', ')]
   if (domain.ownershipProven) parts.push('Domain verified')
   return parts.filter(Boolean).join(' · ') || undefined

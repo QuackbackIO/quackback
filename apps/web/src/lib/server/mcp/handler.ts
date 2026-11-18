@@ -117,7 +117,16 @@ async function resolveOAuthContext(
     const principalRecord = await readOAuthPrincipal(principalId as PrincipalId, clientId)
     if (!principalRecord) return null
 
-    const role = principalRecord.role
+    // A paused seat (the plan has fewer team seats than members) acts as the
+    // portal user it still is, with no team authority. OAuth tokens are only
+    // ever issued to a person signing in.
+    const { isPausedTeamSeat } = await import('@/lib/server/domains/plan-limits/plan-limits.seats')
+    const paused = await isPausedTeamSeat({
+      id: principalId,
+      role: principalRecord.role,
+      type: 'user',
+    })
+    const role = paused ? 'user' : principalRecord.role
     // The caller's current assignment-derived permissions, resolved as a
     // signed-in session resolves them, gate every tool. Portal users hold no
     // workspace assignments, so they skip the read.

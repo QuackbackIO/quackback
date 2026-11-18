@@ -166,7 +166,10 @@ export async function assertInviteGrant(
       throw new ValidationError('VALIDATION_ERROR', 'Custom role invites use the member role')
     }
     const { assertGrantableRole } = await import('@/lib/server/domains/roles/role.grants')
-    roleName = (await assertGrantableRole(roleId, granter.permissions)).name
+    const target = await assertGrantableRole(roleId, granter.permissions)
+    const { assertCustomRoleAssignable } = await import('@/lib/server/domains/roles/role.plan-lock')
+    await assertCustomRoleAssignable(target)
+    roleName = target.name
   }
   assertCanGrantTeamRole(role, granter.role)
   return roleName

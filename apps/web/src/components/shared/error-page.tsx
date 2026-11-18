@@ -4,6 +4,7 @@ import { DocumentLocaleContext } from '@/components/shared/document-locale-conte
 import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
+import { isSeatPausedError } from '@/lib/shared/billing/seat-paused'
 import { errorReferenceOf } from '@/lib/shared/error-reference'
 import { DEFAULT_LOCALE, messageArea, normalizeLocale } from '@/lib/shared/i18n'
 import { cn } from '@/lib/shared/utils'
@@ -158,6 +159,42 @@ export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }
   )
 }
 
+/**
+ * A team member whose seat is paused: the plan includes fewer team seats than
+ * the workspace has members. Only the admin is closed to them, so the way out
+ * is the public site or signing out (to sign in as someone else).
+ */
+export function SeatPausedPage({ fullPage = true }: { fullPage?: boolean }) {
+  const [signingOut, setSigningOut] = useState(false)
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    try {
+      const { signOut } = await import('@/lib/client/auth-client')
+      await signOut()
+    } finally {
+      window.location.href = '/'
+    }
+  }
+
+  return (
+    <FriendlyShell fullPage={fullPage}>
+      <h1 className="text-2xl font-semibold tracking-tight">Your seat is paused</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        This workspace&apos;s plan includes fewer team seats than it has members. An owner can
+        choose who keeps a seat or upgrade.
+      </p>
+      <div className="mt-6 flex items-center justify-center gap-3">
+        <Button onClick={handleSignOut} disabled={signingOut}>
+          Sign out
+        </Button>
+        <Button variant="outline" asChild>
+          <a href="/">View public site</a>
+        </Button>
+      </div>
+    </FriendlyShell>
+  )
+}
+
 export function EntitlementRequiredPage({
   error,
   fullPage = true,
@@ -197,6 +234,9 @@ export function EntitlementRequiredPage({
 }
 
 export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPageProps) {
+  if (isSeatPausedError(error)) {
+    return <SeatPausedPage fullPage={fullPage} />
+  }
   if (isAuthorizationError(error)) {
     return <PermissionDeniedPage fullPage={fullPage} />
   }

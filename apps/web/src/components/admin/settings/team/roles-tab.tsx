@@ -22,7 +22,7 @@ type RoleWithMeta = RolesPayload['roles'][number]
  */
 export function RolesTab() {
   const { data } = useSuspenseQuery(settingsQueries.roles())
-  const { roles, maxCustomRoles } = data
+  const { roles, maxCustomRoles, customRolesLocked } = data
   const canManage = useHasPermission(PERMISSIONS.ROLE_MANAGE)
   const navigate = useNavigate()
 
@@ -51,7 +51,9 @@ export function RolesTab() {
               {customCount} of {maxCustomRoles}
             </strong>{' '}
             custom role{maxCustomRoles === 1 ? '' : 's'} used.
-            {capReached && ' Your plan is at its custom-role limit.'}
+            {customRolesLocked
+              ? " Custom roles can't be edited or given to anyone new on this plan. People on them keep their access."
+              : capReached && ' Your plan is at its custom-role limit.'}
           </div>
         </div>
       )}

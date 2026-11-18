@@ -50,13 +50,15 @@ function editorFromAuth(auth: Awaited<ReturnType<typeof requireAuth>>): RoleEdit
 
 export const listRolesFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
-  const [roles, limits] = await Promise.all([
+  const [roles, limits, customRolesLocked] = await Promise.all([
     listRoles(),
     import('@/lib/server/domains/settings/tier-limits.service').then((m) => m.getTierLimits()),
+    import('@/lib/server/domains/roles/role.plan-lock').then((m) => m.customRolesLocked()),
   ])
   // The cap ships so the roles tab can render the plan banner; null (the OSS
-  // default) renders nothing.
-  return { roles, maxCustomRoles: limits.maxCustomRoles }
+  // default) renders nothing. `customRolesLocked`: past the cap after the plan
+  // limits grace, custom roles can't be edited or given to anyone new.
+  return { roles, maxCustomRoles: limits.maxCustomRoles, customRolesLocked }
 })
 
 export const createRoleFn = createServerFn({ method: 'POST' })
