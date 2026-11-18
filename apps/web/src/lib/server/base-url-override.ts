@@ -54,3 +54,16 @@ export function runWithBaseUrlOverride<T>(origin: string, fn: () => T): T {
   child[OVERRIDE_KEY] = { workspaceKey: currentWorkspaceKey(), origin } satisfies BaseUrlOverride
   return runWithLogContext(child as never, fn)
 }
+
+/**
+ * Run `fn` with no override: `config.baseUrl` answers the configured origin.
+ * For anything built once and cached past the request that builds it (the
+ * auth instance), so a paused custom domain's override never leaks into it.
+ */
+export function runWithoutBaseUrlOverride<T>(fn: () => T): T {
+  const parent = getLogContext() as Record<PropertyKey, unknown> | undefined
+  if (!parent?.[OVERRIDE_KEY]) return fn()
+  const child: Record<PropertyKey, unknown> = { ...parent }
+  delete child[OVERRIDE_KEY]
+  return runWithLogContext(child as never, fn)
+}

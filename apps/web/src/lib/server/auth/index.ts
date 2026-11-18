@@ -30,6 +30,7 @@ import { authTrustedOrigins } from './trusted-origins'
 import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
 import { reconcileMcpOauthClientScopes } from './reconcile-mcp-oauth-client-scopes'
 import { HTTP_DISABLED_AUTH_PATHS } from './http-disabled-paths'
+import { runWithoutBaseUrlOverride } from '@/lib/server/base-url-override'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -962,7 +963,9 @@ function retryClientScopeReconcile(): void {
 function buildAuth(): Promise<AuthInstance> {
   const inFlight = authBuilds.get(AUTH_CACHE_KEY)
   if (inFlight) return inFlight
-  const build: Promise<AuthInstance> = createAuth()
+  // Built from the configured origin: the instance outlives this request, so
+  // a per-request base URL override must not leak into it.
+  const build: Promise<AuthInstance> = runWithoutBaseUrlOverride(() => createAuth())
     .then((built) => {
       // A reset while this was building means it was built from a config that
       // has since changed: serve it to the callers already waiting on it, but

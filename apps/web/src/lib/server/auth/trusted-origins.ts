@@ -24,7 +24,7 @@
  * Honouring it under pooled tenancy would trust one workspace's origin on
  * every other workspace in the process.
  */
-import { config } from '@/lib/server/config'
+import { config, configuredBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 
@@ -73,7 +73,10 @@ export function workspaceAuthTrustedOrigins(
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  return [...originsForWorkspaceHostnames(config.baseUrl, []), ...extra]
+  // The configured origin and, while a paused custom domain overrides it for
+  // this request, the default origin too.
+  const bases = new Set([configuredBaseUrl(), config.baseUrl])
+  return [...[...bases].flatMap((base) => originsForWorkspaceHostnames(base, [])), ...extra]
 }
 
 function withMatchingRequestOrigin(
