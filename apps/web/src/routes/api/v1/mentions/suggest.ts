@@ -153,7 +153,11 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
         // A paused seat (the plan has fewer team seats than members) is judged as a portal user.
         role: await roleUnlessPaused(principalRecord, principalRecord.role),
       },
-      ...result.map((r) => ({ id: r.principalId as PrincipalId, type: 'user', role: r.role })),
+      // The caller is judged once, as above: listed again with their row's role,
+      // a paused seat would count as a teammate after all.
+      ...result
+        .filter((r) => r.principalId !== callerId)
+        .map((r) => ({ id: r.principalId as PrincipalId, type: 'user', role: r.role })),
     ])
     if (visible.has(callerId)) {
       for (const row of result) if (hidden.has(row.principalId as PrincipalId)) row.noAccess = true
