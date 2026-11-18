@@ -26,6 +26,8 @@ import {
 import { logger } from '@/lib/server/logger'
 import { assertTierFeature } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
+import { PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { readTextBodyOr413 } from '@/lib/server/utils/read-body'
 import { oauthFragmentBridge } from './oauth-fragment'
 import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
@@ -41,14 +43,23 @@ const FALLBACK_URL = 'https://quackback.io'
  */
 const CHANNEL_GITHUB_PATH = '/admin/settings/channels/github'
 
-/** The refusal when the plan does not include integrations, or null when it does. */
+/**
+ * The refusal when the plan does not include integrations, or null when it
+ * does. It names the plan when plan billing sets it, and this workspace
+ * otherwise.
+ */
 async function integrationsPlanRefusal(): Promise<TierLimitError | null> {
   try {
     await assertTierFeature('integrations', 'Integrations')
     return null
   } catch (err) {
-    if (err instanceof TierLimitError) return err
-    throw err
+    if (!(err instanceof TierLimitError)) throw err
+    const { plan } = await getCloudConfig()
+    const where = plan ? `in the ${PLAN_CATALOGUE[plan].name} plan` : 'for this workspace'
+    return new TierLimitError({
+      limit: err.limit,
+      message: `Integrations are not included ${where}.`,
+    })
   }
 }
 

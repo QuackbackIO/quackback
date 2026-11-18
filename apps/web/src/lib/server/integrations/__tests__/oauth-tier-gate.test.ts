@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   state: vi.fn(),
   limits: vi.fn(),
+  plan: null as string | null,
 }))
 vi.mock('../index', () => ({
   getIntegration: () => ({
@@ -31,6 +32,9 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: mocks.limits,
 }))
 vi.mock('../save', () => ({ saveIntegration: mocks.save }))
+vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
+  getCloudConfig: async () => ({ plan: mocks.plan }),
+}))
 import { handleOAuthCallback, handleOAuthConnect } from '../oauth-handlers'
 
 const CHANNEL_PATH = '/admin/settings/channels/github'
@@ -58,6 +62,7 @@ function setIntegrationsFeature(enabled: boolean) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.plan = null
   setIntegrationsFeature(true)
   mocks.state.mockReturnValue({
     type: 'acme_oauth',
@@ -83,6 +88,19 @@ it('refuses to start a connection when the plan lacks integrations', async () =>
     limit: 'features.integrations',
   })
   expect(mocks.buildAuthUrl).not.toHaveBeenCalled()
+})
+
+it('names the plan in the refusal when plan billing sets it', async () => {
+  setIntegrationsFeature(false)
+  mocks.plan = 'free'
+  const response = await handleOAuthConnect(connectRequest(), 'acme')
+  expect((await response.json()).message).toBe('Integrations are not included in the Free plan.')
+})
+
+it('names this workspace in the refusal without plan billing', async () => {
+  setIntegrationsFeature(false)
+  const response = await handleOAuthConnect(connectRequest(), 'acme')
+  expect((await response.json()).message).toBe('Integrations are not included for this workspace.')
 })
 
 it('completes the callback when the plan includes integrations', async () => {
