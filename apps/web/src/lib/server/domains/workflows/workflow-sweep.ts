@@ -782,8 +782,7 @@ export async function sweepSlaTimerTriggers(now: Date): Promise<number> {
  * guards inside them, which are expected races, not failures) and propagates
  * rather than being swallowed here.
  */
-export async function sweepWorkflowRuns(): Promise<void> {
-  const now = new Date()
+export async function sweepWorkflowRuns(now: Date = new Date()): Promise<void> {
   const staleCount = await sweepStaleRunningRuns(now)
   const rescheduledCount = await sweepOrphanedWaitingRuns(now)
   const expiredCount = await sweepExpiredInputWaits(now)

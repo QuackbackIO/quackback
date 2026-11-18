@@ -8,7 +8,10 @@
  * quarantined test. The quarantine cause comes from the test's `quarantine`
  * annotation.
  *
- * Usage: bun summarize-report.ts <report.json> "<heading>" [--all]
+ * With `--fail-if-empty`, exits 1 when no real test ran (only setup
+ * plumbing), so a sharded run whose grep matched nothing cannot pass as green.
+ *
+ * Usage: bun summarize-report.ts <report.json> "<heading>" [--all] [--fail-if-empty]
  */
 import { readFileSync } from 'node:fs'
 
@@ -49,12 +52,16 @@ interface Row {
   cause: string
 }
 
-const [reportPath, heading, flag] = process.argv.slice(2)
+const [reportPath, heading, ...flags] = process.argv.slice(2)
 if (!reportPath || !heading) {
-  console.error('Usage: bun summarize-report.ts <report.json> "<heading>" [--all]')
+  console.error(
+    'Usage: bun summarize-report.ts <report.json> "<heading>" [--all] [--fail-if-empty]'
+  )
   process.exit(1)
 }
-const listAll = flag === '--all'
+const listAll = flags.includes('--all')
+const failIfEmpty = flags.includes('--fail-if-empty')
+const PLUMBING_PROJECTS = new Set(['setup', 'cleanup', 'support-setup'])
 
 const report = JSON.parse(readFileSync(reportPath, 'utf8')) as Report
 
@@ -64,7 +71,7 @@ function walk(suite: ReportSuite, path: string[]): void {
   for (const spec of suite.specs ?? []) {
     for (const t of spec.tests) {
       // The admin sign-in and its teardown are plumbing: report them only when they fail.
-      const plumbing = t.projectName === 'setup' || t.projectName === 'cleanup'
+      const plumbing = PLUMBING_PROJECTS.has(t.projectName)
       if (plumbing && t.status === 'expected') continue
       rows.push({
         file: `${spec.file}:${spec.line}`,
@@ -109,5 +116,11 @@ if (listed.length > 0) {
       `| ${label[r.status]} | ${cell(`[${r.project}] ${r.title}`)} | ${cell(r.file)} | ${cell(r.cause)} |`
     )
   }
+}
+const realTests = rows.filter((r) => !PLUMBING_PROJECTS.has(r.project))
+if (failIfEmpty && realTests.length === 0) {
+  lines.push('', '**No tests ran.** The run is treated as a failure.')
+  console.log(lines.join('\n'))
+  process.exit(1)
 }
 console.log(lines.join('\n'))

@@ -8,21 +8,26 @@
 import { execFileSync } from 'child_process'
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import type { SeededPeople } from '../support/people'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 /**
  * Run an e2e CLI script from apps/web and return its trimmed stdout.
- * `bun --env-file` loads the repo-root .env for local runs. Do not shell out
- * to `dotenv`: GitHub runners ship a Ruby dotenv first on PATH that rejects -e.
- * Failures rethrow with the script's stderr so the real cause surfaces.
+ * `bun --env-file` loads the repo-root .env for local runs, or the file named
+ * by E2E_ENV_FILE (the support suite points it at its own support.env, and
+ * sets the values it overrides in the environment, which bun prefers over the
+ * file). Do not shell out to `dotenv`: GitHub runners ship a Ruby dotenv first
+ * on PATH that rejects -e. Failures rethrow with the script's stderr so the
+ * real cause surfaces.
  */
 function runScript(scriptFile: string, args: string[], label: string): string {
   const scriptPath = resolve(__dirname, '../scripts', scriptFile)
+  const envFile = process.env.E2E_ENV_FILE ?? '../../.env'
 
   try {
-    const result = execFileSync('bun', ['--env-file=../../.env', scriptPath, ...args], {
+    const result = execFileSync('bun', [`--env-file=${envFile}`, scriptPath, ...args], {
       encoding: 'utf-8',
       cwd: resolve(__dirname, '../..'), // apps/web directory
     })
@@ -163,4 +168,30 @@ export function getMentionTarget(excludeEmail: string = 'demo@example.com'): {
     principalId: string
     displayName: string
   }
+}
+
+/**
+ * Create (idempotently) the support suite's people, teams and custom roles;
+ * returns their ids. See e2e/support/people.ts.
+ */
+export function seedSupportPeople(): SeededPeople {
+  return JSON.parse(runScript('seed-support-people.ts', [], 'seed support people')) as SeededPeople
+}
+
+/** Mint a session per support person and write their storageState files. */
+export function mintSupportSessions(outDir: string, people: SeededPeople): void {
+  runScript('mint-support-sessions.ts', [outDir, JSON.stringify(people)], 'mint support sessions')
+}
+
+/** Create the S3_BUCKET on S3_ENDPOINT if it does not exist yet. */
+export function ensureStorageBucket(): void {
+  runScript('ensure-storage-bucket.ts', [], 'ensure storage bucket')
+}
+
+/** Create an API key for a teammate (by email) through the app's service. */
+export function createSupportApiKey(
+  creatorEmail: string,
+  kind: 'personal' | 'workspace' = 'personal'
+): string {
+  return runScript('create-support-api-key.ts', [creatorEmail, kind], 'create support API key')
 }

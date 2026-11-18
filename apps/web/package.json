@@ -15,6 +15,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
+    "test:e2e:support": "playwright test -c playwright.support.config.ts",
     "check:widget-bundle": "bun scripts/check-widget-bundle.ts",
     "check:server-fn-manifest": "bun scripts/check-server-fn-manifest.ts",
     "perf:setup": "bun perf/setup-db.ts",

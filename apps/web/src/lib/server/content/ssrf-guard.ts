@@ -23,6 +23,7 @@ import {
   CONNECTOR_MAX_RESPONSE_BYTES,
   CONNECTOR_REQUEST_TIMEOUT_MS,
 } from '@/lib/shared/assistant/connectors'
+import { isE2eWebhookSinkUrl, isLoopbackAddress } from '@/lib/server/e2e-harness/webhook-sink'
 
 const ALLOWED_SCHEMES = new Set(['http:', 'https:'])
 
@@ -188,6 +189,26 @@ export async function checkUrlSafety(url: string): Promise<UrlSafetyResult> {
   }
 }
 
+/**
+ * The check for the e2e webhook sink (see e2e-harness/webhook-sink.ts): the
+ * named host must resolve, and every address it resolves to must be loopback.
+ * Any other private range is still refused.
+ */
+async function checkE2eWebhookSinkSafety(url: string): Promise<UrlSafetyResult> {
+  let addresses: Array<{ address: string; family: number }>
+  try {
+    addresses = await lookup(new URL(url).hostname, { all: true })
+  } catch {
+    return { safe: false, reason: 'dns-error' }
+  }
+  if (addresses.length === 0) return { safe: false, reason: 'dns-error' }
+  if (!addresses.every((entry) => isLoopbackAddress(entry.address))) {
+    return { safe: false, reason: 'ssrf-rejected' }
+  }
+  const pinned = addresses[0]
+  return { safe: true, address: pinned.address, family: pinned.family === 6 ? 6 : 4 }
+}
+
 /** Thrown by `safeFetch` when the target URL fails SSRF validation. */
 export class SsrfError extends Error {
   constructor(public readonly reason: 'scheme-rejected' | 'ssrf-rejected' | 'dns-error') {
@@ -229,6 +250,12 @@ export interface SafeFetchInit {
    *   must not act on a partial body (e.g. image rehosting).
    */
   onOverflow?: 'truncate' | 'error'
+  /**
+   * Outgoing webhooks only: let the one e2e webhook sink host through. Has no
+   * effect unless the e2e harness gate is open and the URL is exactly the
+   * configured sink (see e2e-harness/webhook-sink.ts). No other caller sets it.
+   */
+  allowE2eWebhookSink?: boolean
 }
 
 const DEFAULT_TIMEOUT_MS = 5000
@@ -256,7 +283,10 @@ const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024
  * underlying error on network failure / timeout.
  */
 export async function safeFetch(url: string, init: SafeFetchInit = {}): Promise<Response> {
-  const safety = await checkUrlSafety(url)
+  const safety =
+    init.allowE2eWebhookSink && isE2eWebhookSinkUrl(url)
+      ? await checkE2eWebhookSinkSafety(url)
+      : await checkUrlSafety(url)
   if (!safety.safe) throw new SsrfError(safety.reason)
 
   const parsed = new URL(url)

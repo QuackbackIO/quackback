@@ -33,18 +33,38 @@ job leaves it out, so it cannot hide new failures.
   the review date, fix the test, fix the product, or delete the test with a
   reason. Do not extend the date without a reason in the entry.
 
+## The rule: an owner and two weeks
+
+- A test enters quarantine with a named owner (a person, not a team) and a
+  review date no more than two weeks out. "owner: unassigned" is only allowed
+  for the entries below that predate this rule, and each of them needs an owner
+  before its review date.
+- The owner either fixes it (test or product) and removes the tag, or deletes
+  it with the reason in the commit, by the review date.
+- One extension of up to two weeks is allowed, with the reason written in the
+  entry. A second extension needs the code owner's sign-off in the PR.
+- The nightly `e2e-quarantine` summary lists every quarantined test, so a test
+  that has started to pass, or one past its date, is visible every morning.
+- The support suite (`playwright.support.config.ts`) follows the same rule and
+  tag; its nightly run leaves `@quarantine` out in the same way.
+
 ## Quarantined tests
 
 Every entry has owner: unassigned and review by: 2026-12-02.
 
-### Needs object storage in CI (environment)
+### Storage is now wired; the sent attachment's rendering is not traced
 
 Since #629, conversation attachments upload to `/api/upload/file` (team) and
-`/api/widget/files` (widget) and become file records in object storage. A
-route stub cannot stand in for that: the send step attaches files by id, and
-the server reads their rows. CI has no object storage, so the tray shows "File
-storage is not configured". These come back when the e2e jobs get a storage
-service.
+`/api/widget/files` (widget) and become file records in object storage. The
+e2e-full and e2e-quarantine jobs now run an S3-compatible storage container.
+With it (checked locally against the same container) the upload works: the
+tray thumb renders and the stored file reads back with a 200. The tests then
+fail after the reply is sent: they wait for the sent image as an
+`img.object-contain` thumb, and the thread showed it as a file link instead.
+The thread renders a single image that way (`ImageRow` in
+`attachment-list.tsx`), so either the sent file is not classed as an image
+here or the assertions are stale; not traced. The paperclip label
+(`Attach files`) and an image-load wait were fixed on the way.
 
 - `admin/conversation-images.spec.ts` › Admin conversation images › paste and
   paperclip stage the tray, then send a contain thumb. owner: unassigned,

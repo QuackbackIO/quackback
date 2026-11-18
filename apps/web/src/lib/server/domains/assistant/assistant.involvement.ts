@@ -341,9 +341,10 @@ export async function voidAssumedResolutionForConversation(
  */
 export async function finalizeStaleAssistantInvolvements(
   thresholdMinutes: number = ASSUMED_RESOLUTION_INACTIVITY_MINUTES,
-  exec: Executor = db
+  exec: Executor = db,
+  now: Date = new Date()
 ): Promise<{ resolved: number }> {
-  const cutoff = new Date(Date.now() - thresholdMinutes * 60_000)
+  const cutoff = new Date(now.getTime() - thresholdMinutes * 60_000)
   const laterCustomerMessage = exec
     .select({ one: sql`1` })
     .from(conversationMessages)

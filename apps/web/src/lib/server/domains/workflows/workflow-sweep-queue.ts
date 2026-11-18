@@ -13,3 +13,8 @@ import { sweepWorkflowRuns } from './workflow-sweep'
 export async function runWorkflowSweep(): Promise<void> {
   await sweepWorkflowRuns()
 }
+
+/** One pass with an explicit clock (see runSlaBreachSweepAt). */
+export async function runWorkflowSweepAt(now: Date): Promise<void> {
+  await sweepWorkflowRuns(now)
+}
