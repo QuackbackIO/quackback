@@ -14,7 +14,7 @@ import Link from '@tiptap/extension-link'
 import { ResizableImage } from 'tiptap-extension-resizable-image'
 import 'tiptap-extension-resizable-image/styles.css'
 import './rich-text-editor.css'
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import { CodeBlockHighlight, lowlight } from './code-block-highlight'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Table } from '@tiptap/extension-table'
@@ -32,25 +32,6 @@ import { Markdown } from '@tiptap/markdown'
 import { Extension, getHTMLFromFragment } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
-import { createLowlight } from 'lowlight'
-import langBash from 'highlight.js/lib/languages/bash'
-import langC from 'highlight.js/lib/languages/c'
-import langCss from 'highlight.js/lib/languages/css'
-import langDiff from 'highlight.js/lib/languages/diff'
-import langGo from 'highlight.js/lib/languages/go'
-import langJava from 'highlight.js/lib/languages/java'
-import langJavascript from 'highlight.js/lib/languages/javascript'
-import langJson from 'highlight.js/lib/languages/json'
-import langPhp from 'highlight.js/lib/languages/php'
-import langPlaintext from 'highlight.js/lib/languages/plaintext'
-import langPython from 'highlight.js/lib/languages/python'
-import langRuby from 'highlight.js/lib/languages/ruby'
-import langRust from 'highlight.js/lib/languages/rust'
-import langShell from 'highlight.js/lib/languages/shell'
-import langSql from 'highlight.js/lib/languages/sql'
-import langTypescript from 'highlight.js/lib/languages/typescript'
-import langXml from 'highlight.js/lib/languages/xml'
-import langYaml from 'highlight.js/lib/languages/yaml'
 import {
   useEffect,
   useCallback,
@@ -129,43 +110,6 @@ import {
   ContextMenuTrigger,
 } from './context-menu'
 import { ScrollArea } from './scroll-area'
-
-// Curated grammar set instead of lowlight's `common` (~37 languages): the
-// bundle cost of every registered grammar is paid by all editor surfaces,
-// including the lazy-loaded visitor composer, so registration is limited to
-// languages that actually appear in support and product content. An
-// unregistered language renders as plain text inside the code block.
-const lowlight = createLowlight({
-  bash: langBash,
-  c: langC,
-  css: langCss,
-  diff: langDiff,
-  go: langGo,
-  java: langJava,
-  javascript: langJavascript,
-  json: langJson,
-  php: langPhp,
-  plaintext: langPlaintext,
-  python: langPython,
-  ruby: langRuby,
-  rust: langRust,
-  shell: langShell,
-  sql: langSql,
-  typescript: langTypescript,
-  xml: langXml,
-  yaml: langYaml,
-})
-// Fence aliases people actually type (```js, ```html, ```sh …) — without
-// these an aliased block silently falls back to plain text.
-lowlight.registerAlias({
-  bash: ['sh', 'zsh'],
-  javascript: ['js', 'jsx', 'node'],
-  python: ['py'],
-  ruby: ['rb'],
-  typescript: ['ts', 'tsx'],
-  xml: ['html', 'svg'],
-  yaml: ['yml'],
-})
 
 // ============================================================================
 // Extension builder (exported for testing)
@@ -246,7 +190,7 @@ export function buildExtensions(
     UploadedVideo,
     ...(features.codeBlocks
       ? [
-          CodeBlockLowlight.configure({
+          CodeBlockHighlight.configure({
             lowlight,
             HTMLAttributes: {
               class: 'not-prose rounded-lg bg-muted p-4 overflow-x-auto',

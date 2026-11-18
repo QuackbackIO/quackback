@@ -1,4 +1,5 @@
 import {
+  Component,
   Suspense,
   useCallback,
   useEffect,
@@ -6,6 +7,7 @@ import {
   memo,
   useRef,
   useState,
+  type ReactNode,
   type RefObject,
 } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
@@ -21,13 +23,6 @@ import {
 import { m, AnimatePresence } from 'framer-motion'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { widgetListPublicPostsFn } from '@/lib/server/functions/widget/posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
@@ -47,6 +42,7 @@ import {
   RichTextEditorPlaceholder,
 } from '@/components/ui/lazy-rich-text-editor'
 import { useWidgetMediaUpload, WidgetSessionError } from './use-widget-image-upload'
+import { lazyWithPreload } from '@/lib/client/lazy-with-preload'
 import type { JSONContent } from '@tiptap/react'
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
@@ -272,6 +268,62 @@ const WidgetPostRow = memo(
     prev.canVote === next.canVote &&
     prev.noAccessReason === next.noAccessReason
 )
+
+// The board picker shows only once the visitor starts writing, so its select
+// and positioning code load behind this boundary, warmed when the title gets
+// focus, instead of in the widget's first load.
+function loadBoardSelect() {
+  return lazyWithPreload(() => import('./widget-board-select'), 'WidgetBoardSelect')
+}
+// React keeps a failed lazy component failed, so a failure swaps in a fresh
+// one and the next time the row mounts it tries the import again.
+let boardSelect = loadBoardSelect()
+const preloadBoardSelect = () => boardSelect.preload()
+
+/**
+ * Keeps a picker that failed to load (a widget left open across a deploy, its
+ * old chunk gone) inside the "Posting to" row: the row shows the placeholder,
+ * the draft stays, and Post still goes to the board the composer chose.
+ */
+class BoardSelectBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch() {
+    boardSelect = loadBoardSelect()
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
+
+/** The picker's closed trigger, drawn without the select while it loads. */
+function BoardSelectPlaceholder({ name }: { name: string | undefined }) {
+  const intl = useIntl()
+  return (
+    <span
+      className={cn(
+        'inline-flex h-6 items-center gap-1 px-1.5 text-xs font-medium whitespace-nowrap',
+        name ? 'text-foreground' : 'text-muted-foreground'
+      )}
+    >
+      {name ??
+        intl.formatMessage({
+          id: 'widget.home.posting.selectBoard',
+          defaultMessage: 'Select a board',
+        })}
+      {/* The trigger's chevron is size-4. */}
+      <span aria-hidden className="size-4" />
+    </span>
+  )
+}
 
 /**
  * The title as typed, held outside React state: the field and the similar-ideas
@@ -842,6 +894,10 @@ export function WidgetHomeAnimated({
   }
 
   const canSubmitForm = hasTitle && selectedBoardId && canPost
+  const WidgetBoardSelect = boardSelect.Component
+  const boardPlaceholder = (
+    <BoardSelectPlaceholder name={boards.find((b) => b.id === selectedBoardId)?.name} />
+  )
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
@@ -873,26 +929,15 @@ export function WidgetHomeAnimated({
                         defaultMessage="Posting to"
                       />
                     </span>
-                    <Select value={selectedBoardId} onValueChange={handleComposeBoardChange}>
-                      <SelectTrigger
-                        size="xs"
-                        className="border-0 font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
-                      >
-                        <SelectValue
-                          placeholder={intl.formatMessage({
-                            id: 'widget.home.posting.selectBoard',
-                            defaultMessage: 'Select a board',
-                          })}
+                    <BoardSelectBoundary fallback={boardPlaceholder}>
+                      <Suspense fallback={boardPlaceholder}>
+                        <WidgetBoardSelect
+                          boards={boards}
+                          value={selectedBoardId}
+                          onValueChange={handleComposeBoardChange}
                         />
-                      </SelectTrigger>
-                      <SelectContent align="start">
-                        {boards.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      </Suspense>
+                    </BoardSelectBoundary>
                   </div>
                 </m.div>
               )}
@@ -922,6 +967,7 @@ export function WidgetHomeAnimated({
                   if (!val && expanded && !detailsRef.current?.html().trim()) setExpanded(false)
                 }}
                 onFocus={() => {
+                  preloadBoardSelect()
                   if (title.get() && !expanded) setExpanded(true)
                 }}
               />
