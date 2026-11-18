@@ -10,7 +10,7 @@ import type { EventData } from '../types'
 
 // db.select().from(conversations).where().limit(1) — only exercised by
 // getAssistantHandedOffTargets, which re-reads the conversation's team.
-let conversationRows: Array<{ assignedTeamId: string | null }> = []
+let conversationRows: Array<{ teamId: string | null }> = []
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -24,6 +24,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     }),
   },
 }))
+// The scope rule itself runs over real rows in notification-scope.db.test.ts;
+// here every recipient is in scope, so these cases test only the role and
+// actor rules each builder adds.
+vi.mock('@/lib/server/domains/notifications/recipient-scope', async () =>
+  (await import('@/lib/server/__tests__/conversation-visibility-mocks')).recipientScopePassThrough()
+)
 
 const listTeamMemberPrincipalIds = vi.fn<(teamId: string) => Promise<string[]>>()
 const listAssignableTeammates =
@@ -344,7 +350,7 @@ describe('getPostOwnerAssignedTargets', () => {
 
 describe('getAssistantHandedOffTargets', () => {
   it("targets the assigned team's members when the conversation has one", async () => {
-    conversationRows = [{ assignedTeamId: 'team_1' }]
+    conversationRows = [{ teamId: 'team_1' }]
     listTeamMemberPrincipalIds.mockResolvedValue(['principal_a', 'principal_quinn'])
     const event = {
       id: 'evt-9',
@@ -366,7 +372,7 @@ describe('getAssistantHandedOffTargets', () => {
   })
 
   it('falls back to every admin/member principal when the conversation has no team', async () => {
-    conversationRows = [{ assignedTeamId: null }]
+    conversationRows = [{ teamId: null }]
     listAssignableTeammates.mockResolvedValue([
       { principalId: 'principal_a', name: 'A', email: 'a@x.com' },
       { principalId: 'principal_b', name: 'B', email: 'b@x.com' },
@@ -385,7 +391,7 @@ describe('getAssistantHandedOffTargets', () => {
   })
 
   it('is a no-op when the only eligible recipient is the actor', async () => {
-    conversationRows = [{ assignedTeamId: null }]
+    conversationRows = [{ teamId: null }]
     listAssignableTeammates.mockResolvedValue([
       { principalId: 'principal_quinn', name: 'Quinn', email: null },
     ])
@@ -403,11 +409,11 @@ describe('getAssistantHandedOffTargets', () => {
 
 // WO-3 slice 3 (ported characterization): replaces the deleted direct
 // createNotificationsBatch call in sync-conversation-mentions.ts. Recipients
-// are trusted straight from the payload (already eligibility-filtered +
-// author-excluded by the emit site) — no DB round-trip, unlike the other
-// resolvers above.
+// come from the payload (already eligibility-filtered + author-excluded by the
+// emit site), cut to each one's scope (stubbed to everyone here; real rows in
+// notification-scope.db.test.ts).
 describe('getConversationNoteMentionedTargets', () => {
-  it('targets exactly the mentioned principals, carrying the note context in config', () => {
+  it('targets exactly the mentioned principals, carrying the note context in config', async () => {
     const event = {
       id: 'evt-12',
       type: 'conversation.note_mentioned',
@@ -422,7 +428,7 @@ describe('getConversationNoteMentionedTargets', () => {
       },
     } as EventData
 
-    const target = getConversationNoteMentionedTargets(event)
+    const target = await getConversationNoteMentionedTargets(event)
     expect(target).toEqual({
       type: 'notification',
       target: { principalIds: ['principal_one', 'principal_two'] },
@@ -435,7 +441,7 @@ describe('getConversationNoteMentionedTargets', () => {
     })
   })
 
-  it('is a no-op when no one is mentioned', () => {
+  it('is a no-op when no one is mentioned', async () => {
     const event = {
       id: 'evt-13',
       type: 'conversation.note_mentioned',
@@ -450,6 +456,6 @@ describe('getConversationNoteMentionedTargets', () => {
       },
     } as EventData
 
-    expect(getConversationNoteMentionedTargets(event)).toBeNull()
+    expect(await getConversationNoteMentionedTargets(event)).toBeNull()
   })
 })

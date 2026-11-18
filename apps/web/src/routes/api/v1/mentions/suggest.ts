@@ -9,13 +9,30 @@
  *
  * Rate-limited per session: 60 requests / 60s on a single rate bucket.
  * Fails open on store errors (the limiter returns `null` count then).
+ *
+ * With `itemKind` (`conversation` or `ticket`) and `itemId`, a teammate caller
+ * who can see that item gets each teammate who cannot see it marked
+ * `noAccess: true`, by the one rule notices use (recipient-scope.ts), so the
+ * note composer can show them muted and refuse the pick. A caller who cannot
+ * see the item, a missing item or a malformed id gets the plain list, which
+ * says nothing about the item.
  */
 import { createFileRoute } from '@tanstack/react-router'
-import type { UserId } from '@quackback/ids'
+import {
+  isValidTypeId,
+  type ConversationId,
+  type PrincipalId,
+  type TicketId,
+  type UserId,
+} from '@quackback/ids'
 import type { SQL } from 'drizzle-orm'
 import { auth } from '@/lib/server/auth'
 import { db, principal, user, eq, and, inArray, sql } from '@/lib/server/db'
 import type { Role } from '@/lib/shared/roles'
+import {
+  teammateView,
+  type ScopedItemRef,
+} from '@/lib/server/domains/notifications/recipient-scope'
 import { incrementBucket } from '@/lib/server/utils/rate-bucket'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 
@@ -32,6 +49,19 @@ interface SuggestRow {
   displayName: string | null
   avatarUrl: string | null
   role: Role
+  /** Set only when the request named an item this teammate cannot see. */
+  noAccess?: true
+}
+
+/** The item named by `itemKind` and `itemId`, or null for none or a malformed one. */
+function itemFrom(params: URLSearchParams): ScopedItemRef | null {
+  const kind = params.get('itemKind')
+  const id = params.get('itemId') ?? ''
+  if (kind === 'conversation' && isValidTypeId(id, 'conversation')) {
+    return { kind, id: id as ConversationId }
+  }
+  if (kind === 'ticket' && isValidTypeId(id, 'ticket')) return { kind, id: id as TicketId }
+  return null
 }
 
 // Same fallback chain as /api/v1/users/:id/card so the picker and the
@@ -48,7 +78,7 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
   // (API key) principals never get to enumerate the user directory.
   const principalRecord = await db.query.principal.findFirst({
     where: eq(principal.userId, session.user.id as UserId),
-    columns: { id: true, type: true },
+    columns: { id: true, type: true, role: true },
   })
   if (!principalRecord || principalRecord.type !== 'user') {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
@@ -108,6 +138,21 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
     }),
     role: r.role as Role,
   }))
+
+  // The caller is judged by the same rule as the people listed: only a
+  // teammate who sees the item learns who else cannot. Anyone else (a
+  // customer, even on their own conversation) gets the plain list.
+  const item = itemFrom(url.searchParams)
+  if (item) {
+    const callerId = principalRecord.id as PrincipalId
+    const { visible, hidden } = await teammateView(item, [
+      { id: callerId, type: principalRecord.type, role: principalRecord.role },
+      ...result.map((r) => ({ id: r.principalId as PrincipalId, type: 'user', role: r.role })),
+    ])
+    if (visible.has(callerId)) {
+      for (const row of result) if (hidden.has(row.principalId as PrincipalId)) row.noAccess = true
+    }
+  }
 
   return Response.json(result, { status: 200 })
 }

@@ -28,6 +28,7 @@ import type { TicketId, PrincipalId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
 import { ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
+import { withoutTeammatesWhoCannotSee } from './ticket-visibility'
 
 const log = logger.child({ component: 'ticket-subscriptions' })
 
@@ -180,7 +181,10 @@ export async function getTicketWatchStatus(
  * members (type `user`, role admin/member), plus `requesterPrincipalId` when
  * that principal still watches. A watcher who is neither a current team member
  * nor the requester (a former teammate, any other portal user) is never
- * returned. Actor exclusion happens in the resolvers.
+ * returned. A teammate who can no longer see the ticket (it moved away from
+ * them and their team after they started watching) is dropped too; their row
+ * stays, so the watch resumes if the ticket comes back to them. Actor exclusion
+ * happens in the resolvers.
  */
 export async function getTicketNotifiableWatchers(
   ticketId: TicketId,
@@ -191,7 +195,7 @@ export async function getTicketNotifiableWatchers(
     inArray(principal.role, ['admin', 'member'])
   )
   const rows = await db
-    .select({ principalId: ticketSubscriptions.principalId })
+    .select({ id: principal.id, type: principal.type, role: principal.role })
     .from(ticketSubscriptions)
     .innerJoin(principal, eq(ticketSubscriptions.principalId, principal.id))
     .where(
@@ -203,17 +207,18 @@ export async function getTicketNotifiableWatchers(
           : isTeamWatcher
       )
     )
-  return rows.map((r) => r.principalId)
+  return withoutTeammatesWhoCannotSee(ticketId, rows, { requesterPrincipalId })
 }
 
 /**
  * Watchers who are team members (admin/member roles), mute-filtered — the
  * recipient set for agent-only signals like internal-note bells. One joined
- * query so requester-watchers are excluded structurally, not by a second pass.
+ * query so requester-watchers are excluded structurally, not by a second pass;
+ * the visibility filter is the same as getTicketNotifiableWatchers'.
  */
 export async function getTicketAgentWatchersForEvent(ticketId: TicketId): Promise<PrincipalId[]> {
   const rows = await db
-    .select({ principalId: ticketSubscriptions.principalId })
+    .select({ id: principal.id, type: principal.type, role: principal.role })
     .from(ticketSubscriptions)
     .innerJoin(principal, eq(ticketSubscriptions.principalId, principal.id))
     .where(
@@ -224,7 +229,7 @@ export async function getTicketAgentWatchersForEvent(ticketId: TicketId): Promis
         inArray(principal.role, ['admin', 'member'])
       )
     )
-  return rows.map((r) => r.principalId)
+  return withoutTeammatesWhoCannotSee(ticketId, rows)
 }
 
 /**

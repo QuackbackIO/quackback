@@ -237,6 +237,14 @@ describe('buildExtensions', () => {
     expect(names).toContain('mention')
   })
 
+  it('uses the mention extension it is handed instead of the default one', async () => {
+    const { MentionExtension, teamMentionExtensionFor } = await import('../mention-extension')
+    const scoped = teamMentionExtensionFor({ kind: 'conversation', id: 'conversation_1' })
+    const extensions = buildExtensions({}, { placeholder: '', mentionExtension: scoped })
+    expect(extensions).toContain(scoped)
+    expect(extensions).not.toContain(MentionExtension)
+  })
+
   it('omits the mention extension when mentions is false', () => {
     const names = buildExtensions({ mentions: false }, { placeholder: '' }).map(
       (e) => (e as { name: string }).name
