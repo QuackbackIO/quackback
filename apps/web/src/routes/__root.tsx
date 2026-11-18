@@ -30,6 +30,7 @@ import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/sha
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { rssAlternateLink } from '@/lib/shared/rss-alternate'
 import { isStatusFeedReadable } from '@/lib/shared/status-settings'
+import { pageIconHref } from '@/lib/shared/workspace-icon'
 
 // The toast renderer is its own chunk: the root module ships with every
 // document (the embedded widget included), and a toast fired before it mounts
@@ -137,6 +138,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       {
         rel: 'stylesheet',
         href: appCss,
+      },
+      {
+        rel: 'icon',
+        href: pageIconHref(
+          matches[matches.length - 1]?.pathname ?? '/',
+          (matches[0]?.context as RootContext | undefined)?.settings
+        ),
       },
       rssAlternateLink(
         matches.map((match) => match.routeId),
