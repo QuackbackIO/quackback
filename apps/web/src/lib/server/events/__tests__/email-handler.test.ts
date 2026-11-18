@@ -35,6 +35,13 @@ vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   emailBudgetAvailable: () => emailBudgetAvailable(),
 }))
 
+const { recordSkippedBroadcast } = vi.hoisted(() => ({
+  recordSkippedBroadcast: vi.fn(async (_eventId: string): Promise<boolean | null> => null),
+}))
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.broadcasts', () => ({
+  recordSkippedBroadcast: (eventId: string) => recordSkippedBroadcast(eventId),
+}))
+
 /**
  * The `email` child logger, observed: the real logger with only this handler's
  * warn and error spied, so the level a failed send is reported at is readable.
@@ -264,6 +271,34 @@ describe('emailHook', () => {
 
       expect(result).toEqual({ success: true })
       expect(mockChangelogPublishedEmail).not.toHaveBeenCalled()
+    })
+
+    it('records a skipped broadcast and warns once per broadcast, not per recipient', async () => {
+      emailLog.warn.mockClear()
+      recordSkippedBroadcast.mockReset()
+      recordSkippedBroadcast.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+      emailBudgetAvailable.mockResolvedValue(false)
+      const event = {
+        id: 'evt-broadcast-1',
+        type: 'changelog.published',
+        timestamp: new Date().toISOString(),
+        actor: { type: 'user', displayName: 'Test User' },
+      } as EventData
+      const config = { workspaceName: 'TestWorkspace', changelogTitle: 'May', changelogUrl: 'u' }
+
+      await emailHook.run(event, baseTarget, config)
+      await emailHook.run(event, baseTarget, config)
+
+      expect(recordSkippedBroadcast).toHaveBeenCalledTimes(2)
+      expect(recordSkippedBroadcast).toHaveBeenCalledWith('evt-broadcast-1')
+      const warned = emailLog.warn.mock.calls.filter(
+        ([fields]) => (fields as { broadcast_skipped?: boolean }).broadcast_skipped === true
+      )
+      expect(warned).toHaveLength(1)
+      expect(warned[0][0]).toMatchObject({
+        event_type: 'changelog.published',
+        event_id: 'evt-broadcast-1',
+      })
     })
 
     it('still sends feedback status mail when the broadcast budget is exhausted', async () => {

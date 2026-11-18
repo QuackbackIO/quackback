@@ -72,6 +72,11 @@ import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 import {
+  PlanLimitsEmail,
+  planLimitsTitle,
+  type PlanLimitsEmailProps,
+} from './templates/plan-limits'
+import {
   SendingDomainAttentionEmail,
   type SendingDomainAttentionProblem,
 } from './templates/sending-domain-attention'
@@ -1034,6 +1039,40 @@ export async function sendSendingDomainAttentionEmail(
     preview: { domain },
   })
 }
+
+// ============================================================================
+// Plan limits
+// ============================================================================
+
+interface SendPlanLimitsParams extends Omit<PlanLimitsEmailProps, 'logoUrl'> {
+  to: SecureRecipient
+  logoUrl?: string
+}
+
+/**
+ * To a person who manages billing, when the workspace is over its plan's
+ * limits: at the start of the grace, two days before it ends, and once the
+ * extras are paused. It is account mail, so it is not counted on the monthly
+ * email meter.
+ */
+export async function sendPlanLimitsEmail(params: SendPlanLimitsParams): Promise<EmailResult> {
+  const { to, ...props } = params
+  log.debug({ kind: props.kind }, 'sending plan limits email')
+  return sendEmail({
+    to,
+    subject: planLimitsTitle(props.kind, props.rows.length, props.graceEnds),
+    react: PlanLimitsEmail(props),
+    emailType: 'PlanLimitsEmail',
+    preview: { kind: props.kind },
+  })
+}
+
+export { PlanLimitsEmail, planLimitsTitle } from './templates/plan-limits'
+export type {
+  PlanLimitsEmailKind,
+  PlanLimitsEmailProps,
+  PlanLimitsEmailRow,
+} from './templates/plan-limits'
 
 // ============================================================================
 // Domain needs attention

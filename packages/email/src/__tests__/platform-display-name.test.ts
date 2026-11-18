@@ -244,6 +244,17 @@ const aboutQuackbackSenders: Record<string, Drive> = {
     email.sendOnboardingNudgeEmail({ to, workspaceName: w!, ...onboardingContent }),
   sendSendingDomainAttentionEmail: (w) =>
     email.sendSendingDomainAttentionEmail({ to, domain: 'acme.test', workspaceName: w }),
+  sendPlanLimitsEmail: (w) =>
+    email.sendPlanLimitsEmail({
+      to,
+      kind: 'start',
+      workspaceName: w,
+      graceEnds: '25 Nov 2026',
+      rows: [],
+      pausingFeatures: [],
+      limitsUrl: null,
+      planUrl: null,
+    }),
   sendDomainAttentionEmail: (w) =>
     email.sendDomainAttentionEmail({
       to,

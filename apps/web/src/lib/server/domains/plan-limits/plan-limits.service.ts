@@ -280,6 +280,15 @@ export async function evaluate(options: {
       // Another process wrote first: its state stands. Recompute from it.
       const fresh = parsePlanLimitsState(await readPlanLimitsStateFresh())
       result = computePlanLimits({ ...toInputs(snapshot), stored: fresh }, now)
+    } else if (
+      result.nextState &&
+      result.view.phase === 'grace' &&
+      result.nextState.since !== context.inputs.stored?.since
+    ) {
+      // This process stored a new grace (a reader that merely adopts the stored
+      // one does not get here): tell the billing managers now, not at the next slot.
+      const view = result.view
+      void import('./plan-limits.emails').then((m) => m.sendPlanLimitsEmailsQuietly(view))
     }
   }
   return { view: result.view, snapshot }

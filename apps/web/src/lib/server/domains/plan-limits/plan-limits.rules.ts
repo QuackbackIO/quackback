@@ -155,7 +155,16 @@ export interface PlanLimitsState {
   visibleStatusComponentIds?: string[]
   /** The admin's choice of sending domains that keep sending. */
   sendingDomainIds?: string[]
+  /**
+   * Which of the plan limits emails went out for this grace. The state is
+   * replaced by a new one when a new grace starts, so each email is sent at
+   * most once per grace.
+   */
+  emailsSent?: PlanLimitsEmailKind[]
 }
+
+export const PLAN_LIMITS_EMAIL_KINDS = ['start', 'reminder', 'enforced'] as const
+export type PlanLimitsEmailKind = (typeof PLAN_LIMITS_EMAIL_KINDS)[number]
 
 export interface PlanLimitsCandidates {
   boards?: readonly BoardCandidate[]
@@ -552,5 +561,9 @@ export function parsePlanLimitsState(value: unknown): PlanLimitsState | null {
   if (components) state.visibleStatusComponentIds = components
   const domains = stringList(raw.sendingDomainIds)
   if (domains) state.sendingDomainIds = domains
+  const sent = stringList(raw.emailsSent)?.filter((k): k is PlanLimitsEmailKind =>
+    (PLAN_LIMITS_EMAIL_KINDS as readonly string[]).includes(k)
+  )
+  if (sent && sent.length > 0) state.emailsSent = sent
   return state
 }

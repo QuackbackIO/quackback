@@ -175,7 +175,17 @@ async function deliverEmail(
     if (BROADCAST_EMAIL_EVENTS.has(event.type)) {
       const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
       if (!(await emailBudgetAvailable())) {
-        log.warn({ event_type: event.type }, 'email budget exhausted; broadcast skipped')
+        // With plan limits on, one line per broadcast (not per recipient) that
+        // the Plan limits page also counts; otherwise the line per delivery.
+        const { recordSkippedBroadcast } =
+          await import('@/lib/server/domains/plan-limits/plan-limits.broadcasts')
+        const firstForBroadcast = await recordSkippedBroadcast(event.id)
+        if (firstForBroadcast !== false) {
+          log.warn(
+            { event_type: event.type, event_id: event.id, broadcast_skipped: true },
+            'email budget exhausted; broadcast skipped'
+          )
+        }
         return { success: true }
       }
     }

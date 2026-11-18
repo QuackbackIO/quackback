@@ -14,7 +14,11 @@ import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { logger } from '@/lib/server/logger'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { TerminalJobError } from '@/lib/server/jobs/definitions'
-import { detectPlanLimitsQuietly } from '@/lib/server/domains/plan-limits/plan-limits.service'
+import {
+  detectPlanLimitsQuietly,
+  getPlanLimits,
+} from '@/lib/server/domains/plan-limits/plan-limits.service'
+import { sendPlanLimitsEmailsQuietly } from '@/lib/server/domains/plan-limits/plan-limits.emails'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import {
   enqueueUsageReport,
@@ -40,6 +44,15 @@ export function dateForUtcMonth(month: string): Date {
   return new Date(Date.UTC(year, mon - 1, 1))
 }
 
+/** The reminder and enforcement emails ride the same hourly slot as detection. */
+async function sendPlanLimitsEmailsForSlot(): Promise<void> {
+  try {
+    await sendPlanLimitsEmailsQuietly(await getPlanLimits())
+  } catch (err) {
+    log.warn({ err }, 'plan limits emails skipped')
+  }
+}
+
 export async function runUsageReport(job: ClaimedJob): Promise<void> {
   if (!isHostedBillingConfigured()) {
     log.debug('usage-report skipped: hosted billing is not configured')
@@ -55,6 +68,7 @@ export async function runUsageReport(job: ClaimedJob): Promise<void> {
     // limits detection, so a drop on the clock (a term lapsing) starts its
     // grace without anyone visiting. It never fails the slot.
     await detectPlanLimitsQuietly()
+    await sendPlanLimitsEmailsForSlot()
     await enqueueUsageReport({ month })
     return
   }
