@@ -15,6 +15,7 @@ import {
   CUSTOM_DOMAINS_ANCHOR,
   effectiveSectionDomains,
   normalizeHost,
+  notAnsweringNote,
   sectionDomainState,
   type SectionDomainMap,
 } from '@/lib/shared/section-domains'
@@ -38,14 +39,18 @@ export function SectionDomainCard({
 }) {
   const entry = map[section]
   const state = entry ? sectionDomainState(entry) : null
+  const note = entry ? notAnsweringNote(entry) : null
   // Label left, value right, as a detail row reads; kept plain, it sits on many pages.
   return (
     <SettingsCard>
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-sm">
-        <span className="flex items-center gap-2 font-medium">
-          Custom domain
-          {state === 'pending' && <StateBadge state="pending" />}
-          {state === 'not-answering' && <StateBadge state="attention" />}
+        <span className="flex flex-col gap-0.5">
+          <span className="flex items-center gap-2 font-medium">
+            Custom domain
+            {state === 'pending' && <StateBadge state="pending" />}
+            {state === 'not-answering' && <StateBadge state="attention" />}
+          </span>
+          {note && <span className="text-[13px] text-muted-foreground">{note}</span>}
         </span>
         <span className="flex items-center gap-3">
           <span className={entry ? undefined : 'text-muted-foreground'}>

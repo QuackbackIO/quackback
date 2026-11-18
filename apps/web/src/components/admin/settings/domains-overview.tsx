@@ -24,7 +24,7 @@ import type {
 import { PORTAL_SECTIONS, sectionOfHost, type SectionDomainMap } from '@/lib/shared/section-domains'
 import { sectionDomainState, type SectionDomainState } from '@/lib/shared/section-domains'
 
-export const EMPTY_DESCRIPTION = 'Use your own domain for email, web addresses and sign-in.'
+export const EMPTY_DESCRIPTION = 'Use your own domain for email, the portal and sign-in.'
 
 /** Each use's words: its chip on the list, its row title and what it is for on a domain's page. */
 export const USE_COPY: Record<DomainUse, { chip: string; title: string; description: string }> = {

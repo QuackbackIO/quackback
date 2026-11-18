@@ -11,7 +11,11 @@
 import { Fragment, lazy, Suspense, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
+import {
+  RowActions,
+  SettingsList,
+  SettingsListRow,
+} from '@/components/admin/settings/settings-list'
 import type { CheckResult } from '@/components/admin/settings/section-domain-record'
 import { StateBadge, type BadgeState } from '@/components/shared/state-badge'
 import { errorText } from '@/lib/client/error-text'
@@ -23,7 +27,11 @@ import {
   type PortalSection,
 } from '@/lib/shared/custom-domains'
 import { PORTAL_SECTIONS, type SectionDomainMap } from '@/lib/shared/section-domains'
-import { sectionDomainState, type SectionDomainState } from '@/lib/shared/section-domains'
+import {
+  notAnsweringNote,
+  sectionDomainState,
+  type SectionDomainState,
+} from '@/lib/shared/section-domains'
 import type { PortalNavConfig } from '@/lib/shared/types/settings'
 import {
   setSectionDomainFn,
@@ -156,13 +164,15 @@ export function SectionDomainsCard({
           trailing={
             <>
               <span className="truncate text-foreground">{primary}</span>
-              {!(cloud && canAdd) && MENU_SPACE}
+              {cloud && canAdd ? (
+                <RowActions
+                  label={usedForLabel('portal')}
+                  items={[{ label: 'Change', onSelect: () => setDialog({ initial: 'portal' }) }]}
+                />
+              ) : (
+                MENU_SPACE
+              )}
             </>
-          }
-          actions={
-            cloud && canAdd
-              ? [{ label: 'Change', onSelect: () => setDialog({ initial: 'portal' }) }]
-              : undefined
           }
         />
         {sections.map((section) => {
@@ -172,11 +182,25 @@ export function SectionDomainsCard({
           const badge = state ? STATE_BADGE[state] : null
           const off = !sectionEnabled[section]
           const showsRecord = !cloud && !!entry && state !== 'verified' && !!primary
+          // A domain that needs a check has Verify on its row too; a verified one has it in the menu.
+          const needsVerify = state === 'pending' || state === 'not-answering'
+          // The second line: only a state that needs action speaks, and it says the next step.
+          // Modules are turned on in Settings > General; named, not linked, as the page's JS budget is tight.
+          const note = !entry
+            ? undefined
+            : state === 'not-answering'
+              ? notAnsweringNote(entry)
+              : state === 'pending' && checks[section]?.verified === false
+                ? 'Not verified yet. DNS changes can take a while to show.'
+                : off
+                  ? `Turn ${label} on in Settings > General to use this domain.`
+                  : undefined
           return (
             <Fragment key={section}>
               <SettingsListRow
                 title={label}
-                meta={state === 'not-answering' ? 'Not answering' : undefined}
+                meta={note ?? undefined}
+                wrapMeta
                 badges={
                   badge || off ? (
                     <>
@@ -185,37 +209,51 @@ export function SectionDomainsCard({
                     </>
                   ) : undefined
                 }
+                // A row with its own domain carries its menu in the trailing
+                // controls, so on a phone they move under the text together.
+                stackTrailing={!!entry}
                 trailing={
                   <>
                     <span
                       className={cn(
-                        'truncate',
-                        entry ? 'text-foreground' : 'text-muted-foreground'
+                        'min-w-0 truncate',
+                        entry ? 'text-foreground max-sm:flex-1' : 'text-muted-foreground'
                       )}
                     >
                       {entry?.hostname ?? primary}
                     </span>
-                    {!entry && MENU_SPACE}
+                    {needsVerify && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void verify(section)}
+                        disabled={busy}
+                      >
+                        Verify
+                      </Button>
+                    )}
+                    {/* A section on the primary domain is quiet: Add custom domain sets it. */}
+                    {entry ? (
+                      <RowActions
+                        label={label}
+                        items={[
+                          { label: 'Verify', onSelect: () => void verify(section), disabled: busy },
+                          ...(canAdd
+                            ? [{ label: 'Change', onSelect: () => setDialog({ initial: section }) }]
+                            : []),
+                          {
+                            label: 'Remove',
+                            onSelect: () => setRemoving(section),
+                            destructive: true,
+                            disabled: busy,
+                          },
+                        ]}
+                      />
+                    ) : (
+                      MENU_SPACE
+                    )}
                   </>
                 }
-                // A section on the primary domain is quiet: Add custom domain sets it.
-                actions={
-                  entry
-                    ? [
-                        { label: 'Verify', onSelect: () => void verify(section), disabled: busy },
-                        ...(canAdd
-                          ? [{ label: 'Change', onSelect: () => setDialog({ initial: section }) }]
-                          : []),
-                        {
-                          label: 'Remove',
-                          onSelect: () => setRemoving(section),
-                          destructive: true,
-                          disabled: busy,
-                        },
-                      ]
-                    : undefined
-                }
-                actionsLabel={label}
               />
               {showsRecord && entry && (
                 <div data-slot="section-domain-records" className="px-4 pb-3 sm:px-6">
@@ -246,7 +284,11 @@ export function SectionDomainsCard({
             map={map}
             primaryHost={view.primaryHost}
             readyHostnames={readyHostnames}
-            onSaved={onChanged}
+            onSaved={() => {
+              // A changed hostname has not been checked yet: forget what the last Verify found.
+              setChecks({})
+              onChanged()
+            }}
             onClose={() => setDialog(null)}
             onMakePrimary={onMakePrimary}
             onAddDomain={onAddDomain}

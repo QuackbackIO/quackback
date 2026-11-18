@@ -40,6 +40,7 @@ import {
 } from '@/components/public/portal-header-nav'
 import type { PortalNavItemConfig } from '@/lib/shared/types/settings'
 import type { PortalSection } from '@/lib/shared/custom-domains'
+import { PORTAL_SECTIONS, type SectionDomainMap } from '@/lib/shared/section-domains'
 
 const TYPE_ICONS: Record<string, typeof ChatBubbleLeftIcon> = {
   feedback: ChatBubbleLeftIcon,
@@ -53,6 +54,19 @@ const TYPE_ICONS: Record<string, typeof ChatBubbleLeftIcon> = {
 
 export function isValidNavLinkUrl(url: string | undefined): boolean {
   return !!url && /^https?:\/\/\S+\.\S+/i.test(url)
+}
+
+/**
+ * The hostname each tab is served at, for the line under it: only a verified
+ * one, as routing sends visitors only there. A pending domain serves nothing yet.
+ */
+export function servedSectionHosts(map: SectionDomainMap): Partial<Record<PortalSection, string>> {
+  const hosts: Partial<Record<PortalSection, string>> = {}
+  for (const section of PORTAL_SECTIONS) {
+    const entry = map[section]
+    if (entry?.verifiedAt) hosts[section] = entry.hostname
+  }
+  return hosts
 }
 
 interface PortalNavEditorProps {
@@ -266,7 +280,8 @@ function NavRow({
       {host && (
         <p
           data-slot="nav-row-domain"
-          className="mt-0.5 truncate ps-[3.25rem] text-xs text-muted-foreground"
+          // Lined up with the label's text: grip, icon and the input's own padding.
+          className="mt-0.5 truncate ps-[3.8125rem] text-xs text-muted-foreground"
         >
           {host}
         </p>

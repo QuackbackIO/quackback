@@ -65,11 +65,14 @@ export interface SectionDomainDialogProps {
 }
 
 export function SectionDomainDialog(props: SectionDomainDialogProps) {
+  // Opened from a row's Change: that row already has a domain.
+  const changing =
+    props.initial === 'portal' || (props.initial !== null && !!props.map[props.initial])
   return (
     <Dialog open={props.open} onOpenChange={(open) => !open && props.onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add custom domain</DialogTitle>
+          <DialogTitle>{changing ? 'Change custom domain' : 'Add custom domain'}</DialogTitle>
         </DialogHeader>
         {props.open && <SectionDomainForm key={props.initial ?? ''} {...props} />}
       </DialogContent>
@@ -192,7 +195,8 @@ function SectionDomainForm({
               onChange={(next) => choose(next as CustomDomainUsedFor)}
               options={tiles}
               disabled={saving}
-              className="grid-cols-2 sm:grid-cols-3"
+              // Two across at most, so a tile has room for the hostname it names.
+              className="grid-cols-1 sm:grid-cols-2"
             />
           </div>
         </div>
@@ -259,7 +263,7 @@ function SectionDomainForm({
               <Input
                 id="section-domain-hostname"
                 value={typed}
-                placeholder={`${DEFAULT_PREFIX[usedFor]}.acme.com`}
+                placeholder={`${DEFAULT_PREFIX[usedFor]}.example.com`}
                 onChange={(e) => {
                   setTyped(e.target.value)
                   setError(null)

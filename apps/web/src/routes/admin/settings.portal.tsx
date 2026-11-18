@@ -34,6 +34,7 @@ import { AdvancedCssPanel } from '@/components/admin/settings/branding/advanced-
 import {
   PortalNavEditor,
   isValidNavLinkUrl,
+  servedSectionHosts,
 } from '@/components/admin/settings/branding/portal-nav-editor'
 import {
   seedNavEditorItems,
@@ -61,8 +62,7 @@ import {
 import { DEFAULT_PORTAL_CONFIG, isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
-import { effectiveSectionDomains, PORTAL_SECTIONS } from '@/lib/shared/section-domains'
-import type { PortalSection } from '@/lib/shared/custom-domains'
+import { effectiveSectionDomains } from '@/lib/shared/section-domains'
 import type {
   PortalConfig,
   PortalNavItemConfig,
@@ -241,18 +241,16 @@ function PortalPage() {
   }, [settings, session])
 
   // A tab served at its own domain shows it under the tab; the domain is set on Settings > Domains.
-  const sectionHosts = useMemo(() => {
-    const map = effectiveSectionDomains({
-      sectionDomains: settings?.portalConfig?.sectionDomains,
-      legacyHelpDomain: settings?.helpCenterConfig?.domain,
-    })
-    const hosts: Partial<Record<PortalSection, string>> = {}
-    for (const section of PORTAL_SECTIONS) {
-      const hostname = map[section]?.hostname
-      if (hostname) hosts[section] = hostname
-    }
-    return hosts
-  }, [settings])
+  const sectionHosts = useMemo(
+    () =>
+      servedSectionHosts(
+        effectiveSectionDomains({
+          sectionDomains: settings?.portalConfig?.sectionDomains,
+          legacyHelpDomain: settings?.helpCenterConfig?.domain,
+        })
+      ),
+    [settings]
+  )
 
   const resetNavItems = useCallback(() => setNavItems(seedNavEditorItems(null)), [])
 

@@ -157,6 +157,17 @@ describe('Add custom domain', () => {
     })
     expect(within(dialog).getByRole('radio', { name: /^Help center/ })).toBeChecked()
     expect(within(dialog).getByLabelText('Domain')).toHaveValue('help.acme.com')
+    // Opened from a row that has a domain: it is a change, not an addition.
+    expect(within(dialog).getByRole('heading', { name: 'Change custom domain' })).toBeVisible()
+  })
+
+  it('suggests a sample hostname for the section chosen, with no brand in it', () => {
+    const dialog = renderDialog()
+    choose(dialog, 'Status')
+    expect(within(dialog).getByLabelText('Domain')).toHaveAttribute(
+      'placeholder',
+      'status.example.com'
+    )
   })
 
   it('on Cloud, offers only ready custom domains no other section uses', async () => {

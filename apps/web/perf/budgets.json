@@ -483,7 +483,7 @@
     },
     "sweep:doc:admin:/admin/settings/channels": {
       "dbQueries": 8,
-      "htmlKB": 75.6
+      "htmlKB": 76.6
     },
     "sweep:ui:admin:/admin/settings/channels": {
       "dbQueries": 8,
