@@ -254,6 +254,32 @@ describe.skipIf(!fixture.available)('rowInScope agrees with the SQL filters (rea
     }
   })
 
+  it('a scoped teammate holds an unassigned conversation with no team, never such a ticket', async () => {
+    const world = await seedWorld()
+    const nobody = { assigneePrincipalId: null, teamId: null }
+    for (const principalId of [world.agentA, world.agentB]) {
+      const actor = buildActor({
+        principalId,
+        permissions: new Set([PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW]),
+      })
+      const teamIds = await teamIdsForPrincipal(principalId)
+      expect(rowInScope(actor, 'conversation', nobody, teamIds)).toBe(true)
+      expect(rowInScope(actor, 'ticket', nobody, teamIds)).toBe(false)
+      const [conversationRow] = await testDb
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(
+          and(eq(conversations.id, world.conversationIds.unassigned), conversationFilter(actor))
+        )
+      expect(conversationRow?.id).toBe(world.conversationIds.unassigned)
+      const [ticketRow] = await testDb
+        .select({ id: tickets.id })
+        .from(tickets)
+        .where(and(eq(tickets.id, world.ticketIds.unassigned), ticketFilter(actor)))
+      expect(ticketRow).toBeUndefined()
+    }
+  })
+
   it('rowInScope keeps a deleted ticket in the scope of the teammate who holds it', async () => {
     const world = await seedWorld()
     const actor = buildActor({

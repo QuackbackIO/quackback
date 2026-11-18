@@ -48,7 +48,8 @@ const KEYS: Record<ScopedResource, { view: PermissionKey; viewAll: PermissionKey
  * Whether `actor`'s scope holds an item with this owner and team. Branches, in
  * order: an unscoped service sees everything; the `view_all` key sees
  * everything; the `view` key sees items assigned to the actor or to one of
- * their teams; anything else sees nothing.
+ * their teams, and a conversation (never a ticket) with no assignee and no
+ * team, the Unassigned queue; anything else sees nothing.
  */
 export function rowInScope(
   actor: Actor,
@@ -62,5 +63,6 @@ export function rowInScope(
   const principalId = rowScopePrincipalId(actor)
   if (!can(actor, keys.view) || principalId === null) return false
   if (row.assigneePrincipalId !== null && row.assigneePrincipalId === principalId) return true
-  return row.teamId !== null && actorTeamIds.has(row.teamId)
+  if (row.teamId !== null) return actorTeamIds.has(row.teamId)
+  return resource === 'conversation' && row.assigneePrincipalId === null
 }

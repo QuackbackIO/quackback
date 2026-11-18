@@ -841,7 +841,19 @@ export async function sendAgentMessage(
   // strips them from the visitor's copy.
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
 
-  await publishConversationUpdate(conversationDTO.id, conversationDTO)
+  // A reply that claims an unassigned conversation takes it out of the
+  // Unassigned queue, so the update names it as it was: every other scoped
+  // teammate who held it gets its removal.
+  const claimed =
+    txResult.previousAgentPrincipalId == null &&
+    txResult.conversation.assignedAgentPrincipalId != null
+  await publishConversationUpdate(
+    conversationDTO.id,
+    conversationDTO,
+    claimed
+      ? conversationScopeOf({ ...txResult.conversation, assignedAgentPrincipalId: null })
+      : undefined
+  )
   publishConversationMessage(
     txResult.conversation.id,
     { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
@@ -1536,13 +1548,16 @@ export async function routeUnassignedConversation(
 }
 
 /**
- * `prev` is set by a caller that cleared the assignee just before routing (the
- * offline requeue): the published update then carries it, so the teammate who
- * lost the conversation gets its removal from their inbox stream.
+ * The published update names the conversation's owner and team before the
+ * claim, so every inbox that held it and no longer does gets its removal. By
+ * default that is the row as passed, still unassigned (the Unassigned queue a
+ * scoped teammate sees). A caller that cleared the assignee just before
+ * routing (the offline requeue) passes the owner it cleared instead, so the
+ * teammate who lost the conversation gets the removal.
  */
 async function assignRoutedConversation(
   conversation: Conversation,
-  prev?: ScopedRow
+  prev: ScopedRow = conversationScopeOf(conversation)
 ): Promise<PrincipalId | null> {
   // Test threads belong to the teammate trying them out; they never take a
   // colleague's routing slot.

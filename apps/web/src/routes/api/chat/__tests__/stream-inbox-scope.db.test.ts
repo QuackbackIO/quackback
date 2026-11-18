@@ -3,9 +3,9 @@
  *
  * Real here: the stream route and its scope cache, every publisher in
  * conversation-channels with its by-id scope read, the writers that move an
- * item (assign, team assign, offline requeue, ticket assign) and the writers
- * that change a scope (team membership, role), all against seeded rows in the
- * rollback transaction. Stood in for: the NOTIFY transport, by an in-process
+ * item (assign, team assign, a reply that claims, routing, offline requeue,
+ * ticket assign) and the writers that change a scope (team membership, role),
+ * all against seeded rows in the rollback transaction. Stood in for: the NOTIFY transport, by an in-process
  * loopback that keeps the production contract (the handler gets the channel,
  * the payload as a JSON string, and the scope envelope beside it); a NOTIFY is
  * only delivered at commit, and the fixture never commits. pubsub.db.test.ts
@@ -186,6 +186,8 @@ import {
   assignTeam,
   deleteConversationPermanently,
   requeueUnansweredOnAgentOffline,
+  routeUnassignedConversation,
+  sendAgentMessage,
 } from '@/lib/server/domains/conversation/conversation.service'
 import { sweepFiledSpamConversations } from '@/lib/server/domains/conversation/conversation.spam-retention'
 import {
@@ -525,12 +527,20 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
       .where(eq(conversations.id, w.conv.y))
     await requeueUnansweredOnAgentOffline(w.scoped)
     await settle()
+    // Nobody took it, so it waits in the Unassigned queue, which the teammate
+    // still sees: the update reaches them and no second removal is sent.
     expect(
       scoped
         .frames()
         .filter((f) => f.event === 'inbox_item_removed')
         .map((f) => f.data.id)
-    ).toEqual([w.conv.y, w.conv.y])
+    ).toEqual([w.conv.y])
+    expect(
+      scoped
+        .frames()
+        .filter((f) => f.event === 'conversation')
+        .map(itemIdOf)
+    ).toEqual([w.conv.y])
   })
 
   it('removes a requeued conversation from the offline agent when routing gives it to someone else', async () => {
@@ -558,6 +568,102 @@ describe.skipIf(!fixture.available)('the realtime inbox follows scope (real Post
             ?.principalId
       )
     ).toContain(w.other)
+  })
+
+  describe('the Unassigned queue: no assignee and no team', () => {
+    /** A conversation and a ticket with no assignee and no team. */
+    async function seedUnassigned(w: Awaited<ReturnType<typeof seedWorld>>) {
+      const conversationId = createId('conversation') as ConversationId
+      await testDb
+        .insert(conversations)
+        .values({ id: conversationId, visitorPrincipalId: w.visitor, channel: 'messenger' })
+      const [status] = await testDb.select({ id: ticketStatuses.id }).from(ticketStatuses).limit(1)
+      const ticketId = createId('ticket') as TicketId
+      await testDb.insert(tickets).values({ id: ticketId, title: 'u', statusId: status.id })
+      return { conversationId, ticketId }
+    }
+
+    const removalsOf = (inbox: Awaited<ReturnType<typeof openInbox>>) =>
+      inbox
+        .frames()
+        .filter((f) => f.event === 'inbox_item_removed')
+        .map((f) => f.data.id)
+
+    it("a scoped teammate receives an unassigned conversation's frames, never an unassigned ticket's", async () => {
+      const w = await seedWorld()
+      const u = await seedUnassigned(w)
+      const scoped = await openInbox(w.scoped)
+      const [row] = await testDb
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, u.conversationId))
+      await publishConversationUpdate(u.conversationId, await conversationToDTO(row, 'agent'))
+      publishAgentConversationEvent({
+        kind: 'message',
+        conversationId: u.conversationId,
+        message: {
+          id: `conversation_msg_${suffix()}`,
+          conversationId: u.conversationId,
+          attachments: [],
+        } as never,
+      })
+      await settle()
+      await until(() => scoped.frames().filter((f) => f.event !== 'inbox_item_removed').length >= 2)
+      expect(scoped.frames().map(itemIdOf)).toEqual([u.conversationId, u.conversationId])
+      expect(await ticketReadReaches(scoped, u.ticketId, 'unassigned')).toBe(false)
+    })
+
+    it('removes it when it is assigned to another team', async () => {
+      const w = await seedWorld()
+      const u = await seedUnassigned(w)
+      const scoped = await openInbox(w.scoped)
+      await assignTeam(u.conversationId, w.teamY, w.adminActor)
+      await settle()
+      expect(removalsOf(scoped)).toEqual([u.conversationId])
+    })
+
+    it('removes it when it is assigned to another person with no team', async () => {
+      const w = await seedWorld()
+      const u = await seedUnassigned(w)
+      const scoped = await openInbox(w.scoped)
+      await assignConversation(u.conversationId, w.other, w.adminActor)
+      await settle()
+      expect(removalsOf(scoped)).toEqual([u.conversationId])
+    })
+
+    it("removes it when another teammate's reply claims it", async () => {
+      const w = await seedWorld()
+      const u = await seedUnassigned(w)
+      const scoped = await openInbox(w.scoped)
+      const otherActor: Actor = { ...w.adminActor, principalId: w.other }
+      await sendAgentMessage(
+        u.conversationId,
+        'On it',
+        { principalId: w.other, displayName: 'Other' },
+        otherActor
+      )
+      await settle()
+      const [after] = await testDb
+        .select({ assignee: conversations.assignedAgentPrincipalId })
+        .from(conversations)
+        .where(eq(conversations.id, u.conversationId))
+      expect(after.assignee).toBe(w.other)
+      expect(removalsOf(scoped)).toEqual([u.conversationId])
+    })
+
+    it('removes it when routing gives it to someone else', async () => {
+      const w = await seedWorld()
+      const u = await seedUnassigned(w)
+      const scoped = await openInbox(w.scoped)
+      const [row] = await testDb
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, u.conversationId))
+      routing.to = w.other
+      expect(await routeUnassignedConversation(row)).toBe(w.other)
+      await settle()
+      expect(removalsOf(scoped)).toEqual([u.conversationId])
+    })
   })
 
   it('refreshes the cached scope at once when the teammate joins a team', async () => {
