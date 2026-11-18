@@ -35,6 +35,11 @@ const log = logger.child({ component: 'plan-limits-emails' })
 
 const REMINDER_LEAD_MS = 2 * 24 * 60 * 60 * 1000
 
+/** "1 status component is", "3 status components are": a count, its noun and the verb. */
+function plural(n: number, noun: string): string {
+  return n === 1 ? `1 ${noun} is` : `${n} ${noun}s are`
+}
+
 /** How each cap reads in the email: its name and what happens to the excess. */
 const ISSUE_COPY: Record<PlanLimitIssueKey, { label: string; effect: (n: number) => string }> = {
   maxBoards: {
@@ -48,11 +53,17 @@ const ISSUE_COPY: Record<PlanLimitIssueKey, { label: string; effect: (n: number)
   },
   maxStatusComponents: {
     label: 'Status components',
-    effect: (n) => `${n} hidden from your status page`,
+    effect: (n) => `${plural(n, 'status component')} hidden from your status page`,
   },
-  maxCustomRoles: { label: 'Custom roles', effect: (n) => `${n} locked` },
-  maxSendingDomains: { label: 'Sending domains', effect: (n) => `${n} paused` },
-  maxHelpCenterLocales: { label: 'Help center languages', effect: (n) => `${n} locked` },
+  maxCustomRoles: { label: 'Custom roles', effect: (n) => `${plural(n, 'custom role')} locked` },
+  maxSendingDomains: {
+    label: 'Sending domains',
+    effect: (n) => `${plural(n, 'sending domain')} paused`,
+  },
+  maxHelpCenterLocales: {
+    label: 'Help center languages',
+    effect: (n) => `${plural(n, 'help center language')} locked`,
+  },
 }
 
 /**

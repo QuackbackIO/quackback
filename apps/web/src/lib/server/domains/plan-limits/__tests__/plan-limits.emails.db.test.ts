@@ -82,7 +82,12 @@ import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-li
 import { detectPlanLimits, getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
 import { setKeptBoard } from '../plan-limits.choosers'
 import { readPlanLimitsSources } from '@/lib/server/domains/settings/settings.plan-limits'
-import { claimPlanLimitsEmail, deadlineText, sendPlanLimitsEmails } from '../plan-limits.emails'
+import {
+  claimPlanLimitsEmail,
+  deadlineText,
+  emailRows,
+  sendPlanLimitsEmails,
+} from '../plan-limits.emails'
 import { recordSkippedBroadcast, skippedBroadcastCount } from '../plan-limits.broadcasts'
 import { planLimitsPage } from '../plan-limits.page'
 
@@ -470,6 +475,25 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
     expect(await sendPlanLimitsEmails(view)).toBeNull()
     expect(lookups.resolve).not.toHaveBeenCalled()
     expect(lookups.managers).not.toHaveBeenCalled()
+  })
+})
+
+describe('email rows', () => {
+  const rows = (key: string, used: number, cap: number) =>
+    emailRows({ issues: [{ key, used, cap }] } as never)[0]!.effect
+
+  it('reads every cap as a full sentence, singular and plural', () => {
+    expect(rows('maxStatusComponents', 4, 3)).toBe(
+      '1 status component is hidden from your status page'
+    )
+    expect(rows('maxStatusComponents', 6, 3)).toBe(
+      '3 status components are hidden from your status page'
+    )
+    expect(rows('maxCustomRoles', 2, 1)).toBe('1 custom role is locked')
+    expect(rows('maxSendingDomains', 3, 1)).toBe('2 sending domains are paused')
+    expect(rows('maxHelpCenterLocales', 2, 1)).toBe('1 help center language is locked')
+    expect(rows('maxBoards', 5, 1)).toBe('4 boards become read-only')
+    expect(rows('maxTeamSeats', 2, 1)).toBe('1 teammate loses admin access until a seat frees up')
   })
 })
 
