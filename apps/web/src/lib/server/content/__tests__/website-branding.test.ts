@@ -191,15 +191,35 @@ describe('website branding through real safe-fetch and magic-byte seams', () => 
     })
   })
 
-  it('offers a social banner as weak when no icon can be fetched', async () => {
-    page('<link rel="icon" href="/missing.png"><meta property="og:image" content="/banner.png">')
-    const banner = pngOf(1200, 630)
-    image('/banner.png', banner)
+  it('offers a square social image as weak when no icon can be fetched', async () => {
+    page('<link rel="icon" href="/missing.png"><meta property="og:image" content="/square.png">')
+    const square = pngOf(600, 600)
+    image('/square.png', square)
     expect(await fetchWebsiteBranding('example.com')).toMatchObject({
-      logoKey: keyFor(banner, 'png'),
+      logoKey: keyFor(square, 'png'),
       quality: 'weak',
     })
     expect(fixture.uploads).toHaveLength(1)
+  })
+
+  // The logo doubles as the tab icon and the square avatar, where a banner
+  // shrinks to an unreadable strip.
+  it('offers nothing rather than a wide social banner', async () => {
+    page('<link rel="icon" href="/missing.png"><meta property="og:image" content="/banner.png">')
+    image('/banner.png', pngOf(1200, 630))
+    expect(await fetchWebsiteBranding('example.com')).toBeNull()
+    expect(fixture.uploads).toHaveLength(0)
+  })
+
+  it('skips a wide icon and keeps looking for a square one', async () => {
+    page('<link rel="icon" href="/wordmark.png" sizes="192x192" type="image/png">')
+    image('/wordmark.png', pngOf(400, 100))
+    image('/apple-touch-icon.png')
+    expect(await fetchWebsiteBranding('example.com')).toMatchObject({
+      logoKey: keyFor(LOGO, 'png'),
+      quality: 'good',
+    })
+    expect(fixture.uploads.map((upload) => upload.buffer)).toEqual([LOGO])
   })
 
   it('keeps looking past a weak icon and uploads only the later good one', async () => {
