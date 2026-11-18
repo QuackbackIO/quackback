@@ -15,10 +15,11 @@ export default defineConfig({
   /* Fail the build on CI if you accidentally left test.only in the source code */
   forbidOnly: !!process.env.CI,
 
-  /* Retry on CI only */
+  /* Retry on CI only (the nightly e2e-full job passes --retries=1) */
   retries: process.env.CI ? 2 : 0,
 
-  /* Use 1 worker per shard in CI (sharding provides parallelism, 1 worker reduces flakiness) */
+  /* Use 1 worker per shard in CI (the e2e-full shard matrix provides the
+     parallelism; 1 worker keeps specs that change workspace settings apart) */
   workers: process.env.CI ? 1 : undefined,
 
   /* Reporter to use - blob for CI (enables sharding/merging), html for local */
@@ -73,6 +74,10 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         /* No stored auth state - tests manage their own auth */
       },
+      /* (1b) in unified-login opens a context with the admin session that
+         setup saves. A shard that holds no admin tests would otherwise read a
+         missing or stale e2e/.auth/admin.json. */
+      dependencies: ['setup'],
       testMatch: /tests\/auth\/.+\.spec\.ts/,
     },
 
