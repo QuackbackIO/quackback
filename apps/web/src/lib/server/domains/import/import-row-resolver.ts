@@ -127,6 +127,8 @@ export interface RowContext {
   boardMap: Map<string, { id: BoardId; slug: string }>
   /** Lowercase board name -> slug. */
   boardNames: Map<string, string>
+  /** Boards an admin has set read-only. */
+  readOnlyBoardIds: Set<string>
 }
 
 export async function loadRowContext(): Promise<RowContext> {
@@ -154,6 +156,10 @@ export async function loadRowContext(): Promise<RowContext> {
   )
   const boardNames = new Map(existingBoards.map((b) => [b.name.toLowerCase(), b.slug]))
 
+  const readOnlyBoardIds = new Set<string>(
+    existingBoards.filter((b) => b.readOnly).map((b) => b.id)
+  )
+
   return {
     defaultStatusId: (defaultStatus?.id ?? null) as PostStatusId | null,
     statusMap,
@@ -162,6 +168,7 @@ export async function loadRowContext(): Promise<RowContext> {
     tagMap,
     boardMap,
     boardNames,
+    readOnlyBoardIds,
   }
 }
 

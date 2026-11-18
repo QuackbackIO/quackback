@@ -49,7 +49,7 @@ export async function changeBoard(
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${newBoardId} not found`)
   }
   // Posts move out of a read-only board, never into one.
-  await assertBoardOpen(newBoardId)
+  await assertBoardOpen(newBoardId, newBoard.readOnly ?? false)
 
   const [updatedPost] = await db
     .update(posts)

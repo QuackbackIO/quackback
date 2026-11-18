@@ -11,12 +11,13 @@
  * Like the other runtime helpers it fails open: with the flag off, or when the
  * plan limits cannot be read, every board is open.
  */
-import { db, and, eq, isNull, posts, sql } from '@/lib/server/db'
+import { db, and, boards, eq, isNull, posts, sql } from '@/lib/server/db'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { BOARD_READ_ONLY_MESSAGE } from '@/lib/shared/board-read-only'
 import type { BoardId, PostId } from '@quackback/ids'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+import { PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { loadUsageCounts } from '@/lib/server/domains/billing/usage-counts'
 import { getPlanLimits, openBoardIds } from './plan-limits.service'
@@ -30,35 +31,72 @@ export class BoardReadOnlyError extends ForbiddenError {
   }
 }
 
-/** Refuses a write to a board that is read-only now. */
-export async function assertBoardOpen(boardId: BoardId): Promise<void> {
-  const open = await openBoardIds()
-  if (open !== null && !open.includes(boardId)) throw new BoardReadOnlyError()
+export type BoardClosedReason = 'manual' | 'plan'
+
+/** Whether an admin has set the board read-only (a column on the board). */
+async function isManuallyReadOnly(boardId: BoardId): Promise<boolean> {
+  const [row] = await db
+    .select({ readOnly: boards.readOnly })
+    .from(boards)
+    .where(eq(boards.id, boardId))
+    .limit(1)
+  return row?.readOnly ?? false
 }
 
-/** The board that decides a post: a merged post counts on its canonical post's board. */
-async function deciderBoardId(postId: PostId): Promise<BoardId | null> {
-  const [row] = await db
-    .select({ boardId: posts.boardId, canonicalPostId: posts.canonicalPostId })
-    .from(posts)
-    .where(and(eq(posts.id, postId), isNull(posts.deletedAt)))
-    .limit(1)
+/**
+ * Why a board takes no new posts, votes or comments, or null when it does. An
+ * admin's setting counts on every plan; the plan reason applies only to a board
+ * over the plan's board limit that is not kept open. Pass `readOnly` when the
+ * board row is already loaded to skip a read.
+ */
+export async function boardClosedReason(
+  boardId: BoardId,
+  readOnly?: boolean
+): Promise<BoardClosedReason | null> {
+  if (readOnly ?? (await isManuallyReadOnly(boardId))) return 'manual'
+  const open = await openBoardIds()
+  return open !== null && !open.includes(boardId) ? 'plan' : null
+}
+
+/**
+ * Whether a board takes new feedback, for callers that already hold its row's
+ * `readOnly` column (so no board read is needed with the plan limits off).
+ */
+export async function isBoardOpenFor(boardId: BoardId, readOnly: boolean): Promise<boolean> {
+  return (await boardClosedReason(boardId, readOnly)) === null
+}
+
+/** Refuses a write to a board that is read-only now, for either reason. */
+export async function assertBoardOpen(boardId: BoardId, readOnly?: boolean): Promise<void> {
+  if (await boardClosedReason(boardId, readOnly)) throw new BoardReadOnlyError()
+}
+
+/** The board that decides a post (a merged post counts on its canonical post's board). */
+async function deciderBoard(postId: PostId): Promise<{ id: BoardId; readOnly: boolean } | null> {
+  const board = (id: PostId) =>
+    db
+      .select({
+        postBoardId: posts.boardId,
+        canonicalPostId: posts.canonicalPostId,
+        readOnly: boards.readOnly,
+      })
+      .from(posts)
+      .innerJoin(boards, eq(boards.id, posts.boardId))
+      .where(and(eq(posts.id, id), isNull(posts.deletedAt)))
+      .limit(1)
+  const [row] = await board(postId)
   if (!row) return null
-  if (!row.canonicalPostId) return row.boardId
-  const [canonical] = await db
-    .select({ boardId: posts.boardId })
-    .from(posts)
-    .where(eq(posts.id, row.canonicalPostId))
-    .limit(1)
-  return canonical?.boardId ?? row.boardId
+  if (!row.canonicalPostId) return { id: row.postBoardId, readOnly: row.readOnly }
+  const [canonical] = await board(row.canonicalPostId)
+  return canonical
+    ? { id: canonical.postBoardId, readOnly: canonical.readOnly }
+    : { id: row.postBoardId, readOnly: row.readOnly }
 }
 
 /** False when the post's board is read-only now. A missing post is left to the caller. */
 export async function isPostBoardOpen(postId: PostId): Promise<boolean> {
-  const open = await openBoardIds()
-  if (open === null) return true
-  const boardId = await deciderBoardId(postId)
-  return boardId === null || open.includes(boardId)
+  const decider = await deciderBoard(postId)
+  return decider === null || (await boardClosedReason(decider.id, decider.readOnly)) === null
 }
 
 /** Refuses a vote on a post whose board is read-only. */
@@ -82,18 +120,16 @@ async function postsCapReached(): Promise<boolean> {
 }
 
 /**
- * What the portal and widget need to draw read-only boards: the boards that
- * stay open (null when all do) and whether new posts are stopped at the posts
- * cap. It names no plan, so it is safe to send to a visitor.
+ * What the portal and widget need to draw read-only boards: the boards the plan
+ * keeps open (null when it keeps all) and whether new posts are stopped at the
+ * posts cap, read only when asked. It names no plan, so it is safe to send to a
+ * visitor.
  */
 export async function readOnlyBoardState(): Promise<{
   open: string[] | null
-  postsPaused: boolean
+  postsPaused: () => Promise<boolean>
 }> {
-  const open = await openBoardIds()
-  if (open === null) return { open: null, postsPaused: false }
-  const postsPaused = await postsCapReached()
-  return { open, postsPaused }
+  return { open: await openBoardIds(), postsPaused: postsCapReached }
 }
 
 /**
@@ -121,21 +157,38 @@ async function limitsEnabled(): Promise<boolean> {
 }
 
 /**
- * How many more posts and boards an import may add under the plan's caps. Null
- * means no limit: the flag is off, the cap is unlimited, or the counts cannot
- * be read. Imports stop at the caps the same way a single post does.
+ * How many more posts and boards an import may add under the plan's caps, with
+ * the refusal each cap gives. A null room means no limit: the flag is off, the
+ * cap is unlimited, or the counts cannot be read. Imports stop at the caps the
+ * same way a single post does.
  */
-export async function importRoom(): Promise<{ posts: number | null; boards: number | null }> {
+export interface ImportRoom {
+  posts: number | null
+  boards: number | null
+  postsRefusal: string
+  boardsRefusal: string
+}
+
+export async function importRoom(): Promise<ImportRoom> {
+  const none: ImportRoom = { posts: null, boards: null, postsRefusal: '', boardsRefusal: '' }
   try {
-    if (!(await getPlanLimits()).enabled) return { posts: null, boards: null }
+    const limits = await getPlanLimits()
+    if (!limits.enabled) return none
     const [tier, used] = await Promise.all([getTierLimits(), loadUsageCounts()])
     const room = (cap: number | null, count: number) =>
       cap === null ? null : Math.max(0, cap - count)
+    const plan = limits.plan
+      ? `the ${PLAN_CATALOGUE[limits.plan].name} plan`
+      : "the workspace's plan"
+    const refusal = (cap: number | null, noun: string) =>
+      `Not imported: ${plan} allows ${cap} ${noun}.`
     return {
       posts: room(tier.maxPosts, used.maxPosts ?? 0),
       boards: room(tier.maxBoards, used.maxBoards ?? 0),
+      postsRefusal: refusal(tier.maxPosts, 'posts'),
+      boardsRefusal: refusal(tier.maxBoards, 'boards'),
     }
   } catch {
-    return { posts: null, boards: null }
+    return none
   }
 }

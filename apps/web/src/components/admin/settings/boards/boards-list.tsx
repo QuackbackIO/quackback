@@ -11,6 +11,10 @@ interface BoardRow {
   description: string | null
   access: BoardAccess
   postCount: number
+  /** Set by an admin. */
+  readOnly?: boolean
+  /** Kept read-only by the plan's board limit. */
+  planReadOnly?: string
 }
 
 function usesSegments(access: BoardAccess): boolean {
@@ -41,30 +45,38 @@ function postCountLabel(count: number): string {
   return count === 1 ? '1 post' : `${count} posts`
 }
 
-/** Open or Read-only, shown only while some boards are read-only. */
-function BoardOpenBadge({ open }: { open: boolean }) {
-  return open ? (
-    <Badge size="sm" variant="success">
-      Open
-    </Badge>
-  ) : (
+/**
+ * Open or Read-only. "Read-only" is an admin's own setting; "Read-only on your
+ * plan" is the plan's board limit, which wins the wording when both apply.
+ */
+function BoardOpenBadge({
+  readOnly,
+  planReadOnly,
+}: {
+  readOnly: boolean
+  planReadOnly: string | undefined
+}) {
+  if (!readOnly && planReadOnly === undefined) {
+    return (
+      <Badge size="sm" variant="success">
+        Open
+      </Badge>
+    )
+  }
+  return (
     <Badge size="sm" variant="secondary">
-      Read-only
+      {planReadOnly === undefined
+        ? 'Read-only'
+        : planReadOnly
+          ? `Read-only on the ${planReadOnly} plan`
+          : 'Read-only by plan limit'}
     </Badge>
   )
 }
 
-/**
- * `openBoardIds` lists the boards that take posts, votes and comments; null
- * means every board does, and no status label is shown.
- */
-export function BoardsList({
-  boards,
-  openBoardIds = null,
-}: {
-  boards: BoardRow[]
-  openBoardIds?: string[] | null
-}) {
+/** Open and read-only labels show only while some board is read-only. */
+export function BoardsList({ boards }: { boards: BoardRow[] }) {
+  const anyReadOnly = boards.some((board) => board.readOnly || board.planReadOnly !== undefined)
   return (
     <SettingsList>
       {boards.map((board) => (
@@ -77,7 +89,9 @@ export function BoardsList({
           badges={
             <>
               <BoardAccessBadge access={board.access} />
-              {openBoardIds !== null && <BoardOpenBadge open={openBoardIds.includes(board.id)} />}
+              {anyReadOnly && (
+                <BoardOpenBadge readOnly={!!board.readOnly} planReadOnly={board.planReadOnly} />
+              )}
             </>
           }
           meta={

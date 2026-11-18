@@ -10,6 +10,8 @@ export interface BoardCandidate {
   id: string
   postCount: number
   createdAt: string
+  /** Set read-only by an admin, so it takes no feedback whichever board stays open. */
+  readOnly?: boolean
 }
 
 export interface MemberCandidate {
@@ -51,14 +53,23 @@ const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id)
 const byCreated = (a: { createdAt: string }, b: { createdAt: string }) =>
   Date.parse(a.createdAt) - Date.parse(b.createdAt)
 
-/** Boards that stay open: the chosen one, then most posts, then oldest. */
+/**
+ * Boards that stay open: the chosen one, then boards an admin has not set
+ * read-only, then most posts, then oldest.
+ */
 export function openBoardOrder(
   boards: readonly BoardCandidate[],
   cap: number,
   keptBoardId?: string
 ): string[] {
   const ordered = [...boards]
-    .sort((a, b) => b.postCount - a.postCount || byCreated(a, b) || byId(a, b))
+    .sort(
+      (a, b) =>
+        Number(!!a.readOnly) - Number(!!b.readOnly) ||
+        b.postCount - a.postCount ||
+        byCreated(a, b) ||
+        byId(a, b)
+    )
     .map((board) => board.id)
   return keepFirst(keptBoardId ? [keptBoardId] : [], ordered, cap)
 }

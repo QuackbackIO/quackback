@@ -44,9 +44,6 @@ import { assertImportWithinPlanLimits } from './import-plan-limits'
 
 /** integration_type/sourceType tag on post_votes rows this pipeline creates. */
 const VOTE_SOURCE_TYPE = 'import'
-const BOARD_LIMIT_MESSAGE =
-  "Not imported: the board limit is reached, so this row's board was not created."
-const POST_LIMIT_MESSAGE = 'Not imported: the post limit is reached.'
 
 // Constants
 export const MAX_ERRORS = 100
@@ -223,8 +220,11 @@ export async function processBatch(
     const { row, index } = validRows[i]
     if (row.pendingBoardSlug !== null && !ctx.boardMap.has(row.pendingBoardSlug)) {
       validRows.splice(i, 1)
-      refuse(index, open !== null ? BOARD_READ_ONLY_MESSAGE : BOARD_LIMIT_MESSAGE, 'board')
-    } else if (open !== null && !open.includes(row.boardId)) {
+      refuse(index, open !== null ? BOARD_READ_ONLY_MESSAGE : room.boardsRefusal, 'board')
+    } else if (
+      ctx.readOnlyBoardIds.has(row.boardId) ||
+      (open !== null && !open.includes(row.boardId))
+    ) {
       validRows.splice(i, 1)
       refuse(index, BOARD_READ_ONLY_MESSAGE, 'board')
     }
@@ -253,12 +253,12 @@ export async function processBatch(
   // New posts stop at the plan's posts cap, as a single post does.
   if (room.posts !== null && toInsert.length > room.posts) {
     for (const { index } of toInsert.splice(room.posts)) {
-      refuse(index, POST_LIMIT_MESSAGE, 'title')
+      refuse(index, room.postsRefusal, 'title')
     }
   }
 
   // A post already on a read-only board keeps its content and votes.
-  if (open !== null && toUpdate.length > 0) {
+  if ((open !== null || ctx.readOnlyBoardIds.size > 0) && toUpdate.length > 0) {
     const boardOf = new Map(
       (
         await db
@@ -269,7 +269,10 @@ export async function processBatch(
     )
     for (let i = toUpdate.length - 1; i >= 0; i--) {
       const boardId = boardOf.get(existingBySourceId.get(toUpdate[i].row.sourceId!)!)
-      if (boardId && !open.includes(boardId)) {
+      if (
+        boardId &&
+        (ctx.readOnlyBoardIds.has(boardId) || (open !== null && !open.includes(boardId)))
+      ) {
         refuse(toUpdate.splice(i, 1)[0].index, BOARD_READ_ONLY_MESSAGE, 'board')
       }
     }

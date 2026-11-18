@@ -10,7 +10,6 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { isBoardReadOnlyError } from '@/lib/shared/board-read-only'
 import type { BoardPermission } from '@/lib/shared/types/boards'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
@@ -127,6 +126,11 @@ export interface WidgetHomeProps {
 interface SearchResult {
   posts: WidgetPost[]
 }
+
+// The server's refusal for a read-only board, matched by its message. Kept
+// local so this file shares no module with the lazy chunks.
+const isReadOnlyRefusal = (err: unknown): boolean =>
+  err instanceof Error && err.message === "This board isn't taking new feedback right now."
 
 const SIMILAR_SEARCH_CACHE_LIMIT = 40
 /** Shorter titles match too much to be similar to anything, as in the portal composer. */
@@ -902,7 +906,7 @@ export function WidgetHomeAnimated({
       collapseForm()
     } catch (err) {
       setError(
-        isBoardReadOnlyError(err)
+        isReadOnlyRefusal(err)
           ? intl.formatMessage({
               id: 'widget.readOnly',
               defaultMessage: "This board isn't taking new feedback right now.",

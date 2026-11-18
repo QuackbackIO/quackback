@@ -149,12 +149,14 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
     slug: string
     description: string | null
     settings: BoardSettings
+    readOnly: boolean
     access?: BoardAccess
   } = {
     name: input.name.trim(),
     slug,
     description: input.description?.trim() || null,
     settings: input.settings || {},
+    readOnly: input.readOnly ?? false,
   }
   if (input.access) {
     insertValues.access = input.access
@@ -238,6 +240,7 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   if (slug !== existingBoard.slug) updateData.slug = slug
   if (input.settings !== undefined) updateData.settings = input.settings
+  if (input.readOnly !== undefined) updateData.readOnly = input.readOnly
 
   // Update the board
   const [updatedBoard] = await db

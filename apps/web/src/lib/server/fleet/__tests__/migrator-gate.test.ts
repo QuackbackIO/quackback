@@ -392,6 +392,7 @@ describe('replayGateVerdict', () => {
       '0315_domains_ownership_warning',
       '0316_personal_key_reply_cutoff',
       '0317_plan_limits_state',
+      '0318_board_read_only',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

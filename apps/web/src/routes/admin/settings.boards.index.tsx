@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
@@ -43,7 +43,6 @@ export const Route = createFileRoute('/admin/settings/boards/')({
     const { surfaceSenderQuery } = await import('@/lib/client/queries/channel-accounts')
     await Promise.all([
       context.queryClient.ensureQueryData(adminQueries.boardsWithCounts()),
-      warmQuery(context.queryClient, adminQueries.boardLimits()),
       // The Email card's "Sent from" line, so it renders from the document.
       warmQuery(context.queryClient, surfaceSenderQuery('feedback')),
     ])
@@ -54,13 +53,20 @@ export const Route = createFileRoute('/admin/settings/boards/')({
 
 function BoardsSettingsPage() {
   const { data: boards } = useSuspenseQuery(adminQueries.boardsWithCounts())
-  const { data: limits } = useQuery(adminQueries.boardLimits())
-  const openBoardIds = limits?.openBoardIds ?? null
-  const openBoards = boards.filter((board) => openBoardIds?.includes(board.id))
+  const planFrozen = boards.some((board) => board.planReadOnly !== undefined)
+  const openBoards = boards.filter((board) => !board.readOnly && board.planReadOnly === undefined)
   // At the plan's cap a new board is refused, so the action says so up front.
-  const atCap = limits?.boardCap != null && boards.length >= limits.boardCap
+  const atCap = boards.find((board) => board.atCap)?.atCap
   const newBoard = atCap ? (
-    <NewButton noun="board" disabled title="Your plan's board limit is reached" />
+    <NewButton
+      noun="board"
+      disabled
+      title={
+        atCap.planName
+          ? `The ${atCap.planName} plan allows ${atCap.cap} boards.`
+          : `Your workspace allows ${atCap.cap} boards.`
+      }
+    />
   ) : (
     <CreateBoardDialog />
   )
@@ -77,10 +83,10 @@ function BoardsSettingsPage() {
             action={newBoard}
           />
         ) : (
-          <BoardsList boards={boards} openBoardIds={openBoardIds} />
+          <BoardsList boards={boards} />
         )}
       </SettingsCard>
-      {openBoardIds !== null && boards.length > 0 && (
+      {planFrozen && boards.length > 0 && (
         <p className="text-sm text-muted-foreground">
           Read-only boards keep their posts visible. Nobody can post, vote or comment on them. You
           can still change statuses, merge, export, or move posts into{' '}

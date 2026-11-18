@@ -19,6 +19,7 @@ const updateBoardSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   slug: z.string().min(1).max(100).optional(),
   description: z.string().max(500).nullable().optional(),
+  readOnly: z.boolean().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/boards/$boardId')({
@@ -81,6 +82,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
             name: parsed.data.name,
             slug: parsed.data.slug,
             description: parsed.data.description,
+            readOnly: parsed.data.readOnly,
           })
 
           return successResponse({
@@ -91,6 +93,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
             // Legacy contract: synthesised from board.access for back-compat.
             audience: accessToAudience(board.access),
             settings: board.settings,
+            readOnly: board.readOnly,
             createdAt: board.createdAt.toISOString(),
             updatedAt: board.updatedAt.toISOString(),
           })

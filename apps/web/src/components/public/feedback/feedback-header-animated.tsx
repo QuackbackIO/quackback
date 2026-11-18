@@ -1,5 +1,4 @@
 import type { BoardId } from '@quackback/ids'
-import { isBoardReadOnlyError } from '@/lib/shared/board-read-only'
 import type { BoardPermission } from '@/lib/shared/types/boards'
 import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
@@ -69,6 +68,11 @@ export interface FeedbackHeaderProps {
 }
 
 /** The server's limits for a new post's title and details (createPublicPostSchema). */
+// The server's refusal for a read-only board, matched by its message. Kept
+// local so this file shares no module with the lazy chunks.
+const isReadOnlyRefusal = (err: unknown): boolean =>
+  err instanceof Error && err.message === "This board isn't taking new feedback right now."
+
 const DETAILS_MAX_LENGTH = 10_000
 
 export function FeedbackHeaderAnimated({
@@ -293,7 +297,7 @@ export function FeedbackHeaderAnimated({
       // The server logs why it refused the post; its message is not written
       // for the visitor, except the neutral line for a board that takes none.
       setError(
-        isBoardReadOnlyError(err)
+        isReadOnlyRefusal(err)
           ? intl.formatMessage({
               id: 'portal.feedback.readOnly',
               defaultMessage: "This board isn't taking new feedback right now.",

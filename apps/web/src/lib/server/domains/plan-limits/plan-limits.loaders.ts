@@ -169,6 +169,7 @@ export async function loadBoardChoices(): Promise<BoardChoice[]> {
       name: boards.name,
       slug: boards.slug,
       createdAt: boards.createdAt,
+      readOnly: boards.readOnly,
       postCount: sql<number>`count(${posts.id})::int`,
       lastActivityAt: max(posts.createdAt),
     })
@@ -188,6 +189,7 @@ export async function loadBoardChoices(): Promise<BoardChoice[]> {
     name: row.name,
     slug: row.slug,
     createdAt: iso(row.createdAt)!,
+    readOnly: row.readOnly,
     postCount: Number(row.postCount),
     lastActivityAt: iso(row.lastActivityAt),
   }))

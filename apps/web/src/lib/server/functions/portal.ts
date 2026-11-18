@@ -69,7 +69,7 @@ import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters
 
 import type { BoardPermission } from '@/lib/shared/types/boards'
 import {
-  isPostBoardOpen,
+  isBoardOpenFor,
   readOnlyBoardState,
 } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 
@@ -114,7 +114,7 @@ const fetchPortalDataSchema = z.object({
  */
 async function buildBoardPermissions(
   actor: Actor,
-  boards: ReadonlyArray<{ id: string; access: BoardAccess }>,
+  boards: ReadonlyArray<{ id: string; access: BoardAccess; readOnly?: boolean }>,
   allowAnonymous: boolean
 ): Promise<Record<string, BoardPermission>> {
   const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
@@ -122,21 +122,25 @@ async function buildBoardPermissions(
   const caps = new Map(
     boards.map((b) => [b.id, boardCapabilitiesForActor(actor, b.access, allowAnonymous)])
   )
-  // A read-only board shows its posts and takes nothing; visitors are pointed
-  // at a board that does, unless new posts are stopped everywhere.
-  // Prefer one the viewer can post to now; a visitor who must sign in first
-  // is still pointed at an open board they can see.
-  const visibleOpen = open?.filter((id) => caps.has(id)) ?? []
-  const shareBoardId =
-    open && !postsPaused
-      ? (visibleOpen.find((id) => caps.get(id)?.canSubmit) ?? visibleOpen[0] ?? null)
-      : null
+  // A read-only board (set by an admin, or frozen by the plan) shows its posts
+  // and takes nothing; visitors are pointed at a board that does, unless new
+  // posts are stopped everywhere.
+  const isClosed = (b: { id: string; readOnly?: boolean }) =>
+    !!b.readOnly || (open !== null && !open.includes(b.id))
+  const anyClosed = boards.some(isClosed)
+  let shareBoardId: string | null = null
+  if (anyClosed && !(await postsPaused())) {
+    // Prefer one the viewer can post to now; a visitor who must sign in first
+    // is still pointed at an open board they can see.
+    const visibleOpen = boards.filter((b) => !isClosed(b))
+    shareBoardId =
+      (visibleOpen.find((b) => caps.get(b.id)?.canSubmit) ?? visibleOpen[0])?.id ?? null
+  }
   const map: Record<string, BoardPermission> = {}
   for (const b of boards) {
     const c = caps.get(b.id)!
-    const readOnly = open !== null && !open.includes(b.id)
-    map[b.id] = readOnly
-      ? { canSubmit: false, canVote: false, readOnly, shareBoardId }
+    map[b.id] = isClosed(b)
+      ? { canSubmit: false, canVote: false, readOnly: true, shareBoardId }
       : { canSubmit: c.canSubmit, canVote: c.canVote }
   }
   return map
@@ -391,7 +395,10 @@ export const runFetchPublicPostDetail = createServerOnlyFn(async function runFet
   // so the UI never advertises a vote/comment CTA the board's tier rejects
   // (#191). canSubmit is unused on the detail view.
   const { boardCapabilitiesForActor, canCommentOnPost } = await import('@/lib/server/policy')
-  const boardReadOnly = !(await isPostBoardOpen(postId))
+  const boardReadOnly = !(await isBoardOpenFor(
+    result.board.id as BoardId,
+    result.boardManualReadOnly ?? false
+  ))
   const { canVote: tierCanVote } = boardCapabilitiesForActor(
     actor,
     result.boardAccess,
@@ -413,7 +420,7 @@ export const runFetchPublicPostDetail = createServerOnlyFn(async function runFet
 
   // Drop boardAccess (server-only — used above to compute the booleans) so
   // the board's segment ids never reach the client.
-  const { boardAccess: _boardAccess, ...serializable } = result
+  const { boardAccess: _boardAccess, boardManualReadOnly: _manual, ...serializable } = result
   return {
     ...serializable,
     contentJson: result.contentJson ?? {},
@@ -608,10 +615,9 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
  * boardPermissions / boardCapabilitiesForActor and never reads board.access,
  * so shipping it would leak segmentation structure (#191).
  */
-function serializePublicBoard<B extends { access: unknown; settings: unknown }>({
-  access: _access,
-  ...board
-}: B) {
+function serializePublicBoard<
+  B extends { access: unknown; settings: unknown; readOnly?: boolean },
+>({ access: _access, readOnly: _readOnly, ...board }: B) {
   return { ...board, settings: (board.settings ?? {}) as BoardSettings }
 }
 
@@ -830,7 +836,10 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
     const isMember = !!(ctx?.user && ctx?.principal)
     const isTeamMember =
       isMember && (ctx.principal.role === 'admin' || ctx.principal.role === 'member')
-    const boardReadOnly = !(await isPostBoardOpen(postId))
+    const boardReadOnly = !(await isBoardOpenFor(
+      commentContext.boardId as BoardId,
+      commentContext.boardReadOnly ?? false
+    ))
 
     return {
       isMember,

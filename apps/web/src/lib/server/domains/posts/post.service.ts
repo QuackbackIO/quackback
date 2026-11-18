@@ -151,7 +151,7 @@ export async function createPost(
   if (!board) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
   }
-  await assertBoardOpen(board.id)
+  await assertBoardOpen(board.id, board.readOnly ?? false)
 
   // Validate submitted custom-field answers against the board's declared
   // fields. Unknown keys are dropped by the validator; a missing required

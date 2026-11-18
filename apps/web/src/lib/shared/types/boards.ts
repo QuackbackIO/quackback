@@ -15,7 +15,7 @@ export type { BoardWithStats }
  * serialization — clients gate via the server-computed boardPermissions /
  * boardCapabilitiesForActor and never read `access` (#191).
  */
-export type PublicBoardWithStats = Omit<BoardWithStats, 'access'>
+export type PublicBoardWithStats = Omit<BoardWithStats, 'access' | 'readOnly'>
 
 /**
  * What the current viewer can do on one board, computed on the server.

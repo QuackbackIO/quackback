@@ -64,6 +64,7 @@ const updateBoardSchema = z.object({
   // access on this team-level path, members could grant/revoke board
   // visibility despite the access-control split.
   settings: boardSettingsSchema.optional(),
+  readOnly: z.boolean().optional(),
 })
 
 const deleteBoardSchema = z.object({
@@ -101,7 +102,14 @@ export const fetchBoardsFn = createServerFn({ method: 'GET' }).handler(async () 
 
   const boards = await listBoards()
   log.debug({ count: boards.length }, 'fetch boards')
-  return boards.map(serializeBoard)
+  const { openBoardIds } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  const open = await openBoardIds()
+  return boards.map((b) => ({
+    ...serializeBoard(b),
+    // Set only while the plan keeps this board read-only, so the payload is
+    // unchanged otherwise. `readOnly` is the admin's own setting.
+    planReadOnly: open !== null && !open.includes(b.id) ? true : undefined,
+  }))
 })
 
 /**
@@ -115,9 +123,21 @@ export const fetchBoardsWithCountsFn = createServerFn({ method: 'GET' }).handler
 
   const boards = await listBoardsWithDetails()
   log.debug({ count: boards.length }, 'fetch boards with counts')
+  const { openBoardIds, getPlanLimits } =
+    await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { PLAN_CATALOGUE } = await import('@/lib/server/domains/settings/cloud/cloud.types')
+  const open = await openBoardIds()
+  // Set only with the limits in force and the board count at the plan's cap.
+  const limits = await getPlanLimits()
+  const cap = limits.enabled ? (await getTierLimits()).maxBoards : null
+  const planName = limits.plan ? PLAN_CATALOGUE[limits.plan].name : null
+  const atCap = cap !== null && boards.length >= cap ? { cap, planName } : undefined
   return boards.map((b) => ({
     ...serializeBoard(b),
     postCount: b.postCount,
+    planReadOnly: open !== null && !open.includes(b.id) ? (planName ?? '') : undefined,
+    atCap,
   }))
 })
 
@@ -179,6 +199,7 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
       name: data.name,
       description: data.description,
       settings: data.settings as BoardSettings | undefined,
+      readOnly: data.readOnly,
     })
 
     log.info({ board_id: board.id }, 'board updated')

@@ -424,6 +424,86 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
     })
   })
 
+  describe('a board an admin set read-only, with the plan limits flag off', () => {
+    beforeEach(async () => {
+      await configure({ planLimits: false })
+      await testDb.update(boards).set({ readOnly: true }).where(eq(boards.id, closedBoard))
+    })
+
+    it('refuses every create path', async () => {
+      await expect(newPost(closedBoard)).rejects.toBeInstanceOf(BoardReadOnlyError)
+      await expect(voteOnPost(closedPost, voterId)).rejects.toBeInstanceOf(BoardReadOnlyError)
+      await expect(addVoteOnBehalf(closedPost, voterId)).rejects.toBeInstanceOf(BoardReadOnlyError)
+      await expect(newComment(closedPost)).rejects.toBeInstanceOf(BoardReadOnlyError)
+      await expect(newComment(closedPost, true)).rejects.toBeInstanceOf(BoardReadOnlyError)
+      await expect(
+        changeBoard(openPost, closedBoard, { principalId: ownerId })
+      ).rejects.toBeInstanceOf(BoardReadOnlyError)
+      const imported = await processBatch(
+        [{ title: 'Acme one', content: 'x', author_name: 'Acme Fan', board: closedBoard }],
+        openBoard,
+        0,
+        new ImportUserResolver()
+      )
+      expect(imported).toMatchObject({ imported: 0 })
+      expect(imported.errors.map((e) => e.message)).toEqual([BOARD_READ_ONLY_MESSAGE])
+    })
+
+    it('words the refusal neutrally', async () => {
+      const error = await newPost(closedBoard).catch((e: unknown) => e as Error)
+      expect((error as Error).message).toBe(BOARD_READ_ONLY_MESSAGE)
+    })
+
+    it('leaves the admin actions on it open: moving a post out, and the open board', async () => {
+      await expect(
+        changeBoard(closedPost, openBoard, { principalId: ownerId })
+      ).resolves.toBeDefined()
+      await expect(newPost(openBoard)).resolves.toBeDefined()
+    })
+
+    it('reopens when the setting is turned back off', async () => {
+      await testDb.update(boards).set({ readOnly: false }).where(eq(boards.id, closedBoard))
+      await expect(newPost(closedBoard)).resolves.toBeDefined()
+      await expect(voteOnPost(closedPost, voterId)).resolves.toBeDefined()
+      await expect(newComment(closedPost)).resolves.toBeDefined()
+    })
+
+    it('tells the portal, and points at an open board that is not read-only', async () => {
+      const third = await addBoard('Acme third', 0, new Date('2026-03-01T00:00:00.000Z'))
+      await testDb.update(boards).set({ readOnly: true }).where(eq(boards.id, openBoard))
+      const open = {
+        ...DEFAULT_BOARD_ACCESS,
+        view: 'anonymous' as const,
+        vote: 'anonymous' as const,
+        comment: 'anonymous' as const,
+        submit: 'anonymous' as const,
+      }
+      await testDb
+        .update(boards)
+        .set({ access: open })
+        .where(inArray(boards.id, [openBoard, closedBoard, third.id]))
+      await testDb
+        .update(settings)
+        .set({ portalConfig: JSON.stringify({ features: { allowAnonymous: true } }) })
+        .where(eq(settings.id, settingsId))
+      await invalidateSettingsCache()
+      const { permissions } = await runFetchBoardCapabilities(null)
+      expect(permissions[closedBoard]).toMatchObject({ readOnly: true, shareBoardId: third.id })
+      expect(permissions[openBoard]).toMatchObject({ readOnly: true, shareBoardId: third.id })
+      expect(permissions[third.id]).toEqual({ canSubmit: true, canVote: true })
+    })
+
+    it('still counts toward the board cap, and the kept-board default skips it', async () => {
+      // The bigger board is the manual read-only one: the default keeps the other.
+      await testDb.update(boards).set({ readOnly: true }).where(eq(boards.id, openBoard))
+      await testDb.update(boards).set({ readOnly: false }).where(eq(boards.id, closedBoard))
+      await configure({ planLimits: true })
+      const limits = await getPlanLimits()
+      expect(limits.issues.map((i) => [i.key, i.used, i.cap])).toEqual([['maxBoards', 2, 1]])
+      expect(limits.openBoardIds).toEqual([closedBoard])
+    })
+  })
+
   describe('import voters of refused rows', () => {
     const voter = { email: 'refused-voter@example.com', name: 'Acme Voter' }
     const voterRows = (board: string) => [

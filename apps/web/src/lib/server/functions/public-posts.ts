@@ -42,7 +42,7 @@ import {
 import { createPost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
 import {
-  isPostBoardOpen,
+  isBoardOpenFor,
   withVisitorPostCapCopy,
 } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 import { checkAnonVoteRateLimit, reserveAnonPostSlot } from '@/lib/server/utils/anon-rate-limit'
@@ -737,15 +737,18 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     // The workspace anonymousVoting flag is composed below as a ceiling.
     const { loadBoardAccessForPost } = await import('@/lib/server/domains/posts/post.access')
     const { canVotePost } = await import('@/lib/server/policy')
-    const boardAccess = await loadBoardAccessForPost(postId)
-    if (!boardAccess) {
+    const boardState = await loadBoardAccessForPost(postId)
+    if (!boardState) {
       // Race: post or board deleted between assertPostViewable and now.
       log.debug('post or board vanished mid-call')
       return denied
     }
 
     // A read-only board shows its votes and takes none; the sidebar says so.
-    const boardReadOnly = !(await isPostBoardOpen(postId))
+    const boardReadOnly = !(await isBoardOpenFor(
+      boardState.boardId as BoardId,
+      boardState.readOnly ?? false
+    ))
 
     // canVotePost composes canViewPost internally, but assertPostViewable
     // already proved view-allowed for this actor; pass moderationState=
@@ -754,7 +757,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     const voteDecision = canVotePost(
       probeActor,
       { moderationState: 'published', principalId: null },
-      { access: boardAccess }
+      { access: boardState.access }
     )
 
     // No session cookie — fall back to the workspace anonymous master

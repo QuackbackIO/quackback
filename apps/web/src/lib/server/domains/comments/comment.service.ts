@@ -68,7 +68,7 @@ export async function createComment(
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
   }
   const board = post.board
-  await assertBoardOpen(board.id)
+  await assertBoardOpen(board.id, board.readOnly ?? false)
 
   // Enforce access-control policy: board audience + post visibility + comments-locked
   // + merged. Workspace moderation default is the fallback for board-level `inherit`.

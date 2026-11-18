@@ -5,7 +5,3 @@
  * translation.
  */
 export const BOARD_READ_ONLY_MESSAGE = "This board isn't taking new feedback right now."
-
-export function isBoardReadOnlyError(error: unknown): boolean {
-  return error instanceof Error && error.message === BOARD_READ_ONLY_MESSAGE
-}
