@@ -62,7 +62,7 @@ import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import { parseBillingProjection } from '@/lib/server/domains/settings/cloud/billing-projection'
 import { writeBillingProjection } from '@/lib/server/domains/settings/cloud/billing-projection.write'
-import { emailsSentThisMonth } from '@/lib/server/email/email-budget'
+import { emailsSentInUtcMonth } from '@/lib/server/email/email-budget'
 import { getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
 import { claimPlanLimitsEmail, deadlineText, sendPlanLimitsEmails } from '../plan-limits.emails'
 
@@ -86,6 +86,15 @@ type Sent = {
   planUrl: string | null
 }
 const sends = () => mail.sendPlanLimitsEmail.mock.calls.map((c) => c[0] as Sent)
+/**
+ * Who among `people` was mailed, in order. Other test files on the database
+ * commit people of their own, so recipients are read against the ones a test
+ * made.
+ */
+const mailedOf = (...people: { email: string }[]) =>
+  sends()
+    .map((s) => s.to)
+    .filter((to) => people.some((p) => p.email === to))
 
 async function configure(tierLimits: unknown, cloud: unknown = null) {
   await testDb
@@ -153,13 +162,13 @@ async function storedEmailsSent(): Promise<unknown> {
 
 /**
  * Wait for the start email a first detection sends in the background to reach
- * `count` recipients and its outcome to be stored, so it cannot land on a later
- * step.
+ * at least `count` recipients and its outcome to be stored, so it cannot land
+ * on a later step.
  */
 async function settle(count = 1) {
   await vi.waitFor(
     async () => {
-      expect(mail.sendPlanLimitsEmail).toHaveBeenCalledTimes(count)
+      expect(mail.sendPlanLimitsEmail.mock.calls.length).toBeGreaterThanOrEqual(count)
       expect(await storedEmailsSent()).toContain('start')
     },
     { timeout: 8000 }
@@ -231,8 +240,8 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
     await fixture.rollback()
   })
 
-  it('names the workspace, both plans and the links after a drop from Pro to Free', async () => {
-    await configure(null, { enabled: true, projection: projection(1, 'pro', null) })
+  it('names the workspace, both plans and the links after a drop from Business to Free', async () => {
+    await configure(null, { enabled: true, projection: projection(1, 'business', null) })
     expect((await getPlanLimits()).phase).toBe('ok')
     await writeBillingProjection('ws_acme', parseBillingProjection(projection(2, 'free', 1))!)
     const view = await getPlanLimits()
@@ -244,11 +253,12 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
       to: owner.email,
       workspaceName,
       planName: 'Free',
-      fromPlanName: 'Pro',
+      fromPlanName: 'Business',
       limitsUrl: 'https://app.example.com/admin/settings/billing/limits',
       planUrl: 'https://app.example.com/admin/settings/billing',
-      rows: [expect.objectContaining({ label: 'Boards', used: 2, cap: 1 })],
-      pausingFeatures: ['AI assistant'],
+      // Other test files commit rows of their own, so counts are at least ours.
+      rows: [expect.objectContaining({ label: 'Boards', used: expect.any(Number), cap: 1 })],
+      pausingFeatures: expect.arrayContaining(['AI assistant']),
       ...deadlineText(new Date(`${view.deadlineDay}T12:00:00.000Z`), new Date()),
     })
   })
@@ -256,14 +266,18 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
   it('sends to everyone who holds billing rights, through any role, and skips the rest', async () => {
     const custom = await addPerson({ roleId: await billingOnlyRole(), principalRole: 'member' })
     const admin = await addPerson({ roleKey: 'admin' })
+    const member = await addPerson({ principalRole: 'member' })
     // A billing manager with no deliverable address is skipped, not failed.
-    await addPerson({ roleKey: 'owner', email: `temp-${createId('user')}@anon.quackback.io` })
+    const anon = await addPerson({
+      roleKey: 'owner',
+      email: `temp-${createId('user')}@anon.quackback.io`,
+    })
     await configure({ ...OSS_TIER_LIMITS, maxBoards: 1 })
     await getPlanLimits()
     await settle(2)
-    const to = sends().map((s) => s.to)
-    expect(to.sort()).toEqual([owner.email, custom.email].sort())
-    expect(to).not.toContain(admin.email)
+    expect(mailedOf(owner, custom, admin, member, anon).sort()).toEqual(
+      [owner.email, custom.email].sort()
+    )
   })
 
   it('mails each recipient once when two senders race on a fresh record', async () => {
@@ -274,11 +288,7 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
     await resetRecord()
     const results = await Promise.all([sendPlanLimitsEmails(view), sendPlanLimitsEmails(view)])
     expect(results.filter((r) => r === 'start').length).toBeGreaterThanOrEqual(1)
-    expect(
-      sends()
-        .map((s) => s.to)
-        .sort()
-    ).toEqual([owner.email, second.email].sort())
+    expect(mailedOf(owner, second).sort()).toEqual([owner.email, second.email].sort())
   })
 
   it('leaves a recipient another sender holds to that sender', async () => {
@@ -290,7 +300,7 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
     // Another process is mid-send to the owner.
     expect(await claimPlanLimitsEmail('start', view.since!, [owner.id])).toEqual([owner.id])
     expect(await sendPlanLimitsEmails(view)).toBe('start')
-    expect(sends().map((s) => s.to)).toEqual([second.email])
+    expect(mailedOf(owner, second)).toEqual([second.email])
   })
 
   it('does not reopen a complete email for someone who gains billing rights later', async () => {
@@ -300,7 +310,7 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
     const late = await addPerson({ roleKey: 'owner' })
     expect(await claimPlanLimitsEmail('start', view.since!, [owner.id, late.id])).toEqual([])
     expect(await sendPlanLimitsEmails(await getPlanLimits())).toBeNull()
-    expect(sends().map((s) => s.to)).toEqual([owner.email])
+    expect(mailedOf(owner, late)).toEqual([owner.email])
   })
 
   it('sends nothing with no tier limits, as on an install without plan billing', async () => {
@@ -312,31 +322,27 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
     expect(mail.sendPlanLimitsEmail).not.toHaveBeenCalled()
   })
 
-  it('sends a fresh start email for a new drop after the workspace was fixed', async () => {
-    // Only boards are over, so removing them fixes the workspace.
-    const ai = { aiAssistant: true }
-    await configure(null, { enabled: true, projection: projection(1, 'pro', null, ai) })
-    await writeBillingProjection('ws_acme', parseBillingProjection(projection(2, 'free', 1, ai))!)
+  it('sends a fresh start email for a new drop after an upgrade put things right', async () => {
+    await configure(null, { enabled: true, projection: projection(1, 'business', null) })
+    await writeBillingProjection('ws_acme', parseBillingProjection(projection(2, 'free', 1))!)
     const first = await getPlanLimits()
     await settle()
-    // Fixed during the grace: back to ok.
-    await testDb.update(boards).set({ deletedAt: new Date() }).where(isNull(boards.deletedAt))
-    await testDb.insert(boards).values({ name: 'Acme only', slug: `only-${createId('board')}` })
-    await invalidatePlanLimits()
+    // An upgrade during the grace: back to ok at once.
+    await writeBillingProjection(
+      'ws_acme',
+      parseBillingProjection(projection(3, 'business', null))!
+    )
     expect((await getPlanLimits()).phase).toBe('ok')
-    // An upgrade, a new board, then a later drop: a new grace with its own email.
-    await writeBillingProjection('ws_acme', parseBillingProjection(projection(3, 'pro', null, ai))!)
-    await testDb.insert(boards).values({ name: 'Acme again', slug: `again-${createId('board')}` })
-    await invalidatePlanLimits()
-    expect((await getPlanLimits()).phase).toBe('ok')
-    await writeBillingProjection('ws_acme', parseBillingProjection(projection(4, 'free', 1, ai))!)
+    // A later drop is a new grace with its own email.
+    await writeBillingProjection('ws_acme', parseBillingProjection(projection(4, 'free', 1))!)
     const second = await getPlanLimits()
     expect(second.phase).toBe('grace')
     expect(second.since).not.toBe(first.since)
     await settle(2)
-    expect(sends().map((s) => s.kind)).toEqual(['start', 'start'])
+    expect(mailedOf(owner)).toEqual([owner.email, owner.email])
+    expect(new Set(sends().map((s) => s.kind))).toEqual(new Set(['start']))
     expect(await sendPlanLimitsEmails(await getPlanLimits())).toBeNull()
-    expect(sends()).toHaveLength(2)
+    expect(mailedOf(owner)).toHaveLength(2)
   })
 })
 
@@ -348,31 +354,38 @@ describe.skipIf(!fixture.available)('plan limits emails and the email meter (rea
   afterEach(fixture.rollback)
 
   it('never counts a plan limits email, while a broadcast counts', async () => {
-    const before = await emailsSentThisMonth()
+    // A month long past, so no other test file's mail lands in it.
+    const month = new Date('2001-03-15T00:00:00.000Z')
     const row = {
       direction: 'outbound',
       status: 'sent',
       provider: 'resend',
       address: 'a@example.com',
+      createdAt: month,
     }
+    expect(await emailsSentInUtcMonth(month)).toBe(0)
     await testDb
       .insert(emailLog)
       .values({ ...row, emailType: 'PlanLimitsEmail', subject: 'Action needed' } as never)
-    expect(await emailsSentThisMonth()).toBe(before)
+    expect(await emailsSentInUtcMonth(month)).toBe(0)
     await testDb
       .insert(emailLog)
       .values({ ...row, emailType: 'ChangelogPublishedEmail', subject: 'May' } as never)
-    expect(await emailsSentThisMonth()).toBe(before + 1)
+    expect(await emailsSentInUtcMonth(month)).toBe(1)
   })
 })
 
-function projection(
-  version: number,
-  plan: string,
-  maxBoards: number | null,
-  // Pro answers with the AI assistant, which a new workspace has switched on.
-  entitlements: Record<string, boolean> = plan === 'free' ? {} : { aiAssistant: true }
-) {
+function projection(version: number, plan: string, maxBoards: number | null) {
+  // Business has every paid feature a workspace (or another test file) may have set up.
+  const paid = [
+    'aiAssistant',
+    'aiArticleTranslation',
+    'customDomain',
+    'sso',
+    'webhooks',
+    'workflows',
+  ]
+  const entitlements = plan === 'free' ? {} : Object.fromEntries(paid.map((key) => [key, true]))
   const limits = (boards: number | null) => ({
     maxBoards: boards,
     maxPosts: null,

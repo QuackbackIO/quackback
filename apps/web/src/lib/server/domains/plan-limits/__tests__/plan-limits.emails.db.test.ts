@@ -230,7 +230,9 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
       deadlineText(new Date(`${view.deadlineDay}T12:00:00.000Z`), new Date()).deadline
     )
     expect(params.deadline).not.toBe(deadlineText(new Date(view.graceEndsAt!), new Date()).deadline)
-    expect(params.rows).toEqual([expect.objectContaining({ label: 'Boards', used: 2, cap: 1 })])
+    // Other test files commit boards of their own, so the count is at least ours.
+    expect(params.rows).toEqual([expect.objectContaining({ label: 'Boards', cap: 1 })])
+    expect(params.rows[0]!.used).toBeGreaterThanOrEqual(2)
     expect(params.limitsUrl).toBe('https://app.example.com/admin/settings/billing/limits')
     expect((await storedState())?.emailsSent).toEqual(['start'])
   })
