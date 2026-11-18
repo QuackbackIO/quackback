@@ -27,7 +27,26 @@ import {
 } from '@/lib/server/db'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 
-const spies = vi.hoisted(() => ({ loadUsageCounts: vi.fn(), readsNoState: false }))
+const spies = vi.hoisted(() => ({
+  loadUsageCounts: vi.fn(),
+  readsNoState: false,
+  cache: new Map<string, unknown>(),
+}))
+
+// The application cache, kept in memory: its kv rows are shared by every test
+// file on the database, and a write that collides with another file's commit
+// aborts this test's transaction.
+vi.mock('@/lib/server/cache', async (original) => ({
+  ...(await original<typeof import('@/lib/server/cache')>()),
+  cacheGet: async (key: string) =>
+    spies.cache.has(key) ? structuredClone(spies.cache.get(key)) : null,
+  cacheSet: async (key: string, value: unknown) => {
+    spies.cache.set(key, structuredClone(value))
+  },
+  cacheDel: async (...keys: string[]) => {
+    for (const key of keys) spies.cache.delete(key)
+  },
+}))
 
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
@@ -149,6 +168,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     vi.useRealTimers()
     spies.loadUsageCounts.mockClear()
     spies.readsNoState = false
+    spies.cache.clear()
     settingsId = await ensureSettings()
     await testDb.update(settings).set({ planLimitsState: null }).where(eq(settings.id, settingsId))
     await testDb.update(boards).set({ deletedAt: new Date() }).where(isNull(boards.deletedAt))
@@ -542,6 +562,7 @@ describe.skipIf(!fixture.available)('detection on a billing projection write (re
   const instance = process.env.QUACKBACK_INSTANCE_ID
   beforeEach(async () => {
     await fixture.begin()
+    spies.cache.clear()
     process.env.QUACKBACK_INSTANCE_ID = 'ws_acme'
     settingsId = await ensureSettings()
     await testDb.update(boards).set({ deletedAt: new Date() }).where(isNull(boards.deletedAt))
