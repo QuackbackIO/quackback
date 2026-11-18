@@ -13,7 +13,8 @@ const view: PlanLimitsView = {
   phase: 'grace',
   plan: 'free',
   since: '2026-11-18T00:00:00.000Z',
-  graceEndsAt: '2026-11-25T00:00:00.000Z',
+  graceEndsAt: '2026-11-25T12:00:00.000Z',
+  deadlineDay: '2026-11-24',
   fromPlan: 'pro',
   issues: [
     {
@@ -76,6 +77,8 @@ describe('planLimitsPage', () => {
     expect(page.candidates.members).toHaveLength(1)
     expect(page.canManageBilling).toBe(true)
     expect(page.planName).toBe('Free')
+    expect(page.graceEndsAt).toBe('2026-11-25T12:00:00.000Z')
+    expect(page.deadlineDay).toBe('2026-11-24')
     expect(page.fromPlanName).toBe('Pro')
   })
 

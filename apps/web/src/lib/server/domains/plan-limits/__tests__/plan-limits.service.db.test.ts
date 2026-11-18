@@ -221,7 +221,14 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     expect(first.issues.map((i) => [i.key, i.used, i.cap])).toEqual([['maxBoards', 2, 1]])
     const stored = await storedState()
     expect(stored).toMatchObject({ since: first.since, graceEndsAt: first.graceEndsAt })
-    expect(Date.parse(first.graceEndsAt!) - Date.parse(first.since!)).toBe(7 * DAY)
+    // Seven days, then on to the next 12:00 UTC.
+    const length = Date.parse(first.graceEndsAt!) - Date.parse(first.since!)
+    expect(length).toBeGreaterThanOrEqual(7 * DAY)
+    expect(length).toBeLessThan(8 * DAY)
+    expect(first.graceEndsAt).toMatch(/T12:00:00\.000Z$/)
+    expect(first.deadlineDay).toBe(
+      new Date(Date.parse(first.graceEndsAt!) - DAY).toISOString().slice(0, 10)
+    )
 
     const again = await getPlanLimits(new Date(Date.now() + DAY))
     expect(again.since).toBe(first.since)

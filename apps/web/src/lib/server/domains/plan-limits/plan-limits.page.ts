@@ -88,6 +88,7 @@ export function planLimitsPage(
     plan: view.plan,
     since: view.since,
     graceEndsAt: view.graceEndsAt,
+    deadlineDay: view.deadlineDay,
     fromPlan: view.fromPlan,
     issues: view.issues,
     infoRows: view.infoRows,

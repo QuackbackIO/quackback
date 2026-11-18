@@ -45,6 +45,31 @@ import {
 
 export const PLAN_LIMITS_GRACE_MS = 7 * 24 * 60 * 60 * 1000
 
+const DAY_MS = 24 * 60 * 60 * 1000
+const NOON_UTC_MS = 12 * 60 * 60 * 1000
+
+/**
+ * When a grace that starts at `since` ends: the first 12:00 UTC at or after
+ * seven days. Every surface shows the day before it as the deadline
+ * ({@link planLimitsDeadlineDay}), and a noon end makes that day end locally
+ * before the grace ends everywhere from UTC-12 to UTC+14.
+ */
+export function graceEndFor(since: Date): Date {
+  const earliest = since.getTime() + PLAN_LIMITS_GRACE_MS
+  const dayStart = Math.floor(earliest / DAY_MS) * DAY_MS
+  const noon = dayStart + NOON_UTC_MS
+  return new Date(noon >= earliest ? noon : noon + DAY_MS)
+}
+
+/**
+ * The last full day to fix, as a plain calendar date (YYYY-MM-DD): the UTC
+ * date of `graceEndsAt` minus one day. Show it as a date with no time-zone
+ * conversion (format it in UTC); emails cannot know the reader's zone.
+ */
+export function planLimitsDeadlineDay(graceEndsAt: string): string {
+  return new Date(Date.parse(graceEndsAt) - DAY_MS).toISOString().slice(0, 10)
+}
+
 export {
   guaranteedSeatHolders,
   openBoardOrder,
@@ -188,6 +213,8 @@ export interface PlanLimitsView {
   /** Null when the phase is ok. */
   since: string | null
   graceEndsAt: string | null
+  /** The last full day to fix (YYYY-MM-DD, see {@link planLimitsDeadlineDay}); null when ok. */
+  deadlineDay: string | null
   fromPlan: PlanId | null
   issues: PlanLimitIssue[]
   infoRows: PlanLimitInfoRow[]
@@ -220,6 +247,7 @@ function okView(input: Pick<PlanLimitsInputs, 'enabled' | 'plan' | 'features'>):
     plan: input.plan,
     since: null,
     graceEndsAt: null,
+    deadlineDay: null,
     fromPlan: null,
     issues: [],
     infoRows: [],
@@ -345,7 +373,7 @@ export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimit
     ? input.stored!
     : {
         since: now.toISOString(),
-        graceEndsAt: new Date(now.getTime() + PLAN_LIMITS_GRACE_MS).toISOString(),
+        graceEndsAt: graceEndFor(now).toISOString(),
         fromPlan: input.previous?.plan ?? null,
         fromFeatures: graceFeatures(input.features, input.previous, input.configured),
         limitsKey: key,
@@ -370,6 +398,7 @@ export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimit
       plan: input.plan,
       since: nextState.since,
       graceEndsAt: nextState.graceEndsAt,
+      deadlineDay: planLimitsDeadlineDay(nextState.graceEndsAt),
       fromPlan: nextState.fromPlan,
       issues,
       infoRows: rows,

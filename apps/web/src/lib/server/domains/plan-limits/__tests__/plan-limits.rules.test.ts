@@ -13,7 +13,9 @@ import {
 } from '../plan-limits.features'
 import {
   PLAN_LIMITS_GRACE_MS,
+  graceEndFor,
   guaranteedSeatHolders,
+  planLimitsDeadlineDay,
   computePlanLimits,
   featureLive,
   limitsKeyFor,
@@ -312,6 +314,65 @@ describe('computePlanLimits: issues and info rows', () => {
       { key: 'customCss', count: 1 },
     ])
     expect(result.view.phase).toBe('grace')
+  })
+})
+
+describe('the deadline', () => {
+  const since = (sevenDaysLaterIso: string) =>
+    new Date(Date.parse(sevenDaysLaterIso) - PLAN_LIMITS_GRACE_MS)
+
+  it('ends the grace at the first 12:00 UTC at or after seven days', () => {
+    expect(graceEndFor(since('2026-11-25T11:59:59.999Z')).toISOString()).toBe(
+      '2026-11-25T12:00:00.000Z'
+    )
+    expect(graceEndFor(since('2026-11-25T12:00:00.000Z')).toISOString()).toBe(
+      '2026-11-25T12:00:00.000Z'
+    )
+    expect(graceEndFor(since('2026-11-25T12:00:00.001Z')).toISOString()).toBe(
+      '2026-11-26T12:00:00.000Z'
+    )
+    expect(graceEndFor(since('2026-11-25T01:00:00.000Z')).toISOString()).toBe(
+      '2026-11-25T12:00:00.000Z'
+    )
+    expect(graceEndFor(since('2026-12-31T23:00:00.000Z')).toISOString()).toBe(
+      '2027-01-01T12:00:00.000Z'
+    )
+  })
+
+  it('names the last full day to fix: the UTC day before the grace ends', () => {
+    expect(planLimitsDeadlineDay('2026-11-25T12:00:00.000Z')).toBe('2026-11-24')
+    expect(planLimitsDeadlineDay('2027-01-01T12:00:00.000Z')).toBe('2026-12-31')
+    expect(planLimitsDeadlineDay('2026-03-01T12:00:00.000Z')).toBe('2026-02-28')
+  })
+
+  it('ends that day before the grace ends everywhere from UTC-12 to UTC+14', () => {
+    const graceEndsAt = '2026-11-25T12:00:00.000Z'
+    const day = planLimitsDeadlineDay(graceEndsAt)
+    // The day ends locally at 24:00 of that date: latest in UTC-12.
+    const endInUtcMinus12 = Date.parse(`${day}T24:00:00.000-12:00`)
+    expect(endInUtcMinus12).toBeLessThanOrEqual(Date.parse(graceEndsAt))
+  })
+
+  it('stores the rounded end on a new grace and shows its deadline day', () => {
+    const now = new Date('2026-11-18T16:30:00.000Z')
+    const result = computePlanLimits(inputs({ usage: OVER_BOARDS }), now)
+    expect(result.nextState?.graceEndsAt).toBe('2026-11-26T12:00:00.000Z')
+    expect(result.view.graceEndsAt).toBe('2026-11-26T12:00:00.000Z')
+    expect(result.view.deadlineDay).toBe('2026-11-25')
+  })
+
+  it('shows no deadline day when nothing is over', () => {
+    expect(computePlanLimits(inputs(), NOW).view.deadlineDay).toBeNull()
+  })
+
+  it('keeps a stored end as it was', () => {
+    const stored = {
+      ...computePlanLimits(inputs({ usage: OVER_BOARDS }), NOW).nextState!,
+      graceEndsAt: '2026-11-25T03:00:00.000Z',
+    }
+    const later = computePlanLimits(inputs({ usage: OVER_BOARDS, stored }), at(DAY))
+    expect(later.view.graceEndsAt).toBe('2026-11-25T03:00:00.000Z')
+    expect(later.view.deadlineDay).toBe('2026-11-24')
   })
 })
 
