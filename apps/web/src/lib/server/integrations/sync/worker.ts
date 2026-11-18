@@ -38,6 +38,7 @@ import { installationIdentity } from './identity'
 import { getIntegration } from '../index'
 import { publishTicketUpdated } from '@/lib/server/domains/tickets/ticket-intake.service'
 import { logger } from '@/lib/server/logger'
+import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.service'
 
 const log = logger.child({ component: 'integration-sync' })
 
@@ -49,6 +50,18 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
     typeof job.payload.version === 'number' ? job.payload.version : undefined
   )
   if (!claim) return
+  // Paused after the plan limits grace: the operation is settled, not left
+  // queued, so nothing is sent now or replayed after an upgrade. The
+  // connection and its tokens are kept. Provider app events still run: they
+  // carry the app's own lifecycle, such as an uninstall.
+  if (claim.operation.kind !== 'app-hook' && (await isFeaturePaused('integrations'))) {
+    log.info(
+      { operationId: id, provider: claim.operation.provider },
+      'integrations paused on this plan; sync cancelled'
+    )
+    await finishSyncOperation(claim, { state: 'cancelled', errorCode: 'plan_paused' })
+    return
+  }
   const heartbeat = setInterval(() => {
     void heartbeatSync(claim).catch(() => undefined)
   }, 20_000)

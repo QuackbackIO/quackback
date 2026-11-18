@@ -30,6 +30,7 @@ export const SYNC_ERRORS = {
     'The connection or destination changed. This operation cannot use the new connection.',
   missing_payload: 'The original data is no longer available. Start a new sync from the source.',
   local_persistence: 'The remote change succeeded; local confirmation still needs to be saved.',
+  plan_paused: 'Syncing is paused on the current plan. It starts again when the plan includes it.',
 } as const
 export type SyncErrorCode = keyof typeof SYNC_ERRORS
 export const SYNC_ATTENTION: readonly SyncState[] = [

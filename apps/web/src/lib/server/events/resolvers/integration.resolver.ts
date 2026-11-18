@@ -7,6 +7,7 @@
 import { db, integrations, integrationEventMappings, eq, and } from '@/lib/server/db'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
+import { isFeaturePaused } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import { getEventDefinition } from '../catalogue'
 import { boardIdsFromEvent } from './webhook.resolver'
 import type { SinkResolver } from './registry'
@@ -117,6 +118,8 @@ export const integrationResolver: SinkResolver = {
     const mappings = await loadMappings()
     const relevant = mappings.filter((m) => m.eventType === event.type)
     if (relevant.length === 0) return []
+    // Paused after the plan limits grace: nothing is queued for later.
+    if (await isFeaturePaused('integrations')) return []
     return buildIntegrationTargets(relevant, event.type, boardIdsFromEvent(event))
   },
 }
