@@ -199,8 +199,14 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
       to: string
       rows: { label: string; used: number; cap: number }[]
       limitsUrl: string | null
+      deadline: string
     }
     expect(params.to).toBe(billingEmail)
+    // The last full day to fix, not the day the grace ends.
+    expect(params.deadline).toBe(
+      deadlineText(new Date(`${view.deadlineDay}T12:00:00.000Z`), new Date()).deadline
+    )
+    expect(params.deadline).not.toBe(deadlineText(new Date(view.graceEndsAt!), new Date()).deadline)
     expect(params.rows).toEqual([expect.objectContaining({ label: 'Boards', used: 2, cap: 1 })])
     expect(params.limitsUrl).toBe('https://app.example.com/admin/settings/billing/limits')
     expect((await storedState())?.emailsSent).toEqual(['start'])
@@ -348,18 +354,20 @@ describe.skipIf(!fixture.available)('plan limits emails (real DB)', () => {
 
   it('sends the reminder two days before the end, once, and the enforcement email after it', async () => {
     await configure({ planLimits: true })
-    await getPlanLimits()
+    // The grace ends at the first noon UTC after seven days, so time is set
+    // from its end rather than from now.
+    const end = Date.parse((await getPlanLimits()).graceEndsAt!)
     await settle()
     expect(sentKinds()).toEqual(['start'])
 
-    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 4 * DAY })
+    vi.useFakeTimers({ toFake: ['Date'], now: end - 3 * DAY })
     expect(await sendPlanLimitsEmails(await getPlanLimits())).toBeNull()
 
-    vi.setSystemTime(Date.now() + 1.5 * DAY)
+    vi.setSystemTime(end - 1.5 * DAY)
     expect(await sendPlanLimitsEmails(await getPlanLimits())).toBe('reminder')
     expect(await sendPlanLimitsEmails(await getPlanLimits())).toBeNull()
 
-    vi.setSystemTime(Date.now() + 2 * DAY)
+    vi.setSystemTime(end + DAY / 2)
     expect((await getPlanLimits()).phase).toBe('enforced')
     expect(await sendPlanLimitsEmails(await getPlanLimits())).toBe('enforced')
     expect(await sendPlanLimitsEmails(await getPlanLimits())).toBeNull()

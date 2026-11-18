@@ -26,8 +26,8 @@ const base = {
   workspaceName: 'Acme Support',
   planName: 'Free',
   fromPlanName: 'Pro',
-  deadline: 'Nov 25',
-  deadlineHeading: 'Wed, Nov 25',
+  deadline: 'Nov 24',
+  deadlineHeading: 'Tue, Nov 24',
   rows: [
     { label: 'Boards', used: 5, cap: 1, effect: '4 boards become read-only' },
     {
@@ -48,13 +48,13 @@ describe('PlanLimitsEmail', () => {
   it('start: names the issues and the date, what pauses, and that nothing is deleted', async () => {
     const html = await render(PlanLimitsEmail({ ...base, kind: 'start' }))
     const text = visibleText(html)
-    expect(text).toContain('Fix 2 issues by Wed, Nov 25')
-    expect(text).toContain('Fix 2 issues by Nov 25, or upgrade to keep everything.')
+    expect(text).toContain('Fix 2 issues by Tue, Nov 24')
+    expect(text).toContain('Fix 2 issues by Nov 24, or upgrade to keep everything.')
     expect(text).toContain('Boards: 5 of 1. 4 boards become read-only.')
     expect(text).toContain(
       'Team seats: 3 of 1. 2 teammates lose admin access until a seat frees up.'
     )
-    expect(text).toContain('Webhooks and your custom domain pause on Nov 25.')
+    expect(text).toContain('Webhooks and your custom domain pause after Nov 24.')
     expect(text.match(/Nothing is deleted\./g)).toHaveLength(1)
     expect(text).toContain('Review issues')
     expect(text).toContain('Upgrade to Pro')
@@ -66,7 +66,7 @@ describe('PlanLimitsEmail', () => {
 
   it('reminder: same content', async () => {
     const text = visibleText(await render(PlanLimitsEmail({ ...base, kind: 'reminder' })))
-    expect(text).toContain('Fix 2 issues by Nov 25')
+    expect(text).toContain('Fix 2 issues by Nov 24')
     expect(text).toContain('Boards: 5 of 1.')
     expect(text).not.toMatch(BANNED)
   })
@@ -83,11 +83,11 @@ describe('PlanLimitsEmail', () => {
   it('says features pause, not "Fix 0 issues", when no cap is over', async () => {
     const props = { ...base, rows: [], kind: 'start' as const }
     const text = visibleText(await render(PlanLimitsEmail(props)))
-    expect(text).toContain('Some features pause on Wed, Nov 25')
+    expect(text).toContain('Some features pause after Tue, Nov 24')
     expect(text).toContain('Upgrade to keep everything.')
     expect(text).not.toMatch(/Fix \d+ issue/)
-    expect(planLimitsSubject('start', 'Acme Support', 'Free', 'Nov 25')).toBe(
-      'Some features pause on Nov 25'
+    expect(planLimitsSubject('start', 'Acme Support', 'Free', 'Nov 24')).toBe(
+      'Some features pause after Nov 24'
     )
   })
 

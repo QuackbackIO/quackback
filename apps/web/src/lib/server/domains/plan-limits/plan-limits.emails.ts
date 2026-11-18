@@ -24,6 +24,7 @@ import { PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { PLAN_FEATURE_LINKS } from './plan-limits.features'
 import {
   parsePlanLimitsState,
+  planLimitsDeadlineDay,
   type PlanLimitIssueKey,
   type PlanLimitsState,
   type PlanLimitsEmailKind,
@@ -55,9 +56,10 @@ const ISSUE_COPY: Record<PlanLimitIssueKey, { label: string; effect: (n: number)
 }
 
 /**
- * The deadline as it reads inline ("Nov 23") and in a heading ("Mon, Nov 23"),
- * in UTC so every reader sees the same day. The year appears only when it
- * differs from the current one.
+ * A date as it reads inline ("Nov 23") and in a heading ("Mon, Nov 23"), in
+ * UTC so every reader sees the same day. The year appears only when it
+ * differs from the current one. The emails name the last full day to fix
+ * (`deadlineDay`), never the instant the grace ends.
  */
 export function deadlineText(at: Date, now: Date): { deadline: string; deadlineHeading: string } {
   const year = at.getUTCFullYear() === now.getUTCFullYear() ? {} : { year: 'numeric' as const }
@@ -229,7 +231,10 @@ export async function sendPlanLimitsEmails(
     workspaceName: workspace?.settings?.name,
     planName: view.plan ? PLAN_CATALOGUE[view.plan].name : null,
     fromPlanName: view.fromPlan ? PLAN_CATALOGUE[view.fromPlan].name : null,
-    ...deadlineText(new Date(view.graceEndsAt), now),
+    ...deadlineText(
+      new Date(`${view.deadlineDay ?? planLimitsDeadlineDay(view.graceEndsAt)}T12:00:00.000Z`),
+      now
+    ),
     rows: emailRows(view),
     pausingFeatures: pausingFeatureLabels(view),
     limitsUrl: base ? `${base}/admin/settings/billing/limits` : null,

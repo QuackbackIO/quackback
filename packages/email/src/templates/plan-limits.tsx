@@ -21,7 +21,7 @@ export interface PlanLimitsEmailProps {
   planName?: string | null
   /** The plan it had before, named on the upgrade link when known. */
   fromPlanName?: string | null
-  /** The deadline as it reads in a sentence, e.g. "Nov 23". */
+  /** The last full day to fix as it reads in a sentence, e.g. "Nov 23". */
   deadline: string
   /** The deadline as it reads in a heading, e.g. "Mon, Nov 23". */
   deadlineHeading: string
@@ -48,7 +48,7 @@ export function planLimitsSubject(
 ): string {
   const name = workspaceName ?? 'Your workspace'
   if (featuresOnlyDeadline && kind === 'start') {
-    return `Some features pause on ${featuresOnlyDeadline}`
+    return `Some features pause after ${featuresOnlyDeadline}`
   }
   if (kind === 'start') {
     return `Action needed: ${name} is over the ${planName ?? 'current'} plan's limits`
@@ -59,7 +59,7 @@ export function planLimitsSubject(
 
 function heading(props: PlanLimitsEmailProps): string {
   if (props.kind === 'enforced') return planLimitsSubject(props.kind, props.workspaceName, null)
-  if (props.rows.length === 0) return `Some features pause on ${props.deadlineHeading}`
+  if (props.rows.length === 0) return `Some features pause after ${props.deadlineHeading}`
   return `Fix ${issues(props.rows.length)} by ${props.deadlineHeading}`
 }
 
@@ -98,7 +98,7 @@ function featureLine(props: PlanLimitsEmailProps): string {
   if (props.kind === 'enforced') {
     return `${list} ${many ? 'are' : 'is'} paused on the ${props.planName ?? 'current'} plan.`
   }
-  return `${list} ${many ? 'pause' : 'pauses'} on ${props.deadline}.`
+  return `${list} ${many ? 'pause' : 'pauses'} after ${props.deadline}.`
 }
 
 /**
