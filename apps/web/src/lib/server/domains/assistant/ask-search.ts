@@ -7,7 +7,8 @@
  * Every kind reads through the same visibility rule its own page uses, so a
  * result is always a record the viewer could open:
  * - posts: postViewFilter (boards and moderation state), live boards only
- * - conversations: conversationFilter (all, or assigned to me or my teams)
+ * - conversations: conversationFilter (all, or assigned to me or my teams, or
+ *   with no assignee and no team)
  * - tickets: ticketFilter (same resolution, never deleted)
  * - articles: help center visibility, the team slice for help center
  *   managers and the public slice (published, public category, segment

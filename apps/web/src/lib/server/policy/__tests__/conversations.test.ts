@@ -76,7 +76,7 @@ async function seedWorld() {
     teamX: createId('conversation') as ConversationId, // team = X (agentA member)
     teamY: createId('conversation') as ConversationId, // team = Y (agentA not a member)
     selfB: createId('conversation') as ConversationId, // agent = agentB
-    unassigned: createId('conversation') as ConversationId, // no assignee
+    unassigned: createId('conversation') as ConversationId, // no assignee, no team
   }
   const base = { visitorPrincipalId: visitor, channel: 'messenger' as const }
   await testDb.insert(conversations).values([
@@ -130,22 +130,22 @@ describe.skipIf(!fixture.available)('conversationFilter (real DB, rolled back)',
     )
   })
 
-  it('conversation.view + team membership sees team-assigned OR self-assigned', async () => {
+  it('conversation.view + team membership sees team-assigned, self-assigned OR unassigned with no team', async () => {
     const world = await seedWorld()
     const memberA = buildActor({
       principalId: world.agentA,
       permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
     })
-    expect(await visibleLabels(memberA, world)).toEqual(new Set(['selfA', 'teamX']))
+    expect(await visibleLabels(memberA, world)).toEqual(new Set(['selfA', 'teamX', 'unassigned']))
   })
 
-  it('conversation.view with NO team membership sees assigned-to-me only', async () => {
+  it('conversation.view with NO team membership sees assigned-to-me and the Unassigned queue', async () => {
     const world = await seedWorld()
     const soloB = buildActor({
       principalId: world.agentB,
       permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
     })
-    expect(await visibleLabels(soloB, world)).toEqual(new Set(['selfB']))
+    expect(await visibleLabels(soloB, world)).toEqual(new Set(['selfB', 'unassigned']))
   })
 
   it('a service actor acting for a scoped creator (personal API key) sees only what the creator sees', async () => {
@@ -156,7 +156,9 @@ describe.skipIf(!fixture.available)('conversationFilter (real DB, rolled back)',
       scopePrincipalId: world.agentA,
       permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
     })
-    expect(await visibleLabels(personalKey, world)).toEqual(new Set(['selfA', 'teamX']))
+    expect(await visibleLabels(personalKey, world)).toEqual(
+      new Set(['selfA', 'teamX', 'unassigned'])
+    )
   })
 
   it('a personal API key whose creator holds view_all sees everything', async () => {

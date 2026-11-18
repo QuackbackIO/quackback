@@ -6,7 +6,8 @@
  * A conversation is visible to the visitor who owns it; to a workspace-wide
  * service principal holding `conversation.view` or `conversation.view_all`; to
  * a teammate with `conversation.view_all`; and to a scoped teammate for a
- * conversation assigned to them or one of their teams (`conversationFilter`).
+ * conversation assigned to them or one of their teams, or one with no assignee
+ * and no team (the Unassigned queue) (`conversationFilter`).
  * Anyone else gets NotFound, never Forbidden, so a conversation id cannot be
  * probed.
  */

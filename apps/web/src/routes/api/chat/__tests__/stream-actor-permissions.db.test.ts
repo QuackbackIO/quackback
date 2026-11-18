@@ -222,7 +222,7 @@ describe.skipIf(!fixture.available)('/api/chat/stream actor permissions (real Po
       expect(await openStream(teammate, 'dashboard', `conversationId=${conversationId}`)).toBe(404)
     })
 
-    it('opens a scoped teammate only on conversations of their own or their team', async () => {
+    it('opens a scoped teammate only on conversations of their own, their team or nobody', async () => {
       const visitor = await seedPrincipal('user')
       const teammate = await seedPrincipal('member')
       await assignCustomRole(teammate, [PERMISSIONS.CONVERSATION_VIEW])
@@ -237,6 +237,11 @@ describe.skipIf(!fixture.available)('/api/chat/stream actor permissions (real Po
       const myTeam = await seedConversation(visitor)
       const otherTeam = await seedConversation(visitor)
       const unassigned = await seedConversation(visitor)
+      const someoneElses = await seedConversation(visitor)
+      await testDb
+        .update(conversations)
+        .set({ assignedAgentPrincipalId: await seedPrincipal('member') })
+        .where(eq(conversations.id, someoneElses))
       await testDb
         .update(conversations)
         .set({ assignedAgentPrincipalId: teammate })
@@ -253,7 +258,8 @@ describe.skipIf(!fixture.available)('/api/chat/stream actor permissions (real Po
       expect(await openStream(teammate, 'dashboard', `conversationId=${mine}`)).toBe(200)
       expect(await openStream(teammate, 'dashboard', `conversationId=${myTeam}`)).toBe(200)
       expect(await openStream(teammate, 'dashboard', `conversationId=${otherTeam}`)).toBe(404)
-      expect(await openStream(teammate, 'dashboard', `conversationId=${unassigned}`)).toBe(404)
+      expect(await openStream(teammate, 'dashboard', `conversationId=${unassigned}`)).toBe(200)
+      expect(await openStream(teammate, 'dashboard', `conversationId=${someoneElses}`)).toBe(404)
     })
 
     it('opens any conversation for a teammate holding conversation.view_all', async () => {

@@ -333,8 +333,13 @@ describe.skipIf(!fixture.available)('ticket note cross-post (real DB, rolled bac
     const statusId = await seedStatus()
     const agentP = await seedPrincipal()
     const ticketId = await seedTicket(statusId, 'back_office')
-    // No assignee and no team: outside a team-scoped author's view.
+    // Assigned to another teammate with no team: outside a team-scoped
+    // author's view.
     const conversationId = await seedConversation()
+    await testDb
+      .update(conversations)
+      .set({ assignedAgentPrincipalId: await seedPrincipal() })
+      .where(eq(conversations.id, conversationId))
     await link(ticketId, conversationId, 'back_office')
 
     await addTicketNote(agentActor(agentP, PERMISSIONS.CONVERSATION_VIEW), {

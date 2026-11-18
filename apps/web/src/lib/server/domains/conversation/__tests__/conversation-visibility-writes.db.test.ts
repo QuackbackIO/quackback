@@ -2,8 +2,9 @@
  * Real-DB coverage for conversation visibility on every agent conversation
  * read and write in the conversation domain. A teammate whose role grants
  * team-scoped `conversation.view` reaches only conversations assigned to them
- * or to one of their teams. Every other conversation answers NotFound, exactly
- * like a missing one, and stays unchanged.
+ * or to one of their teams, and the Unassigned queue (no assignee and no
+ * team). Every other conversation answers NotFound, exactly like a missing
+ * one, and stays unchanged.
  *
  * The system paths keep working: a workspace-wide service actor reaches every
  * conversation, the visitor who owns a conversation still reads and writes it,
@@ -127,7 +128,11 @@ import {
   listConversationParticipants,
   removeConversationParticipant,
 } from '../conversation-participant.service'
-import { getLinkedConversationsForPost, listFlaggedMessages } from '../conversation.query'
+import {
+  getLinkedConversationsForPost,
+  listConversationsForAgent,
+  listFlaggedMessages,
+} from '../conversation.query'
 import { applyMacroActions } from '@/lib/server/domains/macros/macro.actions'
 import { boundedServiceActor } from '@/lib/server/policy/service-actor'
 import { AUTOMATION_PERMISSIONS } from '@/lib/server/domains/workflows/workflow-actor-permissions'
@@ -198,13 +203,44 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
     expect((await row(hidden.id)).assignedTeamId).toBe(w.teamY)
   })
 
-  it('a conversation with no assignee and no team is hidden from a scoped teammate', async () => {
-    const w = await seedWorld()
-    const unassigned = await w.conversation(null)
-    await expect(setConversationStatus(unassigned.id, 'closed', w.actor)).rejects.toMatchObject(
-      NOT_FOUND
-    )
-    await expect(assertConversationVisible(unassigned.id, w.actor)).rejects.toMatchObject(NOT_FOUND)
+  describe('the Unassigned queue: no assignee and no team', () => {
+    it('a scoped teammate lists, opens and replies to it, and the reply claims it', async () => {
+      const w = await seedWorld()
+      const unassigned = await w.conversation(null)
+      const listed = await listConversationsForAgent({ limit: 100 }, w.actor)
+      expect(listed.conversations.map((c) => c.id)).toContain(unassigned.id)
+      await expect(assertConversationVisible(unassigned.id, w.actor)).resolves.toMatchObject({
+        id: unassigned.id,
+      })
+      await sendAgentMessage(unassigned.id, 'Hello from Acme', w.author, w.actor)
+      expect(await agentMessagesOn(unassigned.id)).toHaveLength(1)
+      expect((await row(unassigned.id)).assignedAgentPrincipalId).toBe(w.teammate)
+    })
+
+    it("another team's conversation and one assigned to someone else stay NotFound", async () => {
+      const w = await seedWorld()
+      const otherTeam = await w.conversation(w.teamY)
+      const someoneElses = await w.conversation(null, {
+        assignedAgentPrincipalId: await seedPerson('member'),
+      })
+      const listed = await listConversationsForAgent({ limit: 100 }, w.actor)
+      for (const hidden of [otherTeam, someoneElses]) {
+        expect(listed.conversations.map((c) => c.id)).not.toContain(hidden.id)
+        await expect(assertConversationVisible(hidden.id, w.actor)).rejects.toMatchObject(NOT_FOUND)
+        await expect(
+          sendAgentMessage(hidden.id, 'Hello from Acme', w.author, w.actor)
+        ).rejects.toMatchObject(NOT_FOUND)
+        expect(await agentMessagesOn(hidden.id)).toEqual([])
+      }
+      expect((await row(otherTeam.id)).assignedAgentPrincipalId).toBeNull()
+    })
+
+    it('a personal key whose creator is scoped sees it too', async () => {
+      const w = await seedWorld()
+      const unassigned = await w.conversation(null)
+      const key: Actor = { ...workspaceKey, scopePrincipalId: w.teammate }
+      await expect(assertConversationVisible(unassigned.id, key)).resolves.toBeTruthy()
+    })
   })
 
   it('a teammate who moves their own conversation to another team gets success', async () => {

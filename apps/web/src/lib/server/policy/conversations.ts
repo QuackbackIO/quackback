@@ -5,8 +5,8 @@
  * policy/tickets.ts `ticketFilter` (same service / view_all / team / self
  * resolution). Wired into `conversation.query.ts`'s `listConversationsForAgent`
  * (UNIFIED-INBOX-SPEC.md §3.1/§6): a deliberate behavior change — a bare
- * `conversation.view` holder now sees assigned-to-me-or-my-team only, not
- * every conversation (previously an unwired seam). The single-row check
+ * `conversation.view` holder now sees assigned-to-me, my team or the
+ * Unassigned queue (no assignee and no team), not every conversation (previously an unwired seam). The single-row check
  * (`assertConversationVisible`, domains/conversation/conversation-visibility.ts)
  * adds the visitor-owner branch to this predicate; on its own it is the
  * team-inbox row selection.
@@ -14,7 +14,7 @@
  * Unlike tickets, `conversations` has no soft-delete column, so there is no
  * deleted-row exclusion.
  */
-import { eq, sql, type SQL } from 'drizzle-orm'
+import { and, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import { conversations } from '@/lib/server/db'
 import { can } from './authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -28,9 +28,12 @@ import { isUnscopedService, rowScopePrincipalId, type Actor } from './types'
  *    -> ALL conversations (workspace-wide, membership-independent). A personal
  *    API key carries `scopePrincipalId` and resolves as its creator below.
  * 2. `conversation.view_all` -> all conversations.
- * 3. `conversation.view` -> conversations assigned to one of the actor's teams
- *    OR to the actor. With no team memberships the team subquery is empty, so
- *    this collapses to assigned-to-me only.
+ * 3. `conversation.view` -> conversations assigned to one of the actor's teams,
+ *    OR to the actor, OR to nobody at all (no assignee and no team: the
+ *    Unassigned queue, which everyone who works the inbox picks up from). With
+ *    no team memberships the team subquery is empty, so this collapses to
+ *    assigned-to-me plus the Unassigned queue. A conversation assigned to
+ *    someone else with no team, or to another team, stays hidden.
  * 4. Anything else fails closed (no principal, or no conversation.view).
  */
 export function conversationFilter(actor: Actor): SQL {
@@ -47,6 +50,10 @@ export function conversationFilter(actor: Actor): SQL {
 
   const assignedToMe = eq(conversations.assignedAgentPrincipalId, principalId as never)
   const assignedToMyTeam = sql`${conversations.assignedTeamId} IN (${teamsForActor(principalId)})`
+  const unassignedQueue = and(
+    isNull(conversations.assignedAgentPrincipalId),
+    isNull(conversations.assignedTeamId)
+  )
 
-  return sql`(${assignedToMe} OR ${assignedToMyTeam})`
+  return sql`(${assignedToMe} OR ${assignedToMyTeam} OR ${unassignedQueue})`
 }
