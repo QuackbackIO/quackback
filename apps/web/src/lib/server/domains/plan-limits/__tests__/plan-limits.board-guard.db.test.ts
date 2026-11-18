@@ -61,7 +61,6 @@ import {
   BoardReadOnlyError,
   assertBoardOpen,
   boardClosedReason,
-  importRoom,
   withVisitorPostCapCopy,
 } from '../plan-limits.board-guard'
 
@@ -597,70 +596,12 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
       expect(await userCount()).toBe(0)
     })
 
-    it('creates no user for the voters of a row refused at the posts cap', async () => {
-      await configure({ planLimits: true, tierLimits: { ...OSS_TIER_LIMITS, maxPosts: 4 } })
-      await processBatch(voterRows(openBoard), openBoard, 0, new ImportUserResolver(), null, {
-        'src-v': [voter],
-      })
-      expect(await userCount()).toBe(0)
-    })
-
     it('still resolves the voters of a row that is imported', async () => {
       await configure({ planLimits: false })
       await processBatch(voterRows(openBoard), openBoard, 0, new ImportUserResolver(), null, {
         'src-v': [voter],
       })
       expect(await userCount()).toBe(1)
-    })
-  })
-
-  describe('import under the caps', () => {
-    const rows = (n: number, extra: Record<string, string> = {}) =>
-      Array.from({ length: n }, (_, i) => ({
-        title: `Acme import ${i}`,
-        content: 'x',
-        author_name: 'Acme Fan',
-        ...extra,
-      }))
-
-    it('stops new posts at the posts cap', async () => {
-      // Four posts exist; a cap of five leaves room for one.
-      await configure({ planLimits: true, tierLimits: { ...OSS_TIER_LIMITS, maxPosts: 5 } })
-      const result = await processBatch(rows(3), openBoard, 0, new ImportUserResolver())
-      expect(result.imported).toBe(1)
-      expect(result.errors).toHaveLength(2)
-      expect(result.skipped).toBe(2)
-    })
-
-    it('spends one shared room across the batches of a run', async () => {
-      await configure({ planLimits: true, tierLimits: { ...OSS_TIER_LIMITS, maxPosts: 5 } })
-      const room = await importRoom()
-      expect(room.posts).toBe(1)
-      const resolver = new ImportUserResolver()
-      const first = await processBatch(rows(1), openBoard, 0, resolver, null, undefined, room)
-      const second = await processBatch(rows(1), openBoard, 1, resolver, null, undefined, room)
-      expect(first.imported).toBe(1)
-      expect(second.imported).toBe(0)
-      expect(second.errors).toHaveLength(1)
-    })
-
-    it('does not create a board past the boards cap, and refuses the rows that needed it', async () => {
-      await configure({ planLimits: true, tierLimits: { ...OSS_TIER_LIMITS, maxBoards: 2 } })
-      const result = await processBatch(
-        rows(1, { board: 'Acme brand new' }),
-        openBoard,
-        0,
-        new ImportUserResolver()
-      )
-      expect(result.createdBoards).toEqual([])
-      expect(result.imported).toBe(0)
-      expect(result.errors).toHaveLength(1)
-    })
-
-    it('is unlimited with the flag off', async () => {
-      await configure({ planLimits: false, tierLimits: { ...OSS_TIER_LIMITS, maxPosts: 5 } })
-      const result = await processBatch(rows(3), openBoard, 0, new ImportUserResolver())
-      expect(result.imported).toBe(3)
     })
   })
 

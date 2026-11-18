@@ -19,9 +19,7 @@ import { ForbiddenError } from '@/lib/shared/errors'
 import { BOARD_READ_ONLY_MESSAGE } from '@/lib/shared/board-read-only'
 import type { BoardId, PostId } from '@quackback/ids'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
-import { PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
-import { loadUsageCounts } from '@/lib/server/domains/billing/usage-counts'
 import { evaluate, getPlanLimits, openBoardIds } from './plan-limits.service'
 
 export const BOARD_READ_ONLY_CODE = 'BOARD_READ_ONLY'
@@ -177,42 +175,5 @@ async function limitsEnabled(): Promise<boolean> {
     return (await getPlanLimits()).enabled
   } catch {
     return false
-  }
-}
-
-/**
- * How many more posts and boards an import may add under the plan's caps, with
- * the refusal each cap gives. A null room means no limit: the flag is off, the
- * cap is unlimited, or the counts cannot be read. Imports stop at the caps the
- * same way a single post does.
- */
-export interface ImportRoom {
-  posts: number | null
-  boards: number | null
-  postsRefusal: string
-  boardsRefusal: string
-}
-
-export async function importRoom(): Promise<ImportRoom> {
-  const none: ImportRoom = { posts: null, boards: null, postsRefusal: '', boardsRefusal: '' }
-  try {
-    const limits = await getPlanLimits()
-    if (!limits.enabled) return none
-    const [tier, used] = await Promise.all([getTierLimits(), loadUsageCounts()])
-    const room = (cap: number | null, count: number) =>
-      cap === null ? null : Math.max(0, cap - count)
-    const plan = limits.plan
-      ? `the ${PLAN_CATALOGUE[limits.plan].name} plan`
-      : "the workspace's plan"
-    const refusal = (cap: number | null, noun: string) =>
-      `Not imported: ${plan} allows ${cap} ${noun}.`
-    return {
-      posts: room(tier.maxPosts, used.maxPosts ?? 0),
-      boards: room(tier.maxBoards, used.maxBoards ?? 0),
-      postsRefusal: refusal(tier.maxPosts, 'posts'),
-      boardsRefusal: refusal(tier.maxBoards, 'boards'),
-    }
-  } catch {
-    return none
   }
 }

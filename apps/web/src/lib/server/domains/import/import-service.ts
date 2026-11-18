@@ -32,12 +32,11 @@ import {
   type PrincipalId,
 } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
-import { openBoardIds } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import {
-  BOARD_READ_ONLY_MESSAGE,
-  importRoom,
-  type ImportRoom,
-} from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
+  loadClosedBoards,
+  refuseRowsOnClosedBoards,
+  refuseUpdatesOnClosedBoards,
+} from './import-board-guard'
 import type { ImportInput, ImportResult, ImportRowError, ImportVoterRecord } from './types'
 import { ImportUserResolver } from './user-resolver'
 import { BATCH_SIZE, IMPORT_LINK_TYPE, loadRowContext, resolveRows } from './import-row-resolver'
@@ -126,9 +125,7 @@ export async function processBatch(
   startIndex: number,
   userResolver: ImportUserResolver,
   batchTagId?: PostTagId | null,
-  voters?: Record<string, ImportVoterRecord[]>,
-  /** The room left under the plan's caps. A run passes one object and every batch spends from it. */
-  runRoom?: ImportRoom
+  voters?: Record<string, ImportVoterRecord[]>
 ): Promise<BatchResult> {
   const result: BatchResult = {
     imported: 0,
@@ -164,15 +161,9 @@ export async function processBatch(
   // Direct inserts — deliberately not createBoard/createStatusFn, so bulk
   // imports don't fan out board/status events per row.
   // While boards are read-only no board is created: a new one is not kept open.
-  // Otherwise boards stop at the plan's cap, as a single board create does.
-  const open = await openBoardIds()
-  const room = runRoom ?? (await importRoom())
-  let boardRoom = room.boards
+  const closed = await loadClosedBoards(ctx)
   for (const [slug, name] of boardsToCreate) {
-    if (open !== null || ctx.boardMap.has(slug)) continue
-    if (boardRoom !== null && boardRoom <= 0) continue
-    if (boardRoom !== null) boardRoom--
-    room.boards = boardRoom
+    if (closed.open !== null || ctx.boardMap.has(slug)) continue
     const id = createId('board')
     await db.insert(boards).values({ id, name, slug })
     ctx.boardMap.set(slug, { id, slug })
@@ -213,26 +204,7 @@ export async function processBatch(
     }
   }
 
-  // Rows aimed at a board that does not exist (it was not created) or is
-  // read-only are refused, whether they would create or update a post: a
-  // read-only board takes no new posts and no vote changes.
-  const refuse = (index: number, message: string, field: string) => {
-    result.errors.push({ row: index, message, field })
-    result.skipped++
-  }
-  for (let i = validRows.length - 1; i >= 0; i--) {
-    const { row, index } = validRows[i]
-    if (row.pendingBoardSlug !== null && !ctx.boardMap.has(row.pendingBoardSlug)) {
-      validRows.splice(i, 1)
-      refuse(index, open !== null ? BOARD_READ_ONLY_MESSAGE : room.boardsRefusal, 'board')
-    } else if (
-      ctx.readOnlyBoardIds.has(row.boardId) ||
-      (open !== null && !open.includes(row.boardId))
-    ) {
-      validRows.splice(i, 1)
-      refuse(index, BOARD_READ_ONLY_MESSAGE, 'board')
-    }
-  }
+  refuseRowsOnClosedBoards(validRows, ctx, closed, result)
 
   // Idempotence: match rows carrying a source_id against prior import links.
   const sourceIds = validRows.map(({ row }) => row.sourceId).filter((id): id is string => !!id)
@@ -254,34 +226,8 @@ export async function processBatch(
     ({ row }) => row.sourceId && existingBySourceId.has(row.sourceId)
   )
 
-  // New posts stop at the plan's posts cap, as a single post does.
-  if (room.posts !== null && toInsert.length > room.posts) {
-    for (const { index } of toInsert.splice(room.posts)) {
-      refuse(index, room.postsRefusal, 'title')
-    }
-  }
-  if (room.posts !== null) room.posts -= toInsert.length
-
   // A post already on a read-only board keeps its content and votes.
-  if ((open !== null || ctx.readOnlyBoardIds.size > 0) && toUpdate.length > 0) {
-    const boardOf = new Map(
-      (
-        await db
-          .select({ id: posts.id, boardId: posts.boardId })
-          .from(posts)
-          .where(inArray(posts.id, [...existingBySourceId.values()]))
-      ).map((post) => [post.id, post.boardId])
-    )
-    for (let i = toUpdate.length - 1; i >= 0; i--) {
-      const boardId = boardOf.get(existingBySourceId.get(toUpdate[i].row.sourceId!)!)
-      if (
-        boardId &&
-        (ctx.readOnlyBoardIds.has(boardId) || (open !== null && !open.includes(boardId)))
-      ) {
-        refuse(toUpdate.splice(i, 1)[0].index, BOARD_READ_ONLY_MESSAGE, 'board')
-      }
-    }
-  }
+  await refuseUpdatesOnClosedBoards(toUpdate, existingBySourceId, ctx, closed, result)
 
   // Pre-generate IDs for all new tags (no interactive transaction)
   const tagsToCreateArray = Array.from(tagsToCreate)
@@ -500,8 +446,6 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
 
   // Single UserResolver instance shared across all batches (caches email->principalId lookups)
   const userResolver = new ImportUserResolver()
-  // The plan's caps are read once; each batch spends from what is left.
-  const room = await importRoom()
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE)
@@ -511,8 +455,7 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
       i,
       userResolver,
       data.batchTagId,
-      data.voters,
-      room
+      data.voters
     )
     result = mergeResults(result, batchResult)
   }
