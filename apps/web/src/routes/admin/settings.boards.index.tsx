@@ -93,6 +93,13 @@ function BoardsSettingsPage() {
           {openBoards.length > 0
             ? openBoards.map((board) => board.name).join(', ')
             : 'an open board'}
+          . To open another board instead,{' '}
+          <a
+            href="/admin/settings/billing/limits"
+            className="font-medium text-foreground hover:underline"
+          >
+            change the open board
+          </a>
           .
         </p>
       )}
