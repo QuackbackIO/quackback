@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { Component, lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { Component, Suspense, useEffect, type ReactNode } from 'react'
 import type { Role } from '@/lib/shared/roles'
 import type { QueryClient } from '@tanstack/react-query'
 import {
@@ -14,6 +14,7 @@ import { isAdmin } from '@/lib/shared/roles'
 import appCss from '../globals.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
+import { lazyOptional } from '@/lib/client/lazy-with-preload'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { ThemeProvider } from '@/components/theme-provider'
 import { resolveDocumentTheme, SYSTEM_THEME_SCRIPT } from '@/lib/shared/theme'
@@ -32,8 +33,9 @@ import { isStatusFeedReadable } from '@/lib/shared/status-settings'
 
 // The toast renderer is its own chunk: the root module ships with every
 // document (the embedded widget included), and a toast fired before it mounts
-// is replayed to it once it subscribes.
-const Toaster = lazy(() => import('@/components/ui/sonner').then((m) => ({ default: m.Toaster })))
+// is replayed to it once it subscribes. It loads on every page, so a chunk that
+// fails to load must cost the toasts, not the page.
+const Toaster = lazyOptional(() => import('@/components/ui/sonner'), 'Toaster')
 
 export interface RouterContext {
   queryClient: QueryClient
