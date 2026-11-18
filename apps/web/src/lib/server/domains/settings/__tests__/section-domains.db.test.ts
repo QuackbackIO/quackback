@@ -289,6 +289,38 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
         unconfirmedSince: '2020-01-01T00:00:00.000Z',
       })
     })
+
+    describe('a help center domain that is the primary domain', () => {
+      // Set before section domains, when nothing refused BASE_URL's host.
+      beforeEach(() => seedSettings({ helpCenterConfig: legacyHelp('feedback.acme.com', NOW) }))
+
+      it('is no section domain to any reader', async () => {
+        expect(await getSectionDomains()).toEqual({})
+        expect((await getSectionDomainsView()).sectionDomains).toEqual({})
+      })
+
+      it('cannot be verified as a section domain', async () => {
+        expect(await verifySectionDomain('help')).toMatchObject({
+          ok: false,
+          code: 'SECTION_DOMAIN_NOT_SET',
+        })
+      })
+
+      it('stays stored through a change to another section', async () => {
+        const result = await setSectionDomain('status', 'status.acme.com')
+        expect(result).toEqual({
+          ok: true,
+          sectionDomains: { status: { hostname: 'status.acme.com', verifiedAt: null } },
+        })
+        expect(await stored()).toEqual({
+          sectionDomains: {
+            help: { hostname: 'feedback.acme.com', verifiedAt: NOW },
+            status: { hostname: 'status.acme.com', verifiedAt: null },
+          },
+          helpDomain: { domain: 'feedback.acme.com', verifiedAt: NOW },
+        })
+      })
+    })
   })
 
   describe('Cloud', () => {

@@ -141,6 +141,8 @@ export function DomainsCard(props: {
   onAdd: () => void
   onRefresh: (hostname: string) => void
   onMakePrimary: (hostname: string) => void
+  /** Whether a section uses the hostname: such a domain is never made primary. */
+  usedBySection?: (hostname: string) => boolean
   onRemove: (hostname: string) => void
 }) {
   return (
@@ -209,17 +211,19 @@ export function DomainsCard(props: {
                   >
                     Verify
                   </Button>
-                  {domain.readiness === 'ready' && !domain.isPrimary && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={props.pending}
-                      onClick={() => props.onMakePrimary(domain.hostname)}
-                    >
-                      Make primary
-                    </Button>
-                  )}
+                  {domain.readiness === 'ready' &&
+                    !domain.isPrimary &&
+                    !props.usedBySection?.(domain.hostname) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={props.pending}
+                        onClick={() => props.onMakePrimary(domain.hostname)}
+                      >
+                        Make primary
+                      </Button>
+                    )}
                   <Button
                     type="button"
                     size="sm"

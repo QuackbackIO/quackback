@@ -72,7 +72,7 @@ import {
 import { DEFAULT_PORTAL_CONFIG, isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
-import { effectiveSectionDomains } from '@/lib/shared/section-domains'
+import { effectiveSectionDomains, hostOfOrigin } from '@/lib/shared/section-domains'
 import type {
   PortalConfig,
   PortalNavItemConfig,
@@ -81,6 +81,7 @@ import type {
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import {
+  useBaseUrl,
   useCloudEnabled,
   useSessionContext,
   useWorkspaceSettings,
@@ -241,6 +242,7 @@ function CustomDomainsPanel({ onLeave }: { onLeave?: () => void }) {
 function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] }) {
   const router = useRouter()
   const settings = useWorkspaceSettings()
+  const baseUrl = useBaseUrl()
   const session = useSessionContext()
   const [, startTransition] = useTransition()
   // Display-only: the name is edited on Workspace > General.
@@ -398,9 +400,10 @@ function PortalPage({ tab, tabs }: { tab: PortalTab; tabs: readonly PortalTab[] 
         effectiveSectionDomains({
           sectionDomains: settings?.portalConfig?.sectionDomains,
           legacyHelpDomain: settings?.helpCenterConfig?.domain,
+          primaryHost: hostOfOrigin(baseUrl),
         })
       ),
-    [settings]
+    [settings, baseUrl]
   )
 
   const resetNavItems = useCallback(() => setNavItems(seedNavEditorItems(null)), [])

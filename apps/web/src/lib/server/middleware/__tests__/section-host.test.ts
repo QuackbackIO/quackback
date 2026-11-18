@@ -11,10 +11,15 @@ import type { SectionHostContext } from '../section-host-handler'
 const state = vi.hoisted(() => ({
   settings: null as Record<string, unknown> | null,
   settingsReads: 0,
+  baseUrl: 'https://acme.example.com',
 }))
 
 vi.mock('@/lib/server/config', () => ({
-  config: { baseUrl: 'https://acme.example.com' },
+  config: {
+    get baseUrl() {
+      return state.baseUrl
+    },
+  },
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getWorkspaceSettings: async () => {
@@ -71,6 +76,7 @@ async function send(url: string, init: RequestInit = {}): Promise<Outcome> {
 
 beforeEach(() => {
   state.settingsReads = 0
+  state.baseUrl = 'https://acme.example.com'
   state.settings = workspace({
     sectionDomains: {
       help: { hostname: 'help.acme.com', verifiedAt: VERIFIED },
@@ -317,5 +323,64 @@ describe('handleSectionHost for a team page on a section host', () => {
   it('leaves server functions on a section host to the app', async () => {
     const { response } = await send('https://help.acme.com/_serverFn/abc', { method: 'POST' })
     expect(response).toBe(PASSED)
+  })
+})
+
+describe('handleSectionHost when a section names the primary domain', () => {
+  // A help center domain set to BASE_URL's host before section domains (main
+  // never refused it, and it did nothing there), BASE_URL moved onto a
+  // section's hostname, or a custom domain made primary on Cloud. The primary
+  // domain stays the primary domain: no rewrite of /, and no section's path
+  // sent to itself.
+  const PAGES = ['/roadmap', '/b/x', '/changelog', '/status', '/hc', '/support']
+
+  describe.each([
+    ['verified', VERIFIED],
+    ['not verified', null],
+  ])('a legacy help domain that is the BASE_URL host, %s', (_label, verifiedAt) => {
+    describe.each([
+      ['help on', true],
+      ['help off', false],
+    ])('%s', (_on, helpCenter) => {
+      beforeEach(() => {
+        state.settings = workspace({
+          legacyHelpDomain: { domain: 'acme.example.com', verifiedAt },
+          helpCenter,
+        })
+      })
+
+      it('shows the feedback home at /', async () => {
+        const { response, context } = await send('https://acme.example.com/')
+        expect(response).toBe(PASSED)
+        expect(context).toBeUndefined()
+      })
+
+      it.each(PAGES)('serves %s with no redirect', async (path) => {
+        const { response, context } = await send(`https://acme.example.com${path}`)
+        expect(response).toBe(PASSED)
+        expect(context).toBeUndefined()
+      })
+    })
+  })
+
+  it('stops treating a section hostname as a section host once BASE_URL moves onto it', async () => {
+    state.baseUrl = 'https://help.acme.com'
+    const { response, context } = await send('https://help.acme.com/')
+    expect(response).toBe(PASSED)
+    expect(context).toBeUndefined()
+    for (const path of ['/roadmap', '/b/x', '/changelog', '/hc', '/support']) {
+      expect((await send(`https://help.acme.com${path}`)).response).toBe(PASSED)
+    }
+    // Another section with a host of its own is still moved there.
+    const status = await send('https://help.acme.com/status')
+    expect(status.response.status).toBe(301)
+    expect(status.response.headers.get('location')).toBe('https://status.acme.com/status')
+  })
+
+  it('compares with BASE_URL without case or port', async () => {
+    state.baseUrl = 'https://HELP.acme.com:8443'
+    const { response, context } = await send('https://help.acme.com/roadmap')
+    expect(response).toBe(PASSED)
+    expect(context).toBeUndefined()
   })
 })

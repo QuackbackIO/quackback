@@ -21,8 +21,13 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   },
 }))
 
-const { getSectionOrigins, getSignInSectionOrigins, isSectionHost, sectionHostOrigin } =
-  await import('../section-links')
+const {
+  getSectionOrigins,
+  getSignInSectionOrigins,
+  isSectionHost,
+  sectionHostOrigin,
+  sectionOriginsOf,
+} = await import('../section-links')
 
 const VERIFIED = '2026-11-01T00:00:00.000Z'
 const PRIMARY = 'https://acme.example.com'
@@ -179,5 +184,28 @@ describe('isSectionHost', () => {
     expect(await isSectionHost(null)).toBe(false)
     state.settings = null
     expect(await isSectionHost('help.acme.com')).toBe(false)
+  })
+})
+
+describe('a section hostname that is the primary domain', () => {
+  // BASE_URL's host, or BASE_URL moved onto a section's hostname: never a
+  // section's origin, so links, sign-in origins and handoffs keep to the
+  // primary domain as it is now, port and all.
+  const ON_PRIMARY = () =>
+    workspace({ legacyHelpDomain: { domain: 'acme.example.com', verifiedAt: VERIFIED } })
+
+  it('links nothing at it, comparing without the port', () => {
+    const settings = ON_PRIMARY() as unknown as Parameters<typeof sectionOriginsOf>[0]
+    const primary = 'https://acme.example.com:8443'
+    for (const forSignIn of [false, true]) {
+      const origins = sectionOriginsOf(settings, primary, { forSignIn })
+      expect(origins.help).toBe(primary)
+      expect(origins.primary).toBe(primary)
+    }
+  })
+
+  it('hands no session off to it', async () => {
+    state.settings = ON_PRIMARY()
+    expect(await sectionHostOrigin('acme.example.com')).toBeNull()
   })
 })

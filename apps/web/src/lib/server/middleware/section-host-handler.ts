@@ -31,6 +31,7 @@ import { config } from '@/lib/server/config'
 import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
 import {
   effectiveSectionDomains,
+  hostOfOrigin,
   portalSectionsEnabled,
   resolveSectionHostRoute,
   sectionForPath,
@@ -75,6 +76,7 @@ export async function handleSectionHost<T extends NextResult>({
     effectiveSectionDomains({
       sectionDomains: settings.portalConfig?.sectionDomains,
       legacyHelpDomain: settings.helpCenterConfig?.domain,
+      primaryHost: hostOfOrigin(config.baseUrl),
     }),
     hostingOf(settings.settings as { cloud?: unknown; cloudIdentity?: unknown })
   )

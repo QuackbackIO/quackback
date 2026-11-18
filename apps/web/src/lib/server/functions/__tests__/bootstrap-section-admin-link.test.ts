@@ -164,3 +164,28 @@ describe('the admin link for a teammate on a section host', () => {
     expect(data.userRole).toBe('admin')
   })
 })
+
+describe('a help center domain that is the primary domain', () => {
+  // Set before section domains, when nothing refused BASE_URL's host. The
+  // primary domain must not become the help center's host: `/` stays the
+  // feedback home, and the page is not told it is on a section's host.
+  beforeEach(() => {
+    hoisted.host = 'acme.com'
+    hoisted.getWorkspaceSettings.mockResolvedValue({
+      ...settings,
+      portalConfig: {},
+      helpCenterConfig: { domain: { domain: 'acme.com', verifiedAt: '2026-11-01T00:00:00.000Z' } },
+      featureFlags: { feedback: true, helpCenter: true },
+    })
+  })
+
+  it('shows the feedback home at / and says nothing about a section host', async () => {
+    const data = (await getBootstrapData()) as Bootstrap & {
+      sectionHome: string | null
+      sectionLinks?: unknown
+    }
+    expect(data.sectionHome).toBeNull()
+    expect(data.sectionLinks).toBeUndefined()
+    expect('primaryAdminUrl' in data).toBe(false)
+  })
+})

@@ -14,7 +14,7 @@ import type { PortalSection } from '@/lib/shared/custom-domains'
 import { CUSTOM_DOMAINS_LINK } from '@/lib/shared/portal-settings-tabs'
 import {
   effectiveSectionDomains,
-  normalizeHost,
+  hostOfOrigin,
   notAnsweringNote,
   sectionDomainState,
   type SectionDomainMap,
@@ -76,21 +76,16 @@ export function SectionDomainSettingsCard({ section }: { section: PortalSection 
   const settings = useWorkspaceSettings()
   const baseUrl = useBaseUrl()
   const canManage = useHasPermission(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)
+  const primaryHost = useMemo(() => hostOfOrigin(baseUrl), [baseUrl])
   const map = useMemo(
     () =>
       effectiveSectionDomains({
         sectionDomains: settings?.portalConfig?.sectionDomains,
         legacyHelpDomain: settings?.helpCenterConfig?.domain,
+        primaryHost,
       }),
-    [settings]
+    [settings, primaryHost]
   )
-  const primaryHost = useMemo(() => {
-    try {
-      return baseUrl ? normalizeHost(new URL(baseUrl).host) : null
-    } catch {
-      return null
-    }
-  }, [baseUrl])
   return (
     <SectionDomainCard
       section={section}

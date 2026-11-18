@@ -15,9 +15,13 @@ import type { ShownProofSource } from '@/lib/shared/domain-proof'
 
 afterEach(cleanup)
 
-function renderCard(domains: (CustomDomainInstruction & { provenBy?: ShownProofSource | null })[]) {
+function renderCard(
+  domains: (CustomDomainInstruction & { provenBy?: ShownProofSource | null })[],
+  usedBySection?: (hostname: string) => boolean
+) {
   return render(
     <DomainsCard
+      usedBySection={usedBySection}
       entitled
       domains={domains}
       hostname=""
@@ -39,6 +43,19 @@ const base = {
 } as const
 
 describe('<DomainsCard>', () => {
+  it('offers Make primary for a ready domain no section uses, and never for one a section uses', () => {
+    const ready = (hostname: string) =>
+      ({ ...base, hostname, readiness: 'ready', ownershipTxt: null }) as CustomDomainInstruction
+    renderCard(
+      [ready('feedback.example.com'), ready('help.example.com')],
+      (hostname) => hostname === 'help.example.com'
+    )
+    expect(screen.getAllByRole('button', { name: 'Make primary' })).toHaveLength(1)
+    const rows = screen.getAllByRole('listitem')
+    expect(rows[0]!.textContent).toContain('Make primary')
+    expect(rows[1]!.textContent).not.toContain('Make primary')
+  })
+
   it('carries the anchor Add a new domain lands on', () => {
     const { container } = renderCard([])
     expect(container.querySelector(`section#${DOMAIN_VERIFICATION_ANCHOR}`)).not.toBeNull()

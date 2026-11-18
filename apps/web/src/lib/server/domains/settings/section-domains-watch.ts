@@ -31,7 +31,12 @@ import {
   type SectionDomainMap,
 } from '@/lib/shared/section-domains'
 import type { PortalSection } from '@/lib/shared/custom-domains'
-import { getSectionDomains, readHosting, writeSectionDomains } from './section-domains.service'
+import {
+  getSectionDomains,
+  readHosting,
+  readStoredSectionDomains,
+  writeSectionDomains,
+} from './section-domains.service'
 import {
   notifySectionDomainLapsed,
   notifySectionDomainNotAnswering,
@@ -141,7 +146,8 @@ export async function watchSectionDomains(
 
   // Read again just before writing, so the window for an admin's edit is the
   // write itself, not the seconds the checks took.
-  const current = await getSectionDomains('fresh')
+  // As stored, so an entry hidden as the primary domain's is kept.
+  const current = await readStoredSectionDomains('fresh')
   const next: SectionDomainMap = { ...current }
   const changed: { section: PortalSection; entry: SectionDomain; decision: Decision }[] = []
   for (const judgedEntry of decisions) {

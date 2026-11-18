@@ -230,6 +230,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     {
       effectiveSectionDomains,
       helpDomainConfig,
+      hostOfOrigin,
       normalizeHost,
       portalSectionsEnabled,
       sectionHomeForHost,
@@ -333,6 +334,8 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   const sectionDomains = effectiveSectionDomains({
     sectionDomains: settings?.portalConfig?.sectionDomains,
     legacyHelpDomain: settings?.helpCenterConfig?.domain,
+    // BASE_URL's host; `baseUrl` below is the help host on the help host.
+    primaryHost: hostOfOrigin(config.baseUrl),
   })
   const baseUrl = resolveHelpCenterBaseUrl({
     domainConfig: helpDomainConfig(sectionDomains),

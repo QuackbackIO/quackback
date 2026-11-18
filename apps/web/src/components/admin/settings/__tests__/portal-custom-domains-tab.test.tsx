@@ -10,13 +10,14 @@ const calls = vi.hoisted(() => ({
   sectionReads: 0,
   readyHostnames: [] as readonly string[],
   order: [] as string[],
-  mutateResult: { projection: { canonicalOrigin: 'https://help.acme.com' } } as {
-    projection: { canonicalOrigin: string }
-    transferToken?: string
-  },
+  mutateResult: { projection: { canonicalOrigin: 'https://help.acme.com' } } as
+    | { projection: { canonicalOrigin: string }; transferToken?: string }
+    | { ok: false; code: string; message: string },
   domains: [] as { hostname: string; readiness: string; isPrimary: boolean }[],
   permissions: [] as string[],
   navigate: vi.fn(),
+  sectionDomains: {} as Record<string, { hostname: string; verifiedAt: string | null }>,
+  usedBySection: undefined as ((hostname: string) => boolean) | undefined,
   card: {} as {
     cloudHostnames?: readonly string[]
     loadVerifiedDomains?: () => Promise<readonly string[]>
@@ -48,7 +49,7 @@ vi.mock('@/lib/server/functions/cloud-identity', () => ({
 vi.mock('@/lib/server/functions/section-domains', () => ({
   getSectionDomainsFn: vi.fn(async () => {
     calls.sectionReads++
-    return { sectionDomains: {}, primaryHost: 'acme.com' }
+    return { sectionDomains: calls.sectionDomains, primaryHost: 'acme.com' }
   }),
 }))
 
@@ -87,11 +88,20 @@ vi.mock('@/components/admin/settings/section-domains-card', () => ({
 }))
 
 vi.mock('@/components/admin/settings/domains-cards', () => ({
-  DomainsCard: ({ onRefresh }: { onRefresh: (hostname: string) => void }) => (
-    <button type="button" onClick={() => onRefresh('help.acme.com')}>
-      Verify domain
-    </button>
-  ),
+  DomainsCard: ({
+    onRefresh,
+    usedBySection,
+  }: {
+    onRefresh: (hostname: string) => void
+    usedBySection?: (hostname: string) => boolean
+  }) => {
+    calls.usedBySection = usedBySection
+    return (
+      <button type="button" onClick={() => onRefresh('help.acme.com')}>
+        Verify domain
+      </button>
+    )
+  },
   QuackbackUrlCard: () => null,
   hostnameRecords: (domain: { hostname: string }) => [{ name: domain.hostname }],
 }))
@@ -124,6 +134,8 @@ beforeEach(() => {
   calls.permissions = []
   calls.navigate.mockReset()
   calls.card = {}
+  calls.sectionDomains = {}
+  calls.usedBySection = undefined
 })
 
 afterEach(() => {
@@ -167,6 +179,40 @@ describe('the Custom domains tab on Cloud', () => {
 
     await waitFor(() => expect(assign).toHaveBeenCalledTimes(1))
     expect(calls.order).toEqual(['leave', 'assign'])
+  })
+
+  it('tells the Domain verification card which domains a section uses', async () => {
+    calls.sectionDomains = { help: { hostname: 'help.acme.com', verifiedAt: null } }
+    renderTab()
+    await screen.findByText('Verify domain')
+    expect(calls.usedBySection?.('help.acme.com')).toBe(true)
+    expect(calls.usedBySection?.('feedback.acme.com')).toBe(false)
+  })
+
+  it('says why Make primary was refused, and leaves the page where it is', async () => {
+    calls.mutateResult = {
+      ok: false,
+      code: 'CUSTOM_DOMAIN_USED_BY_SECTION',
+      message: 'Help center uses this domain. Remove it there first.',
+    }
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+    const onLeave = vi.fn()
+    const { toast } = await import('sonner')
+    vi.mocked(toast.error).mockClear()
+    vi.mocked(toast.success).mockClear()
+    renderTab(onLeave)
+
+    fireEvent.click(await screen.findByText('Make primary'))
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Help center uses this domain. Remove it there first.'
+      )
+    )
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(assign).not.toHaveBeenCalled()
+    expect(onLeave).not.toHaveBeenCalled()
   })
 })
 
