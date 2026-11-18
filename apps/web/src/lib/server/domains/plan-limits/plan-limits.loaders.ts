@@ -75,7 +75,8 @@ const countOf = async (query: Promise<{ count: number }[]>): Promise<number> =>
 export interface ConfiguredFeatureSources {
   customCss: string | null
   cloudIdentity: StoredCloudIdentityProjection | null
-  helpCenterDomain: string | null
+  /** Every hostname a portal section names (see `PlanLimitsSources`). */
+  sectionHostnames: readonly string[]
   autoTranslate: boolean
   assistantResponds: boolean
 }
@@ -106,7 +107,7 @@ export async function loadConfiguredFeatures(
     ),
   ])
   const hostnames = new Set(sources.cloudIdentity?.customDomains?.map((d) => d.hostname) ?? [])
-  if (sources.helpCenterDomain) hostnames.add(sources.helpCenterDomain)
+  for (const hostname of sources.sectionHostnames) hostnames.add(hostname)
   const configured: Partial<Record<PlanFeatureKey, number>> = {
     workflows: liveWorkflows,
     webhooks: activeWebhooks,

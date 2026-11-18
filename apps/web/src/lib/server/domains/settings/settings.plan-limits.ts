@@ -11,8 +11,14 @@ import type {
   StoredCloudIdentityProjection,
   StoredPlanLimitsState,
 } from '@/lib/shared/db-types'
+import { getBaseUrl } from '@/lib/server/config'
+import {
+  effectiveSectionDomains,
+  hostOfOrigin,
+  PORTAL_SECTIONS,
+} from '@/lib/shared/section-domains'
 import { findSettingsCached, invalidateSettingsCache, parseJsonConfig } from './settings.helpers'
-import { DEFAULT_HELP_CENTER_CONFIG } from './settings.types'
+import { DEFAULT_HELP_CENTER_CONFIG, DEFAULT_PORTAL_CONFIG } from './settings.types'
 
 /** What the plan limits state is computed from, off the cached settings row. */
 export interface PlanLimitsSources {
@@ -26,7 +32,11 @@ export interface PlanLimitsSources {
   authConfigVersion: number
   cloudIdentity: StoredCloudIdentityProjection | null
   customCss: string | null
-  helpCenterDomain: string | null
+  /**
+   * Every hostname a portal section names (help.acme.com), verified or not,
+   * from the section map every reader uses: never the primary domain.
+   */
+  sectionHostnames: string[]
   autoTranslate: boolean
 }
 
@@ -34,6 +44,12 @@ export async function readPlanLimitsSources(): Promise<PlanLimitsSources | null>
   const row = await findSettingsCached()
   if (!row) return null
   const helpCenter = parseJsonConfig(row.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
+  const portal = parseJsonConfig(row.portalConfig, DEFAULT_PORTAL_CONFIG)
+  const sectionDomains = effectiveSectionDomains({
+    sectionDomains: portal.sectionDomains,
+    legacyHelpDomain: helpCenter.domain,
+    primaryHost: hostOfOrigin(getBaseUrl()),
+  })
   return {
     planLimitsState: row.planLimitsState ?? null,
     tierLimits: row.tierLimits ?? null,
@@ -42,7 +58,10 @@ export async function readPlanLimitsSources(): Promise<PlanLimitsSources | null>
     authConfigVersion: row.authConfigVersion ?? 0,
     cloudIdentity: row.cloudIdentity ?? null,
     customCss: row.customCss ?? null,
-    helpCenterDomain: helpCenter.domain?.domain ?? null,
+    sectionHostnames: PORTAL_SECTIONS.flatMap((section) => {
+      const hostname = sectionDomains[section]?.hostname
+      return hostname ? [hostname.toLowerCase()] : []
+    }),
     autoTranslate: helpCenter.autoTranslate?.enabled === true,
   }
 }

@@ -162,7 +162,7 @@ async function loadPart(
         configured: await loadConfiguredFeatures({
           customCss: sources?.customCss ?? null,
           cloudIdentity: sources?.cloudIdentity ?? null,
-          helpCenterDomain: sources?.helpCenterDomain ?? null,
+          sectionHostnames: sources?.sectionHostnames ?? [],
           autoTranslate: sources?.autoTranslate ?? false,
           assistantResponds: messenger.assistant?.respond === true,
         }),
