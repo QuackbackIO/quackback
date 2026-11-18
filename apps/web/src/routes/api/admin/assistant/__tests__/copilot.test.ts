@@ -371,7 +371,7 @@ describe('POST /api/admin/assistant/copilot', () => {
     expect(turnInput()).toMatchObject({ actorPrincipalId: 'principal_1' })
   })
 
-  it('uses the resolved actor only for the viewability gate, not as runtime policy input', async () => {
+  it('uses the resolved actor for the viewability gate and as the retrieval viewer, never as the executing actor', async () => {
     const resolvedActor = {
       principalId: 'principal_1',
       permissions: new Set(['conversation.set_attributes']),
@@ -382,6 +382,10 @@ describe('POST /api/admin/assistant/copilot', () => {
 
     expect(mockAssertConversationViewable).toHaveBeenCalledWith(CONVERSATION_ID, resolvedActor)
     expect(turnInput()).not.toHaveProperty('askerActor')
+    // Team-scoped knowledge (closed-ticket summaries) is bounded by the asking
+    // teammate; Quinn still executes as its own bounded actor.
+    expect(turnInput().viewer).toBe(resolvedActor)
+    expect(turnInput()).not.toHaveProperty('actor')
   })
 
   it('relays a turn that proposed a write-tool action: the pending action surfaces on the final payload untouched', async () => {

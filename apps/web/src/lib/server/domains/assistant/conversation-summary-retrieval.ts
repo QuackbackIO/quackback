@@ -28,10 +28,31 @@
  * fallback — a missing scope must read as "nothing", not "everything".
  * registered per the agent's config-v3 knowledge toggles (resolveAssistantKnowledgeSnapshot)
  * `resolveKnowledgeSources`), default off.
+ *
+ * Customer scope is necessary but not sufficient on a teammate surface: the
+ * same customer can have conversations owned by teams the asking teammate
+ * cannot open. So every query also joins the parent conversation through
+ * `conversationFilter(viewer)`, the same visibility the inbox applies. The
+ * viewer is the asking teammate, never Quinn's own service actor (which
+ * `conversationFilter` treats as workspace-wide), so a missing or
+ * unscoped-service viewer returns nothing, like the closed-tickets source.
  */
-import { db, conversationSummaries, and, desc, eq, ilike, ne, sql } from '@/lib/server/db'
+import {
+  db,
+  conversationSummaries,
+  conversations,
+  and,
+  desc,
+  eq,
+  ilike,
+  ne,
+  sql,
+} from '@/lib/server/db'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
+import { escapeLike } from '@/lib/server/db/like'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
+import { conversationFilter } from '@/lib/server/policy/conversations'
+import { isUnscopedService, type Actor } from '@/lib/server/policy/types'
 import type { ContentAudience } from './audience'
 import {
   KNOWLEDGE_SNIPPET_CHARS,
@@ -71,21 +92,27 @@ export interface RetrieveConversationSummariesOptions {
   customerPrincipalId?: PrincipalId
   /** The current conversation, excluded so a turn never grounds on its own in-progress summary. */
   conversationId?: ConversationId | null
+  /** The teammate the copilot answers. Bounds retrieval to the conversations
+   *  they can see; absent means nothing is returned. */
+  viewer?: Actor
 }
 
 /**
  * THE mandatory scope predicate for a conversation-summaries query, shared by
  * both retrieval paths below so neither can drift from the other: only rows
- * belonging to `customerPrincipalId`, within the recency window, excluding
- * `excludeConversationId` (the turn's own in-progress conversation) when
- * given. Every summary query in this module builds its `WHERE` from this one
- * function — there is no other route to this table.
+ * belonging to `customerPrincipalId` whose parent conversation `viewer` can
+ * see, within the recency window, excluding `excludeConversationId` (the
+ * turn's own in-progress conversation) when given. Every summary query in
+ * this module builds its `WHERE` from this one function, over a join to
+ * `conversations` — there is no other route to this table.
  */
 function conversationSummariesScopeConditions(
   customerPrincipalId: PrincipalId,
-  excludeConversationId: ConversationId | null
+  excludeConversationId: ConversationId | null,
+  viewer: Actor
 ) {
   const conditions = [
+    conversationFilter(viewer),
     eq(conversationSummaries.visitorPrincipalId, customerPrincipalId),
     sql`${conversationSummaries.createdAt} >= ${CONVERSATION_SUMMARIES_RECENCY_WINDOW_SQL}`,
   ]
@@ -108,28 +135,38 @@ async function hybridQuery(
   customerPrincipalId: PrincipalId,
   excludeConversationId: ConversationId | null,
   topK: number,
-  minScore: number
+  minScore: number,
+  viewer: Actor
 ): Promise<SummaryRow[]> {
   const vectorStr = `[${embedding.join(',')}]`
   const score = sql<number>`1 - (${conversationSummaries.embedding} <=> ${vectorStr}::vector)`
 
-  return db
-    .select({
-      conversationId: conversationSummaries.conversationId,
-      summary: conversationSummaries.summary,
-      score: score.as('score'),
-      createdAt: conversationSummaries.createdAt,
-    })
-    .from(conversationSummaries)
-    .where(
-      and(
-        ...conversationSummariesScopeConditions(customerPrincipalId, excludeConversationId),
-        sql`${conversationSummaries.embedding} IS NOT NULL`,
-        sql`1 - (${conversationSummaries.embedding} <=> ${vectorStr}::vector) > ${minScore}`
+  return (
+    db
+      .select({
+        conversationId: conversationSummaries.conversationId,
+        summary: conversationSummaries.summary,
+        score: score.as('score'),
+        createdAt: conversationSummaries.createdAt,
+      })
+      .from(conversationSummaries)
+      .innerJoin(conversations, eq(conversations.id, conversationSummaries.conversationId))
+      .where(
+        and(
+          ...conversationSummariesScopeConditions(
+            customerPrincipalId,
+            excludeConversationId,
+            viewer
+          ),
+          sql`${conversationSummaries.embedding} IS NOT NULL`,
+          sql`1 - (${conversationSummaries.embedding} <=> ${vectorStr}::vector) > ${minScore}`
+        )
       )
-    )
-    .orderBy(sql`score DESC`)
-    .limit(topK)
+      // Ordered by the score alias, not an index-ordered `<=>`, so the scope
+      // filter applies before LIMIT.
+      .orderBy(sql`score DESC`)
+      .limit(topK)
+  )
 }
 
 /** Keyword-only fallback when embedding generation is unavailable: a plain
@@ -142,9 +179,10 @@ async function keywordQuery(
   query: string,
   customerPrincipalId: PrincipalId,
   excludeConversationId: ConversationId | null,
-  topK: number
+  topK: number,
+  viewer: Actor
 ): Promise<SummaryRow[]> {
-  const pattern = `%${query}%`
+  const pattern = `%${escapeLike(query)}%`
 
   return db
     .select({
@@ -154,9 +192,10 @@ async function keywordQuery(
       createdAt: conversationSummaries.createdAt,
     })
     .from(conversationSummaries)
+    .innerJoin(conversations, eq(conversations.id, conversationSummaries.conversationId))
     .where(
       and(
-        ...conversationSummariesScopeConditions(customerPrincipalId, excludeConversationId),
+        ...conversationSummariesScopeConditions(customerPrincipalId, excludeConversationId, viewer),
         ilike(conversationSummaries.summary, pattern)
       )
     )
@@ -168,15 +207,18 @@ async function keywordQuery(
  * Retrieve the top-k most relevant past-conversation summaries for the SAME
  * customer as the current conversation. Past support history is team-only,
  * even when it belongs to the same customer, so a public turn returns nothing.
- * Also returns `[]` without querying when `customerPrincipalId` is absent.
+ * Also returns `[]` without querying when `customerPrincipalId` is absent, or
+ * when there is no viewer or the viewer is an unscoped service principal
+ * (Quinn's own actor must never stand in for the teammate).
  */
 export async function retrieveConversationSummaries(
   query: string,
   ceiling: ContentAudience,
   options: RetrieveConversationSummariesOptions = {}
 ): Promise<RetrievedConversationSummary[]> {
-  const { customerPrincipalId } = options
+  const { customerPrincipalId, viewer } = options
   if (ceiling === 'public' || !customerPrincipalId) return []
+  if (!viewer || isUnscopedService(viewer)) return []
 
   const topK = options.topK ?? CONVERSATION_SUMMARIES_TOP_K
   const minScore = options.minScore ?? CONVERSATION_SUMMARIES_SEMANTIC_SIMILARITY_FLOOR
@@ -187,8 +229,15 @@ export async function retrieveConversationSummaries(
   })
 
   const rows = embedding
-    ? await hybridQuery(embedding, customerPrincipalId, excludeConversationId, topK, minScore)
-    : await keywordQuery(query, customerPrincipalId, excludeConversationId, topK)
+    ? await hybridQuery(
+        embedding,
+        customerPrincipalId,
+        excludeConversationId,
+        topK,
+        minScore,
+        viewer
+      )
+    : await keywordQuery(query, customerPrincipalId, excludeConversationId, topK, viewer)
 
   return rows.map((r) => ({
     conversationId: r.conversationId,
@@ -214,28 +263,27 @@ export const conversationSummariesKnowledgeSource: KnowledgeSource = {
       topK: opts.topK,
       customerPrincipalId: opts.customerPrincipalId,
       conversationId: opts.conversationId,
+      viewer: opts.viewer,
     })
-    return rows.map(
-      (r): RetrievedItem => ({
+    return rows.map((r): RetrievedItem => ({
+      id: r.conversationId,
+      sourceType: 'summary' as const,
+      title: PAST_CONVERSATION_TITLE,
+      excerpt: r.summary.slice(0, KNOWLEDGE_SNIPPET_CHARS),
+      score: r.score,
+      updatedAt: r.createdAt.toISOString(),
+      citation: {
+        type: 'summary' as const,
         id: r.conversationId,
-        sourceType: 'summary' as const,
         title: PAST_CONVERSATION_TITLE,
-        excerpt: r.summary.slice(0, KNOWLEDGE_SNIPPET_CHARS),
-        score: r.score,
-        updatedAt: r.createdAt.toISOString(),
-        citation: {
-          type: 'summary' as const,
-          id: r.conversationId,
-          title: PAST_CONVERSATION_TITLE,
-          // No cross-surface-safe URL: unlike a KB article or a post, a past
-          // conversation isn't necessarily viewable from wherever this
-          // citation renders (e.g. the widget), so this stays title-referential
-          // only, like a snippet's.
-          url: '',
-          // Another conversation's content is never customer-facing material.
-          internal: true,
-        },
-      })
-    )
+        // No cross-surface-safe URL: unlike a KB article or a post, a past
+        // conversation isn't necessarily viewable from wherever this
+        // citation renders (e.g. the widget), so this stays title-referential
+        // only, like a snippet's.
+        url: '',
+        // Another conversation's content is never customer-facing material.
+        internal: true,
+      },
+    }))
   },
 }
