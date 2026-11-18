@@ -40,6 +40,7 @@ function limits(over: Partial<PlanLimitsPage> = {}): PlanLimitsPage {
     plan: 'free',
     since: '2026-11-18T12:00:00.000Z',
     graceEndsAt: '2026-11-25T12:00:00.000Z',
+    deadlineDay: '2026-11-24',
     fromPlan: 'pro',
     issues: [boards, seats],
     fixedIssues: [],
@@ -88,7 +89,7 @@ describe('PlanLimitsBanner', () => {
     )
     expect(screen.getByText("Your workspace is over the Free plan's limits.")).toBeInTheDocument()
     expect(
-      screen.getByText(/^Fix 2 issues by Nov 25, or upgrade to keep everything\.$/)
+      screen.getByText(/^Fix 2 issues by Nov 24, or upgrade to keep everything\.$/)
     ).toBeInTheDocument()
     const review = screen.getByRole('link', { name: 'Review issues' })
     expect(review).toHaveAttribute('href', PLAN_LIMITS_PATH)
@@ -133,7 +134,7 @@ describe('PlanLimitsBanner', () => {
   it('asks a teammate without billing rights to ask someone who manages billing', () => {
     render(<PlanLimitsBanner limits={limits({ canManageBilling: false })} pathname="/admin" />)
     expect(
-      screen.getByText('Fix 2 issues by Nov 25. Ask someone who manages billing to upgrade.')
+      screen.getByText('Fix 2 issues by Nov 24. Ask someone who manages billing to upgrade.')
     ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Review issues' })).toHaveAttribute(
       'href',
@@ -164,12 +165,12 @@ describe('PlanLimitsQuiet', () => {
     const link = screen.getByRole('link')
     expect(link).toHaveAttribute('href', PLAN_LIMITS_PATH)
     expect(link).toHaveTextContent('Free plan · 2 issues')
-    expect(link).toHaveTextContent(/Fix by Nov 25$/)
+    expect(link).toHaveTextContent(/Fix by Nov 24$/)
   })
 
   it('says what is paused once enforced, and nothing when it fits or the flag is off', () => {
     mount(limits({ phase: 'enforced' }))
-    expect(screen.getByRole('link')).toHaveTextContent(/Paused since/)
+    expect(screen.getByRole('link')).toHaveTextContent(/Paused since Nov 25$/)
     cleanup()
     mount(limits({ phase: 'ok' }))
     expect(screen.queryByRole('link')).toBeNull()

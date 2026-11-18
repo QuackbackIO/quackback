@@ -11,13 +11,17 @@ import {
   infoRowNote,
   isPlanLimitsOver,
   keepEverythingLines,
+  planLimitsShownDay,
 } from '@/lib/shared/billing/plan-limits-copy'
 import { daysUntil } from '@/lib/shared/billing/trial-state'
 import type { PlanCapKey } from '@/lib/shared/billing/plan-downgrade'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useLocalDateFormatter } from '@/components/ui/local-date'
-import { DEADLINE_FORMAT } from '@/components/admin/plan-limits/plan-limits-banner'
+import {
+  DEADLINE_FORMAT,
+  INLINE_DATE_FORMAT,
+} from '@/components/admin/plan-limits/plan-limits-banner'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { PlanLimitIssues, type PlanLimitRow } from './plan-limit-issues'
 import {
@@ -92,8 +96,9 @@ export function PlanLimitsView(props: {
   const grace = limits.phase === 'grace'
   const plan = limits.planName ?? 'current'
   const tense = limits.phase
-  const date = format(limits.graceEndsAt, DEADLINE_FORMAT)
-  const shortDate = format(limits.graceEndsAt, { day: 'numeric', month: 'short' })
+  const day = planLimitsShownDay(limits)
+  const date = format(day, DEADLINE_FORMAT)
+  const shortDate = format(day, INLINE_DATE_FORMAT)
 
   const can = (anyOf: readonly PermissionKey[]) => anyOf.some((p) => props.permissions.has(p))
   const issueRows: PlanLimitRow[] = limits.issues.map((issue) => {
@@ -200,7 +205,7 @@ export function PlanLimitsView(props: {
         {limits.featureIssues.length > 0 ? (
           <section className="space-y-3">
             <h2 className="text-base font-semibold">
-              {grace ? `Pauses on ${shortDate}` : 'Paused'}
+              {grace ? `Pauses after ${shortDate}` : 'Paused'}
             </h2>
             {/* Whole-row links, as in the settings lists. */}
             <ul className="divide-y divide-border/50 overflow-hidden rounded-xl border bg-card">

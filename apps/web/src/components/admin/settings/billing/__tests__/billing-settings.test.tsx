@@ -545,7 +545,7 @@ describe('BillingPlansView with plan limits', () => {
       'data-variant',
       'destructive'
     )
-    expect(within(meter('Boards')).getByText('3 of 1 · fix by Nov 25')).toBeInTheDocument()
+    expect(within(meter('Boards')).getByText('3 of 1 · fix by Nov 24')).toBeInTheDocument()
     const boardsBar = within(meter('Boards')).getByRole('progressbar')
     expect(boardsBar).toHaveAttribute('data-tone', 'over')
     expect(boardsBar.className).toMatch(/bg-destructive\/15/)

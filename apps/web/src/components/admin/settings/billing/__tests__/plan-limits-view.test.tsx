@@ -52,7 +52,7 @@ describe('PlanLimitsView', () => {
   it('shows the deadline, the countdown and how much is fixed', () => {
     mount(overLimits())
     const card = document.querySelector('[data-plan-limits-deadline="grace"]') as HTMLElement
-    expect(within(card).getByRole('heading')).toHaveTextContent(/^Fix by Wed, Nov 25$/)
+    expect(within(card).getByRole('heading')).toHaveTextContent(/^Fix by Tue, Nov 24$/)
     expect(card).toHaveTextContent('1 of 5 fixed')
     expect(within(card).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1')
     // The upgrade is in the card too on a phone, where the plan aside sits at the bottom.
@@ -72,7 +72,7 @@ describe('PlanLimitsView', () => {
     expect(row('maxBoards')).toHaveAttribute('data-status', 'over')
     expect(row('maxBoards')).toHaveTextContent('3 of 1')
     expect(row('maxBoards')).toHaveTextContent(
-      'On Nov 25, 2 boards become read-only. Their posts stay visible.'
+      'After Nov 24, 2 boards become read-only. Their posts stay visible.'
     )
     // An over bar is destructive on a destructive tint, never the brand colour.
     const bar = within(row('maxBoards')).getByRole('progressbar')
@@ -105,7 +105,7 @@ describe('PlanLimitsView', () => {
 
   it('lists what pauses on the date, and what keeps working', () => {
     mount(overLimits())
-    expect(screen.getByRole('heading', { name: 'Pauses on Nov 25' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Pauses after Nov 24' })).toBeInTheDocument()
     // Each paused feature is one whole-row link to where it is set up.
     const feature = document.querySelector('[data-plan-limit-feature="webhooks"]') as HTMLElement
     const link = within(feature).getByRole('link')
@@ -120,13 +120,13 @@ describe('PlanLimitsView', () => {
   it('moves to the past tense after the date', () => {
     mount(overLimits({ phase: 'enforced' }))
     expect(screen.getByRole('heading', { name: 'Paused' })).toBeInTheDocument()
-    expect(screen.queryByText(/Pauses on/)).toBeNull()
+    expect(screen.queryByText(/Pauses after/)).toBeNull()
     expect(row('maxBoards')).toHaveTextContent('2 boards are read-only.')
     expect(document.querySelector('[data-plan-limit-feature="webhooks"]')).toHaveTextContent(
       'Paused on the Free plan.'
     )
     expect(document.querySelector('[data-plan-limits-deadline="enforced"]')).toHaveTextContent(
-      /Paused since/
+      /Paused since Wed, Nov 25/
     )
   })
 
@@ -170,7 +170,7 @@ describe('PlanLimitsView', () => {
   })
 
   it('says the workspace fits when nothing is over, and when the flag is off', () => {
-    mount(overLimits({ phase: 'ok', issues: [], graceEndsAt: null }))
+    mount(overLimits({ phase: 'ok', issues: [], graceEndsAt: null, deadlineDay: null }))
     expect(screen.getByText('Your workspace fits the Free plan.')).toBeInTheDocument()
     cleanup()
     mount(overLimits({ enabled: false }))

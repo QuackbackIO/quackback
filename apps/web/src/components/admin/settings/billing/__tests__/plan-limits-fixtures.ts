@@ -8,6 +8,7 @@ export function overLimits(over: Partial<PlanLimitsPage> = {}): PlanLimitsPage {
     plan: 'free',
     since: '2026-11-18T12:00:00.000Z',
     graceEndsAt: '2026-11-25T12:00:00.000Z',
+    deadlineDay: '2026-11-24',
     fromPlan: 'pro',
     issues: [
       {

@@ -3,27 +3,40 @@ import { ExclamationCircleIcon, ExclamationTriangleIcon } from '@heroicons/react
 import { useRouterState } from '@tanstack/react-router'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 import { planLimitsQueries } from '@/lib/client/queries/plan-limits'
-import { isPlanLimitsOver, planLimitsBannerCopy } from '@/lib/shared/billing/plan-limits-copy'
+import {
+  isPlanLimitsOver,
+  planLimitsBannerCopy,
+  planLimitsShownDay,
+} from '@/lib/shared/billing/plan-limits-copy'
 import { useLocalDateFormatter } from '@/components/ui/local-date'
 import { cn } from '@/lib/shared/utils'
 
 export const PLAN_LIMITS_PATH = '/admin/settings/billing/limits'
 
-/** A deadline in a heading: "Mon, Nov 23". A deadline reads as a day, never as a duration. */
+/**
+ * A deadline in a heading: "Mon, Nov 23". A deadline reads as a day, never as
+ * a duration. Plan limits days are plain calendar dates, formatted in UTC.
+ */
 export const DEADLINE_FORMAT: Intl.DateTimeFormatOptions = {
   weekday: 'short',
   day: 'numeric',
   month: 'short',
+  timeZone: 'UTC',
 }
 
 /** A deadline inside a sentence: "Nov 23". */
-export const INLINE_DATE_FORMAT: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }
+export const INLINE_DATE_FORMAT: Intl.DateTimeFormatOptions = {
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
+}
 
 type BannerLimits = Pick<
   PlanLimitsPage,
   | 'enabled'
   | 'phase'
   | 'graceEndsAt'
+  | 'deadlineDay'
   | 'issues'
   | 'featureIssues'
   | 'planName'
@@ -43,7 +56,7 @@ export function PlanLimitsBanner(props: {
   const format = useLocalDateFormatter()
   const { limits } = props
   if (!limits || props.pathname === PLAN_LIMITS_PATH) return null
-  const copy = planLimitsBannerCopy(limits, format(limits.graceEndsAt, INLINE_DATE_FORMAT))
+  const copy = planLimitsBannerCopy(limits, format(planLimitsShownDay(limits), INLINE_DATE_FORMAT))
   if (!copy) return null
   const enforced = copy.tone === 'enforced'
   // Amber with warning accents during grace, as the urgent plan notice is;
@@ -92,7 +105,7 @@ export function PlanLimitsQuiet(props: { limits: BannerLimits | null | undefined
   if (limits.phase === 'enforced' && limits.issues.length === 0) return null
   const count = limits.issues.length
   const plan = limits.planName ? `${limits.planName} plan` : 'Your plan'
-  const date = format(limits.graceEndsAt, INLINE_DATE_FORMAT)
+  const date = format(planLimitsShownDay(limits), INLINE_DATE_FORMAT)
   return (
     <a
       href={PLAN_LIMITS_PATH}

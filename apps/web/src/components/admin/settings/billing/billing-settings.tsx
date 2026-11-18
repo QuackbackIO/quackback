@@ -23,6 +23,7 @@ import {
   type PaidPlanId,
 } from '@/lib/shared/billing/plan-action'
 import { daysUntil } from '@/lib/shared/billing/trial-state'
+import { planLimitsDay } from '@/lib/shared/billing/plan-limits-copy'
 import { checkoutPath } from '@/lib/shared/billing/checkout-path'
 import { SubscribeDialog } from './subscribe-dialog'
 import { UsageMeter } from './usage-meter'
@@ -416,8 +417,8 @@ function UsageCard(props: {
     props.limits?.enabled ? props.limits.infoRows.map((row) => row.key) : []
   )
   const fixBy =
-    over?.phase === 'grace' && over.graceEndsAt
-      ? format(over.graceEndsAt, { day: 'numeric', month: 'short' })
+    over?.phase === 'grace' && over.deadlineDay
+      ? format(planLimitsDay(over.deadlineDay), { day: 'numeric', month: 'short', timeZone: 'UTC' })
       : null
   const inventory = props.usage.filter(
     (line) =>

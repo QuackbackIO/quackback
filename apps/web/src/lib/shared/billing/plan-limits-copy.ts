@@ -12,6 +12,26 @@ import {
 import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { PLAN_NUMERIC_CAPS, type PlanCapKey } from './plan-downgrade'
 
+/**
+ * A plan limits calendar day (YYYY-MM-DD) as an instant to format with
+ * `timeZone: 'UTC'`, so it reads as the same date for every viewer.
+ */
+export function planLimitsDay(day: string): Date {
+  return new Date(`${day}T12:00:00.000Z`)
+}
+
+/**
+ * The day a plan limits surface names: during grace the last full day to fix
+ * (`deadlineDay`), after it the day things paused (the date of `graceEndsAt`).
+ * Null when there is none.
+ */
+export function planLimitsShownDay(
+  limits: Pick<PlanLimitsPage, 'phase' | 'deadlineDay' | 'graceEndsAt'>
+): Date | null {
+  if (limits.phase === 'grace') return limits.deadlineDay ? planLimitsDay(limits.deadlineDay) : null
+  return limits.graceEndsAt ? planLimitsDay(limits.graceEndsAt.slice(0, 10)) : null
+}
+
 /** A grace date is ahead (future tense); an enforced one has passed (present tense). */
 export type PlanLimitsTense = 'grace' | 'enforced'
 
@@ -39,7 +59,7 @@ export const PLAN_CAP_LABELS: Record<PlanCapKey | 'aiTokensPerMonth' | 'emailsPe
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-/** What happens to the excess of a cap: on `date` while in grace, now once enforced. */
+/** What happens to the excess of a cap: after `date` while in grace, now once enforced. */
 export function capConsequence(
   key: PlanCapKey,
   excess: number,
@@ -48,7 +68,7 @@ export function capConsequence(
   plan = 'current'
 ): string {
   const grace = tense === 'grace'
-  const on = (line: string) => `On ${date}, ${line}`
+  const on = (line: string) => `After ${date}, ${line}`
   switch (key) {
     case 'maxBoards':
       return grace
@@ -101,7 +121,7 @@ export function infoRowNote(row: { key: string; message: string; cap: number }):
 }
 
 /**
- * The line under a paid feature's name: what pauses on the date, or that it is
+ * The line under a paid feature's name: what pauses after the date, or that it is
  * paused on the plan. "Nothing is deleted" is said once for the page, not here.
  */
 export function featureConsequence(
@@ -222,7 +242,7 @@ export function planLimitsBannerCopy(
   }
   const n = limits.issues.length
   const fix =
-    n > 0 ? `Fix ${plural(n, 'issue', 'issues')} by ${date}` : `Some features pause on ${date}`
+    n > 0 ? `Fix ${plural(n, 'issue', 'issues')} by ${date}` : `Some features pause after ${date}`
   return {
     tone: 'grace',
     title,
