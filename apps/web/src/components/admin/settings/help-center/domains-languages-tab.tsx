@@ -1,17 +1,9 @@
-import { INLINE_LINK } from '@/components/admin/settings/inline-link'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TrashIcon, XCircleIcon } from '@heroicons/react/24/solid'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import {
-  DnsRecordTable,
-  FULL_NAMES_NOTE,
-  type DnsRecordRow,
-} from '@/components/shared/dns-record-table'
-import { Badge } from '@/components/ui/badge'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,8 +20,6 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import {
   useUpdateHelpCenterSeo,
-  useUpdateHelpCenterDomain,
-  useVerifyHelpCenterDomain,
   useCreateHelpCenterRedirectRule,
   useDeleteHelpCenterRedirectRule,
   useEnableHelpCenterLocale,
@@ -41,7 +31,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { listArticlesFn } from '@/lib/server/functions/help-center'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/lib/shared/i18n'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
-import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
+import { SectionDomainSettingsCard } from '@/components/admin/settings/section-domain-card'
 
 const LOCALE_LABELS: Record<string, string> = {
   en: 'English',
@@ -57,32 +47,6 @@ const LOCALE_LABELS: Record<string, string> = {
   pl: 'Polski',
   th: 'ภาษาไทย',
   uk: 'Українська',
-}
-
-const HOSTNAME_PATTERN =
-  /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,63}|xn--[a-z0-9-]{1,59})$/
-
-/**
- * The stored form of a hostname: trimmed, one trailing dot dropped, IDN labels
- * as punycode, lower case. Null when the value is not a bare hostname. The
- * server canonicalises the same way, so the two agree on what is already saved.
- */
-export function normalizeHelpCenterDomain(value: string): string | null {
-  const trimmed = value.trim().replace(/\.$/, '')
-  if (!trimmed || /[\s/:@?#\\]/.test(trimmed)) return null
-  let ascii: string
-  try {
-    ascii = new URL(`http://${trimmed}`).hostname
-  } catch {
-    return null
-  }
-  const lower = ascii.toLowerCase()
-  return HOSTNAME_PATTERN.test(lower) ? lower : null
-}
-
-/** An empty value clears the domain; anything else must be a bare hostname. */
-export function isValidHelpCenterDomain(value: string): boolean {
-  return value.trim() === '' || normalizeHelpCenterDomain(value) !== null
 }
 
 const MAX_PROTECTED_TERMS = 100
@@ -128,170 +92,14 @@ interface DomainsLanguagesTabProps {
 }
 
 export function DomainsLanguagesTab({ config }: DomainsLanguagesTabProps) {
-  const billingEnabled = useBillingEnabled()
   return (
     <div className="space-y-6">
-      {billingEnabled ? null : <DomainCard domain={config.domain} />}
+      <SectionDomainSettingsCard section="help" />
       <RedirectRulesCard />
       <IndexingCard indexable={config.seo.indexable} />
       <LocalesCard locales={config.locales} />
       <AutoTranslateCard autoTranslate={config.autoTranslate} />
     </div>
-  )
-}
-
-// ============================================================================
-// Domain
-// ============================================================================
-
-function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
-  const [value, setValue] = useState(domain.domain ?? '')
-  const [savedDomain, setSavedDomain] = useState(domain.domain ?? '')
-  const [invalid, setInvalid] = useState(false)
-  const updateDomain = useUpdateHelpCenterDomain()
-  const verifyDomain = useVerifyHelpCenterDomain()
-  const statusQuery = useQuery({
-    ...settingsQueries.helpCenterDomainStatus(),
-    enabled: !!domain.domain,
-  })
-
-  const busy = verifyDomain.isPending
-  const verifyDisabled = busy
-
-  useEffect(() => {
-    setSavedDomain(domain.domain ?? '')
-  }, [domain.domain])
-
-  function save() {
-    const next = normalizeHelpCenterDomain(value) ?? ''
-    if (value.trim() !== '' && next === '') {
-      setInvalid(true)
-      return
-    }
-    setInvalid(false)
-    if (next === savedDomain) return
-    updateDomain.mutate(next || null, {
-      onSuccess: () => {
-        setSavedDomain(next)
-        setValue(next)
-      },
-    })
-  }
-
-  return (
-    <SettingsCard title="Custom domain" description="Serve the help center on your own subdomain.">
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="hc-domain" className="text-sm font-medium">
-            Domain
-          </Label>
-          <Input
-            id="hc-domain"
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value)
-              setInvalid(false)
-            }}
-            onBlur={save}
-            placeholder="help.acme.com"
-            disabled={busy}
-            aria-invalid={invalid || undefined}
-          />
-          {invalid && (
-            <p role="alert" className="text-xs text-destructive">
-              Enter a hostname like help.acme.com, without https:// or a path.
-            </p>
-          )}
-        </div>
-
-        {domain.domain && (
-          <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
-            <div className="flex items-center gap-2">
-              <VerifiedChip verifiedAt={domain.verifiedAt} />
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={verifyDisabled}
-              onClick={() => verifyDomain.mutate()}
-            >
-              <InlineSpinner visible={verifyDomain.isPending} />
-              Verify
-            </Button>
-          </div>
-        )}
-
-        {domain.domain && statusQuery.data?.cnameTarget && (
-          <div className="space-y-1">
-            <DnsRecordTable
-              records={[
-                helpCenterCnameRecord(
-                  domain.domain,
-                  statusQuery.data.cnameTarget,
-                  statusQuery.data
-                ),
-              ]}
-            />
-            <p className="text-xs text-muted-foreground">{FULL_NAMES_NOTE}</p>
-          </div>
-        )}
-
-        <Collapsible>
-          <CollapsibleTrigger className={`${INLINE_LINK} text-[13px]`}>
-            DNS setup
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="mt-2 space-y-1.5 text-[13px] text-muted-foreground">
-              <p>
-                Point a CNAME for your domain at this instance. TLS terminates at your own reverse
-                proxy (Caddy, nginx, Traefik). Quackback does not issue certificates.
-              </p>
-              <p>
-                Article content stores absolute image URLs. Changing the domain does not rewrite
-                existing article images, so keep the old host reachable or re-upload affected
-                images.
-              </p>
-              <p>
-                If you self-host branding fonts, keep doing so on the new domain too. Never link a
-                Google Fonts stylesheet from the help center.
-              </p>
-              <p>
-                Once verified, /hc pages on the default host redirect to this domain automatically.
-              </p>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      </div>
-    </SettingsCard>
-  )
-}
-
-/** The CNAME a help center domain needs, with the state its last check found. */
-export function helpCenterCnameRecord(
-  domain: string,
-  cnameTarget: string,
-  status: { dnsResolved: boolean; verified: boolean }
-): DnsRecordRow {
-  const record = { label: 'Routing', type: 'CNAME', name: domain, value: cnameTarget }
-  if (status.verified) return { ...record, state: 'found' }
-  if (!status.dnsResolved) return { ...record, state: 'waiting' }
-  return {
-    ...record,
-    state: 'problem',
-    problem:
-      'This name resolves but does not reach this instance yet. Check the CNAME and your proxy.',
-  }
-}
-
-function VerifiedChip({ verifiedAt }: { verifiedAt: string | null }) {
-  return verifiedAt ? (
-    <Badge variant="success" size="sm">
-      Verified
-    </Badge>
-  ) : (
-    <Badge variant="warning" size="sm">
-      Not verified
-    </Badge>
   )
 }
 

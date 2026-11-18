@@ -1,18 +1,14 @@
 // @vitest-environment happy-dom
+import '@testing-library/jest-dom/vitest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { DomainsLanguagesTab, helpCenterCnameRecord } from '../domains-languages-tab'
+import { cleanup, render, screen } from '@testing-library/react'
+import { DomainsLanguagesTab } from '../domains-languages-tab'
 import { DEFAULT_HELP_CENTER_CONFIG } from '@/lib/server/domains/settings/settings.types'
 
-const { mockBillingEnabled } = vi.hoisted(() => ({
-  mockBillingEnabled: { current: false },
-}))
-
-vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
-    const context = { billingEnabled: mockBillingEnabled.current }
-    return opts?.select ? opts.select(context as never) : context
-  },
+vi.mock('@/components/admin/settings/section-domain-card', () => ({
+  SectionDomainSettingsCard: ({ section }: { section: string }) => (
+    <div data-testid="section-domain">{section}</div>
+  ),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -21,7 +17,6 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/lib/client/queries/settings', () => ({
   settingsQueries: {
-    helpCenterDomainStatus: () => ({ queryKey: ['hc-domain-status'] }),
     helpCenterRedirectRules: () => ({ queryKey: ['hc-redirects'] }),
   },
 }))
@@ -32,8 +27,6 @@ vi.mock('@/lib/client/queries/help-center', () => ({
 
 vi.mock('@/lib/client/mutations/settings', () => ({
   useUpdateHelpCenterSeo: () => ({ isPending: false, mutate: vi.fn() }),
-  useUpdateHelpCenterDomain: () => ({ isPending: false, isError: false, mutate: vi.fn() }),
-  useVerifyHelpCenterDomain: () => ({ isPending: false, mutate: vi.fn() }),
   useCreateHelpCenterRedirectRule: () => ({ isPending: false, isError: false, mutate: vi.fn() }),
   useDeleteHelpCenterRedirectRule: () => ({ isPending: false, mutate: vi.fn() }),
   useEnableHelpCenterLocale: () => ({ isPending: false, isError: false, mutate: vi.fn() }),
@@ -53,45 +46,12 @@ const config = {
 }
 
 describe('DomainsLanguagesTab', () => {
-  afterEach(() => {
-    mockBillingEnabled.current = false
-    cleanup()
-  })
+  afterEach(cleanup)
 
-  it('shows the local reverse-proxy writer when cloud is off', () => {
-    mockBillingEnabled.current = false
+  it("shows the help center's custom domain read-only, set on Settings > Domains", () => {
     render(<DomainsLanguagesTab config={config} />)
-    expect(screen.getByText('Custom domain')).toBeTruthy()
+    expect(screen.getByTestId('section-domain')).toHaveTextContent('help')
+    expect(screen.queryByLabelText('Domain')).toBeNull()
     expect(screen.queryByText(/TLS terminates at your own reverse proxy/i)).toBeNull()
-    fireEvent.click(screen.getByText('DNS setup'))
-    expect(screen.getByText(/TLS terminates at your own reverse proxy/i)).toBeTruthy()
-  })
-
-  it('hides the local reverse-proxy writer when cloud is on', () => {
-    mockBillingEnabled.current = true
-    render(<DomainsLanguagesTab config={config} />)
-    expect(screen.queryByText('Custom domain')).toBeNull()
-    expect(screen.queryByText(/TLS terminates at your own reverse proxy/i)).toBeNull()
-  })
-})
-
-describe('helpCenterCnameRecord', () => {
-  const at = (status: { dnsResolved: boolean; verified: boolean }) =>
-    helpCenterCnameRecord('help.acme.com', 'app.example.com', status)
-
-  it('is one CNAME from the domain to this instance', () => {
-    expect(at({ dnsResolved: false, verified: false })).toMatchObject({
-      type: 'CNAME',
-      name: 'help.acme.com',
-      value: 'app.example.com',
-    })
-  })
-
-  it('waits until the name resolves, is found once verified, and is a problem in between', () => {
-    expect(at({ dnsResolved: false, verified: false }).state).toBe('waiting')
-    expect(at({ dnsResolved: true, verified: true }).state).toBe('found')
-    const broken = at({ dnsResolved: true, verified: false })
-    expect(broken.state).toBe('problem')
-    expect(broken.problem).toMatch(/does not reach this instance/)
   })
 })

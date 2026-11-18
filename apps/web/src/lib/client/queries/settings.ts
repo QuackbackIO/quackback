@@ -18,7 +18,6 @@ import {
   getSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
 import { getHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
-import { getHelpCenterDomainStatusFn } from '@/lib/server/functions/help-center-domain'
 import { listRedirectRulesFn } from '@/lib/server/functions/help-center-redirect-rules'
 import {
   listTeamsAdminFn,
@@ -189,14 +188,6 @@ export const settingsQueries = {
       queryKey: ['settings', 'helpCenterConfig'],
       queryFn: () => getHelpCenterConfigFn({ data: {} }),
       staleTime: STALE_TIME_LONG,
-    }),
-
-  helpCenterDomainStatus: () =>
-    queryOptions({
-      queryKey: ['settings', 'helpCenterDomainStatus'],
-      queryFn: () => getHelpCenterDomainStatusFn({ data: {} }),
-      staleTime: STALE_TIME_SHORT,
-      // Only meaningful once a domain is configured -- callers gate `enabled`.
     }),
 
   helpCenterRedirectRules: () =>

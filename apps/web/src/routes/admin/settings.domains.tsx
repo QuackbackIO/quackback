@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
-import { DOMAINS_PAGE_PERMISSIONS, domainUseLinks } from '@/lib/shared/domains-permissions'
+import {
+  DOMAINS_PAGE_PERMISSIONS,
+  DOMAIN_VERIFICATION_ANCHOR,
+  domainUseLinks,
+} from '@/lib/shared/domains-permissions'
 import { useMutation, type QueryClient } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -23,7 +27,11 @@ import {
   domainRows,
 } from '@/components/admin/settings/domains-overview'
 import { AddDomainButton } from '@/components/admin/settings/add-domain-dialog'
-import { isProductEnabled } from '@/lib/shared/types/settings'
+import {
+  listedSections,
+  SectionDomainsCard,
+} from '@/components/admin/settings/section-domains-card'
+import { portalSectionsEnabled } from '@/lib/shared/section-domains'
 import { loadDomainSummaries } from '@/lib/client/domain-summaries'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { toastError } from '@/lib/client/error-notice'
@@ -42,11 +50,7 @@ export const Route = createFileRoute('/admin/settings/domains')({
     return {
       operator,
       ...summaries,
-      links: domainUseLinks({
-        permissions: context.permissions ?? [],
-        cloudEnabled: !!cloudEnabled,
-        helpCenterOn: isProductEnabled(context.settings?.featureFlags, 'helpCenter'),
-      }),
+      links: domainUseLinks({ permissions: context.permissions ?? [] }),
     }
   },
   component: DomainsSettingsPage,
@@ -66,20 +70,70 @@ async function loadOperatorHostnames(context: {
   return { entitled, domains, cloudIdentity }
 }
 
+type Operator = Awaited<ReturnType<typeof loadOperatorHostnames>>
+
+/** Go to the Domain verification card and its Domain field, where a Cloud custom domain is added. */
+function goToAddDomain() {
+  // After the dialog has closed and handed focus back.
+  window.setTimeout(() => {
+    document.getElementById(DOMAIN_VERIFICATION_ANCHOR)?.scrollIntoView({ behavior: 'smooth' })
+    document.getElementById('custom-hostname')?.focus({ preventScroll: true })
+  }, 0)
+}
+
+/**
+ * The Cloud custom domains the operator routes here, and the one change made
+ * to them at a time. Making a domain primary may move the session to it.
+ */
+function useCloudDomains(initial: WebAddress[]) {
+  const [domains, setDomains] = useState(initial)
+  const router = useRouter()
+  const mutation = useMutation({
+    mutationFn: (input: {
+      action: 'add' | 'refresh' | 'makePrimary' | 'remove'
+      hostname: string
+    }) => mutateCloudCustomDomainFn({ data: input }),
+    onSuccess: async (result) => {
+      if (result.transferToken) {
+        const target = new URL('/auth/origin-transfer', result.projection.canonicalOrigin)
+        target.searchParams.set('ott', result.transferToken)
+        target.searchParams.set('returnTo', '/admin/settings/domains')
+        window.location.assign(target)
+        return
+      }
+      toast.success('Domain updated')
+      const next = await getCloudCustomDomainsFn().catch(() => domains)
+      setDomains(next)
+      await router.invalidate()
+    },
+    onError: (error) => {
+      toastError(error, 'Could not update that domain.')
+    },
+  })
+  return { domains, mutation }
+}
+
 function DomainsSettingsPage() {
-  const { operator, sending, signIn, helpCenterDomain, added, links } = Route.useLoaderData()
-  const { permissions } = Route.useRouteContext()
+  const { operator, sending, signIn, sectionDomains, added, links } = Route.useLoaderData()
+  const { permissions, cloudEnabled, settings } = Route.useRouteContext()
+  const router = useRouter()
+  const cloud = useCloudDomains(operator?.domains ?? [])
   // Only settings.manage adds a bare domain; the other Domains permissions see the page without it.
   const canAdd = permissions?.includes(PERMISSIONS.SETTINGS_MANAGE) ?? false
   const rows = domainRows({
     sending,
     signIn,
-    helpCenterDomain,
-    webAddresses: operator?.domains,
+    sectionDomains: sectionDomains?.sectionDomains,
+    webAddresses: operator ? cloud.domains : undefined,
     added,
   })
   // Cloud hostnames are also on their own card, where they are added and verified.
-  const empty = rows.length === 0 && !operator?.domains.length
+  const empty = rows.length === 0 && !operator?.domains.length && !sectionDomains
+  const sectionEnabled = portalSectionsEnabled({
+    featureFlags: settings?.featureFlags,
+    statusConfig: settings?.statusConfig,
+    portalConfig: settings?.portalConfig,
+  })
 
   return (
     <SettingsPage
@@ -90,7 +144,30 @@ function DomainsSettingsPage() {
     >
       {empty && <DomainsEmptyState canAdd={canAdd} />}
       {rows.length > 0 && <DomainList rows={rows} links={links} />}
-      {operator && <OperatorHostnames {...operator} />}
+      {sectionDomains && (
+        <SectionDomainsCard
+          view={sectionDomains}
+          sections={listedSections({
+            nav: settings?.portalConfig?.nav,
+            sectionEnabled,
+            map: sectionDomains.sectionDomains,
+          })}
+          sectionEnabled={sectionEnabled}
+          cloud={!!cloudEnabled}
+          readyHostnames={cloud.domains
+            .filter((d) => d.readiness === 'ready' && !d.isPrimary)
+            .map((d) => d.hostname)}
+          canAdd={!cloudEnabled || !!operator?.entitled}
+          onChanged={() => void router.invalidate()}
+          onMakePrimary={
+            operator
+              ? (hostname) => cloud.mutation.mutate({ action: 'makePrimary', hostname })
+              : undefined
+          }
+          onAddDomain={operator ? goToAddDomain : undefined}
+        />
+      )}
+      {operator && <OperatorHostnames {...operator} cloud={cloud} />}
     </SettingsPage>
   )
 }
@@ -98,10 +175,9 @@ function DomainsSettingsPage() {
 /** Hostnames an operator routes to this workspace, set up on this page. */
 function OperatorHostnames({
   entitled,
-  domains: initialDomains,
   cloudIdentity: initialCloudIdentity,
-}: Awaited<ReturnType<typeof loadOperatorHostnames>>) {
-  const [domains, setDomains] = useState(initialDomains)
+  cloud,
+}: Operator & { cloud: ReturnType<typeof useCloudDomains> }) {
   const [hostname, setHostname] = useState('')
   const [cloudIdentity, setCloudIdentity] = useState(initialCloudIdentity)
   const [platformLabel, setPlatformLabel] = useState(
@@ -110,6 +186,7 @@ function OperatorHostnames({
       : ''
   )
   const router = useRouter()
+  const { domains, mutation } = cloud
 
   const identityMutation = useMutation({
     mutationFn: () => {
@@ -137,30 +214,6 @@ function OperatorHostnames({
     },
   })
 
-  const mutation = useMutation({
-    mutationFn: (input: {
-      action: 'add' | 'refresh' | 'makePrimary' | 'remove'
-      hostname: string
-    }) => mutateCloudCustomDomainFn({ data: input }),
-    onSuccess: async (result) => {
-      if (result.transferToken) {
-        const target = new URL('/auth/origin-transfer', result.projection.canonicalOrigin)
-        target.searchParams.set('ott', result.transferToken)
-        target.searchParams.set('returnTo', '/admin/settings/domains')
-        window.location.assign(target)
-        return
-      }
-      toast.success('Domain updated')
-      const next = await getCloudCustomDomainsFn().catch(() => domains)
-      setDomains(next)
-      setHostname('')
-      await router.invalidate()
-    },
-    onError: (error) => {
-      toastError(error, 'Could not update that domain.')
-    },
-  })
-
   return (
     <>
       <DomainsCard
@@ -170,7 +223,9 @@ function OperatorHostnames({
         pending={mutation.isPending}
         error={mutation.error}
         onHostnameChange={setHostname}
-        onAdd={() => mutation.mutate({ action: 'add', hostname })}
+        onAdd={() =>
+          mutation.mutate({ action: 'add', hostname }, { onSuccess: () => setHostname('') })
+        }
         onRefresh={(value) => mutation.mutate({ action: 'refresh', hostname: value })}
         onMakePrimary={(value) => mutation.mutate({ action: 'makePrimary', hostname: value })}
         onRemove={(value) => mutation.mutate({ action: 'remove', hostname: value })}

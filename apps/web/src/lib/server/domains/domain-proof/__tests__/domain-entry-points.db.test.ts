@@ -1,6 +1,6 @@
 /**
- * The places a domain is given a use in context (Sign-in's domain list, the
- * help center's own domain) put the domain on Settings > Domains in the same
+ * The places a domain is given a use in context (Sign-in's domain list, a
+ * portal section's own domain) put the domain on Settings > Domains in the same
  * step, against a real database rolled back after each test.
  *
  * Each leaves exactly one domain row and only its own use's records, and doing
@@ -48,8 +48,11 @@ vi.mock('@/lib/server/domains/domain-proof/domains.service', async (importOrigin
 })
 
 import { insertVerifiedDomain } from '@/lib/server/domains/settings/settings.service'
-import { setHelpCenterDomain } from '@/lib/server/domains/help-center/help-center-domain.service'
+import { setSectionDomain } from '@/lib/server/domains/settings/section-domains.service'
 import { addDomain } from '@/lib/server/domains/domain-proof/domains.service'
+
+/** The help center's own domain, as Settings > Domains sets it. */
+const setHelpDomain = (hostname: string | null) => setSectionDomain('help', hostname)
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -139,7 +142,7 @@ describe.skipIf(!fixture.available)('in-context entry points (real DB, rolled ba
 
   describe("the help center's own domain", () => {
     it('leaves exactly one domain and only the help center record', async () => {
-      await setHelpCenterDomain('help.acme.com')
+      await setHelpDomain('help.acme.com')
 
       expect((await addedDomains()).map((d) => [d.name, d.status])).toEqual([
         ['help.acme.com', 'pending'],
@@ -154,16 +157,16 @@ describe.skipIf(!fixture.available)('in-context entry points (real DB, rolled ba
 
     it('sets the help center domain even when the domain cannot be put on Settings > Domains', async () => {
       side.ensureFails = true
-      const set = await setHelpCenterDomain('help.acme.com')
+      const set = await setHelpDomain('help.acme.com')
 
-      expect(set.domain).toBe('help.acme.com')
+      expect(set.ok).toBe(true)
       expect((await useRecords()).helpCenter).toBe('help.acme.com')
     })
 
     it('keeps the one domain and its token when set again', async () => {
-      await setHelpCenterDomain('help.acme.com')
+      await setHelpDomain('help.acme.com')
       const [first] = await addedDomains()
-      await setHelpCenterDomain('Help.Acme.com')
+      await setHelpDomain('Help.Acme.com')
 
       const after = await addedDomains()
       expect(after).toHaveLength(1)
@@ -171,14 +174,14 @@ describe.skipIf(!fixture.available)('in-context entry points (real DB, rolled ba
     })
 
     it('adds no domain when the help center domain is cleared', async () => {
-      await setHelpCenterDomain(null)
+      await setHelpDomain(null)
       expect(await addedDomains()).toEqual([])
     })
 
     it('adds no second domain for an address under a domain already added', async () => {
       await addDomain('acme.com')
       const [parent] = await addedDomains()
-      await setHelpCenterDomain('help.acme.com')
+      await setHelpDomain('help.acme.com')
 
       const after = await addedDomains()
       expect(after.map((d) => d.name)).toEqual(['acme.com'])
@@ -188,7 +191,7 @@ describe.skipIf(!fixture.available)('in-context entry points (real DB, rolled ba
 
     it('adds its own domain for an address that only shares a suffix with one added', async () => {
       await addDomain('acme.com')
-      await setHelpCenterDomain('help.notacme.com')
+      await setHelpDomain('help.notacme.com')
 
       expect((await addedDomains()).map((d) => d.name).sort()).toEqual([
         'acme.com',

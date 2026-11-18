@@ -33,11 +33,15 @@ vi.mock('@/lib/server/domains/settings/cloud/entitlements', () => ({
   hasEntitlement: async () => side.entitled,
   requireEntitlement: async () => {},
 }))
+vi.mock('@/lib/server/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/config')>()),
+  getBaseUrl: () => 'https://feedback.acme.com',
+}))
 vi.mock('@/lib/server/domains/domain-proof/reachability-probe', () => ({
   probeCustomDomain: async () => ({ status: side.status, dnsAnswered: side.dnsAnswered }),
 }))
 
-const { getSectionDomains, setSectionDomain, verifySectionDomain } =
+const { getSectionDomains, getSectionDomainsView, setSectionDomain, verifySectionDomain } =
   await import('../section-domains.service')
 
 const fixture = await createDbTestFixture({
@@ -257,6 +261,34 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
         code: 'SECTION_DOMAIN_NOT_SET',
       })
     })
+
+    it('shows the map with the primary domain for Settings > Domains', async () => {
+      await setSectionDomain('status', 'status.acme.com')
+      const view = await getSectionDomainsView()
+      expect(view.sectionDomains).toEqual({
+        status: { hostname: 'status.acme.com', verifiedAt: null },
+      })
+      expect(view.primaryHost).toBe('feedback.acme.com')
+    })
+
+    it('shows a kept verification past its grace as unverified, still marked', async () => {
+      await seedSettings({
+        portalConfig: JSON.stringify({
+          sectionDomains: {
+            help: {
+              hostname: 'help.acme.com',
+              verifiedAt: NOW,
+              unconfirmedSince: '2020-01-01T00:00:00.000Z',
+            },
+          },
+        }),
+      })
+      expect((await getSectionDomainsView()).sectionDomains.help).toEqual({
+        hostname: 'help.acme.com',
+        verifiedAt: null,
+        unconfirmedSince: '2020-01-01T00:00:00.000Z',
+      })
+    })
   })
 
   describe('Cloud', () => {
@@ -326,6 +358,19 @@ describe.skipIf(!fixture.available)('section domains (real DB, rolled back)', ()
       })
       expect((await verifySectionDomain('status')).ok).toBe(true)
       expect((await getSectionDomains()).status?.verifiedAt).toEqual(expect.any(String))
+    })
+
+    it('shows a section whose custom domain is no longer ready as unverified, and the primary domain', async () => {
+      await setSectionDomain('help', 'help.acme.com')
+      await testDb.update(settings).set({
+        cloudIdentity: cloudIdentity([
+          { hostname: 'acme.com', readiness: 'ready', isPrimary: true },
+          { hostname: 'help.acme.com', readiness: 'failed' },
+        ]),
+      })
+      const view = await getSectionDomainsView()
+      expect(view.sectionDomains.help).toEqual({ hostname: 'help.acme.com', verifiedAt: null })
+      expect(view.primaryHost).toBe('acme.example.com')
     })
   })
 })

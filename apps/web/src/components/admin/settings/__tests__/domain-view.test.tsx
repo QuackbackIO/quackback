@@ -8,6 +8,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import type { DomainDetail } from '@/lib/server/functions/domains'
+import type { SectionDomainMap } from '@/lib/shared/section-domains'
 
 const navigate = vi.fn()
 vi.mock('@tanstack/react-router', () => ({
@@ -44,7 +45,7 @@ const checkOwnership = vi.fn()
 const removeDomainByName = vi.fn()
 const addDomainByName = vi.fn()
 const removeSignIn = vi.fn()
-const clearHelpCenterDomain = vi.fn()
+const setSectionDomain = vi.fn()
 vi.mock('@/lib/server/functions/domains', () => ({
   addDomainFn: addDomainByName,
   checkDomainOwnershipFn: checkOwnership,
@@ -56,8 +57,8 @@ vi.mock('@/lib/server/functions/sso', () => ({
   addProviderDomainFn: addSignIn,
   listIdentityProvidersFn: vi.fn(),
 }))
-vi.mock('@/lib/server/functions/help-center-domain', () => ({
-  updateHelpCenterDomainFn: clearHelpCenterDomain,
+vi.mock('@/lib/server/functions/section-domains', () => ({
+  setSectionDomainFn: setSectionDomain,
 }))
 const addWebAddress = vi.fn()
 vi.mock('@/lib/server/functions/cloud-identity', () => ({
@@ -152,7 +153,7 @@ function rowWith({
     signIn: signIn
       ? [{ id: 'domain_a', name: 'acme.com', verified: signInVerified, provenBy: null }]
       : [],
-    helpCenterDomain: customDomain ? { domain: 'help.acme.com', verified: false } : null,
+    sectionDomains: customDomain ? { help: { hostname: 'help.acme.com', verifiedAt: null } } : null,
     added: [{ name: 'acme.com', verified: false }],
   })[0]!
 }
@@ -179,7 +180,7 @@ function renderView(
     domain = PENDING_DOMAIN,
     detail = { ...DETAIL, inUse: row.uses.length > 0 } as DomainDetail | null,
     cloud = false,
-    helpCenterDomain = null as string | null,
+    sectionDomains = {} as SectionDomainMap,
     providers = [{ id: 'idp_1' }] as { id: string }[],
   } = {}
 ) {
@@ -201,8 +202,12 @@ function renderView(
     <QueryClientProvider client={client}>
       <DomainView
         row={row}
-        links={domainUseLinks({ permissions, cloudEnabled: cloud, helpCenterOn: true })}
-        helpCenterDomain={helpCenterDomain}
+        links={domainUseLinks({ permissions })}
+        setup={{
+          cloud,
+          sectionDomains: { sectionDomains, primaryHost: 'acme.com' },
+          sections: ['feedback', 'help', 'status'],
+        }}
         visibleUses={visibleDomainUses(permissions)}
         domain={detail}
         canManage={permissions.includes(PERMISSIONS.SETTINGS_MANAGE)}
@@ -271,9 +276,10 @@ describe('domain view uses', () => {
       within(useRow('Sign-in')).getByRole('link', { name: 'Sign-in settings' })
     ).toHaveAttribute('href', '/admin/settings/security/authentication?tab=sign-in')
     expect(useRow('Custom domains')).toHaveTextContent('Pending')
+    expect(useRow('Custom domains')).toHaveTextContent('help.acme.com · Help center')
     expect(
-      within(useRow('Custom domains')).getByRole('link', { name: 'Help center settings' })
-    ).toHaveAttribute('href', '/admin/settings/help-center?tab=domains-languages')
+      within(useRow('Custom domains')).getByRole('link', { name: 'Custom domains' })
+    ).toHaveAttribute('href', '/admin/settings/domains#custom-domains')
   })
 
   it('never says live, mail or Security', () => {
@@ -323,54 +329,53 @@ describe('domain view set up', () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
 
-  it('puts the help center on help.<domain> when it has none', async () => {
+  /** The section tiles, then the name in front of the domain, then Save. */
+  const chooseSection = async (section: string) =>
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('radio', {
+        name: new RegExp(`^${section}`),
+      })
+    )
+
+  it('self-hosted: asks what the domain is used for, then takes a name on it', async () => {
     const onChanged = vi.fn()
-    clearHelpCenterDomain.mockResolvedValue({ domain: 'help.acme.com', verifiedAt: null })
+    setSectionDomain.mockResolvedValue({ ok: true, sectionDomains: {} })
     renderView(rowWith({}), { onChanged })
     setUp('Custom domains')
-    expect(screen.getByRole('dialog')).toHaveTextContent('Used for your help center.')
-    expect(within(screen.getByRole('dialog')).getByLabelText('Domain')).toHaveValue('help')
-    addWebAddressAs()
-    expect(screen.queryByRole('alertdialog')).toBeNull()
-    expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: 'help.acme.com' } })
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('Used for')
+    expect(within(dialog).queryByLabelText('Domain')).toBeNull()
+    await chooseSection('Help center')
+    expect(within(dialog).getByLabelText('Domain')).toHaveValue('help')
+    expect(dialog).toHaveTextContent('.acme.com')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    expect(setSectionDomain).toHaveBeenCalledWith({
+      data: { section: 'help', hostname: 'help.acme.com' },
+    })
+    expect(addWebAddress).not.toHaveBeenCalled()
   })
 
-  it('takes the domain itself when the address is left empty', () => {
-    clearHelpCenterDomain.mockResolvedValue({ domain: 'acme.com', verifiedAt: null })
+  it('takes the domain itself when the name is left empty', async () => {
+    setSectionDomain.mockResolvedValue({ ok: true, sectionDomains: {} })
     renderView(rowWith({}))
     setUp('Custom domains')
-    addWebAddressAs('')
-    expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: 'acme.com' } })
+    await chooseSection('Status')
+    const dialog = screen.getByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Domain'), { target: { value: '' } })
+    // Nothing typed: nothing to save yet.
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 
-  it('refuses an address that is not a name, and changes nothing', () => {
+  it('refuses a name that is not one, and changes nothing', async () => {
     renderView(rowWith({}))
     setUp('Custom domains')
-    addWebAddressAs('help desk')
-    expect(within(screen.getByRole('dialog')).getByRole('alert')).toHaveTextContent(
-      'Use letters, numbers and hyphens'
-    )
-    expect(clearHelpCenterDomain).not.toHaveBeenCalled()
-  })
-
-  it('names the current help center address and changes nothing until confirmed', async () => {
-    clearHelpCenterDomain.mockResolvedValue({ domain: 'help.acme.com', verifiedAt: null })
-    renderView(rowWith({}), { helpCenterDomain: 'help.acme.io' })
-
-    setUp('Custom domains')
-    addWebAddressAs()
-    let dialog = screen.getByRole('alertdialog')
-    expect(dialog).toHaveTextContent('Move the help center to help.acme.com?')
-    expect(dialog).toHaveTextContent('help.acme.io will stop serving the help center.')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    expect(clearHelpCenterDomain).not.toHaveBeenCalled()
-
-    setUp('Custom domains')
-    addWebAddressAs()
-    dialog = screen.getByRole('alertdialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Move help center' }))
-    expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: 'help.acme.com' } })
+    await chooseSection('Help center')
+    const dialog = screen.getByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Domain'), { target: { value: 'help desk' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Use letters, numbers and hyphens')
+    expect(setSectionDomain).not.toHaveBeenCalled()
   })
 
   it('lists each web address on the domain with what it opens', () => {
@@ -379,7 +384,6 @@ describe('domain view set up', () => {
         now: NOW,
         sending: [],
         signIn: [],
-        helpCenterDomain: null,
         webAddresses: [
           { hostname: 'feedback.acme.com', readiness: 'ready' },
           { hostname: 'help.acme.com', readiness: 'pending' },
@@ -426,12 +430,10 @@ describe('domain view set up', () => {
     expect(onChanged).not.toHaveBeenCalled()
   })
 
-  it("shows a use's row without Set up to a viewer who cannot set it up", () => {
-    // The custom domain's permission alone reads the use; the help center is
-    // set up by whoever manages it.
+  it('sets up a custom domain with the custom domain permission alone', () => {
     renderView(rowWith({}), { permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN] })
     expect(useTitles()).toEqual(['Custom domains'])
-    expect(within(usesCard()).queryByRole('button', { name: 'Set up' })).toBeNull()
+    expect(within(usesCard()).getByRole('button', { name: 'Set up' })).toBeVisible()
   })
 
   it('offers Set up only for the uses whose permission the viewer holds', () => {
@@ -535,25 +537,21 @@ describe('domain view permissions', () => {
     expect(screen.queryByRole('link', { name: 'Sign-in settings' })).toBeNull()
   })
 
-  it('lists no custom domain on an install that takes no web address', () => {
-    // Off Cloud with the help center off, nothing can put a site on a domain.
+  it('lists the custom domain on every install: each section can take one', () => {
     const all = [
       EMAIL_SENDING_PERMISSION,
       PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
       PERMISSIONS.AUTH_MANAGE,
     ]
-    expect(visibleDomainUses(all, { takesWebAddresses: false })).toEqual(['email', 'signIn'])
-    expect(visibleDomainUses(all, { takesWebAddresses: true })).toEqual([
-      'email',
-      'customDomain',
-      'signIn',
-    ])
+    expect(visibleDomainUses(all)).toEqual(['email', 'customDomain', 'signIn'])
   })
 
-  it('shows the custom domain without a link to a page the viewer cannot open', () => {
+  it('links the custom domain to the Custom domains card only', () => {
     renderView(all(), { permissions: [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN] })
     expect(useTitles()).toEqual(['Custom domains'])
-    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getAllByRole('link').map((l) => l.getAttribute('href'))).toEqual([
+      '/admin/settings/domains#custom-domains',
+    ])
   })
 })
 
@@ -603,14 +601,9 @@ describe('domain view removal', () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
 
-  it('stops serving the help center on the domain from its row', async () => {
-    clearHelpCenterDomain.mockResolvedValue({ domain: null, verifiedAt: null })
+  it('leaves removing a custom domain to the Custom domains card', () => {
     renderView(rowWith({ customDomain: true }))
-    fireEvent.click(within(useRow('Custom domains')).getByRole('button', { name: 'Remove' }))
-    const dialog = screen.getByRole('alertdialog')
-    expect(dialog).toHaveTextContent('Stop serving the help center on help.acme.com?')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
-    expect(clearHelpCenterDomain).toHaveBeenCalledWith({ data: { domain: null } })
+    expect(within(useRow('Custom domains')).queryByRole('button', { name: 'Remove' })).toBeNull()
   })
 
   it('removes the last address with the wording Email settings uses, and the domain with it', () => {

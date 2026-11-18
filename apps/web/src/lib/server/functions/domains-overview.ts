@@ -13,11 +13,6 @@ import type {
 
 export type { SendingDomainSummary, SignInDomainSummary }
 
-export interface HelpCenterDomainSummary {
-  domain: string
-  verified: boolean
-}
-
 export const getSendingDomainSummariesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<SendingDomainSummary[]> => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
@@ -33,17 +28,5 @@ export const getSignInDomainSummariesFn = createServerFn({ method: 'GET' }).hand
     const { listSignInDomainSummaries } =
       await import('@/lib/server/domains/domain-proof/domains-overview')
     return listSignInDomainSummaries(auth.permissions)
-  }
-)
-
-/** The help center's own domain on an install that serves it itself, or null when none is set. */
-export const getHelpCenterDomainSummaryFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<HelpCenterDomainSummary | null> => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN })
-    const { getSectionDomains } =
-      await import('@/lib/server/domains/settings/section-domains.service')
-    const help = (await getSectionDomains()).help
-    if (!help) return null
-    return { domain: help.hostname, verified: help.verifiedAt !== null }
   }
 )

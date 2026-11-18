@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 
 import { DomainsCard, hostnameRecords } from '../domains-cards'
-import { CUSTOM_DOMAINS_ANCHOR } from '@/lib/shared/domains-permissions'
+import { DOMAIN_VERIFICATION_ANCHOR } from '@/lib/shared/domains-permissions'
 import { FULL_NAMES_NOTE } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import type { ShownProofSource } from '@/lib/shared/domain-proof'
@@ -39,9 +39,9 @@ const base = {
 } as const
 
 describe('<DomainsCard>', () => {
-  it('carries the anchor the empty state Custom domain action lands on', () => {
+  it('carries the anchor Add a new domain lands on', () => {
     const { container } = renderCard([])
-    expect(container.querySelector(`section#${CUSTOM_DOMAINS_ANCHOR}`)).not.toBeNull()
+    expect(container.querySelector(`section#${DOMAIN_VERIFICATION_ANCHOR}`)).not.toBeNull()
   })
 
   it('shows the ownership TXT record next to the CNAME for a pending domain', () => {
@@ -215,9 +215,11 @@ describe('<DomainsCard>', () => {
     expect(screen.queryByText(/Already verified/)).toBeNull()
   })
 
-  it('calls the card Custom domains, the field Domain and the re-check Verify', () => {
+  it('calls the card Domain verification, the field Domain and the re-check Verify', () => {
     renderCard([challenged(null)])
-    expect(screen.getByText('Custom domains')).toBeTruthy()
+    // Custom domains is the card above it, where each domain's use is set.
+    expect(screen.getByText('Domain verification')).toBeTruthy()
+    expect(screen.queryByText('Custom domains')).toBeNull()
     expect(screen.getByLabelText('Domain')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Verify' })).toBeTruthy()
     expect(screen.queryByText('Web addresses')).toBeNull()
@@ -259,6 +261,8 @@ describe('<DomainsCard>', () => {
   it('names no hosting provider in its description', () => {
     renderCard([])
     expect(screen.queryByText(/cloud/i)).toBeNull()
-    expect(screen.getByText('Where people reach your portal and help center.')).toBeTruthy()
+    expect(
+      screen.getByText('Add a domain here, then choose what it is used for under Custom domains.')
+    ).toBeTruthy()
   })
 })

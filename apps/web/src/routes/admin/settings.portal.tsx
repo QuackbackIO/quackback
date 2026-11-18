@@ -61,6 +61,8 @@ import {
 import { DEFAULT_PORTAL_CONFIG, isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
+import { effectiveSectionDomains, PORTAL_SECTIONS } from '@/lib/shared/section-domains'
+import type { PortalSection } from '@/lib/shared/custom-domains'
 import type {
   PortalConfig,
   PortalNavItemConfig,
@@ -238,6 +240,20 @@ function PortalPage() {
     ) as ReadonlySet<string>
   }, [settings, session])
 
+  // A tab served at its own domain shows it under the tab; the domain is set on Settings > Domains.
+  const sectionHosts = useMemo(() => {
+    const map = effectiveSectionDomains({
+      sectionDomains: settings?.portalConfig?.sectionDomains,
+      legacyHelpDomain: settings?.helpCenterConfig?.domain,
+    })
+    const hosts: Partial<Record<PortalSection, string>> = {}
+    for (const section of PORTAL_SECTIONS) {
+      const hostname = map[section]?.hostname
+      if (hostname) hosts[section] = hostname
+    }
+    return hosts
+  }, [settings])
+
   const resetNavItems = useCallback(() => setNavItems(seedNavEditorItems(null)), [])
 
   // Structural drafts pushed into the preview iframe (postMessage, no reload).
@@ -288,6 +304,7 @@ function PortalPage() {
               onChange={setNavItems}
               gatedTypes={gatedTypes}
               onReset={resetNavItems}
+              sectionHosts={sectionHosts}
             />
             <p className="mt-3 text-xs text-muted-foreground">
               Renamed tabs show your text in every language; untouched labels stay translated.

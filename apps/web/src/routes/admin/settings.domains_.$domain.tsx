@@ -3,11 +3,12 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
 import { DOMAINS_PAGE_PERMISSIONS, domainUseLinks } from '@/lib/shared/domains-permissions'
 import { visibleDomainUses } from '@/lib/shared/domain-uses'
-import { isProductEnabled } from '@/lib/shared/types/settings'
+import { portalSectionsEnabled } from '@/lib/shared/section-domains'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { DomainView } from '@/components/admin/settings/domain-view'
 import { domainRows } from '@/components/admin/settings/domains-overview'
+import { listedSections } from '@/components/admin/settings/section-domains-card'
 
 // The trailing underscore on "domains_" escapes nesting under the Domains
 // list, which has no Outlet. The URL is still /admin/settings/domains/:domain.
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/admin/settings/domains_/$domain')({
 const DOMAIN_ROUTES = new Set<string>([Route.id, '/admin/settings/domains'])
 
 function DomainPage() {
-  const { sending, signIn, helpCenterDomain, webAddresses, added, domain } = Route.useLoaderData()
+  const { sending, signIn, sectionDomains, webAddresses, added, domain } = Route.useLoaderData()
   const params = Route.useParams()
   const context = Route.useRouteContext()
   const permissions = context.permissions ?? []
@@ -33,22 +34,36 @@ function DomainPage() {
   const name = (domain?.name ?? params.domain).trim().toLowerCase()
   // An added domain has its page with no use at all; a name only uses hold is
   // shown while one of them the viewer may see still holds it.
-  const row = domainRows({ sending, signIn, helpCenterDomain, webAddresses, added }).find(
-    (r) => r.name === name
-  )
+  const row = domainRows({
+    sending,
+    signIn,
+    sectionDomains: sectionDomains?.sectionDomains,
+    webAddresses,
+    added,
+  }).find((r) => r.name === name)
   if (!row) return <Navigate to="/admin/settings/domains" replace />
-  const cloudEnabled = !!context.cloudEnabled
-  const helpCenterOn = isProductEnabled(context.settings?.featureFlags, 'helpCenter')
+  const settings = context.settings
+  const sectionEnabled = portalSectionsEnabled({
+    featureFlags: settings?.featureFlags,
+    statusConfig: settings?.statusConfig,
+    portalConfig: settings?.portalConfig,
+  })
 
   return (
     <SettingsPage title={row.name} crumbs={[{ label: 'Domains', to: '/admin/settings/domains' }]}>
       <DomainView
         row={row}
-        links={domainUseLinks({ permissions, cloudEnabled, helpCenterOn })}
-        helpCenterDomain={helpCenterDomain?.domain ?? null}
-        visibleUses={visibleDomainUses(permissions, {
-          takesWebAddresses: cloudEnabled || helpCenterOn,
-        })}
+        links={domainUseLinks({ permissions })}
+        setup={{
+          cloud: !!context.cloudEnabled,
+          sectionDomains,
+          sections: listedSections({
+            nav: settings?.portalConfig?.nav,
+            sectionEnabled,
+            map: sectionDomains?.sectionDomains ?? {},
+          }),
+        }}
+        visibleUses={visibleDomainUses(permissions)}
         domain={domain}
         canManage={permissions.includes(PERMISSIONS.SETTINGS_MANAGE)}
         onChanged={() =>

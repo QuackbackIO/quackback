@@ -10,6 +10,7 @@ import { StatusGeneralCard } from '@/components/admin/settings/status/status-gen
 import { StatusVisibilityCard } from '@/components/admin/settings/status/status-visibility-card'
 import { StatusNotificationsCard } from '@/components/admin/settings/status/status-notifications-card'
 import { StatusDangerCard } from '@/components/admin/settings/status/status-danger-card'
+import { SectionDomainSettingsCard } from '@/components/admin/settings/section-domain-card'
 import { updateStatusSettingsFn } from '@/lib/server/functions/status'
 import { statusSettingsQueries } from '@/lib/client/queries/status'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
@@ -72,6 +73,7 @@ function StatusSettingsPage() {
   return (
     <SettingsPage page="/admin/settings/status">
       <StatusGeneralCard settings={settings} onChange={onChange} onFlushText={textSave.flush} />
+      <SectionDomainSettingsCard section="status" />
       <StatusVisibilityCard settings={settings} onChange={onChange} disabled={mutation.isPending} />
       <StatusNotificationsCard
         settings={settings}

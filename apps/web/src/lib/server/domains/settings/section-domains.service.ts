@@ -14,10 +14,16 @@ import { db, settings } from '@/lib/server/db'
 import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { normalizeDomain } from '@/lib/server/auth/normalize-domain'
-import { hostingOf, readyOnCloud, type Hosting } from './section-domains.hosting'
+import {
+  hostingOf,
+  readyOnCloud,
+  routableSectionDomains,
+  type Hosting,
+} from './section-domains.hosting'
 import {
   getHelpCenterConfig,
   getPortalConfig,
+  getWorkspaceSettings,
   updateHelpCenterConfig,
   updatePortalConfig,
 } from './settings.service'
@@ -72,6 +78,31 @@ export async function getSectionDomains(
     sectionDomains: portalConfig.sectionDomains,
     legacyHelpDomain: helpCenterConfig.domain,
   })
+}
+
+/** What Settings > Domains shows: each section's hostname as visitors are routed, and the primary domain. */
+export interface SectionDomainsView {
+  /**
+   * The map as routing reads it: on Cloud a hostname whose custom domain is
+   * not ready shows unverified, and on a self-hosted server so does a kept
+   * verification past its grace (still marked `unconfirmedSince`).
+   */
+  sectionDomains: SectionDomainMap
+  /** The host every section without its own is served at. */
+  primaryHost: string | null
+}
+
+/** Read from the workspace settings the request already holds, so the page adds no query. */
+export async function getSectionDomainsView(): Promise<SectionDomainsView> {
+  const workspace = await getWorkspaceSettings()
+  const hosting = hostingOf(
+    (workspace?.settings as { cloud?: unknown; cloudIdentity?: unknown } | undefined) ?? null
+  )
+  const map = effectiveSectionDomains({
+    sectionDomains: workspace?.portalConfig?.sectionDomains,
+    legacyHelpDomain: workspace?.helpCenterConfig?.domain,
+  })
+  return { sectionDomains: routableSectionDomains(map, hosting), primaryHost: primaryHost(hosting) }
 }
 
 async function readHosting(): Promise<Hosting> {

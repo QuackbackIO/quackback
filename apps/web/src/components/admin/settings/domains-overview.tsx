@@ -18,13 +18,11 @@ import { verifiedThroughLabel } from '@/lib/shared/domain-proof'
 import { coveringName, usedForLabel, type CustomDomainUsedFor } from '@/lib/shared/custom-domains'
 import type { AddedDomainSummary } from '@/lib/server/functions/domains'
 import type {
-  HelpCenterDomainSummary,
   SendingDomainSummary,
   SignInDomainSummary,
 } from '@/lib/server/functions/domains-overview'
-
-export const WEB_ADDRESSES_TITLE = 'Custom domains'
-export const WEB_ADDRESSES_DESCRIPTION = 'Where people reach your portal and help center.'
+import { PORTAL_SECTIONS, sectionOfHost, type SectionDomainMap } from '@/lib/shared/section-domains'
+import { sectionDomainState, type SectionDomainState } from '@/lib/shared/section-domains'
 
 export const EMPTY_DESCRIPTION = 'Use your own domain for email, web addresses and sign-in.'
 
@@ -94,6 +92,12 @@ export interface WebAddressSummary {
   readiness: 'pending' | 'ready' | 'failed'
 }
 
+const SECTION_STATE = {
+  verified: null,
+  pending: 'pending',
+  'not-answering': 'attention',
+} as const satisfies Record<SectionDomainState, BadgeState | null>
+
 const READINESS_STATE = {
   ready: null,
   pending: 'pending',
@@ -121,14 +125,15 @@ function signInDetail(d: SignInDomainSummary): string | undefined {
 export function domainRows({
   sending,
   signIn,
-  helpCenterDomain,
+  sectionDomains,
   webAddresses = [],
   added = [],
   now = new Date(),
 }: {
   sending: SendingDomainSummary[]
   signIn: SignInDomainSummary[]
-  helpCenterDomain: HelpCenterDomainSummary | null
+  /** The hostname each portal section is served at. */
+  sectionDomains?: SectionDomainMap | null
   /** Cloud's web addresses, each its hostname's custom domain use. */
   webAddresses?: WebAddressSummary[]
   added?: AddedDomainSummary[]
@@ -155,15 +160,25 @@ export function domainRows({
     const key = coveringName(entry.hostname, addedByName.keys()) ?? keyOf(entry.hostname)
     web.set(key, [...(web.get(key) ?? []), { ...entry, hostname: keyOf(entry.hostname) }])
   }
-  if (helpCenterDomain) {
+  const sections = sectionDomains ?? {}
+  // A Cloud custom domain serves the whole portal unless a section has it.
+  const cloudHosts = new Set<string>()
+  for (const w of webAddresses) {
+    cloudHosts.add(keyOf(w.hostname))
     addWeb({
-      hostname: helpCenterDomain.domain,
-      usedFor: 'help',
-      state: helpCenterDomain.verified ? null : 'pending',
+      hostname: w.hostname,
+      usedFor: sectionOfHost(w.hostname, sections) ?? 'portal',
+      state: READINESS_STATE[w.readiness],
     })
   }
-  for (const w of webAddresses) {
-    addWeb({ hostname: w.hostname, usedFor: 'portal', state: READINESS_STATE[w.readiness] })
+  for (const section of PORTAL_SECTIONS) {
+    const entry = sections[section]
+    if (!entry || cloudHosts.has(keyOf(entry.hostname))) continue
+    addWeb({
+      hostname: entry.hostname,
+      usedFor: section,
+      state: SECTION_STATE[sectionDomainState(entry)],
+    })
   }
   for (const [name, entries] of web) {
     const addresses = entries.sort((a, b) => (a.hostname < b.hostname ? -1 : 1))
