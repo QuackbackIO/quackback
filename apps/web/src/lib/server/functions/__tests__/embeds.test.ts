@@ -22,6 +22,7 @@ import {
   resolveEmbed,
 } from '../embeds'
 import type { EmbedResolverDeps, TicketEmbedRow } from '../embeds'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 const sid = (s: string) => s as PostStatusId
 
@@ -45,7 +46,15 @@ const STATUSES = [
 // Canonical portal base injected into the projections (the server fn passes
 // config.baseUrl). The `url` it yields is the absolute, viewer-shareable link a
 // new-tab embed (e.g. in the widget) opens.
-const BASE = 'https://feedback.example.com'
+const BASE = allOnPrimary('https://feedback.example.com')
+// The same workspace with its help center, changelog and support on their own hosts.
+const ON_HOSTS = {
+  ...BASE,
+  help: 'https://help.acme.com',
+  changelog: 'https://news.acme.com',
+  support: 'https://support.acme.com',
+  feedback: 'https://ideas.acme.com',
+}
 
 describe('projectPostPreview', () => {
   it('projects a post with its resolved status name + color + absolute url', () => {
@@ -81,7 +90,11 @@ describe('projectPostPreview', () => {
     expect(r.statusColor).toBeNull()
   })
   it('joins the post url cleanly when the base has a trailing slash', () => {
-    const r = projectPostPreview(POST_DETAIL, STATUSES, 'https://feedback.example.com/')
+    const r = projectPostPreview(
+      POST_DETAIL,
+      STATUSES,
+      allOnPrimary('https://feedback.example.com/')
+    )
     expect(r.url).toBe(
       'https://feedback.example.com/b/features/posts/post_01ktjwt5tyf6br9mw521h13n6n'
     )
@@ -235,7 +248,7 @@ describe('projectArticlePreview', () => {
   })
 
   it('joins the article url cleanly when the base has a trailing slash', () => {
-    const r = projectArticlePreview(ARTICLE_INPUT, 'https://feedback.example.com/')
+    const r = projectArticlePreview(ARTICLE_INPUT, allOnPrimary('https://feedback.example.com/'))
     expect(r.url).toBe(
       'https://feedback.example.com/hc/articles/getting-started/how-to-reset-password'
     )
@@ -358,7 +371,7 @@ describe('projectTicketPreview', () => {
     expect(r.url).toBe(`https://feedback.example.com/admin/inbox?i=${TICKET_ROW.id}`)
   })
   it('joins the ticket url cleanly when the base has a trailing slash', () => {
-    const r = projectTicketPreview(TICKET_ROW, 'https://feedback.example.com/')
+    const r = projectTicketPreview(TICKET_ROW, allOnPrimary('https://feedback.example.com/'))
     expect(r.url).toBe('https://feedback.example.com/support/conversation_01pair')
   })
 })
@@ -438,5 +451,35 @@ describe('resolveEmbed — ticket', () => {
       BASE
     )
     expect(r).toEqual({ unavailable: true })
+  })
+})
+
+describe("embed links on each section's own host", () => {
+  it('links a post at the feedback host', () => {
+    expect(projectPostPreview(POST_DETAIL, STATUSES, ON_HOSTS).url).toBe(
+      'https://ideas.acme.com/b/features/posts/post_01ktjwt5tyf6br9mw521h13n6n'
+    )
+  })
+  it('links a changelog entry at the changelog host', () => {
+    const r = projectChangelogPreview(
+      { id: 'changelog_x', title: 't', publishedAt: null },
+      ON_HOSTS
+    )
+    expect(r.url).toBe('https://news.acme.com/changelog/changelog_x')
+  })
+  it('links an article at the help center host, keeping its /hc path', () => {
+    expect(projectArticlePreview(ARTICLE_INPUT, ON_HOSTS).url).toMatch(
+      /^https:\/\/help\.acme\.com\/hc\/articles\//
+    )
+  })
+  it('links a ticket at the support host, and an internal one at the primary inbox', () => {
+    expect(projectTicketPreview(TICKET_ROW, ON_HOSTS).url).toBe(
+      'https://support.acme.com/support/conversation_01pair'
+    )
+    const internal = projectTicketPreview(
+      { ...TICKET_ROW, type: 'back_office', conversationId: null },
+      ON_HOSTS
+    )
+    expect(internal.url).toBe(`https://feedback.example.com/admin/inbox?i=${TICKET_ROW.id}`)
   })
 })

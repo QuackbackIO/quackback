@@ -69,4 +69,29 @@ describe('help center article head', () => {
     })
     expect(links).toEqual([])
   })
+
+  it("canonicalises to the article URL on the help center's own host", () => {
+    const { links } = head({
+      loaderData: { article },
+      params: { locale: 'en', idSlug: '150-mcp-reference' },
+      matches: [
+        {
+          routeId: '/_portal',
+          loaderData: { workspaceName: 'Acme' },
+          context: {
+            baseUrl: 'https://help.acme.com',
+            sectionLinks: {
+              hosts: { help: 'https://help.acme.com' },
+              here: 'https://help.acme.com',
+              primary: 'https://feedback.example.com',
+            },
+          },
+        },
+      ],
+    })
+    expect(links).toContainEqual({
+      rel: 'canonical',
+      href: 'https://help.acme.com/hc/en/articles/150-mcp-reference',
+    })
+  })
 })

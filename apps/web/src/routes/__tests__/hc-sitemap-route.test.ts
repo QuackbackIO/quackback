@@ -1,17 +1,16 @@
 // @vitest-environment node
 /**
  * The help center sitemap lists absolute URLs. Behind the TLS proxy the app
- * sees the request as http, so the origin has to come from the configured base
- * URL, or from the verified custom domain the request arrived on, the same
- * rule the canonical links use. Never from the request's own scheme.
- *
- * The help center's domain is its entry in the section map. Sending the
- * default host's sitemap there is the section host middleware's job.
+ * sees the request as http, so the origin comes from where the help center is
+ * linked: its own host once it has one, else the configured base URL. Never
+ * from the request's own scheme. Sending the primary domain's sitemap to the
+ * help center's host is the section host middleware's job.
  */
 import { describe, it, expect, vi } from 'vitest'
+import { allOnPrimary, type SectionOrigins } from '@/lib/shared/section-links'
 
 const state = vi.hoisted(() => ({
-  sectionDomains: {} as Record<string, { hostname: string; verifiedAt: string | null }>,
+  origins: null as SectionOrigins | null,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -31,8 +30,8 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   }),
 }))
 
-vi.mock('@/lib/server/domains/settings/section-domains.service', () => ({
-  getSectionDomains: async () => state.sectionDomains,
+vi.mock('@/lib/server/domains/settings/section-links', () => ({
+  getSectionOrigins: async () => state.origins,
 }))
 
 vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
@@ -59,36 +58,21 @@ async function sitemapLocs(requestUrl: string): Promise<string[]> {
 
 describe('help center sitemap origin', () => {
   it('lists https URLs when the request reaches the app over http behind a proxy', async () => {
-    state.sectionDomains = {}
+    state.origins = allOnPrimary('https://feedback.example.com')
     expect(await sitemapLocs('http://feedback.example.com/hc/sitemap.xml')).toEqual([
       'https://feedback.example.com/hc',
       'https://feedback.example.com/hc/en/collections/1-basics',
     ])
   })
 
-  it('uses the verified custom domain when the request arrived on it', async () => {
-    state.sectionDomains = {
-      help: { hostname: 'help.acme.com', verifiedAt: '2026-10-01T00:00:00.000Z' },
+  it("lists the help center's own host, its home as /, once it has one", async () => {
+    state.origins = {
+      ...allOnPrimary('https://feedback.example.com'),
+      help: 'https://help.acme.com',
     }
-    const locs = await sitemapLocs('https://help.acme.com/hc/sitemap.xml')
-    expect(locs).toEqual([
-      'https://help.acme.com/hc',
+    expect(await sitemapLocs('https://help.acme.com/hc/sitemap.xml')).toEqual([
+      'https://help.acme.com/',
       'https://help.acme.com/hc/en/collections/1-basics',
     ])
-  })
-
-  it('reads the host the edge vouches for, not the hop it came through', async () => {
-    state.sectionDomains = {
-      help: { hostname: 'help.acme.com', verifiedAt: '2026-10-01T00:00:00.000Z' },
-    }
-    // A Host header naming the custom domain on a request to the app's own
-    // origin is not enough: only the signed edge header can name it.
-    const response = await GET({
-      request: new Request('http://feedback.example.com/hc/sitemap.xml', {
-        headers: { host: 'feedback.example.com', 'x-forwarded-host': 'help.acme.com' },
-      }),
-    })
-    const locs = [...(await response.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])
-    expect(locs[0]).toBe('https://feedback.example.com/hc')
   })
 })

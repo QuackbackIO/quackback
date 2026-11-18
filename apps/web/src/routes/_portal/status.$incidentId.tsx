@@ -20,6 +20,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { DEFAULT_LOCALE, loadAreaMessages } from '@/lib/shared/i18n'
 import type { StatusIncidentId } from '@quackback/ids'
+import { pageCanonical } from '@/lib/shared/section-links'
 
 export const Route = createFileRoute('/_portal/status/$incidentId')({
   loader: async ({ context, params }) => {
@@ -47,16 +48,15 @@ export const Route = createFileRoute('/_portal/status/$incidentId')({
       incidentId,
       incidentTitle: incident.title,
       workspaceName: context.settings?.name ?? 'Quackback',
-      baseUrl: context.baseUrl ?? '',
+      canonicalUrl: pageCanonical('status', `/status/${incidentId}`, context),
       messages: await messagesPromise,
     }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
-    const { incidentTitle, incidentId, workspaceName, baseUrl } = loaderData
+    const { incidentTitle, workspaceName, canonicalUrl } = loaderData
     const title = `${incidentTitle} - ${workspaceName} Status`
     const description = `${incidentTitle}. A status update from ${workspaceName}.`
-    const canonicalUrl = baseUrl ? `${baseUrl}/status/${incidentId}` : ''
     return {
       meta: [
         { title },

@@ -15,6 +15,7 @@ import { buildShortcutStoryBody } from '@/integrations/shortcut/server/message'
 import { buildAsanaTaskBody } from '@/integrations/asana/server/message'
 import { buildAzureDevOpsWorkItemBody } from '@/integrations/azure-devops/server/message'
 import { buildZapierPayload } from '@/integrations/zapier/server/message'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 // ---------------------------------------------------------------------------
 // Shared test event factory
@@ -51,18 +52,22 @@ const ROOT = 'https://feedback.example.com'
 describe.each([
   {
     name: 'Linear',
-    build: (e: EventData) => buildLinearIssueBody(e, ROOT),
+    build: (e: EventData) => buildLinearIssueBody(e, allOnPrimary(ROOT)),
     bodyKey: 'description',
   },
-  { name: 'GitHub', build: (e: EventData) => buildGitHubIssueBody(e, ROOT), bodyKey: 'body' },
+  {
+    name: 'GitHub',
+    build: (e: EventData) => buildGitHubIssueBody(e, allOnPrimary(ROOT)),
+    bodyKey: 'body',
+  },
   {
     name: 'ClickUp',
-    build: (e: EventData) => buildClickUpTaskBody(e, ROOT),
+    build: (e: EventData) => buildClickUpTaskBody(e, allOnPrimary(ROOT)),
     bodyKey: 'description',
   },
   {
     name: 'Shortcut',
-    build: (e: EventData) => buildShortcutStoryBody(e, ROOT),
+    build: (e: EventData) => buildShortcutStoryBody(e, allOnPrimary(ROOT)),
     bodyKey: 'description',
   },
 ])('$name message builder', ({ build, bodyKey }) => {
@@ -98,10 +103,14 @@ describe.each([
 // ---------------------------------------------------------------------------
 
 describe.each([
-  { name: 'Asana', build: (e: EventData) => buildAsanaTaskBody(e, ROOT), bodyKey: 'htmlNotes' },
+  {
+    name: 'Asana',
+    build: (e: EventData) => buildAsanaTaskBody(e, allOnPrimary(ROOT)),
+    bodyKey: 'htmlNotes',
+  },
   {
     name: 'Azure DevOps',
-    build: (e: EventData) => buildAzureDevOpsWorkItemBody(e, ROOT),
+    build: (e: EventData) => buildAzureDevOpsWorkItemBody(e, allOnPrimary(ROOT)),
     bodyKey: 'description',
   },
 ])('$name message builder', ({ build, bodyKey }) => {
@@ -130,7 +139,7 @@ describe.each([
 
 describe('Jira message builder', () => {
   it('does not include vote count in ADF nodes', () => {
-    const { description } = buildJiraIssueBody(makeEvent(), ROOT)
+    const { description } = buildJiraIssueBody(makeEvent(), allOnPrimary(ROOT))
     const texts = description.content
       .filter(
         (n): n is { type: 'paragraph'; content: Array<{ type: 'text'; text: string }> } =>
@@ -141,14 +150,14 @@ describe('Jira message builder', () => {
   })
 
   it('produces valid ADF structure', () => {
-    const { description } = buildJiraIssueBody(makeEvent(), ROOT)
+    const { description } = buildJiraIssueBody(makeEvent(), allOnPrimary(ROOT))
     expect(description.version).toBe(1)
     expect(description.type).toBe('doc')
     expect(description.content.length).toBeGreaterThan(0)
   })
 
   it('includes author, board, and link in ADF', () => {
-    const { description } = buildJiraIssueBody(makeEvent(), ROOT)
+    const { description } = buildJiraIssueBody(makeEvent(), allOnPrimary(ROOT))
     const texts = description.content
       .filter((n) => n.type === 'paragraph')
       .flatMap((p) => ('content' in p ? p.content.map((t) => t.text) : []))
@@ -160,7 +169,7 @@ describe('Jira message builder', () => {
 
   it('returns fallback ADF for non post.created events', () => {
     const event = { type: 'post.status_changed' } as unknown as EventData
-    const { title, description } = buildJiraIssueBody(event, ROOT)
+    const { title, description } = buildJiraIssueBody(event, allOnPrimary(ROOT))
     expect(title).toBe('Feedback')
     expect(description.type).toBe('doc')
   })
@@ -172,12 +181,12 @@ describe('Jira message builder', () => {
 
 describe('Zapier message builder', () => {
   it('does not include vote_count in payload', () => {
-    const payload = buildZapierPayload(makeEvent(), ROOT)
+    const payload = buildZapierPayload(makeEvent(), allOnPrimary(ROOT))
     expect(payload.post).not.toHaveProperty('vote_count')
   })
 
   it('includes post metadata', () => {
-    const payload = buildZapierPayload(makeEvent(), ROOT)
+    const payload = buildZapierPayload(makeEvent(), allOnPrimary(ROOT))
     expect(payload.event).toBe('post.created')
     expect(payload.post.title).toBe('Dark mode support')
     expect(payload.post.board).toBe('features')
@@ -193,13 +202,13 @@ describe('Zapier message builder', () => {
 describe('Shortcut title truncation', () => {
   it('truncates titles longer than 512 characters', () => {
     const longTitle = 'A'.repeat(600)
-    const { title } = buildShortcutStoryBody(makeEvent({ title: longTitle }), ROOT)
+    const { title } = buildShortcutStoryBody(makeEvent({ title: longTitle }), allOnPrimary(ROOT))
     expect(title.length).toBe(512)
     expect(title.endsWith('...')).toBe(true)
   })
 
   it('does not truncate short titles', () => {
-    const { title } = buildShortcutStoryBody(makeEvent({ title: 'Short' }), ROOT)
+    const { title } = buildShortcutStoryBody(makeEvent({ title: 'Short' }), allOnPrimary(ROOT))
     expect(title).toBe('Short')
   })
 })
@@ -208,15 +217,33 @@ describe('non post.created fallbacks', () => {
   const event = { type: 'post.status_changed' } as unknown as EventData
 
   it.each([
-    { name: 'Linear', build: () => buildLinearIssueBody(event, ROOT) },
-    { name: 'GitHub', build: () => buildGitHubIssueBody(event, ROOT) },
-    { name: 'ClickUp', build: () => buildClickUpTaskBody(event, ROOT) },
-    { name: 'Shortcut', build: () => buildShortcutStoryBody(event, ROOT) },
-    { name: 'Asana', build: () => buildAsanaTaskBody(event, ROOT) },
-    { name: 'Azure DevOps', build: () => buildAzureDevOpsWorkItemBody(event, ROOT) },
+    { name: 'Linear', build: () => buildLinearIssueBody(event, allOnPrimary(ROOT)) },
+    { name: 'GitHub', build: () => buildGitHubIssueBody(event, allOnPrimary(ROOT)) },
+    { name: 'ClickUp', build: () => buildClickUpTaskBody(event, allOnPrimary(ROOT)) },
+    { name: 'Shortcut', build: () => buildShortcutStoryBody(event, allOnPrimary(ROOT)) },
+    { name: 'Asana', build: () => buildAsanaTaskBody(event, allOnPrimary(ROOT)) },
+    { name: 'Azure DevOps', build: () => buildAzureDevOpsWorkItemBody(event, allOnPrimary(ROOT)) },
   ])('$name returns fallback title', ({ build }) => {
     const result = build() as Record<string, unknown>
     const title = result.title ?? result.name
     expect(title).toBe('Feedback')
+  })
+})
+
+describe("links at the feedback section's own host", () => {
+  const links = { ...allOnPrimary(ROOT), feedback: 'https://ideas.acme.com' }
+  const postUrl = 'https://ideas.acme.com/b/features/posts/post_1'
+
+  it.each([
+    { name: 'Linear', build: () => buildLinearIssueBody(makeEvent(), links).description },
+    { name: 'GitHub', build: () => buildGitHubIssueBody(makeEvent(), links).body },
+    { name: 'Asana', build: () => buildAsanaTaskBody(makeEvent(), links).htmlNotes },
+    { name: 'Zapier', build: () => JSON.stringify(buildZapierPayload(makeEvent(), links)) },
+  ])('$name links the post there', ({ build }) => {
+    expect(build()).toContain(postUrl)
+  })
+
+  it('keeps the webhook portal_url on the primary domain', () => {
+    expect(buildZapierPayload(makeEvent(), links).portal_url).toBe(ROOT)
   })
 })

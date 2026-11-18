@@ -34,7 +34,6 @@ import type {
   PrincipalId,
 } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
-import { getBaseUrl } from '@/lib/server/config'
 import {
   registerTool,
   requireScope,
@@ -52,6 +51,8 @@ import {
   READ_ONLY,
   type AuthorAt,
 } from './helpers'
+import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import { sectionUrl } from '@/lib/shared/section-links'
 
 // ============================================================================
 // Schemas
@@ -364,12 +365,12 @@ async function searchPosts(args: SearchArgs, auth: McpAuthContext): Promise<Call
   const lastItem = result.items[result.items.length - 1]
   const nextCursor = result.hasMore && lastItem ? encodeSearchCursor('posts', lastItem.id) : null
 
-  const origin = getBaseUrl()
+  const origins = await getSectionOrigins()
   return compactJsonResult({
     posts: result.items.map((p) => ({
       id: p.id,
       title: p.title,
-      url: `${origin}/b/${encodeURIComponent(p.board.slug)}/posts/${p.id}`,
+      url: sectionUrl('feedback', `/b/${encodeURIComponent(p.board.slug)}/posts/${p.id}`, origins),
       excerpt: p.content ? truncate(p.content, 200) : '',
       voteCount: p.voteCount,
       commentCount: p.commentCount,

@@ -7,6 +7,7 @@ import { buildTrelloCard } from '@/integrations/trello/server/message'
 import { buildShortcutStoryBody } from '@/integrations/shortcut/server/message'
 import { buildClickUpTaskBody } from '@/integrations/clickup/server/message'
 import type { PostCreatedEvent } from '@/lib/server/events/types'
+import { allOnPrimary } from '@/lib/shared/section-links'
 const root = 'https://feedback.test'
 const url = `${root}/api/storage/shot.png`
 const image = `![Screenshot](${url})`
@@ -30,12 +31,15 @@ const event: PostCreatedEvent = {
 }
 describe('shared integration media content', () => {
   it.each([
-    ['Linear', (e: PostCreatedEvent) => buildLinearIssueBody(e, root).description],
-    ['GitHub', (e: PostCreatedEvent) => buildGitHubIssueBody(e, root).body],
-    ['GitLab', (e: PostCreatedEvent) => buildGitLabIssue(e, root).description],
-    ['Trello', (e: PostCreatedEvent) => buildTrelloCard(e, root).desc],
-    ['Shortcut', (e: PostCreatedEvent) => buildShortcutStoryBody(e, root).description],
-    ['ClickUp', (e: PostCreatedEvent) => buildClickUpTaskBody(e, root).description],
+    ['Linear', (e: PostCreatedEvent) => buildLinearIssueBody(e, allOnPrimary(root)).description],
+    ['GitHub', (e: PostCreatedEvent) => buildGitHubIssueBody(e, allOnPrimary(root)).body],
+    ['GitLab', (e: PostCreatedEvent) => buildGitLabIssue(e, allOnPrimary(root)).description],
+    ['Trello', (e: PostCreatedEvent) => buildTrelloCard(e, allOnPrimary(root)).desc],
+    [
+      'Shortcut',
+      (e: PostCreatedEvent) => buildShortcutStoryBody(e, allOnPrimary(root)).description,
+    ],
+    ['ClickUp', (e: PostCreatedEvent) => buildClickUpTaskBody(e, allOnPrimary(root)).description],
   ] as const)('%s preserves an image cut at the closing parenthesis', (_provider, build) => {
     const body = build(event)
     expect(body).toContain(image)

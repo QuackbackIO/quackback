@@ -9,6 +9,8 @@ import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations
 import type { EventData } from '@/lib/server/events/types'
 import { buildClickUpTaskBody } from '@/integrations/clickup/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'clickup' })
 
@@ -21,12 +23,13 @@ export interface ClickUpTarget {
 export interface ClickUpConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
 }
 
 export const clickupHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId: listId } = target as ClickUpTarget
-    const { accessToken, rootUrl } = config as ClickUpConfig
+    const { accessToken, rootUrl, links } = config as ClickUpConfig
 
     // Only create tasks for new feedback
     if (event.type !== 'post.created') {
@@ -35,7 +38,7 @@ export const clickupHook: IntegrationHook = {
 
     log.debug({ event_type: event.type, list_id: listId }, 'creating task')
 
-    const { name, description } = buildClickUpTaskBody(event, rootUrl)
+    const { name, description } = buildClickUpTaskBody(event, hookLinks({ rootUrl, links }))
 
     try {
       const response = await integrationFetch(`${CLICKUP_API}/list/${listId}/task`, {

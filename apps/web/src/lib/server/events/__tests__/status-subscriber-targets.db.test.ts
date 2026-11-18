@@ -65,6 +65,7 @@ import {
 import { setEmailSender } from '@/lib/server/domains/channel-accounts/email-senders'
 import type { EventData } from '../types'
 import type { HookContext } from '../hook-context'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 const runSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -247,6 +248,24 @@ describe.skipIf(!fixture.available)('status incident emails (execution-level)', 
         from: 'alerts@acme.example',
         fromDisplayName: 'Acme Status',
       })
+    }
+  })
+
+  it("links the incident at the status page's own host when it has one", async () => {
+    const onStatusHost: HookContext = {
+      ...context,
+      sectionOrigins: {
+        ...allOnPrimary(context.portalBaseUrl),
+        status: 'https://status.acme.com',
+      },
+    }
+    const targets = await getStatusSubscriberTargets(incidentCreated, onStatusHost)
+    const emails = targets.filter((t) => t.type === 'email')
+    expect(emails.length).toBeGreaterThan(0)
+    for (const t of emails) {
+      expect((t.config as { incidentUrl: string }).incidentUrl).toBe(
+        `https://status.acme.com/status/${INCIDENT}`
+      )
     }
   })
 

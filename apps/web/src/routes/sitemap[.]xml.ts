@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import type { SitemapUrl } from '@/lib/server/sitemap'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import { publicWorkspaceCacheHeaders } from '@/lib/server/workspaces/http-cache'
 
@@ -7,16 +6,31 @@ export const Route = createFileRoute('/sitemap.xml')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const [{ config }, { renderSitemap }] = await Promise.all([
-          import('@/lib/server/config'),
+        const [
+          { renderSitemap },
+          { getSectionOrigins },
+          { portalSitemapSections, buildPortalSitemapUrls },
+          { sectionServedAt },
+          { requestWorkspaceHost },
+        ] = await Promise.all([
           import('@/lib/server/sitemap'),
+          import('@/lib/server/domains/settings/section-links'),
+          import('@/lib/shared/portal-sitemap'),
+          import('@/lib/shared/section-links'),
+          import('@/lib/server/workspaces/saas-edge-host'),
         ])
 
         const url = new URL(request.url)
         const pageParam = url.searchParams.get('page')
         const page = pageParam ? parseInt(pageParam, 10) : null
 
-        const baseUrl = config.baseUrl
+        // Each host lists its own pages: a section on its own host
+        // (news.acme.com for the changelog) only that section, the primary
+        // domain the sections it serves itself.
+        const origins = await getSectionOrigins()
+        const host = requestWorkspaceHost(request)
+        const hostSection = sectionServedAt(host, origins)
+        const baseUrl = hostSection ? origins[hostSection] : origins.primary
 
         // Private portals must not expose URLs to search engines.
         const { getWorkspaceSettings } =
@@ -31,7 +45,11 @@ export const Route = createFileRoute('/sitemap.xml')({
           })
         }
 
-        const allUrls = await collectUrls(baseUrl)
+        const allUrls = buildPortalSitemapUrls({
+          origins,
+          sections: portalSitemapSections(host, origins),
+          ...(await collectContent()),
+        })
 
         const xml = renderSitemap(allUrls, baseUrl, isNaN(page as number) ? null : page)
 
@@ -51,30 +69,20 @@ export const Route = createFileRoute('/sitemap.xml')({
   },
 })
 
-async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
+/** The public changelog entries and posts the sitemap may list. */
+async function collectContent() {
   const [
     { db, changelogEntries, and, desc, eq, sql },
     { publicChangelogConditions },
-    { toIsoDateOnly },
     { getFeatureFlags },
   ] = await Promise.all([
     import('@/lib/server/db'),
     import('@/lib/server/domains/changelog/changelog.public'),
-    import('@/lib/shared/utils/date'),
     import('@/lib/server/domains/settings/settings.service'),
   ])
 
   const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
-
-  const urls: SitemapUrl[] = []
   const flags = await getFeatureFlags()
-
-  // Static pages
-  if (flags.feedback) {
-    urls.push({ loc: baseUrl })
-    urls.push({ loc: `${baseUrl}/roadmap` })
-  }
-  if (flags.changelog) urls.push({ loc: `${baseUrl}/changelog` })
 
   const entries = flags.changelog
     ? await db
@@ -83,13 +91,6 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
         .where(and(...publicChangelogConditions(new Date())))
         .orderBy(desc(effectiveDisplayDate))
     : []
-
-  for (const entry of entries) {
-    urls.push({
-      loc: `${baseUrl}/changelog/${entry.id}`,
-      lastmod: toIsoDateOnly(entry.updatedAt),
-    })
-  }
 
   // Published, non-merged posts on public, non-deleted boards.
   // Sitemap is anonymous-public by definition — only boards whose view
@@ -113,14 +114,13 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
       })
     : []
 
-  for (const post of publicPosts) {
-    if (post.board?.slug && post.board.access?.view === 'anonymous' && !post.board.deletedAt) {
-      urls.push({
-        loc: `${baseUrl}/b/${post.board.slug}/posts/${post.id}`,
-        lastmod: toIsoDateOnly(post.updatedAt),
-      })
-    }
+  return {
+    flags: { feedback: flags.feedback, changelog: flags.changelog },
+    changelogEntries: entries,
+    posts: publicPosts.flatMap((post) =>
+      post.board?.slug && post.board.access?.view === 'anonymous' && !post.board.deletedAt
+        ? [{ id: post.id, boardSlug: post.board.slug, updatedAt: post.updatedAt }]
+        : []
+    ),
   }
-
-  return urls
 }

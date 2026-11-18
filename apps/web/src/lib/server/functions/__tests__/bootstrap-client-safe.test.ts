@@ -105,6 +105,7 @@ async function getBootstrapData() {
     settings: { name: string; settings: object; statusConfig: object } | null
     onboarding: { complete: boolean; needsSetupWizard: boolean }
     sectionHome: string | null
+    sectionLinks?: { hosts?: Record<string, string>; here?: string; primary?: string }
   }
 }
 
@@ -179,5 +180,40 @@ describe('getBootstrapData response', () => {
     expect((await getBootstrapData()).sectionHome).toBeNull()
     hoisted.host = 'help.acme.com'
     expect((await getBootstrapData()).sectionHome).toBe('/hc')
+  })
+
+  it('tells the browser where each section is linked, on every host', async () => {
+    const settings = workspaceSettings(setupState())
+    hoisted.getWorkspaceSettings.mockResolvedValue({
+      ...settings,
+      portalConfig: {
+        ...settings.portalConfig,
+        sectionDomains: {
+          help: { hostname: 'help.acme.com', verifiedAt: '2026-11-01T00:00:00.000Z' },
+          // Not verified: links stay on the primary domain.
+          status: { hostname: 'status.acme.com', verifiedAt: null },
+        },
+      },
+      featureFlags: { feedback: true, helpCenter: true, statusPage: true },
+      statusConfig: { enabled: true },
+    })
+
+    // Only the exception is sent: the help center's host. The page is on
+    // the primary domain, which is its base URL.
+    expect((await getBootstrapData()).sectionLinks).toEqual({
+      hosts: { help: 'https://help.acme.com' },
+    })
+
+    hoisted.host = 'help.acme.com'
+    expect((await getBootstrapData()).sectionLinks).toEqual({
+      hosts: { help: 'https://help.acme.com' },
+      here: 'https://help.acme.com',
+    })
+  })
+
+  it('sends nothing about section hosts while no section has one', async () => {
+    hoisted.getWorkspaceSettings.mockResolvedValue(workspaceSettings(setupState()))
+    const data = await getBootstrapData()
+    expect('sectionLinks' in data).toBe(false)
   })
 })

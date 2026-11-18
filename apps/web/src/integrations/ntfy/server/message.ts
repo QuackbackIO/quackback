@@ -5,6 +5,7 @@ import type { EventData } from '@/lib/server/events/types'
 import { stripHtml, truncate, formatStatus } from '@/lib/server/events/hook-utils'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 export interface NtfyPayload {
   topic: string
@@ -17,7 +18,7 @@ export interface NtfyPayload {
 export function buildNtfyPayload(
   event: EventData,
   topic: string,
-  rootUrl: string
+  links: SectionOrigins
 ): NtfyPayload | null {
   switch (event.type) {
     case 'post.created': {
@@ -27,7 +28,7 @@ export function buildNtfyPayload(
         topic,
         title: `New feedback: ${post.title}`,
         message: body || post.title,
-        click: buildPostUrl(rootUrl, post.boardSlug, post.id),
+        click: buildPostUrl(links, post.boardSlug, post.id),
         tags: ['speech_balloon'],
       }
     }
@@ -38,7 +39,7 @@ export function buildNtfyPayload(
         topic,
         title: `Status changed: ${post.title}`,
         message: `${formatStatus(previousStatus)} → ${formatStatus(newStatus)}`,
-        click: buildPostUrl(rootUrl, post.boardSlug, post.id),
+        click: buildPostUrl(links, post.boardSlug, post.id),
         tags: ['arrows_counterclockwise'],
       }
     }
@@ -50,7 +51,7 @@ export function buildNtfyPayload(
         topic,
         title: `New comment: ${post.title}`,
         message: body || `New comment on "${post.title}"`,
-        click: buildPostUrl(rootUrl, post.boardSlug, post.id),
+        click: buildPostUrl(links, post.boardSlug, post.id),
         tags: ['speech_balloon'],
       }
     }

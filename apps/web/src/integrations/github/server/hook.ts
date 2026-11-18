@@ -9,6 +9,8 @@ import type { EventData } from '@/lib/server/events/types'
 import { buildGitHubIssueBody } from '@/integrations/github/server/message'
 import { githubIssues } from '@/integrations/github/server/issues'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'github' })
 
@@ -19,12 +21,13 @@ export interface GitHubTarget {
 export interface GitHubConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
 }
 
 export const githubHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId: ownerRepo } = target as GitHubTarget
-    const { accessToken, rootUrl } = config as GitHubConfig
+    const { accessToken, rootUrl, links } = config as GitHubConfig
 
     // Only create issues for new feedback
     if (event.type !== 'post.created') {
@@ -33,7 +36,7 @@ export const githubHook: IntegrationHook = {
 
     log.debug({ event_type: event.type, repo: ownerRepo }, 'creating issue')
 
-    const { title, body } = buildGitHubIssueBody(event, rootUrl)
+    const { title, body } = buildGitHubIssueBody(event, hookLinks({ rootUrl, links }))
 
     try {
       // The capability owns the API call + error classification; this hook

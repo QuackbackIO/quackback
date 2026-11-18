@@ -6,6 +6,7 @@
 import type { EventData } from '@/lib/server/events/types'
 import { stripHtml, truncate } from '@/lib/server/events/hook-utils'
 import { buildPostUrl, getAuthorName } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 /**
  * ADF node types used for Jira issue descriptions.
@@ -36,7 +37,7 @@ interface AdfDoc {
  */
 export function buildJiraIssueBody(
   event: EventData,
-  rootUrl: string
+  links: SectionOrigins
 ): { title: string; description: AdfDoc } {
   if (event.type !== 'post.created') {
     return {
@@ -50,7 +51,7 @@ export function buildJiraIssueBody(
   }
 
   const { post } = event.data
-  const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+  const postUrl = buildPostUrl(links, post.boardSlug, post.id)
   const content = truncate(stripHtml(post.content), 2000)
   const author = getAuthorName(post)
 

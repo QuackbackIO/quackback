@@ -9,6 +9,8 @@ import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations
 import type { EventData } from '@/lib/server/events/types'
 import { buildDiscordMessage } from '@/integrations/discord/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'discord' })
 
@@ -21,16 +23,17 @@ export interface DiscordTarget {
 export interface DiscordConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
 }
 
 export const discordHook: IntegrationHook = {
   async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as DiscordTarget
-    const { accessToken, rootUrl } = config as DiscordConfig
+    const { accessToken, rootUrl, links } = config as DiscordConfig
 
     log.debug({ event_type: event.type, channel_id: channelId }, 'processing event')
 
-    const message = buildDiscordMessage(event, rootUrl)
+    const message = buildDiscordMessage(event, hookLinks({ rootUrl, links }))
 
     try {
       const response = await integrationFetch(`${DISCORD_API}/channels/${channelId}/messages`, {

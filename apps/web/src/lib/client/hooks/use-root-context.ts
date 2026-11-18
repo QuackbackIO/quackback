@@ -2,6 +2,7 @@ import { useRouteContext } from '@tanstack/react-router'
 import { useMemo } from 'react'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
+import { expandSectionLinks } from '@/lib/shared/section-links'
 
 /**
  * Named reads of the route context. Every navigation hands the tree a new
@@ -25,6 +26,17 @@ export function useUserRole() {
 
 export function useBaseUrl() {
   return useRouteContext({ from: '__root__', select: (context) => context.baseUrl })
+}
+
+/**
+ * Where each portal section is linked (its own host, or the primary origin),
+ * and the origin this page is served at. Null before the bootstrap has a base
+ * URL. The bootstrap sends only the exception; this rebuilds the full table.
+ */
+export function useSectionLinks() {
+  const baseUrl = useBaseUrl()
+  const links = useRouteContext({ from: '__root__', select: (context) => context.sectionLinks })
+  return useMemo(() => expandSectionLinks(baseUrl, links), [baseUrl, links])
 }
 
 /** Whether this deployment sells plans: false on every self-hosted install. */

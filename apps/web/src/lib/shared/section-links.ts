@@ -1,0 +1,164 @@
+/**
+ * Where links to each portal section point. A section on its own verified
+ * host (help.acme.com for the help center) is linked there directly, so an
+ * email, a webhook, a canonical tag or a nav tab never leans on the redirect
+ * from the primary domain. Every other section, and every path all hosts
+ * share (sign-in, settings, unsubscribe), stays on the primary domain.
+ *
+ * Client-safe and pure. The server reads the settings once per request or job
+ * (`getSectionOrigins` in lib/server/domains/settings/section-links.ts) and
+ * the browser gets the same table from the bootstrap.
+ */
+import type { PortalSection } from './custom-domains'
+import {
+  PORTAL_SECTIONS,
+  SECTION_HOME,
+  normalizeHost,
+  routableSectionHost,
+  sectionForPath,
+  type SectionDomainMap,
+} from './section-domains'
+
+/** The origin each section is linked at, and the primary origin for everything else. */
+export type SectionOrigins = Record<PortalSection | 'primary', string>
+
+function trimOrigin(origin: string): string {
+  return origin.replace(/\/+$/, '')
+}
+
+/**
+ * The origin of every section. `map` is the routable map (on Cloud only ready
+ * domains count), so links agree with where the middleware routes.
+ */
+export function sectionOrigins({
+  map,
+  sectionEnabled,
+  primaryOrigin,
+}: {
+  map: SectionDomainMap
+  sectionEnabled: Record<PortalSection, boolean>
+  primaryOrigin: string
+}): SectionOrigins {
+  const primary = trimOrigin(primaryOrigin)
+  const result = { primary } as SectionOrigins
+  for (const section of PORTAL_SECTIONS) {
+    const host = routableSectionHost(section, map, sectionEnabled)
+    result[section] = host ? `https://${host}` : primary
+  }
+  return result
+}
+
+/** Every section on the primary domain: no section has a host of its own. */
+export function allOnPrimary(primaryOrigin: string): SectionOrigins {
+  return sectionOrigins({
+    map: {},
+    sectionEnabled: {
+      feedback: false,
+      roadmap: false,
+      changelog: false,
+      help: false,
+      support: false,
+      status: false,
+    },
+    primaryOrigin,
+  })
+}
+
+/**
+ * An absolute URL for a path in one section. Paths keep their prefix on a
+ * section's own host, except its home, which is `/` there, as the router
+ * writes it (help.acme.com/ for /hc, but help.acme.com/hc/articles/x).
+ */
+export function sectionUrl(section: PortalSection, path: string, origins: SectionOrigins): string {
+  const clean = path.startsWith('/') ? path : `/${path}`
+  const ownHost = origins[section] !== origins.primary
+  return `${origins[section]}${ownHost && clean === SECTION_HOME[section] ? '/' : clean}`
+}
+
+/**
+ * What the browser is sent about section hosts: only what differs from the
+ * page's base URL, and nothing at all in the usual case where no section has
+ * a host of its own. The bootstrap goes into every document, so it carries
+ * the exception, not the full table.
+ */
+export interface SectionLinks {
+  /** The sections linked at their own host. */
+  hosts?: Partial<Record<PortalSection, string>>
+  /** The page's own origin, when it is a section's host. */
+  here?: string
+  /** The primary origin, when it is not the page's base URL. */
+  primary?: string
+}
+
+export function compactSectionLinks({
+  origins,
+  hostOrigin,
+  baseUrl,
+}: {
+  origins: SectionOrigins
+  hostOrigin: string
+  baseUrl: string
+}): SectionLinks | undefined {
+  const hosts: Partial<Record<PortalSection, string>> = {}
+  for (const section of PORTAL_SECTIONS) {
+    if (origins[section] !== origins.primary) hosts[section] = origins[section]
+  }
+  const links: SectionLinks = {
+    ...(Object.keys(hosts).length > 0 ? { hosts } : {}),
+    ...(hostOrigin !== origins.primary ? { here: hostOrigin } : {}),
+    ...(origins.primary !== trimOrigin(baseUrl) ? { primary: origins.primary } : {}),
+  }
+  return Object.keys(links).length > 0 ? links : undefined
+}
+
+/** The full table again, from what the browser was sent and its base URL. */
+export function expandSectionLinks(
+  baseUrl: string | null | undefined,
+  links: SectionLinks | null | undefined
+): { origins: SectionOrigins; hostOrigin: string } | null {
+  const primary = links?.primary ?? (baseUrl ? trimOrigin(baseUrl) : null)
+  if (!primary) return null
+  const origins = { primary } as SectionOrigins
+  for (const section of PORTAL_SECTIONS) origins[section] = links?.hosts?.[section] ?? primary
+  return { origins, hostOrigin: links?.here ?? primary }
+}
+
+/**
+ * A page's canonical URL from the route context: on its section's origin, else
+ * empty when the request carries no base URL (a relative canonical would
+ * resolve against whichever host the crawler fetched).
+ */
+export function pageCanonical(
+  section: PortalSection,
+  path: string,
+  context: { sectionLinks?: SectionLinks | null; baseUrl?: string | null }
+): string {
+  const expanded = expandSectionLinks(context.baseUrl, context.sectionLinks)
+  return expanded ? sectionUrl(section, path, expanded.origins) : ''
+}
+
+/** An absolute URL for any portal path, on the host its section is linked at. */
+export function portalPageUrl(path: string, origins: SectionOrigins): string {
+  const section = sectionForPath(path)
+  return section ? sectionUrl(section, path, origins) : `${origins.primary}${path}`
+}
+
+/** The sections the primary domain serves itself, in nav order. */
+export function sectionsOnPrimary(origins: SectionOrigins): PortalSection[] {
+  return PORTAL_SECTIONS.filter((section) => origins[section] === origins.primary)
+}
+
+/** The section a host is linked for, or null for the primary domain or a host not in use. */
+export function sectionServedAt(
+  host: string | null | undefined,
+  origins: SectionOrigins
+): PortalSection | null {
+  const clean = normalizeHost(host)
+  if (!clean) return null
+  for (const section of PORTAL_SECTIONS) {
+    if (origins[section] !== origins.primary && origins[section] === `https://${clean}`) {
+      return section
+    }
+  }
+  return null
+}

@@ -49,7 +49,9 @@ import type { JSONContent } from '@tiptap/core'
 import { generateContentHTML } from '@/lib/shared/content-html'
 import { withEmailProxyHint } from '@/lib/server/content/email-image-proxy'
 import { isPrincipalOnline, readAvailableAgentIds } from '@/lib/server/realtime/presence'
-import { buildHookContext } from '@/lib/server/events/hook-context'
+import { buildHookContext, type HookContext } from '@/lib/server/events/hook-context'
+import { hookOrigins } from '@/lib/server/events/hook-origins'
+import { sectionUrl, type SectionOrigins } from '@/lib/shared/section-links'
 import { truncate } from '@/lib/shared/utils/string'
 import { resolveReplyRecipient } from './conversation.recipient'
 import {
@@ -224,23 +226,23 @@ async function loadConversationMailContext(conversationId: ConversationId): Prom
  * so the selection is unit-tested directly.
  */
 export function visitorConversationLink(
-  portalBaseUrl: string,
+  origins: SectionOrigins,
   conversationId: ConversationId,
   portalSupportEnabled: boolean
 ): string {
-  const base = portalBaseUrl.replace(/\/$/, '')
+  const id = encodeURIComponent(conversationId)
   return portalSupportEnabled
-    ? `${base}/support/${encodeURIComponent(conversationId)}`
-    : `${base}/widget/?c=${encodeURIComponent(conversationId)}`
+    ? sectionUrl('support', `/support/${id}`, origins)
+    : `${origins.primary}/widget/?c=${id}`
 }
 
 /** Resolve the visitor-facing conversation link with the current gate state. */
 async function resolveVisitorConversationLink(
-  portalBaseUrl: string,
+  ctx: HookContext,
   conversationId: ConversationId
 ): Promise<string> {
   const { isPortalSupportEnabled } = await import('@/lib/server/domains/settings/settings.support')
-  return visitorConversationLink(portalBaseUrl, conversationId, await isPortalSupportEnabled())
+  return visitorConversationLink(hookOrigins(ctx), conversationId, await isPortalSupportEnabled())
 }
 
 /**
@@ -629,7 +631,7 @@ export async function notifyAgentReply(opts: {
     // when enabled, else the widget messenger view). The thread is surfaced from
     // the visitor's own session (or a re-identify in the host app), so the URL
     // only navigates — it carries no capability of its own.
-    const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
+    const ctaUrl = await resolveVisitorConversationLink(ctx, opts.conversationId)
     const adapter = requireChannelAdapter(opts.channel)
     const threadAddressed = getChannelDescriptor(opts.channel)?.addressing === 'thread'
     if (recipient || threadAddressed) {
@@ -737,7 +739,7 @@ export async function notifyConversationStarted(opts: {
 
     const ctx = await buildHookContext()
     if (!ctx) return
-    const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
+    const ctaUrl = await resolveVisitorConversationLink(ctx, opts.conversationId)
     await requireChannelAdapter(channel).deliverAgentMessage({
       conversationId: opts.conversationId,
       messageId: opts.messageId,

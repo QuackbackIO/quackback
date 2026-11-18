@@ -94,6 +94,7 @@ vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: async () => true,
+  getWorkspaceSettings: async () => null,
 }))
 vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
   segmentIdsForPrincipal: async () => new Set(),

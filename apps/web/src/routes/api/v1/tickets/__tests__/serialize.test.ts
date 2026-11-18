@@ -23,7 +23,11 @@ function baseMessage(overrides: Partial<ConversationMessageDTO> = {}): Conversat
     senderType: 'agent',
     content: 'plain text',
     createdAt: '2026-07-05T00:00:00.000Z',
-    author: { principalId: 'principal_01h455vb4pex5vsknk084sn02q' as PrincipalId, displayName: 'Grace', avatarUrl: null },
+    author: {
+      principalId: 'principal_01h455vb4pex5vsknk084sn02q' as PrincipalId,
+      displayName: 'Grace',
+      avatarUrl: null,
+    },
     attachments: [],
     citations: [],
     isAssistant: false,
@@ -79,9 +83,15 @@ describe('serializeTicketMessage', () => {
     const dto = baseMessage({
       senderType: 'agent',
       isInternal: true,
-      author: { principalId: 'principal_note_author' as PrincipalId, displayName: 'Ada', avatarUrl: null },
+      author: {
+        principalId: 'principal_note_author' as PrincipalId,
+        displayName: 'Ada',
+        avatarUrl: null,
+      },
       content: 'internal note text',
-      citations: [{ type: 'article', id: 'kb_1', title: 'Reset your password', url: 'https://x.test/a' }],
+      citations: [
+        { type: 'article', id: 'kb_1', title: 'Reset your password', url: 'https://x.test/a' },
+      ],
     })
 
     const result = serializeTicketMessage(dto)

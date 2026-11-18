@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import type { PostCreatedEvent, EventData } from '@/lib/server/events/types'
 import { buildLinearIssueBody } from '@/integrations/linear/server/message'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 function makePostCreatedEvent(overrides: Record<string, unknown> = {}): PostCreatedEvent {
   return {
@@ -30,7 +31,10 @@ function makePostCreatedEvent(overrides: Record<string, unknown> = {}): PostCrea
 
 describe('buildLinearIssueBody', () => {
   it('builds title and description from post.created event', () => {
-    const result = buildLinearIssueBody(makePostCreatedEvent(), 'https://feedback.example.com')
+    const result = buildLinearIssueBody(
+      makePostCreatedEvent(),
+      allOnPrimary('https://feedback.example.com')
+    )
 
     expect(result.title).toBe('Feature request')
     expect(result.description).toContain('Please add dark mode')
@@ -42,7 +46,10 @@ describe('buildLinearIssueBody', () => {
   })
 
   it('does not include vote count', () => {
-    const result = buildLinearIssueBody(makePostCreatedEvent(), 'https://feedback.example.com')
+    const result = buildLinearIssueBody(
+      makePostCreatedEvent(),
+      allOnPrimary('https://feedback.example.com')
+    )
 
     expect(result.description).not.toContain('Votes')
     expect(result.description).not.toContain('voteCount')
@@ -53,7 +60,7 @@ describe('buildLinearIssueBody', () => {
       makePostCreatedEvent({
         content: 'Before\n\n![Block menu](/api/storage/portal-media/block-menu.png)\n\nAfter',
       }),
-      'https://say.any.org'
+      allOnPrimary('https://say.any.org')
     )
 
     expect(result.description).toContain(
@@ -68,7 +75,7 @@ describe('buildLinearIssueBody', () => {
         content:
           'Reproduction\n\n[/api/storage/portal-media/recording.mov](/api/storage/portal-media/recording.mov)',
       }),
-      'https://say.any.org/'
+      allOnPrimary('https://say.any.org/')
     )
 
     expect(result.description).toContain(
@@ -82,7 +89,7 @@ describe('buildLinearIssueBody', () => {
       makePostCreatedEvent({
         content: `${'Long report '.repeat(250)}\n\n![Late screenshot](/api/storage/portal-media/late.png)`,
       }),
-      'https://say.any.org'
+      allOnPrimary('https://say.any.org')
     )
 
     expect(result.description).toContain(
@@ -96,7 +103,7 @@ describe('buildLinearIssueBody', () => {
         content:
           '<p>Steps</p><img src="/api/storage/portal-media/shot.webp" alt="Shot"><video src="/api/storage/portal-media/demo.mp4" title="Demo"></video>',
       }),
-      'https://say.any.org'
+      allOnPrimary('https://say.any.org')
     )
 
     expect(result.description).toContain(
@@ -110,7 +117,7 @@ describe('buildLinearIssueBody', () => {
   it('falls back to email when authorName is missing', () => {
     const result = buildLinearIssueBody(
       makePostCreatedEvent({ authorName: undefined }),
-      'https://feedback.example.com'
+      allOnPrimary('https://feedback.example.com')
     )
 
     expect(result.description).toContain('**Submitted by:** jane@example.com')
@@ -119,7 +126,7 @@ describe('buildLinearIssueBody', () => {
   it('falls back to Anonymous when no author info', () => {
     const result = buildLinearIssueBody(
       makePostCreatedEvent({ authorName: undefined, authorEmail: undefined }),
-      'https://feedback.example.com'
+      allOnPrimary('https://feedback.example.com')
     )
 
     expect(result.description).toContain('**Submitted by:** Anonymous')
@@ -127,7 +134,7 @@ describe('buildLinearIssueBody', () => {
 
   it('returns fallback for non post.created events', () => {
     const event = { type: 'post.status_changed' } as unknown as EventData
-    const result = buildLinearIssueBody(event, 'https://example.com')
+    const result = buildLinearIssueBody(event, allOnPrimary('https://example.com'))
 
     expect(result.title).toBe('Feedback')
     expect(result.description).toBe('')

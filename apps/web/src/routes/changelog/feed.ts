@@ -10,7 +10,8 @@ export const Route = createFileRoute('/changelog/feed')({
        */
       GET: async () => {
         const [
-          { config },
+          { getSectionOrigins },
+          { sectionUrl },
           { db, changelogEntries, and, desc, sql },
           { publicChangelogConditions },
           { getSettingsBrandingData },
@@ -20,7 +21,8 @@ export const Route = createFileRoute('/changelog/feed')({
           { isFeatureEnabled },
           { categoryGateCondition },
         ] = await Promise.all([
-          import('@/lib/server/config'),
+          import('@/lib/server/domains/settings/section-links'),
+          import('@/lib/shared/section-links'),
           import('@/lib/server/db'),
           import('@/lib/server/domains/changelog/changelog.public'),
           import('@/lib/server/settings-utils'),
@@ -33,7 +35,9 @@ export const Route = createFileRoute('/changelog/feed')({
 
         const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
 
-        const baseUrl = config.baseUrl
+        // On the changelog's own host once it has one, so a reader never
+        // leans on the redirect from the primary domain.
+        const origins = await getSectionOrigins()
 
         // Get workspace branding for feed title
         const branding = await getSettingsBrandingData()
@@ -83,14 +87,14 @@ export const Route = createFileRoute('/changelog/feed')({
         const rssXml = buildRssFeed({
           title: `${siteName} Changelog`,
           description: `Latest updates and releases from ${siteName}`,
-          link: `${baseUrl}/changelog`,
-          feedUrl: `${baseUrl}/changelog/feed`,
+          link: sectionUrl('changelog', '/changelog', origins),
+          feedUrl: `${origins.changelog}/changelog/feed`,
           entries: entries.map((entry) => ({
             id: entry.id,
             title: entry.title,
             content: entry.content,
             publishedAt: entry.displayDate ?? entry.publishedAt!,
-            link: `${baseUrl}/changelog/${entry.id}`,
+            link: sectionUrl('changelog', `/changelog/${entry.id}`, origins),
           })),
         })
 

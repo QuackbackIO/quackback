@@ -13,6 +13,7 @@ import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-sco
 import { SELF_HOSTED_MAIL_SLUG } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import type { EventData } from '../types'
 import type { HookContext } from '../hook-context'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 // --- db: flexible chainable select() consuming a FIFO of result rows ---
 const selectQueue: unknown[][] = []
@@ -305,6 +306,29 @@ describe('getTicketRepliedEmailTargets', () => {
     expect(
       await getTicketRepliedEmailTargets(repliedEvent({ senderType: 'visitor' }), context)
     ).toEqual([])
+  })
+
+  it("links the requester at support's own host and the agent at the primary domain", async () => {
+    getTicketNotifiableWatchers.mockResolvedValue(['principal_requester', 'principal_agent_1'])
+    queueSelect([
+      { id: 'principal_requester', email: 'req@example.com', contactEmail: null },
+      { id: 'principal_agent_1', email: 'agent1@example.com', contactEmail: null },
+    ])
+    queueSelect([{ conversationId: 'conversation_1' }])
+    const onSupportHost = {
+      ...context,
+      sectionOrigins: { ...allOnPrimary('https://p'), support: 'https://support.acme.com' },
+    } as HookContext
+    const targets = await getTicketRepliedEmailTargets(repliedEvent(), onSupportHost)
+    const byEmail = Object.fromEntries(
+      targets.map((t) => [(t.target as { email: string }).email, t.config])
+    )
+    expect(byEmail['req@example.com']).toMatchObject({
+      ctaUrl: 'https://support.acme.com/support/conversation_1',
+    })
+    expect(byEmail['agent1@example.com']).toMatchObject({
+      ctaUrl: 'https://p/admin/inbox?i=ticket_1',
+    })
   })
 
   it('emails the requester (portal CTA) and agent watchers (inbox CTA), actor excluded', async () => {

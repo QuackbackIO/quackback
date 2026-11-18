@@ -9,6 +9,8 @@ import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations
 import type { EventData } from '@/lib/server/events/types'
 import { buildTrelloCard } from '@/integrations/trello/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'trello' })
 
@@ -21,6 +23,7 @@ export interface TrelloTarget {
 export interface TrelloConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
   apiKey?: string
 }
 
@@ -31,7 +34,7 @@ export const trelloHook: IntegrationHook = {
     }
 
     const { channelId: listId } = target as TrelloTarget
-    const { accessToken, rootUrl, apiKey } = config as TrelloConfig
+    const { accessToken, rootUrl, links, apiKey } = config as TrelloConfig
 
     if (!apiKey) {
       return { state: 'failed', errorCode: 'provider_failed' }
@@ -39,7 +42,7 @@ export const trelloHook: IntegrationHook = {
 
     log.debug({ event_type: event.type, list_id: listId }, 'processing event')
 
-    const { name, desc } = buildTrelloCard(event, rootUrl)
+    const { name, desc } = buildTrelloCard(event, hookLinks({ rootUrl, links }))
 
     try {
       const params = new URLSearchParams({

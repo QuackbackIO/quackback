@@ -9,6 +9,8 @@ import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations
 import type { EventData } from '@/lib/server/events/types'
 import { buildNotionPage } from '@/integrations/notion/server/message'
 import { logger } from '@/lib/server/logger'
+import { hookLinks } from '@/lib/server/integrations/message-utils'
+import type { SectionOrigins } from '@/lib/shared/section-links'
 
 const log = logger.child({ component: 'notion' })
 
@@ -22,6 +24,7 @@ export interface NotionTarget {
 export interface NotionConfig {
   accessToken: string
   rootUrl: string
+  links?: SectionOrigins
 }
 
 export const notionHook: IntegrationHook = {
@@ -31,11 +34,11 @@ export const notionHook: IntegrationHook = {
     }
 
     const { channelId: databaseId } = target as NotionTarget
-    const { accessToken, rootUrl } = config as NotionConfig
+    const { accessToken, rootUrl, links } = config as NotionConfig
 
     log.debug({ event_type: event.type, database_id: databaseId }, 'processing event')
 
-    const { title, blocks } = buildNotionPage(event, rootUrl)
+    const { title, blocks } = buildNotionPage(event, hookLinks({ rootUrl, links }))
 
     try {
       const response = await integrationFetch(`${NOTION_API}/pages`, {

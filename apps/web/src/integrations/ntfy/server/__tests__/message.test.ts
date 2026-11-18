@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildNtfyPayload } from '@/integrations/ntfy/server/message'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 const ROOT = 'https://app.example.com'
 const TOPIC = 'my-topic'
@@ -52,7 +53,7 @@ function commentCreatedEvent() {
 
 describe('buildNtfyPayload', () => {
   it('returns correct payload for post.created', () => {
-    const payload = buildNtfyPayload(postCreatedEvent() as any, TOPIC, ROOT)
+    const payload = buildNtfyPayload(postCreatedEvent() as any, TOPIC, allOnPrimary(ROOT))
     expect(payload).not.toBeNull()
     expect(payload!.topic).toBe(TOPIC)
     expect(payload!.title).toBe('New feedback: Dark mode support')
@@ -62,7 +63,7 @@ describe('buildNtfyPayload', () => {
   })
 
   it('returns correct payload for post.status_changed', () => {
-    const payload = buildNtfyPayload(statusChangedEvent() as any, TOPIC, ROOT)
+    const payload = buildNtfyPayload(statusChangedEvent() as any, TOPIC, allOnPrimary(ROOT))
     expect(payload).not.toBeNull()
     expect(payload!.title).toBe('Status changed: Dark mode support')
     expect(payload!.message).toBe('Open → In Progress')
@@ -71,7 +72,7 @@ describe('buildNtfyPayload', () => {
   })
 
   it('returns correct payload for comment.created', () => {
-    const payload = buildNtfyPayload(commentCreatedEvent() as any, TOPIC, ROOT)
+    const payload = buildNtfyPayload(commentCreatedEvent() as any, TOPIC, allOnPrimary(ROOT))
     expect(payload).not.toBeNull()
     expect(payload!.title).toBe('New comment: Dark mode support')
     expect(payload!.message).toContain('Great idea')
@@ -94,7 +95,7 @@ describe('buildNtfyPayload', () => {
         },
       },
     }
-    const payload = buildNtfyPayload(event as any, TOPIC, ROOT)
+    const payload = buildNtfyPayload(event as any, TOPIC, allOnPrimary(ROOT))
     expect(payload).toBeNull()
   })
 })

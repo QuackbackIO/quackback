@@ -6,6 +6,7 @@ import { RoadmapBoard } from '@/components/public/roadmap-board'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { pageCanonical } from '@/lib/shared/section-links'
 
 const searchSchema = z.object({
   roadmap: z.string().optional(),
@@ -19,7 +20,7 @@ const searchSchema = z.object({
 export const Route = createFileRoute('/_portal/roadmap/')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
-    const { queryClient, settings, baseUrl, userRole } = context
+    const { queryClient, settings, userRole } = context
     if (!isProductEnabled(settings?.featureFlags, 'feedback')) throw notFound()
 
     // The shell's lists in one request; the columns ask for their posts once it renders.
@@ -34,16 +35,15 @@ export const Route = createFileRoute('/_portal/roadmap/')({
     return {
       firstRoadmapId: roadmaps[0]?.id ?? null,
       workspaceName: settings?.name ?? 'Quackback',
-      baseUrl: baseUrl ?? '',
+      canonicalUrl: pageCanonical('roadmap', '/roadmap', context),
       userRole: userRole ?? null,
     }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
-    const { workspaceName, baseUrl } = loaderData
+    const { workspaceName, canonicalUrl } = loaderData
     const title = `Roadmap - ${workspaceName}`
     const description = `See what ${workspaceName} is working on and what's coming next.`
-    const canonicalUrl = baseUrl ? `${baseUrl}/roadmap` : ''
     return {
       meta: [
         { title },

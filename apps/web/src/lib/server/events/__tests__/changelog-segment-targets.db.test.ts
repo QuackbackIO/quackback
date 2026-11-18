@@ -56,6 +56,7 @@ import { createId, type ChangelogId, type PrincipalId, type SegmentId } from '@q
 import { getChangelogSubscriberTargets } from '../targets'
 import type { EventData } from '../types'
 import type { HookContext } from '../hook-context'
+import { allOnPrimary } from '@/lib/shared/section-links'
 
 const runSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -242,6 +243,25 @@ describe.skipIf(!dbAvailable)('changelog segment targeting (execution-level)', (
     const targets = await getChangelogSubscriberTargets(publishEvent(ENTRY_OPEN), context)
     expect(emailAddresses(targets)).toEqual([MEMBER_EMAIL, OUTSIDER_EMAIL].sort())
     expect(notificationPrincipalIds(targets)).toEqual([P_MEMBER, P_OUTSIDER].sort())
+  })
+
+  it('links the changelog at its own host when it has one', async () => {
+    const onChangelogHost: HookContext = {
+      ...context,
+      sectionOrigins: {
+        ...allOnPrimary(context.portalBaseUrl),
+        changelog: 'https://news.acme.com',
+      },
+    }
+    const targets = await getChangelogSubscriberTargets(publishEvent(ENTRY_OPEN), onChangelogHost)
+    const emails = targets.filter((t) => t.type === 'email')
+    expect(emails.length).toBeGreaterThan(0)
+    for (const t of emails) {
+      expect((t.config as { changelogUrl: string }).changelogUrl).toBe(
+        // The changelog's home is / on its own host.
+        'https://news.acme.com/'
+      )
+    }
   })
 
   it("sends from the changelog's address under its sender name, resolved once", async () => {

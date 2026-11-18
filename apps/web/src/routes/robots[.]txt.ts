@@ -3,47 +3,57 @@ import { createFileRoute } from '@tanstack/react-router'
 export const Route = createFileRoute('/robots.txt')({
   server: {
     handlers: {
-      GET: async () => {
+      GET: async ({ request }) => {
         const [
-          { config },
           { isFeatureEnabled, getHelpCenterConfig },
-          { resolveHelpCenterPublicBaseUrl },
-          { getSectionDomains },
-          { helpDomainConfig },
+          { getSectionOrigins },
+          { sectionServedAt },
+          { requestWorkspaceHost },
         ] = await Promise.all([
-          import('@/lib/server/config'),
           import('@/lib/server/domains/settings/settings.service'),
-          import('@/lib/shared/help-center-domain'),
-          import('@/lib/server/domains/settings/section-domains.service'),
-          import('@/lib/shared/section-domains'),
+          import('@/lib/server/domains/settings/section-links'),
+          import('@/lib/shared/section-links'),
+          import('@/lib/server/workspaces/saas-edge-host'),
         ])
-        const baseUrl = config.baseUrl
 
-        const helpCenterConfig = await getHelpCenterConfig()
-        const helpCenterEnabled = await isFeatureEnabled('helpCenter')
+        const [helpCenterConfig, helpCenterEnabled, origins] = await Promise.all([
+          getHelpCenterConfig(),
+          isFeatureEnabled('helpCenter'),
+          getSectionOrigins(),
+        ])
         // Indexing toggle (domains/languages §1): off means neither crawlable
         // nor advertised via a sitemap link.
         const helpCenterIndexable = helpCenterEnabled && helpCenterConfig.seo?.indexable !== false
-        // The default host's /hc/sitemap.xml redirects to a verified custom domain,
-        // so the sitemap is advertised on that domain directly.
-        const helpCenterBaseUrl = resolveHelpCenterPublicBaseUrl({
-          domainConfig: helpDomainConfig(await getSectionDomains()),
-          fallback: baseUrl,
-        })
+        // Each host advertises its own sitemaps: a section on its own host
+        // (help.acme.com) lists that section's, the primary domain the rest.
+        const hostSection = sectionServedAt(requestWorkspaceHost(request), origins)
 
-        const lines = [
-          'User-agent: *',
-          'Allow: /',
-          'Disallow: /admin/',
-          'Disallow: /auth/',
-          'Disallow: /onboarding/',
-          'Disallow: /api/',
-          'Disallow: /widget',
-          ...(helpCenterEnabled && !helpCenterIndexable ? ['Disallow: /hc'] : []),
-          '',
-          `Sitemap: ${baseUrl}/sitemap.xml`,
-          ...(helpCenterIndexable ? [`Sitemap: ${helpCenterBaseUrl}/hc/sitemap.xml`] : []),
-        ]
+        const lines =
+          hostSection === 'help' && !helpCenterIndexable
+            ? ['User-agent: *', 'Disallow: /']
+            : [
+                'User-agent: *',
+                'Allow: /',
+                'Disallow: /admin/',
+                'Disallow: /auth/',
+                'Disallow: /onboarding/',
+                'Disallow: /api/',
+                'Disallow: /widget',
+                ...(helpCenterEnabled && !helpCenterIndexable ? ['Disallow: /hc'] : []),
+                '',
+                ...sitemapLines(),
+              ]
+
+        function sitemapLines(): string[] {
+          if (hostSection === 'help') return [`Sitemap: ${origins.help}/hc/sitemap.xml`]
+          if (hostSection) return [`Sitemap: ${origins[hostSection]}/sitemap.xml`]
+          const helpHere = origins.help === origins.primary && helpCenterIndexable
+          return [
+            `Sitemap: ${origins.primary}/sitemap.xml`,
+            ...(helpHere ? [`Sitemap: ${origins.primary}/hc/sitemap.xml`] : []),
+          ]
+        }
+
         const body = lines.join('\n') + '\n'
 
         return new Response(body, {

@@ -58,10 +58,10 @@ import { syncPostMentions } from './sync-post-mentions'
 import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
 import type { CustomFieldValues } from '@/lib/shared/db-types'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
-import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { isTestCustomer, notTestPrincipal } from '@/lib/server/test-data'
 import { resolveTestFeedbackActor } from '@/lib/server/test-customer-feedback'
+import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
 
 const log = logger.child({ component: 'posts' })
 
@@ -544,7 +544,7 @@ export async function updatePost(
           postId: updatedPost.id,
           postTitle: updatedPost.title,
           boardSlug: board.slug,
-          postUrl: buildPostUrl(getBaseUrl(), board.slug, updatedPost.id),
+          postUrl: buildPostUrl(await getSectionOrigins(), board.slug, updatedPost.id),
           boardId: updatedPost.boardId,
           ownerPrincipalId: newOwner,
           previousOwnerPrincipalId: oldOwner ?? null,
@@ -636,7 +636,7 @@ export async function updatePost(
     await syncPostMentions({
       postId: updatedPost.id,
       postTitle: updatedPost.title,
-      postUrl: buildPostUrl(getBaseUrl(), board.slug, updatedPost.id),
+      postUrl: buildPostUrl(await getSectionOrigins(), board.slug, updatedPost.id),
       boardId: updatedPost.boardId,
       mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
       excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
