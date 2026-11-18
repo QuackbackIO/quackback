@@ -129,9 +129,13 @@ export const fetchBoardsWithCountsFn = createServerFn({ method: 'GET' }).handler
   const { PLAN_CATALOGUE } = await import('@/lib/server/domains/settings/cloud/cloud.types')
   const open = await openBoardIds()
   // Set only with the limits in force and the board count at the plan's cap.
-  const limits = await getPlanLimits()
-  const cap = limits.enabled ? (await getTierLimits()).maxBoards : null
-  const planName = limits.plan ? PLAN_CATALOGUE[limits.plan].name : null
+  // A failed plan limits read leaves the list as it is, without the cap line.
+  const limits = await getPlanLimits().catch((err: unknown) => {
+    log.error({ err }, 'plan limits read failed; listing boards without it')
+    return null
+  })
+  const cap = limits?.enabled ? (await getTierLimits()).maxBoards : null
+  const planName = limits?.plan ? PLAN_CATALOGUE[limits.plan].name : null
   const atCap = cap !== null && boards.length >= cap ? { cap, planName } : undefined
   return boards.map((b) => ({
     ...serializeBoard(b),
