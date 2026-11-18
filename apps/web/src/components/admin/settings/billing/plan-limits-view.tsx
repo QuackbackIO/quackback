@@ -12,6 +12,7 @@ import {
   isPlanLimitsOver,
   keepEverythingLines,
   keepEverythingPlan,
+  planLimitsDateOptions,
   planLimitsShownDay,
 } from '@/lib/shared/billing/plan-limits-copy'
 import { daysUntil } from '@/lib/shared/billing/trial-state'
@@ -81,11 +82,11 @@ export function PlanLimitsView(props: {
   }
 
   const grace = limits.phase === 'grace'
-  const plan = limits.planName ?? 'current'
+  const plan = limits.planName
   const tense = limits.phase
   const day = planLimitsShownDay(limits)
-  const date = format(day, DEADLINE_FORMAT)
-  const shortDate = format(day, INLINE_DATE_FORMAT)
+  const date = format(day, planLimitsDateOptions(day, DEADLINE_FORMAT))
+  const shortDate = format(day, planLimitsDateOptions(day, INLINE_DATE_FORMAT))
 
   const can = (anyOf: readonly PermissionKey[]) => anyOf.some((p) => props.permissions.has(p))
   const issueRows: PlanLimitRow[] = limits.issues.map((issue) => {

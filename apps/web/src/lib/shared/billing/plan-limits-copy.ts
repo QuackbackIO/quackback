@@ -34,6 +34,23 @@ export function planLimitsShownDay(
   return limits.graceEndsAt ? planLimitsDay(limits.graceEndsAt.slice(0, 10)) : null
 }
 
+/**
+ * Date options for a plan limits day: the given format, with the year added
+ * only when the day falls in another year than `now`, both read on the UTC
+ * calendar the day is named in.
+ */
+export function planLimitsDateOptions(
+  day: Date | null,
+  options: Intl.DateTimeFormatOptions,
+  now: Date = new Date()
+): Intl.DateTimeFormatOptions {
+  if (!day || day.getUTCFullYear() === now.getUTCFullYear()) return options
+  return { ...options, year: 'numeric' }
+}
+
+/** "on the Free plan", or "on this plan" when no plan is named. */
+const onPlan = (plan: string | null | undefined) => (plan ? `on the ${plan} plan` : 'on this plan')
+
 /** A grace date is ahead (future tense); an enforced one has passed (present tense). */
 export type PlanLimitsTense = 'grace' | 'enforced'
 
@@ -67,7 +84,7 @@ export function capConsequence(
   excess: number,
   tense: PlanLimitsTense,
   date: string,
-  plan = 'current'
+  plan?: string | null
 ): string {
   const grace = tense === 'grace'
   const on = (line: string) => `After ${date}, ${line}`
@@ -91,17 +108,17 @@ export function capConsequence(
     case 'maxCustomRoles':
       return grace
         ? on('custom roles are locked. People on them keep their access.')
-        : `Custom roles are locked on the ${plan} plan. People on them keep their access.`
+        : `Custom roles are locked ${onPlan(plan)}. People on them keep their access.`
     case 'maxSendingDomains':
       return grace
         ? on(
             `${plural(excess, 'sending domain pauses', 'sending domains pause')}. Email goes from your default address.`
           )
-        : `Paused on the ${plan} plan. Email goes from your default address.`
+        : `Paused ${onPlan(plan)}. Email goes from your default address.`
     case 'maxHelpCenterLocales':
       return grace
         ? on(`${plural(excess, 'language is', 'languages are')} locked. Published pages stay live.`)
-        : `${plural(excess, 'language is', 'languages are')} locked on the ${plan} plan. Published pages stay live.`
+        : `${plural(excess, 'language is', 'languages are')} locked ${onPlan(plan)}. Published pages stay live.`
     case 'maxPosts':
       return 'New posts stop at the cap. Existing posts stay.'
     case 'maxInboundEmailAddresses':
@@ -130,10 +147,10 @@ export function featureConsequence(
   key: PlanFeatureKey,
   count: number,
   tense: PlanLimitsTense,
-  plan = 'current'
+  plan?: string | null
 ): string {
   if (tense === 'enforced') {
-    const paused = `Paused on the ${plan} plan.`
+    const paused = `Paused ${onPlan(plan)}.`
     if (key === 'sso') return `${paused} Your team signs in with email links.`
     if (key === 'customDomain') return `${paused} Links go to your workspace address.`
     if (key === 'aiAssistant') return `${paused} New conversations go to your team.`
@@ -231,8 +248,9 @@ export function planLimitsBannerCopy(
   date: string
 ): PlanLimitsBannerCopy | null {
   if (!isPlanLimitsOver(limits)) return null
-  const plan = limits.planName ?? 'current'
-  const title = `Your workspace is over the ${plan} plan's limits.`
+  const title = limits.planName
+    ? `Your workspace is over the ${limits.planName} plan's limits.`
+    : "Your workspace is over its plan's limits."
   const ask = 'Ask someone who manages billing to upgrade.'
   if (limits.phase === 'enforced') {
     if (limits.issues.length === 0) return null

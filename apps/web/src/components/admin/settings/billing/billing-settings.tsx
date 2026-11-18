@@ -24,7 +24,7 @@ import {
   isPlanDowngrade,
 } from '@/lib/shared/billing/plan-action'
 import { daysUntil } from '@/lib/shared/billing/trial-state'
-import { planLimitsDay } from '@/lib/shared/billing/plan-limits-copy'
+import { planLimitsDateOptions, planLimitsDay } from '@/lib/shared/billing/plan-limits-copy'
 import { checkoutPath } from '@/lib/shared/billing/checkout-path'
 import { PLAN_LIMITS_PATH } from '@/lib/shared/billing/plan-limits-path'
 import { SubscribeDialog } from './subscribe-dialog'
@@ -420,10 +420,14 @@ function UsageCard(props: {
   const infoKeys = new Set<string>(
     props.limits?.enabled ? props.limits.infoRows.map((row) => row.key) : []
   )
-  const fixBy =
-    over?.phase === 'grace' && over.deadlineDay
-      ? format(planLimitsDay(over.deadlineDay), { day: 'numeric', month: 'short', timeZone: 'UTC' })
-      : null
+  const fixByDay =
+    over?.phase === 'grace' && over.deadlineDay ? planLimitsDay(over.deadlineDay) : null
+  const fixBy = fixByDay
+    ? format(
+        fixByDay,
+        planLimitsDateOptions(fixByDay, { day: 'numeric', month: 'short', timeZone: 'UTC' })
+      )
+    : null
   const inventory = props.usage.filter(
     (line) =>
       line.limit != null &&

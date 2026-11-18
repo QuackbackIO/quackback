@@ -6,6 +6,7 @@ import { planLimitsQueries } from '@/lib/client/queries/plan-limits'
 import {
   isPlanLimitsOver,
   planLimitsBannerCopy,
+  planLimitsDateOptions,
   planLimitsShownDay,
 } from '@/lib/shared/billing/plan-limits-copy'
 import { useLocalDateFormatter } from '@/components/ui/local-date'
@@ -23,7 +24,7 @@ export const DEADLINE_FORMAT: Intl.DateTimeFormatOptions = {
   timeZone: 'UTC',
 }
 
-/** A deadline inside a sentence: "Nov 23". */
+/** A deadline inside a sentence: "Nov 23" (see `planLimitsDateOptions` for the year). */
 export const INLINE_DATE_FORMAT: Intl.DateTimeFormatOptions = {
   day: 'numeric',
   month: 'short',
@@ -55,7 +56,11 @@ export function PlanLimitsBanner(props: {
   const format = useLocalDateFormatter()
   const { limits } = props
   if (!limits || props.pathname === PLAN_LIMITS_PATH) return null
-  const copy = planLimitsBannerCopy(limits, format(planLimitsShownDay(limits), INLINE_DATE_FORMAT))
+  const day = planLimitsShownDay(limits)
+  const copy = planLimitsBannerCopy(
+    limits,
+    format(day, planLimitsDateOptions(day, INLINE_DATE_FORMAT))
+  )
   if (!copy) return null
   const enforced = copy.tone === 'enforced'
   // Amber with warning accents during grace, as the urgent plan notice is;
@@ -104,7 +109,8 @@ export function PlanLimitsQuiet(props: { limits: BannerLimits | null | undefined
   if (limits.phase === 'enforced' && limits.issues.length === 0) return null
   const count = limits.issues.length
   const plan = limits.planName ? `${limits.planName} plan` : 'Your plan'
-  const date = format(planLimitsShownDay(limits), INLINE_DATE_FORMAT)
+  const day = planLimitsShownDay(limits)
+  const date = format(day, planLimitsDateOptions(day, INLINE_DATE_FORMAT))
   return (
     <a
       href={PLAN_LIMITS_PATH}

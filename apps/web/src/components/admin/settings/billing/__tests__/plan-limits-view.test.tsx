@@ -22,8 +22,14 @@ const { PlanLimitsView } = await import('../plan-limits-view')
 const { keepEverythingPlan } = await import('@/lib/shared/billing/plan-limits-copy')
 const { planLimitsQueries } = await import('@/lib/client/queries/plan-limits')
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 beforeEach(() => {
+  // The fixture's dates are in this clock's year, so they show no year.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-18T12:00:00.000Z'))
   for (const fn of Object.values(hoisted)) fn.mockReset()
   hoisted.getPlanLimitsSummaryFn.mockResolvedValue(null)
 })

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IntlProvider } from 'react-intl'
 import de from '@/locales/de.json'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
@@ -562,6 +562,12 @@ describe('BillingPlansView with plan limits', () => {
   ]
   const meter = (label: string) =>
     screen.getByText(label, { selector: 'div' }).closest('.px-6') as HTMLElement
+  // The fixture's dates are in this clock's year, so they show no year.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-18T12:00:00.000Z'))
+  })
+  afterEach(() => vi.useRealTimers())
 
   it('links each meter over a cap to the Plan limits page, with the date', () => {
     renderView({ usage, limits: overLimits() })
