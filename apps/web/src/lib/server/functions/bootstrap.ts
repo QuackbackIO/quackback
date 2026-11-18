@@ -153,10 +153,21 @@ async function roleFor(
   return roleUnlessPaused(principalRecord, role)
 }
 
+/** Whether a teammate's seat is paused (the plan has fewer team seats than members). */
+async function isPausedSeat(principalRecord: {
+  id: string
+  role: string
+  type: string
+}): Promise<boolean> {
+  const { isPausedTeamSeat } = await import('@/lib/server/domains/plan-limits/plan-limits.seats')
+  return isPausedTeamSeat(principalRecord)
+}
+
 // Returns both the session (with principalType) AND the user role from one
 // principal read, both shared with every other identity read in the request.
 // `teammate` is the principal's own role, read past the session's scope: true
-// for an unblocked admin or member signed in on the site (never the widget).
+// for an unblocked admin or member signed in on the site (never the widget)
+// whose seat the plan has not paused.
 // It decides only whether a link is shown, never what the session may do.
 async function getSessionAndRole(): Promise<{
   session: Session | null
@@ -215,8 +226,10 @@ async function getSessionAndRole(): Promise<{
       role: principalRecord ? await roleFor(principalRecord, scope) : null,
       teammate:
         scope !== 'widget' &&
-        isTeamMember(principalRecord?.role) &&
-        principalRecord?.blockedAt == null,
+        principalRecord != null &&
+        isTeamMember(principalRecord.role) &&
+        principalRecord.blockedAt == null &&
+        !(await isPausedSeat(principalRecord)),
     }
   } catch (error) {
     // During SSR, auth might fail due to env var issues

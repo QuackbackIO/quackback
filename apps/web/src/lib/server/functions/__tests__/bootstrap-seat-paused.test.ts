@@ -25,6 +25,10 @@ vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () =>
     new Headers({ host: 'feedback.example', cookie: 'better-auth.session_token=t' }),
   getRequestUrl: () => new URL('https://feedback.example/'),
+  getRequest: () =>
+    new Request('https://feedback.example/', {
+      headers: { host: 'feedback.example', cookie: 'better-auth.session_token=t' },
+    }),
   setResponseHeader: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
