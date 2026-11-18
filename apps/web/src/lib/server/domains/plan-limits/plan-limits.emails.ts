@@ -27,9 +27,9 @@ import {
   planLimitsDeadlineDay,
   type PlanLimitIssueKey,
   type PlanLimitsState,
-  type PlanLimitsEmailKind,
   type PlanLimitsView,
 } from './plan-limits.rules'
+import type { PlanLimitsEmailKind, PlanLimitsEmailState } from './plan-limits.email-state'
 
 const log = logger.child({ component: 'plan-limits-emails' })
 
@@ -206,7 +206,7 @@ export function settlePlanLimitsEmail(
  * null when nothing was due or sent.
  */
 export async function sendPlanLimitsEmails(
-  view: PlanLimitsView,
+  view: PlanLimitsView & Pick<PlanLimitsEmailState, 'emailsSent'>,
   now: Date = new Date()
 ): Promise<PlanLimitsEmailKind | null> {
   const kind = dueEmailKind(view, now)

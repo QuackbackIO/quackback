@@ -35,6 +35,7 @@ import { parseBillingProjection } from '@/lib/server/domains/settings/cloud/bill
 import type { StoredCloudConfig, StoredPlanLimitsState } from '@/lib/shared/db-types'
 import { loadUsageCounts } from '@/lib/server/domains/billing/usage-counts'
 import { invalidatePlanLimits } from './plan-limits.cache'
+import type { PlanLimitsEmailState } from './plan-limits.email-state'
 import {
   PLAN_FEATURES,
   PLAN_FEATURE_KEYS,
@@ -74,7 +75,7 @@ const INPUTS_TTL_SECONDS = 300
 const INPUTS_KEY = CACHE_KEYS.PLAN_LIMITS_INPUTS
 
 /** The plan limits state as every caller sees it. See {@link PlanLimitsView}. */
-export type PlanLimits = PlanLimitsView
+export type PlanLimits = PlanLimitsView & Pick<PlanLimitsEmailState, 'emailsSent'>
 
 /** Cached inputs. Each part is loaded the first time something needs it. */
 export interface PlanLimitsSnapshot {
@@ -226,7 +227,7 @@ const CANDIDATE_PART: Partial<Record<PlanLimitIssueKey, SnapshotPart>> = {
 }
 
 export interface Evaluation {
-  view: PlanLimitsView
+  view: PlanLimits
   snapshot: PlanLimitsSnapshot
 }
 
@@ -291,7 +292,9 @@ export async function evaluate(options: {
         .catch((err) => log.warn({ err }, 'plan limits start email trigger failed'))
     }
   }
-  return { view: result.view, snapshot }
+  // The emails' progress rides along so the hourly slot can skip a finished email.
+  const view: PlanLimits = { ...result.view, emailsSent: result.nextState?.emailsSent }
+  return { view, snapshot }
 }
 
 async function persist(expected: unknown, next: PlanLimitsState | null): Promise<boolean> {
