@@ -322,6 +322,17 @@ export async function createIssueForTicket(
       'NOT_CONFIGURED',
       `Connect the ${providerName(integrationType)} integration first`
     )
+  // Refused up front while integrations are paused after the plan limits
+  // grace, so the ticket's create identity is not spent on a cancelled sync.
+  const { isFeaturePaused } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  if (await isFeaturePaused('integrations')) {
+    const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
+    throw new TierLimitError({
+      limit: 'integrations',
+      code: 'INTEGRATIONS_PAUSED',
+      message: 'Integrations are paused on your current plan, so issues cannot be created.',
+    })
+  }
   const { queueSyncOperation } = await import('@/lib/server/integrations/sync/ledger')
   const { installationIdentity, syncDestination, syncOperationKey } =
     await import('@/lib/server/integrations/sync/identity')
