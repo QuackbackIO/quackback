@@ -31,8 +31,15 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
 }))
 
-const { DomainList, DomainsEmptyState, EMPTY_DESCRIPTION, domainRows } =
+const { VerifiedDomainsCard, EMPTY_DESCRIPTION, VERIFIED_DOMAINS_TITLE, domainRows } =
   await import('../domains-overview')
+
+/** The Verified domains card with these rows, for a viewer who can add a domain. */
+const DomainList = ({ rows, links }: { rows: DomainRows; links: Links }) => (
+  <VerifiedDomainsCard rows={rows} links={links} canAdd />
+)
+type DomainRows = ReturnType<typeof domainRows>
+type Links = ReturnType<typeof domainUseLinks>
 const { domainUseLinks, CUSTOM_DOMAINS_ANCHOR } = await import('@/lib/shared/domains-permissions')
 
 afterEach(cleanup)
@@ -64,28 +71,59 @@ const rowOf = (text: string) => screen.getByText(text).closest('[data-slot="sett
 
 vi.mock('@/lib/server/functions/domains', () => ({ addDomainFn: vi.fn() }))
 
-describe('empty state', () => {
-  it('offers one Add domain action and no choice of use', () => {
-    const { container } = render(<DomainsEmptyState canAdd />)
+describe('Verified domains card', () => {
+  it('is titled Verified domains, with Add domain on the card', () => {
+    render(<VerifiedDomainsCard rows={[]} links={linksFor(ALL)} canAdd />)
+    expect(screen.getByRole('heading', { name: VERIFIED_DOMAINS_TITLE })).toHaveTextContent(
+      'Verified domains'
+    )
     expect(screen.getAllByRole('button')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Add domain' })).toBeInTheDocument()
-    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('with none yet, says what a verified domain is for, and no choice of use', () => {
+    const { container } = render(<VerifiedDomainsCard rows={[]} links={linksFor(ALL)} canAdd />)
     expect(container).toHaveTextContent(EMPTY_DESCRIPTION)
-    for (const use of ['Email sending', 'Custom domains', 'Sign-in']) {
+    expect(screen.queryByRole('link')).toBeNull()
+    for (const use of [
+      'Email sending',
+      'Custom domains',
+      'Sign-in',
+      'Security',
+      'No domains yet',
+    ]) {
       expect(container).not.toHaveTextContent(use)
     }
   })
 
-  it('never says Security, and is no dead end for a viewer who can add', () => {
-    const { container } = render(<DomainsEmptyState canAdd />)
-    expect(container).not.toHaveTextContent('Security')
-    expect(container).not.toHaveTextContent('No domains yet')
-  })
-
   it('offers no Add domain to a viewer who cannot add one', () => {
-    const { container } = render(<DomainsEmptyState canAdd={false} />)
+    const { container } = render(
+      <VerifiedDomainsCard rows={[]} links={linksFor(ALL)} canAdd={false} />
+    )
     expect(screen.queryByRole('button')).toBeNull()
     expect(container).toHaveTextContent(EMPTY_DESCRIPTION)
+  })
+
+  it('leaves section hostnames to the Custom domains card: no row, and no Custom domain chip', () => {
+    const rows = domainRows({
+      now: NOW,
+      sending: [sending({})],
+      signIn: [],
+      sectionDomains: {
+        help: { hostname: 'help.acme.com', verifiedAt: VERIFIED },
+        status: { hostname: 'status.example.org', verifiedAt: null },
+      },
+      webAddresses: [{ hostname: 'feedback.example.net', readiness: 'ready' }],
+      added: [{ name: 'acme.com', verified: true }],
+    })
+    const { container } = render(<DomainList rows={rows} links={linksFor(ALL)} />)
+    const listed = [...container.querySelectorAll('[data-slot="settings-list-row"]')]
+    expect(listed.map((r) => r.querySelector('span.font-medium')?.textContent)).toEqual([
+      'acme.com',
+    ])
+    expect(rowOf('acme.com')).toHaveTextContent('Email')
+    expect(container).not.toHaveTextContent('Custom domain')
+    expect(container).not.toHaveTextContent('help.acme.com')
   })
 })
 
@@ -169,6 +207,8 @@ describe('domain list', () => {
       'example.org',
       'help.acme.com',
     ])
+    // The list itself leaves the section hostname to the Custom domains card.
+    expect(screen.queryByText('help.acme.com')).toBeNull()
 
     expect(rowOf('acme.com')).toHaveTextContent('Domain verified')
     expect(rowOf('acme.co.uk')).toHaveTextContent('Pending')
@@ -181,12 +221,6 @@ describe('domain list', () => {
     expect(rowOf('eu.acme.com')).toHaveTextContent('Already verified. Click Verify to use it.')
     expect(rowOf('example.io')).toHaveTextContent('Verified by this workspace')
     expect(rowOf('example.io')).not.toHaveTextContent('Pending')
-
-    const help = rowOf('help.acme.com')
-    expect(help).toHaveTextContent('Custom domain')
-    expect(help).toHaveTextContent('Help center')
-    expect(help).toHaveTextContent('Pending')
-    expect(help).toHaveAttribute('href', '/admin/settings/domains/help.acme.com')
   })
 
   it('opens the domain, not one of its uses, when a domain has more than one', () => {
@@ -212,14 +246,9 @@ describe('domain list', () => {
   })
 
   it('renders a row without a link for a viewer who cannot open its page', () => {
-    const rows = domainRows({
-      now: NOW,
-      sending: [],
-      signIn: [],
-      sectionDomains: { help: { hostname: 'help.acme.com', verifiedAt: VERIFIED } },
-    })
+    const rows = domainRows({ now: NOW, sending: [sending({})], signIn: [] })
     render(<DomainList rows={rows} links={linksFor([PERMISSIONS.AUTH_MANAGE])} />)
-    const row = rowOf('help.acme.com')
+    const row = rowOf('acme.com')
     expect(row.tagName).not.toBe('A')
     expect(row.querySelector('[data-slot="settings-list-chevron"]')).toBeNull()
     expect(row).not.toHaveTextContent('Pending')
@@ -251,7 +280,7 @@ describe('domain list', () => {
     expect(rowOf('acme.com')).not.toHaveTextContent('Pending')
   })
 
-  it('lists web addresses under a domain already added on that domain, each with what it opens', () => {
+  it('rows custom domains under a domain already added on that domain, for its own page', () => {
     const rows = domainRows({
       now: NOW,
       sending: [],
@@ -271,9 +300,7 @@ describe('domain list', () => {
       { hostname: 'help.acme.com', usedFor: 'portal', state: 'pending' },
       { hostname: 'status.acme.com', usedFor: 'portal', state: null },
     ])
-    render(<DomainList rows={rows} links={linksFor(ALL)} />)
-    expect(rowOf('acme.com')).toHaveTextContent('help.acme.com · Portal')
-    expect(rowOf('acme.com')).toHaveTextContent('Pending')
+    expect(web!.detail).toBe('help.acme.com · Portal, status.acme.com · Portal')
   })
 
   it("lists the help center's address under the domain it sits on", () => {

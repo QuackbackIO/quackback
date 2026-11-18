@@ -1,9 +1,10 @@
 /**
- * Add custom domain: what the domain is used for first, as tiles (Portal,
- * then each section in nav order), then only the field that choice needs.
+ * Add custom domain: what the domain is used for first, as tiles (Portal on
+ * Cloud, then each section in nav order), then only the field that choice needs.
  *
  * - Portal is the primary domain. On Cloud a ready custom domain is made
- *   primary; a self-hosted server's primary domain is its BASE_URL.
+ *   primary. A self-hosted server's primary domain is its BASE_URL, so it
+ *   offers no Portal tile.
  * - A section takes a hostname of its own. On Cloud it must be a ready custom
  *   domain no other section uses (or the viewer is sent to add one); on a
  *   self-hosted server any name is typed, then verified once DNS points here.
@@ -138,7 +139,7 @@ function SectionDomainForm({
     return value || null
   }
 
-  const canSave = usedFor === 'portal' ? cloud && !!picked : cloud ? !!picked : !!typed.trim()
+  const canSave = cloud ? !!picked : !!typed.trim()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -173,15 +174,21 @@ function SectionDomainForm({
   }
 
   const tiles = [
-    { value: 'portal' as const, title: usedForLabel('portal'), description: primaryHost ?? '' },
+    ...(cloud
+      ? [
+          {
+            value: 'portal' as const,
+            title: usedForLabel('portal'),
+            description: primaryHost ?? '',
+          },
+        ]
+      : []),
     ...sections.map((section) => ({
       value: section,
       title: usedForLabel(section),
       description: map[section]?.hostname ?? primaryHost ?? '',
     })),
   ]
-
-  const showsSave = usedFor !== null && (usedFor !== 'portal' || cloud)
 
   return (
     <form onSubmit={submit}>
@@ -200,13 +207,6 @@ function SectionDomainForm({
             />
           </div>
         </div>
-
-        {usedFor === 'portal' && !cloud && (
-          <p className="text-[13px] text-muted-foreground">
-            The primary domain is {primaryHost ?? 'set on the server'}. Change it with BASE_URL on
-            the server.
-          </p>
-        )}
 
         {usedFor && cloud && (
           <div className="space-y-2">
@@ -287,7 +287,7 @@ function SectionDomainForm({
         <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
-        {showsSave && (
+        {usedFor && (
           <Button type="submit" disabled={saving || !canSave}>
             Save
           </Button>

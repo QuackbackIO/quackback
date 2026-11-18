@@ -1,8 +1,9 @@
 /**
- * The Domains page body: every domain the workspace uses or has added, one row
- * per domain name with a chip for each use, or, with none yet, one way to add a
- * domain. Rows are status only. Each opens the domain's own page; a row only a
- * use holds is linked for a viewer who can open one of its uses.
+ * The Verified domains card on Settings > Domains: the domains the workspace
+ * owns and verifies, for email, sign-in and the like, one row per domain name
+ * with a chip for each use. Section hostnames are listed only on the Custom
+ * domains card. Rows are status only. Each opens the domain's own page; a row
+ * only a use holds is linked for a viewer who can open one of its uses.
  */
 import { Fragment } from 'react'
 import { DOMAIN_USE_ORDER, DOMAIN_VIEW_ROUTE } from '@/lib/shared/domain-uses'
@@ -24,7 +25,8 @@ import type {
 import { PORTAL_SECTIONS, sectionOfHost, type SectionDomainMap } from '@/lib/shared/section-domains'
 import { sectionDomainState, type SectionDomainState } from '@/lib/shared/section-domains'
 
-export const EMPTY_DESCRIPTION = 'Use your own domain for email, the portal and sign-in.'
+export const VERIFIED_DOMAINS_TITLE = 'Verified domains'
+export const EMPTY_DESCRIPTION = 'Verify a domain you own to send email from it or set up sign-in.'
 
 /** Each use's words: its chip on the list, its row title and what it is for on a domain's page. */
 export const USE_COPY: Record<DomainUse, { chip: string; title: string; description: string }> = {
@@ -211,52 +213,61 @@ export function domainRows({
 const opens = (row: DomainRow, links: DomainUseLinks): boolean =>
   row.added || row.uses.some((u) => links[u.use])
 
-export function DomainList({ rows, links }: { rows: DomainRow[]; links: DomainUseLinks }) {
+export function VerifiedDomainsCard({
+  rows,
+  links,
+  canAdd,
+}: {
+  rows: DomainRow[]
+  links: DomainUseLinks
+  canAdd: boolean
+}) {
+  // A custom domain is listed on the Custom domains card, not here.
+  const listed = rows.flatMap((row) => {
+    const uses = row.uses.filter((u) => u.use !== 'customDomain')
+    return uses.length || row.added ? [{ ...row, uses }] : []
+  })
   return (
-    <SettingsCard flush>
-      <SettingsList>
-        {rows.map((row) => {
-          const linked = opens(row, links)
-          const meta = row.uses.flatMap((u) => (u.detail ? [u.detail] : [])).join(' · ')
-          return (
-            <SettingsListRow
-              key={row.name}
-              leading={<RowIcon icon={GlobeAltIcon} />}
-              title={row.name}
-              meta={meta || undefined}
-              badges={
-                // With no use yet, the domain's own ownership is what it waits on.
-                row.uses.length === 0 && row.ownershipPending ? (
-                  <StateBadge state="pending" />
-                ) : (
-                  row.uses.map((u) => (
-                    <Fragment key={u.use}>
-                      <Badge variant="outline" size="sm">
-                        {USE_COPY[u.use].chip}
-                      </Badge>
-                      {u.state && <StateBadge state={u.state} />}
-                    </Fragment>
-                  ))
-                )
-              }
-              to={linked ? DOMAIN_VIEW_ROUTE : undefined}
-              params={linked ? { domain: row.name } : undefined}
-            />
-          )
-        })}
-      </SettingsList>
-    </SettingsCard>
-  )
-}
-
-/** With no domains yet: one way to add one, for a viewer who may. */
-export function DomainsEmptyState({ canAdd }: { canAdd: boolean }) {
-  return (
-    <SettingsCard>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[13px] text-muted-foreground">{EMPTY_DESCRIPTION}</p>
-        {canAdd && <AddDomainButton />}
-      </div>
+    <SettingsCard
+      title={VERIFIED_DOMAINS_TITLE}
+      action={canAdd ? <AddDomainButton /> : undefined}
+      flush
+    >
+      {listed.length === 0 ? (
+        <p className="px-4 py-3 text-[13px] text-muted-foreground sm:px-6">{EMPTY_DESCRIPTION}</p>
+      ) : (
+        <SettingsList>
+          {listed.map((row) => {
+            const linked = opens(row, links)
+            const meta = row.uses.flatMap((u) => (u.detail ? [u.detail] : [])).join(' · ')
+            return (
+              <SettingsListRow
+                key={row.name}
+                leading={<RowIcon icon={GlobeAltIcon} />}
+                title={row.name}
+                meta={meta || undefined}
+                badges={
+                  // With no use yet, the domain's own verification is what it waits on.
+                  row.uses.length === 0 && row.ownershipPending ? (
+                    <StateBadge state="pending" />
+                  ) : (
+                    row.uses.map((u) => (
+                      <Fragment key={u.use}>
+                        <Badge variant="outline" size="sm">
+                          {USE_COPY[u.use].chip}
+                        </Badge>
+                        {u.state && <StateBadge state={u.state} />}
+                      </Fragment>
+                    ))
+                  )
+                }
+                to={linked ? DOMAIN_VIEW_ROUTE : undefined}
+                params={linked ? { domain: row.name } : undefined}
+              />
+            )
+          })}
+        </SettingsList>
+      )}
     </SettingsCard>
   )
 }
