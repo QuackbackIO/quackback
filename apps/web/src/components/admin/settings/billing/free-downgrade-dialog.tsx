@@ -28,6 +28,8 @@ export function PlanDowngradeDialog(props: {
   checkout?: PlanDowngradeCheckout
   /** The way out. An ended trial has no current plan to keep, so it goes back to the plans. */
   cancelLabel?: string
+  /** The plan the workspace is on, for "Keep {plan}". */
+  currentPlanName?: string
 }) {
   const [issues, setIssues] = useState<PlanDowngradeIssue[]>([])
   const [info, setInfo] = useState<PlanCapInfo[]>([])
@@ -63,16 +65,16 @@ export function PlanDowngradeDialog(props: {
   }, [props.open, props.planId])
 
   const planName = resolvedName || props.planName
-  const confirmLabel = props.planId === 'free' ? 'Switch to Free' : `Continue to ${planName}`
+  const confirmLabel = `Downgrade to ${planName}`
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Switch to {planName}</DialogTitle>
+          <DialogTitle>Downgrade to {planName}</DialogTitle>
           <DialogDescription>
             {blocked
-              ? `${planName} includes less than you use today. Fix these first, then switch.`
+              ? `${planName} includes less than you use today.`
               : `Check what changes on ${planName}, then confirm.`}
           </DialogDescription>
         </DialogHeader>
@@ -110,38 +112,46 @@ export function PlanDowngradeDialog(props: {
           />
         ) : null}
 
+        {!loading && !error && blocked ? (
+          <p className="text-[13px] text-muted-foreground">
+            Fix these issues to downgrade to {planName}.
+          </p>
+        ) : null}
+
         {!loading && !error && !blocked ? (
           <p className="text-sm text-muted-foreground">This workspace fits the {planName} plan.</p>
         ) : null}
 
         {features.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-sm font-medium">What stops on {planName}</p>
-            <ul className="space-y-2 rounded-xl border border-border px-4 py-3">
+            <p className="text-sm font-medium">What pauses on {planName}</p>
+            <ul className="space-y-1 rounded-xl border border-border px-4 py-3">
               {features.map((line) => (
-                <li key={line} className="flex gap-2 text-sm text-muted-foreground">
-                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-warning" />
+                <li key={line} className="flex gap-2 text-[13px] text-muted-foreground">
+                  <span className="mt-[7px] size-1 shrink-0 rounded-full bg-muted-foreground/70" />
                   {line}
                 </li>
               ))}
             </ul>
             <p className="text-[13px] text-muted-foreground">
-              Nothing is deleted. Upgrading later turns it all back on.
+              Nothing is deleted. It comes back when you upgrade.
             </p>
           </div>
         ) : null}
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)}>
-            {props.cancelLabel ?? 'Keep current plan'}
+          {/* While anything is over, staying is the one action: no greyed-out switch. */}
+          <Button
+            type="button"
+            variant={blocked && !loading && !error ? 'default' : 'outline'}
+            onClick={() => props.onOpenChange(false)}
+          >
+            {props.cancelLabel ??
+              (props.currentPlanName ? `Keep ${props.currentPlanName}` : 'Cancel')}
           </Button>
-          {blocked || loading || error ? (
-            <Button type="button" disabled>
-              {loading
-                ? 'Checking…'
-                : error
-                  ? `Switch to ${planName}`
-                  : `Fix ${issues.length} ${issues.length === 1 ? 'thing' : 'things'} to switch`}
+          {blocked && !loading && !error ? null : loading || error ? (
+            <Button type="button" variant="outline" disabled>
+              {loading ? 'Checking…' : confirmLabel}
             </Button>
           ) : props.planId === 'free' ? (
             <form method="post" action="/api/billing/session">
@@ -181,6 +191,7 @@ export function FreeDowngradeDialog(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   cancelLabel?: string
+  currentPlanName?: string
 }) {
   return <PlanDowngradeDialog {...props} planId="free" planName="Free" />
 }

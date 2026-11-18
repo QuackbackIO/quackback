@@ -1,4 +1,4 @@
-import { useEffect, type ComponentProps } from 'react'
+import { lazy, Suspense, useEffect, type ComponentProps } from 'react'
 import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
 import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
@@ -17,13 +17,8 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { UpdateBanner } from '@/components/admin/update-banner'
 import { GithubStarPromptGate } from '@/components/admin/github-star-prompt-gate'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
-import {
-  PlanLimitsBanner,
-  usePlanLimitsSummary,
-} from '@/components/admin/plan-limits/plan-limits-banner'
-import { planLimitsQueries } from '@/lib/client/queries/plan-limits'
-import { isPlanLimitsOver } from '@/lib/shared/billing/plan-limits-copy'
 import { presentPlanNotice } from '@/lib/shared/plan-notice'
+import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
 import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
@@ -124,6 +119,7 @@ export const Route = createFileRoute('/admin')({
         updateBannerDismissedVersion: null,
         currentUser: null,
         planNotice: null,
+        planLimits: null,
         inLaunchWindow: false,
         locale: DEFAULT_LOCALE,
         messages: await loadAdminMessages(DEFAULT_LOCALE),
@@ -146,31 +142,37 @@ export const Route = createFileRoute('/admin')({
     const readPlanNotice = (context.permissions ?? []).includes(PERMISSIONS.MEMBER_VIEW)
 
     const locale = context.acceptLanguageLocale ?? DEFAULT_LOCALE
-    const [avatarData, latestRelease, planNotice, messages, launchWindow] = await Promise.all([
-      fetchUserAvatar({
-        data: { userId: user.id, fallbackImageUrl: user.image },
-      }),
-      getLatestVersion(),
-      readPlanNotice ? getPlanNotice().catch(() => null) : null,
-      loadAdminMessages(locale),
-      // Only cloud loads the help launcher, so only cloud asks whether to hide it.
-      context.cloudEnabled
-        ? import('@/lib/server/functions/onboarding-progress')
-            .then((module) => module.getLaunchWindowOpenFn())
-            .catch(() => ({ open: false }))
-        : { open: false },
-      // The rail's unread badge rides the document rather than a request of
-      // its own after hydration. Unreadable now, it is left to the bell.
-      context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
-      // The same goes for the count of posts waiting for review.
-      warmModeration
-        ? context.queryClient.ensureQueryData(adminQueries.moderationStatus()).catch(() => null)
-        : null,
-      // And for the plan limits banner, which only plan billing can raise.
-      context.billingEnabled
-        ? context.queryClient.ensureQueryData(planLimitsQueries.summary()).catch(() => null)
-        : null,
-    ])
+    // Plan limits ride on this loader, and only while their flag is on, so a
+    // workspace without them pays no request and no code for them.
+    const planLimitsOn =
+      Boolean(context.billingEnabled) && context.settings?.featureFlags?.planLimits === true
+    const [avatarData, latestRelease, planNotice, messages, launchWindow, , , planLimits] =
+      await Promise.all([
+        fetchUserAvatar({
+          data: { userId: user.id, fallbackImageUrl: user.image },
+        }),
+        getLatestVersion(),
+        readPlanNotice ? getPlanNotice().catch(() => null) : null,
+        loadAdminMessages(locale),
+        // Only cloud loads the help launcher, so only cloud asks whether to hide it.
+        context.cloudEnabled
+          ? import('@/lib/server/functions/onboarding-progress')
+              .then((module) => module.getLaunchWindowOpenFn())
+              .catch(() => ({ open: false }))
+          : { open: false },
+        // The rail's unread badge rides the document rather than a request of
+        // its own after hydration. Unreadable now, it is left to the bell.
+        context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
+        // The same goes for the count of posts waiting for review.
+        warmModeration
+          ? context.queryClient.ensureQueryData(adminQueries.moderationStatus()).catch(() => null)
+          : null,
+        planLimitsOn
+          ? import('@/lib/server/functions/plan-limits')
+              .then((module) => module.getPlanLimitsSummaryFn())
+              .catch(() => null)
+          : null,
+      ])
 
     const latestVersion =
       latestRelease && isNewerVersion(__APP_VERSION__, latestRelease.version) ? latestRelease : null
@@ -188,6 +190,7 @@ export const Route = createFileRoute('/admin')({
       latestVersion,
       updateBannerDismissedVersion: context.updateBannerDismissedVersion ?? null,
       planNotice,
+      planLimits: planLimits as PlanLimitsPage | null,
       inLaunchWindow: launchWindow.open,
       locale,
       messages,
@@ -273,6 +276,7 @@ function AdminLayout() {
     latestVersion,
     updateBannerDismissedVersion,
     planNotice,
+    planLimits,
     inLaunchWindow,
     currentUser,
     locale,
@@ -301,6 +305,7 @@ function AdminLayout() {
               latestVersion={latestVersion}
               updateBannerDismissedVersion={updateBannerDismissedVersion}
               planNotice={planNotice}
+              planLimits={planLimits}
               inLaunchWindow={inLaunchWindow}
               currentUser={currentUser}
             />
@@ -311,18 +316,29 @@ function AdminLayout() {
   )
 }
 
+/** The plan limits banner, in a chunk of its own that only a workspace with the flag loads. */
+const PlanLimitsStrip = lazy(() => import('@/components/admin/plan-limits/plan-limits-banner'))
+
 /**
  * The plan strip: the plan limits banner while the workspace is over its
  * plan, which stands in for the ended-trial strip, or the plan notice.
  */
-function PlanStrip({ planNotice }: Pick<ReturnType<typeof Route.useLoaderData>, 'planNotice'>) {
-  const limits = usePlanLimitsSummary()
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const endedTrial = presentPlanNotice(planNotice)?.ended === true
+function PlanStrip({
+  planNotice,
+  planLimits,
+}: Pick<ReturnType<typeof Route.useLoaderData>, 'planNotice' | 'planLimits'>) {
+  const over =
+    planLimits?.enabled === true &&
+    (planLimits.phase === 'grace' || planLimits.phase === 'enforced')
+  const hideNotice = over && presentPlanNotice(planNotice)?.ended === true
   return (
     <>
-      <PlanLimitsBanner limits={limits} pathname={pathname} />
-      {endedTrial && isPlanLimitsOver(limits) ? null : <PlanNoticeBanner notice={planNotice} />}
+      {planLimits ? (
+        <Suspense fallback={null}>
+          <PlanLimitsStrip initial={planLimits} />
+        </Suspense>
+      ) : null}
+      {hideNotice ? null : <PlanNoticeBanner notice={planNotice} />}
     </>
   )
 }
@@ -332,6 +348,7 @@ function AdminContent({
   latestVersion,
   updateBannerDismissedVersion,
   planNotice,
+  planLimits,
   inLaunchWindow,
   currentUser,
 }: Pick<
@@ -340,6 +357,7 @@ function AdminContent({
   | 'latestVersion'
   | 'updateBannerDismissedVersion'
   | 'planNotice'
+  | 'planLimits'
   | 'inLaunchWindow'
   | 'currentUser'
 >) {
@@ -356,12 +374,13 @@ function AdminContent({
               initialUserData={initialUserData}
               latestVersion={latestVersion}
               planNotice={planNotice}
+              planLimits={planLimits}
             />
           )
         }
         notices={
           <>
-            <PlanStrip planNotice={planNotice} />
+            <PlanStrip planNotice={planNotice} planLimits={planLimits} />
             <UpdateBanner
               latestVersion={latestVersion}
               dismissedVersion={updateBannerDismissedVersion}

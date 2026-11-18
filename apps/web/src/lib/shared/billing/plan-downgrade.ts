@@ -137,42 +137,42 @@ const PLAN_FEATURES: ReadonlyArray<{
   plans: readonly PlanId[]
 }> = [
   {
-    paused: 'Your custom domain redirects to your workspace address after 7 days.',
+    paused: 'Your custom domain pauses after 7 days. Links go to your workspace address.',
     disabled: 'Custom domains will be disabled',
     plans: ['pro', 'business', 'enterprise'],
   },
   {
-    paused: 'Live workflows pause after 7 days. They are kept.',
+    paused: 'Live workflows pause after 7 days.',
     disabled: 'Workflows and automations will be disabled',
     plans: ['business', 'enterprise'],
   },
   {
-    paused: 'Single sign-on turns off after 7 days. Your team signs in with email links.',
+    paused: 'Single sign-on pauses after 7 days. Your team signs in with email links.',
     disabled: 'Single sign-on will be disabled',
     plans: ['enterprise'],
   },
   {
-    paused: 'The AI assistant stops answering after 7 days. AI insights stop now.',
+    paused: 'The AI assistant pauses after 7 days. AI insights pause now.',
     disabled: 'AI assistant and insights will be disabled',
     plans: ['pro', 'business', 'enterprise'],
   },
   {
-    paused: 'AI article translation stops after 7 days. Published translations stay.',
+    paused: 'AI article translation pauses after 7 days. Published translations stay.',
     disabled: 'AI article translation will be disabled',
     plans: ['business', 'enterprise'],
   },
   {
-    paused: 'Webhooks pause after 7 days. Endpoints are kept.',
+    paused: 'Webhooks pause after 7 days.',
     disabled: 'Webhooks will be disabled',
     plans: ['pro', 'business', 'enterprise'],
   },
   {
-    paused: 'MCP access pauses. Keys are kept.',
-    disabled: 'MCP access pauses. Keys are kept.',
+    paused: 'MCP access pauses.',
+    disabled: 'MCP access pauses.',
     plans: ['pro', 'business', 'enterprise'],
   },
   {
-    paused: 'The audit log is hidden. Entries are still recorded.',
+    paused: 'The audit log is hidden. New entries are still recorded.',
     disabled: 'The audit log will be disabled',
     plans: ['enterprise'],
   },

@@ -55,6 +55,16 @@ describe('PlanLimitsView', () => {
     expect(within(card).getByRole('heading')).toHaveTextContent(/^Fix by Wed, Nov 25$/)
     expect(card).toHaveTextContent('1 of 5 fixed')
     expect(within(card).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1')
+    // The upgrade is in the card too on a phone, where the plan aside sits at the bottom.
+    expect(within(card).getByRole('link', { name: 'Upgrade to Pro' }).className).toMatch(
+      /lg:hidden/
+    )
+    cleanup()
+    // No empty grey bar before the first fix; the count still shows.
+    mount(overLimits({ fixedIssues: [] }))
+    const fresh = document.querySelector('[data-plan-limits-deadline="grace"]') as HTMLElement
+    expect(within(fresh).queryByRole('progressbar')).toBeNull()
+    expect(fresh).toHaveTextContent('0 of 4 fixed')
   })
 
   it('renders each row type: over with fixes, fixed with a check, information with no fix', () => {
@@ -62,7 +72,7 @@ describe('PlanLimitsView', () => {
     expect(row('maxBoards')).toHaveAttribute('data-status', 'over')
     expect(row('maxBoards')).toHaveTextContent('3 of 1')
     expect(row('maxBoards')).toHaveTextContent(
-      'On Nov 25, 2 boards become read-only. Their posts stay visible to everyone.'
+      'On Nov 25, 2 boards become read-only. Their posts stay visible.'
     )
     // An over bar is destructive on a destructive tint, never the brand colour.
     const bar = within(row('maxBoards')).getByRole('progressbar')
@@ -72,15 +82,23 @@ describe('PlanLimitsView', () => {
     expect(bar.firstElementChild?.className).toMatch(/\bbg-destructive\b/)
     expect(bar.firstElementChild?.className).not.toMatch(/bg-primary/)
     expect(
-      within(row('maxBoards')).getByRole('button', { name: 'Choose the board to keep' })
+      within(row('maxBoards')).getByRole('button', { name: 'Choose which board stays open' })
     ).toBeInTheDocument()
+    // The choosers are secondary; the page's one primary is the upgrade.
+    const choose = within(row('maxBoards')).getByRole('button', {
+      name: 'Choose which board stays open',
+    })
+    expect(choose.className).not.toMatch(/\bbg-primary\b/)
+    expect(choose.closest('[data-plan-limit-actions]')).not.toBeNull()
 
     expect(row('maxSendingDomains')).toHaveAttribute('data-status', 'fixed')
     expect(row('maxSendingDomains')).toHaveTextContent('Fixed.')
     expect(within(row('maxSendingDomains')).queryByRole('button')).toBeNull()
 
     expect(row('maxPosts')).toHaveAttribute('data-status', 'info')
-    expect(row('maxPosts')).toHaveTextContent('New posts are paused')
+    expect(row('maxPosts')).toHaveTextContent('New posts stop at 50. Existing posts stay.')
+    expect(within(row('maxPosts')).queryByRole('progressbar')).toBeNull()
+    expect(within(row('maxSendingDomains')).queryByRole('progressbar')).toBeNull()
     expect(within(row('maxPosts')).queryByRole('button')).toBeNull()
     expect(within(row('maxPosts')).queryByRole('link')).toBeNull()
   })
@@ -88,11 +106,15 @@ describe('PlanLimitsView', () => {
   it('lists what pauses on the date, and what keeps working', () => {
     mount(overLimits())
     expect(screen.getByRole('heading', { name: 'Pauses on Nov 25' })).toBeInTheDocument()
-    expect(document.querySelector('[data-plan-limit-feature="webhooks"]')).toHaveTextContent(
-      'Webhooks. Deliveries to 1 endpoint pause. Endpoints and secrets are kept.'
-    )
-    expect(screen.getByRole('heading', { name: 'Keeps working' })).toBeInTheDocument()
-    expect(screen.getByText('All posts, votes and comments')).toBeInTheDocument()
+    // Each paused feature is one whole-row link to where it is set up.
+    const feature = document.querySelector('[data-plan-limit-feature="webhooks"]') as HTMLElement
+    const link = within(feature).getByRole('link')
+    expect(link).toHaveAttribute('href', '/admin/settings/developers')
+    expect(link).toHaveTextContent('WebhooksDeliveries to 1 endpoint pause.')
+    expect(screen.getByRole('heading', { name: 'Not affected' })).toBeInTheDocument()
+    const keeps = document.querySelector('[data-plan-limits-keeps]') as HTMLElement
+    expect(within(keeps).getByText('All posts, votes and comments')).toBeInTheDocument()
+    expect(keeps.className).toMatch(/sm:grid-cols-2/)
   })
 
   it('moves to the past tense after the date', () => {
@@ -101,7 +123,7 @@ describe('PlanLimitsView', () => {
     expect(screen.queryByText(/Pauses on/)).toBeNull()
     expect(row('maxBoards')).toHaveTextContent('2 boards are read-only.')
     expect(document.querySelector('[data-plan-limit-feature="webhooks"]')).toHaveTextContent(
-      'Deliveries to 1 endpoint are paused.'
+      'Paused on the Free plan.'
     )
     expect(document.querySelector('[data-plan-limits-deadline="enforced"]')).toHaveTextContent(
       /Paused since/
@@ -111,11 +133,11 @@ describe('PlanLimitsView', () => {
   it('offers the plan that keeps everything with the checkout, for a billing manager', () => {
     mount(overLimits())
     const aside = document.querySelector('[data-plan-limits-keep="pro"]') as HTMLElement
-    expect(within(aside).getByRole('link', { name: 'Choose Pro' })).toHaveAttribute(
+    expect(within(aside).getByRole('link', { name: 'Upgrade to Pro' })).toHaveAttribute(
       'href',
       expect.stringContaining('/admin/settings/billing/checkout')
     )
-    expect(within(aside).getByRole('link', { name: 'Compare all plans' })).toBeInTheDocument()
+    expect(within(aside).getByRole('link', { name: 'Compare plans' })).toBeInTheDocument()
     // What the plan keeps, from the rows on the page: no custom roles line,
     // since Pro includes none.
     const lines = [...aside.querySelectorAll('[data-plan-limits-keep-lines] li')].map(
@@ -137,20 +159,22 @@ describe('PlanLimitsView', () => {
       }),
       [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.BOARD_MANAGE]
     )
-    expect(within(row('maxBoards')).getByRole('button', { name: /Choose the board/ })).toBeVisible()
+    expect(
+      within(row('maxBoards')).getByRole('button', { name: /Choose which board/ })
+    ).toBeVisible()
     expect(within(row('maxBoards')).getByRole('link', { name: 'Manage boards' })).toBeVisible()
     expect(within(row('maxTeamSeats')).queryByRole('button')).toBeNull()
     expect(within(row('maxTeamSeats')).queryByRole('link')).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Choose Pro' })).toBeNull()
-    expect(screen.getByText('Ask an owner to choose a plan.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Upgrade to Pro' })).toBeNull()
+    expect(screen.getByText('Ask someone who manages billing to upgrade.')).toBeInTheDocument()
   })
 
   it('says the workspace fits when nothing is over, and when the flag is off', () => {
     mount(overLimits({ phase: 'ok', issues: [], graceEndsAt: null }))
-    expect(screen.getByText('This workspace fits the Free plan.')).toBeInTheDocument()
+    expect(screen.getByText('Your workspace fits the Free plan.')).toBeInTheDocument()
     cleanup()
     mount(overLimits({ enabled: false }))
-    expect(screen.getByText('This workspace fits the Free plan.')).toBeInTheDocument()
+    expect(screen.getByText('Your workspace fits the Free plan.')).toBeInTheDocument()
     expect(document.querySelector('[data-plan-limit-issues]')).toBeNull()
   })
 })
@@ -170,7 +194,7 @@ describe('choosers', () => {
     hoisted.setKeptBoardFn.mockResolvedValue({ ok: true })
     mount(overLimits())
     await waitFor(() => expect(hoisted.getPlanLimitsSummaryFn).toHaveBeenCalledTimes(1))
-    fireEvent.click(screen.getByRole('button', { name: 'Choose the board to keep' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose which board stays open' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('button', { name: 'Keep Feature requests open' })).toBeVisible()
     fireEvent.click(within(dialog).getByRole('radio', { name: 'Bugs' }))
@@ -204,7 +228,7 @@ describe('choosers', () => {
   it('picks the status components that show', async () => {
     hoisted.setVisibleStatusComponentsFn.mockResolvedValue({ ok: true })
     mount(overLimits())
-    fireEvent.click(screen.getByRole('button', { name: 'Choose what shows' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose what shows on your status page' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Portal' }))
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Email' }))
@@ -239,7 +263,7 @@ describe('choosers', () => {
       },
     })
     mount(limits)
-    fireEvent.click(screen.getByRole('button', { name: 'Choose the domain to keep' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose which domain keeps sending' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('radio', { name: 'news.example.com' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
@@ -264,17 +288,17 @@ describe('choosers', () => {
         choosers: { board: false, seats: false, statusComponents: false, sendingDomains: true },
       })
     )
-    expect(screen.queryByRole('button', { name: 'Choose the domain to keep' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Choose which domain keeps sending' })).toBeNull()
   })
 
   it('shows a refusal inline and stays open', async () => {
     hoisted.setKeptBoardFn.mockResolvedValue({ ok: false, reason: 'not_over' })
     mount(overLimits())
-    fireEvent.click(screen.getByRole('button', { name: 'Choose the board to keep' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose which board stays open' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Keep Feature requests open' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'This is within your plan now, so there is nothing to choose.'
+      'This fits the plan now, so there is nothing to choose.'
     )
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })

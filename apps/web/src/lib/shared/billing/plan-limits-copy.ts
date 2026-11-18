@@ -44,97 +44,98 @@ export function capConsequence(
   key: PlanCapKey,
   excess: number,
   tense: PlanLimitsTense,
-  date: string
+  date: string,
+  plan = 'current'
 ): string {
-  const on = (line: string) => (tense === 'grace' ? `On ${date}, ${line}` : line)
+  const grace = tense === 'grace'
+  const on = (line: string) => `On ${date}, ${line}`
   switch (key) {
     case 'maxBoards':
-      return tense === 'grace'
+      return grace
         ? on(
-            `${plural(excess, 'board becomes', 'boards become')} read-only. Their posts stay visible to everyone.`
+            `${plural(excess, 'board becomes', 'boards become')} read-only. Their posts stay visible.`
           )
-        : `${plural(excess, 'board is', 'boards are')} read-only. Their posts stay visible to everyone.`
+        : `${plural(excess, 'board is', 'boards are')} read-only. Their posts stay visible.`
     case 'maxTeamSeats':
-      return tense === 'grace'
+      return grace
         ? on(
-            `${plural(excess, 'teammate loses', 'teammates lose')} admin access until a seat frees. Their conversations and history stay.`
+            `${plural(excess, 'teammate loses', 'teammates lose')} admin access until a seat frees up.`
           )
-        : `${plural(excess, 'teammate has', 'teammates have')} no admin access until a seat frees. Their conversations and history stay.`
+        : `${plural(excess, 'teammate has', 'teammates have')} no admin access until a seat frees up.`
     case 'maxStatusComponents':
-      return tense === 'grace'
-        ? on(
-            `${plural(excess, 'component is', 'components are')} hidden from your status page. ${excess === 1 ? 'It stays' : 'They stay'} in your admin.`
-          )
-        : `${plural(excess, 'component is', 'components are')} hidden from your status page. ${excess === 1 ? 'It stays' : 'They stay'} in your admin.`
+      return grace
+        ? on(`${plural(excess, 'component is', 'components are')} hidden from your status page.`)
+        : `${plural(excess, 'component is', 'components are')} hidden from your status page.`
     case 'maxCustomRoles':
-      return tense === 'grace'
-        ? on('custom roles lock. People on them keep their access.')
-        : 'Custom roles are locked. People on them keep their access.'
+      return grace
+        ? on('custom roles are locked. People on them keep their access.')
+        : `Custom roles are locked on the ${plan} plan. People on them keep their access.`
     case 'maxSendingDomains':
-      return tense === 'grace'
+      return grace
         ? on(
-            `mail from ${plural(excess, 'domain', 'domains')} sends from your default address. The ${excess === 1 ? 'domain is' : 'domains are'} kept.`
+            `${plural(excess, 'sending domain pauses', 'sending domains pause')}. Email goes from your default address.`
           )
-        : `Mail from ${plural(excess, 'domain', 'domains')} sends from your default address. The ${excess === 1 ? 'domain is' : 'domains are'} kept.`
+        : `Paused on the ${plan} plan. Email goes from your default address.`
     case 'maxHelpCenterLocales':
-      return tense === 'grace'
-        ? on(
-            `${plural(excess, 'language locks', 'languages lock')} for editing. Published pages keep serving.`
-          )
-        : `${plural(excess, 'language is', 'languages are')} locked for editing. Published pages keep serving.`
+      return grace
+        ? on(`${plural(excess, 'language is', 'languages are')} locked. Published pages stay live.`)
+        : `${plural(excess, 'language is', 'languages are')} locked on the ${plan} plan. Published pages stay live.`
     case 'maxPosts':
-      return 'New posts are paused. Existing posts stay.'
+      return 'New posts stop at the cap. Existing posts stay.'
     case 'maxInboundEmailAddresses':
       return 'No new addresses. Existing ones keep working.'
     case 'maxStatusSubscribers':
-      return 'New sign-ups are paused. Existing subscribers keep getting updates.'
+      return 'New sign-ups stop at the cap. Existing subscribers keep getting updates.'
   }
 }
 
 /** The quiet note under an information row: nothing to fix, only new ones stop. */
-export function infoRowNote(row: { key: string; message: string }): string {
+export function infoRowNote(row: { key: string; message: string; cap: number }): string {
   if (row.key === 'aiTokensPerMonth' || row.key === 'emailsPerMonth') return `${row.message}.`
+  // The billing usage card says the same.
+  if (row.key === 'maxPosts') return `New posts stop at ${row.cap}. Existing posts stay.`
+  if (row.key === 'maxStatusSubscribers') {
+    return `New sign-ups stop at ${row.cap}. Existing subscribers keep getting updates.`
+  }
   return capConsequence(row.key as PlanCapKey, 0, 'enforced', '')
 }
 
-/** One line per paid feature that pauses, in the present tense, after its name. */
+/**
+ * The line under a paid feature's name: what pauses on the date, or that it is
+ * paused on the plan. "Nothing is deleted" is said once for the page, not here.
+ */
 export function featureConsequence(
   key: PlanFeatureKey,
   count: number,
-  tense: PlanLimitsTense
+  tense: PlanLimitsTense,
+  plan = 'current'
 ): string {
-  const now = tense === 'enforced'
+  if (tense === 'enforced') {
+    const paused = `Paused on the ${plan} plan.`
+    if (key === 'sso') return `${paused} Your team signs in with email links.`
+    if (key === 'customDomain') return `${paused} Links go to your workspace address.`
+    if (key === 'aiAssistant') return `${paused} New conversations go to your team.`
+    return paused
+  }
   switch (key) {
     case 'webhooks':
-      return now
-        ? `Deliveries to ${plural(count, 'endpoint are', 'endpoints are')} paused. Endpoints and secrets are kept.`
-        : `Deliveries to ${plural(count, 'endpoint', 'endpoints')} pause. Endpoints and secrets are kept.`
+      return `Deliveries to ${plural(count, 'endpoint', 'endpoints')} pause.`
     case 'workflows':
-      return now
-        ? `${plural(count, 'live workflow is', 'live workflows are')} paused. They are kept.`
-        : `${plural(count, 'live workflow pauses', 'live workflows pause')}. They are kept.`
+      return `${plural(count, 'live workflow pauses', 'live workflows pause')}.`
     case 'integrations':
-      return now
-        ? 'Sync and notifications are paused. Connections are kept.'
-        : 'Sync and notifications pause. Connections are kept.'
+      return 'Sync and notifications pause.'
     case 'customDomain':
-      return 'Redirects to your workspace address. Links keep working.'
+      return 'Pauses. Links go to your workspace address.'
     case 'customCss':
-      return now ? 'Not shown. It is kept.' : 'Stops showing. It is kept.'
+      return 'Pauses on your portal.'
     case 'sso':
-      return now
-        ? 'Off. Your team signs in with email links. Settings are kept.'
-        : 'Turns off. Your team will sign in with email links. Settings are kept.'
+      return 'Pauses. Your team signs in with email links.'
     case 'aiAssistant':
-      return now
-        ? 'Not answering customers. New conversations go to your team.'
-        : 'Stops answering customers. New conversations go to your team.'
+      return 'Pauses. New conversations go to your team.'
     case 'aiArticleTranslation':
-      return now
-        ? 'New translations are paused. Published ones stay.'
-        : 'New translations stop. Published ones stay.'
+      return 'New translations pause. Published ones stay.'
     default:
-      return now ? 'Paused. It is kept.' : 'Pauses. It is kept.'
+      return 'Pauses.'
   }
 }
 
@@ -145,13 +146,13 @@ function pausedClause(issue: { key: string; used: number; cap: number }): string
     case 'maxBoards':
       return `${plural(n, 'board is', 'boards are')} read-only`
     case 'maxTeamSeats':
-      return `${plural(n, 'teammate is', 'teammates are')} paused`
+      return `${plural(n, 'teammate has', 'teammates have')} no admin access`
     case 'maxStatusComponents':
       return `${plural(n, 'status component is', 'status components are')} hidden`
     case 'maxCustomRoles':
       return 'custom roles are locked'
     case 'maxSendingDomains':
-      return `${plural(n, 'sending domain is', 'sending domains are')} off`
+      return `${plural(n, 'sending domain is', 'sending domains are')} paused`
     case 'maxHelpCenterLocales':
       return `${plural(n, 'help center language is', 'help center languages are')} locked`
     default:
@@ -206,39 +207,31 @@ export function planLimitsBannerCopy(
 ): PlanLimitsBannerCopy | null {
   if (!isPlanLimitsOver(limits)) return null
   const plan = limits.planName ?? 'current'
+  const title = `Your workspace is over the ${plan} plan's limits.`
+  const ask = 'Ask someone who manages billing to upgrade.'
   if (limits.phase === 'enforced') {
     if (limits.issues.length === 0) return null
     return {
       tone: 'enforced',
-      title: `Paused on the ${plan} plan.`,
-      body: limits.canManageBilling
-        ? `${pausedSummary(limits)} Upgrade to bring them back.`
-        : pausedSummary(limits),
-      action: limits.canManageBilling ? 'Review' : "See what's affected",
-    }
-  }
-  const title = `Over the ${plan} plan limits.`
-  if (!limits.canManageBilling) {
-    return {
-      tone: 'grace',
       title,
-      body: `An owner needs to choose a plan by ${date}.`,
-      action: "See what's affected",
+      body: `${pausedSummary(limits)} ${
+        limits.canManageBilling ? 'They come back when you upgrade.' : ask
+      }`,
+      action: 'Review issues',
     }
   }
   const n = limits.issues.length
-  const keep =
-    limits.fromPlanName && limits.fromPlanName !== limits.planName
-      ? `, or keep everything on ${limits.fromPlanName}`
-      : ''
+  const fix =
+    n > 0 ? `Fix ${plural(n, 'issue', 'issues')} by ${date}` : `Some features pause on ${date}`
   return {
     tone: 'grace',
     title,
-    body:
-      n > 0
-        ? `Fix ${plural(n, 'thing', 'things')} by ${date}${keep}.`
-        : `Some features pause on ${date}${keep}.`,
-    action: n > 0 ? `Review ${plural(n, 'issue', 'issues')}` : 'Review',
+    body: limits.canManageBilling
+      ? n > 0
+        ? `${fix}, or upgrade to keep everything.`
+        : `${fix}. Upgrade to keep everything.`
+      : `${fix}. ${ask}`,
+    action: 'Review issues',
   }
 }
 

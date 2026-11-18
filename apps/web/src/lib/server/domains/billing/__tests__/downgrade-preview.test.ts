@@ -29,6 +29,6 @@ describe('loadDowngradePreview feature copy', () => {
   it('says features pause after 7 days once plan limits are on', async () => {
     hoisted.flags = { planLimits: true }
     const preview = await loadDowngradePreview({ planId: 'free', overview, used: {} })
-    expect(preview.featuresDisabled).toContain('Webhooks pause after 7 days. Endpoints are kept.')
+    expect(preview.featuresDisabled).toContain('Webhooks pause after 7 days.')
   })
 })

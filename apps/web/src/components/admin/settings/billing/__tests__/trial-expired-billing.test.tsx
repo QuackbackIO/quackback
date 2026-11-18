@@ -68,7 +68,7 @@ describe('TrialExpiredBilling lead', () => {
     vi.setSystemTime(new Date(Date.parse(EXPIRED) + 72 * 3_600_000))
     renderPage()
     expect(screen.getByRole('heading', { name: 'Your Pro trial has ended' })).toBeInTheDocument()
-    expect(screen.getByText(/keep Pro, or switch to Free/)).toBeInTheDocument()
+    expect(screen.getByText(/upgrade to Pro, or downgrade to Free/)).toBeInTheDocument()
     expect(screen.queryByText(/rest of admin/)).not.toBeInTheDocument()
   })
 
@@ -77,14 +77,16 @@ describe('TrialExpiredBilling lead', () => {
     renderPage({ overview: { ...overview, trialPlanName: null, trialPlanId: null } })
     expect(screen.getByRole('heading', { name: 'Your trial has ended' })).toBeInTheDocument()
     expect(screen.queryByText(/your plan/)).not.toBeInTheDocument()
-    expect(screen.getByText(/pick a paid plan, or switch to Free/)).toBeInTheDocument()
+    expect(screen.getByText(/upgrade to a paid plan, or downgrade to Free/)).toBeInTheDocument()
   })
 })
 
 describe('TrialExpiredBilling with plan limits', () => {
-  it('lists the caps over the plan above the plan choice, linking to Plan limits', () => {
+  it('lists the caps over the plan above the plan choice, linking to Plan limits', async () => {
     renderPage({ limits: overLimits() })
-    expect(screen.getByRole('heading', { name: 'Over your limits' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Over your limits' }, { timeout: 10_000 })
+    ).toBeInTheDocument()
     expect(
       document.querySelector('[data-plan-limit-row="maxBoards"][data-status="over"]')
     ).toBeInTheDocument()

@@ -16,8 +16,8 @@ import { adminPageHead } from '@/lib/client/admin-head'
 const BILLING_ERROR_COPY: Record<string, string> = {
   seats_below_usage: 'Pick at least as many seats as people you already have.',
   seat_cap_exceeded: 'Remove extra members or choose Business.',
-  over_free_limits: 'Remove anything that is over the Free plan before switching.',
-  over_plan_limits: 'Remove anything that is over the new plan before switching.',
+  over_free_limits: 'Fix anything over the Free plan before you downgrade.',
+  over_plan_limits: 'Fix anything over the new plan before you downgrade.',
   already_on_plan: 'You are already on this plan.',
   already_on_addon: 'Branding removal is already on this workspace.',
   not_on_addon: 'Branding removal is not on this workspace.',

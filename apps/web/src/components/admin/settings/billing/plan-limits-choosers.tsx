@@ -36,9 +36,9 @@ interface ChoiceItem {
 }
 
 const REFUSAL_TEXT: Record<Exclude<PlanLimitsChoiceResponse, { ok: true }>['reason'], string> = {
-  not_over: 'This is within your plan now, so there is nothing to choose.',
+  not_over: 'This fits the plan now, so there is nothing to choose.',
   unknown: 'Something in this list has changed. Close this and try again.',
-  too_many: 'That is more than your plan includes. Clear one and try again.',
+  too_many: 'That is more than the plan includes. Clear one and try again.',
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -60,7 +60,7 @@ function chooserSpec(
   limits: PlanLimitsPage,
   date: string
 ): ChooserSpec | null {
-  const plan = limits.planName ?? 'Your'
+  const plan = limits.planName ? `The ${limits.planName} plan` : 'Your plan'
   const grace = limits.phase === 'grace'
   const from = grace ? `From ${date}, ` : ''
   const capOf = (key: string) => limits.issues.find((issue) => issue.key === key)?.cap ?? 0
@@ -70,9 +70,9 @@ function chooserSpec(
       const cap = capOf('maxBoards')
       const most = Math.max(0, ...boards.map((b) => b.postCount))
       return {
-        title: 'Choose the board that stays open',
-        description: `${plan} includes ${plural(cap, 'board', 'boards')}. ${from}${grace ? 'the' : 'The'} others are read-only: their posts stay visible, and you can move posts into this board.`,
-        footnote: 'You can change this at any time. Upgrading opens every board again.',
+        title: 'Choose which board stays open',
+        description: `${plan} includes ${plural(cap, 'board', 'boards')}. ${from}${grace ? 'the' : 'The'} others are read-only. Their posts stay visible, and you can move posts into this board.`,
+        footnote: 'You can change this at any time. Every board opens again when you upgrade.',
         items: boards.map((board) => ({
           id: board.id,
           title: board.name,
@@ -95,7 +95,7 @@ function chooserSpec(
       const locked = new Set(limits.lockedSeatHolderIds)
       return {
         title: 'Choose who keeps a seat',
-        description: `${plan} includes ${plural(cap, 'seat', 'seats')}. ${from}${grace ? 'everyone' : 'Everyone'} else has no admin access until a seat frees. Their conversations and history stay.`,
+        description: `${plan} includes ${plural(cap, 'seat', 'seats')}. ${from}${grace ? 'other' : 'Other'} teammates lose admin access until a seat frees up. Their conversations and history stay.`,
         items: members.map((member) => ({
           id: member.id,
           title: member.name ?? member.email ?? 'Teammate',
@@ -116,7 +116,7 @@ function chooserSpec(
       const cap = capOf('maxStatusComponents')
       return {
         title: 'Choose what shows on your status page',
-        description: `${plan} includes ${plural(cap, 'component', 'components')}. ${from}${grace ? 'the' : 'The'} rest are hidden from your status page. They stay in your admin.`,
+        description: `${plan} includes ${plural(cap, 'component', 'components')}. ${from}${grace ? 'the' : 'The'} rest are hidden from your status page.`,
         items: components.map((component) => ({
           id: component.id,
           title: component.name,
@@ -134,8 +134,8 @@ function chooserSpec(
       const cap = capOf('maxSendingDomains')
       if (cap < 1) return null
       return {
-        title: 'Choose the domain that keeps sending',
-        description: `${plan} includes ${plural(cap, 'sending domain', 'sending domains')}. ${from}${grace ? 'mail' : 'Mail'} from the others sends from your default address. Nothing is deleted.`,
+        title: 'Choose which domain keeps sending',
+        description: `${plan} includes ${plural(cap, 'sending domain', 'sending domains')}. ${from}${grace ? 'the' : 'The'} others pause, and email goes from your default address.`,
         items: domains.map((domain) => ({
           id: domain.id,
           title: domain.domain,

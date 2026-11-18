@@ -4,7 +4,6 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
-import de from '@/locales/de.json'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 
 vi.mock('@/lib/client/queries/plan-limits', () => ({
@@ -87,11 +86,11 @@ describe('PlanLimitsBanner', () => {
     expect(banner()?.querySelector('[data-plan-limits-icon]')?.getAttribute('class')).toMatch(
       /text-warning/
     )
-    expect(screen.getByText('Over the Free plan limits.')).toBeInTheDocument()
+    expect(screen.getByText("Your workspace is over the Free plan's limits.")).toBeInTheDocument()
     expect(
-      screen.getByText(/^Fix 2 things by Wed, Nov 25, or keep everything on Pro\.$/)
+      screen.getByText(/^Fix 2 issues by Nov 25, or upgrade to keep everything\.$/)
     ).toBeInTheDocument()
-    const review = screen.getByRole('link', { name: 'Review 2 issues' })
+    const review = screen.getByRole('link', { name: 'Review issues' })
     expect(review).toHaveAttribute('href', PLAN_LIMITS_PATH)
     expect(review.className).toMatch(/text-warning/)
   })
@@ -104,10 +103,10 @@ describe('PlanLimitsBanner', () => {
     expect(banner()?.querySelector('[data-plan-limits-icon]')?.getAttribute('class')).toMatch(
       /text-destructive/
     )
-    expect(screen.getByText('Paused on the Free plan.')).toBeInTheDocument()
+    expect(screen.getByText("Your workspace is over the Free plan's limits.")).toBeInTheDocument()
     expect(
       screen.getByText(
-        '4 boards are read-only, 2 teammates are paused and more. Upgrade to bring them back.'
+        '4 boards are read-only, 2 teammates have no admin access and more. They come back when you upgrade.'
       )
     ).toBeInTheDocument()
     cleanup()
@@ -119,7 +118,7 @@ describe('PlanLimitsBanner', () => {
     )
     expect(
       screen.getByText(
-        '4 boards are read-only and webhooks are paused. Upgrade to bring them back.'
+        '4 boards are read-only and webhooks are paused. They come back when you upgrade.'
       )
     ).toBeInTheDocument()
   })
@@ -131,14 +130,16 @@ describe('PlanLimitsBanner', () => {
     expect(banner()).toBeNull()
   })
 
-  it('tells a teammate without billing rights that an owner needs to choose', () => {
+  it('asks a teammate without billing rights to ask someone who manages billing', () => {
     render(<PlanLimitsBanner limits={limits({ canManageBilling: false })} pathname="/admin" />)
-    expect(screen.getByText('An owner needs to choose a plan by Wed, Nov 25.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: "See what's affected" })).toHaveAttribute(
+    expect(
+      screen.getByText('Fix 2 issues by Nov 25. Ask someone who manages billing to upgrade.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Review issues' })).toHaveAttribute(
       'href',
       PLAN_LIMITS_PATH
     )
-    expect(screen.queryByText(/keep everything/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/keep everything|owner/)).not.toBeInTheDocument()
   })
 
   it('is hidden on the Plan limits page itself', () => {
@@ -151,7 +152,7 @@ describe('PlanLimitsBanner', () => {
 })
 
 describe('PlanLimitsQuiet', () => {
-  const mount = (value: PlanLimitsPage, locale = 'en', messages = en) =>
+  const mount = (value: PlanLimitsPage, locale = 'en', messages: Record<string, string> = en) =>
     render(
       <IntlProvider locale={locale} messages={messages}>
         <PlanLimitsQuiet limits={value} />
@@ -162,8 +163,8 @@ describe('PlanLimitsQuiet', () => {
     mount(limits())
     const link = screen.getByRole('link')
     expect(link).toHaveAttribute('href', PLAN_LIMITS_PATH)
-    expect(link).toHaveTextContent('Free plan · 2 to fix')
-    expect(link).toHaveTextContent(/Fix by Wed, Nov 25/)
+    expect(link).toHaveTextContent('Free plan · 2 issues')
+    expect(link).toHaveTextContent(/Fix by Nov 25$/)
   })
 
   it('says what is paused once enforced, and nothing when it fits or the flag is off', () => {
@@ -177,8 +178,8 @@ describe('PlanLimitsQuiet', () => {
     expect(screen.queryByRole('link')).toBeNull()
   })
 
-  it('words the line in the viewer language', () => {
-    mount(limits(), 'de', de)
-    expect(screen.getByRole('link')).not.toHaveTextContent('to fix')
+  it('needs no message catalogue, so nothing is seeded for it', () => {
+    render(<PlanLimitsQuiet limits={limits()} />)
+    expect(screen.getByRole('link')).toHaveTextContent('Free plan · 2 issues')
   })
 })

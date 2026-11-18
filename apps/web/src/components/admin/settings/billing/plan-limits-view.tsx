@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { CheckIcon } from '@heroicons/react/24/solid'
+import { CheckIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
@@ -28,10 +28,10 @@ import {
 
 /** The chooser for each cap that has one, with its button label. */
 const CHOOSER_FOR: Partial<Record<PlanCapKey, { kind: PlanLimitsChooserKind; label: string }>> = {
-  maxBoards: { kind: 'board', label: 'Choose the board to keep' },
+  maxBoards: { kind: 'board', label: 'Choose which board stays open' },
   maxTeamSeats: { kind: 'seats', label: 'Choose who keeps a seat' },
-  maxStatusComponents: { kind: 'statusComponents', label: 'Choose what shows' },
-  maxSendingDomains: { kind: 'sendingDomains', label: 'Choose the domain to keep' },
+  maxStatusComponents: { kind: 'statusComponents', label: 'Choose what shows on your status page' },
+  maxSendingDomains: { kind: 'sendingDomains', label: 'Choose which domain keeps sending' },
 }
 
 /** The page that fixes each cap, and who may open it. */
@@ -83,13 +83,14 @@ export function PlanLimitsView(props: {
     return (
       <p className="text-[13px] text-muted-foreground">
         {limits.planName
-          ? `This workspace fits the ${limits.planName} plan.`
-          : 'This workspace fits its plan.'}
+          ? `Your workspace fits the ${limits.planName} plan.`
+          : 'Your workspace fits its plan.'}
       </p>
     )
   }
 
   const grace = limits.phase === 'grace'
+  const plan = limits.planName ?? 'current'
   const tense = limits.phase
   const date = format(limits.graceEndsAt, DEADLINE_FORMAT)
   const shortDate = format(limits.graceEndsAt, { day: 'numeric', month: 'short' })
@@ -101,14 +102,20 @@ export function PlanLimitsView(props: {
     const actions: ReactNode[] = []
     if (choose && chooserAvailable(choose.kind, limits)) {
       actions.push(
-        <Button key="choose" size="sm" type="button" onClick={() => setChooser(choose.kind)}>
+        <Button
+          key="choose"
+          size="sm"
+          variant="outline"
+          type="button"
+          onClick={() => setChooser(choose.kind)}
+        >
           {choose.label}
         </Button>
       )
     }
     if (manage && can(manage.anyOf)) {
       actions.push(
-        <Button key="manage" size="sm" variant="outline" asChild>
+        <Button key="manage" size="sm" variant="ghost" asChild>
           <a href={issue.href}>{manage.label}</a>
         </Button>
       )
@@ -118,7 +125,7 @@ export function PlanLimitsView(props: {
       used: issue.used,
       cap: issue.cap,
       status: 'over',
-      note: capConsequence(issue.key, issue.used - issue.cap, tense, shortDate),
+      note: capConsequence(issue.key, issue.used - issue.cap, tense, shortDate, plan),
       actions: actions.length > 0 ? actions : undefined,
     }
   })
@@ -132,6 +139,8 @@ export function PlanLimitsView(props: {
   }))
   const total = issueRows.length + fixedRows.length
   const target = keepEverythingPlan(limits.plan, limits.fromPlan)
+  const targetName = target ? planName(target, props.catalogue) : null
+  const canChoose = limits.canManageBilling && target !== null && isPaidPlanId(target)
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
@@ -153,12 +162,16 @@ export function PlanLimitsView(props: {
           </div>
           {total > 0 ? (
             <div className="space-y-1.5">
-              <Progress
-                className="h-1.5"
-                value={fixedRows.length}
-                max={total}
-                aria-label={`${fixedRows.length} of ${total} fixed`}
-              />
+              {/* The bar shows progress, so it waits for the first fix rather
+                  than starting as an empty grey track. */}
+              {fixedRows.length > 0 ? (
+                <Progress
+                  className="h-1.5"
+                  value={fixedRows.length}
+                  max={total}
+                  aria-label={`${fixedRows.length} of ${total} fixed`}
+                />
+              ) : null}
               <p className="text-[12px] text-muted-foreground">
                 {fixedRows.length} of {total} fixed
               </p>
@@ -166,9 +179,15 @@ export function PlanLimitsView(props: {
           ) : null}
           <p className="text-[13px] text-muted-foreground">
             {grace
-              ? 'Until then everything keeps working. After that, extras are frozen and paid features pause. Nothing is deleted, and upgrading brings it all back at once.'
-              : 'Extras are frozen and paid features are paused. Nothing is deleted, and upgrading brings it all back at once.'}
+              ? 'Until then everything keeps working. After that, what is over becomes read-only, hidden or paused. Nothing is deleted. It comes back when you upgrade.'
+              : 'What is over is read-only, hidden or paused. Nothing is deleted. It comes back when you upgrade.'}
           </p>
+          {/* On a phone the plan aside sits at the bottom, so the way out is here too. */}
+          {canChoose && target && isPaidPlanId(target) ? (
+            <Button size="sm" variant="outline" className="lg:hidden" asChild>
+              <a href={checkoutPath({ plan: target })}>Upgrade to {targetName}</a>
+            </Button>
+          ) : null}
         </section>
 
         {total > 0 || infoRows.length > 0 ? (
@@ -183,39 +202,46 @@ export function PlanLimitsView(props: {
             <h2 className="text-base font-semibold">
               {grace ? `Pauses on ${shortDate}` : 'Paused'}
             </h2>
+            {/* Whole-row links, as in the settings lists. */}
             <ul className="divide-y divide-border/50 overflow-hidden rounded-xl border bg-card">
-              {limits.featureIssues.map((feature) => (
-                <li
-                  key={feature.key}
-                  data-plan-limit-feature={feature.key}
-                  className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
-                >
-                  <p className="min-w-0 text-[13px]">
-                    <span className="font-medium">{feature.label}.</span>{' '}
-                    <span className="text-muted-foreground">
-                      {featureConsequence(feature.key, feature.count, tense)}
+              {limits.featureIssues.map((feature) => {
+                const text = (
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">{feature.label}</span>
+                    <span className="block text-[13px] text-muted-foreground">
+                      {featureConsequence(feature.key, feature.count, tense, plan)}
                     </span>
-                  </p>
-                  {feature.href ? (
-                    <a href={feature.href} className={`${INLINE_LINK} shrink-0 text-[13px]`}>
-                      View
-                    </a>
-                  ) : null}
-                </li>
-              ))}
+                  </span>
+                )
+                return (
+                  <li key={feature.key} data-plan-limit-feature={feature.key}>
+                    {feature.href ? (
+                      <a
+                        href={feature.href}
+                        className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-muted-foreground sm:px-5"
+                      >
+                        {text}
+                        <ChevronRightIcon
+                          aria-hidden
+                          className="size-4 shrink-0 text-muted-foreground/70"
+                        />
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-3 px-4 py-3 sm:px-5">{text}</div>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           </section>
         ) : null}
 
         <section className="space-y-3">
-          <h2 className="text-base font-semibold">Keeps working</h2>
-          <ul className="flex flex-wrap gap-2">
+          <h2 className="text-base font-semibold">Not affected</h2>
+          <ul data-plan-limits-keeps="" className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
             {KEEPS_WORKING.map((item) => (
-              <li
-                key={item}
-                className="inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-[12px]"
-              >
-                <CheckIcon aria-hidden className="size-3 text-success" />
+              <li key={item} className="flex items-center gap-2 text-[13px] text-muted-foreground">
+                <CheckIcon aria-hidden className="size-3.5 shrink-0 text-success" />
                 {item}
               </li>
             ))}
@@ -246,6 +272,11 @@ export function PlanLimitsView(props: {
   )
 }
 
+function planName(id: string, catalogue: BillingCatalogue | null): string {
+  const entry = catalogue?.plans.find((plan) => plan.id === id)
+  return entry?.name ?? id.charAt(0).toUpperCase() + id.slice(1)
+}
+
 function daysLeftLabel(days: number | null): string {
   if (days === null) return ''
   if (days === 0) return 'Last day'
@@ -261,21 +292,20 @@ function KeepEverything(props: {
   catalogue: BillingCatalogue | null
 }) {
   if (!props.target) return null
-  const entry = props.catalogue?.plans.find((plan) => plan.id === props.target)
-  const name = entry?.name ?? props.target.charAt(0).toUpperCase() + props.target.slice(1)
+  const name = planName(props.target, props.catalogue)
   return (
     <aside
       data-settings-card=""
       data-plan-limits-keep={props.target}
-      className="h-fit space-y-3 rounded-xl border bg-card px-5 py-4"
+      className="h-fit space-y-3 self-start rounded-xl border bg-card px-5 py-4 lg:sticky lg:top-4"
     >
       <div>
         <p className="text-[11px] font-medium text-muted-foreground">Keep everything</p>
         <h2 className="mt-1 text-base font-semibold">{name}</h2>
         <p className="mt-1 text-[13px] text-muted-foreground">
           {props.fromPlan === props.target
-            ? 'The plan you had. Nothing above changes.'
-            : 'Nothing above changes.'}
+            ? 'The plan you had. Everything above stays as it is.'
+            : 'Everything above stays as it is.'}
         </p>
       </div>
       {props.lines.length > 0 ? (
@@ -292,18 +322,20 @@ function KeepEverything(props: {
         <div className="space-y-2">
           {isPaidPlanId(props.target) ? (
             <Button size="sm" className="w-full" asChild>
-              <a href={checkoutPath({ plan: props.target })}>Choose {name}</a>
+              <a href={checkoutPath({ plan: props.target })}>Upgrade to {name}</a>
             </Button>
           ) : null}
           <a
             href="/admin/settings/billing"
             className={`${INLINE_LINK} block text-center text-[13px]`}
           >
-            Compare all plans
+            Compare plans
           </a>
         </div>
       ) : (
-        <p className="text-[13px] text-muted-foreground">Ask an owner to choose a plan.</p>
+        <p className="text-[13px] text-muted-foreground">
+          Ask someone who manages billing to upgrade.
+        </p>
       )}
     </aside>
   )

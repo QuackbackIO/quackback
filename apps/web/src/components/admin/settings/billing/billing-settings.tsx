@@ -1,6 +1,7 @@
 import { useIntl } from 'react-intl'
-import { useState } from 'react'
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { lazy, Suspense, useState } from 'react'
+import { skipToken, useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { useLoaderData } from '@tanstack/react-router'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import type { BillingCatalogue, CustomerInvoice } from '@/lib/server/control-plane/client'
@@ -26,14 +27,32 @@ import { checkoutPath } from '@/lib/shared/billing/checkout-path'
 import { SubscribeDialog } from './subscribe-dialog'
 import { UsageMeter } from './usage-meter'
 import { TrialExpiredBilling } from './trial-expired-billing'
-import { PlanDowngradeDialog } from './free-downgrade-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
-import { isPlanLimitsOver } from '@/lib/shared/billing/plan-limits-copy'
-import {
-  PLAN_LIMITS_PATH,
-  usePlanLimitsSummary,
-} from '@/components/admin/plan-limits/plan-limits-banner'
+
+/** The downgrade dialog loads when it opens, so the page never ships the plan limits list. */
+const PlanDowngradeDialog = lazy(() =>
+  import('./free-downgrade-dialog').then((module) => ({ default: module.PlanDowngradeDialog }))
+)
+
+// Plan limits reach this page as data only (the admin loader's summary, kept
+// fresh by the banner's query), never as code: the page imports nothing of
+// theirs, so a workspace without the flag ships nothing extra.
+const PLAN_LIMITS_PATH = '/admin/settings/billing/limits'
+
+function isOver(limits: PlanLimitsPage | null | undefined): limits is PlanLimitsPage {
+  return Boolean(limits?.enabled) && (limits?.phase === 'grace' || limits?.phase === 'enforced')
+}
+
+/** The summary the banner keeps fresh, else the one the admin loader read; null with the flag off. */
+function usePlanLimits(): PlanLimitsPage | null {
+  const loaded = useLoaderData({ from: '/admin', select: (data) => data.planLimits ?? null })
+  const live = useQuery<PlanLimitsPage | null>({
+    queryKey: ['plan-limits', 'summary'],
+    queryFn: skipToken,
+  })
+  return loaded ? (live.data ?? loaded) : null
+}
 
 /** Workspace-local presentation of the control-plane billing projection. */
 export function BillingSettings() {
@@ -41,7 +60,7 @@ export function BillingSettings() {
   const catalogue = useQuery(billingQueries.catalogue())
   const invoices = useQuery(billingQueries.invoices())
   const usage = useQuery(billingQueries.usage())
-  const limits = usePlanLimitsSummary()
+  const limits = usePlanLimits()
   if (!overview) return null
   return (
     <BillingPlansView
@@ -103,7 +122,7 @@ export function BillingPlansView(props: {
         overview={overview}
         catalogue={catalogue}
         onSubscribe={setSubscribePlanId}
-        overLimits={isPlanLimitsOver(props.limits)}
+        overLimits={isOver(props.limits)}
       />
 
       <UsageCard overview={overview} usage={props.usage ?? []} limits={props.limits} />
@@ -146,6 +165,7 @@ export function BillingPlansView(props: {
                 index={index}
                 subscribeIsContinuation={Boolean(overview.trialActive || overview.trialEnded)}
                 onSubscribe={setSubscribePlanId}
+                currentPlanName={overview.planName}
               />
             ))}
           </div>
@@ -390,7 +410,7 @@ function UsageCard(props: {
   const api = props.usage.find((line) => line.key === 'apiRequestsPerMonth')
   // With plan limits on, a cap that needs a fix links to the Plan limits page,
   // and a cap that is over without needing one (posts) says what stops.
-  const over = isPlanLimitsOver(props.limits) ? props.limits! : null
+  const over = isOver(props.limits) ? props.limits : null
   const overKeys = new Set<string>(over?.issues.map((issue) => issue.key) ?? [])
   const infoKeys = new Set<string>(
     props.limits?.enabled ? props.limits.infoRows.map((row) => row.key) : []
@@ -486,9 +506,14 @@ function UsageCard(props: {
                     ? `New posts stop at ${formatNumber(line.limit)}. Existing posts stay.`
                     : usageMeterDescription(line.key)
                 }
-                valueText={`${formatNumber(line.used)} of ${formatNumber(line.limit)}`}
+                valueText={
+                  overKeys.has(line.key) && fixBy
+                    ? `${formatNumber(line.used)} of ${formatNumber(line.limit)} · fix by ${fixBy}`
+                    : `${formatNumber(line.used)} of ${formatNumber(line.limit)}`
+                }
                 used={line.used}
                 limit={line.limit}
+                href={overKeys.has(line.key) ? PLAN_LIMITS_PATH : undefined}
                 tone={
                   overKeys.has(line.key)
                     ? 'over'
@@ -496,14 +521,11 @@ function UsageCard(props: {
                       ? 'muted'
                       : undefined
                 }
-                flag={
+                badge={
                   overKeys.has(line.key) ? (
-                    <a
-                      href={PLAN_LIMITS_PATH}
-                      className="font-medium text-destructive underline underline-offset-2"
-                    >
-                      {fixBy ? `Over limit · fix by ${fixBy}` : 'Over limit'}
-                    </a>
+                    <Badge size="sm" variant="destructive">
+                      Over limit
+                    </Badge>
                   ) : null
                 }
               />
@@ -600,6 +622,7 @@ function PlanCard(props: {
   index: number
   subscribeIsContinuation: boolean
   onSubscribe: (planId: PaidPlanId) => void
+  currentPlanName?: string
 }) {
   const { plan, period, action } = props
   const isAnnual = period === 'annual'
@@ -659,6 +682,7 @@ function PlanCard(props: {
           period={period}
           subscribeIsContinuation={props.subscribeIsContinuation}
           onSubscribe={props.onSubscribe}
+          currentPlanName={props.currentPlanName}
         />
       </div>
     </article>
@@ -672,6 +696,7 @@ function PlanActionButton(props: {
   period: 'monthly' | 'annual'
   subscribeIsContinuation: boolean
   onSubscribe: (planId: PaidPlanId) => void
+  currentPlanName?: string
 }) {
   const { action } = props
   if (action.kind === 'current') {
@@ -684,7 +709,7 @@ function PlanActionButton(props: {
   if (action.kind === 'unavailable') {
     return (
       <Button size="sm" variant="outline" className="w-full" disabled>
-        {props.planName === 'Free' ? 'Switch to Free' : `Choose ${props.planName}`}
+        {props.planName === 'Free' ? 'Downgrade to Free' : `Upgrade to ${props.planName}`}
       </Button>
     )
   }
@@ -694,7 +719,13 @@ function PlanActionButton(props: {
     )
   }
   if (action.kind === 'downgrade') {
-    return <DowngradeButton planId={action.planId} planName={props.planName} />
+    return (
+      <DowngradeButton
+        planId={action.planId}
+        planName={props.planName}
+        currentPlanName={props.currentPlanName}
+      />
+    )
   }
   if (action.kind === 'subscribe') {
     return (
@@ -719,7 +750,7 @@ function PlanActionButton(props: {
           period: props.period,
         })}
       >
-        Switch to this plan
+        Upgrade to {props.planName}
       </a>
     </Button>
   )
@@ -761,7 +792,7 @@ function TrialButton(props: { planId: PaidPlanId; planName: string; trialDays: n
   )
 }
 
-function DowngradeButton(props: { planId: string; planName: string }) {
+function DowngradeButton(props: { planId: string; planName: string; currentPlanName?: string }) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -772,15 +803,18 @@ function DowngradeButton(props: { planId: string; planName: string }) {
         className="w-full"
         onClick={() => setOpen(true)}
       >
-        Switch to {props.planName}
+        Downgrade to {props.planName}
       </Button>
       {open ? (
-        <PlanDowngradeDialog
-          open
-          onOpenChange={setOpen}
-          planId={props.planId}
-          planName={props.planName}
-        />
+        <Suspense fallback={null}>
+          <PlanDowngradeDialog
+            open
+            onOpenChange={setOpen}
+            planId={props.planId}
+            planName={props.planName}
+            currentPlanName={props.currentPlanName}
+          />
+        </Suspense>
       ) : null}
     </>
   )

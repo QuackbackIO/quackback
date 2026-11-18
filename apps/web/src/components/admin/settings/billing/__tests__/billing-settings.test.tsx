@@ -167,9 +167,9 @@ describe('BillingPlansView', () => {
     expect(screen.queryByRole('button', { name: 'Remove seats' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Plans' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Switch to Free' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Switch to Pro' })).toBeInTheDocument()
-    const switchLinks = screen.getAllByRole('link', { name: 'Switch to this plan' })
+    expect(screen.getByRole('button', { name: 'Downgrade to Free' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Downgrade to Pro' })).toBeInTheDocument()
+    const switchLinks = screen.getAllByRole('link', { name: 'Upgrade to Enterprise' })
     expect(switchLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/admin/settings/billing/checkout?plan=enterprise&period=annual',
     ])
@@ -253,7 +253,7 @@ describe('BillingPlansView', () => {
     expect(screen.getAllByRole('button', { name: 'Start 7-day trial' })).toHaveLength(3)
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Downgrade' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Switch to Free' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Downgrade to Free' })).not.toBeInTheDocument()
   })
 
   it('shows trial expiry, Continue with the plan, and included seats', () => {
@@ -538,10 +538,14 @@ describe('BillingPlansView with plan limits', () => {
 
   it('links each meter over a cap to the Plan limits page, with the date', () => {
     renderView({ usage, limits: overLimits() })
-    const boards = within(meter('Boards')).getByRole('link', {
-      name: 'Over limit · fix by Nov 25',
-    })
+    // The whole row links to Plan limits, with a small badge and the date in the caption.
+    const boards = meter('Boards').querySelector('a[data-usage-meter-link]')
     expect(boards).toHaveAttribute('href', '/admin/settings/billing/limits')
+    expect(within(meter('Boards')).getByText('Over limit')).toHaveAttribute(
+      'data-variant',
+      'destructive'
+    )
+    expect(within(meter('Boards')).getByText('3 of 1 · fix by Nov 25')).toBeInTheDocument()
     const boardsBar = within(meter('Boards')).getByRole('progressbar')
     expect(boardsBar).toHaveAttribute('data-tone', 'over')
     expect(boardsBar.className).toMatch(/bg-destructive\/15/)
@@ -552,7 +556,7 @@ describe('BillingPlansView with plan limits', () => {
       'data-tone'
     )
     // Seats show on the usage card once they are over.
-    expect(within(meter('Team seats')).getByRole('link', { name: /Over limit/ })).toBeVisible()
+    expect(meter('Team seats').querySelector('a[data-usage-meter-link]')).not.toBeNull()
     expect(within(meter('Sending domains')).queryByRole('link')).toBeNull()
   })
 

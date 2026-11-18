@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { lazy, Suspense, useId, useState } from 'react'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
@@ -21,8 +21,15 @@ import {
   isPaidPlanId,
   type BillingPeriod,
 } from '@/lib/shared/billing/checkout-path'
-import { FreeDowngradeDialog, PlanDowngradeDialog } from './free-downgrade-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+
+/** The downgrade dialog loads when it opens, so the page never ships the plan limits list. */
+const PlanDowngradeDialog = lazy(() =>
+  import('./free-downgrade-dialog').then((module) => ({ default: module.PlanDowngradeDialog }))
+)
+const FreeDowngradeDialog = lazy(() =>
+  import('./free-downgrade-dialog').then((module) => ({ default: module.FreeDowngradeDialog }))
+)
 
 type CataloguePlan = BillingCatalogue['plans'][number]
 
@@ -102,7 +109,13 @@ export function CheckoutBuilder(props: {
             data-settings-card=""
             className="divide-y divide-border/50 overflow-hidden border-y border-t-transparent"
           >
-            {freePlan && freeAction ? <FreePlanRow plan={freePlan} action={freeAction} /> : null}
+            {freePlan && freeAction ? (
+              <FreePlanRow
+                plan={freePlan}
+                action={freeAction}
+                currentPlanName={overview.planName}
+              />
+            ) : null}
             {paidPlans.map((plan) => (
               <PlanRow
                 key={plan.id}
@@ -258,7 +271,11 @@ function PlanRow(props: {
   )
 }
 
-function FreePlanRow(props: { plan: CataloguePlan; action: BillingPlanAction }) {
+function FreePlanRow(props: {
+  plan: CataloguePlan
+  action: BillingPlanAction
+  currentPlanName?: string
+}) {
   const [open, setOpen] = useState(false)
   const current = props.action.kind === 'current'
   return (
@@ -282,9 +299,17 @@ function FreePlanRow(props: { plan: CataloguePlan; action: BillingPlanAction }) 
         {props.action.kind === 'downgrade' ? (
           <div className="mt-3">
             <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
-              Switch to Free
+              Downgrade to Free
             </Button>
-            {open ? <FreeDowngradeDialog open onOpenChange={setOpen} /> : null}
+            {open ? (
+              <Suspense fallback={null}>
+                <FreeDowngradeDialog
+                  open
+                  onOpenChange={setOpen}
+                  currentPlanName={props.currentPlanName}
+                />
+              </Suspense>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -443,6 +468,7 @@ function OrderSummary(props: {
             action={props.action}
             canAct={canAct}
             trialDays={props.trialDays}
+            currentPlanName={overview.planName}
           />
           <p className="text-[12px] leading-snug text-muted-foreground">
             {!canAct
@@ -475,6 +501,7 @@ function SummaryAction(props: {
   action: BillingPlanAction | null
   canAct: boolean
   trialDays: number
+  currentPlanName?: string
 }) {
   const { plan, action } = props
   if (props.brandingOnly && props.canAct) {
@@ -509,6 +536,7 @@ function SummaryAction(props: {
         planId={action.planId}
         period={props.period}
         branding={props.branding}
+        currentPlanName={props.currentPlanName}
       />
     )
   }
@@ -543,24 +571,28 @@ function PaidDowngradeAction(props: {
   planId: string
   period: BillingPeriod
   branding: boolean
+  currentPlanName?: string
 }) {
   const [open, setOpen] = useState(false)
   return (
     <>
       <Button type="button" className="w-full" variant="outline" onClick={() => setOpen(true)}>
-        Switch to {props.planName}
+        Downgrade to {props.planName}
       </Button>
       {open ? (
-        <PlanDowngradeDialog
-          open
-          onOpenChange={setOpen}
-          planId={props.planId}
-          planName={props.planName}
-          checkout={{
-            period: props.period,
-            branding: props.branding,
-          }}
-        />
+        <Suspense fallback={null}>
+          <PlanDowngradeDialog
+            open
+            onOpenChange={setOpen}
+            planId={props.planId}
+            planName={props.planName}
+            currentPlanName={props.currentPlanName}
+            checkout={{
+              period: props.period,
+              branding: props.branding,
+            }}
+          />
+        </Suspense>
       ) : null}
     </>
   )

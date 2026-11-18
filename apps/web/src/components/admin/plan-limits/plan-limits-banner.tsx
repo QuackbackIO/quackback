@@ -1,21 +1,23 @@
 import { useQuery } from '@tanstack/react-query'
 import { ExclamationCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid'
-import { FormattedDate, FormattedMessage } from 'react-intl'
+import { useRouterState } from '@tanstack/react-router'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
 import { planLimitsQueries } from '@/lib/client/queries/plan-limits'
 import { isPlanLimitsOver, planLimitsBannerCopy } from '@/lib/shared/billing/plan-limits-copy'
-import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
 import { useLocalDateFormatter } from '@/components/ui/local-date'
 import { cn } from '@/lib/shared/utils'
 
 export const PLAN_LIMITS_PATH = '/admin/settings/billing/limits'
 
-/** "Tue 25 Nov": a deadline reads as a day, never as a duration. */
+/** A deadline in a heading: "Mon, Nov 23". A deadline reads as a day, never as a duration. */
 export const DEADLINE_FORMAT: Intl.DateTimeFormatOptions = {
   weekday: 'short',
   day: 'numeric',
   month: 'short',
 }
+
+/** A deadline inside a sentence: "Nov 23". */
+export const INLINE_DATE_FORMAT: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }
 
 type BannerLimits = Pick<
   PlanLimitsPage,
@@ -30,20 +32,6 @@ type BannerLimits = Pick<
 >
 
 /**
- * The plan limits state, for every admin, while billing is on. Undefined until
- * it loads and when it cannot be read, so a failure shows nothing.
- */
-export function usePlanLimitsSummary(): PlanLimitsPage | undefined {
-  const billingEnabled = useBillingEnabled()
-  const { data } = useQuery({
-    ...planLimitsQueries.summary(),
-    enabled: Boolean(billingEnabled),
-    retry: false,
-  })
-  return data ?? undefined
-}
-
-/**
  * The strip over every admin page while the workspace is over its plan:
  * amber with the date during grace, red once something is paused. Hidden on
  * the Plan limits page itself, which says it all.
@@ -55,7 +43,7 @@ export function PlanLimitsBanner(props: {
   const format = useLocalDateFormatter()
   const { limits } = props
   if (!limits || props.pathname === PLAN_LIMITS_PATH) return null
-  const copy = planLimitsBannerCopy(limits, format(limits.graceEndsAt, DEADLINE_FORMAT))
+  const copy = planLimitsBannerCopy(limits, format(limits.graceEndsAt, INLINE_DATE_FORMAT))
   if (!copy) return null
   const enforced = copy.tone === 'enforced'
   // Amber with warning accents during grace, as the urgent plan notice is;
@@ -98,12 +86,13 @@ export function PlanLimitsBanner(props: {
  * to fix, and the date. Shown whenever the banner would be.
  */
 export function PlanLimitsQuiet(props: { limits: BannerLimits | null | undefined }) {
+  const format = useLocalDateFormatter()
   const { limits } = props
   if (!limits || !isPlanLimitsOver(limits) || !limits.graceEndsAt) return null
   if (limits.phase === 'enforced' && limits.issues.length === 0) return null
   const count = limits.issues.length
-  const plan = limits.planName ?? ''
-  const date = <FormattedDate value={limits.graceEndsAt} {...DEADLINE_FORMAT} />
+  const plan = limits.planName ? `${limits.planName} plan` : 'Your plan'
+  const date = format(limits.graceEndsAt, INLINE_DATE_FORMAT)
   return (
     <a
       href={PLAN_LIMITS_PATH}
@@ -111,35 +100,37 @@ export function PlanLimitsQuiet(props: { limits: BannerLimits | null | undefined
       className="mb-1 block rounded px-3 py-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
     >
       <span className="block truncate font-medium text-foreground">
-        {count > 0 ? (
-          <FormattedMessage
-            id="admin.planLimits.quiet.toFix"
-            defaultMessage="{plan} plan · {count} to fix"
-            values={{ plan, count }}
-          />
-        ) : (
-          <FormattedMessage
-            id="admin.planLimits.quiet.plan"
-            defaultMessage="{plan} plan"
-            values={{ plan }}
-          />
-        )}
+        {count > 0 ? `${plan} · ${count} ${count === 1 ? 'issue' : 'issues'}` : plan}
       </span>
       <span className="block truncate">
-        {limits.phase === 'grace' ? (
-          <FormattedMessage
-            id="admin.planLimits.quiet.fixBy"
-            defaultMessage="Fix by {date}"
-            values={{ date }}
-          />
-        ) : (
-          <FormattedMessage
-            id="admin.planLimits.quiet.paused"
-            defaultMessage="Paused since {date}"
-            values={{ date }}
-          />
-        )}
+        {limits.phase === 'grace' ? `Fix by ${date}` : `Paused since ${date}`}
       </span>
     </a>
   )
+}
+
+/**
+ * The state the admin loader read, kept fresh by the summary query: a chooser
+ * invalidates it, so the banner and the sidebar line tick down at once. Only
+ * mounted while the flag is on (see `routes/admin.tsx`).
+ */
+function useLiveLimits(initial: PlanLimitsPage): PlanLimitsPage {
+  const { data } = useQuery({
+    ...planLimitsQueries.summary(),
+    initialData: initial,
+    retry: false,
+  })
+  return data ?? initial
+}
+
+/** The banner, live. The default export, for the admin layout's lazy import. */
+export default function PlanLimitsStrip(props: { initial: PlanLimitsPage }) {
+  const limits = useLiveLimits(props.initial)
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  return <PlanLimitsBanner limits={limits} pathname={pathname} />
+}
+
+/** The sidebar line, live. */
+export function PlanLimitsQuietLive(props: { initial: PlanLimitsPage }) {
+  return <PlanLimitsQuiet limits={useLiveLimits(props.initial)} />
 }
