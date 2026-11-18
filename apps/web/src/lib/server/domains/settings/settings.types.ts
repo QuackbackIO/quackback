@@ -1191,6 +1191,13 @@ export const ROLLOUT_FEATURE_FLAGS = [
   'planLimits',
 ] as const satisfies readonly (keyof FeatureFlags)[]
 
+/** A settings write with the operator rollout flags taken out. */
+export function withoutRolloutFlags(input: Partial<FeatureFlags>): Partial<FeatureFlags> {
+  const out = { ...input }
+  for (const key of ROLLOUT_FEATURE_FLAGS) delete out[key]
+  return out
+}
+
 /**
  * Parse stored `feature_flags` JSON into a plain object, tolerating
  * corruption. Blank (absent/empty) or the literal string `'null'` means "no

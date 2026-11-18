@@ -68,3 +68,19 @@ export function planFeatureSet(features: TierFeatureFlags, config: CloudConfig):
   }
   return set
 }
+
+/** Where each paid feature that can pause is set up, and its name on the Plan limits page. */
+export const PLAN_FEATURE_LINKS: Partial<Record<PlanFeatureKey, { label: string; href: string }>> =
+  {
+    customDomain: { label: 'Custom domain', href: '/admin/settings/domains' },
+    sso: { label: 'Single sign-on', href: '/admin/settings/security/sso' },
+    webhooks: { label: 'Webhooks', href: '/admin/settings/developers' },
+    workflows: { label: 'Workflows', href: '/admin/settings/workflows' },
+    integrations: { label: 'Integrations', href: '/admin/settings/integrations' },
+    customCss: { label: 'Custom CSS', href: '/admin/settings/branding' },
+    aiAssistant: { label: 'AI assistant', href: '/admin/settings/agent' },
+    aiArticleTranslation: {
+      label: 'AI article translation',
+      href: '/admin/settings/help-center',
+    },
+  }

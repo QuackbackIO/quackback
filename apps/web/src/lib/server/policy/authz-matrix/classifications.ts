@@ -107,6 +107,27 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/personal-api-keys.ts::revokeMyApiKeyFn': END_USER(
     'self-service: revokes one of personal API keys of the caller; team members only (inline isTeamMember), and the key is filtered to kind personal and createdById = caller'
   ),
+  // Plan limits: every teammate sees what is over the plan; each chooser takes
+  // billing rights or the permission that manages what it picks.
+  'lib/server/functions/plan-limits.ts::getPlanLimitsFn': END_USER(
+    'read-only plan limits state for the Plan limits page and banner; team members only (requireAuth refuses non-team principals), and candidate lists are filtered to the choosers the caller may use'
+  ),
+  'lib/server/functions/plan-limits.ts::setKeptBoardFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.SETTINGS_MANAGE],
+    'choose the board that stays open: billing rights or whoever manages boards'
+  ),
+  'lib/server/functions/plan-limits.ts::setSeatHoldersFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.MEMBER_MANAGE],
+    'choose who keeps a seat: billing rights or whoever manages members'
+  ),
+  'lib/server/functions/plan-limits.ts::setVisibleStatusComponentsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.STATUS_PAGE_MANAGE],
+    'choose the status components that stay public: billing rights or whoever manages the status page'
+  ),
+  'lib/server/functions/plan-limits.ts::setKeptSendingDomainsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
+    'choose the sending domains that keep sending: billing rights or whoever manages channel accounts'
+  ),
   // Email senders: sending is a workspace setting (settings.manage), and whoever
   // runs the support inbox may still choose where support replies come from.
   // Domains added by name: every Domains page permission reads them, so each

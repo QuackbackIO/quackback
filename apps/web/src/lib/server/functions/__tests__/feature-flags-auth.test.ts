@@ -83,9 +83,11 @@ describe('updateFeatureFlagsFn — admin gate', () => {
 
 describe('updateFeatureFlagsFn — rollout flags', () => {
   it('never lets a workspace switch plan limits on or off for itself', async () => {
-    const { featureFlagsUpdateSchema } = await import('../feature-flags')
-    expect(featureFlagsUpdateSchema.parse({ helpCenter: true, planLimits: false })).toEqual({
-      helpCenter: true,
+    hoisted.mockRequireAuth.mockResolvedValueOnce({
+      user: { id: 'usr_admin' },
+      principal: { id: 'prn_admin', role: 'admin' },
     })
+    await updateFeatureFlagsHandler({ data: { helpCenter: true, planLimits: false } })
+    expect(hoisted.mockUpdateFeatureFlags).toHaveBeenCalledWith({ helpCenter: true })
   })
 })

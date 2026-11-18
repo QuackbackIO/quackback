@@ -6,6 +6,7 @@ import { updateFeatureFlags } from '@/lib/server/domains/settings/settings.servi
 import {
   DEFAULT_FEATURE_FLAGS,
   ROLLOUT_FEATURE_FLAGS,
+  withoutRolloutFlags,
 } from '@/lib/server/domains/settings/settings.types'
 import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 
@@ -15,7 +16,7 @@ type WorkspaceFlag = Exclude<keyof FeatureFlags, (typeof ROLLOUT_FEATURE_FLAGS)[
 // once silently stripped newer flags from the request (zod drops unknown keys),
 // making their Settings → General toggles no-ops. Operator rollout flags are
 // left out, so zod drops them and a workspace cannot change them.
-export const featureFlagsUpdateSchema = z.object(
+const featureFlagsUpdateSchema = z.object(
   Object.fromEntries(
     Object.keys(DEFAULT_FEATURE_FLAGS)
       .filter((key) => !(ROLLOUT_FEATURE_FLAGS as readonly string[]).includes(key))
@@ -30,5 +31,5 @@ export const updateFeatureFlagsFn = createServerFn({ method: 'POST' })
   .validator(featureFlagsUpdateSchema)
   .handler(async ({ data }): Promise<FeatureFlags> => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    return updateFeatureFlags(data)
+    return updateFeatureFlags(withoutRolloutFlags(data))
   })
