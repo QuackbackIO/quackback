@@ -3,6 +3,7 @@ import type { StoredCloudConfig } from '@/lib/shared/db-types'
 import { db, eq, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
 import { invalidateSettingsCache } from '../settings.helpers'
 import { invalidateTierLimitsCache } from '../tier-limits.service'
 import { parseBillingProjection, type BillingProjection } from './billing-projection'
@@ -66,6 +67,10 @@ export async function writeBillingProjection(
       .update(settings)
       .set({ cloud, cloudRevision: row.cloudRevision + 1 })
       .where(eq(settings.id, row.id))
+    // The plan decides whether identity providers register, and the auth
+    // instance is rebuilt only when this version moves, so a plan that gains
+    // single sign-on back serves its providers at once, with no setup.
+    await bumpAuthConfigVersionInTx(tx)
     return true
   })
 

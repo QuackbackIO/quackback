@@ -41,12 +41,43 @@ import { localCacheGet, localCacheSet, settingsLocalTtlMs } from '@/lib/server/l
 const REGISTERED_AUTH_PROVIDERS_TTL_SECONDS = 300
 
 /**
+ * Whether single sign-on works right now: the plan includes the
+ * `customOidcProvider` feature. The one place that decides it, so the provider
+ * registry, the auth runtime, the sign-in fallback and the last-method guards
+ * all agree.
+ */
+export async function isSsoLive(): Promise<boolean> {
+  return (await getTierLimits()).features.customOidcProvider
+}
+
+/**
+ * The OIDC provider `registrationId`s that are set up: the provider row is
+ * `enabled` and a credential row exists. Whether they register also depends on
+ * {@link isSsoLive}. "Credential present" uses the cached configured-types Set
+ * rather than decrypting the secret; a saved credential row always carries the
+ * secret.
+ */
+export async function getConfiguredOidcProviderIds(
+  providers?: IdentityProvider[]
+): Promise<Set<string>> {
+  const [configuredTypes, identityProviders] = await Promise.all([
+    getConfiguredIntegrationTypes(),
+    providers ? Promise.resolve(providers) : listIdentityProviders(),
+  ])
+  const ids = new Set<string>()
+  for (const provider of identityProviders) {
+    if (!provider.enabled) continue
+    if (!configuredTypes.has(`${AUTH_CREDENTIAL_PREFIX}${provider.registrationId}`)) continue
+    ids.add(provider.registrationId)
+  }
+  return ids
+}
+
+/**
  * The set of OIDC provider `registrationId`s the auth runtime registers
- * right now. Mirrors `buildGenericOAuthConfigs`' gate exactly: the
- * `customOidcProvider` tier flag is on, the provider row is `enabled`, and a
- * credential row exists. "Credential present" uses the cached
- * configured-types Set rather than decrypting the secret — a saved
- * credential row always carries the secret.
+ * right now. Mirrors `buildGenericOAuthConfigs`' gate exactly: single sign-on
+ * is live ({@link isSsoLive}), the provider row is `enabled`, and a credential
+ * row exists ({@link getConfiguredOidcProviderIds}).
  *
  * This is THE shared definition of "registered OIDC provider" consulted by
  * the enforcement / dispatch code (`isHardBound`, `isAuthMethodAllowed`,
@@ -59,20 +90,27 @@ const REGISTERED_AUTH_PROVIDERS_TTL_SECONDS = 300
 export async function getRegisteredOidcProviderIds(
   providers?: IdentityProvider[]
 ): Promise<Set<string>> {
-  const [tierLimits, configuredTypes, identityProviders] = await Promise.all([
-    getTierLimits(),
-    getConfiguredIntegrationTypes(),
-    providers ? Promise.resolve(providers) : listIdentityProviders(),
+  const [ssoLive, configured] = await Promise.all([
+    isSsoLive(),
+    getConfiguredOidcProviderIds(providers),
   ])
+  return ssoLive ? configured : new Set<string>()
+}
 
-  const ids = new Set<string>()
-  if (!tierLimits.features.customOidcProvider) return ids
-  for (const provider of identityProviders) {
-    if (!provider.enabled) continue
-    if (!configuredTypes.has(`${AUTH_CREDENTIAL_PREFIX}${provider.registrationId}`)) continue
-    ids.add(provider.registrationId)
-  }
-  return ids
+/**
+ * The inputs `effectiveSignInMethods` needs, read live: whether single
+ * sign-on works right now and whether any provider is set up. Plan limits are
+ * read first, and the provider list only when single sign-on is not live, so
+ * the common case costs no provider read. While single sign-on is live,
+ * `providersConfigured` is not read and is reported false; it cannot change
+ * the result then.
+ */
+export async function getSsoSignInState(
+  providers?: IdentityProvider[]
+): Promise<{ ssoLive: boolean; providersConfigured: boolean }> {
+  if (await isSsoLive()) return { ssoLive: true, providersConfigured: false }
+  const configured = await getConfiguredOidcProviderIds(providers)
+  return { ssoLive: false, providersConfigured: configured.size > 0 }
 }
 
 /**

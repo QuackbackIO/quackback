@@ -1140,6 +1140,11 @@ export interface WorkspaceSettings {
    *  have been added. The auth runtime reads this to decide routing
    *  (sso-default vs methods) and hard-binding (per-row `enforced`). */
   verifiedDomains: VerifiedDomain[]
+  /** Whether any identity provider is enabled with its secret saved. Server
+   *  side, read with the plan to decide whether email links stand in for
+   *  single sign-on (see `effectiveSignInMethods`). Absent on an entry cached
+   *  before it existed. */
+  ssoProvidersConfigured?: boolean
   /** Workspace state. INERT — app-level suspension enforcement was removed
    *  (dormant workspaces are scaled to 0 by the control plane; the gateway
    *  serves their hostnames). Nothing reads this anymore. */

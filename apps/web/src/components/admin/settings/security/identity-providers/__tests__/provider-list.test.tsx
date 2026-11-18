@@ -16,8 +16,17 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 import { IdentityProvidersSection } from '../provider-list'
 
-const { upsertSpy } = vi.hoisted(() => ({
+const { upsertSpy, access } = vi.hoisted(() => ({
   upsertSpy: vi.fn(async (_args: { data: { id: string; enabled: boolean } }) => undefined),
+  access: { billingEnabled: true, permissions: new Set<string>(['billing.manage']) },
+}))
+
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useBillingEnabled: () => access.billingEnabled,
+}))
+
+vi.mock('@/lib/client/hooks/use-permission', () => ({
+  usePermission: (key: string) => access.permissions.has(key),
 }))
 
 vi.mock('@/components/admin/upgrade', () => ({
@@ -65,6 +74,8 @@ vi.mock('@/lib/server/functions/sso', () => ({
 
 beforeEach(() => {
   upsertSpy.mockClear()
+  access.billingEnabled = true
+  access.permissions = new Set(['billing.manage'])
 })
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -202,7 +213,8 @@ describe('<IdentityProvidersSection>', () => {
 describe('plan gate', () => {
   it('hides New provider and names Enterprise when SSO is not entitled', () => {
     const qc = new QueryClient()
-    qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
+    // No provider set up yet (the only one is switched off): the plain offer.
+    qc.setQueryData(['settings', 'identityProviders'], [buttonProvider])
     render(
       <QueryClientProvider client={qc}>
         <IdentityProvidersSection tierEnabled={false} enabledMethodCount={5} />
@@ -344,5 +356,64 @@ describe('empty list', () => {
     )
     expect(screen.getByText('No providers yet')).toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: /new provider/i }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('set up but off on the current plan', () => {
+  const OFF_COPY =
+    'Single sign-on is set up but off on your current plan. Your team signs in with email links.'
+
+  function renderSetUp(tierEnabled: boolean, providers = [buttonProvider, routedProvider]) {
+    const qc = new QueryClient()
+    qc.setQueryData(['settings', 'identityProviders'], providers)
+    return render(
+      <QueryClientProvider client={qc}>
+        <IdentityProvidersSection tierEnabled={tierEnabled} enabledMethodCount={5} />
+      </QueryClientProvider>
+    )
+  }
+
+  it('says email links stand in when an enabled provider is set up and the plan lacks SSO', () => {
+    renderSetUp(false)
+    expect(screen.getByText(OFF_COPY)).toBeInTheDocument()
+    // One notice, not the plain upgrade offer as well.
+    expect(screen.queryByText(/Single sign-on is an Enterprise feature/)).toBeNull()
+  })
+
+  it('links to Plan & billing for someone who can manage billing', () => {
+    renderSetUp(false)
+    expect(screen.getByRole('link', { name: /plans/i })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing'
+    )
+  })
+
+  it('shows no billing link without billing rights', () => {
+    access.permissions = new Set()
+    renderSetUp(false)
+    expect(screen.getByText(OFF_COPY)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /plans/i })).toBeNull()
+  })
+
+  it('shows no billing link where billing is not managed in the app', () => {
+    access.billingEnabled = false
+    renderSetUp(false)
+    expect(screen.queryByRole('link', { name: /plans/i })).toBeNull()
+  })
+
+  it('keeps the providers listed', () => {
+    renderSetUp(false)
+    expect(screen.getByText('Acme SSO')).toBeInTheDocument()
+  })
+
+  it('is absent while the plan includes SSO', () => {
+    renderSetUp(true)
+    expect(screen.queryByText(OFF_COPY)).toBeNull()
+  })
+
+  it('is absent when no enabled provider has its secret saved', () => {
+    renderSetUp(false, [buttonProvider, { ...routedProvider, configured: false }])
+    expect(screen.queryByText(OFF_COPY)).toBeNull()
+    expect(screen.getByText(/Single sign-on is an Enterprise feature/)).toBeInTheDocument()
   })
 })

@@ -15,6 +15,8 @@
  *   - magic link — `oauth.magicLink === true` (absent ⇒ off, opt-in) AND email delivery is wired.
  *   - social     — `oauth[id] === true` (absent ⇒ off, opt-in) AND its credentials are saved.
  *   - identity provider — registered (tier on + enabled + secret saved).
+ *   - email links in place of an identity provider — enabled + secret saved
+ *     but tier off (`effectiveSignInMethods`), with email delivery wired.
  *
  * Each check is read-then-write (no lock across the check and the mutation), so
  * two *simultaneous* admin requests each disabling a *different* one of the last
@@ -25,12 +27,13 @@
 
 import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
-import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
+import { effectiveSignInMethods, isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 
 export interface WorkingMethodInputs {
-  /** Whether the `customOidcProvider` tier feature is on. The runtime only
-   *  registers OIDC providers when it is, so a tier-off workspace has no
-   *  working IdP however many are enabled + configured. */
+  /** Whether single sign-on is live (`isSsoLive`: the `customOidcProvider`
+   *  tier feature is on). The runtime only registers OIDC providers when it
+   *  is, so a tier-off workspace has no working IdP however many are enabled +
+   *  configured; email links stand in for them instead. */
   tierEnabled: boolean
   /** Every identity provider with its enabled + configured (secret saved) state. */
   providers: ReadonlyArray<{ id: string; enabled: boolean; configured: boolean }>
@@ -56,15 +59,23 @@ export interface SignInMethodSnapshot extends WorkingMethodInputs {
  * backstop.
  */
 export function hasAnyWorkingSignInMethod(snap: WorkingMethodInputs): boolean {
+  const providersConfigured = snap.providers.some((p) => p.enabled && p.configured)
   // Registered IdP — enabled + configured + tier on.
-  if (snap.tierEnabled && snap.providers.some((p) => p.enabled && p.configured)) return true
+  if (snap.tierEnabled && providersConfigured) return true
+  // The methods in force, not just the stored ones: email links stand in for
+  // an IdP the tier does not register.
+  const oauth = effectiveSignInMethods({
+    stored: snap.oauth,
+    ssoLive: snap.tierEnabled,
+    providersConfigured,
+  })
   // Password — enabled (absent ⇒ on), matching the runtime gate.
-  if (isSignInMethodEnabled(snap.oauth, 'password')) return true
+  if (isSignInMethodEnabled(oauth, 'password')) return true
   // Magic link — opt-in (absent ⇒ off) AND email delivery wired (else rejected).
-  if (isSignInMethodEnabled(snap.oauth, 'magicLink') && snap.emailConfigured) return true
+  if (isSignInMethodEnabled(oauth, 'magicLink') && snap.emailConfigured) return true
   // Social — opt-in (absent ⇒ off) AND its credentials are saved.
   for (const id of snap.socialIds) {
-    if (isSignInMethodEnabled(snap.oauth, id) && snap.configuredSocialIds.has(id)) return true
+    if (isSignInMethodEnabled(oauth, id) && snap.configuredSocialIds.has(id)) return true
   }
   return false
 }
@@ -97,15 +108,20 @@ export function isSsoOnlySignIn(snap: WorkingMethodInputs): boolean {
  */
 export function isOnlyWorkingSignInMethod(snap: SignInMethodSnapshot): boolean {
   const target = snap.providers.find((p) => p.id === snap.targetIdpId)
-  // Not a working method (tier off, disabled, or no secret) → removing it can't
-  // cause a lockout. Tier gates every IdP, mirroring `getRegisteredOidcProviderIds`.
-  if (!snap.tierEnabled || !target?.enabled || !target.configured) return false
+  // Disabled or no secret → it contributes nothing, so removing it can't cause
+  // a lockout.
+  if (!target?.enabled || !target.configured) return false
 
-  // It IS working — so it's the only method iff nothing else works once it's gone.
-  return !hasAnyWorkingSignInMethod({
-    ...snap,
-    providers: snap.providers.filter((p) => p.id !== snap.targetIdpId),
-  })
+  // It contributes either as a registered IdP (tier on) or, with the tier off,
+  // by keeping the email links that stand in for single sign-on. Either way it
+  // is the only way in iff something works now and nothing does once it's gone.
+  return (
+    hasAnyWorkingSignInMethod(snap) &&
+    !hasAnyWorkingSignInMethod({
+      ...snap,
+      providers: snap.providers.filter((p) => p.id !== snap.targetIdpId),
+    })
+  )
 }
 
 /**
@@ -121,19 +137,19 @@ async function gatherWorkingMethodInputs(
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { listIdentityProviders } =
     await import('@/lib/server/domains/settings/identity-providers.service')
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { isSsoLive } = await import('@/lib/server/auth/registered-providers')
   const { isEmailConfigured } = await import('@quackback/email')
   const { AUTH_PROVIDERS } = await import('@/lib/server/auth/auth-providers')
 
-  const [configuredTypes, providers, tierLimits] = await Promise.all([
+  const [configuredTypes, providers, ssoLive] = await Promise.all([
     getConfiguredIntegrationTypes(),
     knownProviders ?? listIdentityProviders(),
-    getTierLimits(),
+    isSsoLive(),
   ])
 
   const socials = AUTH_PROVIDERS.filter((p) => p.type !== 'generic-oauth')
   return {
-    tierEnabled: tierLimits.features.customOidcProvider,
+    tierEnabled: ssoLive,
     providers: providers.map((p) => ({ id: p.id, enabled: p.enabled, configured: p.configured })),
     oauth,
     emailConfigured: isEmailConfigured(),

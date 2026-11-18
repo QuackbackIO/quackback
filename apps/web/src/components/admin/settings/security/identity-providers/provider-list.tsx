@@ -7,7 +7,8 @@
  * the same label the end user meets at login. Adding or configuring a provider
  * leaves this page: /sso/new is the short create form and /sso/:id is the
  * provider's own page (connection, sign-in, accounts, claim mapping, removal).
- * When the custom-OIDC tier is off, the upgrade prompt sits above the list.
+ * When the custom-OIDC tier is off, the upgrade prompt sits above the list, or,
+ * when a provider is still set up, a notice that email links stand in for it.
  * Enabled providers can still be switched off from the list; turning one on,
  * adding one, and opening its page need the tier. The recovery codes stay.
  */
@@ -30,7 +31,7 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
 import { inferIdpKind, IDP_KIND_NAMES } from '../idp-shortcuts'
 import { RecoveryCodesSection } from '../sso/recovery-codes-section'
 import { isOnlyWorkingMethod } from './only-working-method'
-import { SsoUpgradeNotice } from './sso-upgrade-notice'
+import { SsoOffOnPlanNotice, SsoUpgradeNotice } from './sso-upgrade-notice'
 import { toastError } from '@/lib/client/error-notice'
 
 export function IdentityProvidersSection({
@@ -44,6 +45,8 @@ export function IdentityProvidersSection({
 }) {
   const providersQuery = useSuspenseQuery(settingsQueries.identityProviders())
   const providers = providersQuery.data ?? []
+  // Set up but not in the plan: email links stand in for single sign-on.
+  const setUpButOff = !tierEnabled && providers.some((p) => p.enabled && p.configured)
 
   const createAction = (
     <NewButton noun="provider" asChild>
@@ -60,7 +63,7 @@ export function IdentityProvidersSection({
     >
       {!tierEnabled && (
         <div className="p-4 sm:p-6">
-          <SsoUpgradeNotice />
+          {setUpButOff ? <SsoOffOnPlanNotice /> : <SsoUpgradeNotice />}
         </div>
       )}
       {providers.length === 0 ? (

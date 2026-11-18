@@ -164,6 +164,12 @@ describe('redactSettingsForClient — server-only settings columns', () => {
     expect(result.name).toBe('Acme')
   })
 
+  it('strips the server-side sign-in input from a WorkspaceSettings shape', () => {
+    const result = redactSettingsForClient({ name: 'Acme', ssoProvidersConfigured: true })
+    expect(result).not.toHaveProperty('ssoProvidersConfigured')
+    expect(result.name).toBe('Acme')
+  })
+
   it('redacts the raw row riding on a WorkspaceSettings-shaped `.settings` property', () => {
     const workspaceShaped = {
       name: 'Acme',
