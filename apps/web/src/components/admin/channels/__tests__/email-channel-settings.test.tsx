@@ -1683,12 +1683,14 @@ describe('Verify domain beside an address on an unverified domain', () => {
     expect(screen.getAllByRole('link', { name: 'Verify domain' })).toHaveLength(1)
   })
 
-  it('reads nothing more while every address can send', () => {
+  it('reads nothing more while every address can send', async () => {
     renderSettings({
       view: 'workspace',
       addresses: [address('a1', 'help@acme.com')],
       domains: [LIVE],
     })
+    // Long enough for a query that was started to have called the server.
+    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(listDomains).not.toHaveBeenCalled()
     expect(screen.queryByRole('link', { name: 'Verify domain' })).toBeNull()
   })
@@ -1702,6 +1704,7 @@ describe('Verify domain beside an address on an unverified domain', () => {
       senders: { support: { mode: 'address', id: 'a1' } },
     })
     expect(screen.getByText(/isn't verified yet/)).toBeTruthy()
+    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(listDomains).not.toHaveBeenCalled()
     expect(screen.queryByRole('link', { name: 'Verify domain' })).toBeNull()
   })
