@@ -28,6 +28,12 @@ import { UsageMeter } from './usage-meter'
 import { TrialExpiredBilling } from './trial-expired-billing'
 import { PlanDowngradeDialog } from './free-downgrade-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+import { isPlanLimitsOver } from '@/lib/shared/billing/plan-limits-copy'
+import {
+  PLAN_LIMITS_PATH,
+  usePlanLimitsSummary,
+} from '@/components/admin/plan-limits/plan-limits-banner'
 
 /** Workspace-local presentation of the control-plane billing projection. */
 export function BillingSettings() {
@@ -35,6 +41,7 @@ export function BillingSettings() {
   const catalogue = useQuery(billingQueries.catalogue())
   const invoices = useQuery(billingQueries.invoices())
   const usage = useQuery(billingQueries.usage())
+  const limits = usePlanLimitsSummary()
   if (!overview) return null
   return (
     <BillingPlansView
@@ -44,6 +51,7 @@ export function BillingSettings() {
       invoices={invoices.data ?? []}
       invoicesError={invoices.error instanceof Error ? invoices.error.message : null}
       usage={usage.data ?? []}
+      limits={limits}
     />
   )
 }
@@ -63,6 +71,8 @@ export function BillingPlansView(props: {
   invoices: CustomerInvoice[]
   invoicesError: string | null
   usage?: Array<{ key: string; label: string; used: number; limit: number | null }>
+  /** The plan limits state; rows over a cap link to the Plan limits page. */
+  limits?: PlanLimitsPage | null
 }) {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
   const [subscribePlanId, setSubscribePlanId] = useState<PaidPlanId | null>(null)
@@ -82,15 +92,21 @@ export function BillingPlansView(props: {
         overview={overview}
         catalogue={catalogue}
         catalogueError={props.catalogueError}
+        limits={props.limits}
       />
     )
   }
 
   return (
     <div className="space-y-6">
-      <CurrentPlanCard overview={overview} catalogue={catalogue} onSubscribe={setSubscribePlanId} />
+      <CurrentPlanCard
+        overview={overview}
+        catalogue={catalogue}
+        onSubscribe={setSubscribePlanId}
+        overLimits={isPlanLimitsOver(props.limits)}
+      />
 
-      <UsageCard overview={overview} usage={props.usage ?? []} />
+      <UsageCard overview={overview} usage={props.usage ?? []} limits={props.limits} />
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -178,6 +194,7 @@ function CurrentPlanCard(props: {
   overview: BillingProjectionOverview
   catalogue: BillingCatalogue | null
   onSubscribe: (planId: PaidPlanId) => void
+  overLimits?: boolean
 }) {
   const { overview, catalogue } = props
   const format = useLocalDateFormatter()
@@ -232,12 +249,22 @@ function CurrentPlanCard(props: {
                 {statusLabel}
               </Badge>
             ) : null}
+            {props.overLimits ? (
+              <Badge size="sm" variant="destructive">
+                Over limits
+              </Badge>
+            ) : null}
           </div>
           {renewalBits.length > 0 ? (
             <p className="text-[13px] text-muted-foreground">{renewalBits.join(' · ')}</p>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {props.overLimits ? (
+            <Button size="sm" variant="outline" asChild>
+              <a href={PLAN_LIMITS_PATH}>See plan limits</a>
+            </Button>
+          ) : null}
           {canSubscribe && subscribePlanId ? (
             <Button size="sm" type="button" onClick={() => props.onSubscribe(subscribePlanId)}>
               Continue with {trialPlanName ?? 'a paid plan'}
@@ -355,15 +382,27 @@ function usageMeterDescription(key: string): string | undefined {
 function UsageCard(props: {
   overview: BillingProjectionOverview
   usage: Array<{ key: string; label: string; used: number; limit: number | null }>
+  limits?: PlanLimitsPage | null
 }) {
   const format = useLocalDateFormatter()
   const intl = useIntl()
   const emails = props.usage.find((line) => line.key === 'emailsPerMonth')
   const api = props.usage.find((line) => line.key === 'apiRequestsPerMonth')
+  // With plan limits on, a cap that needs a fix links to the Plan limits page,
+  // and a cap that is over without needing one (posts) says what stops.
+  const over = isPlanLimitsOver(props.limits) ? props.limits! : null
+  const overKeys = new Set<string>(over?.issues.map((issue) => issue.key) ?? [])
+  const infoKeys = new Set<string>(
+    props.limits?.enabled ? props.limits.infoRows.map((row) => row.key) : []
+  )
+  const fixBy =
+    over?.phase === 'grace' && over.graceEndsAt
+      ? format(over.graceEndsAt, { day: 'numeric', month: 'short' })
+      : null
   const inventory = props.usage.filter(
     (line) =>
       line.limit != null &&
-      !USAGE_CARD_SKIP.has(line.key) &&
+      (!USAGE_CARD_SKIP.has(line.key) || overKeys.has(line.key)) &&
       line.key !== 'emailsPerMonth' &&
       line.key !== 'apiRequestsPerMonth'
   )
@@ -442,10 +481,24 @@ function UsageCard(props: {
             <div key={line.key} className="px-6 py-4">
               <UsageMeter
                 label={usageMeterLabel(line)}
-                description={usageMeterDescription(line.key)}
+                description={
+                  infoKeys.has(line.key) && line.key === 'maxPosts'
+                    ? `New posts stop at ${formatNumber(line.limit)}. Existing posts stay.`
+                    : usageMeterDescription(line.key)
+                }
                 valueText={`${formatNumber(line.used)} of ${formatNumber(line.limit)}`}
                 used={line.used}
                 limit={line.limit}
+                flag={
+                  overKeys.has(line.key) ? (
+                    <a
+                      href={PLAN_LIMITS_PATH}
+                      className="font-medium text-destructive underline underline-offset-2"
+                    >
+                      {fixBy ? `Over limit · fix by ${fixBy}` : 'Over limit'}
+                    </a>
+                  ) : null
+                }
               />
             </div>
           ) : null

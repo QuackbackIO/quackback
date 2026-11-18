@@ -14,6 +14,10 @@ import {
 import { FreeDowngradeDialog } from './free-downgrade-dialog'
 import { SubscribeDialog } from './subscribe-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+import { isPlanLimitsOver } from '@/lib/shared/billing/plan-limits-copy'
+import { PLAN_LIMITS_PATH } from '@/components/admin/plan-limits/plan-limits-banner'
+import { PlanLimitIssues } from './plan-limit-issues'
 
 /** What happened and what is being asked. */
 function TrialChoiceLead(props: { trialPlanName: string | null }) {
@@ -34,6 +38,7 @@ export function TrialExpiredBilling(props: {
   overview: BillingProjectionOverview
   catalogue: BillingCatalogue | null
   catalogueError: string | null
+  limits?: PlanLimitsPage | null
 }) {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
   const [selectedId, setSelectedId] = useState<PaidPlanId | 'free'>(
@@ -51,6 +56,25 @@ export function TrialExpiredBilling(props: {
   return (
     <div className="space-y-6">
       <TrialChoiceLead trialPlanName={overview.trialPlanName ?? null} />
+
+      {isPlanLimitsOver(props.limits) && props.limits!.issues.length > 0 ? (
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-semibold">Over your limits</h2>
+            <Button size="sm" variant="outline" asChild>
+              <a href={PLAN_LIMITS_PATH}>See plan limits</a>
+            </Button>
+          </div>
+          <PlanLimitIssues
+            rows={props.limits!.issues.map((issue) => ({
+              key: issue.key,
+              used: issue.used,
+              cap: issue.cap,
+              status: 'over' as const,
+            }))}
+          />
+        </section>
+      ) : null}
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-5">

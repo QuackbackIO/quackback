@@ -77,3 +77,14 @@ export const setKeptSendingDomainsFn = createServerFn({ method: 'POST' })
       await import('@/lib/server/domains/plan-limits/plan-limits.choosers')
     return setKeptSendingDomains(data.ids)
   })
+
+/**
+ * The state for the admin banner and the sidebar line, read on every admin
+ * page: the same shape as the page, without the choosers' candidates.
+ */
+export const getPlanLimitsSummaryFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const { permissions } = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+  const { getPlanLimits } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  const { planLimitsPage } = await import('@/lib/server/domains/plan-limits/plan-limits.page')
+  return planLimitsPage(await getPlanLimits(), {}, permissions)
+})

@@ -50,7 +50,7 @@ describe('FreeDowngradeDialog', () => {
   it('only reads the preview: a look is not a choice, and closing just closes', async () => {
     hoisted.preview.mockResolvedValue(OVER_LIMITS)
     const onOpenChange = renderDialog()
-    await screen.findByText('You have 3 out of 1 boards')
+    await screen.findByRole('link', { name: 'Remove 2 boards' })
     expect(hoisted.preview).toHaveBeenCalledWith({ data: { planId: 'free' } })
     fireEvent.click(screen.getByRole('button', { name: 'Back to plans' }))
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
@@ -64,7 +64,10 @@ describe('FreeDowngradeDialog', () => {
       info: [{ key: 'maxPosts', used: 400, cap: 50, message: 'You have 400 out of 50 posts' }],
     })
     renderDialog()
-    await screen.findByText(/You have 400 out of 50 posts/)
+    await screen.findByText('New posts are paused. Existing posts stay.')
+    const row = document.querySelector('[data-plan-limit-row="maxPosts"]')
+    expect(row).toHaveTextContent('Posts400 of 50')
+    expect(row).toHaveAttribute('data-status', 'info')
     expect(screen.getByRole('button', { name: 'Switch to Free' })).toBeEnabled()
   })
 
@@ -73,9 +76,9 @@ describe('FreeDowngradeDialog', () => {
     renderDialog()
     expect(screen.getByRole('heading', { name: 'Switch to Free' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Checking…' })).toBeDisabled()
-    await screen.findByText('You have 3 out of 1 boards')
+    await screen.findByRole('link', { name: 'Remove 2 boards' })
     expect(screen.getByRole('heading', { name: 'Switch to Free' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Resolve issues first' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Fix 1 thing to switch' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Back to plans' })).toBeInTheDocument()
   })
 
@@ -85,5 +88,23 @@ describe('FreeDowngradeDialog', () => {
     await screen.findByText('This workspace fits the Free plan.')
     expect(screen.queryByText(/Delete extra resources first/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Switch to Free' })).toBeEnabled()
+  })
+
+  it('renders the same rows as the Plan limits page, and says nothing is deleted', async () => {
+    hoisted.preview.mockResolvedValue({
+      ...OVER_LIMITS,
+      featuresDisabled: ['Webhooks pause after 7 days. Endpoints are kept.'],
+    })
+    renderDialog()
+    const link = await screen.findByRole('link', { name: 'Remove 2 boards' })
+    expect(link).toHaveAttribute('href', '/admin/settings/boards')
+    const row = document.querySelector('[data-plan-limit-issues] [data-plan-limit-row="maxBoards"]')
+    expect(row).toHaveAttribute('data-status', 'over')
+    expect(row).toHaveTextContent('Boards3 of 1')
+    expect(screen.getByText('What stops on Free')).toBeInTheDocument()
+    expect(screen.getByText('Webhooks pause after 7 days. Endpoints are kept.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Nothing is deleted. Upgrading later turns it all back on.')
+    ).toBeInTheDocument()
   })
 })

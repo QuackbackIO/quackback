@@ -11,6 +11,7 @@ vi.mock('@/lib/client/queries/billing', () => ({
 }))
 
 const { TrialExpiredBilling } = await import('../trial-expired-billing')
+const { overLimits } = await import('./plan-limits-fixtures')
 
 const EXPIRED = '2026-11-19T12:00:00.000Z'
 
@@ -33,7 +34,12 @@ const overview: BillingProjectionOverview = {
   hideBranding: false,
 }
 
-function renderPage(props: { overview?: BillingProjectionOverview } = {}) {
+function renderPage(
+  props: {
+    overview?: BillingProjectionOverview
+    limits?: ReturnType<typeof overLimits>
+  } = {}
+) {
   render(
     <IntlProvider locale="en" messages={{}}>
       <QueryClientProvider client={new QueryClient()}>
@@ -41,6 +47,7 @@ function renderPage(props: { overview?: BillingProjectionOverview } = {}) {
           overview={props.overview ?? overview}
           catalogue={null}
           catalogueError={null}
+          limits={props.limits}
         />
       </QueryClientProvider>
     </IntlProvider>
@@ -71,5 +78,25 @@ describe('TrialExpiredBilling lead', () => {
     expect(screen.getByRole('heading', { name: 'Your trial has ended' })).toBeInTheDocument()
     expect(screen.queryByText(/your plan/)).not.toBeInTheDocument()
     expect(screen.getByText(/pick a paid plan, or switch to Free/)).toBeInTheDocument()
+  })
+})
+
+describe('TrialExpiredBilling with plan limits', () => {
+  it('lists the caps over the plan above the plan choice, linking to Plan limits', () => {
+    renderPage({ limits: overLimits() })
+    expect(screen.getByRole('heading', { name: 'Over your limits' })).toBeInTheDocument()
+    expect(
+      document.querySelector('[data-plan-limit-row="maxBoards"][data-status="over"]')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See plan limits' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing/limits'
+    )
+  })
+
+  it('shows nothing extra with the flag off', () => {
+    renderPage({ limits: overLimits({ enabled: false }) })
+    expect(screen.queryByRole('heading', { name: 'Over your limits' })).toBeNull()
+    expect(document.querySelector('[data-plan-limit-issues]')).toBeNull()
   })
 })

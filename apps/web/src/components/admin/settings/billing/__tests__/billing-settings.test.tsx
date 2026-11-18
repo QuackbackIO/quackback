@@ -7,6 +7,8 @@ import de from '@/locales/de.json'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import { BillingPlansView, EmailsPausedNotice } from '../billing-settings'
+import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+import { overLimits } from './plan-limits-fixtures'
 
 const catalogue: BillingCatalogue = {
   version: 1,
@@ -91,6 +93,7 @@ function renderView(
     usage?: Array<{ key: string; label: string; used: number; limit: number | null }>
     locale?: string
     messages?: Record<string, string>
+    limits?: PlanLimitsPage | null
   } = {}
 ) {
   return render(
@@ -112,6 +115,7 @@ function renderView(
         ]}
         invoicesError={null}
         usage={overrides.usage}
+        limits={overrides.limits}
       />
     </IntlProvider>
   )
@@ -519,5 +523,54 @@ describe('the emails allowance notice', () => {
         'Changelog and status page emails are paused until your allowance resets. Sign-in and support emails still send.'
       )
     ).toBeInTheDocument()
+  })
+})
+
+describe('BillingPlansView with plan limits', () => {
+  const usage = [
+    { key: 'maxBoards', label: 'boards', used: 3, limit: 1 },
+    { key: 'maxTeamSeats', label: 'team seats', used: 3, limit: 2 },
+    { key: 'maxPosts', label: 'posts', used: 77, limit: 50 },
+    { key: 'maxSendingDomains', label: 'sending domains', used: 0, limit: 0 },
+  ]
+  const meter = (label: string) =>
+    screen.getByText(label, { selector: 'div' }).closest('.px-6') as HTMLElement
+
+  it('links each meter over a cap to the Plan limits page, with the date', () => {
+    renderView({ usage, limits: overLimits() })
+    const boards = within(meter('Boards')).getByRole('link', {
+      name: 'Over limit · fix by Nov 25',
+    })
+    expect(boards).toHaveAttribute('href', '/admin/settings/billing/limits')
+    expect(within(meter('Boards')).getByRole('progressbar').firstElementChild).toHaveAttribute(
+      'data-level',
+      'full'
+    )
+    // Seats show on the usage card once they are over.
+    expect(within(meter('Team seats')).getByRole('link', { name: /Over limit/ })).toBeVisible()
+    expect(within(meter('Sending domains')).queryByRole('link')).toBeNull()
+  })
+
+  it('notes that only new posts stop, with no link', () => {
+    renderView({ usage, limits: overLimits() })
+    expect(meter('Posts')).toHaveTextContent('New posts stop at 50. Existing posts stay.')
+    expect(within(meter('Posts')).queryByRole('link')).toBeNull()
+  })
+
+  it('flags the plan card and links to the Plan limits page', () => {
+    renderView({ usage, limits: overLimits() })
+    expect(screen.getByText('Over limits')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See plan limits' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing/limits'
+    )
+  })
+
+  it('says nothing new with the flag off', () => {
+    renderView({ usage, limits: overLimits({ enabled: false }) })
+    expect(screen.queryByText('Over limits')).toBeNull()
+    expect(screen.queryByRole('link', { name: /Over limit|See plan limits/ })).toBeNull()
+    expect(screen.queryByText(/New posts stop/)).toBeNull()
+    expect(screen.queryByText('Team seats', { selector: 'div' })).toBeNull()
   })
 })

@@ -9,6 +9,8 @@ const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   setKeptBoard: vi.fn(async (_id: string) => ({ ok: true as const })),
   setSeatHolders: vi.fn(async (_ids: string[]) => ({ ok: true as const })),
+  getPlanLimits: vi.fn(),
+  getPlanLimitsWithCandidates: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', async (original) => ({
@@ -37,9 +39,15 @@ vi.mock('@tanstack/react-start', () => ({
   },
 }))
 
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+  getPlanLimits: () => hoisted.getPlanLimits(),
+  getPlanLimitsWithCandidates: () => hoisted.getPlanLimitsWithCandidates(),
+}))
+
 await import('../plan-limits')
-// Declaration order: get, board, seats, status components, sending domains.
+// Declaration order: get, board, seats, status components, sending domains, summary.
 const [getPlanLimits, setKeptBoard, setSeatHolders] = handlers
+const getPlanLimitsSummary = handlers[5]
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -78,5 +86,50 @@ describe('plan limits choosers', () => {
   it('needs a signed-in teammate', async () => {
     hoisted.requireAuth.mockRejectedValue(new Error('Authentication required'))
     await expect(setSeatHolders!({ data: { ids: [] } })).rejects.toThrow(/auth/i)
+  })
+})
+
+describe('plan limits summary', () => {
+  const graceView = {
+    enabled: true,
+    phase: 'grace',
+    plan: 'free',
+    since: '2026-11-18T00:00:00.000Z',
+    graceEndsAt: '2026-11-25T00:00:00.000Z',
+    fromPlan: 'pro',
+    issues: [
+      {
+        key: 'maxBoards',
+        used: 5,
+        cap: 1,
+        message: 'You have 5 out of 1 boards',
+        actionLabel: 'Remove 4 boards',
+        href: '/admin/settings/boards',
+      },
+    ],
+    infoRows: [],
+    featureIssues: [],
+    features: {},
+    fromFeatures: null,
+    openBoardIds: ['b1'],
+    keptBoardId: 'b1',
+    seatHolderIds: null,
+    visibleStatusComponentIds: null,
+    sendingDomainIds: null,
+  }
+
+  it('reads the state without loading any chooser candidates', async () => {
+    hoisted.requireAuth.mockResolvedValue(teammate([PERMISSIONS.MEMBER_VIEW]))
+    hoisted.getPlanLimits.mockResolvedValue(graceView)
+    const summary = (await getPlanLimitsSummary!({ data: {} })) as Record<string, unknown>
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: PERMISSIONS.MEMBER_VIEW })
+    expect(hoisted.getPlanLimitsWithCandidates).not.toHaveBeenCalled()
+    expect(summary).toMatchObject({
+      phase: 'grace',
+      planName: 'Free',
+      canManageBilling: false,
+      candidates: {},
+    })
+    expect((summary.issues as unknown[]).length).toBe(1)
   })
 })

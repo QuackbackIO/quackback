@@ -17,6 +17,13 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { UpdateBanner } from '@/components/admin/update-banner'
 import { GithubStarPromptGate } from '@/components/admin/github-star-prompt-gate'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
+import {
+  PlanLimitsBanner,
+  usePlanLimitsSummary,
+} from '@/components/admin/plan-limits/plan-limits-banner'
+import { planLimitsQueries } from '@/lib/client/queries/plan-limits'
+import { isPlanLimitsOver } from '@/lib/shared/billing/plan-limits-copy'
+import { presentPlanNotice } from '@/lib/shared/plan-notice'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
 import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
@@ -159,6 +166,10 @@ export const Route = createFileRoute('/admin')({
       warmModeration
         ? context.queryClient.ensureQueryData(adminQueries.moderationStatus()).catch(() => null)
         : null,
+      // And for the plan limits banner, which only plan billing can raise.
+      context.billingEnabled
+        ? context.queryClient.ensureQueryData(planLimitsQueries.summary()).catch(() => null)
+        : null,
     ])
 
     const latestVersion =
@@ -300,6 +311,22 @@ function AdminLayout() {
   )
 }
 
+/**
+ * The plan strip: the plan limits banner while the workspace is over its
+ * plan, which stands in for the ended-trial strip, or the plan notice.
+ */
+function PlanStrip({ planNotice }: Pick<ReturnType<typeof Route.useLoaderData>, 'planNotice'>) {
+  const limits = usePlanLimitsSummary()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const endedTrial = presentPlanNotice(planNotice)?.ended === true
+  return (
+    <>
+      <PlanLimitsBanner limits={limits} pathname={pathname} />
+      {endedTrial && isPlanLimitsOver(limits) ? null : <PlanNoticeBanner notice={planNotice} />}
+    </>
+  )
+}
+
 function AdminContent({
   initialUserData,
   latestVersion,
@@ -334,7 +361,7 @@ function AdminContent({
         }
         notices={
           <>
-            <PlanNoticeBanner notice={planNotice} />
+            <PlanStrip planNotice={planNotice} />
             <UpdateBanner
               latestVersion={latestVersion}
               dismissedVersion={updateBannerDismissedVersion}

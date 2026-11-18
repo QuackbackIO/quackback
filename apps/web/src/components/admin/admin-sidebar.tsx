@@ -1,6 +1,10 @@
 import { LaunchPlanDock, LaunchPlanInHelp } from '@/components/onboarding/launch-plan-dock'
 import { openHelpLauncher } from '@/components/shared/cloud-quackback-widget'
 import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
+import {
+  PlanLimitsQuiet,
+  usePlanLimitsSummary,
+} from '@/components/admin/plan-limits/plan-limits-banner'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { SearchTrigger } from '@/components/admin/ask/search-palette'
 import { useProductTour } from '@/components/onboarding/product-tour'
@@ -325,6 +329,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   const cloudEnabled = useCloudEnabled()
   const githubStarPrompt = useGithubStarPrompt()
   const permissions = usePermissions()
+  const planLimits = usePlanLimitsSummary()
 
   const flags = settings?.featureFlags as FeatureFlags | undefined
   // Settings is offered to anyone who can open at least one of its pages; the
@@ -449,6 +454,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
             <div className="flex flex-col gap-0.5 px-2">
               {/* Mounted only for a notice, so a page without one renders nothing here. */}
               {planNotice && <PlanNoticeQuiet notice={planNotice} />}
+              <PlanLimitsQuiet limits={planLimits} />
               <LaunchPlanDock />
               {/* Settings (admin-only) */}
               {showSettings &&
@@ -676,6 +682,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
               ))}
               <div className="h-px bg-border/40 my-4" />
               <PlanNoticeQuiet notice={planNotice ?? null} />
+              <PlanLimitsQuiet limits={planLimits} />
               <div onClickCapture={() => setMobileMenuOpen(false)}>
                 <LaunchPlanDock />
               </div>

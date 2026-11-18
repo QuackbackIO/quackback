@@ -10,11 +10,16 @@ export function UsageMeter(props: {
   limit: number
   /** A quiet line under the bar, for a state the numbers alone do not explain. */
   note?: ReactNode
+  /** A short flag beside the label, such as an over-limit link. */
+  flag?: ReactNode
 }) {
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-10">
       <div className="min-w-0 md:w-56 md:shrink-0">
-        <div className="text-[13px] font-medium">{props.label}</div>
+        <div className="flex flex-wrap items-baseline gap-x-2 text-[13px] font-medium">
+          {props.label}
+          {props.flag ? <span className="text-[12px] font-normal">{props.flag}</span> : null}
+        </div>
         {props.description ? (
           <div className="mt-0.5 text-[12px] text-muted-foreground">{props.description}</div>
         ) : null}

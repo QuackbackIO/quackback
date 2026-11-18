@@ -10,9 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import type { PlanCapInfo, PlanDowngradeIssue } from '@/lib/shared/billing/plan-downgrade'
 import { errorText } from '@/lib/client/error-text'
+import { infoRowNote } from '@/lib/shared/billing/plan-limits-copy'
+import { PlanLimitIssues, type PlanLimitRow } from './plan-limit-issues'
 
 export type PlanDowngradeCheckout = {
   period: BillingPeriod
@@ -71,18 +72,10 @@ export function PlanDowngradeDialog(props: {
           <DialogTitle>Switch to {planName}</DialogTitle>
           <DialogDescription>
             {blocked
-              ? `Resolve these first: ${planName} applies its own limits.`
+              ? `${planName} includes less than you use today. Fix these first, then switch.`
               : `Check what changes on ${planName}, then confirm.`}
           </DialogDescription>
         </DialogHeader>
-
-        {blocked ? (
-          <Alert>
-            <AlertDescription>
-              Switching to {planName} will apply that plan's quotas. Delete extra resources first.
-            </AlertDescription>
-          </Alert>
-        ) : null}
 
         {loading ? (
           <p className="text-sm text-muted-foreground">
@@ -92,43 +85,49 @@ export function PlanDowngradeDialog(props: {
           <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
-        ) : blocked ? (
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Issues to resolve ({issues.length}):</p>
-            <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-              {issues.map((issue) => (
-                <li key={issue.key} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <span className="text-sm">{issue.message}</span>
+        ) : blocked || info.length > 0 ? (
+          <PlanLimitIssues
+            rows={[
+              ...issues.map((issue): PlanLimitRow => ({
+                key: issue.key,
+                used: issue.used,
+                cap: issue.cap,
+                status: 'over',
+                actions: (
                   <Button size="sm" variant="outline" asChild>
                     <a href={issue.href}>{issue.actionLabel}</a>
                   </Button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">This workspace fits the {planName} plan.</p>
-        )}
+                ),
+              })),
+              ...info.map((row): PlanLimitRow => ({
+                key: row.key,
+                used: row.used,
+                cap: row.cap,
+                status: 'info',
+                note: infoRowNote(row),
+              })),
+            ]}
+          />
+        ) : null}
 
-        {!loading && !error && info.length > 0 ? (
-          <ul className="space-y-1 text-sm text-muted-foreground">
-            {info.map((row) => (
-              <li key={row.key}>{row.message}. Existing ones stay; new ones stop at the cap.</li>
-            ))}
-          </ul>
+        {!loading && !error && !blocked ? (
+          <p className="text-sm text-muted-foreground">This workspace fits the {planName} plan.</p>
         ) : null}
 
         {features.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-sm font-medium">Features that will be disabled:</p>
+            <p className="text-sm font-medium">What stops on {planName}</p>
             <ul className="space-y-2 rounded-xl border border-border px-4 py-3">
               {features.map((line) => (
                 <li key={line} className="flex gap-2 text-sm text-muted-foreground">
-                  <span className="mt-1 size-1.5 shrink-0 rounded-full bg-warning" />
+                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-warning" />
                   {line}
                 </li>
               ))}
             </ul>
+            <p className="text-[13px] text-muted-foreground">
+              Nothing is deleted. Upgrading later turns it all back on.
+            </p>
           </div>
         ) : null}
 
@@ -138,7 +137,11 @@ export function PlanDowngradeDialog(props: {
           </Button>
           {blocked || loading || error ? (
             <Button type="button" disabled>
-              {loading ? 'Checking…' : error ? `Switch to ${planName}` : 'Resolve issues first'}
+              {loading
+                ? 'Checking…'
+                : error
+                  ? `Switch to ${planName}`
+                  : `Fix ${issues.length} ${issues.length === 1 ? 'thing' : 'things'} to switch`}
             </Button>
           ) : props.planId === 'free' ? (
             <form method="post" action="/api/billing/session">

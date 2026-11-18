@@ -145,6 +145,8 @@ export interface PlanLimitsState {
   limitsKey: string
   /** The inputs revision the state was written under (see {@link PlanLimitsBasis}). */
   basis?: PlanLimitsBasis
+  /** The caps that needed a fix at first detection, so a fixed one can show as fixed. */
+  overKeys?: PlanLimitIssueKey[]
   /** The admin's choice of the board that stays open. */
   keptBoardId?: string
   /** The admin's choice of who keeps a seat. */
@@ -206,6 +208,13 @@ export interface PlanLimitsInputs {
   candidates: PlanLimitsCandidates
 }
 
+/** A cap over at first detection that fits again. */
+export interface PlanLimitFixedIssue {
+  key: PlanLimitIssueKey
+  used: number
+  cap: number
+}
+
 export interface PlanLimitsView {
   enabled: boolean
   phase: PlanLimitsPhase
@@ -217,6 +226,8 @@ export interface PlanLimitsView {
   deadlineDay: string | null
   fromPlan: PlanId | null
   issues: PlanLimitIssue[]
+  /** Caps over at first detection that fit now. Empty when the phase is ok. */
+  fixedIssues?: PlanLimitFixedIssue[]
   infoRows: PlanLimitInfoRow[]
   featureIssues: PlanFeatureIssue[]
   features: PlanFeatureSet
@@ -395,6 +406,7 @@ export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimit
         fromFeatures: graceFeatures(input.features, input.previous),
         limitsKey: key,
         ...(input.basis ? { basis: input.basis } : {}),
+        overKeys: issues.map((issue) => issue.key),
         ...choicesOf(input.stored),
       }
   const phase: PlanLimitsPhase =
@@ -402,6 +414,9 @@ export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimit
 
   const over = new Set(issues.map((issue) => issue.key))
   const cap = (k: PlanLimitIssueKey) => input.limits[k] ?? 0
+  const fixedIssues = (nextState.overKeys ?? [])
+    .filter((k) => !over.has(k) && input.limits[k] !== null)
+    .map((k) => ({ key: k, used: used[k] ?? 0, cap: cap(k) }))
   const { boards, members, statusComponents, sendingDomains } = input.candidates
   const openBoardIds =
     over.has('maxBoards') && boards
@@ -418,6 +433,7 @@ export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimit
       deadlineDay: planLimitsDeadlineDay(nextState.graceEndsAt),
       fromPlan: nextState.fromPlan,
       issues,
+      fixedIssues,
       infoRows: rows,
       featureIssues,
       features: input.features,
@@ -517,6 +533,10 @@ export function parsePlanLimitsState(value: unknown): PlanLimitsState | null {
       authConfigVersion: basis.authConfigVersion as number,
     }
   }
+  const overKeys = stringList(raw.overKeys)?.filter((key): key is PlanLimitIssueKey =>
+    (PLAN_LIMIT_ISSUE_KEYS as readonly string[]).includes(key)
+  )
+  if (overKeys) state.overKeys = overKeys
   if (typeof raw.keptBoardId === 'string') state.keptBoardId = raw.keptBoardId
   const seats = stringList(raw.seatHolderIds)
   if (seats) state.seatHolderIds = seats

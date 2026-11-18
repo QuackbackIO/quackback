@@ -11,7 +11,8 @@ import type {
   SendingDomainChoice,
   StatusComponentChoice,
 } from './plan-limits.loaders'
-import type { PlanLimitIssueKey, PlanLimitsView } from './plan-limits.rules'
+import { guaranteedSeatHolders } from './plan-limits.order'
+import type { PlanLimitFixedIssue, PlanLimitIssueKey, PlanLimitsView } from './plan-limits.rules'
 
 export type PlanLimitsChooser = 'board' | 'seats' | 'statusComponents' | 'sendingDomains'
 
@@ -50,7 +51,14 @@ export interface PlanLimitsFeatureRow {
   href: string | null
 }
 
-export type PlanLimitsPage = Omit<PlanLimitsView, 'features' | 'fromFeatures' | 'featureIssues'> & {
+export type PlanLimitsPage = Omit<
+  PlanLimitsView,
+  'features' | 'fromFeatures' | 'featureIssues' | 'fixedIssues'
+> & {
+  /** Caps over at first detection that fit now. */
+  fixedIssues: PlanLimitFixedIssue[]
+  /** Members who always keep a seat (the owner and a billing manager); empty without the member list. */
+  lockedSeatHolderIds: string[]
   planName: string | null
   fromPlanName: string | null
   featureIssues: PlanLimitsFeatureRow[]
@@ -91,6 +99,7 @@ export function planLimitsPage(
     deadlineDay: view.deadlineDay,
     fromPlan: view.fromPlan,
     issues: view.issues,
+    fixedIssues: view.fixedIssues ?? [],
     infoRows: view.infoRows,
     openBoardIds: view.openBoardIds,
     keptBoardId: view.keptBoardId,
@@ -106,6 +115,7 @@ export function planLimitsPage(
     })),
     choosers,
     candidates: shown,
+    lockedSeatHolderIds: shown.members ? guaranteedSeatHolders(shown.members) : [],
     canManageBilling: permissions.includes(PERMISSIONS.BILLING_MANAGE),
   }
 }

@@ -123,19 +123,39 @@ const RESOURCE: Record<PlanCapKey, { singular: string; plural: string; href: str
 }
 
 /**
- * Plan features a downgrade can switch off, in display order, with the plans
- * that include each. Copilot drafts and the REST API are on every plan, so no
- * downgrade loses them.
+ * Plan features a downgrade can pause, in display order, with the plans that
+ * include each. Features that were running keep running for 7 days after the
+ * drop, then pause; nothing is deleted and an upgrade brings them back. MCP,
+ * AI insights and the audit log stop at once. Copilot drafts and the REST API
+ * are on every plan, so no downgrade loses them.
  */
 const PLAN_FEATURES: ReadonlyArray<{ lost: string; plans: readonly PlanId[] }> = [
-  { lost: 'Custom domains will be disabled', plans: ['pro', 'business', 'enterprise'] },
-  { lost: 'Workflows and automations will be disabled', plans: ['business', 'enterprise'] },
-  { lost: 'Single sign-on will be disabled', plans: ['enterprise'] },
-  { lost: 'AI assistant and insights will be disabled', plans: ['pro', 'business', 'enterprise'] },
-  { lost: 'AI article translation will be disabled', plans: ['business', 'enterprise'] },
-  { lost: 'Webhooks will be disabled', plans: ['pro', 'business', 'enterprise'] },
-  { lost: 'MCP access will be revoked', plans: ['pro', 'business', 'enterprise'] },
-  { lost: 'The audit log will be disabled', plans: ['enterprise'] },
+  {
+    lost: 'Your custom domain redirects to your workspace address after 7 days.',
+    plans: ['pro', 'business', 'enterprise'],
+  },
+  {
+    lost: 'Live workflows pause after 7 days. They are kept.',
+    plans: ['business', 'enterprise'],
+  },
+  {
+    lost: 'Single sign-on turns off after 7 days. Your team signs in with email links.',
+    plans: ['enterprise'],
+  },
+  {
+    lost: 'The AI assistant stops answering after 7 days. AI insights stop now.',
+    plans: ['pro', 'business', 'enterprise'],
+  },
+  {
+    lost: 'AI article translation stops after 7 days. Published translations stay.',
+    plans: ['business', 'enterprise'],
+  },
+  {
+    lost: 'Webhooks pause after 7 days. Endpoints are kept.',
+    plans: ['pro', 'business', 'enterprise'],
+  },
+  { lost: 'MCP access pauses. Keys are kept.', plans: ['pro', 'business', 'enterprise'] },
+  { lost: 'The audit log is hidden. Entries are still recorded.', plans: ['enterprise'] },
 ]
 
 function featuresLost(fromPlanId: string, toPlanId: string): string[] {

@@ -872,3 +872,53 @@ it('treats a missing key in a stored feature set as off', () => {
     )
   ).toBe(false)
 })
+
+describe('computePlanLimits: fixed issues', () => {
+  const OVER_THREE = { ...FITS, maxBoards: 5, maxTeamSeats: 3, maxStatusComponents: 4 }
+
+  it('records the caps over at first detection and lists the ones fixed since', () => {
+    const first = computePlanLimits(inputs({ usage: OVER_THREE }), at(-2 * DAY))
+    expect(first.nextState?.overKeys).toEqual(['maxBoards', 'maxTeamSeats', 'maxStatusComponents'])
+    expect(first.view.fixedIssues).toEqual([])
+
+    const later = computePlanLimits(
+      inputs({ usage: { ...OVER_THREE, maxTeamSeats: 1 }, stored: first.nextState }),
+      NOW
+    )
+    expect(later.changed).toBe(false)
+    expect(later.view.issues.map((issue) => issue.key)).toEqual([
+      'maxBoards',
+      'maxStatusComponents',
+    ])
+    expect(later.view.fixedIssues).toEqual([{ key: 'maxTeamSeats', used: 1, cap: 1 }])
+  })
+
+  it('never calls a cap fixed that was not over at first detection', () => {
+    const first = computePlanLimits(inputs({ usage: OVER_BOARDS }), at(-2 * DAY))
+    const later = computePlanLimits(inputs({ usage: OVER_BOARDS, stored: first.nextState }), NOW)
+    expect(later.view.fixedIssues).toEqual([])
+  })
+
+  it('reads a state stored without the list as having nothing fixed', () => {
+    const first = computePlanLimits(inputs({ usage: OVER_THREE }), at(-2 * DAY))
+    const { overKeys: _dropped, ...legacy } = first.nextState!
+    const later = computePlanLimits(inputs({ usage: OVER_BOARDS, stored: legacy }), NOW)
+    expect(later.changed).toBe(false)
+    expect(later.view.fixedIssues).toEqual([])
+  })
+
+  it('keeps the list through a stored round trip but not into a new grace', () => {
+    const first = computePlanLimits(inputs({ usage: OVER_THREE }), at(-30 * DAY))
+    const parsed = parsePlanLimitsState(JSON.parse(JSON.stringify(first.nextState)))
+    expect(parsed?.overKeys).toEqual(['maxBoards', 'maxTeamSeats', 'maxStatusComponents'])
+    expect(
+      parsePlanLimitsState({ ...first.nextState, overKeys: ['maxBoards', 'nope', 3] })?.overKeys
+    ).toEqual(['maxBoards'])
+    const next = computePlanLimits(
+      inputs({ usage: OVER_BOARDS, stored: parsed, limits: { ...FREE_LIMITS, maxBoards: 2 } }),
+      NOW
+    )
+    expect(next.nextState?.since).toBe(NOW.toISOString())
+    expect(next.nextState?.overKeys).toEqual(['maxBoards'])
+  })
+})
