@@ -1,4 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
+import { getBoardLimitsFn } from '@/lib/server/functions/board-limits'
 import type { PostId, RoadmapId } from '@quackback/ids'
 import type { AdminPostPanel } from '@/lib/server/domains/posts/post.admin-panels'
 import {
@@ -107,6 +108,16 @@ export const adminQueries = {
       queryKey: ['admin', 'boards', 'with-counts'],
       queryFn: () => fetchBoardsWithCountsFn(),
       staleTime: 5 * 60 * 1000,
+    }),
+
+  /**
+   * Which boards are read-only and the board cap, for the boards settings page.
+   */
+  boardLimits: () =>
+    queryOptions({
+      queryKey: ['admin', 'boards', 'limits'],
+      queryFn: () => getBoardLimitsFn(),
+      staleTime: 60 * 1000,
     }),
 
   /**

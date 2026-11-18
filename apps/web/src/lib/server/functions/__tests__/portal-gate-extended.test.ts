@@ -257,6 +257,12 @@ vi.mock('@/lib/server/sanitize-tiptap', () => ({
   sanitizeTiptapContent: (v: unknown) => v,
 }))
 
+// Every board is open: this suite is about the portal gate, not read-only boards.
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.board-guard', () => ({
+  isPostBoardOpen: vi.fn(async () => true),
+  readOnlyBoardState: vi.fn(async () => ({ open: null, postsPaused: false })),
+}))
+
 vi.mock('@/lib/shared/errors', () => ({
   NotFoundError: class NotFoundError extends Error {
     code: string

@@ -62,6 +62,7 @@ import { logger } from '@/lib/server/logger'
 import { isTestCustomer, notTestPrincipal } from '@/lib/server/test-data'
 import { resolveTestFeedbackActor } from '@/lib/server/test-customer-feedback'
 import { getSectionOrigins } from '@/lib/server/domains/settings/section-links'
+import { assertBoardOpen } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 
 const log = logger.child({ component: 'posts' })
 
@@ -150,6 +151,7 @@ export async function createPost(
   if (!board) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
   }
+  await assertBoardOpen(board.id)
 
   // Validate submitted custom-field answers against the board's declared
   // fields. Unknown keys are dropped by the validator; a missing required

@@ -2274,5 +2274,11 @@
   "admin.integrations.oauthError.session": "We konden je aanmelding niet bevestigen. Meld je opnieuw aan en maak daarna verbinding.",
   "admin.integrations.oauthError.credentials": "Voeg de app-gegevens van {name} toe voordat je verbinding maakt.",
   "admin.integrations.oauthError.elsewhere": "Dit {name}-account is al verbonden met een andere Quackback-werkruimte.",
-  "admin.integrations.oauthError.failed": "De verbinding met {name} is niet voltooid. Probeer opnieuw verbinding te maken."
+  "admin.integrations.oauthError.failed": "De verbinding met {name} is niet voltooid. Probeer opnieuw verbinding te maken.",
+  "portal.feedback.readOnly": "Dit bord neemt op dit moment geen nieuwe feedback aan.",
+  "portal.feedback.readOnlyShare": "Deel het op {board}.",
+  "portal.postCard.vote.ariaClosed": "{count, plural, one {# stem} other {# stemmen}}, stemmen gesloten",
+  "widget.voteButton.ariaClosed": "{count, plural, one {# stem} other {# stemmen}}, stemmen gesloten",
+  "widget.readOnly": "Dit bord neemt op dit moment geen nieuwe feedback aan.",
+  "widget.readOnlyShare": "Deel het op {board}."
 }

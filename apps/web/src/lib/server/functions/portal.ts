@@ -67,6 +67,12 @@ import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters'
 
+import type { BoardPermission } from '@/lib/shared/types/boards'
+import {
+  isPostBoardOpen,
+  readOnlyBoardState,
+} from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
+
 const log = logger.child({ component: 'portal' })
 
 // Schemas
@@ -110,12 +116,28 @@ async function buildBoardPermissions(
   actor: Actor,
   boards: ReadonlyArray<{ id: string; access: BoardAccess }>,
   allowAnonymous: boolean
-): Promise<Record<string, { canSubmit: boolean; canVote: boolean }>> {
+): Promise<Record<string, BoardPermission>> {
   const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
-  const map: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
+  const { open, postsPaused } = await readOnlyBoardState()
+  const caps = new Map(
+    boards.map((b) => [b.id, boardCapabilitiesForActor(actor, b.access, allowAnonymous)])
+  )
+  // A read-only board shows its posts and takes nothing; visitors are pointed
+  // at a board that does, unless new posts are stopped everywhere.
+  // Prefer one the viewer can post to now; a visitor who must sign in first
+  // is still pointed at an open board they can see.
+  const visibleOpen = open?.filter((id) => caps.has(id)) ?? []
+  const shareBoardId =
+    open && !postsPaused
+      ? (visibleOpen.find((id) => caps.get(id)?.canSubmit) ?? visibleOpen[0] ?? null)
+      : null
+  const map: Record<string, BoardPermission> = {}
   for (const b of boards) {
-    const caps = boardCapabilitiesForActor(actor, b.access, allowAnonymous)
-    map[b.id] = { canSubmit: caps.canSubmit, canVote: caps.canVote }
+    const c = caps.get(b.id)!
+    const readOnly = open !== null && !open.includes(b.id)
+    map[b.id] = readOnly
+      ? { canSubmit: false, canVote: false, readOnly, shareBoardId }
+      : { canSubmit: c.canSubmit, canVote: c.canVote }
   }
   return map
 }
@@ -369,7 +391,13 @@ export const runFetchPublicPostDetail = createServerOnlyFn(async function runFet
   // so the UI never advertises a vote/comment CTA the board's tier rejects
   // (#191). canSubmit is unused on the detail view.
   const { boardCapabilitiesForActor, canCommentOnPost } = await import('@/lib/server/policy')
-  const { canVote } = boardCapabilitiesForActor(actor, result.boardAccess, allowAnonymous)
+  const boardReadOnly = !(await isPostBoardOpen(postId))
+  const { canVote: tierCanVote } = boardCapabilitiesForActor(
+    actor,
+    result.boardAccess,
+    allowAnonymous
+  )
+  const canVote = tierCanVote && !boardReadOnly
   // canComment is per-POST: on an author-only board the reply right turns on
   // this post's own author, which the board-level capability can't see. View
   // is already proven (getPublicPostDetail returned a row for this actor), so
@@ -400,7 +428,8 @@ export const runFetchPublicPostDetail = createServerOnlyFn(async function runFet
     mergeInfo,
     mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
     canVote,
-    canComment,
+    canComment: canComment && !boardReadOnly,
+    boardReadOnly,
     // The board's reply rule, so a denied viewer can be told WHY the composer
     // is closed ("only the author and the team can reply") instead of getting
     // the generic no-access notice. Safe to expose: it is a public property of
@@ -743,6 +772,7 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       isMember: false,
       isTeamMember: false,
       canComment: false,
+      boardReadOnly: false,
       user: undefined,
       replyPolicy: 'anyone' as ReplyPolicy,
     }
@@ -800,11 +830,13 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
     const isMember = !!(ctx?.user && ctx?.principal)
     const isTeamMember =
       isMember && (ctx.principal.role === 'admin' || ctx.principal.role === 'member')
+    const boardReadOnly = !(await isPostBoardOpen(postId))
 
     return {
       isMember,
       isTeamMember,
-      canComment,
+      canComment: canComment && !boardReadOnly,
+      boardReadOnly,
       user: isMember
         ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }
         : undefined,
@@ -855,7 +887,7 @@ export const runFetchBoardCapabilities = createServerOnlyFn(
 )
 
 export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const empty: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
+  const empty: Record<string, BoardPermission> = {}
   const access = await resolvePortalAccessForRequest()
   if (!access.granted) return { permissions: empty, boards: [] as WidgetVisibleBoard[] }
   return runFetchBoardCapabilities(await getOptionalAuth())

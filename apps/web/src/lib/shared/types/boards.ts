@@ -16,3 +16,16 @@ export type { BoardWithStats }
  * boardCapabilitiesForActor and never read `access` (#191).
  */
 export type PublicBoardWithStats = Omit<BoardWithStats, 'access'>
+
+/**
+ * What the current viewer can do on one board, computed on the server.
+ * `readOnly` marks a board that shows its posts and takes no new posts, votes
+ * or comments; `shareBoardId` is a board to post to instead, when one exists.
+ * Neither names a plan.
+ */
+export interface BoardPermission {
+  canSubmit: boolean
+  canVote: boolean
+  readOnly?: boolean
+  shareBoardId?: string | null
+}

@@ -8,6 +8,7 @@ import { db, posts, boards, eq, and, isNull } from '@/lib/server/db'
 import { type PostId, type BoardId, type UserId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { assertBoardOpen } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 import type { ChangeBoardResult } from './post.types'
 
 /**
@@ -47,6 +48,8 @@ export async function changeBoard(
   if (!newBoard) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${newBoardId} not found`)
   }
+  // Posts move out of a read-only board, never into one.
+  await assertBoardOpen(newBoardId)
 
   const [updatedPost] = await db
     .update(posts)

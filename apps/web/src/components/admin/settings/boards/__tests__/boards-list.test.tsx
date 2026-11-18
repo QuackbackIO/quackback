@@ -121,3 +121,22 @@ describe('BoardsList', () => {
     expect(screen.queryByText('Team only')).toBeNull()
   })
 })
+
+describe('BoardsList read-only labels', () => {
+  const boards = [
+    board({ id: 'board_1', slug: 'features', name: 'Features' }),
+    board({ id: 'board_2', slug: 'bugs', name: 'Bugs' }),
+  ]
+
+  it('shows no Open or Read-only label while every board is open', () => {
+    render(<BoardsList boards={boards} />)
+    expect(screen.queryByText('Open')).toBeNull()
+    expect(screen.queryByText('Read-only')).toBeNull()
+  })
+
+  it('labels each board Open or Read-only when some are read-only', () => {
+    render(<BoardsList boards={boards} openBoardIds={['board_1']} />)
+    expect(screen.getAllByText('Open')).toHaveLength(1)
+    expect(screen.getAllByText('Read-only')).toHaveLength(1)
+  })
+})

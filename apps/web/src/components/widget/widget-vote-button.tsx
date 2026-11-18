@@ -21,6 +21,8 @@ interface WidgetVoteButtonProps {
   noAccessReason?: string
   /** Compact horizontal variant */
   compact?: boolean
+  /** The board is read-only: the count shows and voting is closed. */
+  closed?: boolean
 }
 
 export function WidgetVoteButton({
@@ -30,6 +32,7 @@ export function WidgetVoteButton({
   onAuthRequired,
   noAccessReason,
   compact = false,
+  closed = false,
 }: WidgetVoteButtonProps) {
   const intl = useIntl()
   const { sessionVersion } = useWidgetAuth()
@@ -44,7 +47,7 @@ export function WidgetVoteButton({
   const handleClick = useCallback(async () => {
     // Denied by the board tier for an identified viewer — the tooltip explains;
     // do nothing (never fire a vote the server would reject).
-    if (noAccessReason) return
+    if (closed || noAccessReason) return
     if (onAuthRequired) {
       onAuthRequired()
       return
@@ -60,23 +63,31 @@ export function WidgetVoteButton({
       }
     }
     handleVote()
-  }, [noAccessReason, onAuthRequired, onBeforeVote, isPending, handleVote])
+  }, [closed, noAccessReason, onAuthRequired, onBeforeVote, isPending, handleVote])
 
-  const ariaLabel = hasVoted
+  const ariaLabel = closed
     ? intl.formatMessage(
         {
-          id: 'widget.voteButton.ariaRemoveVote',
-          defaultMessage: 'Remove vote ({count, plural, one {# vote} other {# votes}})',
+          id: 'widget.voteButton.ariaClosed',
+          defaultMessage: '{count, plural, one {# vote} other {# votes}}, voting closed',
         },
         { count: voteCount }
       )
-    : intl.formatMessage(
-        {
-          id: 'widget.voteButton.ariaVote',
-          defaultMessage: 'Vote ({count, plural, one {# vote} other {# votes}})',
-        },
-        { count: voteCount }
-      )
+    : hasVoted
+      ? intl.formatMessage(
+          {
+            id: 'widget.voteButton.ariaRemoveVote',
+            defaultMessage: 'Remove vote ({count, plural, one {# vote} other {# votes}})',
+          },
+          { count: voteCount }
+        )
+      : intl.formatMessage(
+          {
+            id: 'widget.voteButton.ariaVote',
+            defaultMessage: 'Vote ({count, plural, one {# vote} other {# votes}})',
+          },
+          { count: voteCount }
+        )
 
   return (
     <button
@@ -84,24 +95,25 @@ export function WidgetVoteButton({
       data-testid="vote-button"
       aria-label={ariaLabel}
       aria-pressed={hasVoted}
-      aria-disabled={noAccessReason ? true : undefined}
+      aria-disabled={closed || noAccessReason ? true : undefined}
       title={noAccessReason}
       onClick={handleClick}
-      disabled={isPending}
+      disabled={isPending || closed}
       className={cn(
         'relative flex items-center justify-center border rounded-md',
         compact ? 'flex-row gap-1 py-1.5 px-2.5 text-xs' : 'flex-col w-12 py-2 gap-0.5',
         'group transition-colors duration-200',
-        !noAccessReason && 'cursor-pointer',
+        !noAccessReason && !closed && 'cursor-pointer',
         hasVoted
           ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
           : 'bg-muted/40 text-muted-foreground border-border/50',
         // Hover affordances only when the button is actionable (not denied).
         !hasVoted &&
           !noAccessReason &&
+          !closed &&
           'hover:border-border hover:bg-muted/60 hover:text-foreground/80',
         isPending && 'opacity-70 cursor-wait',
-        noAccessReason && 'cursor-not-allowed opacity-60'
+        (noAccessReason || closed) && 'cursor-not-allowed opacity-60'
       )}
     >
       <ChevronUpIcon
@@ -109,7 +121,7 @@ export function WidgetVoteButton({
           compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
           'transition-transform duration-200',
           hasVoted && 'fill-post-card-voted',
-          !isPending && !noAccessReason && 'group-hover:-translate-y-0.5'
+          !isPending && !noAccessReason && !closed && 'group-hover:-translate-y-0.5'
         )}
       />
       <span

@@ -35,6 +35,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.board-guard', () => ({
+  assertPostBoardOpen: vi.fn(async () => {}),
+}))
 vi.mock('@/lib/server/events/dispatch', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/events/dispatch')>()),
   dispatchPostVoted: (...args: unknown[]) => mockDispatchPostVoted(...args),

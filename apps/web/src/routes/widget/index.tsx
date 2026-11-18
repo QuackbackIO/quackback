@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import type { BoardPermission } from '@/lib/shared/types/boards'
 import { useQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import {
@@ -152,7 +153,7 @@ export const Route = createFileRoute('/widget/')({
       posts: { items: [], hasMore: false },
       statuses: [],
       votedPostIds: [],
-      boardPermissions: {} as Record<string, { canSubmit: boolean; canVote: boolean }>,
+      boardPermissions: {} as Record<string, BoardPermission>,
     }
     let topArticles: { slug: string; title: string }[] = []
     // Teammate-avatar cluster for the Home header. Workspace-global and public-safe

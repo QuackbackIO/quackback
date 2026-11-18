@@ -25,6 +25,7 @@ import { logger } from '@/lib/server/logger'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import { dispatchPostVoted } from '@/lib/server/events/dispatch'
 import type { VoteResult } from './post.types'
+import { assertPostBoardOpen } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 
 const log = logger.child({ component: 'post-voting' })
 
@@ -106,6 +107,7 @@ async function emitPostVotedEvent(
  * @returns Result containing vote status and new count, or an error
  */
 export async function voteOnPost(postId: PostId, principalId: PrincipalId): Promise<VoteResult> {
+  await assertPostBoardOpen(postId)
   const postUuid = toUuid(postId)
   const principalUuid = toUuid(principalId)
   const voteId = toUuid(createId('post_vote'))
@@ -239,6 +241,7 @@ export async function addVoteOnBehalf(
   addedByPrincipalId?: PrincipalId,
   createdAt?: Date
 ): Promise<VoteResult> {
+  await assertPostBoardOpen(postId)
   const postUuid = toUuid(postId)
   const principalUuid = toUuid(principalId)
   const voteId = toUuid(createId('post_vote'))

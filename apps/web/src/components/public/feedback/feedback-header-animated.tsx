@@ -1,4 +1,6 @@
 import type { BoardId } from '@quackback/ids'
+import { isBoardReadOnlyError } from '@/lib/shared/board-read-only'
+import type { BoardPermission } from '@/lib/shared/types/boards'
 import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
@@ -52,7 +54,7 @@ export interface FeedbackHeaderProps {
    * workspace anonymous switch). The submit CTA follows the selected board's
    * `canSubmit` instead of the workspace-wide flag.
    */
-  boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
+  boardPermissions?: Record<string, BoardPermission>
   onPostCreated?: (postId: string, boardSlug: string) => void
   /**
    * When true, posts go to this page's board and the form does not offer a
@@ -287,14 +289,19 @@ export function FeedbackHeaderAnimated({
           },
         }
       )
-    } catch {
+    } catch (err) {
       // The server logs why it refused the post; its message is not written
-      // for the visitor.
+      // for the visitor, except the neutral line for a board that takes none.
       setError(
-        intl.formatMessage({
-          id: 'portal.feedback.header.errorSubmit',
-          defaultMessage: 'Could not submit your feedback. Please try again.',
-        })
+        isBoardReadOnlyError(err)
+          ? intl.formatMessage({
+              id: 'portal.feedback.readOnly',
+              defaultMessage: "This board isn't taking new feedback right now.",
+            })
+          : intl.formatMessage({
+              id: 'portal.feedback.header.errorSubmit',
+              defaultMessage: 'Could not submit your feedback. Please try again.',
+            })
       )
     }
   }

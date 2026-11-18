@@ -2274,5 +2274,11 @@
   "admin.integrations.oauthError.session": "Wir konnten deine Anmeldung nicht bestätigen. Melde dich erneut an und verbinde dich dann.",
   "admin.integrations.oauthError.credentials": "Hinterlege die App-Zugangsdaten für {name}, bevor du dich verbindest.",
   "admin.integrations.oauthError.elsewhere": "Dieses {name}-Konto ist bereits mit einem anderen Quackback-Arbeitsbereich verbunden.",
-  "admin.integrations.oauthError.failed": "Die Verbindung mit {name} wurde nicht abgeschlossen. Versuche es erneut."
+  "admin.integrations.oauthError.failed": "Die Verbindung mit {name} wurde nicht abgeschlossen. Versuche es erneut.",
+  "portal.feedback.readOnly": "Dieses Board nimmt gerade kein neues Feedback an.",
+  "portal.feedback.readOnlyShare": "Teile es in {board}.",
+  "portal.postCard.vote.ariaClosed": "{count, plural, one {# Stimme} other {# Stimmen}}, Abstimmung geschlossen",
+  "widget.voteButton.ariaClosed": "{count, plural, one {# Stimme} other {# Stimmen}}, Abstimmung geschlossen",
+  "widget.readOnly": "Dieses Board nimmt gerade kein neues Feedback an.",
+  "widget.readOnlyShare": "Teile es in {board}."
 }

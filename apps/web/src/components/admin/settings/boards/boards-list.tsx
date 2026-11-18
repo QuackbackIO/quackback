@@ -41,7 +41,30 @@ function postCountLabel(count: number): string {
   return count === 1 ? '1 post' : `${count} posts`
 }
 
-export function BoardsList({ boards }: { boards: BoardRow[] }) {
+/** Open or Read-only, shown only while some boards are read-only. */
+function BoardOpenBadge({ open }: { open: boolean }) {
+  return open ? (
+    <Badge size="sm" variant="success">
+      Open
+    </Badge>
+  ) : (
+    <Badge size="sm" variant="secondary">
+      Read-only
+    </Badge>
+  )
+}
+
+/**
+ * `openBoardIds` lists the boards that take posts, votes and comments; null
+ * means every board does, and no status label is shown.
+ */
+export function BoardsList({
+  boards,
+  openBoardIds = null,
+}: {
+  boards: BoardRow[]
+  openBoardIds?: string[] | null
+}) {
   return (
     <SettingsList>
       {boards.map((board) => (
@@ -51,7 +74,12 @@ export function BoardsList({ boards }: { boards: BoardRow[] }) {
           params={{ slug: board.slug }}
           leading={<RowIcon icon={ChatBubbleLeftIcon} />}
           title={board.name}
-          badges={<BoardAccessBadge access={board.access} />}
+          badges={
+            <>
+              <BoardAccessBadge access={board.access} />
+              {openBoardIds !== null && <BoardOpenBadge open={openBoardIds.includes(board.id)} />}
+            </>
+          }
           meta={
             board.description
               ? `${board.description} · ${postCountLabel(board.postCount)}`

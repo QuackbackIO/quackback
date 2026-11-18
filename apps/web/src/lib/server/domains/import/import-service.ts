@@ -32,6 +32,11 @@ import {
   type PrincipalId,
 } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
+import { openBoardIds } from '@/lib/server/domains/plan-limits/plan-limits.service'
+import {
+  BOARD_READ_ONLY_MESSAGE,
+  importRoom,
+} from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 import type { ImportInput, ImportResult, ImportRowError, ImportVoterRecord } from './types'
 import { ImportUserResolver } from './user-resolver'
 import { BATCH_SIZE, IMPORT_LINK_TYPE, loadRowContext, resolveRows } from './import-row-resolver'
@@ -39,6 +44,9 @@ import { assertImportWithinPlanLimits } from './import-plan-limits'
 
 /** integration_type/sourceType tag on post_votes rows this pipeline creates. */
 const VOTE_SOURCE_TYPE = 'import'
+const BOARD_LIMIT_MESSAGE =
+  "Not imported: the board limit is reached, so this row's board was not created."
+const POST_LIMIT_MESSAGE = 'Not imported: the post limit is reached.'
 
 // Constants
 export const MAX_ERRORS = 100
@@ -155,8 +163,15 @@ export async function processBatch(
   // schema-default access/settings, mirroring tag auto-creation below).
   // Direct inserts — deliberately not createBoard/createStatusFn, so bulk
   // imports don't fan out board/status events per row.
+  // While boards are read-only no board is created: a new one is not kept open.
+  // Otherwise boards stop at the plan's cap, as a single board create does.
+  const open = await openBoardIds()
+  const room = await importRoom()
+  let boardRoom = room.boards
   for (const [slug, name] of boardsToCreate) {
-    if (ctx.boardMap.has(slug)) continue
+    if (open !== null || ctx.boardMap.has(slug)) continue
+    if (boardRoom !== null && boardRoom <= 0) continue
+    if (boardRoom !== null) boardRoom--
     const id = createId('board')
     await db.insert(boards).values({ id, name, slug })
     ctx.boardMap.set(slug, { id, slug })
@@ -197,6 +212,24 @@ export async function processBatch(
     }
   }
 
+  // Rows aimed at a board that does not exist (it was not created) or is
+  // read-only are refused, whether they would create or update a post: a
+  // read-only board takes no new posts and no vote changes.
+  const refuse = (index: number, message: string, field: string) => {
+    result.errors.push({ row: index, message, field })
+    result.skipped++
+  }
+  for (let i = validRows.length - 1; i >= 0; i--) {
+    const { row, index } = validRows[i]
+    if (row.pendingBoardSlug !== null && !ctx.boardMap.has(row.pendingBoardSlug)) {
+      validRows.splice(i, 1)
+      refuse(index, open !== null ? BOARD_READ_ONLY_MESSAGE : BOARD_LIMIT_MESSAGE, 'board')
+    } else if (open !== null && !open.includes(row.boardId)) {
+      validRows.splice(i, 1)
+      refuse(index, BOARD_READ_ONLY_MESSAGE, 'board')
+    }
+  }
+
   // Idempotence: match rows carrying a source_id against prior import links.
   const sourceIds = validRows.map(({ row }) => row.sourceId).filter((id): id is string => !!id)
   const existingLinks =
@@ -216,6 +249,31 @@ export async function processBatch(
   const toUpdate = validRows.filter(
     ({ row }) => row.sourceId && existingBySourceId.has(row.sourceId)
   )
+
+  // New posts stop at the plan's posts cap, as a single post does.
+  if (room.posts !== null && toInsert.length > room.posts) {
+    for (const { index } of toInsert.splice(room.posts)) {
+      refuse(index, POST_LIMIT_MESSAGE, 'title')
+    }
+  }
+
+  // A post already on a read-only board keeps its content and votes.
+  if (open !== null && toUpdate.length > 0) {
+    const boardOf = new Map(
+      (
+        await db
+          .select({ id: posts.id, boardId: posts.boardId })
+          .from(posts)
+          .where(inArray(posts.id, [...existingBySourceId.values()]))
+      ).map((post) => [post.id, post.boardId])
+    )
+    for (let i = toUpdate.length - 1; i >= 0; i--) {
+      const boardId = boardOf.get(existingBySourceId.get(toUpdate[i].row.sourceId!)!)
+      if (boardId && !open.includes(boardId)) {
+        refuse(toUpdate.splice(i, 1)[0].index, BOARD_READ_ONLY_MESSAGE, 'board')
+      }
+    }
+  }
 
   // Pre-generate IDs for all new tags (no interactive transaction)
   const tagsToCreateArray = Array.from(tagsToCreate)

@@ -38,6 +38,7 @@ import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
 import { isTestCustomer, notTestPrincipal } from '@/lib/server/test-data'
+import { assertBoardOpen } from '@/lib/server/domains/plan-limits/plan-limits.board-guard'
 
 const log = logger.child({ component: 'comments' })
 
@@ -67,6 +68,7 @@ export async function createComment(
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
   }
   const board = post.board
+  await assertBoardOpen(board.id)
 
   // Enforce access-control policy: board audience + post visibility + comments-locked
   // + merged. Workspace moderation default is the fallback for board-level `inherit`.

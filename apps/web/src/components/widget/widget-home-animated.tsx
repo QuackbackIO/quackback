@@ -10,6 +10,8 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
+import { isBoardReadOnlyError } from '@/lib/shared/board-read-only'
+import type { BoardPermission } from '@/lib/shared/types/boards'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { Squares2X2Icon, PencilIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
@@ -101,7 +103,7 @@ export interface WidgetHomeProps {
    * `canVote` — instead of a workspace-wide flag that advertises actions the
    * board's tier rejects (#191).
    */
-  boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
+  boardPermissions?: Record<string, BoardPermission>
   defaultBoard?: string
   /** SDK `?board=` / `defaultBoard` — seed the Popular Ideas filter. */
   initialBoardSlug?: string
@@ -164,6 +166,7 @@ const WidgetPostRow = memo(
     showBoard,
     compact,
     canVote,
+    votingClosed,
     noAccessReason,
     ensureSessionThen,
     onAuthRequired,
@@ -174,6 +177,8 @@ const WidgetPostRow = memo(
     showBoard?: boolean
     compact?: boolean
     canVote: boolean
+    /** The row's board is read-only: votes show and are no longer taken. */
+    votingClosed?: boolean
     /** Reason an identified viewer cannot vote on this row's board (authz). */
     noAccessReason?: string
     ensureSessionThen: (callback: () => void | Promise<void>) => Promise<void>
@@ -208,8 +213,9 @@ const WidgetPostRow = memo(
                   }
                 : undefined
             }
-            noAccessReason={!canVote ? noAccessReason : undefined}
-            onAuthRequired={!canVote ? onAuthRequired : undefined}
+            noAccessReason={!canVote && !votingClosed ? noAccessReason : undefined}
+            onAuthRequired={!canVote && !votingClosed ? onAuthRequired : undefined}
+            closed={votingClosed}
           />
         </div>
         <button
@@ -266,6 +272,7 @@ const WidgetPostRow = memo(
     prev.showBoard === next.showBoard &&
     prev.compact === next.compact &&
     prev.canVote === next.canVote &&
+    prev.votingClosed === next.votingClosed &&
     prev.noAccessReason === next.noAccessReason
 )
 
@@ -387,6 +394,7 @@ function SimilarIdeas({
   sessionVersion,
   statusMap,
   rowCanVote,
+  rowClosed,
   ensureSessionThen,
   noAccessReason,
   onAuthRequired,
@@ -396,6 +404,7 @@ function SimilarIdeas({
   sessionVersion: number
   statusMap: Map<string, StatusInfo>
   rowCanVote: (boardId: string | undefined) => boolean
+  rowClosed: (boardId: string | undefined) => boolean
   ensureSessionThen: (callback: () => void | Promise<void>) => Promise<void>
   noAccessReason?: string
   onAuthRequired: (postId: string) => void
@@ -475,6 +484,7 @@ function SimilarIdeas({
                   statusMap={statusMap}
                   compact
                   canVote={rowCanVote(post.board?.id)}
+                  votingClosed={rowClosed(post.board?.id)}
                   ensureSessionThen={ensureSessionThen}
                   noAccessReason={noAccessReason}
                   onAuthRequired={() => onAuthRequired(post.id)}
@@ -608,7 +618,16 @@ export function WidgetHomeAnimated({
     (boardId: string | undefined) => !!boardId && (boardPermissions?.[boardId]?.canVote ?? false),
     [boardPermissions]
   )
+  const rowClosed = useCallback(
+    (boardId: string | undefined) => !!boardId && (boardPermissions?.[boardId]?.readOnly ?? false),
+    [boardPermissions]
+  )
   const canPost = boardPermissions?.[selectedBoardId]?.canSubmit ?? false
+  // A read-only board takes no posts: the footer says so, with a way to post
+  // to a board that does, and the submit button goes away.
+  const selectedReadOnly = boardPermissions?.[selectedBoardId]?.readOnly ?? false
+  const shareBoard =
+    boards.find((b) => b.id === boardPermissions?.[selectedBoardId]?.shareBoardId) ?? null
   // An identified viewer denied by the selected board's submit tier (segments/
   // team) is an authorization failure — surface it instead of "Posting as X".
   // An anonymous visitor on a members-only board must sign in via the host
@@ -881,12 +900,17 @@ export function WidgetHomeAnimated({
       })
 
       collapseForm()
-    } catch {
+    } catch (err) {
       setError(
-        intl.formatMessage({
-          id: 'widget.home.form.errorNetwork',
-          defaultMessage: 'Network error. Please try again.',
-        })
+        isBoardReadOnlyError(err)
+          ? intl.formatMessage({
+              id: 'widget.readOnly',
+              defaultMessage: "This board isn't taking new feedback right now.",
+            })
+          : intl.formatMessage({
+              id: 'widget.home.form.errorNetwork',
+              defaultMessage: 'Network error. Please try again.',
+            })
       )
     } finally {
       setIsSubmitting(false)
@@ -1024,6 +1048,7 @@ export function WidgetHomeAnimated({
                     sessionVersion={sessionVersion}
                     statusMap={statusMap}
                     rowCanVote={rowCanVote}
+                    rowClosed={rowClosed}
                     ensureSessionThen={ensureSessionThen}
                     noAccessReason={voteNoAccessReason}
                     onAuthRequired={handleAuthRequired}
@@ -1046,7 +1071,34 @@ export function WidgetHomeAnimated({
                   >
                     <div className="flex items-center justify-between px-3 py-2">
                       <p className="text-[11px] text-muted-foreground truncate me-2">
-                        {submitNoAccess ? (
+                        {selectedReadOnly ? (
+                          <>
+                            <FormattedMessage
+                              id="widget.readOnly"
+                              defaultMessage="This board isn't taking new feedback right now."
+                            />
+                            {shareBoard && (
+                              <>
+                                {' '}
+                                <FormattedMessage
+                                  id="widget.readOnlyShare"
+                                  defaultMessage="Share it in {board}."
+                                  values={{
+                                    board: (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleComposeBoardChange(shareBoard.id)}
+                                        className="font-medium text-foreground hover:underline"
+                                      >
+                                        {shareBoard.name}
+                                      </button>
+                                    ),
+                                  }}
+                                />
+                              </>
+                            )}
+                          </>
+                        ) : submitNoAccess ? (
                           <FormattedMessage
                             id="widget.home.posting.noAccess"
                             defaultMessage="You don't have access to post on this board"
@@ -1090,20 +1142,25 @@ export function WidgetHomeAnimated({
                         >
                           <FormattedMessage id="widget.home.form.cancel" defaultMessage="Cancel" />
                         </button>
-                        <button
-                          type="submit"
-                          disabled={!canSubmitForm || isSubmitting}
-                          className="px-3 py-1 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                        >
-                          {isSubmitting ? (
-                            <FormattedMessage
-                              id="widget.home.form.submitting"
-                              defaultMessage="Posting..."
-                            />
-                          ) : (
-                            <FormattedMessage id="widget.home.form.submit" defaultMessage="Post" />
-                          )}
-                        </button>
+                        {!selectedReadOnly && (
+                          <button
+                            type="submit"
+                            disabled={!canSubmitForm || isSubmitting}
+                            className="px-3 py-1 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                          >
+                            {isSubmitting ? (
+                              <FormattedMessage
+                                id="widget.home.form.submitting"
+                                defaultMessage="Posting..."
+                              />
+                            ) : (
+                              <FormattedMessage
+                                id="widget.home.form.submit"
+                                defaultMessage="Post"
+                              />
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </m.div>
@@ -1282,6 +1339,7 @@ export function WidgetHomeAnimated({
                         statusMap={statusMap}
                         showBoard
                         canVote={rowCanVote(post.board?.id)}
+                        votingClosed={rowClosed(post.board?.id)}
                         ensureSessionThen={ensureSessionThen}
                         noAccessReason={voteNoAccessReason}
                         onAuthRequired={() => handleAuthRequired(post.id)}
@@ -1335,6 +1393,7 @@ export function WidgetHomeAnimated({
                         statusMap={statusMap}
                         showBoard
                         canVote={rowCanVote(post.board?.id)}
+                        votingClosed={rowClosed(post.board?.id)}
                         ensureSessionThen={ensureSessionThen}
                         noAccessReason={voteNoAccessReason}
                         onAuthRequired={() => handleAuthRequired(post.id)}

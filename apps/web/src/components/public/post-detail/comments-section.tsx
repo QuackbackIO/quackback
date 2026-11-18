@@ -175,7 +175,15 @@ export function CommentsSection({
         allowCommenting={allowCommenting}
         replyPolicy={replyPolicy}
         user={adminUser ?? data?.user}
-        lockedMessage={lockedMessage}
+        lockedMessage={
+          lockedMessage ??
+          (data?.boardReadOnly
+            ? intl.formatMessage({
+                id: 'portal.feedback.readOnly',
+                defaultMessage: "This board isn't taking new feedback right now.",
+              })
+            : undefined)
+        }
         pinnedCommentId={pinnedCommentId}
         canPinComments={canPinComments || effectiveIsTeamMember}
         onPinComment={onPinComment}
