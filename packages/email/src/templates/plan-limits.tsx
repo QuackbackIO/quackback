@@ -47,7 +47,7 @@ export function planLimitsSubject(
   featuresOnlyDeadline?: string
 ): string {
   const name = workspaceName ?? 'Your workspace'
-  if (featuresOnlyDeadline && kind === 'start') {
+  if (featuresOnlyDeadline && kind !== 'enforced') {
     return `${name}: some features pause after ${featuresOnlyDeadline}`
   }
   if (kind === 'start') {

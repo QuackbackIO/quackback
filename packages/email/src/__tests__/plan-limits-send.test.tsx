@@ -104,6 +104,21 @@ describe('sendPlanLimitsEmail', () => {
   })
 })
 
+describe('features-only reminder', () => {
+  it('names the features and the date, not issues to fix, when no cap is over', async () => {
+    await email.sendPlanLimitsEmail({
+      to: sealedTo('billing@example.test'),
+      kind: 'reminder',
+      ...base,
+      rows: [],
+    })
+    expect(wire().subject).toBe('Acme Support: some features pause after Nov 24')
+    expect(planLimitsSubject('reminder', 'Acme Support', 'Free')).toBe(
+      "2 days left to fix Acme Support's plan limits"
+    )
+  })
+})
+
 /** Words never shown to users (see the plan limits glossary). */
 const BANNED =
   /\b(grace|enforced?|enforcement|frozen|held|extras|switch|current plan|choose a plan|keep pro|choose pro)\b/i
