@@ -70,14 +70,18 @@ describe('RolesTab', () => {
   afterEach(cleanup)
 
   it('says once, quietly, when the plan holds custom roles', () => {
-    renderTab({ ...ROLES, maxCustomRoles: 0, customRolesLocked: true })
-    expect(screen.getAllByText(/can't be edited or given to anyone new/i)).toHaveLength(1)
+    renderTab({ ...ROLES, maxCustomRoles: 0, customRolesLocked: true, planName: 'Free' })
+    expect(
+      screen.getAllByText(
+        /Custom roles are locked on the Free plan\. People on them keep their access\./
+      )
+    ).toHaveLength(1)
     expect(screen.queryByText(/at its custom-role limit/i)).toBeNull()
   })
 
   it('says nothing of a hold while custom roles are not held', () => {
-    renderTab({ ...ROLES, maxCustomRoles: 0, customRolesLocked: false })
-    expect(screen.queryByText(/can't be edited/i)).toBeNull()
+    renderTab({ ...ROLES, maxCustomRoles: 0, customRolesLocked: false, planName: null })
+    expect(screen.queryByText(/are locked/i)).toBeNull()
   })
 
   it('offers exactly one New role action, with a plus icon', () => {

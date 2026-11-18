@@ -9,7 +9,7 @@
  * Here: what each gate does with it.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { SEAT_PAUSED_DENIAL, isSeatPausedError } from '@/lib/shared/billing/seat-paused'
+import { isSeatPausedError } from '@/lib/shared/billing/seat-paused'
 
 const hoisted = vi.hoisted(() => ({
   paused: new Set<string>(),
@@ -57,7 +57,7 @@ vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ debug: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() }) },
 }))
 
-const { requireAuth, getOptionalAuth } = await import('../auth-helpers')
+const { requireAuth, getOptionalAuth, isAuthDenialError } = await import('../auth-helpers')
 await import('../workspace-utils')
 const requireWorkspaceRole = hoisted.handlers[0]!
 
@@ -80,8 +80,10 @@ describe('requireAuth', () => {
     hoisted.paused.add('principal_paused')
     const err = await requireAuth({ permission: 'settings.manage' }).catch((e: Error) => e)
     expect(err).toBeInstanceOf(Error)
-    expect((err as Error).message).toBe(SEAT_PAUSED_DENIAL)
+    expect((err as Error).message).toBe('Your admin access is paused.')
     expect(isSeatPausedError(err)).toBe(true)
+    // An auth denial, so production keeps its words rather than masking them.
+    expect(isAuthDenialError(err)).toBe(true)
   })
 
   it('gives a paused seat a portal context with no team authority', async () => {

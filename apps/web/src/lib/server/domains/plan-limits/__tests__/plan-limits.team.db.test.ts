@@ -381,9 +381,8 @@ describe.skipIf(!fixture.available)('sending domains (real DB)', () => {
       userId: createId('user') as UserId,
       workspaceName: 'Acme',
     }).catch((e: Error) => e.message)
-    expect(err).toBe(
-      'mail.news.example is paused on your plan. Mail from it goes from the default sender for now.'
-    )
+    // No billing projection here, so the plan goes unnamed.
+    expect(err).toBe('mail.news.example is paused. Email goes from your default address.')
   })
 })
 

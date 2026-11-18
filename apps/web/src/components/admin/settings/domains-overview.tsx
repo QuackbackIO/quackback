@@ -82,11 +82,13 @@ export const PHASE_STATE = {
   'not-found': 'attention',
 } as const satisfies Record<DomainPhase, BadgeState | null>
 
-/** The quiet line a sending domain held back by the plan carries. */
-export const SENDING_PAUSED_DETAIL = 'Paused on your plan. Mail goes from the default sender.'
+/** The quiet line a sending domain held back by the plan carries, naming the plan. */
+export function sendingPausedDetail(planName: string | null | undefined): string {
+  return `Paused${planName ? ` on the ${planName} plan` : ''}. Email goes from your default address.`
+}
 
 function sendingDetail(domain: SendingDomainSummary): string | undefined {
-  if (domain.paused) return SENDING_PAUSED_DETAIL
+  if (domain.paused) return sendingPausedDetail(domain.pausedPlanName)
   const parts = [domain.localParts.join(', ')]
   if (domain.ownershipProven) parts.push('Domain verified')
   return parts.filter(Boolean).join(' · ') || undefined

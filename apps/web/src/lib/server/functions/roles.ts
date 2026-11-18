@@ -58,7 +58,12 @@ export const listRolesFn = createServerFn({ method: 'GET' }).handler(async () =>
   // The cap ships so the roles tab can render the plan banner; null (the OSS
   // default) renders nothing. `customRolesLocked`: past the cap after the plan
   // limits grace, custom roles can't be edited or given to anyone new.
-  return { roles, maxCustomRoles: limits.maxCustomRoles, customRolesLocked }
+  const planName = customRolesLocked
+    ? await import('@/lib/server/domains/plan-limits/plan-limits.copy').then((m) =>
+        m.currentPlanName()
+      )
+    : null
+  return { roles, maxCustomRoles: limits.maxCustomRoles, customRolesLocked, planName }
 })
 
 export const createRoleFn = createServerFn({ method: 'POST' })

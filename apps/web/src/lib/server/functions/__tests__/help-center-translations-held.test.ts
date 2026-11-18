@@ -64,6 +64,7 @@ const fns = (await import('../help-center-translations')) as unknown as Record<
 
 const ENFORCED = {
   enabled: true,
+  plan: 'free',
   phase: 'enforced',
   issues: [{ key: 'maxHelpCenterLocales', used: 3, cap: 2 }],
 }
@@ -86,9 +87,12 @@ describe('help center translation writes', () => {
     hoisted.view = ENFORCED
     for (const [name, data] of calls) {
       const refused = await fns[name]!({ data: { ...data, locale: 'de' } }).catch(
-        (e: { code?: string }) => e.code
+        (e: { code?: string; message?: string }) => [e.code, e.message]
       )
-      expect(refused, name).toBe('HC_LOCALE_HELD')
+      expect(refused, name).toEqual([
+        'HC_LOCALE_HELD',
+        'This language is locked on the Free plan. Its published pages stay live.',
+      ])
       await fns[name]!({ data: { ...data, locale: 'fr' } })
     }
     expect(hoisted.writes.every((w) => w.endsWith(':fr'))).toBe(true)

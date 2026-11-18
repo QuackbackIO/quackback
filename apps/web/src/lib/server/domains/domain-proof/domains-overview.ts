@@ -41,6 +41,8 @@ export interface SendingDomainSummary {
   ownershipProven: boolean
   /** Held back by the plan: its mail goes from the default sender for now. */
   paused: boolean
+  /** The plan that holds it back, named in its line; null when unknown or not paused. */
+  pausedPlanName?: string | null
 }
 
 export interface SignInDomainSummary {
@@ -75,6 +77,12 @@ export async function listSendingDomainSummaries(): Promise<SendingDomainSummary
       .where(and(eq(channelAccounts.role, 'sending'), isNull(channelAccounts.deletedAt))),
     activeSendingDomainIds(),
   ])
+  const pausedPlanName =
+    active === null
+      ? null
+      : await import('@/lib/server/domains/plan-limits/plan-limits.copy').then((m) =>
+          m.currentPlanName()
+        )
   return domains.map((d) => {
     const domain = toAsciiDomain(d.domain)
     const parts = new Set<string>()
@@ -95,6 +103,7 @@ export async function listSendingDomainSummaries(): Promise<SendingDomainSummary
       localParts: [...parts].sort(),
       ownershipProven: sendingRowProvesZone(d),
       paused: active !== null && !active.includes(d.id),
+      pausedPlanName,
     }
   })
 }

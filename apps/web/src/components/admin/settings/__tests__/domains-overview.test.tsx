@@ -161,14 +161,16 @@ describe('use links', () => {
 })
 
 describe('a sending domain the plan holds back', () => {
-  it('says once that its mail goes from the default sender', () => {
+  it('says once, naming the plan, that its email goes from the default address', () => {
     const rows = domainRows({
       now: NOW,
-      sending: [sending({ paused: true, localParts: ['help@'] })],
+      sending: [sending({ paused: true, pausedPlanName: 'Free', localParts: ['help@'] })],
       signIn: [],
       helpCenterDomain: null,
     })
-    expect(rows[0]?.uses[0]?.detail).toBe('Paused on your plan. Mail goes from the default sender.')
+    expect(rows[0]?.uses[0]?.detail).toBe(
+      'Paused on the Free plan. Email goes from your default address.'
+    )
     const kept = domainRows({
       now: NOW,
       sending: [sending({ localParts: ['help@'] })],

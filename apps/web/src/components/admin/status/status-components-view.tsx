@@ -107,6 +107,14 @@ const EMPTY_FORM: ComponentFormValues = {
   segmentIds: [],
 }
 
+/** The one quiet line over the list when the plan hides some services. */
+export function hiddenLine(count: number, planName: string | null): string {
+  const onPlan = planName ? ` on the ${planName} plan` : ''
+  return count === 1
+    ? `1 service is hidden from your status page${onPlan}. It comes back when you upgrade.`
+    : `${count} services are hidden from your status page${onPlan}. They come back when you upgrade.`
+}
+
 export function StatusComponentsView() {
   const intl = useIntl()
   const { data, isLoading } = useQuery(statusComponentQueries.list())
@@ -124,7 +132,9 @@ export function StatusComponentsView() {
   // Past the plan's service cap after the grace, these stay here but are
   // hidden from the public page.
   const planHidden = data?.planHidden ?? null
-  const hiddenLabel = planHidden?.planName ? `Hidden on ${planHidden.planName}` : 'Hidden'
+  const hiddenLabel = planHidden?.planName
+    ? `Hidden on ${planHidden.planName}`
+    : 'Hidden from your status page'
   const hiddenOf = (c: StatusComponentAdmin) =>
     planHidden?.ids.includes(c.id) ? hiddenLabel : undefined
 
@@ -435,11 +445,7 @@ export function StatusComponentsView() {
         <div className="p-3 space-y-4">
           {planHidden && (
             <p className="px-3 text-xs text-muted-foreground">
-              {planHidden.ids.length === 1
-                ? '1 service is'
-                : `${planHidden.ids.length} services are`}{' '}
-              hidden from the public status page on your current plan. They come back when you
-              upgrade.
+              {hiddenLine(planHidden.ids.length, planHidden.planName)}
             </p>
           )}
           <DndContext

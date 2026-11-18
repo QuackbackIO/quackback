@@ -178,10 +178,10 @@ export function SeatPausedPage({ fullPage = true }: { fullPage?: boolean }) {
 
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">Your seat is paused</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Your admin access is paused</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        This workspace&apos;s plan includes fewer team seats than it has members. An owner can
-        choose who keeps a seat or upgrade.
+        This workspace&apos;s plan includes fewer team members than it has. Someone who manages
+        billing can give you access again or upgrade.
       </p>
       <div className="mt-6 flex items-center justify-center gap-3">
         <Button onClick={handleSignOut} disabled={signingOut}>

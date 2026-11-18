@@ -25,6 +25,16 @@ export async function customRolesLocked(): Promise<boolean> {
   }
 }
 
+/** "Custom roles are locked on the Free plan.", naming the plan when it is known. */
+export function customRolesLockedLine(planName: string | null): string {
+  return `Custom roles are locked${planName ? ` on the ${planName} plan` : ''}.`
+}
+
+async function lockedLine(): Promise<string> {
+  const { currentPlanName } = await import('@/lib/server/domains/plan-limits/plan-limits.copy')
+  return customRolesLockedLine(await currentPlanName())
+}
+
 function lockedError(message: string): TierLimitError {
   return new TierLimitError({ limit: 'maxCustomRoles', code: 'CUSTOM_ROLES_LOCKED', message })
 }
@@ -32,9 +42,7 @@ function lockedError(message: string): TierLimitError {
 /** Refuse an edit to a custom role while custom roles are held. */
 export async function assertCustomRoleEditable(role: { isSystem: boolean }): Promise<void> {
   if (role.isSystem || !(await customRolesLocked())) return
-  throw lockedError(
-    "Custom roles can't be edited on your current plan. People on them keep their access."
-  )
+  throw lockedError(`${await lockedLine()} People on them keep their access.`)
 }
 
 /**
@@ -47,9 +55,7 @@ export async function assertCustomRoleAssignable(
   alreadyHeld = false
 ): Promise<void> {
   if (role.isSystem || alreadyHeld || !(await customRolesLocked())) return
-  throw lockedError(
-    "Custom roles can't be given to anyone new on your current plan. Pick a built-in role."
-  )
+  throw lockedError(`${await lockedLine()} Pick a built-in role.`)
 }
 
 /**

@@ -310,8 +310,10 @@ export async function sendTestEmail(input: {
   if (!permitted) {
     const domain = domainOfAddress(address) ?? address
     if (isSendingIdentityPermitted(address, { ...ctx, pausedDomains: [] })) {
+      const { currentPlanName, onThePlan } =
+        await import('@/lib/server/domains/plan-limits/plan-limits.copy')
       throw new SendingDomainRefusedError(
-        `${domain} is paused on your plan. Mail from it goes from the default sender for now.`
+        `${domain} is paused${onThePlan(await currentPlanName())}. Email goes from your default address.`
       )
     }
     throw new SendingDomainRefusedError(

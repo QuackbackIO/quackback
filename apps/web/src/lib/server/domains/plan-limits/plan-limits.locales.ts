@@ -15,6 +15,7 @@ import { logger } from '@/lib/server/logger'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
 import { getPlanLimits } from './plan-limits.service'
+import { currentPlanName, onThePlan } from './plan-limits.copy'
 
 const log = logger.child({ component: 'plan-limits' })
 
@@ -47,6 +48,6 @@ export async function assertHelpCenterLocaleEditable(locale: string): Promise<vo
   if (!(await isHelpCenterLocaleHeld(locale))) return
   throw new ForbiddenError(
     'HC_LOCALE_HELD',
-    "This language can't be edited on your current plan. Its published pages stay live."
+    `This language is locked${onThePlan(await currentPlanName())}. Its published pages stay live.`
   )
 }
