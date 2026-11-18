@@ -22,6 +22,7 @@ vi.mock('@/lib/server/cache', async (importOriginal) => ({
 }))
 vi.mock('@/lib/server/config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/config')>()),
+  configuredBaseUrl: () => 'https://feedback.acme.com',
   getBaseUrl: () => 'https://feedback.acme.com',
 }))
 

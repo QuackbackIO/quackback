@@ -14,8 +14,8 @@
  * on, and on Cloud a custom domain that is ready.
  *
  * Sign-out alone is trusted from every section host still served
- * (`getSectionOrigins`), a self-hosted host kept while its lookups go
- * unanswered included: that host still serves pages for its grace, so a
+ * (`getServedSectionOrigins`), a self-hosted host kept while its lookups go
+ * unanswered and a host paused with the custom domain included: that host still serves pages for its grace, so a
  * visitor signed in there must be able to sign out. Signing someone out is the
  * worst a forged sign-out can do, which the primary domain already allows.
  * Sign-in, callback URLs, the handoff and linking keep the stricter list.
@@ -125,9 +125,11 @@ export async function authTrustedOrigins(
 ): Promise<string[]> {
   const base = workspaceAuthTrustedOrigins(request, env)
   try {
-    const { getSectionOrigins, getSignInSectionOrigins } =
+    const { getServedSectionOrigins, getSignInSectionOrigins } =
       await import('@/lib/server/domains/settings/section-links')
-    const origins = isSignOut(request) ? await getSectionOrigins() : await getSignInSectionOrigins()
+    const origins = isSignOut(request)
+      ? await getServedSectionOrigins()
+      : await getSignInSectionOrigins()
     return [...new Set([...base, ...Object.values(origins)])]
   } catch (err) {
     logger

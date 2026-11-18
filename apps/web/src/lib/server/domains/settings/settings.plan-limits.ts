@@ -11,7 +11,7 @@ import type {
   StoredCloudIdentityProjection,
   StoredPlanLimitsState,
 } from '@/lib/shared/db-types'
-import { getBaseUrl } from '@/lib/server/config'
+import { configuredBaseUrl } from '@/lib/server/config'
 import {
   effectiveSectionDomains,
   hostOfOrigin,
@@ -70,6 +70,15 @@ export interface PlanLimitsSources {
   visitorChatLive: boolean
 }
 
+/** The configured origin, never a paused custom domain's override; '' when there is none. */
+function configuredOrigin(): string {
+  try {
+    return configuredBaseUrl()
+  } catch {
+    return ''
+  }
+}
+
 export async function readPlanLimitsSources(): Promise<PlanLimitsSources | null> {
   const row = await findSettingsCached()
   if (!row) return null
@@ -81,7 +90,7 @@ export async function readPlanLimitsSources(): Promise<PlanLimitsSources | null>
   const sectionDomains = effectiveSectionDomains({
     sectionDomains: portal.sectionDomains,
     legacyHelpDomain: helpCenter.domain,
-    primaryHost: hostOfOrigin(getBaseUrl()),
+    primaryHost: hostOfOrigin(configuredOrigin()),
   })
   const sectionOn = portalSectionsEnabled({
     featureFlags: flags,

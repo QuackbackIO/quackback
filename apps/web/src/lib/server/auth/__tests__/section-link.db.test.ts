@@ -74,6 +74,7 @@ vi.mock('@/lib/server/logger', () => ({ logger: hoisted.log }))
 vi.mock('@/lib/server/domains/settings/section-links', () => ({
   getSignInSectionOrigins: async () => hoisted.origins,
   getSectionOrigins: async () => hoisted.origins,
+  getServedSectionOrigins: async () => hoisted.origins,
 }))
 vi.mock('@tanstack/react-start/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-start/server')>()),

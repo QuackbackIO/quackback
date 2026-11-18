@@ -50,7 +50,8 @@ export const startInstance = createStart(() => {
     // The user-content host (USER_CONTENT_URL) is narrowed to stored-file
     // reads before anything else looks at the request.
     // Section hosts (help.acme.com for the help center) are routed once the
-    // workspace, and so its settings, is known.
+    // workspace, and so its settings, is known, and after the paused custom
+    // domain, whose decision (the default origin, the paused hosts) they read.
     // Audit attribution last: it opens the request's attribution boundary, and
     // anything it records must land in the workspace resolved above.
     requestMiddleware: [

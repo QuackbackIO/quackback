@@ -7,7 +7,7 @@
  */
 import { getBaseUrl } from '@/lib/server/config'
 import { getWorkspaceSettings } from './settings.service'
-import { hostingOf, routableSectionDomains } from './section-domains.hosting'
+import { hostingOf, routableSectionDomains, withoutPausedHosts } from './section-domains.hosting'
 import type { WorkspaceSettings } from './settings.types'
 import {
   confirmedSectionDomains,
@@ -31,10 +31,10 @@ export function sectionOriginsOf(
     'settings' | 'portalConfig' | 'helpCenterConfig' | 'featureFlags' | 'statusConfig'
   > | null,
   primaryOrigin: string,
-  { forSignIn = false }: { forSignIn?: boolean } = {}
+  { forSignIn = false, asServed = false }: { forSignIn?: boolean; asServed?: boolean } = {}
 ): SectionOrigins {
   if (!settings) return allOnPrimary(primaryOrigin)
-  const routable = routableSectionDomains(
+  const routed = routableSectionDomains(
     effectiveSectionDomains({
       sectionDomains: settings.portalConfig?.sectionDomains,
       legacyHelpDomain: settings.helpCenterConfig?.domain,
@@ -42,6 +42,9 @@ export function sectionOriginsOf(
     }),
     hostingOf(settings.settings as { cloud?: unknown; cloudIdentity?: unknown })
   )
+  // A host paused with the custom domain still serves, so sign-in and the
+  // hosts still served (`asServed`) keep it; links and routing do not.
+  const routable = forSignIn || asServed ? routed : withoutPausedHosts(routed)
   const map = forSignIn ? confirmedSectionDomains(routable) : routable
   return sectionOrigins({
     map,
@@ -53,6 +56,15 @@ export function sectionOriginsOf(
 /** The origins for this request or job. Call it once and pass the result down. */
 export async function getSectionOrigins(): Promise<SectionOrigins> {
   return sectionOriginsOf(await getWorkspaceSettings(), getBaseUrl())
+}
+
+/**
+ * The origins of every section host still served, a host whose custom domain
+ * the plan has paused included: the hosts sign-out is trusted from. Links use
+ * `getSectionOrigins`, which never names a paused host.
+ */
+export async function getServedSectionOrigins(): Promise<SectionOrigins> {
+  return sectionOriginsOf(await getWorkspaceSettings(), getBaseUrl(), { asServed: true })
 }
 
 /**

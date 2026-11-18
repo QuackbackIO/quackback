@@ -39,7 +39,6 @@ vi.mock(
 import { runWithLogContext } from '@/lib/server/log-context'
 import { config } from '@/lib/server/config'
 import {
-  effectiveHelpCenterDomain,
   handlePausedCustomDomain,
   withPausedCustomDomainOrigin,
 } from '../plan-limits.custom-domain'
@@ -63,14 +62,14 @@ function identity(custom: string[], platformHostname: string | null = 'acme.exam
   }
 }
 
-function withSources(cloudIdentity: unknown, helpCenterDomain: string | null = null) {
+function withSources(cloudIdentity: unknown, sectionHostnames: string[] = []) {
   h.sources = {
     planLimitsState: null,
     tierLimits: null,
     cloud: null,
     cloudIdentity,
     customCss: null,
-    helpCenterDomain,
+    sectionHostnames,
     autoTranslate: false,
   }
 }
@@ -220,12 +219,12 @@ describe('requests on a custom hostname', () => {
     )
   })
 
-  // The default host used to send /hc/* to the help center domain with a
-  // permanent redirect that browsers cache. Redirecting that domain back to
-  // the default host would loop, so it keeps serving in place while paused.
-  it('serves a help center custom domain in place, so a cached redirect to it cannot loop', async () => {
+  // The primary domain sends a section's paths to its own host with a
+  // permanent redirect that browsers cache. Redirecting that host back to the
+  // default host would loop, so it keeps serving in place while paused.
+  it("serves a section's own host in place, so a cached redirect to it cannot loop", async () => {
     h.baseUrl = 'https://acme.example.com'
-    withSources(null, 'help.acme.test')
+    withSources(null, ['help.acme.test'])
     setFeatureState('enforced', 'customDomain')
     const { result, baseUrl } = await serve(request('https://help.acme.test/hc/refunds?q=1'))
     expect(result).toBe('next')
@@ -233,10 +232,10 @@ describe('requests on a custom hostname', () => {
     expect(baseUrl).toBe('https://acme.example.com')
   })
 
-  it('serves the help center domain in place even when it is also a workspace custom domain', async () => {
-    withSources(identity(['feedback.acme.test', 'help.acme.test']), 'help.acme.test')
+  it("serves a section's host in place even when it is also a workspace custom domain", async () => {
+    withSources(identity(['feedback.acme.test', 'status.acme.test']), ['status.acme.test'])
     setFeatureState('enforced', 'customDomain')
-    expect((await serve(request('https://help.acme.test/hc/x'))).result).toBe('next')
+    expect((await serve(request('https://status.acme.test/status'))).result).toBe('next')
     expect(
       ((await serve(request('https://feedback.acme.test/hc/x'))).result as Response).status
     ).toBe(307)
@@ -260,14 +259,4 @@ describe('background work', () => {
       )
     }
   )
-})
-
-describe('the help center custom domain', () => {
-  const domain = { domain: 'help.acme.test', verifiedAt: NOW }
-
-  it.each(FEATURE_STATES)('is offered only while not paused (%s)', async (state) => {
-    withSources(null, 'help.acme.test')
-    setFeatureState(state, 'customDomain')
-    expect(await effectiveHelpCenterDomain(domain)).toEqual(state === 'enforced' ? null : domain)
-  })
 })

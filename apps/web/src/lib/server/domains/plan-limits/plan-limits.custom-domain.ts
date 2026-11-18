@@ -7,14 +7,18 @@
  * names that hostname. The domain records are never touched, so the custom
  * hostname serves again the moment the plan includes it.
  *
- * The help center's custom domain is the exception: it keeps serving in place.
- * The default host used to send `/hc/*` there with a permanent redirect that
- * browsers cache, so sending that domain back to the default host would loop.
- * While paused, the default host stops redirecting to it and no link,
- * canonical, sitemap or robots.txt names it.
+ * A portal section's own host (help.acme.com) is the exception: it keeps
+ * serving its section in place. The primary domain sends a section's paths
+ * there with a permanent redirect that browsers cache, so sending that host
+ * back would loop. While paused, the section map reads it as not verified
+ * (`withoutPausedHosts`): the primary domain serves the section's paths
+ * itself, no link, canonical, sitemap or robots.txt names the host, and the
+ * team's pages on it still go to the primary domain. Sign-in and sign-out
+ * still trust it, since it still serves.
  *
  * Host resolution runs before any workspace scope exists, so the decision is
- * made by a request middleware that runs right after it, inside the scope.
+ * made by a request middleware that runs right after it, inside the scope,
+ * and before the section host middleware, which reads what it decided.
  *
  * Only a safe, top-level read is redirected. Left in place:
  *  - every other method, so a form posted before the pause still lands;
@@ -31,7 +35,11 @@
  */
 import { configuredBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
-import { runWithBaseUrlOverride, setRequestBaseUrlOverride } from '@/lib/server/base-url-override'
+import {
+  runWithPausedCustomDomain,
+  setRequestPausedCustomDomain,
+  type PausedCustomDomainView,
+} from '@/lib/server/base-url-override'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { requestWorkspaceHost } from '@/lib/server/workspaces/saas-edge-host'
 import { readPlanLimitsSources } from '@/lib/server/domains/settings/settings.plan-limits'
@@ -45,7 +53,7 @@ export interface PausedCustomDomain {
   defaultOrigin: string
   /** Every lower-case custom hostname: links never name these while paused. */
   customHostnames: ReadonlySet<string>
-  /** The custom hostnames that redirect to the default origin (not the help center's). */
+  /** The custom hostnames that redirect to the default origin (not a section's). */
   redirectHostnames: ReadonlySet<string>
 }
 
@@ -69,7 +77,7 @@ export async function pausedCustomDomain(): Promise<PausedCustomDomain | null> {
     const identity = parseIdentityProjection(sources.cloudIdentity)
     const custom = new Set<string>()
     for (const domain of identity?.customDomains ?? []) custom.add(domain.hostname.toLowerCase())
-    if (sources.helpCenterDomain) custom.add(sources.helpCenterDomain.toLowerCase())
+    for (const hostname of sources.sectionHostnames) custom.add(hostname)
     if (custom.size === 0) return null
 
     const workspace = getCurrentWorkspace()
@@ -90,7 +98,7 @@ export async function pausedCustomDomain(): Promise<PausedCustomDomain | null> {
 
     if (!(await isFeaturePaused('customDomain'))) return null
     const redirectHostnames = new Set(custom)
-    if (sources.helpCenterDomain) redirectHostnames.delete(sources.helpCenterDomain.toLowerCase())
+    for (const hostname of sources.sectionHostnames) redirectHostnames.delete(hostname)
     return { defaultOrigin: `https://${defaultHost}`, customHostnames: custom, redirectHostnames }
   } catch (err) {
     log.error({ err }, 'paused custom domain check failed; serving as usual')
@@ -144,27 +152,26 @@ export async function handlePausedCustomDomain<T>({
       },
     })
   }
-  if (paused.customHostnames.has(hostOf(configuredBaseUrl()) ?? '')) {
-    setRequestBaseUrlOverride(paused.defaultOrigin)
-  }
+  setRequestPausedCustomDomain(pausedView(paused))
   return next()
+}
+
+/**
+ * What the rest of the work reads: links on the default hostname when the
+ * configured origin is itself a paused custom hostname, and every paused
+ * hostname left out of links and routing.
+ */
+function pausedView(paused: PausedCustomDomain): PausedCustomDomainView {
+  const configuredIsCustom = paused.customHostnames.has(hostOf(configuredBaseUrl()) ?? '')
+  return {
+    origin: configuredIsCustom ? paused.defaultOrigin : null,
+    hostnames: [...paused.customHostnames],
+  }
 }
 
 /** Run background work (an email, a notification) with links on the default hostname while paused. */
 export async function withPausedCustomDomainOrigin<T>(fn: () => Promise<T>): Promise<T> {
   const paused = await pausedCustomDomain()
-  if (!paused || !paused.customHostnames.has(hostOf(configuredBaseUrl()) ?? '')) return fn()
-  return runWithBaseUrlOverride(paused.defaultOrigin, fn)
-}
-
-/**
- * The help center's custom domain as the public pages should use it: null
- * while paused, so the default-host redirect to it and the links naming it stop
- * with the rest of the custom domain. The stored config is unchanged.
- */
-export async function effectiveHelpCenterDomain<T>(
-  domain: T | null | undefined
-): Promise<T | null> {
-  if (!domain) return null
-  return (await pausedCustomDomain()) ? null : domain
+  if (!paused) return fn()
+  return runWithPausedCustomDomain(pausedView(paused), fn)
 }

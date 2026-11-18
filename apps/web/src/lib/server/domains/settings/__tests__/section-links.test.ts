@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
 vi.mock('@/lib/server/config', () => ({
   getBaseUrl: () => 'https://acme.example.com',
 }))
+
+const { runWithPausedCustomDomain } = await import('@/lib/server/base-url-override')
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getWorkspaceSettings: async () => {
     state.reads += 1
@@ -23,6 +25,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 
 const {
   getSectionOrigins,
+  getServedSectionOrigins,
   getSignInSectionOrigins,
   isSectionHost,
   sectionHostOrigin,
@@ -258,5 +261,38 @@ describe('on Cloud, a section saved while its custom domain was pending', () => 
       expect((await getSectionOrigins()).help).toBe(PRIMARY)
       expect((await getSignInSectionOrigins()).help).toBe(PRIMARY)
     }
+  })
+})
+
+// A custom domain paused after the plan limits grace: the hosts it names are
+// decided once for the request (base-url-override.ts) and read here.
+describe('a section host paused with the custom domain', () => {
+  const paused = <T>(fn: () => Promise<T>) =>
+    runWithPausedCustomDomain({ origin: null, hostnames: ['help.acme.com'] }, fn)
+
+  it('is linked nowhere: its section links at the primary domain', async () => {
+    expect((await paused(getSectionOrigins)).help).toBe(PRIMARY)
+    expect(await getSectionOrigins()).not.toEqual(await paused(getSectionOrigins))
+  })
+
+  it('is still trusted for sign-in and sign-out, since it still serves', async () => {
+    expect((await paused(getSignInSectionOrigins)).help).toBe('https://help.acme.com')
+    expect((await paused(getServedSectionOrigins)).help).toBe('https://help.acme.com')
+  })
+
+  it('is still a section host, so a session made there stays portal scope', async () => {
+    expect(await paused(() => isSectionHost('help.acme.com'))).toBe(true)
+  })
+
+  it('leaves other hosts linked as usual', async () => {
+    state.settings = workspace({
+      sectionDomains: {
+        help: { hostname: 'help.acme.com', verifiedAt: VERIFIED },
+        status: { hostname: 'status.acme.com', verifiedAt: VERIFIED },
+      },
+    })
+    const origins = await paused(getSectionOrigins)
+    expect(origins.help).toBe(PRIMARY)
+    expect(origins.status).toBe('https://status.acme.com')
   })
 })

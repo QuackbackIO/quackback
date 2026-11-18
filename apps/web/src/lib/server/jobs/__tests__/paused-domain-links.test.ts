@@ -36,7 +36,7 @@ vi.mock('@/lib/server/domains/settings/settings.plan-limits', () => ({
       ],
       updatedAt: '2026-11-01T00:00:00.000Z',
     },
-    helpCenterDomain: null,
+    sectionHostnames: [],
   }),
 }))
 vi.mock(

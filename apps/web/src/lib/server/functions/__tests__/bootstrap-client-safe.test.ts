@@ -4,6 +4,8 @@ import {
   runsWithoutPlanGate,
   setFeatureState,
 } from '@/lib/server/domains/plan-limits/__tests__/feature-states'
+import { runWithLogContext } from '@/lib/server/log-context'
+import { handlePausedCustomDomain } from '@/lib/server/domains/plan-limits/plan-limits.custom-domain'
 
 /**
  * `getBootstrapData` is a server function: besides seeding the SSR document it
@@ -17,6 +19,7 @@ const hoisted = vi.hoisted(() => ({
   getWorkspaceSettings: vi.fn(),
   handlers: [] as Array<() => Promise<unknown>>,
   host: 'feedback.example',
+  helpDomainConfig: null as { domain: string | null; verifiedAt: string | null } | null,
 }))
 
 vi.mock('@tanstack/react-start', () => ({
@@ -44,9 +47,17 @@ vi.mock('@/lib/server/config', () => ({
   config: { baseUrl: 'https://feedback.example' },
   configuredBaseUrl: () => 'https://feedback.example',
 }))
-vi.mock('@/lib/server/domains/help-center/help-center-domain.service', async () => ({
-  resolveHelpCenterBaseUrl: (await import('@/lib/shared/help-center-domain'))
-    .resolveHelpCenterBaseUrl,
+vi.mock('@/lib/server/domains/help-center/help-center-domain.service', () => ({
+  resolveHelpCenterBaseUrl: ({
+    fallback,
+    domainConfig,
+  }: {
+    fallback: string
+    domainConfig: { domain: string | null; verifiedAt: string | null }
+  }) => {
+    hoisted.helpDomainConfig = domainConfig
+    return fallback
+  },
 }))
 vi.mock(
   '@/lib/server/domains/plan-limits/plan-limits.service',
@@ -55,9 +66,12 @@ vi.mock(
       .planLimitsServiceDouble
 )
 // The paused custom domain reads the workspace's custom hostnames from the
-// settings row: here a help center domain on top of the default host.
+// settings row: here the help center's own host on top of the default host.
 vi.mock('@/lib/server/domains/settings/settings.plan-limits', () => ({
-  readPlanLimitsSources: async () => ({ cloudIdentity: null, helpCenterDomain: 'help.acme.test' }),
+  readPlanLimitsSources: async () => ({
+    cloudIdentity: null,
+    sectionHostnames: ['help.acme.test'],
+  }),
 }))
 vi.mock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => false }))
 vi.mock('@/lib/server/logger', () => ({
@@ -249,6 +263,7 @@ describe('getBootstrapData and the plan limits pause', () => {
       ...workspaceSettings(setupState()),
       customCss: css,
       helpCenterConfig: { domain: hcDomain },
+      featureFlags: { feedback: true, helpCenter: true },
     }
   }
 
@@ -264,23 +279,32 @@ describe('getBootstrapData and the plan limits pause', () => {
     expect(data.settings.customCss).toBe(runsWithoutPlanGate(state) ? css : '')
   })
 
+  // As a request is served: the paused custom domain middleware decides
+  // first, and the bootstrap reads what it decided.
   it.each(FEATURE_STATES)(
-    'offers the help center custom domain only while not paused (%s)',
+    "links the help center's own host only while it is not paused (%s)",
     async (state) => {
       setFeatureState(state, 'customDomain')
       const stored = settingsWithPaidPresentation()
       hoisted.getWorkspaceSettings.mockResolvedValue(stored)
-      const data = (await getBootstrapData()) as unknown as {
-        baseUrl: string
-        settings: { helpCenterConfig: { domain: unknown } }
+      const request = new Request('https://help.acme.test/', {
+        headers: { host: 'help.acme.test' },
+      })
+      const data = (await runWithLogContext({} as never, () =>
+        handlePausedCustomDomain({ request, next: getBootstrapData })
+      )) as unknown as {
+        sectionHome: string | null
+        sectionLinks?: { hosts?: Record<string, string>; here?: string }
       }
+      // The host serves its own section either way.
+      expect(data.sectionHome).toBe('/hc')
       if (runsWithoutPlanGate(state)) {
-        expect(data.settings.helpCenterConfig.domain).toEqual(hcDomain)
-        expect(data.baseUrl).toBe('https://help.acme.test')
+        expect(data.sectionLinks?.hosts?.help).toBe('https://help.acme.test')
+        expect(hoisted.helpDomainConfig?.verifiedAt).toBe('2026-11-01T00:00:00.000Z')
       } else {
-        // No default-host redirect to it, and canonical links on the default host.
-        expect(data.settings.helpCenterConfig.domain).toEqual({ domain: null, verifiedAt: null })
-        expect(data.baseUrl).toBe('https://feedback.example')
+        // No link and no canonical names the paused host.
+        expect(data.sectionLinks?.hosts?.help).toBeUndefined()
+        expect(hoisted.helpDomainConfig?.verifiedAt).toBeNull()
       }
       // The cached settings object is never written to.
       expect(stored.helpCenterConfig.domain).toEqual(hcDomain)
