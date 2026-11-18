@@ -5,6 +5,7 @@ import type { ConversationStatus } from '@/lib/shared/db-types'
 import type { JsonValue } from '@/lib/shared/json'
 import type { ConversationAttributeSource } from '@/lib/shared/conversation/attribute-values'
 import type { Channel } from '@/lib/shared/channels'
+import type { BlockReplyKind } from '@/lib/shared/conversation/block-reply-kinds'
 
 /**
  * Timer-driven workflow triggers (support platform §4.6): synthetic events
@@ -316,6 +317,10 @@ export interface EventMessageData {
   authorEmail: string | null // realEmail()
   content: string
   createdAt: string
+  /** The kind of conversation block the message answers ('csat', 'buttons',
+   *  ...), taken from the stored, server-matched block reply; null for every
+   *  other message. Absent on events stored before the field existed. */
+  blockReplyKind?: BlockReplyKind | null
 }
 
 export interface ConversationCreatedPayload {
