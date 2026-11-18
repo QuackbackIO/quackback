@@ -500,6 +500,13 @@ export const hooksBefore = createAuthMiddleware(async (ctx) => {
     const moved = await sectionSignInMove(ctx)
     if (moved) return ctx.json(moved)
   }
+  // Linking a provider asked for on a section host runs on the primary domain
+  // too, for the same reason (section-link.ts).
+  if (ctx.path === '/link-social' && ctx.request) {
+    const { sectionLinkMove } = await import('./section-link')
+    const moved = await sectionLinkMove(ctx)
+    if (moved) return ctx.json(moved)
+  }
   // Signing out on one host ends the same sign-in on the workspace's other
   // hosts (section-session-family.ts). Before the library ends this session,
   // which is how the family is found.
