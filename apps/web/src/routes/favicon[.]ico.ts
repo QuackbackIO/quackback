@@ -16,6 +16,7 @@ export const Route = createFileRoute('/favicon.ico')({
           headers: {
             Location: '/logo.png',
             'Cache-Control': 'public, max-age=86400',
+            Vary: 'Host',
           },
         }),
     },
