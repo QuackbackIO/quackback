@@ -72,6 +72,11 @@ vi.mock('../conversation.service', () => ({
   routeUnassignedConversation: (conversation: unknown) => routeUnassignedConversation(conversation),
 }))
 
+const notifyVisitorMessage = vi.fn(async (_opts: unknown) => {})
+vi.mock('../conversation.notify', () => ({
+  notifyVisitorMessage: (opts: unknown) => notifyVisitorMessage(opts),
+}))
+
 import { createEmailConversation } from '../conversation.email-cold-inbound'
 
 const RAW = (headers: string[]): string =>
@@ -102,6 +107,7 @@ beforeEach(() => {
   insertedMessages = []
   insertedConversations = []
   routeUnassignedConversation.mockClear()
+  notifyVisitorMessage.mockClear()
 })
 
 describe('the key a cold-inbound message is filed under', () => {
@@ -139,6 +145,19 @@ describe('the key a cold-inbound message is filed under', () => {
     )
   })
 
+  it('emails the team about a new emailed-in conversation like a widget start', async () => {
+    await store(parseRawEmail(RAW(['Message-ID: <cold-notify@example.com>'])))
+    expect(notifyVisitorMessage).toHaveBeenCalledTimes(1)
+    expect(notifyVisitorMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: expect.objectContaining({ channel: 'email' }),
+        content: 'Is anyone there?',
+        authorName: 'stranger@example.com',
+        isFirstMessage: true,
+      })
+    )
+  })
+
   it('does not route quarantined mail', async () => {
     await createEmailConversation({
       parsed: parseRawEmail(RAW(['Message-ID: <spam@example.com>'])),
@@ -149,6 +168,7 @@ describe('the key a cold-inbound message is filed under', () => {
       quarantine: { cause: 'sender_auth_reject', note: 'refused' },
     })
     expect(routeUnassignedConversation).not.toHaveBeenCalled()
+    expect(notifyVisitorMessage).not.toHaveBeenCalled()
   })
 
   it('is absent when the message offers no id at all', async () => {
