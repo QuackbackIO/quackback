@@ -22,18 +22,18 @@ function config(overrides: Partial<CloudConfig> = {}): CloudConfig {
 }
 
 describe('trialNotice', () => {
-  it('keeps See plans until the last three days', () => {
+  it('keeps Compare plans until the last three days', () => {
     const notice = trialNotice(config({ trialExpiresAt: '2026-08-30T00:00:00.000Z' }), NOW)
     expect(notice).toMatchObject({
       label: 'Pro trial',
-      actionLabel: 'See plans',
-      message: expect.stringContaining('pick a paid plan'),
+      actionLabel: 'Compare plans',
+      message: expect.stringContaining('upgrade to keep everything'),
     })
   })
 
-  it('switches the action to Continue with the plan in the last three days', () => {
+  it('switches the action to Upgrade to the plan in the last three days', () => {
     const notice = trialNotice(config({ trialExpiresAt: '2026-08-21T12:00:00.000Z' }), NOW)
-    expect(notice?.actionLabel).toBe('Continue with Pro')
+    expect(notice?.actionLabel).toBe('Upgrade to Pro')
   })
 })
 
@@ -49,13 +49,11 @@ describe('trialEndedNotice', () => {
     expect(notice).toMatchObject({
       label: 'Pro trial ended',
       ended: true,
-      actionLabel: 'Choose a plan',
+      actionLabel: 'Compare plans',
       actionUrl: '/admin/settings/billing',
     })
     expect(notice).not.toHaveProperty('choiceDueAt')
-    expect(notice?.message).toBe(
-      'Choose how this workspace continues: keep Pro, or switch to Free.'
-    )
+    expect(notice?.message).toBe('Upgrade to Pro to keep everything, or downgrade to Free.')
   })
 
   it('never asks for billing details: the trial never had any', () => {
@@ -65,7 +63,7 @@ describe('trialEndedNotice', () => {
 
   it('gives a teammate the news without a button or a deadline, naming who decides', () => {
     const notice = trialEndedNotice(ended, { now: NOW, canManageBilling: false })
-    expect(notice?.message).toMatch(/workspace owner needs to choose a plan/)
+    expect(notice?.message).toMatch(/Ask someone who manages billing to upgrade/)
     expect(notice).toMatchObject({ label: 'Trial ended', ended: true })
     expect(notice).not.toHaveProperty('actionUrl')
     expect(notice).not.toHaveProperty('choiceDueAt')

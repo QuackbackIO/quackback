@@ -20,12 +20,12 @@ export function trialNotice(config: CloudConfig, now: Date = new Date()): PlanNo
   return {
     label: `${planLabel(config)} trial`,
     trialPlan: planLabel(config),
-    message: 'When this ends, pick a paid plan or switch to Free from billing.',
+    message: 'When it ends, upgrade to keep everything, or downgrade to Free.',
     expiresAt: config.trialExpiresAt,
     ...(actionUrl
       ? {
           actionUrl,
-          actionLabel: urgent ? `Continue with ${planLabel(config)}` : 'See plans',
+          actionLabel: urgent ? `Upgrade to ${planLabel(config)}` : 'Compare plans',
         }
       : {}),
   }
@@ -57,15 +57,15 @@ export function trialEndedNotice(
   if (options.canManageBilling === false) {
     return {
       ...base,
-      message: 'The workspace owner needs to choose a plan. Until then, Free limits apply.',
+      message: 'Ask someone who manages billing to upgrade. Until then, Free limits apply.',
     }
   }
   const actionUrl = plansActionUrl(config)
   return {
     ...base,
     message: name
-      ? `Choose how this workspace continues: keep ${name}, or switch to Free.`
-      : 'Choose how this workspace continues: pick a paid plan, or switch to Free.',
-    ...(actionUrl ? { actionUrl, actionLabel: 'Choose a plan' } : {}),
+      ? `Upgrade to ${name} to keep everything, or downgrade to Free.`
+      : 'Upgrade to a paid plan to keep everything, or downgrade to Free.',
+    ...(actionUrl ? { actionUrl, actionLabel: 'Compare plans' } : {}),
   }
 }

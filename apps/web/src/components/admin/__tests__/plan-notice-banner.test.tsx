@@ -6,9 +6,9 @@ import { PlanNoticeBanner } from '../plan-notice-banner'
 
 const ENDED = {
   label: 'Pro trial ended',
-  message: 'Choose how this workspace continues: keep Pro, or switch to Free.',
+  message: 'Upgrade to Pro to keep everything, or downgrade to Free.',
   expiresAt: '2026-08-18T00:00:00.000Z',
-  actionLabel: 'Choose a plan',
+  actionLabel: 'Compare plans',
   actionUrl: '/admin/settings/billing',
   ended: true,
 }
@@ -26,7 +26,7 @@ describe('PlanNoticeBanner', () => {
   it('renders an ended-trial strip with no dismiss control', () => {
     render(<PlanNoticeBanner notice={ENDED} />)
     expect(screen.getByText('Pro trial ended')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Choose a plan/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Compare plans/ })).toHaveAttribute(
       'href',
       '/admin/settings/billing'
     )
@@ -43,7 +43,7 @@ describe('PlanNoticeBanner', () => {
       <PlanNoticeBanner
         notice={{
           label: 'Pro trial ended',
-          message: 'The workspace owner needs to choose a plan. Until then, Free limits apply.',
+          message: 'Ask someone who manages billing to upgrade. Until then, Free limits apply.',
           expiresAt: ENDED.expiresAt,
           ended: true,
         }}
@@ -51,7 +51,9 @@ describe('PlanNoticeBanner', () => {
     )
     expect(screen.getByText('Pro trial ended')).toBeInTheDocument()
     // Its message is all it has to say, so it is not hidden on a phone.
-    expect(screen.getByText(/workspace owner needs to choose/).className).not.toMatch(/hidden/)
+    expect(screen.getByText(/Ask someone who manages billing to upgrade/).className).not.toMatch(
+      /hidden/
+    )
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
     expect(container.firstElementChild?.className).not.toMatch(/bg-red-600/)
   })
@@ -64,9 +66,9 @@ describe('PlanNoticeBanner', () => {
   it('waits for the last three days of a trial before it shows', () => {
     const days = (n: number) => ({
       label: 'Pro trial',
-      message: 'When this ends, pick a plan.',
+      message: 'When it ends, upgrade to keep everything, or downgrade to Free.',
       expiresAt: new Date(Date.now() + n * 86_400_000 - 60_000).toISOString(),
-      actionLabel: 'See plans',
+      actionLabel: 'Compare plans',
       actionUrl: '/admin/settings/billing',
     })
     render(<PlanNoticeBanner notice={days(14)} />)

@@ -242,7 +242,7 @@ describe('getPlanNotice — the trial countdown', () => {
       expect.objectContaining({
         label: 'Business trial ended',
         ended: true,
-        actionLabel: 'Choose a plan',
+        actionLabel: 'Compare plans',
       })
     )
   })
@@ -256,7 +256,7 @@ describe('getPlanNotice — the trial countdown', () => {
       expect.objectContaining({
         label: 'Business trial ended',
         ended: true,
-        message: expect.stringMatching(/workspace owner needs to choose a plan/),
+        message: expect.stringMatching(/Ask someone who manages billing to upgrade/),
       })
     )
     expect(notice).not.toHaveProperty('actionUrl')
@@ -272,7 +272,7 @@ describe('getPlanNotice — the trial countdown', () => {
       expect.objectContaining({
         label: 'Business trial ended',
         ended: true,
-        actionLabel: 'Choose a plan',
+        actionLabel: 'Compare plans',
       })
     )
   })
