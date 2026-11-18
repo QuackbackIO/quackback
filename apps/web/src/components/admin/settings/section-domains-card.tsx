@@ -18,6 +18,7 @@ import {
   SettingsListRow,
 } from '@/components/admin/settings/settings-list'
 import type { CheckResult } from '@/components/admin/settings/section-domain-record'
+import type { DnsRecordRow } from '@/components/shared/dns-record-table'
 import { StateBadge, type BadgeState } from '@/components/shared/state-badge'
 import { errorText } from '@/lib/client/error-text'
 import { CUSTOM_DOMAINS_ANCHOR } from '@/lib/shared/section-domains'
@@ -88,10 +89,14 @@ export function SectionDomainsCard({
   sectionEnabled,
   cloud,
   readyHostnames,
+  cloudHostnames,
+  loadVerifiedDomains,
+  loadCloudRecords,
   canAdd,
   onChanged,
   onMakePrimary,
   onAddDomain,
+  onAddVerifiedDomain,
 }: {
   view: SectionDomainsView
   /** The sections to row, in nav order (`listedSections`). */
@@ -100,11 +105,19 @@ export function SectionDomainsCard({
   cloud: boolean
   /** Cloud: the custom domains that are ready and not the primary domain. */
   readyHostnames: readonly string[]
+  /** Cloud: every custom domain's hostname, ready or not. */
+  cloudHostnames?: readonly string[]
+  /** Reads the Verified domains Add custom domain offers. */
+  loadVerifiedDomains?: () => Promise<readonly string[]>
+  /** Cloud: reads the DNS records a custom domain needs. */
+  loadCloudRecords?: (hostname: string) => Promise<DnsRecordRow[]>
   /** False on Cloud without the custom domain entitlement. */
   canAdd: boolean
   onChanged: () => void
   onMakePrimary?: (hostname: string) => void
   onAddDomain?: () => void
+  /** Go to Settings > Domains to add one; only for a viewer who may. */
+  onAddVerifiedDomain?: (section: PortalSection) => void
 }) {
   const map = view.sectionDomains
   const primary = view.primaryHost ?? ''
@@ -285,6 +298,10 @@ export function SectionDomainsCard({
             map={map}
             primaryHost={view.primaryHost}
             readyHostnames={readyHostnames}
+            cloudHostnames={cloudHostnames}
+            loadVerifiedDomains={loadVerifiedDomains}
+            loadCloudRecords={loadCloudRecords}
+            onAddVerifiedDomain={onAddVerifiedDomain}
             onSaved={() => {
               // A changed hostname has not been checked yet: forget what the last Verify found.
               setChecks({})
@@ -302,13 +319,11 @@ export function SectionDomainsCard({
             open
             onOpenChange={(open) => !open && setRemoving(null)}
             title={
-              removing && removingEntry
+              removingEntry
                 ? `Stop using ${removingEntry.hostname} for ${usedForLabel(removing)}?`
                 : ''
             }
-            description={
-              removing ? `${usedForLabel(removing)} goes back to the primary domain.` : undefined
-            }
+            description={`${usedForLabel(removing)} goes back to the primary domain.`}
             confirmLabel="Remove"
             variant="destructive"
             isPending={busy}

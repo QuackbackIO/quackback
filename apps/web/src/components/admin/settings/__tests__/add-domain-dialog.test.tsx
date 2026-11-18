@@ -53,3 +53,16 @@ describe('add domain', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
+
+describe('add domain, asked for by a link', () => {
+  it('opens straight away when the page was opened to add one', () => {
+    render(<AddDomainButton defaultOpen />)
+    expect(screen.getByRole('dialog')).toHaveTextContent('Add domain')
+    expect(screen.getByLabelText('Domain')).toHaveValue('')
+  })
+
+  it('stays closed otherwise', () => {
+    render(<AddDomainButton />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})

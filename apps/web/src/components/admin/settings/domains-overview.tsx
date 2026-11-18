@@ -217,10 +217,13 @@ export function VerifiedDomainsCard({
   rows,
   links,
   canAdd,
+  openAdd = false,
 }: {
   rows: DomainRow[]
   links: DomainUseLinks
   canAdd: boolean
+  /** Open Add domain on arrival: a link asked for it (`addDomainLink`). */
+  openAdd?: boolean
 }) {
   // A custom domain is listed on the Custom domains card, not here.
   const listed = rows.flatMap((row) => {
@@ -230,7 +233,7 @@ export function VerifiedDomainsCard({
   return (
     <SettingsCard
       title={VERIFIED_DOMAINS_TITLE}
-      action={canAdd ? <AddDomainButton /> : undefined}
+      action={canAdd ? <AddDomainButton defaultOpen={openAdd} /> : undefined}
       flush
     >
       {listed.length === 0 ? (

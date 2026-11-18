@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DnsRecordTable, txtParts } from '../dns-record-table'
+
+afterEach(cleanup)
 
 describe('<DnsRecordTable>', () => {
   it('shows each record with its state and says how to fix only the broken one', () => {
@@ -137,5 +139,50 @@ describe('<DnsRecordTable> a value longer than one TXT string', () => {
     await waitFor(() =>
       expect(writeText).toHaveBeenLastCalledWith(`"${LONG.slice(0, 255)}" "${LONG.slice(255)}"`)
     )
+  })
+})
+
+describe('<DnsRecordTable> one record alone', () => {
+  it('can leave out the record label, keeping its state for screen readers', () => {
+    render(
+      <DnsRecordTable
+        hideLabels
+        records={[
+          {
+            label: 'Routing',
+            type: 'CNAME',
+            name: 'help',
+            value: 'edge.example.net',
+            state: 'waiting',
+          },
+        ]}
+      />
+    )
+    const row = document.querySelector('[data-slot="dns-record"]') as HTMLElement
+    expect(row).not.toHaveTextContent('Routing')
+    // Waiting is the normal state: no bare clock icon, the word kept for screen readers.
+    expect(row.querySelector('td')?.querySelector('svg')).toBeNull()
+    // Its cell, and the column header over it, take no room on screen.
+    expect(row.querySelector('td')).toHaveClass('sr-only')
+    expect(screen.getByText('Record')).toHaveClass('sr-only')
+    expect(screen.getByText('Waiting', { exact: false })).toHaveClass('sr-only')
+  })
+
+  it.each([
+    ['found', 'Found'],
+    ['problem', 'Needs a fix'],
+  ] as const)('shows a %s record its icon with the word, never a bare icon', (state, word) => {
+    render(
+      <DnsRecordTable
+        hideLabels
+        records={[
+          { label: 'Routing', type: 'CNAME', name: 'help', value: 'edge.example.net', state },
+        ]}
+      />
+    )
+    const row = document.querySelector('[data-slot="dns-record"]') as HTMLElement
+    expect(row.querySelector('td')?.querySelector('svg')).not.toBeNull()
+    const label = screen.getByText(word)
+    expect(label).not.toHaveClass('sr-only')
   })
 })

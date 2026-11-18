@@ -5,30 +5,36 @@
  * workspace URL. Each saves from its own dialog or form, so the tab has no
  * save bar. Loaded only when the tab opens, with its data.
  */
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import {
+  getCloudCustomDomainsFn,
   mutateCloudCustomDomainFn,
   platformLabelFromHostname,
   updateCloudIdentityFn,
   type WebAddress,
 } from '@/lib/server/functions/cloud-identity'
 import { platformUrlSuffix } from '@/lib/shared/platform-label'
-import { DomainsCard, QuackbackUrlCard } from '@/components/admin/settings/domains-cards'
+import {
+  DomainsCard,
+  hostnameRecords,
+  QuackbackUrlCard,
+} from '@/components/admin/settings/domains-cards'
 import {
   listedSections,
   SectionDomainsCard,
 } from '@/components/admin/settings/section-domains-card'
 import { portalSectionsEnabled } from '@/lib/shared/section-domains'
-import { DOMAIN_VERIFICATION_ANCHOR } from '@/lib/shared/domains-permissions'
+import { addDomainLink, DOMAIN_VERIFICATION_ANCHOR } from '@/lib/shared/domains-permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { CUSTOM_DOMAINS_HREF } from '@/lib/shared/portal-settings-tabs'
 import {
   portalCustomDomainsQueries,
   type CustomDomainsOperator,
 } from '@/lib/client/queries/portal-custom-domains'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useHasPermission, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { toastError } from '@/lib/client/error-notice'
 
 /** Go to the Domain verification card and its Domain field, where a Cloud custom domain is added. */
@@ -105,6 +111,18 @@ export default function PortalCustomDomainsTab({
     await router.invalidate()
   }
   const cloudDomains = useCloudDomains(operator?.domains ?? NO_DOMAINS, onChanged, onLeave)
+  // Add custom domain reads the Verified domains when it opens, not with the tab.
+  const loadVerifiedDomains = useCallback(
+    () => queryClient.fetchQuery(portalCustomDomainsQueries.verifiedDomains()),
+    [queryClient]
+  )
+  // The records a Cloud custom domain needs, read fresh for Add custom domain's DNS step.
+  const loadCloudRecords = useCallback(async (hostname: string) => {
+    const domain = (await getCloudCustomDomainsFn()).find((d) => d.hostname === hostname)
+    return domain ? hostnameRecords(domain) : []
+  }, [])
+  // Only settings.manage adds a domain, so only its holder is sent to Add domain.
+  const canAddDomain = useHasPermission(PERMISSIONS.SETTINGS_MANAGE)
   const sectionEnabled = portalSectionsEnabled({
     featureFlags: settings?.featureFlags,
     statusConfig: settings?.statusConfig,
@@ -126,6 +144,13 @@ export default function PortalCustomDomainsTab({
           readyHostnames={cloudDomains.domains
             .filter((d) => d.readiness === 'ready' && !d.isPrimary)
             .map((d) => d.hostname)}
+          cloudHostnames={cloudDomains.domains.map((d) => d.hostname)}
+          loadVerifiedDomains={loadVerifiedDomains}
+          loadCloudRecords={cloud ? loadCloudRecords : undefined}
+          // Through the router, so unsaved Design changes ask first, as leaving the page does.
+          onAddVerifiedDomain={
+            canAddDomain ? (section) => void router.navigate(addDomainLink(section)) : undefined
+          }
           canAdd={!cloud || !!operator?.entitled}
           onChanged={() => void onChanged()}
           onMakePrimary={

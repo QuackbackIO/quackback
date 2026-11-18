@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from 'react'
 import { RADIO_TILE_DOT, RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { cn } from '@/lib/shared/utils'
 
@@ -22,6 +23,12 @@ interface VisibilityTilesProps<T extends string> {
   options: VisibilityTileOption<T>[]
   disabled?: boolean
   className?: string
+  /** The id of the heading that names the group. */
+  'aria-labelledby'?: string
+  /** Shown directly under an option's tile, such as a field the option needs. */
+  renderAfter?: (value: T) => ReactNode
+  /** Keep each description to one line, the whole of it on hover, for tight grids. */
+  truncateDescriptions?: boolean
 }
 
 /** Radio tiles: radio dot, title and a one-line description per option. */
@@ -32,6 +39,9 @@ export function VisibilityTiles<T extends string>({
   options,
   disabled,
   className,
+  'aria-labelledby': labelledBy,
+  renderAfter,
+  truncateDescriptions = false,
 }: VisibilityTilesProps<T>) {
   return (
     <RadioGroup
@@ -39,39 +49,52 @@ export function VisibilityTiles<T extends string>({
       value={value}
       onValueChange={(next) => onChange(next as T)}
       disabled={disabled}
+      aria-labelledby={labelledBy}
       className={cn('gap-2.5', className)}
     >
       {options.map((option) => {
         const selected = option.value === value
         const off = disabled || option.disabled
         return (
-          <label
-            key={option.value}
-            data-slot="visibility-tile"
-            data-selected={selected}
-            className={cn(
-              'flex items-start gap-2.5 rounded-xl border px-3.5 py-3 transition-colors',
-              selected
-                ? 'border-primary bg-primary/10 ring-1 ring-primary'
-                : 'border-border hover:bg-muted/40',
-              off ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-            )}
-          >
-            <RadioGroupItem
-              value={option.value}
-              disabled={off}
-              className={cn('mt-0.5', RADIO_TILE_DOT)}
-            />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium">{option.title}</span>
-              {option.description && (
-                // A long hostname breaks inside the tile rather than running past its edge.
-                <span className="mt-0.5 block text-[13px] text-muted-foreground wrap-anywhere">
-                  {option.description}
-                </span>
+          <Fragment key={option.value}>
+            <label
+              data-slot="visibility-tile"
+              data-selected={selected}
+              className={cn(
+                'flex gap-2.5 rounded-xl border px-3.5 py-3 transition-colors',
+                // A tile with one line centres it, so a tile stretched beside a taller one is not hollow.
+                option.description ? 'items-start' : 'items-center',
+                selected
+                  ? 'border-primary bg-primary/10 ring-1 ring-primary'
+                  : 'border-border hover:bg-muted/40',
+                off ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
               )}
-            </span>
-          </label>
+            >
+              <RadioGroupItem
+                value={option.value}
+                disabled={off}
+                className={cn(option.description && 'mt-0.5', RADIO_TILE_DOT)}
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{option.title}</span>
+                {option.description &&
+                  (truncateDescriptions ? (
+                    <span
+                      className="mt-0.5 block truncate text-[13px] text-muted-foreground"
+                      title={option.description}
+                    >
+                      {option.description}
+                    </span>
+                  ) : (
+                    // A long hostname breaks inside the tile rather than running past its edge.
+                    <span className="mt-0.5 block text-[13px] text-muted-foreground wrap-anywhere">
+                      {option.description}
+                    </span>
+                  ))}
+              </span>
+            </label>
+            {renderAfter?.(option.value)}
+          </Fragment>
         )
       })}
     </RadioGroup>

@@ -15,6 +15,8 @@ vi.mock('@/lib/server/functions/section-domains', () => ({
 
 const { SectionDomainsCard, listedSections } = await import('../section-domains-card')
 const { cnameRecord } = await import('../section-domain-record')
+// The dialog is loaded when it opens; load it once up front so a busy run does not time the first open out.
+await import('../section-domain-dialog')
 
 beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
@@ -244,7 +246,8 @@ describe('Custom domains card', () => {
     renderCard({ map: { help: { hostname: 'help.acme.com', verifiedAt: AT } } })
     await pick('Help center', 'Change')
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByRole('radio', { name: /^Help center/ })).toBeChecked()
+    expect(dialog.querySelector('[data-slot="used-for-detail"]')).toHaveTextContent('Help center')
+    expect(within(dialog).getByLabelText('Domain')).toHaveValue('help.acme.com')
   })
 
   it('adds a custom domain from the card, asking what it is used for first', async () => {
