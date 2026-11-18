@@ -53,8 +53,15 @@ vi.mock('./sync-conversation-mentions', () => ({
   syncConversationMessageMentions: vi.fn(),
 }))
 
-vi.mock('../message-parent', () => ({
-  resolveMessageParent: vi.fn(async () => ({ kind: 'ticket', ticketId: 'ticket_1' })),
+// The parent check passes here; a hidden parent is covered by
+// conversation-visibility-writes.db.test.ts.
+vi.mock('../message-parent', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../message-parent')>()),
+  assertMessageParentVisible: vi.fn(async (m: { conversationId?: string; ticketId?: string }) =>
+    m.conversationId
+      ? { kind: 'conversation', conversationId: m.conversationId, conversation: {} }
+      : { kind: 'ticket', ticketId: m.ticketId }
+  ),
 }))
 
 vi.mock('@/lib/server/domains/channels/github-deliver', () => ({
@@ -93,7 +100,9 @@ vi.mock('../conversation.query', () => ({
   ),
 }))
 
-vi.mock('@/lib/server/db', () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  // The real tables the scope filters build their subqueries from.
+  const { teamMembers } = await importOriginal<typeof import('@/lib/server/db')>()
   const conversationRow = {
     id: 'conversation_1',
     visitorPrincipalId: 'principal_visitor',
@@ -142,11 +151,14 @@ vi.mock('@/lib/server/db', () => {
         }),
     },
     eq: vi.fn(),
+    or: vi.fn(),
+    sql: vi.fn(),
     and: vi.fn((...args: unknown[]) => args),
     isNull: vi.fn(),
     desc: vi.fn(),
     ne: (...a: unknown[]) => ne(...a),
     notInArray: vi.fn(),
+    teamMembers,
     conversations: { __name: 'conversations', id: 'id' },
     conversationMessages: { __name: 'conversation_messages', id: 'id', senderType: 'sender_type' },
     conversationMessageMentions: { __name: 'conversation_message_mentions', id: 'id' },

@@ -29,7 +29,9 @@ export function useCopilotInsert({
   replyComposerRef,
 }: {
   noteMode: boolean
-  setNoteMode: (noteMode: boolean) => void
+  /** Returns false when the switch was refused (a tracker's Reply all with
+   *  files staged); the insert is then dropped, never queued for later. */
+  setNoteMode: (noteMode: boolean) => boolean | void
   replyComposerRef: RefObject<InsertableHandle | null>
 }): (text: string) => void {
   const pendingRef = useRef<string | null>(null)
@@ -52,8 +54,8 @@ export function useCopilotInsert({
         replyComposerRef.current?.insertText(text)
         return
       }
+      if (setNoteMode(false) === false) return
       pendingRef.current = text
-      setNoteMode(false)
     },
     [noteMode, setNoteMode, replyComposerRef]
   )

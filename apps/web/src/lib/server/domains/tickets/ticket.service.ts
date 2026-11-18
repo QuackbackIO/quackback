@@ -29,16 +29,20 @@ import {
   ticketStatuses,
   conversationMessages,
   ticketConversations,
-  conversations,
   principal,
   teams,
   type Ticket,
   type ConversationPriority,
 } from '@/lib/server/db'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import type { SQL } from 'drizzle-orm'
 import type { PrincipalId, TicketId, TicketStatusId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
-import { rowScopePrincipalId, type Actor } from '@/lib/server/policy/types'
+import {
+  rowScopePrincipalId,
+  type Actor,
+  type SystemCascadeOptions,
+} from '@/lib/server/policy/types'
 import { ticketFilter } from '@/lib/server/policy/tickets'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
@@ -104,7 +108,7 @@ export async function loadTicketOr404(id: TicketId): Promise<Ticket> {
 /**
  * The canonical single-ticket authorization chokepoint (unified inbox §2.5):
  * exists, non-deleted, AND passes `ticketFilter(actor)` — the same
- * existence+visibility fusion `assertConversationViewable` uses for
+ * existence+visibility fusion `assertConversationVisible` uses for
  * conversations, so a caller without `ticket.view`/`ticket.view_all` (or with
  * `ticket.view` on a ticket assigned to someone else / another team) gets
  * NotFound rather than a Forbidden that would leak the ticket's existence.
@@ -366,11 +370,17 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
 export async function createTicket(input: CreateTicketInput, actor: Actor): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_CREATE, 'create a ticket')
 
+  // A source conversation the actor cannot see is NotFound, like a missing
+  // one, before anything about it is read and before any ticket exists.
+  const sourceAssignee = input.sourceConversationId
+    ? (await assertConversationVisible(input.sourceConversationId, actor)).assignedAgentPrincipalId
+    : null
+
   // Assignee resolution: explicit > source conversation's assignee > creating
-  // agent. The two defaults are best-effort — a missing conversation or a
-  // creator whose principal doesn't resolve to a team member simply leaves
-  // the ticket unassigned (a default must never fail the create); an EXPLICIT
-  // assignee, by contrast, is validated hard, mirroring assignTicket.
+  // agent. The creator default is best-effort — a creator whose principal
+  // doesn't resolve to a team member simply leaves the ticket unassigned (a
+  // default must never fail the create); an EXPLICIT assignee, by contrast, is
+  // validated hard, mirroring assignTicket.
   let assigneePrincipalId = input.assigneePrincipalId ?? null
   if (assigneePrincipalId) {
     const [assignee] = await db
@@ -381,13 +391,8 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
     if (!assignee || !isTeamMember(assignee.role)) {
       throw new ValidationError('INVALID_ASSIGNEE', 'Can only assign to a team member')
     }
-  } else if (input.sourceConversationId) {
-    const [conversation] = await db
-      .select({ assigned: conversations.assignedAgentPrincipalId })
-      .from(conversations)
-      .where(eq(conversations.id, input.sourceConversationId))
-      .limit(1)
-    assigneePrincipalId = conversation?.assigned ?? null
+  } else {
+    assigneePrincipalId = sourceAssignee
   }
   // A personal API key assigns to its creator, so the ticket stays inside the
   // scope the key reads with; the key itself stays the author for attribution.
@@ -431,17 +436,6 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
 }
 
 /**
- * Options for a ticket write that runs as a system effect of another write.
- * `systemCascade` skips the per-ticket visibility check and keeps the actor as
- * author: the tracker status cascade checks the tracker once, then reaches
- * every linked ticket, also ones the actor cannot see. Never take it from
- * request input.
- */
-export interface TicketWriteOptions {
-  systemCascade?: boolean
-}
-
-/**
  * Set a ticket's status. Entering a closed-category status stamps `resolvedAt`;
  * leaving one clears it and increments `reopenedCount`. A ticket the actor
  * cannot see is NotFound.
@@ -450,7 +444,7 @@ export async function setTicketStatus(
   id: TicketId,
   statusId: TicketStatusId,
   actor: Actor,
-  options: TicketWriteOptions = {}
+  options: SystemCascadeOptions = {}
 ): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_SET_STATUS, 'change this ticket status')
   const existing = options.systemCascade

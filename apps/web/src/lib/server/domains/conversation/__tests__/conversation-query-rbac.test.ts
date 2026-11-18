@@ -75,7 +75,7 @@ async function seedWorld() {
     teamX: createId('conversation') as ConversationId, // team = X (agentA member)
     teamY: createId('conversation') as ConversationId, // team = Y (agentA not a member)
     selfB: createId('conversation') as ConversationId, // agent = agentB
-    unassigned: createId('conversation') as ConversationId, // no assignee
+    unassigned: createId('conversation') as ConversationId, // no assignee, no team
   }
   const base = { visitorPrincipalId: visitor, channel: 'messenger' as const }
   await testDb.insert(conversations).values([
@@ -128,22 +128,22 @@ describe.skipIf(!fixture.available)(
       )
     })
 
-    it('bare conversation.view sees assigned-to-me + my-team only (not unassigned)', async () => {
+    it('bare conversation.view sees assigned-to-me + my-team + the Unassigned queue', async () => {
       const world = await seedWorld()
       const memberA = buildActor({
         principalId: world.agentA,
         permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
       })
-      expect(await visibleLabels(memberA, world)).toEqual(new Set(['selfA', 'teamX']))
+      expect(await visibleLabels(memberA, world)).toEqual(new Set(['selfA', 'teamX', 'unassigned']))
     })
 
-    it('bare conversation.view with no team membership sees assigned-to-me only', async () => {
+    it('bare conversation.view with no team membership sees assigned-to-me + the Unassigned queue', async () => {
       const world = await seedWorld()
       const soloB = buildActor({
         principalId: world.agentB,
         permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
       })
-      expect(await visibleLabels(soloB, world)).toEqual(new Set(['selfB']))
+      expect(await visibleLabels(soloB, world)).toEqual(new Set(['selfB', 'unassigned']))
     })
 
     it('an actor with no conversation.view (and anonymous) sees nothing', async () => {

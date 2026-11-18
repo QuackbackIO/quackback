@@ -37,7 +37,10 @@ vi.mock('@tanstack/react-start', () => ({
   },
 }))
 
+const STUB_ACTOR = vi.hoisted(() => ({ principalId: 'principal_1' }))
+
 const hoisted = vi.hoisted(() => ({
+  assertConversationVisible: vi.fn(async () => ({})),
   requireAuth: vi.fn(),
   getWorkflow: vi.fn(),
   updateWorkflow: vi.fn(),
@@ -46,7 +49,16 @@ const hoisted = vi.hoisted(() => ({
   previewWorkflow: vi.fn(),
 }))
 
-vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
+vi.mock('@/lib/server/functions/auth-helpers', () => ({
+  requireAuth: hoisted.requireAuth,
+  policyActorFromAuth: async () => STUB_ACTOR,
+}))
+// The per-item conversation check: visible unless a test says otherwise. Real
+// scope is covered by conversation-visibility-functions.db.test.ts.
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
+}))
 vi.mock('@/lib/server/domains/workflows/workflow.service', () => ({
   listWorkflows: vi.fn(),
   getWorkflow: hoisted.getWorkflow,

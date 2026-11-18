@@ -187,7 +187,9 @@ export const retryGitHubAgentMessageFn = createServerFn({ method: 'POST' })
   .validator(z.object({ messageId: z.string() }))
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const { requireAuth, policyActorFromAuth } = await import('@/lib/server/functions/auth-helpers')
-    const { db, eq, conversationMessages, conversations } = await import('@/lib/server/db')
+    const { db, eq, conversationMessages } = await import('@/lib/server/db')
+    const { assertMessageParentVisible } =
+      await import('@/lib/server/domains/conversation/message-parent')
     const { retryGitHubAgentMessage } = await import('@/lib/server/domains/channels/github-deliver')
     const { canActAsAgent } = await import('@/lib/server/policy/conversation')
     const { ForbiddenError, NotFoundError } = await import('@/lib/shared/errors')
@@ -203,11 +205,9 @@ export const retryGitHubAgentMessageFn = createServerFn({ method: 'POST' })
     if (!message?.conversationId || message.isInternal || message.senderType !== 'agent') {
       throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
     }
-    const [conversation] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, message.conversationId))
-      .limit(1)
+    // A conversation the caller cannot see hides its messages too.
+    const parent = await assertMessageParentVisible(message, actor)
+    const conversation = parent.kind === 'conversation' ? parent.conversation : null
     if (!conversation || conversation.channel !== 'github') {
       throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
     }

@@ -7,7 +7,7 @@
  *   (`chatParamsFromRequestBody`, with the route's own fields validated off
  *   `forwardedProps` against its zod schema) -> `assertCopilotAvailable`
  *   (the assistant being configured) -> the AI token
- *   budget -> item-scoped viewability (`assertConversationViewable` or
+ *   budget -> item-scoped viewability (`assertConversationVisible` or
  *   `assertTicketVisible`, whichever the parsed ref carries — unified inbox
  *   §2.9), each already mapped onto the route's error envelope
  *   (forbiddenResponse / errorResponse).
@@ -39,7 +39,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 // same specifier to stay mockable. index.ts does not re-export this module,
 // so there is no import cycle.
 import { isAssistantConfigured } from '@/lib/server/domains/assistant'
-import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import { NotFoundError } from '@/lib/shared/errors'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
@@ -114,7 +114,7 @@ async function resolveViewableItem(
 ): Promise<{ conversationId: ConversationId | null; ticketId: TicketId | null }> {
   if ('conversationId' in itemRef) {
     const conversationId = itemRef.conversationId as ConversationId
-    await assertConversationViewable(conversationId, actor)
+    await assertConversationVisible(conversationId, actor)
     return { conversationId, ticketId: null }
   }
   const ticketId = itemRef.ticketId as TicketId

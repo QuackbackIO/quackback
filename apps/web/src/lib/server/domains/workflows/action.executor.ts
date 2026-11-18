@@ -196,6 +196,11 @@ export interface WorkflowContext {
    *  sendBlock falls back to resolving lazily itself in that case, exactly
    *  as it always has. */
   resolvedBlockDeps?: ResolvedBlockDeps
+  /** Set only by a macro run (`applyMacroActions`), which checked the item
+   *  once at its start: the conversation writers then skip their per-item
+   *  check, so a later action still applies after an earlier one moved the
+   *  item out of the actor's scope. A workflow run never sets it. */
+  systemCascade?: boolean
 }
 
 /** What `send_block` posts, per block kind — the unresolved template as
@@ -468,17 +473,26 @@ export async function applyAction(
   // Attribution threaded into every service call whose write posts a system
   // notice, so the thread names the firing workflow on that notice.
   const attribution = ctx.workflowName ? { workflowName: ctx.workflowName } : undefined
+  // Forwarded as given: only a macro run sets it (see WorkflowContext).
+  const writeOpts = { systemCascade: ctx.systemCascade }
   switch (action.type) {
     case 'assign_agent':
       await conversationService.assignConversation(
         conversationId,
         action.principalId,
         actor,
-        attribution
+        attribution,
+        writeOpts
       )
       return label('assigned')
     case 'assign_team':
-      await conversationService.assignTeam(conversationId, action.teamId, actor, attribution)
+      await conversationService.assignTeam(
+        conversationId,
+        action.teamId,
+        actor,
+        attribution,
+        writeOpts
+      )
       return label('assigned to team')
     case 'add_tag':
       await tagService.attachTag(conversationId, action.tagId)
@@ -487,7 +501,12 @@ export async function applyAction(
       await tagService.detachTag(conversationId, action.tagId)
       return label('untagged')
     case 'set_priority':
-      await conversationService.setConversationPriority(conversationId, action.priority, actor)
+      await conversationService.setConversationPriority(
+        conversationId,
+        action.priority,
+        actor,
+        writeOpts
+      )
       return label(`priority ${action.priority}`)
     case 'snooze': {
       const until =
@@ -496,7 +515,7 @@ export async function applyAction(
           : action.untilIso
             ? new Date(action.untilIso)
             : null
-      await conversationService.snoozeConversation(conversationId, until, actor)
+      await conversationService.snoozeConversation(conversationId, until, actor, writeOpts)
       return label('snoozed')
     }
     case 'close':
@@ -505,7 +524,8 @@ export async function applyAction(
         'closed',
         actor,
         attribution,
-        action.lifecycle === 'auto_closed' ? 'auto_closed' : 'closed'
+        action.lifecycle === 'auto_closed' ? 'auto_closed' : 'closed',
+        writeOpts
       )
       return label('closed')
     case 'reopen':
@@ -515,7 +535,14 @@ export async function applyAction(
       // event), so an already-open conversation is a no-op in every
       // OBSERVABLE way — no duplicate transcript notice, no re-fired event —
       // without this case needing its own pre-check.
-      await conversationService.setConversationStatus(conversationId, 'open', actor, attribution)
+      await conversationService.setConversationStatus(
+        conversationId,
+        'open',
+        actor,
+        attribution,
+        undefined,
+        writeOpts
+      )
       return label('reopened')
     case 'apply_sla': {
       if (action.target === 'ticket') {

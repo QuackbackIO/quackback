@@ -78,9 +78,6 @@ vi.mock('@/lib/server/realtime/presence', () => ({
   refreshPresence: (...a: unknown[]) => mockRefreshPresence(...a),
   clearPresence: (...a: unknown[]) => mockClearPresence(...a),
 }))
-vi.mock('@/lib/server/policy/conversation', () => ({
-  canViewConversation: (...a: unknown[]) => mockCanView(...a),
-}))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   loadAuthors: vi.fn(async () => new Map()),
   toMessageDTO: vi.fn(),
@@ -103,9 +100,25 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
 vi.mock('@/lib/server/functions/portal-access', () => ({
   resolvePortalAccessForRequest: (...a: unknown[]) => mockPortalAccess(...a),
 }))
+// The per-item check the stream runs: here the row comes from the
+// conversations lookup and the decision from mockCanView, so each test drives
+// existence and visibility separately. Real scope is covered by
+// stream-actor-permissions.db.test.ts.
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   requeueUnansweredOnAgentOffline: vi.fn(),
 }))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', async () => {
+  const { NotFoundError } = await import('@/lib/shared/errors')
+  return {
+    assertConversationVisible: async (_id: unknown, actor: unknown) => {
+      const row = await mockConversationFindFirst()
+      if (!row || !mockCanView(actor, row).allowed) {
+        throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+      }
+      return row
+    },
+  }
+})
 const mockAcquireSlot = vi.fn()
 vi.mock('@/lib/server/realtime/stream-connection-limit', () => ({
   streamLimiter: { acquire: (...a: unknown[]) => mockAcquireSlot(...a) },

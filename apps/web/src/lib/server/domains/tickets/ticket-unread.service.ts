@@ -119,7 +119,7 @@ export async function markTicketReadForAgent(ticketId: TicketId, actor: Actor): 
   if (pairConversationId) {
     const { markConversationRead } =
       await import('@/lib/server/domains/conversation/conversation.service')
-    await markConversationRead(pairConversationId, actor)
+    await markConversationRead(pairConversationId, actor, { systemCascade: true })
     return
   }
   const at = new Date()
@@ -199,7 +199,9 @@ export async function markTicketUnreadFromMessage(
     if (message.conversationId && message.conversationId === pairConversationId) {
       const { markConversationUnreadFromMessage } =
         await import('@/lib/server/domains/conversation/conversation.service')
-      await markConversationUnreadFromMessage(message.conversationId, messageId, actor)
+      await markConversationUnreadFromMessage(message.conversationId, messageId, actor, {
+        systemCascade: true,
+      })
       return
     }
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
@@ -217,7 +219,9 @@ export async function markTicketUnreadFromMessage(
   if (pairConversationId) {
     const { markConversationUnreadAt } =
       await import('@/lib/server/domains/conversation/conversation.service')
-    await markConversationUnreadAt(pairConversationId, message.createdAt, actor)
+    await markConversationUnreadAt(pairConversationId, message.createdAt, actor, {
+      systemCascade: true,
+    })
     return
   }
 

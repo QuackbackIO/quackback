@@ -27,6 +27,7 @@ import {
   type AiBucket,
 } from '@/lib/client/conversation/inbox-scope'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
+import { retryUnlessNotFound } from '@/lib/client/queries/inbox'
 import {
   conversationPanelsToLoad,
   seedConversationPanels,
@@ -127,6 +128,9 @@ export const conversationInboxQueries = {
         }
         return thread
       },
+      // A NotFound conversation (deleted, or outside the viewer's scope) is
+      // final, so the not-found pane shows at once.
+      retry: retryUnlessNotFound,
     }),
 
   /** Labels + per-tag open-conversation counts (drives the nav Tags group). */

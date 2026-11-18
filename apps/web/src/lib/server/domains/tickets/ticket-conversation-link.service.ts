@@ -74,6 +74,7 @@ import {
   type Ticket,
   type ConversationMessageMetadata,
 } from '@/lib/server/db'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
 import { ticketFilter } from '@/lib/server/policy/tickets'
@@ -150,8 +151,6 @@ export async function linkTicketToConversation(
   if (!can(actor, PERMISSIONS.TICKET_CREATE)) {
     throw new ForbiddenError('FORBIDDEN', 'You cannot link a ticket to a conversation')
   }
-  const { assertConversationVisible } =
-    await import('@/lib/server/domains/conversation/conversation.service')
   await assertConversationVisible(conversationId, actor)
 
   let ticket: Ticket
@@ -331,7 +330,9 @@ export async function resolveProvenanceConversationIds(
  * Best-effort per conversation, like the link announcement: the note has
  * already landed on the ticket, so a copy that fails (the conversation was
  * deleted, the author may note tickets but not act as an agent on
- * conversations) is logged, never surfaced to the caller.
+ * conversations, or the conversation is outside the author's scope, which
+ * `addAgentNote` answers NotFound) is logged, never surfaced to the caller.
+ * So a copy goes only to the provenance conversations the author can see.
  */
 export async function crossPostTicketNote(
   ticket: Ticket,

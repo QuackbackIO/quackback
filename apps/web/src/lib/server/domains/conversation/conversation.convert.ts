@@ -11,7 +11,7 @@ import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { config } from '@/lib/server/config'
 import type { Actor } from '@/lib/server/policy/types'
 import { canActAsAgent } from '@/lib/server/policy/conversation'
-import { assertConversationViewable } from './conversation.service'
+import { assertConversationVisible } from './conversation-visibility'
 import type { ConversationAuthorInput } from './conversation.types'
 import { isTestCustomer } from '@/lib/server/test-data'
 
@@ -40,7 +40,7 @@ export async function createPostFromConversation(
   const decision = canActAsAgent(ctx.agentActor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
-  const conversation = await assertConversationViewable(input.conversationId, ctx.agentActor)
+  const conversation = await assertConversationVisible(input.conversationId, ctx.agentActor)
   const visitorPrincipalId = conversation.visitorPrincipalId
   if (await isTestCustomer(visitorPrincipalId)) {
     throw new ForbiddenError(

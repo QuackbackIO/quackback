@@ -28,7 +28,7 @@ vi.mock('@tanstack/react-start', () => ({
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   policyActorFromAuth: vi.fn(),
-  assertConversationViewable: vi.fn(),
+  assertConversationVisible: vi.fn(),
   listMessages: vi.fn(),
   log: {
     trace: vi.fn(),
@@ -48,8 +48,9 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: hoisted.requireAuth,
   policyActorFromAuth: hoisted.policyActorFromAuth,
 }))
-vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  assertConversationViewable: hoisted.assertConversationViewable,
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   listMessages: hoisted.listMessages,
@@ -96,7 +97,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   hoisted.requireAuth.mockResolvedValue({ principal: { id: 'principal_agent', role: 'admin' } })
   hoisted.policyActorFromAuth.mockResolvedValue({ principalId: 'principal_agent', role: 'admin' })
-  hoisted.assertConversationViewable.mockResolvedValue(conversation)
+  hoisted.assertConversationVisible.mockResolvedValue(conversation)
   hoisted.listMessages.mockResolvedValue(page([message({})]))
 })
 

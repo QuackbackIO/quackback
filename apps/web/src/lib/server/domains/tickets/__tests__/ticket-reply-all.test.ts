@@ -220,6 +220,54 @@ describe.skipIf(!fixture.available)('tracker reply-all (real DB, rolled back)', 
     expect(convEmit.emitMessageCreated).toHaveBeenCalled()
   })
 
+  it('refuses a reply-all with attachments and writes no copy, not even on the tracker', async () => {
+    const actor = await seedAgent()
+    const tracker = await seedTicket('tracker')
+    const linked = await seedTicket('customer')
+    await track(tracker, linked)
+
+    const content = `Logs attached ${suffix()}`
+    await expect(
+      sendTicketMessage(actor, {
+        ticketId: tracker,
+        content,
+        replyAll: true,
+        attachments: [
+          {
+            url: 'http://localhost:3000/files/acme.png',
+            name: 'acme.png',
+            contentType: 'image/png',
+            size: 10,
+          },
+        ] as never,
+      })
+    ).rejects.toMatchObject({ code: 'REPLY_ALL_ATTACHMENTS', statusCode: 400 })
+    expect(await copiesOf(content)).toEqual([])
+  })
+
+  it('ignores the reply-all ask on a ticket that is not a tracker, attachments included', async () => {
+    const actor = await seedAgent()
+    const customer = await seedTicket('customer')
+    const outcome = await sendTicketMessage(actor, {
+      ticketId: customer,
+      content: `Logs attached ${suffix()}`,
+      replyAll: true,
+      attachments: [
+        {
+          url: 'http://localhost:3000/files/acme.png',
+          name: 'acme.png',
+          contentType: 'image/png',
+          size: 10,
+        },
+      ] as never,
+    }).then(
+      () => null,
+      (e: { code?: string }) => e.code
+    )
+    // Whatever the attachment's own checks say, it is not a reply-all refusal.
+    expect(outcome).not.toBe('REPLY_ALL_ATTACHMENTS')
+  })
+
   it('leaves the linked tickets alone without the reply-all ask', async () => {
     const actor = await seedAgent()
     const tracker = await seedTicket('tracker')

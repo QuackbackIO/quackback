@@ -17,7 +17,7 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import { conversations, teams, teamMembers, principal, user, and, inArray } from '@/lib/server/db'
 import { PERMISSIONS, type PermissionKey } from '@/lib/server/db'
 import { conversationFilter } from '../conversations'
-import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation.service'
+import { assertConversationVisible } from '@/lib/server/domains/conversation/conversation-visibility'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'
 
 // The per-item check reads through the app's `db`; point it at the rollback
@@ -76,7 +76,7 @@ async function seedWorld() {
     teamX: createId('conversation') as ConversationId, // team = X (agentA member)
     teamY: createId('conversation') as ConversationId, // team = Y (agentA not a member)
     selfB: createId('conversation') as ConversationId, // agent = agentB
-    unassigned: createId('conversation') as ConversationId, // no assignee
+    unassigned: createId('conversation') as ConversationId, // no assignee, no team
   }
   const base = { visitorPrincipalId: visitor, channel: 'messenger' as const }
   await testDb.insert(conversations).values([
@@ -130,22 +130,22 @@ describe.skipIf(!fixture.available)('conversationFilter (real DB, rolled back)',
     )
   })
 
-  it('conversation.view + team membership sees team-assigned OR self-assigned', async () => {
+  it('conversation.view + team membership sees team-assigned, self-assigned OR unassigned with no team', async () => {
     const world = await seedWorld()
     const memberA = buildActor({
       principalId: world.agentA,
       permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
     })
-    expect(await visibleLabels(memberA, world)).toEqual(new Set(['selfA', 'teamX']))
+    expect(await visibleLabels(memberA, world)).toEqual(new Set(['selfA', 'teamX', 'unassigned']))
   })
 
-  it('conversation.view with NO team membership sees assigned-to-me only', async () => {
+  it('conversation.view with NO team membership sees assigned-to-me and the Unassigned queue', async () => {
     const world = await seedWorld()
     const soloB = buildActor({
       principalId: world.agentB,
       permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
     })
-    expect(await visibleLabels(soloB, world)).toEqual(new Set(['selfB']))
+    expect(await visibleLabels(soloB, world)).toEqual(new Set(['selfB', 'unassigned']))
   })
 
   it('a service actor acting for a scoped creator (personal API key) sees only what the creator sees', async () => {
@@ -156,7 +156,9 @@ describe.skipIf(!fixture.available)('conversationFilter (real DB, rolled back)',
       scopePrincipalId: world.agentA,
       permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
     })
-    expect(await visibleLabels(personalKey, world)).toEqual(new Set(['selfA', 'teamX']))
+    expect(await visibleLabels(personalKey, world)).toEqual(
+      new Set(['selfA', 'teamX', 'unassigned'])
+    )
   })
 
   it('a personal API key whose creator holds view_all sees everything', async () => {
@@ -215,7 +217,11 @@ describe('assertConversationVisible (real DB, rolled back)', () => {
   it('opens exactly what the list filter admits for every teammate audience', async () => {
     const world = await seedWorld()
     const audiences: Actor[] = [
-      buildActor({ principalId: createId('principal') as PrincipalId, principalType: 'service' }),
+      buildActor({
+        principalId: createId('principal') as PrincipalId,
+        principalType: 'service',
+        permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+      }),
       buildActor({
         principalId: createId('principal') as PrincipalId,
         permissions: new Set([PERMISSIONS.CONVERSATION_VIEW_ALL]),
@@ -239,6 +245,16 @@ describe('assertConversationVisible (real DB, rolled back)', () => {
     for (const actor of audiences) {
       expect(await openableLabels(actor, world)).toEqual(await visibleLabels(actor, world))
     }
+  })
+
+  it('a workspace-wide service principal without conversation.view opens nothing', async () => {
+    const world = await seedWorld()
+    const assignOnly = buildActor({
+      principalId: createId('principal') as PrincipalId,
+      principalType: 'service',
+      permissions: new Set([PERMISSIONS.CONVERSATION_ASSIGN]),
+    })
+    expect(await openableLabels(assignOnly, world)).toEqual(new Set())
   })
 
   it("gives a scoped teammate NotFound for another team's conversation", async () => {

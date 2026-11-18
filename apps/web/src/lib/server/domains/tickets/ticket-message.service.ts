@@ -114,7 +114,7 @@ import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
-import { ForbiddenError } from '@/lib/shared/errors'
+import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'ticket-message' })
@@ -407,7 +407,10 @@ async function sendViaPairConversation(
             opts.actor,
             prepared.attachments,
             prepared.contentJson,
-            input.metadata as ConversationMessageMetadata | undefined
+            input.metadata as ConversationMessageMetadata | undefined,
+            // The agent caller checked the ticket, and a tracker reply-all is
+            // a system effect, so the pair's conversation is not checked again.
+            { systemCascade: true }
           )
         ).message
   const message = { ...sent, author: supportAuthor }
@@ -446,6 +449,12 @@ export async function sendTicketMessage(
   assertCan(actor, PERMISSIONS.TICKET_REPLY, 'reply to this ticket')
   const principalId = requireAgentPrincipal(actor)
   const visible = await assertTicketVisible(input.ticketId, actor)
+  // A tracker's Reply all carries text only: its copies reach tickets the sender
+  // may not see, so nothing is written, not even on the tracker, when it has
+  // files. Elsewhere the ask is ignored, as the schema says.
+  if (input.replyAll && visible.type === 'tracker' && (input.attachments?.length ?? 0) > 0) {
+    throw new ValidationError('REPLY_ALL_ATTACHMENTS', 'Reply all cannot include attachments')
+  }
   const { message, ticket } = await insertTicketMessage(input, principalId, {
     ticket: visible,
     senderType: 'agent',

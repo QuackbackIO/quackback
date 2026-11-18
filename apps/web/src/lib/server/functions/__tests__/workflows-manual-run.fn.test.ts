@@ -27,7 +27,10 @@ vi.mock('@tanstack/react-start', () => ({
   },
 }))
 
+const STUB_ACTOR = vi.hoisted(() => ({ principalId: 'principal_1' }))
+
 const hoisted = vi.hoisted(() => ({
+  assertConversationVisible: vi.fn(async () => ({})),
   requireAuth: vi.fn(),
   listWorkflows: vi.fn(),
   getWorkflow: vi.fn(),
@@ -36,7 +39,16 @@ const hoisted = vi.hoisted(() => ({
   hasActiveCustomerFacingRun: vi.fn(),
 }))
 
-vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
+vi.mock('@/lib/server/functions/auth-helpers', () => ({
+  requireAuth: hoisted.requireAuth,
+  policyActorFromAuth: async () => STUB_ACTOR,
+}))
+// The per-item conversation check: visible unless a test says otherwise. Real
+// scope is covered by conversation-visibility-functions.db.test.ts.
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({}))
+vi.mock('@/lib/server/domains/conversation/conversation-visibility', () => ({
+  assertConversationVisible: hoisted.assertConversationVisible,
+}))
 vi.mock('@/lib/server/domains/workflows/workflow.service', () => ({
   listWorkflows: hoisted.listWorkflows,
   getWorkflow: hoisted.getWorkflow,
@@ -117,6 +129,24 @@ describe('listRunnableWorkflowsFn', () => {
 })
 
 describe('runWorkflowManuallyFn', () => {
+  it('a conversation the caller cannot see is NotFound before any read, and no run starts', async () => {
+    hoisted.assertConversationVisible.mockRejectedValueOnce(
+      Object.assign(new Error('Conversation not found'), { statusCode: 404 })
+    )
+    hoisted.getWorkflow.mockResolvedValue(makeWorkflow({ class: 'customer_facing' }))
+
+    await expect(
+      runWorkflowManuallyFn({
+        data: { workflowId: 'workflow_1', conversationId: 'conversation_1' },
+      })
+    ).rejects.toMatchObject({ statusCode: 404 })
+
+    expect(hoisted.assertConversationVisible).toHaveBeenCalledWith('conversation_1', STUB_ACTOR)
+    expect(hoisted.hasActiveCustomerFacingRun).not.toHaveBeenCalled()
+    expect(hoisted.resolveConditionContext).not.toHaveBeenCalled()
+    expect(hoisted.runWorkflow).not.toHaveBeenCalled()
+  })
+
   it('gates on conversation.reply', async () => {
     hoisted.getWorkflow.mockResolvedValue(makeWorkflow())
     hoisted.resolveConditionContext.mockResolvedValue(ctx)
