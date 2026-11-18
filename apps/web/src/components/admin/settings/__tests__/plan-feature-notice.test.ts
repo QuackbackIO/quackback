@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/server/functions/plan-limits', () => ({ getPlanLimitsFn: vi.fn() }))
 
 import { planFeatureNotice, type PlanNoticeState } from '../plan-feature-notice'
+import { formatFirstRenderDate } from '@/components/ui/local-date'
 
 const state = (over: Partial<PlanNoticeState> = {}): PlanNoticeState => ({
   enabled: true,
@@ -27,9 +28,18 @@ describe('planFeatureNotice', () => {
     })
   })
 
-  it('names the day it pauses during the grace', () => {
-    expect(planFeatureNotice('workflows', state({ phase: 'grace' }))?.text).toBe(
-      'Workflows pause on 25 Nov unless you choose a plan. Runs waiting at that point stop.'
+  it('names the day it pauses during the grace, in the viewer locale', () => {
+    // The formatter the component passes: the viewer's locale, as on every
+    // other plan limits surface, at the stored UTC day.
+    const usFormat = (date: unknown, options?: Intl.DateTimeFormatOptions) =>
+      formatFirstRenderDate(date as string, options, 'en-US')
+    expect(planFeatureNotice('workflows', state({ phase: 'grace' }), usFormat)?.text).toBe(
+      'Workflows pause on Wed, Nov 25 unless you choose a plan. Runs waiting at that point stop.'
+    )
+    const gbFormat = (date: unknown, options?: Intl.DateTimeFormatOptions) =>
+      formatFirstRenderDate(date as string, options, 'en-GB')
+    expect(planFeatureNotice('workflows', state({ phase: 'grace' }), gbFormat)?.text).toBe(
+      'Workflows pause on Wed 25 Nov unless you choose a plan. Runs waiting at that point stop.'
     )
   })
 

@@ -78,9 +78,58 @@ export function setFeatureState(state: FeatureState, ...keys: PlanFeatureKey[]):
   current = { state, keys: new Set(keys) }
 }
 
+/** The view `getPlanLimits` answers: the flag off, nothing over. */
+function flagOffView(): PlanLimitsView {
+  return {
+    enabled: false,
+    phase: 'ok',
+    plan: null,
+    since: null,
+    graceEndsAt: null,
+    fromPlan: null,
+    issues: [],
+    infoRows: [],
+    featureIssues: [],
+    features: set(true),
+    fromFeatures: null,
+    openBoardIds: null,
+    keptBoardId: null,
+    seatHolderIds: null,
+    visibleStatusComponentIds: null,
+    sendingDomainIds: null,
+  }
+}
+
+/**
+ * Every runtime export of plan-limits.service. The feature helpers follow the
+ * state set above; everything else answers as the flag being off (nothing
+ * paused, nothing hidden, every list null), so a caller of any helper works.
+ * feature-states.test.ts fails when the real module grows an export this lacks.
+ */
 export const planLimitsServiceDouble = {
   isFeatureLive: vi.fn(async (key: PlanFeatureKey) => featureLive(featureView(key), key)),
   isFeaturePaused: vi.fn(async (key: PlanFeatureKey) => featurePaused(featureView(key), key)),
+  getPlanLimits: vi.fn(async (_now?: Date) => flagOffView()),
+  getPlanLimitsWithCandidates: vi.fn(async (_now?: Date) => ({
+    limits: flagOffView(),
+    candidates: {},
+  })),
+  evaluate: vi.fn(async (_options?: unknown) => ({ view: flagOffView(), snapshot: {} })),
+  detectPlanLimits: vi.fn(async (_options?: unknown) => flagOffView()),
+  detectPlanLimitsAfterProjectionWrite: vi.fn(
+    async (_replaced?: unknown, _appliedAt?: Date) => undefined
+  ),
+  detectPlanLimitsQuietly: vi.fn(async () => undefined),
+  invalidatePlanLimits: vi.fn(async () => undefined),
+  isCapEnforced: vi.fn(async (_key?: string) => false),
+  openBoardIds: vi.fn(async (): Promise<string[] | null> => null),
+  isBoardOpen: vi.fn(async (_boardId?: string) => true),
+  seatHolders: vi.fn(async (): Promise<string[] | null> => null),
+  isSeatPaused: vi.fn(async (_principalId?: string) => false),
+  visibleStatusComponentIds: vi.fn(async (): Promise<string[] | null> => null),
+  isStatusComponentVisible: vi.fn(async (_componentId?: string) => true),
+  activeSendingDomainIds: vi.fn(async (): Promise<string[] | null> => null),
+  isSendingDomainActive: vi.fn(async (_domainId?: string) => true),
 }
 
 /** Whether a path should run in `state`, for a path with no plan gate before plan limits. */

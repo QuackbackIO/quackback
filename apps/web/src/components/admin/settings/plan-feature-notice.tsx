@@ -6,6 +6,11 @@
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  formatFirstRenderDate,
+  useLocalDateFormatter,
+  type LocalDateFormatter,
+} from '@/components/ui/local-date'
 import { getPlanLimitsFn } from '@/lib/server/functions/plan-limits'
 
 /** The paid features whose settings pages carry the notice. */
@@ -70,13 +75,15 @@ const COPY: Record<
   },
 }
 
-/** The grace end as a calendar day: it is stored at a UTC instant. */
-function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  })
+/**
+ * The grace end as a day, as every plan limits surface names it ("Tue 25 Nov"
+ * or "Tue, Nov 25" by the viewer's locale), at the UTC instant it is stored at.
+ */
+const DEADLINE_FORMAT: Intl.DateTimeFormatOptions = {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
 }
 
 /**
@@ -85,7 +92,8 @@ function shortDate(iso: string): string {
  */
 export function planFeatureNotice(
   feature: PlanNoticeFeature,
-  state: PlanNoticeState | null | undefined
+  state: PlanNoticeState | null | undefined,
+  format: LocalDateFormatter = formatFirstRenderDate
 ): { text: string; showPlans: boolean } | null {
   if (!state?.enabled || state.phase === 'ok') return null
   if (!state.featureIssues.some((issue) => issue.key === feature)) return null
@@ -94,7 +102,7 @@ export function planFeatureNotice(
   // A feature set up past the plan is live through the grace and paused after.
   const text =
     state.phase === 'grace' && state.graceEndsAt
-      ? `${copy.pausing} on ${shortDate(state.graceEndsAt)} unless you choose a plan.${copy.pausingNote ? ` ${copy.pausingNote}` : ''}`
+      ? `${copy.pausing} on ${format(state.graceEndsAt, DEADLINE_FORMAT)} unless you choose a plan.${copy.pausingNote ? ` ${copy.pausingNote}` : ''}`
       : `${copy.paused} on ${plan}. ${copy.kept}`
   return { text, showPlans: state.canManageBilling }
 }
@@ -106,7 +114,8 @@ export function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
     staleTime: 60_000,
     retry: false,
   })
-  const notice = planFeatureNotice(feature, data)
+  const format = useLocalDateFormatter()
+  const notice = planFeatureNotice(feature, data, format)
   if (!notice) return null
   return (
     <Alert role="status">
