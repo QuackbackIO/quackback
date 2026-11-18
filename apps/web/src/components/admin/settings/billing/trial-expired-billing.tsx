@@ -156,7 +156,7 @@ export function TrialExpiredBilling(props: {
               <OrderSummary plan={paidSelected} period={period} />
             ) : (
               <p className="mt-3 text-[13px] text-muted-foreground">
-                Free has no charge. Resolve anything over the Free caps, then switch.
+                Free has no charge. Fix anything over the Free plan, then downgrade.
               </p>
             )}
             {paidSelected ? (
