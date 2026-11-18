@@ -11,7 +11,7 @@
  * plan-limits.team.db.test.ts. Here: only what they say.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 
 vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
   getPlanLimits: async () => ({
@@ -100,8 +100,9 @@ describe('team and channel limits copy', () => {
     for (const message of messages) expect(bannedIn(message)).toEqual([])
   })
 
-  it('never tells the paused person about seats', () => {
+  it('never tells the paused person about seats', async () => {
     const { container } = render(<DefaultErrorPage error={{ message: SEAT_PAUSED_DENIAL }} />)
+    await screen.findByText('Your admin access is paused')
     const text = container.textContent ?? ''
     expect(text).toContain('Your admin access is paused')
     expect(text).not.toMatch(/\bseats?\b/i)

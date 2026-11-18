@@ -63,9 +63,10 @@ describe('isEntitlementError', () => {
 describe('the paused-seat page', () => {
   afterEach(cleanup)
 
-  it('shows the paused seat, with a way to sign out, for the paused-seat denial', () => {
+  it('shows the paused seat, with a way to sign out, for the paused-seat denial', async () => {
     render(<DefaultErrorPage error={{ message: 'Your admin access is paused.' }} />)
-    expect(screen.getByRole('heading', { name: 'Your admin access is paused' })).toBeTruthy()
+    // The page loads lazily, off the entry chunk.
+    expect(await screen.findByRole('heading', { name: 'Your admin access is paused' })).toBeTruthy()
     expect(
       screen.getByText(
         "This workspace's plan includes fewer team members than it has. Someone who manages billing can give you access again or upgrade."
