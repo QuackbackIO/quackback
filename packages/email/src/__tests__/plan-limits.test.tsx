@@ -87,7 +87,7 @@ describe('PlanLimitsEmail', () => {
     expect(text).toContain('Upgrade to keep everything.')
     expect(text).not.toMatch(/Fix \d+ issue/)
     expect(planLimitsSubject('start', 'Acme Support', 'Free', 'Nov 24')).toBe(
-      'Some features pause after Nov 24'
+      'Acme Support: some features pause after Nov 24'
     )
   })
 
@@ -120,6 +120,14 @@ describe('PlanLimitsEmail', () => {
     expect(planLimitsSubject('enforced', 'Acme Support', 'Free')).toBe(
       'Some of Acme Support is now paused'
     )
+  })
+
+  it('names the workspace in every subject', () => {
+    const subjects = (['start', 'reminder', 'enforced'] as const).flatMap((kind) => [
+      planLimitsSubject(kind, 'Acme Support', 'Free'),
+      planLimitsSubject(kind, 'Acme Support', 'Free', 'Nov 24'),
+    ])
+    for (const subject of subjects) expect(subject).toContain('Acme Support')
   })
 })
 

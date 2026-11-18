@@ -48,7 +48,7 @@ export function planLimitsSubject(
 ): string {
   const name = workspaceName ?? 'Your workspace'
   if (featuresOnlyDeadline && kind === 'start') {
-    return `Some features pause after ${featuresOnlyDeadline}`
+    return `${name}: some features pause after ${featuresOnlyDeadline}`
   }
   if (kind === 'start') {
     return `Action needed: ${name} is over the ${planName ?? 'current'} plan's limits`
