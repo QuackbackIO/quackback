@@ -1,6 +1,7 @@
 import { isProduction } from '@/lib/server/config'
 import { createWidgetIdentityToken } from '@/lib/server/widget/identity-token'
 import { ensureWidgetSecret } from '@/lib/server/domains/settings/settings.widget'
+import { isE2eHarnessEnabled } from '@/lib/server/e2e-harness/gate'
 
 export const E2E_WIDGET_CUSTOMER_EMAIL = 'e2e.customer@example.com'
 export const E2E_WIDGET_CUSTOMER_EXTERNAL_ID = 'e2e-customer'
@@ -12,9 +13,14 @@ export const E2E_WIDGET_CSAT_SUBJECT = 'E2E CSAT thread'
 
 export type E2eWidgetPersona = 'anon' | 'customer' | 'teammate'
 
+/**
+ * Open in development (the dev-server e2e jobs rely on it). In a production
+ * build only behind the shared harness gate: `E2E_HARNESS=1` on a loopback
+ * `BASE_URL`, so the flag alone never opens it on a real deployment.
+ */
 export function isE2eWidgetHarnessEnabled(): boolean {
-  if (process.env.E2E_HARNESS === '1') return true
-  return !isProduction()
+  if (!isProduction()) return true
+  return isE2eHarnessEnabled()
 }
 
 export function parseE2eWidgetPersona(raw: string | null): E2eWidgetPersona {

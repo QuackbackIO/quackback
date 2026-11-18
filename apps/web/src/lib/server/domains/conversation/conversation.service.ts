@@ -1163,11 +1163,14 @@ export async function snoozeConversation(
  * Publishes the same inbox update + status_changed webhook a manual reopen does.
  * Driven by the snooze-sweep queue (system actor); returns the count woken.
  */
-export async function sweepDueSnoozedConversations(): Promise<{ woken: number }> {
-  const now = new Date()
+export async function sweepDueSnoozedConversations(
+  now: Date = new Date()
+): Promise<{ woken: number }> {
+  // `now` decides which timers are due; the row is stamped with the wall clock
+  // either way, so a run "as of" a later time never writes a future updatedAt.
   const due = await db
     .update(conversations)
-    .set({ status: 'open', snoozedUntil: null, updatedAt: now })
+    .set({ status: 'open', snoozedUntil: null, updatedAt: new Date() })
     .where(
       and(
         eq(conversations.status, 'snoozed'),

@@ -113,6 +113,8 @@ export const webhookHook: HookHandler = {
         headers,
         body: payload,
         timeoutMs: TIMEOUT_MS,
+        // Only takes effect for the e2e suite's own sink, behind the harness gate.
+        allowE2eWebhookSink: true,
       })
 
       if (response.ok) {
