@@ -10,6 +10,7 @@ import { AuthSettings, type AuthTab } from '@/components/admin/settings/security
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { getSsoLiveFn } from '@/lib/server/functions/sso'
 
 const searchSchema = z.object({
   // The Access & Security page splits by CONCERN, not by surface:
@@ -60,9 +61,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
       listEntitlementsFn(),
       // Without plan billing single sign-on follows the plan alone, so the
       // page asks nothing more.
-      context.cloudEnabled
-        ? import('@/lib/server/functions/sso').then((m) => m.getSsoLiveFn())
-        : undefined,
+      context.cloudEnabled ? getSsoLiveFn() : undefined,
       ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
 
