@@ -107,10 +107,13 @@ test.describe('Post detail page', () => {
   }) => {
     // Either a sign-in prompt or a comment form must be present
     const signInPrompt = page.getByText(/sign in to comment/i)
+    // Seeded boards let anonymous visitors comment, so the composer shows. It is
+    // a rich editor (first a stand-in textbox, #589), not a textarea.
     const commentForm = page
-      .locator('textarea[placeholder*="comment" i]')
+      .getByRole('textbox', { name: /write a comment/i })
       .or(page.locator('[data-testid="comment-form"]'))
 
+    await expect(signInPrompt.or(commentForm).first()).toBeVisible({ timeout: 10000 })
     const hasSignIn = (await signInPrompt.count()) > 0
     const hasForm = (await commentForm.count()) > 0
 

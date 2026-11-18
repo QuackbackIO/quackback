@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-// /admin redirects to /admin/feedback — all dashboard tests run on the feedback page
+// Since #388 /admin is Home (the overview). It no longer redirects to /admin/feedback.
 
 test.describe('Admin Dashboard', () => {
   test.beforeEach(async ({ page }) => {
@@ -9,12 +9,16 @@ test.describe('Admin Dashboard', () => {
   })
 
   test('page loads without error', async ({ page }) => {
-    // Should redirect to /admin/feedback
-    await expect(page).toHaveURL(/\/admin\/feedback/, { timeout: 10000 })
+    // Home's heading greets the signed-in teammate
+    await expect(page.locator('h1#home-greeting')).toBeVisible({ timeout: 10000 })
   })
 
-  test('redirects /admin to /admin/feedback', async ({ page }) => {
-    await expect(page).toHaveURL(/\/admin\/feedback/)
+  test('/admin stays on Home', async ({ page }) => {
+    await expect(page).toHaveURL(/\/admin\/?$/)
+    await expect(page.getByRole('link', { name: 'Home' }).first()).toHaveAttribute(
+      'data-active',
+      'true'
+    )
   })
 
   test('renders the admin layout without crashing', async ({ page }) => {
@@ -95,12 +99,14 @@ test.describe('Admin Sidebar Navigation', () => {
     await expect(portalLink.first()).toBeVisible({ timeout: 10000 })
   })
 
-  test('logo links to feedback page', async ({ page }) => {
-    const logoLink = page.getByRole('link', { name: 'Quackback' }).first()
+  test('logo links to Home', async ({ page }) => {
+    // The sidebar logo shows the workspace's own logo and name (seed: Acme Corp)
+    // and leads to Home.
+    const logoLink = page.getByRole('link', { name: 'Acme Corp' }).first()
     await expect(logoLink).toBeVisible({ timeout: 10000 })
     await logoLink.click()
     await page.waitForLoadState('networkidle')
-    await expect(page).toHaveURL(/\/admin\/feedback/)
+    await expect(page).toHaveURL(/\/admin\/?$/)
   })
 })
 

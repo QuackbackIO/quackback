@@ -167,8 +167,9 @@ test.describe('Admin Users - User Selection', () => {
       // Should show account section
       await expect(page.getByText('Account', { exact: true })).toBeVisible({ timeout: 15000 })
 
-      // Should show join date
-      await expect(page.getByText(/Joined portal/)).toBeVisible()
+      // Should show join date. Since #402 the profile shows it as a "Joined"
+      // fact cell.
+      await expect(page.getByText('Joined', { exact: true })).toBeVisible()
     }
   })
 
@@ -200,6 +201,8 @@ test.describe('Admin Users - User Selection', () => {
     if ((await userCards.count()) > 0) {
       await userCards.first().click()
       await page.waitForLoadState('networkidle')
+      // The profile listens for Escape once it has rendered; wait for it.
+      await expect(page.getByText('Account', { exact: true })).toBeVisible({ timeout: 15000 })
 
       // Press Escape
       await page.keyboard.press('Escape')

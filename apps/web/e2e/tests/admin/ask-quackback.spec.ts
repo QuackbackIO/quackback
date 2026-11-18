@@ -42,7 +42,14 @@ test.describe('search', () => {
     const input = dialog.getByRole('combobox')
     await expect(input).toBeFocused(FIRST_OPEN)
     await input.fill('tags')
-    await expect(dialog.getByRole('option', { name: 'Tags', exact: true })).toBeVisible()
+    const tags = dialog.getByRole('option', { name: 'Tags', exact: true })
+    await expect(tags).toBeVisible()
+    // Since #901 the first row is "Search for …" and Enter there opens the
+    // results page, so arrow down to Tags before pressing Enter.
+    await expect(async () => {
+      await input.press('ArrowDown')
+      await expect(tags).toHaveAttribute('aria-selected', 'true', { timeout: 500 })
+    }).toPass({ timeout: 5000 })
     await input.press('Enter')
     await expect(page).toHaveURL(/\/admin\/settings\/tags/)
     await expect(dialog).not.toBeVisible()

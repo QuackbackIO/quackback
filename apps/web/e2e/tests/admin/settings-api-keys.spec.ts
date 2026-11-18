@@ -18,86 +18,71 @@ test.describe('Admin API Keys Settings', () => {
     })
   })
 
+  // Since #906 workspace keys are created on their own page
+  // (/admin/settings/developers/workspace-keys/new), reached from the
+  // "New workspace key" link, not from a dialog.
+  const newKeyLink = (page: import('@playwright/test').Page) =>
+    page.getByRole('link', { name: 'New workspace key' })
+
+  async function createWorkspaceKey(page: import('@playwright/test').Page, keyName: string) {
+    await newKeyLink(page).first().click()
+    await expect(page).toHaveURL(/\/developers\/workspace-keys\/new/, { timeout: 10000 })
+    await page.getByRole('textbox', { name: /^name$/i }).fill(keyName)
+    // A key must have a role; pick the first one this admin can grant.
+    await page.getByRole('radio', { disabled: false }).first().click()
+    await page.getByRole('button', { name: 'Create key' }).click()
+
+    const revealDialog = page.getByRole('dialog')
+    await expect(revealDialog.getByText(/api key created/i)).toBeVisible({ timeout: 10000 })
+    return revealDialog
+  }
+
   test('shows create API key button or empty state action', async ({ page }) => {
-    await page.waitForTimeout(500)
-
-    // The card header button, repeated in the empty state
-    const createButton = page.getByRole('button', { name: 'New API key' })
-
-    await expect(createButton.first()).toBeVisible({ timeout: 10000 })
+    // The card header link, repeated in the empty state
+    await expect(newKeyLink(page).first()).toBeVisible({ timeout: 10000 })
   })
 
-  test('can open create API key dialog', async ({ page }) => {
-    await page.waitForTimeout(500)
+  test('can open the create workspace key page', async ({ page }) => {
+    await newKeyLink(page).first().click()
 
-    const createButton = page.getByRole('button', { name: 'New API key' })
-
-    await createButton.first().click()
-
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible({ timeout: 5000 })
-
-    await expect(dialog.getByRole('heading', { name: /create api key/i })).toBeVisible()
+    await expect(page).toHaveURL(/\/developers\/workspace-keys\/new/, { timeout: 10000 })
+    await expect(page.getByRole('heading', { name: 'New workspace key', level: 1 })).toBeVisible()
   })
 
-  test('create dialog has name input', async ({ page }) => {
-    await page.waitForTimeout(500)
-
-    const createButton = page.getByRole('button', { name: 'New API key' })
-
-    await createButton.first().click()
-
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible({ timeout: 5000 })
+  test('create page has name input', async ({ page }) => {
+    await newKeyLink(page).first().click()
+    await expect(page).toHaveURL(/\/developers\/workspace-keys\/new/, { timeout: 10000 })
 
     // Name input
-    await expect(dialog.getByRole('textbox', { name: /^name$/i })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: /^name$/i })).toBeVisible()
 
     // Action buttons
-    await expect(dialog.getByRole('button', { name: /cancel/i })).toBeVisible()
-    await expect(dialog.getByRole('button', { name: /create api key/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /cancel/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Create key' })).toBeVisible()
   })
 
-  test('create dialog cancel closes the dialog', async ({ page }) => {
-    await page.waitForTimeout(500)
+  test('create page cancel returns to the keys tab', async ({ page }) => {
+    await newKeyLink(page).first().click()
+    await expect(page).toHaveURL(/\/developers\/workspace-keys\/new/, { timeout: 10000 })
 
-    const createButton = page.getByRole('button', { name: 'New API key' })
-
-    await createButton.first().click()
-
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible({ timeout: 5000 })
-
-    await dialog.getByRole('button', { name: /cancel/i }).click()
-    await expect(dialog).toBeHidden({ timeout: 5000 })
+    await page.getByRole('button', { name: /cancel/i }).click()
+    await expect(page).toHaveURL(/\/admin\/settings\/developers\?(.*&)?tab=keys/, {
+      timeout: 5000,
+    })
   })
 
   test('created key is revealed once in a dialog with copy button', async ({ page }) => {
-    await page.waitForTimeout(500)
-
     const keyName = `E2E Key ${Date.now()}`
 
-    const createButton = page.getByRole('button', { name: 'New API key' })
-
-    await createButton.first().click()
-
-    const createDialog = page.getByRole('dialog')
-    await expect(createDialog).toBeVisible({ timeout: 5000 })
-
-    await createDialog.getByRole('textbox', { name: /^name$/i }).fill(keyName)
-    await createDialog.getByRole('button', { name: /create api key/i }).click()
-
-    // Reveal replaces create in-place; both are role=dialog, so assert on title.
-    const revealDialog = page.getByRole('dialog')
-    await expect(revealDialog.getByText(/api key created/i)).toBeVisible({ timeout: 10000 })
+    const revealDialog = await createWorkspaceKey(page, keyName)
 
     await expect(revealDialog.locator('code').filter({ hasText: /^qb_/ })).toBeVisible()
 
     // Copy button should be present (aria-label contains "copy")
     const copyButton = revealDialog.getByRole('button', { name: /copy/i })
-    await expect(copyButton).toBeVisible()
+    await expect(copyButton.first()).toBeVisible()
 
-    // Dismiss the reveal dialog
+    // Dismiss the reveal dialog; it returns to the keys tab
     await revealDialog.getByRole('button', { name: /i've saved my key/i }).click()
     await expect(revealDialog).toBeHidden({ timeout: 5000 })
 
@@ -135,49 +120,30 @@ test.describe('Admin API Keys Settings', () => {
   })
 
   test('can open revoke confirmation dialog for an existing key', async ({ page }) => {
-    await page.waitForTimeout(500)
-
-    // Create a key first if none exist
-    const revokeButtons = page.getByRole('button', { name: /^actions for /i })
-
-    if ((await revokeButtons.count()) === 0) {
-      // Create one
-      const keyName = `Cleanup Test ${Date.now()}`
-      const createButton = page.getByRole('button', { name: 'New API key' })
-
-      await createButton.first().click()
-      const createDialog = page.getByRole('dialog')
-      await expect(createDialog).toBeVisible({ timeout: 5000 })
-      await createDialog.getByRole('textbox', { name: /^name$/i }).fill(keyName)
-      await createDialog.getByRole('button', { name: /create api key/i }).click()
-
-      const revealDialog = page.getByRole('dialog')
-      await expect(revealDialog.getByText(/api key created/i)).toBeVisible({ timeout: 10000 })
-      await revealDialog.getByRole('button', { name: /i've saved my key/i }).click()
-      await expect(revealDialog).toBeHidden({ timeout: 5000 })
-    }
+    const keyName = `Revoke Test ${Date.now()}`
+    const revealDialog = await createWorkspaceKey(page, keyName)
+    await revealDialog.getByRole('button', { name: /i've saved my key/i }).click()
+    await expect(revealDialog).toBeHidden({ timeout: 5000 })
 
     // Open the row menu and choose Revoke
-    const rowMenu = page.getByRole('button', { name: /^actions for /i }).first()
+    const rowMenu = page.getByRole('button', { name: `Actions for ${keyName}` })
+    await expect(rowMenu).toBeVisible({ timeout: 10000 })
+    await rowMenu.click()
+    await page.getByRole('menuitem', { name: 'Revoke' }).click()
 
-    if ((await rowMenu.count()) > 0) {
-      await rowMenu.click()
-      await page.getByRole('menuitem', { name: 'Revoke' }).click()
+    // Confirmation dialog should appear
+    const confirmDialog = page.getByRole('alertdialog').or(page.getByRole('dialog'))
+    await expect(confirmDialog).toBeVisible({ timeout: 5000 })
 
-      // Confirmation dialog should appear
-      const confirmDialog = page.getByRole('alertdialog').or(page.getByRole('dialog'))
-      await expect(confirmDialog).toBeVisible({ timeout: 5000 })
+    // Should have "Revoke API key" title
+    await expect(confirmDialog.getByText(/revoke api key/i)).toBeVisible()
 
-      // Should have "Revoke API Key" title
-      await expect(confirmDialog.getByText(/revoke api key/i)).toBeVisible()
+    // Should warn that the action cannot be undone
+    await expect(confirmDialog.getByText(/cannot be undone/i)).toBeVisible()
 
-      // Should warn that the action cannot be undone
-      await expect(confirmDialog.getByText(/cannot be undone/i)).toBeVisible()
-
-      // Cancel the revocation
-      await confirmDialog.getByRole('button', { name: /cancel/i }).click()
-      await expect(confirmDialog).toBeHidden({ timeout: 5000 })
-    }
+    // Cancel the revocation
+    await confirmDialog.getByRole('button', { name: /cancel/i }).click()
+    await expect(confirmDialog).toBeHidden({ timeout: 5000 })
   })
 
   test('shows the base URL and API reference link', async ({ page }) => {

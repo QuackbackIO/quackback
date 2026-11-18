@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { closeDialog } from '../../utils/helpers'
+import { enableMagicLinkMethod } from '../../utils/db-helpers'
 
 /**
  * Public portal auth tests — no prior authentication.
@@ -12,6 +13,12 @@ import { closeDialog } from '../../utils/helpers'
  *   - password enabled  → "credentials" step (email + password fields)
  *   - password disabled → "email" step (email field + "Continue with email" button)
  */
+
+// Email OTP rides on the magic-link method, which a fresh seed leaves off and
+// only global-setup turns on (in a shard that runs the setup project).
+test.beforeAll(() => {
+  enableMagicLinkMethod()
+})
 
 test.describe('Portal Auth Dialog', () => {
   test.describe.configure({ mode: 'serial' })

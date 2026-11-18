@@ -1,9 +1,14 @@
 import { test, expect } from '@playwright/test'
 import { setWidgetSurfaces } from '../../utils/db-helpers'
+import { setWorkspaceAnon } from '../../utils/access-helpers'
 
 test.describe('Widget visitor surfaces', { tag: '@smoke' }, () => {
   test.beforeAll(() => {
     setWidgetSurfaces(true)
+    // The seed's state: anonymous activity denied, so a visitor who has not
+    // identified gets the log-in prompt under a post. board-access-matrix
+    // turns the switch on, so do not depend on which spec ran first.
+    setWorkspaceAnon(false)
   })
 
   test('Feedback tab lists posts and opens post detail', async ({ page }) => {

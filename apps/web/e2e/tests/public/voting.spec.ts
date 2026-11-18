@@ -1,5 +1,6 @@
 import { test, expect, Page, BrowserContext } from '@playwright/test'
-import { getOtpCode } from '../../utils/db-helpers'
+import { clearSigninRateLimit, enableMagicLinkMethod, getOtpCode } from '../../utils/db-helpers'
+import { setWorkspaceAnon } from '../../utils/access-helpers'
 
 const TEST_EMAIL = 'demo@example.com'
 const TEST_HOST = 'acme.localhost:3000'
@@ -9,6 +10,9 @@ const TEST_HOST = 'acme.localhost:3000'
  * This function attempts to handle rate limiting gracefully
  */
 async function authenticateViaOTP(page: Page, maxRetries = 8) {
+  // Every spec signs in demo@example.com, and the sign-in limiter allows 3 a
+  // quarter hour per address. Clear its buckets so specs do not starve each other.
+  clearSigninRateLimit()
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       // Request OTP code
@@ -69,9 +73,19 @@ async function authenticateViaOTP(page: Page, maxRetries = 8) {
       await page.waitForTimeout(3000)
     }
   }
+  // Every attempt was rate limited. Fail here: returning would let the tests
+  // vote signed out, and a signed-out vote click does not register.
+  throw new Error(`OTP sign-in still rate limited after ${maxRetries} attempts`)
 }
 
 test.describe.configure({ mode: 'serial' })
+
+// Email OTP sign-in rides on the magic-link method (src/lib/server/auth/hooks.ts),
+// which a fresh seed leaves off. global-setup turns it on, but only in a shard
+// that runs the setup project, so turn it on here too.
+test.beforeAll(() => {
+  enableMagicLinkMethod()
+})
 
 test.describe('Public Voting', () => {
   let sharedContext: BrowserContext
@@ -81,6 +95,9 @@ test.describe('Public Voting', () => {
   test.setTimeout(90000)
 
   test.beforeAll(async ({ browser }) => {
+    // The email-OTP send limit (3 a minute per address) can make this sign-in
+    // wait out a full window; give the hook time for the retry backoff.
+    test.setTimeout(120_000)
     // Create a shared context and authenticate once for all tests
     // Note: This may take longer if rate limits are active
     sharedContext = await browser.newContext()
@@ -133,6 +150,9 @@ test.describe('Public Voting', () => {
       const voteButtons = page.getByTestId('vote-button')
       const voteButton = voteButtons.nth(5)
       await expect(voteButton).toBeVisible({ timeout: 10000 })
+      // The feed marks the button aria-disabled until board permissions load,
+      // and a click before then is dropped.
+      await expect(voteButton).not.toHaveAttribute('aria-disabled', 'true', { timeout: 10000 })
 
       const voteCountSpan = voteButton.getByTestId('vote-count')
 
@@ -176,6 +196,9 @@ test.describe('Public Voting', () => {
       const voteButtons = page.getByTestId('vote-button')
       const voteButton = voteButtons.nth(6)
       await expect(voteButton).toBeVisible({ timeout: 10000 })
+      // The feed marks the button aria-disabled until board permissions load,
+      // and a click before then is dropped.
+      await expect(voteButton).not.toHaveAttribute('aria-disabled', 'true', { timeout: 10000 })
 
       const voteCountSpan = voteButton.getByTestId('vote-count')
 
@@ -219,6 +242,9 @@ test.describe('Public Voting', () => {
       const voteButtons = page.getByTestId('vote-button')
       const voteButton = voteButtons.nth(7)
       await expect(voteButton).toBeVisible({ timeout: 10000 })
+      // The feed marks the button aria-disabled until board permissions load,
+      // and a click before then is dropped.
+      await expect(voteButton).not.toHaveAttribute('aria-disabled', 'true', { timeout: 10000 })
 
       const voteCountSpan = voteButton.getByTestId('vote-count')
 
@@ -261,14 +287,20 @@ test.describe('Public Voting', () => {
       // Click the 9th post link
       await postLinks.nth(8).click()
 
-      // Wait for URL to change to post detail page
+      // Wait for URL to change to post detail page. The move is client-side,
+      // so also wait for the feed to go: until it does, the first vote button
+      // is still a feed card's.
       await page.waitForURL(/\/posts\//)
+      await expect(page.locator('[data-post-id]')).toHaveCount(0, { timeout: 10000 })
 
       // Wait for detail page vote button specifically.
       // The VoteSidebar vote button is in a Suspense boundary; use aria-pressed to confirm it loaded.
       // Both list and detail use text-sm, so just use the first vote button on the detail page.
       const detailVoteButton = page.getByTestId('vote-button').first()
       await expect(detailVoteButton).toBeVisible({ timeout: 10000 })
+      // The button is disabled while the viewer's vote state loads; a click
+      // then is dropped and the voted state is read too early.
+      await expect(detailVoteButton).toBeEnabled({ timeout: 10000 })
 
       const voteCountSpan = detailVoteButton.getByTestId('vote-count')
 
@@ -304,6 +336,17 @@ test.describe('Anonymous Voting (unauthenticated)', () => {
   // without seeing an auth dialog (a silent anonymous session is created).
   test.setTimeout(60000)
 
+  // Anonymous voting needs the workspace anonymous switch on. A new workspace
+  // gets it on, but the e2e seed writes no portal config, which denies. Turn it
+  // on here, then restore the seed's state, rather than depend on spec order.
+  test.beforeAll(() => {
+    setWorkspaceAnon(true)
+  })
+
+  test.afterAll(() => {
+    setWorkspaceAnon(false)
+  })
+
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
@@ -324,6 +367,9 @@ test.describe('Anonymous Voting (unauthenticated)', () => {
     const voteButtons = page.getByTestId('vote-button')
     const voteButton = voteButtons.nth(9)
     await expect(voteButton).toBeVisible({ timeout: 10000 })
+    // The feed marks the button aria-disabled until board permissions load,
+    // and a click before then is dropped.
+    await expect(voteButton).not.toHaveAttribute('aria-disabled', 'true', { timeout: 10000 })
 
     const voteCountSpan = voteButton.getByTestId('vote-count')
 
@@ -357,6 +403,9 @@ test.describe('Anonymous Voting (unauthenticated)', () => {
     const voteButtons = page.getByTestId('vote-button')
     const voteButton = voteButtons.nth(10)
     await expect(voteButton).toBeVisible({ timeout: 10000 })
+    // The feed marks the button aria-disabled until board permissions load,
+    // and a click before then is dropped.
+    await expect(voteButton).not.toHaveAttribute('aria-disabled', 'true', { timeout: 10000 })
 
     const voteCountSpan = voteButton.getByTestId('vote-count')
 
@@ -426,30 +475,14 @@ test.describe('Voting — independence and persistence', () => {
   let sharedContext: import('@playwright/test').BrowserContext
 
   test.beforeAll(async ({ browser }) => {
+    // The email-OTP send limit (3 a minute per address) can make this sign-in
+    // wait out a full window; give the hook time for the retry backoff.
+    test.setTimeout(120_000)
     sharedContext = await browser.newContext()
     const page = await sharedContext.newPage()
-    // Use the OTP auth helper already tested in the Public Voting suite
-    // (relies on the same demo@example.com account and db-helpers)
-    const { getOtpCode } = await import('../../utils/db-helpers')
-
-    const TEST_EMAIL = 'demo@example.com'
-    const TEST_HOST = 'acme.localhost:3000'
-
-    const sendResponse = await page.request.post('/api/auth/email-otp/send-verification-otp', {
-      headers: { 'Content-Type': 'application/json' },
-      data: { email: TEST_EMAIL, type: 'sign-in' },
-    })
-    if (!sendResponse.ok()) throw new Error('Failed to send OTP for persistence tests')
-
-    const otpCode = getOtpCode(TEST_EMAIL, TEST_HOST)
-    const verifyResponse = await page.request.post('/api/auth/sign-in/email-otp', {
-      headers: { 'Content-Type': 'application/json' },
-      data: { email: TEST_EMAIL, otp: otpCode },
-    })
-    if (!verifyResponse.ok()) throw new Error('Failed to verify OTP for persistence tests')
-
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    // The same helper as the Public Voting suite: it backs off and retries
+    // when the OTP send answers 429, which a single attempt here did not.
+    await authenticateViaOTP(page)
     await page.close()
   })
 
@@ -516,9 +549,14 @@ test.describe('Voting — independence and persistence', () => {
       // Use post 14 to avoid conflicts
       const voteButton = page.getByTestId('vote-button').nth(14)
       await expect(voteButton).toBeVisible({ timeout: 10000 })
+      // The feed marks the button aria-disabled until board permissions load,
+      // and a click before then is dropped.
+      await expect(voteButton).not.toHaveAttribute('aria-disabled', 'true', { timeout: 10000 })
 
       // Normalise to unvoted state
-      const isVoted = await voteButton.evaluate((el) => el.classList.contains('post-card__vote--voted'))
+      const isVoted = await voteButton.evaluate((el) =>
+        el.classList.contains('post-card__vote--voted')
+      )
       if (isVoted) {
         await voteButton.click()
         await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
@@ -550,19 +588,29 @@ test.describe('Voting — independence and persistence', () => {
       await page.goto('/')
       await page.waitForLoadState('networkidle')
 
-      // Use post 15 to avoid conflicts
-      const voteButtons = page.getByTestId('vote-button')
-      await expect(voteButtons.first()).toBeVisible({ timeout: 10000 })
+      // Use post 15 to avoid conflicts. Read the count and the link from the
+      // same card: a card can hold more than one /posts/ link, so matching
+      // the nth vote button to the nth link picks different posts.
+      const card = page.locator('[data-post-id]').nth(15)
+      await expect(card).toBeVisible({ timeout: 10000 })
 
-      const listVoteButton = voteButtons.nth(15)
-      const listCountSpan = listVoteButton.getByTestId('vote-count')
-      const listCount = await listCountSpan.textContent()
+      const listCount = await card
+        .getByTestId('vote-button')
+        .getByTestId('vote-count')
+        .textContent()
 
-      // Find the post link in the same card and navigate to it
-      const postLinks = page.locator('a[href*="/posts/"]')
-      await postLinks.nth(15).click()
-      await page.waitForURL(/\/posts\//)
-      await page.waitForLoadState('networkidle')
+      // Navigate to the same post. The move is client-side, so the URL changes
+      // before the feed is gone: wait for the post's own heading before reading
+      // the first vote button, or it can still be a feed card's.
+      const postId = await card.getAttribute('data-post-id')
+      const link = card.locator(`a[href*="/posts/${postId}"]`).first()
+      const title = ((await link.textContent()) ?? '').trim()
+      await link.click()
+      await page.waitForURL(new RegExp(`/posts/${postId}`))
+      await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible({
+        timeout: 10000,
+      })
+      await expect(page.locator('[data-post-id]')).toHaveCount(0)
 
       // Detail page vote button — use first vote button (VoteSidebar, in DOM order)
       const detailVoteButton = page.getByTestId('vote-button').first()
@@ -578,6 +626,16 @@ test.describe('Voting — independence and persistence', () => {
 })
 
 test.describe('Voting — debounce / rapid clicks', () => {
+  // These votes come from an anonymous visitor, which needs the workspace
+  // anonymous switch on. Set it here, then restore the seed's state.
+  test.beforeAll(() => {
+    setWorkspaceAnon(true)
+  })
+
+  test.afterAll(() => {
+    setWorkspaceAnon(false)
+  })
+
   test.setTimeout(60000)
 
   test('rapid clicks do not cause double-voting', async ({ page }) => {
@@ -593,7 +651,9 @@ test.describe('Voting — debounce / rapid clicks', () => {
     const countSpan = voteButton.getByTestId('vote-count')
 
     // Normalise to unvoted
-    const isVoted = await voteButton.evaluate((el) => el.classList.contains('post-card__vote--voted'))
+    const isVoted = await voteButton.evaluate((el) =>
+      el.classList.contains('post-card__vote--voted')
+    )
     if (isVoted) {
       await voteButton.click()
       await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 10000 })
@@ -617,6 +677,16 @@ test.describe('Voting — debounce / rapid clicks', () => {
 })
 
 test.describe('Voting — filtered board context', () => {
+  // These votes come from an anonymous visitor, which needs the workspace
+  // anonymous switch on. Set it here, then restore the seed's state.
+  test.beforeAll(() => {
+    setWorkspaceAnon(true)
+  })
+
+  test.afterAll(() => {
+    setWorkspaceAnon(false)
+  })
+
   test.setTimeout(60000)
 
   test('voting on a post works when a board filter is active', async ({ page }) => {
@@ -652,7 +722,9 @@ test.describe('Voting — filtered board context', () => {
     const countSpan = voteButton.getByTestId('vote-count')
 
     // Normalise to unvoted
-    const isVoted = await voteButton.evaluate((el) => el.classList.contains('post-card__vote--voted'))
+    const isVoted = await voteButton.evaluate((el) =>
+      el.classList.contains('post-card__vote--voted')
+    )
     if (isVoted) {
       await voteButton.click()
       await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 10000 })

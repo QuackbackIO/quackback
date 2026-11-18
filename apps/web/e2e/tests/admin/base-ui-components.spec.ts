@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { waitForHydration } from '../../utils/helpers'
+import { setSupportSurfaces } from '../../utils/db-helpers'
 
 /**
  * Site-wide usability pass for the Radix → Base UI migration.
@@ -63,7 +64,8 @@ test.describe('Base UI component usability', () => {
     await expect(listbox).toBeHidden()
     await expect(position).toHaveText(shown)
 
-    const install = page.getByRole('link', { name: /Install widget|View installation/ })
+    // "Install widget" reads "Set it up" before the widget is installed (#589)
+    const install = page.getByRole('link', { name: /Set it up|View installation/ })
     await expect(install).toBeVisible()
     await expect(install).not.toHaveAttribute('role', 'button')
 
@@ -110,6 +112,9 @@ test.describe('Base UI component usability', () => {
     await tagDialog.getByRole('button', { name: /cancel/i }).click()
     await expect(tagDialog).toBeHidden()
 
+    // Office hours lives under the Support module, which is off on a fresh
+    // seed; turn it on rather than depend on a support spec running first.
+    setSupportSurfaces(true)
     await page.goto('/admin/settings/office-hours')
     await expect(
       page.getByRole('navigation', { name: 'Support' }).getByRole('link', { name: 'Office hours' })

@@ -6,8 +6,8 @@ test.describe('onboarding launch plan', () => {
     await page.goto('/admin/getting-started')
     await expect(page).toHaveURL(/\/admin\/getting-started$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Launch plan' })).toBeVisible()
-    await expect(page.getByText(/^\d+ of \d+ done$/)).toBeVisible()
-    await expect(page.getByRole('progressbar')).toBeVisible()
+    // Since #706 progress reads "Step N of M" (or "Done") and names the bar
+    await expect(page.getByRole('progressbar', { name: /^(Step \d+ of \d+|Done)$/ })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Replay the tour' })).toBeVisible()
   })
 
