@@ -1,11 +1,13 @@
 /**
- * A billing projection that is applied moves the auth config version.
+ * A billing projection that changes the plan moves the auth config version.
  *
  * The auth instance registers identity providers only while the plan includes
  * single sign-on, and it is rebuilt only when `auth_config_version` changes.
  * Without the bump, a workspace whose plan gained single sign-on back kept an
  * instance built without its providers, so the sign-in button led nowhere
- * until some unrelated auth setting was saved.
+ * until some unrelated auth setting was saved. A projection that changes only
+ * the numbers (seats, allowances) leaves it alone: every rebuild refetches each
+ * provider's discovery document.
  */
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createId } from '@quackback/ids'
@@ -93,4 +95,31 @@ it('leaves it alone for an idempotent replay', async () => {
   const result = await writeBillingProjection(WORKSPACE_KEY, projection(1, true))
   expect(result.applied).toBe(false)
   expect(await authConfigVersion()).toBe(applied)
+})
+
+it('leaves it alone when only the numbers change', async () => {
+  await writeBillingProjection(WORKSPACE_KEY, projection(1, true))
+  const applied = await authConfigVersion()
+  const moreSeats = projection(2, true)
+  moreSeats.planLimits = { ...LIMITS, maxTeamSeats: 50 }
+  const result = await writeBillingProjection(WORKSPACE_KEY, moreSeats)
+  expect(result.applied).toBe(true)
+  expect(await authConfigVersion()).toBe(applied)
+})
+
+it('moves it when the plan changes even if single sign-on does not', async () => {
+  await writeBillingProjection(WORKSPACE_KEY, projection(1, false))
+  const applied = await authConfigVersion()
+  await writeBillingProjection(WORKSPACE_KEY, { ...projection(2, false), effectivePlan: 'pro' })
+  expect(await authConfigVersion()).toBeGreaterThan(applied)
+})
+
+it('moves it when the plan expiry changes', async () => {
+  await writeBillingProjection(WORKSPACE_KEY, projection(1, true))
+  const applied = await authConfigVersion()
+  await writeBillingProjection(WORKSPACE_KEY, {
+    ...projection(2, true),
+    planLimitsExpireAt: '2026-12-01T00:00:00.000Z',
+  })
+  expect(await authConfigVersion()).toBeGreaterThan(applied)
 })

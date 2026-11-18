@@ -165,7 +165,8 @@ describe('redactSettingsForClient — server-only settings columns', () => {
   })
 
   it('strips the server-side sign-in input from a WorkspaceSettings shape', () => {
-    const result = redactSettingsForClient({ name: 'Acme', ssoProvidersConfigured: true })
+    const workspaceShaped = { name: 'Acme', portalConfig: null, ssoProvidersConfigured: true }
+    const result = redactSettingsForClient(workspaceShaped)
     expect(result).not.toHaveProperty('ssoProvidersConfigured')
     expect(result.name).toBe('Acme')
   })

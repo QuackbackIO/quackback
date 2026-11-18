@@ -40,7 +40,10 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getWorkspaceSettings: (...a: unknown[]) => mockGetWorkspaceSettings(...a),
 }))
 
+vi.mock('@quackback/email', () => ({ isEmailConfigured: () => true }))
+
 const { isAuthMethodAllowed, isHardBound } = await import('../auth-restrictions')
+const { evaluateProposedSignInMethods } = await import('../sign-in-method-availability')
 const { getRegisteredOidcProviderIds } = await import('../registered-providers')
 
 function provider(over: Partial<IdentityProvider> = {}): IdentityProvider {
@@ -147,5 +150,29 @@ describe('"Require SSO" domain rules', () => {
     state.providers = [enforced()]
     const registered = await getRegisteredOidcProviderIds(state.providers)
     expect(isHardBound('magic-link', 'jane@acme.com', state.providers, registered)).toBe(true)
+  })
+})
+
+describe('saving sign-in methods while single sign-on is not in the plan', () => {
+  it('counts as SSO-only, so break-glass is required, when password and email links go off', async () => {
+    // Email links stand in now, so this does not lock anyone out today. But the
+    // stored setting is SSO-only, and that is what the workspace becomes the
+    // moment the plan includes single sign-on again.
+    expect(await evaluateProposedSignInMethods({ ...ssoOnlyOauth })).toEqual({
+      leavesNoMethod: false,
+      leavesSsoOnly: true,
+    })
+  })
+
+  it('is not SSO-only while password stays on', async () => {
+    expect(await evaluateProposedSignInMethods({ password: true, magicLink: false })).toEqual({
+      leavesNoMethod: false,
+      leavesSsoOnly: false,
+    })
+  })
+
+  it('is not SSO-only when no provider is set up', async () => {
+    state.providers = [provider({ enabled: false })]
+    expect((await evaluateProposedSignInMethods({ ...ssoOnlyOauth })).leavesSsoOnly).toBe(false)
   })
 })

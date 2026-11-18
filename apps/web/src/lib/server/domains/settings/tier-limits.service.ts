@@ -1,6 +1,7 @@
 import { db, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
+import { settingsLocalTtlMs } from '@/lib/server/local-cache'
 import { OSS_TIER_LIMITS, type TierLimits } from './tier-limits.types'
 import {
   entitlementsAt,
@@ -198,6 +199,8 @@ export function resolveEffectiveTierLimits(
 interface CachedLimits {
   stored: StoredTierLimits | null
   projection: BillingProjection | null
+  /** When this copy stops being served (see {@link getTierLimits}). */
+  expiresAt: number
 }
 
 const cachedLimits = new WorkspaceKeyedCache<CachedLimits>()
@@ -207,10 +210,16 @@ const LIMITS_KEY = 'limits'
  * Resolve the active TierLimits for this workspace. Self-hosters with no
  * row in `settings.tier_limits` get OSS_TIER_LIMITS (unlimited everything).
  * Cloud workspaces apply the signed projection instead of that default.
- * The cache is invalidated when the row is written.
+ *
+ * The row is held in this process for the settings window
+ * (`settingsLocalTtlMs`, a few seconds). A write drops the copy at once in the
+ * process that made it; every other process (other web replicas, the worker)
+ * reads the row again when its copy expires, so a plan change reaches all of
+ * them within that window, as a settings change does.
  */
 export async function getTierLimits(now = new Date()): Promise<TierLimits> {
   let cached = cachedLimits.get(LIMITS_KEY)
+  if (cached && cached.expiresAt <= Date.now()) cached = undefined
 
   if (!cached) {
     const rows = await db
@@ -223,6 +232,7 @@ export async function getTierLimits(now = new Date()): Promise<TierLimits> {
     cached = {
       stored,
       projection: parseBillingProjection(rawProjection),
+      expiresAt: Date.now() + settingsLocalTtlMs(),
     }
     cachedLimits.set(LIMITS_KEY, cached)
   }

@@ -170,12 +170,21 @@ vi.mock('@/lib/client/queries/settings', () => ({
   },
 }))
 
-function renderSection(enabledMethodCount = 5) {
+/** Password still on: no provider is the last way in. */
+const withPassword = { oauthState: { password: true }, emailConfigured: true, credentialStatus: {} }
+/** Password and email links off: the providers are the only way in. */
+const ssoOnly = {
+  oauthState: { password: false, magicLink: false },
+  emailConfigured: true,
+  credentialStatus: {},
+}
+
+function renderSection(methods = withPassword) {
   const qc = new QueryClient()
   qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
   return render(
     <QueryClientProvider client={qc}>
-      <IdentityProvidersSection tierEnabled enabledMethodCount={enabledMethodCount} />
+      <IdentityProvidersSection tierEnabled methods={methods} />
     </QueryClientProvider>
   )
 }
@@ -217,7 +226,7 @@ describe('plan gate', () => {
     qc.setQueryData(['settings', 'identityProviders'], [buttonProvider])
     render(
       <QueryClientProvider client={qc}>
-        <IdentityProvidersSection tierEnabled={false} enabledMethodCount={5} />
+        <IdentityProvidersSection tierEnabled={false} methods={withPassword} />
       </QueryClientProvider>
     )
     expect(screen.queryByRole('link', { name: /new provider/i })).toBeNull()
@@ -229,7 +238,7 @@ describe('plan gate', () => {
     qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
     return render(
       <QueryClientProvider client={qc}>
-        <IdentityProvidersSection tierEnabled={false} enabledMethodCount={5} />
+        <IdentityProvidersSection tierEnabled={false} methods={withPassword} />
       </QueryClientProvider>
     )
   }
@@ -303,12 +312,12 @@ describe('enable toggle on the list row', () => {
   it('blocks disabling a provider that is the only working method', () => {
     // Acme SSO is enabled + configured; with a total of 1 method it is the
     // last thing standing, so its toggle is locked.
-    renderSection(1)
+    renderSection(ssoOnly)
     expect(screen.getByRole('switch', { name: /enable acme sso/i })).toBeDisabled()
   })
 
   it('allows disabling a provider when other methods remain', () => {
-    renderSection(3)
+    renderSection(withPassword)
     expect(screen.getByRole('switch', { name: /enable acme sso/i })).not.toBeDisabled()
   })
 })
@@ -317,7 +326,7 @@ describe('last-method guard depends on the SSO tier', () => {
   // Without the tier the method count leaves identity providers out, so a
   // count of 1 is the built-in or social method, not the SSO provider.
   it('locks the last working method while the tier is on', () => {
-    renderSection(1)
+    renderSection(ssoOnly)
     const toggle = screen.getByRole('switch', { name: /enable acme sso/i })
     expect(toggle).toBeDisabled()
     expect(toggle.parentElement).toHaveAttribute(
@@ -326,12 +335,12 @@ describe('last-method guard depends on the SSO tier', () => {
     )
   })
 
-  it('lets a stale provider be switched off while the tier is off', async () => {
+  it('lets a provider be switched off while the tier is off and another way in remains', async () => {
     const qc = new QueryClient()
     qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
     render(
       <QueryClientProvider client={qc}>
-        <IdentityProvidersSection tierEnabled={false} enabledMethodCount={1} />
+        <IdentityProvidersSection tierEnabled={false} methods={withPassword} />
       </QueryClientProvider>
     )
     const toggle = screen.getByRole('switch', { name: /enable acme sso/i })
@@ -343,6 +352,26 @@ describe('last-method guard depends on the SSO tier', () => {
       enabled: false,
     })
   })
+
+  it('locks the provider that keeps the stand-in email links on while the tier is off', () => {
+    // Password and email links are off; the set-up provider is why email links
+    // are offered at all, so switching it off would leave no way in.
+    const qc = new QueryClient()
+    qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
+    render(
+      <QueryClientProvider client={qc}>
+        <IdentityProvidersSection tierEnabled={false} methods={ssoOnly} />
+      </QueryClientProvider>
+    )
+    const toggle = screen.getByRole('switch', { name: /enable acme sso/i })
+    expect(toggle).toBeDisabled()
+    expect(toggle.parentElement).toHaveAttribute(
+      'title',
+      'At least one sign-in method must stay enabled.'
+    )
+    fireEvent.click(toggle)
+    expect(upsertSpy).not.toHaveBeenCalled()
+  })
 })
 
 describe('empty list', () => {
@@ -351,7 +380,7 @@ describe('empty list', () => {
     qc.setQueryData(['settings', 'identityProviders'], [])
     render(
       <QueryClientProvider client={qc}>
-        <IdentityProvidersSection tierEnabled enabledMethodCount={5} />
+        <IdentityProvidersSection tierEnabled methods={withPassword} />
       </QueryClientProvider>
     )
     expect(screen.getByText('No providers yet')).toBeInTheDocument()
@@ -368,7 +397,7 @@ describe('set up but off on the current plan', () => {
     qc.setQueryData(['settings', 'identityProviders'], providers)
     return render(
       <QueryClientProvider client={qc}>
-        <IdentityProvidersSection tierEnabled={tierEnabled} enabledMethodCount={5} />
+        <IdentityProvidersSection tierEnabled={tierEnabled} methods={withPassword} />
       </QueryClientProvider>
     )
   }

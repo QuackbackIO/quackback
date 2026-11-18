@@ -158,4 +158,33 @@ describe('getWorkspaceSettings', () => {
     const restored = await getWorkspaceSettings()
     expect(restored?.publicAuthConfig.oauth.magicLink).toBe(false)
   })
+
+  it('offers nothing extra when no provider is set up, and caches that', async () => {
+    state.providerEnabled = false
+    const settings = await getWorkspaceSettings()
+    expect(settings?.publicAuthConfig.oauth.magicLink).toBe(false)
+    const cached = mockCacheSet.mock.calls.find(([key]) => key === 'settings:workspace')?.[1] as
+      WorkspaceSettings | undefined
+    expect(cached?.ssoProvidersConfigured).toBe(false)
+  })
+
+  it('reads the providers live for an entry cached before the flag existed', async () => {
+    state.ssoInPlan = true
+    await getWorkspaceSettings()
+    const legacy = structuredClone(
+      mockCacheSet.mock.calls.find(
+        ([key]) => key === 'settings:workspace'
+      )?.[1] as WorkspaceSettings
+    )
+    delete legacy.ssoProvidersConfigured
+    state.cached = legacy
+
+    state.ssoInPlan = false
+    const settings = await getWorkspaceSettings()
+    expect(settings?.publicAuthConfig.oauth.magicLink).toBe(true)
+
+    // And still nothing extra when the live read finds no provider.
+    state.providerEnabled = false
+    expect((await getWorkspaceSettings())?.publicAuthConfig.oauth.magicLink).toBe(false)
+  })
 })

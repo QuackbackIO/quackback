@@ -203,7 +203,11 @@ export async function evaluateProposedSignInMethods(
   const inputs = await gatherWorkingMethodInputs(proposedOauth)
   return {
     leavesNoMethod: !hasAnyWorkingSignInMethod(inputs),
-    leavesSsoOnly: isSsoOnlySignIn(inputs),
+    // Judged as if single sign-on were live. With it off, email links stand in
+    // and nobody is locked out today, but the stored setting is what the
+    // workspace becomes the moment it is live again, so reaching SSO-only
+    // must still demand break-glass.
+    leavesSsoOnly: isSsoOnlySignIn({ ...inputs, tierEnabled: true }),
   }
 }
 
