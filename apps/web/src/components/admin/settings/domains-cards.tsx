@@ -147,6 +147,8 @@ export function DomainsCard(props: {
   /** Whether a section uses the hostname: such a domain is never made primary. */
   usedBySection?: (hostname: string) => boolean
   onRemove: (hostname: string) => void
+  /** The page's plan limits notice already offers the upgrade: no box of its own. */
+  pausedNoticeShown?: boolean
 }) {
   return (
     <SettingsCard
@@ -155,7 +157,9 @@ export function DomainsCard(props: {
       description="Add a domain here, then choose what it is used for under Custom domains."
     >
       {!props.entitled ? (
-        <UpgradeNotice entitlement="customDomain" />
+        props.pausedNoticeShown ? null : (
+          <UpgradeNotice entitlement="customDomain" />
+        )
       ) : (
         <form
           className="max-w-xl space-y-3"

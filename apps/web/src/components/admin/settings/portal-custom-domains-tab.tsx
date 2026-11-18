@@ -40,6 +40,7 @@ import {
 } from '@/lib/client/queries/portal-custom-domains'
 import { useHasPermission, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { toastError, toastErrorLine } from '@/lib/client/error-notice'
+import { usePlanFeatureNoticeShown } from '@/components/admin/settings/plan-feature-notice'
 
 /** Go to the Domain verification card and its Domain field, where a Cloud custom domain is added. */
 function goToAddDomain() {
@@ -214,6 +215,7 @@ function OperatorHostnames({
       : ''
   )
   const { domains, mutation } = cloud
+  const pausedNoticeShown = usePlanFeatureNoticeShown('customDomain')
 
   const identityMutation = useMutation({
     mutationFn: () => {
@@ -242,6 +244,7 @@ function OperatorHostnames({
     <>
       <DomainsCard
         entitled={entitled}
+        pausedNoticeShown={pausedNoticeShown}
         domains={domains}
         domainsUnavailable={domainsUnavailable}
         hostname={hostname}

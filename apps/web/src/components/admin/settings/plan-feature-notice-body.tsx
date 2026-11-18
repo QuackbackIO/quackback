@@ -12,6 +12,13 @@ import {
   type LocalDateFormatter,
 } from '@/components/ui/local-date'
 import { getPlanLimitsFn } from '@/lib/server/functions/plan-limits'
+import {
+  PLAN_FEATURE_NOTICE_QUERY_KEY,
+  planFeatureNoticeApplies,
+  type PlanNoticeState,
+} from './plan-feature-notice-state'
+
+export type { PlanNoticeState }
 
 /** The paid features whose settings pages carry the notice. */
 export type PlanNoticeFeature =
@@ -22,18 +29,6 @@ export type PlanNoticeFeature =
   | 'customCss'
   | 'aiAssistant'
   | 'aiArticleTranslation'
-
-/** The part of the Plan limits page state the notice reads. */
-export interface PlanNoticeState {
-  enabled: boolean
-  phase: 'ok' | 'grace' | 'enforced'
-  planName: string | null
-  graceEndsAt: string | null
-  /** The last full day to fix, a plain YYYY-MM-DD date. */
-  deadlineDay: string | null
-  featureIssues: ReadonlyArray<{ key: string }>
-  canManageBilling: boolean
-}
 
 const THEY_COME_BACK = 'They come back when you upgrade.'
 const IT_COMES_BACK = 'It comes back when you upgrade.'
@@ -103,8 +98,7 @@ export function planFeatureNotice(
   format: LocalDateFormatter = formatFirstRenderDate,
   now: Date = new Date()
 ): { text: string; showPlans: boolean } | null {
-  if (!state?.enabled || state.phase === 'ok') return null
-  if (!state.featureIssues.some((issue) => issue.key === feature)) return null
+  if (!state || !planFeatureNoticeApplies(feature, state)) return null
   const copy = COPY[feature]
   // A feature set up past the plan is live until the deadline and paused after.
   const sentences =
@@ -120,7 +114,7 @@ export function planFeatureNotice(
 
 export default function PlanFeatureNoticeBody({ feature }: { feature: PlanNoticeFeature }) {
   const { data } = useQuery({
-    queryKey: ['plan-limits', 'feature-notice'],
+    queryKey: PLAN_FEATURE_NOTICE_QUERY_KEY,
     queryFn: () => getPlanLimitsFn(),
     staleTime: 60_000,
     retry: false,
