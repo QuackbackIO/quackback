@@ -45,7 +45,6 @@ import type { EventData } from './types'
 import type { ChangelogId, PostId, PrincipalId, StatusIncidentId, WebhookId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import { isTestEvent } from './test-event'
-import { withPausedCustomDomainOrigin } from '@/lib/server/domains/plan-limits/plan-limits.custom-domain'
 
 const log = logger.child({ component: 'event-hook-job' })
 
@@ -109,14 +108,10 @@ export async function runHookJob(job: ClaimedJob): Promise<void> {
 
   let result: HookResult
   try {
-    // Links in an email or notification name the default hostname while the
-    // custom domain is paused after the plan limits grace.
-    result = await withPausedCustomDomainOrigin(() =>
-      hook.run(event, target, hookConfig, {
-        jobId: idempotencyKey,
-        finalAttempt: job.attempts >= job.maxAttempts,
-      })
-    )
+    result = await hook.run(event, target, hookConfig, {
+      jobId: idempotencyKey,
+      finalAttempt: job.attempts >= job.maxAttempts,
+    })
   } catch (error) {
     if (isRetryableError(error)) throw error
     throw new TerminalJobError(error instanceof Error ? error.message : 'Unknown error')
