@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_FEATURE_FLAGS,
   PRODUCT_DEFINITIONS,
+  ROLLOUT_FEATURE_FLAGS,
   enableFlagsForUseCase,
   flagsForGoal,
   newlyEnabledProductLabels,
@@ -13,10 +14,18 @@ import {
 } from '../settings.types'
 
 describe('feature flag settings layout', () => {
-  it('places every remaining flag on exactly one product', () => {
+  it('places every flag on exactly one product, or on the operator rollout list', () => {
     const productFlags = PRODUCT_DEFINITIONS.flatMap((product) => [...product.featureFlags])
-    expect(new Set(productFlags).size).toBe(productFlags.length)
-    expect([...productFlags].sort()).toEqual(Object.keys(DEFAULT_FEATURE_FLAGS).sort())
+    const placed = [...productFlags, ...ROLLOUT_FEATURE_FLAGS]
+    expect(new Set(placed).size).toBe(placed.length)
+    expect([...placed].sort()).toEqual(Object.keys(DEFAULT_FEATURE_FLAGS).sort())
+  })
+
+  it('keeps plan limits behind a rollout flag that is off by default', () => {
+    expect(ROLLOUT_FEATURE_FLAGS).toEqual(['planLimits'])
+    expect(DEFAULT_FEATURE_FLAGS.planLimits).toBe(false)
+    expect(resolveFeatureFlags(null).planLimits).toBe(false)
+    expect(resolveFeatureFlags(JSON.stringify({ planLimits: true })).planLimits).toBe(true)
   })
 
   it('drops a stored Copilot on Home value from the retired Labs switch', () => {

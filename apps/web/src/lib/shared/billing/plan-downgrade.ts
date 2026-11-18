@@ -151,15 +151,26 @@ export function usedByKey(lines: readonly PlanUsageLine[]): Record<string, numbe
   return Object.fromEntries(lines.map((line) => [line.key, line.used]))
 }
 
-export function planDowngradeIssues(
+/** Numeric caps to check usage against (null or absent = unlimited). */
+export type PlanCaps = Partial<Record<PlanCapKey, number | null>>
+
+/**
+ * Caps that never block a plan change. Existing posts always stay: a plan
+ * below its post cap only stops new ones, so posts are shown as information.
+ */
+export const NON_BLOCKING_CAP_KEYS: readonly PlanCapKey[] = ['maxPosts']
+
+const ALL_CAP_KEYS = Object.keys(RESOURCE) as PlanCapKey[]
+
+/** Usage over `caps`, one issue per key in `keys` (every cap key by default). */
+export function capIssues(
   used: Record<string, number>,
-  planId: string
+  caps: PlanCaps,
+  keys: readonly PlanCapKey[] = ALL_CAP_KEYS
 ): PlanDowngradeIssue[] {
-  const id = canonicalPlanId(planId)
-  if (!isPlanId(id)) return []
-  const caps = PLAN_NUMERIC_CAPS[id]
   const issues: PlanDowngradeIssue[] = []
-  for (const key of Object.keys(RESOURCE) as PlanCapKey[]) {
+  for (const key of ALL_CAP_KEYS) {
+    if (!keys.includes(key)) continue
     const cap = caps[key]
     if (cap == null) continue
     const count = used[key] ?? 0
@@ -178,6 +189,32 @@ export function planDowngradeIssues(
     })
   }
   return issues
+}
+
+/** What must be resolved before switching to `planId`. Posts never block. */
+export function planDowngradeIssues(
+  used: Record<string, number>,
+  planId: string
+): PlanDowngradeIssue[] {
+  const id = canonicalPlanId(planId)
+  if (!isPlanId(id)) return []
+  return capIssues(
+    used,
+    PLAN_NUMERIC_CAPS[id],
+    ALL_CAP_KEYS.filter((key) => !NON_BLOCKING_CAP_KEYS.includes(key))
+  )
+}
+
+/** A cap that is over but needs no fix: shown, never blocking. */
+export type PlanCapInfo = { key: PlanCapKey; used: number; cap: number; message: string }
+
+/** Usage over `planId`'s non-blocking caps (posts), for display only. */
+export function planDowngradeInfo(used: Record<string, number>, planId: string): PlanCapInfo[] {
+  const id = canonicalPlanId(planId)
+  if (!isPlanId(id)) return []
+  return capIssues(used, PLAN_NUMERIC_CAPS[id], NON_BLOCKING_CAP_KEYS).map(
+    ({ key, used: count, cap, message }) => ({ key, used: count, cap, message })
+  )
 }
 
 export function freeDowngradeIssues(used: Record<string, number>): PlanDowngradeIssue[] {

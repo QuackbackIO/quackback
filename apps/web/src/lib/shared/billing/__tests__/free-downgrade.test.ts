@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  capIssues,
   featuresDisabledOnDowngrade,
   featuresDisabledOnFree,
   freeDowngradeIssues,
+  planDowngradeInfo,
   planDowngradeIssues,
 } from '../plan-downgrade'
 
@@ -151,6 +153,48 @@ describe('planDowngradeIssues', () => {
       message: 'You have 2 out of 1 help center languages',
       actionLabel: 'Remove 1 help center language',
     })
+  })
+})
+
+describe('posts never block a downgrade', () => {
+  it('leaves posts over the Free cap out of the issues a downgrade must resolve', () => {
+    expect(freeDowngradeIssues({ maxPosts: 400 })).toEqual([])
+    expect(planDowngradeIssues({ maxPosts: 400, maxBoards: 2 }, 'free').map((i) => i.key)).toEqual([
+      'maxBoards',
+    ])
+  })
+
+  it('still shows posts over the cap as information', () => {
+    expect(planDowngradeInfo({ maxPosts: 400 }, 'free')).toEqual([
+      { key: 'maxPosts', used: 400, cap: 50, message: 'You have 400 out of 50 posts' },
+    ])
+    expect(planDowngradeInfo({ maxPosts: 50 }, 'free')).toEqual([])
+    expect(planDowngradeInfo({ maxPosts: 400 }, 'pro')).toEqual([])
+  })
+})
+
+describe('capIssues', () => {
+  it('checks usage against the caps it is given, not a catalogue plan', () => {
+    const issues = capIssues(
+      { maxBoards: 3, maxTeamSeats: 9 },
+      { maxBoards: 2, maxTeamSeats: null }
+    )
+    expect(issues).toEqual([
+      {
+        key: 'maxBoards',
+        used: 3,
+        cap: 2,
+        message: 'You have 3 out of 2 boards',
+        actionLabel: 'Remove 1 board',
+        href: '/admin/settings/boards',
+      },
+    ])
+  })
+
+  it('only checks the keys it is asked about', () => {
+    expect(
+      capIssues({ maxBoards: 3, maxPosts: 90 }, { maxBoards: 1, maxPosts: 50 }, ['maxPosts'])
+    ).toHaveLength(1)
   })
 })
 

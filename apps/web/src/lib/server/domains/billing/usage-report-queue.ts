@@ -50,6 +50,12 @@ export async function runUsageReport(job: ClaimedJob): Promise<void> {
   }
   const monthKey = usageReportDedupeKey(month)
   if (job.dedupeKey !== monthKey) {
+    // The hourly slot, at this workspace's stable offset, doubles as plan
+    // limits detection, so a drop on the clock (a term lapsing) starts its
+    // grace without anyone visiting. It never fails the slot.
+    const { detectPlanLimitsQuietly } =
+      await import('@/lib/server/domains/plan-limits/plan-limits.service')
+    await detectPlanLimitsQuietly()
     await enqueueUsageReport({ month })
     return
   }

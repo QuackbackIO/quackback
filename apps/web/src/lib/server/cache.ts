@@ -63,6 +63,11 @@ export const CACHE_KEYS = {
   // read once per request (`auth/request-session.ts`) under this same key, and
   // every role/type mutation deletes the key, which drops that memo.
   PRINCIPAL_BY_USER: (userId: string) => `principal:user:${userId}` as const,
+  // What the plan limits state is computed from: usage counts, paid features
+  // that are set up, and the choosers' candidates. Dropped by every mutation
+  // of a counted resource and by invalidateSettingsCache(); 5min TTL backstops
+  // anything missed (posts, webhooks, workflows, integrations).
+  PLAN_LIMITS_INPUTS: 'plan-limits:inputs',
 } as const
 
 export async function cacheGet<T>(key: string): Promise<T | null> {

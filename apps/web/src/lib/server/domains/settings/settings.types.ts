@@ -1176,7 +1176,20 @@ export interface FeatureFlags {
   /** Status page: public/private/segment-scoped service status with incidents,
    *  maintenance windows, uptime history, and subscriber notifications. */
   statusPage: boolean
+  /** Plan limits: over-limit detection, the 7-day grace and what freezes after
+   *  it. An operator rollout switch, not a product: a workspace cannot change
+   *  it from settings (see {@link ROLLOUT_FEATURE_FLAGS}). */
+  planLimits: boolean
 }
+
+/**
+ * Flags an operator turns on per workspace during a rollout. They are not
+ * products, never appear on Settings > General, and the settings write path
+ * refuses them, so a workspace cannot opt itself out.
+ */
+export const ROLLOUT_FEATURE_FLAGS = [
+  'planLimits',
+] as const satisfies readonly (keyof FeatureFlags)[]
 
 /**
  * Parse stored `feature_flags` JSON into a plain object, tolerating
@@ -1251,6 +1264,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportInbox: false,
   supportTickets: false,
   statusPage: false,
+  planLimits: false,
 }
 
 /**

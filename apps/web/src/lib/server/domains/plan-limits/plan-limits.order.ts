@@ -1,0 +1,139 @@
+/**
+ * Who keeps what once a cap is enforced: the boards that stay open, the
+ * members who keep a seat, the status components that stay public and the
+ * sending domains that keep sending. Pure; each takes the admin's stored
+ * choice (ids that no longer exist are dropped) and fills the rest from the
+ * default order.
+ */
+
+export interface BoardCandidate {
+  id: string
+  postCount: number
+  createdAt: string
+}
+
+export interface MemberCandidate {
+  id: string
+  isOwner: boolean
+  canManageBilling: boolean
+  lastActiveAt: string | null
+  createdAt: string
+}
+
+export interface StatusComponentCandidate {
+  id: string
+  /** Null for a component outside any group; those show first. */
+  groupPosition: number | null
+  position: number
+}
+
+export interface SendingDomainCandidate {
+  id: string
+  status: string
+  createdAt: string
+}
+
+// ---------------------------------------------------------------------------
+
+function keepFirst(chosen: readonly string[], ordered: readonly string[], limit: number): string[] {
+  const known = new Set(ordered)
+  const out: string[] = []
+  for (const id of [...chosen.filter((id) => known.has(id)), ...ordered]) {
+    if (out.length >= limit) break
+    if (!out.includes(id)) out.push(id)
+  }
+  return out
+}
+
+const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id)
+const byCreated = (a: { createdAt: string }, b: { createdAt: string }) =>
+  Date.parse(a.createdAt) - Date.parse(b.createdAt)
+
+/** Boards that stay open: the chosen one, then most posts, then oldest. */
+export function openBoardOrder(
+  boards: readonly BoardCandidate[],
+  cap: number,
+  keptBoardId?: string
+): string[] {
+  const ordered = [...boards]
+    .sort((a, b) => b.postCount - a.postCount || byCreated(a, b) || byId(a, b))
+    .map((board) => board.id)
+  return keepFirst(keptBoardId ? [keptBoardId] : [], ordered, cap)
+}
+
+function byRecentActivity(a: MemberCandidate, b: MemberCandidate): number {
+  const aAt = a.lastActiveAt ? Date.parse(a.lastActiveAt) : -Infinity
+  const bAt = b.lastActiveAt ? Date.parse(b.lastActiveAt) : -Infinity
+  if (aAt !== bAt) return bAt - aAt
+  return byCreated(a, b) || byId(a, b)
+}
+
+/**
+ * Members who keep a seat. The owner (the earliest, when several) and at least
+ * one member who can manage billing always keep one, past the cap if need be,
+ * so someone can always choose a plan. The admin's choice fills the cap;
+ * without one the default is owners, then billing managers, then the most
+ * recently active.
+ */
+export function seatHolderOrder(
+  members: readonly MemberCandidate[],
+  cap: number,
+  chosen?: readonly string[]
+): string[] {
+  const owners = members.filter((m) => m.isOwner).sort((a, b) => byCreated(a, b) || byId(a, b))
+  const billing = members.filter((m) => m.canManageBilling).sort(byRecentActivity)
+  const guaranteed: MemberCandidate[] = []
+  if (owners[0]) guaranteed.push(owners[0])
+  if (!guaranteed.some((m) => m.canManageBilling) && billing[0]) guaranteed.push(billing[0])
+  const guaranteedIds = guaranteed.map((m) => m.id)
+  const defaults = [
+    ...owners,
+    ...billing,
+    ...members.filter((m) => !m.isOwner && !m.canManageBilling).sort(byRecentActivity),
+  ].map((m) => m.id)
+
+  const known = new Set(members.map((m) => m.id))
+  const picked = (chosen ?? []).filter((id) => known.has(id))
+  if (picked.length === 0) {
+    return keepFirst(guaranteedIds, defaults, Math.max(cap, guaranteedIds.length))
+  }
+  const out = [...guaranteedIds]
+  for (const id of [...new Set(picked)].slice(0, cap)) if (!out.includes(id)) out.push(id)
+  for (const id of defaults) {
+    if (out.length >= cap) break
+    if (!out.includes(id)) out.push(id)
+  }
+  return out
+}
+
+/** Status components that stay public: the chosen ones, then display order. */
+export function statusComponentOrder(
+  components: readonly StatusComponentCandidate[],
+  cap: number,
+  chosen?: readonly string[]
+): string[] {
+  const groupRank = (c: StatusComponentCandidate) =>
+    c.groupPosition === null ? -Infinity : c.groupPosition
+  const ordered = [...components]
+    .sort((a, b) => {
+      const ga = groupRank(a)
+      const gb = groupRank(b)
+      if (ga !== gb) return ga < gb ? -1 : 1
+      return a.position - b.position || byId(a, b)
+    })
+    .map((c) => c.id)
+  return keepFirst(chosen ?? [], ordered, cap)
+}
+
+/** Sending domains that keep sending: the chosen ones, then oldest verified, then oldest. */
+export function sendingDomainOrder(
+  domains: readonly SendingDomainCandidate[],
+  cap: number,
+  chosen?: readonly string[]
+): string[] {
+  const verified = (d: SendingDomainCandidate) => (d.status === 'verified' ? 0 : 1)
+  const ordered = [...domains]
+    .sort((a, b) => verified(a) - verified(b) || byCreated(a, b) || byId(a, b))
+    .map((d) => d.id)
+  return keepFirst(chosen ?? [], ordered, cap)
+}
