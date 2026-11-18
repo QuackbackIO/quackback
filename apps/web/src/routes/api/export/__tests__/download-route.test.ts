@@ -57,6 +57,12 @@ vi.mock('@/lib/server/config', () => ({
 }))
 
 import { handleDownloadExportRun } from '../runs.$runId.download'
+import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
+
+/** A plan with every tier feature off: the workspace export must not depend on any of them. */
+const NO_FEATURES = {
+  features: Object.fromEntries(Object.keys(OSS_TIER_LIMITS.features).map((key) => [key, false])),
+}
 
 function makeRequest(): Request {
   return { url: 'https://app.test/api/export/runs/x/download', headers: new Headers() } as Request
@@ -102,8 +108,8 @@ describe('GET /api/export/runs/{runId}/download', () => {
     expect(res.status).toBe(403)
   })
 
-  it('downloads a finished run on a plan without analytics exports', async () => {
-    hoisted.mockGetTierLimits.mockResolvedValue({ features: { analyticsExports: false } })
+  it('downloads a finished run on a plan with every feature off', async () => {
+    hoisted.mockGetTierLimits.mockResolvedValue(NO_FEATURES)
     hoisted.mockGetExportRun.mockResolvedValue(completedRun())
     const res = await handleDownloadExportRun(RUN_ID, makeRequest())
     expect(res.status).toBe(302)
