@@ -164,3 +164,16 @@ here or the assertions are stale; not traced. The paperclip label
   9000-character reply or note fails with "Message must be 4,000 characters
   or less". Either the schemas or the limit is wrong. owner: unassigned,
   review by: 2026-12-03.
+
+### Support suite: tickets
+
+- `support/tickets-create.spec.ts` › TKT-03 the requester gets one email on
+  create, not also a reply email echoing the opening note. A customer ticket
+  created for a requester (REST, MCP, or the dialog's typeless path) sends the
+  "We received your ticket" email and also a conversation reply email
+  ("Re: <opening note>"): the opening message is written through the full
+  conversation pipeline (`ticket-intake.service.ts:347`,
+  `insertTicketMessage` redirected onto the backing conversation), whose
+  visitor email is not suppressed for the intake. Same family as the possible
+  double email on ticket replies (CUS-O-17). owner: unassigned, review by:
+  2026-12-03.
