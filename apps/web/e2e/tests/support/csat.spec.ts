@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import type { APIRequestContext } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
+import { clientIp } from '../../support/api-client'
 import { pollFor, supportDb } from '../../support/db'
 import { linksIn, waitForEmailLog } from '../../support/mailpit'
 import { sink } from '../../support/webhook-sink-client'
@@ -130,8 +131,17 @@ test.describe('the end-of-thread prompt', () => {
     { tag: '@smoke' },
     async ({ browser, playwright, asPerson, marker }) => {
       test.setTimeout(90_000)
-      const visitorContext = await browser.newContext()
+      // Its own client address, so the anonymous sign-in has its own rate
+      // limit bucket instead of loopback's, shared with every other test.
+      const visitorContext = await browser.newContext({
+        extraHTTPHeaders: { 'x-e2e-client-ip': clientIp() },
+      })
       const widget = await visitorContext.newPage()
+      // Every live stream the widget opens, to know when this thread's is up.
+      const streams: string[] = []
+      widget.on('response', (res) => {
+        if (res.url().includes('/api/chat/stream') && res.status() === 200) streams.push(res.url())
+      })
       await widget.goto('/widget')
       await widget.getByRole('button', { name: 'Messages', exact: true }).click()
       await widget
@@ -149,16 +159,18 @@ test.describe('the end-of-thread prompt', () => {
         return row?.conversation_id ?? null
       })
       const conversationId = fromUuid('conversation', conversationUuid)
+      // Close only once the thread's live stream is open, so the close is
+      // seen live rather than raced against the subscription.
+      await expect
+        .poll(() => streams.some((url) => url.includes(conversationId)), { timeout: 20_000 })
+        .toBe(true)
 
       const admin = await apiAs(playwright, 'admin')
       await close(admin, conversationId)
 
-      // The prompt appears in the visitor's thread once it is closed.
+      // The prompt appears live in the visitor's thread once it is closed.
       const fourStars = widget.getByRole('button', { name: 'Rate 4 of 5' })
-      await expect(async () => {
-        if (!(await fourStars.isVisible())) await widget.reload()
-        await expect(fourStars).toBeVisible({ timeout: 5_000 })
-      }).toPass({ timeout: 30_000 })
+      await expect(fourStars).toBeVisible({ timeout: 15_000 })
       await expect(widget.getByText('How was your conversation?')).toBeVisible()
       await fourStars.click()
       await expect(widget.getByText('Thanks! Anything we could improve?')).toBeVisible()
