@@ -49,7 +49,12 @@ import {
   enqueueUsageReport,
   isHostedBillingConfigured,
 } from '@/lib/server/domains/billing/usage-report'
-import { earliestPendingJobAt, isMissingJobQueue, nextPendingJobAt } from './job-queue'
+import {
+  earliestPendingJobAt,
+  isMissingJobQueue,
+  nextPendingJobAt,
+  type ClaimedJob,
+} from './job-queue'
 import { logPausedJobs } from './definitions'
 import {
   awaitPool,
@@ -225,6 +230,19 @@ function startLoop(opts: {
   // on the minute.
   const schedule = createScheduleState({ spreadKey: opts.workspace ? opts.workspaceKey : null })
   const pool = createJobPool()
+  // Every pass and every job runs in a request scope of its own, opened
+  // outside the workspace scope so the workspace scope is a child of it. The
+  // request memo (`request-memo.ts`) lives on that scope: shared, it would
+  // answer every read for the life of the process with the value from the
+  // first one, and a setting switched on after boot would never reach a job.
+  // A job started from a committing request must not read that request's memo
+  // either, so it is not a child of the caller's scope.
+  const inOwnScope = <T>(route: string, body: () => Promise<T>): Promise<T> =>
+    runWithLogContext(
+      { request_id: crypto.randomUUID(), route, workspace_key: opts.workspaceKey },
+      () => opts.scoped(body)
+    )
+  const runInOwnScope = (job: ClaimedJob) => inOwnScope(`jobs:${job.queue}`, () => runJob(job))
   const handle: WorkspaceLoop = {
     workspaceKey: opts.workspaceKey,
     recentWakeAt: 0,
@@ -245,13 +263,13 @@ function startLoop(opts: {
     },
     async tryStartByIds(jobIds) {
       if (jobIds.length === 0 || stopped) return 0
-      return opts.scoped(async () => {
+      return inOwnScope('jobs:start-by-id', async () => {
         if (stopped) return 0
         return startJobsById({
           pool,
           config: opts.config,
           jobIds,
-          run: (job) => opts.scoped(() => runJob(job)),
+          run: runInOwnScope,
           onSettled: (_queue, outcome) => {
             if (outcome === 'succeeded') s.succeeded += 1
             else if (outcome === 'failed') s.failed += 1
@@ -336,7 +354,7 @@ function startLoop(opts: {
       let wakeAt: number | null = null
       try {
         const now = Date.now()
-        const result = await opts.scoped(async () => {
+        const result = await inOwnScope('jobs:pass', async () => {
           try {
             await convertRelayOwnedEvents()
           } catch (err) {
@@ -361,7 +379,7 @@ function startLoop(opts: {
           const dispatched = await dispatchPass({
             pool,
             config: opts.config,
-            run: (job) => opts.scoped(() => runJob(job)),
+            run: runInOwnScope,
             onSettled: (_queue, outcome) => {
               if (outcome === 'succeeded') s.succeeded += 1
               else if (outcome === 'failed') s.failed += 1
