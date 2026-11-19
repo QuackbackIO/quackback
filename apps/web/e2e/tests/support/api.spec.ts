@@ -1,6 +1,7 @@
 /**
  * The REST API for conversations (/api/v1/conversations), its keys and its
- * refusals. Journeys API-01..24, API-43..51 and ACC-22..24.
+ * refusals, and which key's changes start workflows. Journeys API-01..24,
+ * API-43..51 and ACC-22..24.
  *
  * Every key is made per test (support/api-client.ts), and every request
  * context carries its own client address, so the per-address rate limit never
@@ -27,6 +28,13 @@ import {
   uuidOf,
   waitForEvent,
 } from '../../support/api-client'
+import { apiAs as sessionApiAs, withLiveWorkflow, workflowRuns } from '../../support/sla-csat'
+import {
+  conversationForMessage,
+  conversationTypeId,
+  seedCustomer as seedKnownCustomer,
+  sendColdMail,
+} from '../../support/email-journeys'
 
 // Well-formed ids that exist nowhere.
 // Key and teammate scripts start the app's modules (about a second each).
@@ -708,6 +716,78 @@ test.describe('REST conversations: writes', () => {
       const pending = await expectJson(await api.post(url, { data: { status: 'pending' } }), 400)
       expect(pending.error.code).toBe('BAD_REQUEST')
       await api.dispose()
+    }
+  )
+
+  test(
+    'API-93 a close with a personal key starts workflows like the app; a workspace or pre-cutoff key starts none',
+    { tag: '@core' },
+    async ({ request, playwright, baseURL, people, customerEmail, marker }) => {
+      test.setTimeout(120_000)
+      const adminEmail = people.people.admin.email
+      // A known customer whose authenticated email opens the thread, so the
+      // workflow's audience (person.email) matches them.
+      await seedKnownCustomer(customerEmail, 'Wes Workflow')
+      const sent = await sendColdMail(request, {
+        from: customerEmail,
+        subject: `Workflow ${marker}`,
+        text: `Help please ${marker}`,
+      })
+      const conversationId = conversationTypeId((await conversationForMessage(sent.messageId)).id)
+      const personal = createKey({ creatorEmail: adminEmail })
+      const prePersonal = createKey({ creatorEmail: adminEmail })
+      fixture({ op: 'backdateKey', keyId: prePersonal.id })
+      const workspace = createKey({ creatorEmail: adminEmail, kind: 'workspace' })
+      const apis = {
+        personal: await apiFor(playwright, baseURL, personal.key),
+        prePersonal: await apiFor(playwright, baseURL, prePersonal.key),
+        workspace: await apiFor(playwright, baseURL, workspace.key),
+      }
+      const admin = await sessionApiAs(playwright, 'admin')
+      const url = `/api/v1/conversations/${conversationId}/status`
+      const setStatus = async (by: keyof typeof apis, status: 'open' | 'closed') =>
+        expectJson(await apis[by].post(url, { data: { status } }), 200)
+      try {
+        await withLiveWorkflow(
+          admin,
+          {
+            name: `Closed ${marker}`,
+            triggerType: 'conversation.status_changed',
+            onlyFor: customerEmail,
+            alsoWhen: [{ field: 'conversation.status', op: 'eq', value: 'closed' }],
+            steps: [
+              { id: 'p', type: 'action', action: { type: 'set_priority', priority: 'urgent' } },
+            ],
+          },
+          async (workflow) => {
+            const runs = async () => (await workflowRuns(workflow.id)).length
+            // The personal key's close runs it, as the same close in the app would.
+            await setStatus('personal', 'closed')
+            await expect.poll(runs, { timeout: 45_000 }).toBe(1)
+
+            // A workspace key and a personal key from before the cutoff are
+            // automated: their closes start nothing.
+            await setStatus('workspace', 'open')
+            await setStatus('workspace', 'closed')
+            await setStatus('workspace', 'open')
+            await setStatus('prePersonal', 'closed')
+            await setStatus('workspace', 'open')
+
+            // A last personal-key close is dispatched after the others, so once
+            // its run lands every earlier close has been judged.
+            await setStatus('personal', 'closed')
+            await expect.poll(runs, { timeout: 45_000 }).toBe(2)
+            await new Promise((r) => setTimeout(r, 2_000))
+            expect(await runs()).toBe(2)
+            const closes = (
+              await eventsFor(conversationId, ['conversation.status_changed'])
+            ).filter((e) => e.payload.newStatus === 'closed')
+            expect(closes).toHaveLength(4)
+          }
+        )
+      } finally {
+        await Promise.all([admin.dispose(), ...Object.values(apis).map((a) => a.dispose())])
+      }
     }
   )
 

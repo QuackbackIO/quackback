@@ -17,7 +17,8 @@
  * key is automated. A message with no principal is not a service's.
  *
  * Callers add their own filters: public (`is_internal = false`), and for a
- * ticket's first response, not deleted.
+ * ticket's first response, not deleted. Workflows read the same rule
+ * (`keyActsAsPerson`) to decide whether a key's change starts them.
  */
 import { and, db, eq, or, sql, apiKeys, conversationMessages, principal } from '@/lib/server/db'
 import type { SQLWrapper } from 'drizzle-orm'
@@ -84,6 +85,20 @@ function keyRepliesAsPerson(id: SQLWrapper) {
 
 function isApiKey(id: SQLWrapper) {
   return sql`exists (select 1 from ${apiKeys} where ${apiKeys.principalId} = ${id})`
+}
+
+/**
+ * Whether a service principal is a personal API key that acts as its creator:
+ * a personal key made at or after the cutoff. Workflows read it so a change
+ * made with such a key starts them like the same change in the app. A
+ * workspace key, an older personal key and every other service principal (a
+ * workflow, the assistant, an integration) stay automated.
+ */
+export async function keyActsAsPerson(principalId: PrincipalId): Promise<boolean> {
+  const rows = (await db.execute(sql`
+    select ${keyRepliesAsPerson(sql`${toUuid(principalId)}::uuid`)} as person
+  `)) as unknown as Array<{ person: boolean }>
+  return rows[0]?.person === true
 }
 
 /**
