@@ -63,14 +63,6 @@ Every entry has owner: unassigned and review by: 2026-12-02.
   run, so the cause is not confirmed. owner: unassigned, review by:
   2026-12-02.
 
-### Needs a product decision
-
-- `public/notifications.spec.ts` › Portal Notifications (unauthenticated) ›
-  redirects away from /notifications when not logged in. A signed-out visitor
-  sees the Notifications page heading. The route has never had an auth guard,
-  so decide whether it should redirect, show a sign-in gate, or stay as it is.
-  owner: unassigned, review by: 2026-12-02.
-
 ### Support API and MCP (support suite)
 
 - `support/mcp.spec.ts` › MCP tickets › API-63 reply_to_ticket and

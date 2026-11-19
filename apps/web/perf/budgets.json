@@ -956,19 +956,6 @@
       "htmlTransferKB": 15.9,
       "componentRenders": 152
     },
-    "sweep:doc:anon:/notifications": {
-      "dbQueries": 0,
-      "htmlKB": 26.5
-    },
-    "sweep:ui:anon:/notifications": {
-      "dbQueries": 0,
-      "serverRequests": 3,
-      "requests": 98,
-      "jsRequests": 92,
-      "jsKB": 386.2,
-      "htmlTransferKB": 16.2,
-      "componentRenders": 183
-    },
     "sweep:doc:admin:/settings/profile": {
       "dbQueries": 11,
       "htmlKB": 38.9
