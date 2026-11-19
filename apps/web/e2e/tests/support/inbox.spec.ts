@@ -30,6 +30,7 @@ import {
   waitForConversation,
   widgetStartConversation,
 } from '../../support/inbox'
+import { createTicket, pairedCustomerTicket, ticketApi } from '../../support/tickets'
 
 test.use({ viewport: { width: 1920, height: 1080 } })
 
@@ -913,6 +914,47 @@ test.describe('inbox views', () => {
       })
       await expect(page).not.toHaveURL(/viewId=/)
       await expectListed(page, marker, [a, b])
+    }
+  )
+})
+
+test.describe('inbox list with tickets on', () => {
+  test(
+    'INB-26 a conversation with a linked customer ticket is one row wearing the ticket line',
+    {
+      tag: '@core',
+    },
+    async ({ teammate, playwright, baseURL, customerEmail, marker }) => {
+      const api = await ticketApi(playwright, baseURL)
+      // The marker is in the ticket title and in the opening note, so a second
+      // (ticket) row for the pair would match the search too.
+      const pair = await pairedCustomerTicket(api, customerEmail, `Refund ${marker}`)
+      // Control: a customer ticket with no conversation is a row of its own.
+      await createTicket(api, {
+        title: `Standalone ${marker}`,
+        type: 'customer',
+      })
+      await api.dispose()
+      const { page } = await teammate()
+
+      await page.goto(inboxUrl({ q: marker }))
+      const pairRow = listRows(page, `Refund ${marker}`)
+      await expect(listRows(page, marker)).toHaveCount(1, { timeout: 15_000 })
+      await expect(pairRow).toHaveCount(1)
+      await expect(pairRow).toContainText(`#${pair.ticket.number}`)
+      await expect(pairRow).toContainText(`· Refund ${marker}`)
+
+      await page.goto(inboxUrl({ view: 'tickets_customer', q: marker }))
+      await expect(listRows(page, marker)).toHaveCount(2, { timeout: 15_000 })
+      await expect(pairRow).toHaveCount(1)
+      await expect(pairRow).toContainText(`#${pair.ticket.number}`)
+      await expect(listRows(page, `Standalone ${marker}`)).toHaveCount(1)
+
+      // The one row is the conversation: opening it opens the conversation.
+      await expect(async () => {
+        await pairRow.getByRole('button').first().click()
+        await expect(page).toHaveURL(new RegExp(`i=${pair.conversationId}`), { timeout: 2_000 })
+      }).toPass({ timeout: 15_000 })
     }
   )
 })
