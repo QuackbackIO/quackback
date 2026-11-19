@@ -400,6 +400,11 @@ export async function runAssistantTurnForConversation(
       // A filed proposal waits on the team even when no new handoff is needed.
       waiting: handsOff || result.proposedActions.length > 0,
       citations: persistedCitations,
+      // The model ended the conversation with a tool call before writing these
+      // words; posting them must not reopen what it just closed.
+      closedThisTurn: result.trace.toolCalls.some(
+        (call) => call.name === 'end_conversation' && call.outcome === 'executed'
+      ),
     })
 
     if (result.escalation?.mode === 'handoff') {

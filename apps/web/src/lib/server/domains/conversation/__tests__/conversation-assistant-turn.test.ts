@@ -158,6 +158,8 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', async (importO
 
 const insertedMessages: Record<string, unknown>[] = []
 const updateSets: Record<string, unknown>[] = []
+// The status the reply's own conversation read sees (the turn may have closed it).
+const storedConversation = { status: 'open' }
 
 function conversationRow(override: Record<string, unknown> = {}) {
   return {
@@ -189,7 +191,9 @@ vi.mock('@/lib/server/db', () => {
     })
     c.where = vi.fn(() => c)
     c.orderBy = vi.fn(() => c)
-    c.limit = vi.fn(async () => (label === 'conversations' ? [conversationRow()] : []))
+    c.limit = vi.fn(async () =>
+      label === 'conversations' ? [conversationRow({ status: storedConversation.status })] : []
+    )
     c.returning = vi.fn(async () => {
       if (label === 'conversation_messages') {
         return [{ ...row, id: 'conversation_msg_new', createdAt: new Date() }]
@@ -308,6 +312,7 @@ beforeEach(() => {
   __resetAssistantPrincipalMemo()
   insertedMessages.length = 0
   updateSets.length = 0
+  storedConversation.status = 'open'
   assistantMock.isAssistantConfigured.mockReturnValue(true)
   assistantMock.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_assistant' })
   assistantMock.voidAssumedResolutionForConversation.mockResolvedValue(null)
@@ -470,6 +475,43 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
       sources: [{ type: 'article', id: 'a1', title: 'T', url: 'u' }],
     })
     expect(assistantMock.recordHandoff).not.toHaveBeenCalled()
+  })
+
+  it('keeps the conversation closed when the turn itself ended it (end_conversation)', async () => {
+    // The tool closed the conversation mid-turn; the closing words land after.
+    storedConversation.status = 'closed'
+    assistantMock.runAssistantTurn.mockResolvedValue(
+      answered({
+        text: 'Glad that is sorted',
+        trace: {
+          ...PRIVACY_SAFE_TRACE,
+          toolCalls: [{ name: 'end_conversation', outcome: 'executed' }],
+        },
+      })
+    )
+    await runAssistantTurnForConversation(CONV)
+
+    expect(insertedMessages).toHaveLength(1)
+    expect(updateSets).toHaveLength(1)
+    expect(updateSets[0].status).toBe('closed')
+  })
+
+  it('still reopens a closed conversation for a reply when the turn did not end it', async () => {
+    storedConversation.status = 'closed'
+    assistantMock.runAssistantTurn.mockResolvedValue(
+      answered({
+        text: 'Here you go',
+        trace: {
+          ...PRIVACY_SAFE_TRACE,
+          // A failed close is no close.
+          toolCalls: [{ name: 'end_conversation', outcome: 'failed' }],
+        },
+      })
+    )
+    await runAssistantTurnForConversation(CONV)
+
+    expect(updateSets).toHaveLength(1)
+    expect(updateSets[0].status).toBe('open')
   })
 
   it('refuses an internal-sourced public result: the reply never persists, the floor hands off', async () => {
