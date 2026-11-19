@@ -11,6 +11,7 @@ import { waitForMail } from '../../support/mailpit'
 import { supportDb } from '../../support/db'
 import {
   addWatcherRow,
+  clickUntilVisible,
   conversationMessages,
   detailPanel,
   openRequesterThread,
@@ -35,6 +36,10 @@ import {
   ticketWatchers,
 } from '../../support/tickets'
 import { toUuid } from '@quackback/ids'
+import type { Page } from '@playwright/test'
+import { createHmac } from 'node:crypto'
+import { seedConversation } from '../../utils/db-helpers'
+import { sink } from '../../support/webhook-sink-client'
 
 test.describe('tickets: replies and first response', () => {
   test(
@@ -412,6 +417,487 @@ test.describe('tickets: assignment, notes and the linked ticket', () => {
       const scopedPanel = detailPanel(scoped)
       await expect(scopedPanel.getByText("Linked ticket you can't open")).toBeVisible()
       await expect(scopedPanel.getByRole('button', { name: ticket.reference })).toHaveCount(0)
+    }
+  )
+})
+
+test.describe('tickets: settings', () => {
+  /** The type options the Create ticket dialog offers on a conversation. */
+  async function createPickerOptions(page: Page, conversationId: string): Promise<string[]> {
+    await page.goto(`/admin/inbox?i=${conversationId}`)
+    const dialog = page.getByRole('dialog')
+    await clickUntilVisible(page.getByRole('button', { name: 'Create ticket' }).first(), dialog)
+    await dialog.getByRole('combobox').first().click()
+    const options = await page.getByRole('option').allInnerTexts()
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    return options
+  }
+
+  test(
+    'TKT-20 an admin creates, edits, archives and restores a ticket type',
+    { tag: '@core' },
+    async ({ asPerson, marker }) => {
+      test.setTimeout(90_000)
+      const name = `Kind ${marker}`
+      const renamed = `${name} v2`
+      const conversation = seedConversation(`Type picker ${marker}`)
+      const admin = await asPerson('admin')
+      await admin.goto('/admin/settings/ticket-types')
+
+      const editor = admin.getByRole('dialog')
+      await clickUntilVisible(admin.getByRole('button', { name: 'New type' }), editor)
+      await editor.getByLabel('Name').fill(name)
+      await editor.getByRole('button', { name: 'Create type' }).click()
+      await expect(admin.getByText(`Created "${name}"`)).toBeVisible()
+
+      await admin.getByRole('button', { name: `Actions for ${name}` }).click()
+      await admin.getByRole('menuitem', { name: 'Edit' }).click()
+      await editor.getByLabel('Name').fill(renamed)
+      await editor.getByRole('button', { name: 'Save changes' }).click()
+      await expect(admin.getByText(`Saved "${renamed}"`)).toBeVisible()
+      expect((await createPickerOptions(admin, conversation.conversationId)).join('\n')).toContain(
+        renamed
+      )
+
+      await admin.goto('/admin/settings/ticket-types')
+      await admin.getByRole('button', { name: `Actions for ${renamed}` }).click()
+      await admin.getByRole('menuitem', { name: 'Archive' }).click()
+      await admin.getByRole('button', { name: 'Archive type' }).click()
+      await expect(admin.getByText(`Archived "${renamed}"`)).toBeVisible()
+      expect(
+        (await createPickerOptions(admin, conversation.conversationId)).join('\n')
+      ).not.toContain(renamed)
+
+      await admin.goto('/admin/settings/ticket-types')
+      await admin.getByRole('button', { name: `Actions for ${renamed}` }).click()
+      await admin.getByRole('menuitem', { name: 'Restore' }).click()
+      await expect(admin.getByText(`Restored "${renamed}"`)).toBeVisible()
+      expect((await createPickerOptions(admin, conversation.conversationId)).join('\n')).toContain(
+        renamed
+      )
+    }
+  )
+})
+
+test.describe('tickets: more status, assignment and priority', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } })
+
+  test(
+    'TKT-24 a move within the same stage logs activity but posts no notice and no bell',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, people, marker, customerEmail }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Same stage ${marker}`
+      )
+      await addWatcherRow(ticket.id, people.people.agentB.principalId)
+      await setStatus(api, ticket.id, 'Investigating')
+      const notices = async () =>
+        (await conversationMessages(conversationId)).filter((m) =>
+          m.content.startsWith('Status updated')
+        ).length
+      const bells = async () =>
+        (await ticketBells(people.people.agentB.principalId, ticket.id)).filter(
+          (b) => b.type === 'ticket_status_changed'
+        ).length
+      await expect.poll(bells).toBe(1)
+      expect(await notices()).toBe(1)
+
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      await admin.getByRole('button', { name: 'Investigating', exact: true }).first().click()
+      await admin.getByRole('menuitem', { name: 'Escalated In progress' }).click()
+      await expect
+        .poll(async () =>
+          (await ticketActivity(ticket.id))
+            .filter((a) => a.type === 'status.changed')
+            .map((a) => a.metadata.toName)
+        )
+        .toEqual(['Investigating', 'Escalated'])
+      await new Promise((r) => setTimeout(r, 2_000))
+      expect(await notices()).toBe(1)
+      expect(await bells()).toBe(1)
+    }
+  )
+
+  test(
+    'TKT-26 closing with a hidden-stage status says "closed", never the internal name',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, browser, asPerson, marker, customerEmail }) => {
+      test.setTimeout(60_000)
+      const api = await ticketApi(playwright, baseURL)
+      const { customer, ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Wont do ${marker}`
+      )
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      await admin.getByRole('button', { name: 'New', exact: true }).first().click()
+      await admin.getByRole('menuitem', { name: "Won't do" }).click()
+
+      const row = await waitForTicket(ticket.id, 'closed', (r) => r.status_category === 'closed')
+      expect(row.status_name).toBe("Won't do")
+      const mail = await waitForMail({
+        to: customerEmail,
+        subject: `Your ticket ${ticket.reference} was closed`,
+      })
+      expect(mail.Text).not.toContain("Won't do")
+
+      const requester = await signedInAs(browser, customer.userId)
+      await openRequesterThread(requester, conversationId)
+      await expect(requester.getByText('Ticket closed')).toBeVisible()
+      await expect(requester.getByText("Won't do")).toHaveCount(0)
+    }
+  )
+
+  test(
+    'TKT-31 ticket and conversation status stay independent',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, marker, customerEmail }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Independent ${marker}`
+      )
+      const conversationStatus = async () => {
+        const res = await api.get(`/api/v1/conversations/${conversationId}`)
+        return ((await res.json()) as { data: { status: string } }).data.status
+      }
+      await setStatus(api, ticket.id, 'Resolved')
+      expect(await conversationStatus()).toBe('open')
+
+      await setStatus(api, ticket.id, 'Investigating')
+      const closed = await api.post(`/api/v1/conversations/${conversationId}/status`, {
+        data: { status: 'closed' },
+      })
+      expect(closed.ok(), await closed.text()).toBe(true)
+      expect(await conversationStatus()).toBe('closed')
+      await new Promise((r) => setTimeout(r, 2_000))
+      expect((await ticketRow(ticket.id))!.status_name).toBe('Investigating')
+    }
+  )
+
+  test(
+    'TKT-34 assigning a team bells and emails its members, not the actor',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, people, marker, customerEmail }) => {
+      test.setTimeout(60_000)
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket } = await pairedCustomerTicket(api, customerEmail, `Team ${marker}`)
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      const panel = detailPanel(admin)
+      await panel.getByRole('button', { name: /Ada Admin/ }).click()
+      await admin.getByRole('menuitem', { name: 'E2E Billing' }).click()
+
+      const billing = toUuid(people.teams.billing as `team_${string}`)
+      await waitForTicket(ticket.id, 'team', (r) => r.assignee_team_id === billing)
+      await expect
+        .poll(async () =>
+          (await ticketActivity(ticket.id))
+            .filter((a) => a.type === 'ticket.assigned')
+            .map((a) => a.metadata.toTeamName)
+        )
+        .toContain('E2E Billing')
+      // Billing members who can see tickets get a bell; the contributor (no
+      // ticket permission) and the acting admin (also in Billing) do not.
+      await expect
+        .poll(async () =>
+          (await ticketBells(people.people.scoped.principalId, ticket.id)).map((b) => b.type)
+        )
+        .toContain('ticket_assigned')
+      expect(
+        (await ticketBells(people.people.contributor.principalId, ticket.id)).map((b) => b.type)
+      ).not.toContain('ticket_assigned')
+      await waitForMail({
+        to: people.people.scoped.email,
+        subject: `Ticket ${ticket.reference} assigned to your team`,
+      })
+      expect(
+        (await ticketBells(people.people.admin.principalId, ticket.id)).map((b) => b.type)
+      ).not.toContain('ticket_assigned')
+    }
+  )
+
+  test(
+    'TKT-35 unassign and clear team set null; a repeat assignment records nothing',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, people, marker, customerEmail }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket } = await pairedCustomerTicket(api, customerEmail, `Unassign ${marker}`)
+      const assign = (data: Record<string, string | null>) =>
+        api.post(`/api/v1/tickets/${ticket.id}/assign`, { data })
+      const assigned = async () =>
+        (await ticketActivity(ticket.id)).filter((a) => a.type === 'ticket.assigned').length
+
+      expect((await assign({ assigneeTeamId: people.teams.support })).ok()).toBe(true)
+      await expect.poll(assigned).toBe(1)
+      // The same values again: no activity.
+      const same = await assign({
+        assigneePrincipalId: people.people.admin.principalId,
+        assigneeTeamId: people.teams.support,
+      })
+      expect(same.ok()).toBe(true)
+      await new Promise((r) => setTimeout(r, 1_000))
+      expect(await assigned()).toBe(1)
+
+      expect((await assign({ assigneePrincipalId: null, assigneeTeamId: null })).ok()).toBe(true)
+      await waitForTicket(
+        ticket.id,
+        'cleared',
+        (r) => r.assignee_principal_id === null && r.assignee_team_id === null
+      )
+      await expect.poll(assigned).toBe(2)
+
+      // A customer is not a teammate.
+      const bad = await assign({ assigneePrincipalId: people.people.customer.principalId })
+      expect(bad.status()).toBe(400)
+      expect(await bad.text()).toContain('Can only assign to a team member')
+    }
+  )
+
+  test(
+    'TKT-36 setting priority shows on the ticket and logs the change',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, marker, customerEmail }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket } = await pairedCustomerTicket(api, customerEmail, `Priority ${marker}`)
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      const panel = detailPanel(admin)
+      await panel.getByRole('button', { name: 'Priority' }).click()
+      await admin.getByRole('menuitem', { name: /High/ }).click()
+      await expect(panel.getByRole('button', { name: 'High' })).toBeVisible()
+      await waitForTicket(ticket.id, 'priority', (r) => r.priority === 'high')
+      await expect
+        .poll(async () =>
+          (await ticketActivity(ticket.id))
+            .filter((a) => a.type === 'priority.changed')
+            .map((a) => a.metadata)
+        )
+        .toEqual([expect.objectContaining({ from: 'none', to: 'high' })])
+    }
+  )
+
+  test(
+    'TKT-69 the activity timeline lists status and assignment changes, newest first',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, people, marker, customerEmail }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket } = await pairedCustomerTicket(api, customerEmail, `Timeline ${marker}`)
+      await setStatus(api, ticket.id, 'Investigating')
+      const assign = await api.post(`/api/v1/tickets/${ticket.id}/assign`, {
+        data: { assigneePrincipalId: people.people.agentB.principalId },
+      })
+      expect(assign.ok()).toBe(true)
+
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      const panel = detailPanel(admin)
+      await panel.getByRole('button', { name: 'Activity' }).click()
+      const timeline = admin.getByText(/created this ticket|changed status|assigned Ben Agent/)
+      await expect(timeline).toHaveCount(3)
+      await expect(timeline.nth(0)).toContainText('assigned Ben Agent')
+      await expect(timeline.nth(1)).toContainText('changed status')
+      await expect(timeline.nth(2)).toContainText('created this ticket')
+    }
+  )
+})
+
+test.describe('tickets: replies, refusals and watchers', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } })
+
+  test(
+    'TKT-40 a reply on a back-office ticket stays on the ticket and sets no first response',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, marker }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const ticket = await createTicket(api, { title: `Ledger ${marker}`, type: 'back_office' })
+      // The inbox composer on a back-office ticket offers notes only, so the
+      // reply goes through the REST reply route.
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      await expect(admin.getByRole('button', { name: 'Add note' })).toBeVisible()
+      await expect(admin.getByRole('button', { name: 'Send reply' })).toHaveCount(0)
+      const text = `Back office reply ${marker}`
+      await replyToTicket(api, ticket.id, text)
+      await expect(admin.getByText(text).first()).toBeVisible()
+      await expect
+        .poll(async () => (await ticketOwnMessages(ticket.id)).map((m) => m.content))
+        .toContain(text)
+      expect(await pairedConversationId(ticket.id)).toBeNull()
+      await new Promise((r) => setTimeout(r, 1_000))
+      expect((await ticketRow(ticket.id))!.first_response_at).toBeNull()
+    }
+  )
+
+  test(
+    'TKT-42 a role without ticket.reply is refused and empty content is invalid',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, marker, customerEmail }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Refuse ${marker}`
+      )
+      const empty = await api.post(`/api/v1/tickets/${ticket.id}/reply`, { data: { content: '' } })
+      expect(empty.status()).toBe(400)
+
+      const noAccess = await ticketApi(playwright, baseURL, 'noAccess')
+      const refused = await noAccess.post(`/api/v1/tickets/${ticket.id}/reply`, {
+        data: { content: `Not allowed ${marker}` },
+      })
+      expect(refused.status()).toBe(403)
+      expect(
+        (await conversationMessages(conversationId)).some((m) => m.content.includes('Not allowed'))
+      ).toBe(false)
+      await noAccess.dispose()
+    }
+  )
+
+  test(
+    'TKT-53 a teammate watches, mutes and unwatches a ticket',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, people, marker, customerEmail }) => {
+      test.setTimeout(60_000)
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket } = await pairedCustomerTicket(api, customerEmail, `Watch ${marker}`)
+      const agentB = principalUuid(people.people.agentB.principalId)
+      const mine = async () =>
+        (await ticketWatchers(ticket.id)).find((w) => w.principal_id === agentB) ?? null
+
+      const page = await asPerson('agentB')
+      await openInInbox(page, ticket.id, ticket.title)
+      const panel = detailPanel(page)
+      await clickUntilVisible(
+        panel.getByRole('button', { name: 'Watch', exact: true }),
+        page.getByRole('menuitem', { name: 'Watch' })
+      )
+      await page.getByRole('menuitem', { name: 'Watch' }).click()
+      await expect(panel.getByRole('button', { name: 'Watching' })).toBeVisible()
+      await expect.poll(mine).toMatchObject({ reason: 'manual', muted_until: null })
+
+      await panel.getByRole('button', { name: 'Watching' }).click()
+      await page.getByRole('menuitem', { name: 'Mute for a week' }).click()
+      await expect(panel.getByRole('button', { name: 'Muted' })).toBeVisible()
+      await expect.poll(async () => (await mine())?.muted_until ?? null).not.toBeNull()
+
+      // Muted: a status change sends no bell.
+      await setStatus(api, ticket.id, 'Investigating')
+      await new Promise((r) => setTimeout(r, 2_000))
+      expect(
+        (await ticketBells(people.people.agentB.principalId, ticket.id)).map((b) => b.type)
+      ).not.toContain('ticket_status_changed')
+
+      await panel.getByRole('button', { name: 'Muted' }).click()
+      await page.getByRole('menuitem', { name: 'Unwatch' }).click()
+      await expect(panel.getByRole('button', { name: 'Watch', exact: true })).toBeVisible()
+      await expect.poll(mine).toBeNull()
+    }
+  )
+
+  test(
+    'TKT-54 an admin adds and removes a watcher',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, people, marker }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const ticket = await createTicket(api, { title: `Watchers ${marker}`, type: 'back_office' })
+      const agentB = principalUuid(people.people.agentB.principalId)
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      const panel = detailPanel(admin)
+      const popover = admin.getByRole('dialog')
+      await clickUntilVisible(panel.getByRole('button', { name: 'Add watcher' }), popover)
+      await popover.getByRole('combobox').click()
+      await admin.getByRole('option', { name: /Ben Agent/ }).click()
+      await expect
+        .poll(async () => (await ticketWatchers(ticket.id)).map((w) => w.principal_id))
+        .toContain(agentB)
+
+      // The remove button shows on hover of the watcher's row.
+      const row = popover
+        .locator('div.group')
+        .filter({ has: admin.getByText('Ben Agent', { exact: true }) })
+      await row.hover()
+      await row.getByRole('button', { name: 'Remove watcher' }).click()
+      await expect
+        .poll(async () => (await ticketWatchers(ticket.id)).map((w) => w.principal_id))
+        .not.toContain(agentB)
+    }
+  )
+})
+
+test.describe('tickets: old links and webhooks', () => {
+  test(
+    'TKT-72 old /admin/tickets links redirect to the inbox',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, marker }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const ticket = await createTicket(api, { title: `Old link ${marker}`, type: 'back_office' })
+      const admin = await asPerson('admin')
+      await admin.goto(`/admin/tickets?t=${ticket.id}`)
+      await expect(admin).toHaveURL(new RegExp(`/admin/inbox\\?.*i=${ticket.id}`))
+      await expect(admin.getByText(ticket.title).first()).toBeVisible()
+      await admin.goto('/admin/tickets')
+      await expect(admin).toHaveURL(/\/admin\/inbox\?.*view=tickets_customer/)
+    }
+  )
+
+  test(
+    'TKT-70 signed ticket webhooks reach the sink for create, assign, reply, note and status',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, people, marker, customerEmail }) => {
+      const api = await ticketApi(playwright, baseURL)
+      const events = [
+        'ticket.created',
+        'ticket.assigned',
+        'ticket.replied',
+        'ticket.note_added',
+        'ticket.status_changed',
+      ]
+      const created = await api.post('/api/v1/webhooks', {
+        data: { url: sink.url(marker), events },
+      })
+      expect(created.status(), await created.text()).toBe(201)
+      const { data: webhook } = (await created.json()) as { data: { id: string; secret: string } }
+      try {
+        const { ticket } = await pairedCustomerTicket(api, customerEmail, `Hooks ${marker}`)
+        await api.post(`/api/v1/tickets/${ticket.id}/assign`, {
+          data: { assigneePrincipalId: people.people.agentB.principalId },
+        })
+        await replyToTicket(api, ticket.id, `Hook reply ${marker}`)
+        await api.post(`/api/v1/tickets/${ticket.id}/note`, {
+          data: { content: `Hook note ${marker}` },
+        })
+        await setStatus(api, ticket.id, 'Resolved')
+
+        const deliveries = await sink.waitForDeliveries(marker, {
+          count: events.length,
+          where: (d) => d.body.includes(ticket.id),
+        })
+        const byEvent = new Map(
+          deliveries.map((d) => [d.headers['x-quackback-event'], d.body] as const)
+        )
+        expect([...byEvent.keys()].sort()).toEqual([...events].sort())
+        for (const d of deliveries) {
+          const expected = createHmac('sha256', webhook.secret)
+            .update(`${d.headers['x-quackback-timestamp']}.${d.body}`)
+            .digest('hex')
+          expect(d.headers['x-quackback-signature']).toBe(`sha256=${expected}`)
+        }
+        expect(byEvent.get('ticket.replied')).toContain(`Hook reply ${marker}`)
+        expect(byEvent.get('ticket.replied')).toContain('"senderType":"agent"')
+        expect(byEvent.get('ticket.note_added')).toContain(`Hook note ${marker}`)
+        expect(byEvent.get('ticket.status_changed')).toContain('closed')
+      } finally {
+        await api.delete(`/api/v1/webhooks/${webhook.id}`)
+      }
     }
   )
 })
