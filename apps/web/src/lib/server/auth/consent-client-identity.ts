@@ -66,10 +66,41 @@ export function describeRedirectUri(uri: string): ConsentRedirectTarget | null {
 }
 
 /**
+ * Whether `requested` is one of the client's registered redirect URIs, as the
+ * authorize endpoint decides it: exactly, or for a loopback redirect with any
+ * port (RFC 8252 §7.3; native apps such as Claude Code register
+ * `http://localhost/callback` and listen on a port chosen at run time). The
+ * scheme, host, path and query must still match.
+ */
+export function isRegisteredRedirectUri(registered: readonly string[], requested: string): boolean {
+  if (registered.includes(requested)) return true
+  let want: URL
+  try {
+    want = new URL(requested)
+  } catch {
+    return false
+  }
+  if (want.protocol !== 'http:' || !isLoopbackHost(want.hostname)) return false
+  return registered.some((uri) => {
+    try {
+      const have = new URL(uri)
+      return (
+        have.protocol === want.protocol &&
+        have.hostname === want.hostname &&
+        have.pathname === want.pathname &&
+        have.search === want.search
+      )
+    } catch {
+      return false
+    }
+  })
+}
+
+/**
  * The identity to show. `requestedRedirectUri` is the authorize request's
- * `redirect_uri`; it counts only when the client registered it, since that is
- * the one the authorize endpoint accepted. With none, a client with a single
- * registered redirect shows that one.
+ * `redirect_uri`; it counts only when it matches a registered one, since that
+ * is the one the authorize endpoint accepted. With none, a client with a
+ * single registered redirect shows that one.
  */
 export function consentClientIdentity(
   row: ConsentClientRow,
@@ -77,7 +108,7 @@ export function consentClientIdentity(
 ): ConsentClientIdentity {
   const registered = row.redirectUris ?? []
   const redirectUri =
-    requestedRedirectUri && registered.includes(requestedRedirectUri)
+    requestedRedirectUri && isRegisteredRedirectUri(registered, requestedRedirectUri)
       ? requestedRedirectUri
       : registered.length === 1
         ? registered[0]

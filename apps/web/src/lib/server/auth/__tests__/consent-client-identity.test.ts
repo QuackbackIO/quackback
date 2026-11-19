@@ -61,6 +61,47 @@ describe('consentClientIdentity', () => {
   })
 })
 
+describe('loopback redirects with a run-time port (RFC 8252)', () => {
+  // Claude Code's real CIMD document registers these and listens on a random port.
+  const claudeCode = {
+    clientId: 'https://claude.ai/oauth/claude-code-client-metadata',
+    clientDiscoveryId: 'cimd',
+    redirectUris: ['http://localhost/callback', 'http://127.0.0.1/callback'],
+  }
+
+  it('recognises the redirect the client actually used, so the device warning shows', () => {
+    expect(consentClientIdentity(claudeCode, 'http://localhost:42422/callback')).toEqual({
+      verified: true,
+      host: 'claude.ai',
+      redirect: { kind: 'device' },
+    })
+  })
+
+  it('still needs the same host, path and query', () => {
+    for (const uri of [
+      'http://127.0.0.2:42422/callback',
+      'http://localhost:42422/other',
+      'http://localhost:42422/callback?x=1',
+      'https://localhost:42422/callback',
+    ]) {
+      expect(consentClientIdentity(claudeCode, uri).redirect, uri).toBeNull()
+    }
+  })
+
+  it('never relaxes the port of a non-loopback redirect', () => {
+    expect(
+      consentClientIdentity(
+        {
+          clientId: 'abc',
+          clientDiscoveryId: null,
+          redirectUris: ['https://app.example/cb', 'https://b.example/cb'],
+        },
+        'https://app.example:8443/cb'
+      ).redirect
+    ).toBeNull()
+  })
+})
+
 describe('describeRedirectUri', () => {
   it.each([
     ['https://chatgpt.com/connector/oauth', { kind: 'web', host: 'chatgpt.com' }],
