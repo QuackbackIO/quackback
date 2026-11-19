@@ -153,14 +153,14 @@ test.describe('widget identity: verified identify', () => {
       const upper = await identify(request, {
         ssoToken: signSsoToken({ id: sub, email: customerEmail.toUpperCase() }, secret),
       })
-      expect(upper.json?.user.id).toBe(first.json?.user.id)
+      expect(upper.json?.user?.id).toBe(first.json?.user?.id)
       const [{ n }] = await supportDb()`SELECT count(*)::int AS n FROM "user"
         WHERE lower(email) = lower(${customerEmail})`
       expect(n).toBe(1)
 
       const [verified] = await supportDb()`SELECT w.hmac_verified FROM widget_identified_session w
         JOIN session s ON s.id = w.session_id
-        WHERE s.user_id = ${toUuid(first.json!.user.id as `user_${string}`)} LIMIT 1`
+        WHERE s.user_id = ${toUuid(first.json!.user!.id as `user_${string}`)} LIMIT 1`
       expect(verified?.hmac_verified).toBe(true)
 
       // The minted token is a working widget session.
@@ -180,20 +180,20 @@ test.describe('widget identity: verified identify', () => {
         ssoToken: signSsoToken({ id: marker, email: customerEmail }, 'not-the-secret'),
       })
       expect(bad.res.status()).toBe(403)
-      expect(bad.json?.error.code).toBe('TOKEN_INVALID')
+      expect(bad.json?.error?.code).toBe('TOKEN_INVALID')
       const expired = await identify(request, {
         ssoToken: signSsoToken({ id: marker, email: customerEmail }, secret, -60),
       })
       expect(expired.res.status()).toBe(403)
-      expect(expired.json?.error.code).toBe('TOKEN_INVALID')
+      expect(expired.json?.error?.code).toBe('TOKEN_INVALID')
       const noEmail = await identify(request, {
         ssoToken: signSsoToken({ id: marker, email: undefined as unknown as string }, secret),
       })
       expect(noEmail.res.status()).toBe(400)
-      expect(noEmail.json?.error.code).toBe('TOKEN_INVALID')
+      expect(noEmail.json?.error?.code).toBe('TOKEN_INVALID')
       const noBody = await identify(request, {})
       expect(noBody.res.status()).toBe(400)
-      expect(noBody.json?.error.code).toBe('VALIDATION_ERROR')
+      expect(noBody.json?.error?.code).toBe('VALIDATION_ERROR')
     }
   )
 
@@ -246,7 +246,7 @@ test.describe('widget identity: verified identify', () => {
         anon.token
       )
       expect(merged.res.status()).toBe(403)
-      expect(merged.json?.error.code).toBe('BLOCKED')
+      expect(merged.json?.error?.code).toBe('BLOCKED')
       expect(merged.json?.sessionToken).toBeUndefined()
     }
   )
