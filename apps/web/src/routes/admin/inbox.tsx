@@ -748,7 +748,11 @@ function InboxPage() {
   const { connected: streamConnected } = useConversationStream({
     enabled: true,
     buildUrl: async () => '/api/chat/stream?scope=inbox',
-    onReconnect: refreshInboxAfterReconnect,
+    // Only after a real gap: refetching the lists and the open item on every
+    // first open would double the inbox's load cost.
+    onCatchUp: (reason) => {
+      if (reason === 'reconnect') refreshInboxAfterReconnect()
+    },
     onEvent: (evt) => {
       // Scope events name no thread to patch. A removed item leaves every list
       // at once and its open pane refetches into not found; a scope change

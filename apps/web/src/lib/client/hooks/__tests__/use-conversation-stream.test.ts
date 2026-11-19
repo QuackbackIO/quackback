@@ -4,8 +4,9 @@
  * extraction refactor. Pins the current reconnect contract:
  *  - the EventSource is recreated on error with a FRESH URL from buildUrl
  *    (token re-mint per attempt) after an exponential backoff
- *  - onReconnect fires after a successful RE-connect, never a clean first open
- *  - onReconnect also fires on the first open after a failed initial attempt
+ *  - onCatchUp fires once on every successful open: the first one (a change
+ *    made before the stream was listening has no event) and every reconnect
+ *  - an attempt that fails before opening does not fire it
  *  - a null buildUrl result (mint failure) schedules a retry
  *  - unmount closes the stream and cancels any pending reconnect timer
  */
@@ -128,28 +129,32 @@ describe('useConversationStream', () => {
     expect(MockEventSource.instances[2].url).toBe('/stream?token=3')
   })
 
-  it('fires onReconnect only after a successful reconnect, not the first open', async () => {
-    const onReconnect = vi.fn()
+  it('fires onCatchUp once on the first open and once on every reconnect', async () => {
+    const onCatchUp = vi.fn()
     renderHook(() =>
       useConversationStream({
         buildUrl: async () => '/stream',
         enabled: true,
         onEvent: vi.fn(),
-        onReconnect,
+        onCatchUp,
       })
     )
     await flush()
+    expect(onCatchUp).not.toHaveBeenCalled()
 
     const first = MockEventSource.instances[0]
     act(() => first.onopen?.())
-    expect(onReconnect).not.toHaveBeenCalled()
+    expect(onCatchUp).toHaveBeenCalledTimes(1)
+    expect(onCatchUp).toHaveBeenLastCalledWith('first-open')
 
     act(() => first.onerror?.())
     await advance(2000)
     expect(MockEventSource.instances).toHaveLength(2)
+    expect(onCatchUp).toHaveBeenCalledTimes(1)
 
     act(() => MockEventSource.instances[1].onopen?.())
-    expect(onReconnect).toHaveBeenCalledTimes(1)
+    expect(onCatchUp).toHaveBeenCalledTimes(2)
+    expect(onCatchUp).toHaveBeenLastCalledWith('reconnect')
 
     // A successful open resets the backoff: the next error retries at 2s again.
     act(() => MockEventSource.instances[1].onerror?.())
@@ -157,36 +162,37 @@ describe('useConversationStream', () => {
     expect(MockEventSource.instances).toHaveLength(3)
   })
 
-  it('fires onReconnect on the first successful open after a failed initial attempt', async () => {
-    const onReconnect = vi.fn()
+  it('fires onCatchUp once on the first successful open after a failed initial attempt', async () => {
+    const onCatchUp = vi.fn()
     renderHook(() =>
       useConversationStream({
         buildUrl: async () => '/stream',
         enabled: true,
         onEvent: vi.fn(),
-        onReconnect,
+        onCatchUp,
       })
     )
     await flush()
 
     act(() => MockEventSource.instances[0].onerror?.())
-    expect(onReconnect).not.toHaveBeenCalled()
+    expect(onCatchUp).not.toHaveBeenCalled()
     await advance(2000)
     expect(MockEventSource.instances).toHaveLength(2)
 
     act(() => MockEventSource.instances[1].onopen?.())
-    expect(onReconnect).toHaveBeenCalledTimes(1)
+    expect(onCatchUp).toHaveBeenCalledTimes(1)
+    expect(onCatchUp).toHaveBeenCalledWith('reconnect')
   })
 
-  it('fires onReconnect on the first open after a failed token mint', async () => {
-    const onReconnect = vi.fn()
+  it('fires onCatchUp once on the first open after a failed token mint', async () => {
+    const onCatchUp = vi.fn()
     let attempt = 0
     renderHook(() =>
       useConversationStream({
         buildUrl: async () => (attempt++ === 0 ? null : '/stream'),
         enabled: true,
         onEvent: vi.fn(),
-        onReconnect,
+        onCatchUp,
       })
     )
     await flush()
@@ -195,7 +201,8 @@ describe('useConversationStream', () => {
     await advance(2000)
     expect(MockEventSource.instances).toHaveLength(1)
     act(() => MockEventSource.instances[0].onopen?.())
-    expect(onReconnect).toHaveBeenCalledTimes(1)
+    expect(onCatchUp).toHaveBeenCalledTimes(1)
+    expect(onCatchUp).toHaveBeenCalledWith('reconnect')
   })
 
   it('schedules a retry when buildUrl resolves null (token mint failed)', async () => {
