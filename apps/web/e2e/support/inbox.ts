@@ -88,6 +88,17 @@ export async function mintTeammate(
   }
 }
 
+/** Take minted teammates out of the team (role user, sessions gone). */
+export async function retireTeammates(mates: MintedTeammate[]): Promise<void> {
+  if (mates.length === 0) return
+  const sql = supportDb()
+  const ids = mates.map((m) => m.principalUuid)
+  await sql`UPDATE principal SET role = 'user' WHERE id IN ${sql(ids)}`
+  await sql`DELETE FROM principal_role_assignments WHERE principal_id IN ${sql(ids)}`
+  await sql`DELETE FROM team_members WHERE principal_id IN ${sql(ids)}`
+  await sql`DELETE FROM session WHERE user_id IN ${sql(mates.map((m) => toUuid(m.userId as `user_${string}`)))}`
+}
+
 async function pageFor(browser: Browser, mate: MintedTeammate): Promise<Page> {
   const [cookieName, cookieValue] = mate.cookie.split('=')
   const context = await browser.newContext({
@@ -334,6 +345,32 @@ export async function bellsFor(principalUuid: string): Promise<BellRow[]> {
     WHERE principal_id = ${principalUuid} ORDER BY created_at DESC`
 }
 
+/** A support macro of this test's own (actions as stored, ids as TypeIDs). */
+export async function seedMacro(
+  name: string,
+  body: string,
+  actions: Record<string, unknown>[] = []
+): Promise<{ id: string; name: string }> {
+  const id = generateId('macro')
+  await supportDb()`INSERT INTO macros (id, name, body, scope, actions)
+                    VALUES (${toUuid(id)}, ${name}, ${body}, 'support', ${supportDb().json(actions as never)})`
+  return { id, name }
+}
+
+/** Wait for a bell of `type` for a teammate. */
+export async function waitForBell(principalUuid: string, type: string): Promise<BellRow> {
+  return pollFor(
+    `a ${type} bell`,
+    async () => (await bellsFor(principalUuid)).find((b) => b.type === type) ?? null,
+    { timeoutMs: 15_000 }
+  )
+}
+
+/** System notices (sender_type system) in a conversation, oldest first. */
+export async function systemNotices(conversationUuid: string): Promise<MessageRow[]> {
+  return (await messagesOf(conversationUuid)).filter((m) => m.sender_type === 'system')
+}
+
 export function conversationTypeId(uuid: string): string {
   return fromUuid('conversation', uuid)
 }
@@ -432,13 +469,19 @@ interface InboxFixtures {
 export const test = base.extend<InboxFixtures>({
   teammate: async ({ browser, marker }, use) => {
     const pages: Page[] = []
+    const mates: MintedTeammate[] = []
     await use(async (opts) => {
       const mate = await mintTeammate(marker, opts)
+      mates.push(mate)
       const page = await pageFor(browser, mate)
       pages.push(page)
       return { page, mate }
     })
     for (const page of pages) await page.context().close()
+    // Retire the teammates: every teammate in scope is emailed about each new
+    // visitor message nobody is online for, so teammates left behind would
+    // grow that fan-out for every later test in the shard.
+    await retireTeammates(mates)
   },
   seed: async ({ marker }, use) => {
     await use((opts) => seedConversation(marker, opts))
