@@ -40,6 +40,22 @@ import type { Page } from '@playwright/test'
 import { createHmac } from 'node:crypto'
 import { seedConversation } from '../../utils/db-helpers'
 import { sink } from '../../support/webhook-sink-client'
+import { pollFor } from '../../support/db'
+import { conversationReplyAddress } from '../../support/inbound-email'
+import { createWorkflow, emailConversation } from '../../support/webhooks'
+import {
+  bulkBar,
+  conversationVisitor,
+  customerTicketCount,
+  linkedCustomerTicket,
+  listRows,
+  markerGraph,
+  selectRows,
+  waitForEndedRuns,
+} from '../../support/tickets-more'
+import { fromUuid } from '@quackback/ids'
+import { readFileSync } from 'node:fs'
+import { statusId } from '../../support/tickets'
 
 test.describe('tickets: replies and first response', () => {
   test(
@@ -907,6 +923,590 @@ test.describe('tickets: old links and webhooks', () => {
       } finally {
         await api.delete(`/api/v1/webhooks/${webhook.id}`)
       }
+    }
+  )
+})
+
+test.describe('tickets: workflow actions', () => {
+  test(
+    'TKT-74 a workflow convert_to_ticket makes one linked customer ticket for the conversation',
+    { tag: '@nightly' },
+    async ({ request, marker, customerEmail }) => {
+      test.setTimeout(150_000)
+      const flow = await createWorkflow({
+        name: `Convert ${marker}`,
+        class: 'background',
+        triggerType: 'message.created',
+        graph: markerGraph(marker, [
+          { id: 'convert', type: 'action', action: { type: 'convert_to_ticket' } },
+        ]),
+      })
+      try {
+        const conversationId = await emailConversation(request, customerEmail, marker)
+        const ticket = await pollFor(
+          'the converted ticket',
+          () => linkedCustomerTicket(conversationId),
+          { timeoutMs: 30_000 }
+        )
+        const conversation = await conversationVisitor(conversationId)
+        // Title from the conversation subject; the requester is its visitor.
+        expect(ticket).toMatchObject({
+          type: 'customer',
+          title: `Help ${marker}`,
+          requester_principal_id: conversation.visitor_principal_id,
+        })
+        const [defaultType] = await supportDb()<{ id: string }[]>`
+          SELECT id FROM ticket_types
+          WHERE category = 'customer' AND is_default AND deleted_at IS NULL LIMIT 1`
+        expect(ticket.ticket_type_id).toBe(defaultType?.id ?? null)
+        const notice = `Ticket #${ticket.number} created from this conversation`
+        await expect
+          .poll(async () =>
+            (await conversationMessages(conversationId)).find((m) => m.content.includes(notice))
+          )
+          .toMatchObject({ is_internal: false })
+        const [first] = await waitForEndedRuns(conversationId, flow.id, 1)
+        expect(first.state).toBe('done')
+        expect(first.events.filter((e) => e.startsWith('action_failed'))).toEqual([])
+
+        // A second matching message runs the workflow again: no second ticket.
+        const res = await sendInboundEmail(request, {
+          from: customerEmail,
+          to: conversationReplyAddress(conversationId),
+          subject: `Re: Help ${marker}`,
+          text: `One more thing ${marker}`,
+        })
+        expect(res.status(), await res.text()).toBe(200)
+        const runs = await waitForEndedRuns(conversationId, flow.id, 2)
+        expect(runs[1].state).toBe('done')
+        expect(runs[1].events.filter((e) => e.startsWith('action_failed'))).toEqual([])
+        expect(await customerTicketCount(conversationId)).toBe(1)
+        expect((await linkedCustomerTicket(conversationId))!.id).toBe(ticket.id)
+      } finally {
+        flow.cleanup()
+      }
+    }
+  )
+
+  test(
+    'TKT-75 a workflow set_ticket_status moves the linked ticket; with no ticket the step fails',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, request, marker, customerEmail }) => {
+      test.setTimeout(150_000)
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Workflow status ${marker}`
+      )
+      expect((await ticketRow(ticket.id))!.status_name).toBe('New')
+      const flow = await createWorkflow({
+        name: `Set status ${marker}`,
+        class: 'background',
+        triggerType: 'message.created',
+        graph: markerGraph(marker, [
+          {
+            id: 'status',
+            type: 'action',
+            action: { type: 'set_ticket_status', statusId: await statusId('Investigating') },
+          },
+        ]),
+      })
+      try {
+        const res = await sendInboundEmail(request, {
+          from: customerEmail,
+          to: conversationReplyAddress(conversationId),
+          subject: `Re: ${ticket.title}`,
+          text: `Any news ${marker}`,
+        })
+        expect(res.status(), await res.text()).toBe(200)
+        await waitForTicket(ticket.id, 'Investigating', (r) => r.status_name === 'Investigating')
+        await expect
+          .poll(async () =>
+            (await ticketActivity(ticket.id))
+              .filter((a) => a.type === 'status.changed')
+              .map((a) => a.metadata.toName)
+          )
+          .toEqual(['Investigating'])
+        const [run] = await waitForEndedRuns(conversationId, flow.id, 1)
+        expect(run.events.filter((e) => e.startsWith('action_failed'))).toEqual([])
+
+        // A conversation with no linked ticket: the step fails, nothing else changes.
+        const lone = await emailConversation(
+          request,
+          `${marker}-lone@customers.example`,
+          `${marker}-lone`
+        )
+        const [failed] = await waitForEndedRuns(lone, flow.id, 1)
+        expect(failed.events).toContain('action_failed:set_ticket_status')
+        expect(await linkedCustomerTicket(lone)).toBeNull()
+      } finally {
+        flow.cleanup()
+      }
+    }
+  )
+})
+
+test.describe('tickets: status settings', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } })
+
+  test(
+    'TKT-21 an admin creates, edits, reorders and deletes ticket statuses; the picker follows',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, marker }) => {
+      test.setTimeout(120_000)
+      const first = `A ${marker}`
+      const second = `B ${marker}`
+      const renamed = `${first} v2`
+      const admin = await asPerson('admin')
+      await admin.goto('/admin/settings/ticket-statuses')
+      const editor = admin.getByRole('dialog')
+
+      // Two pending statuses of our own, so the seeded ones keep their order.
+      for (const name of [first, second]) {
+        await clickUntilVisible(admin.getByRole('button', { name: 'New status' }), editor)
+        await editor.getByLabel('Name').fill(name)
+        await editor.getByRole('combobox').first().click()
+        await admin.getByRole('option', { name: /^Pending/ }).click()
+        await editor.getByRole('combobox').nth(1).click()
+        await admin.getByRole('option', { name: 'In progress' }).click()
+        await editor.getByRole('button', { name: 'Create status' }).click()
+        await expect(editor).toBeHidden()
+        await expect(admin.getByRole('button', { name: `Reorder ${name}` })).toBeVisible()
+      }
+      const rows = async () =>
+        supportDb()<{ name: string; category: string; public_stage: string | null }[]>`
+          SELECT name, category, public_stage FROM ticket_statuses
+          WHERE name LIKE ${`%${marker}%`} AND deleted_at IS NULL ORDER BY position`
+      await expect
+        .poll(async () => (await rows()).map((r) => [r.name, r.category, r.public_stage]))
+        .toEqual([
+          [first, 'pending', 'in_progress'],
+          [second, 'pending', 'in_progress'],
+        ])
+
+      // Edit: rename and hide from the customer.
+      await admin.getByRole('button', { name: `Actions for ${first}` }).click()
+      await admin.getByRole('menuitem', { name: 'Edit' }).click()
+      await expect(editor.getByRole('heading', { name: 'Edit status' })).toBeVisible()
+      await editor.getByLabel('Name').fill(renamed)
+      await editor.getByRole('combobox').nth(1).click()
+      await admin.getByRole('option', { name: 'Hidden' }).click()
+      await editor.getByRole('button', { name: 'Save changes' }).click()
+      await expect(editor).toBeHidden()
+      await expect(
+        admin.getByRole('combobox', { name: `Customer stage for ${renamed}` })
+      ).toHaveText('Hidden')
+
+      // Reorder: move the second above the first with the keyboard.
+      const grip = admin.getByRole('button', { name: `Reorder ${second}` })
+      await expect(async () => {
+        if ((await rows())[0]?.name !== second) {
+          await grip.focus()
+          await admin.keyboard.press('Space')
+          await admin.waitForTimeout(300)
+          await admin.keyboard.press('ArrowUp')
+          await admin.waitForTimeout(300)
+          await admin.keyboard.press('Space')
+        }
+        await expect
+          .poll(async () => (await rows()).map((r) => r.name), { timeout: 3_000 })
+          .toEqual([second, renamed])
+      }).toPass({ timeout: 30_000 })
+
+      // The status picker on a ticket lists them in the new order.
+      const api = await ticketApi(playwright, baseURL)
+      const ticket = await createTicket(api, { title: `Picker ${marker}`, type: 'back_office' })
+      await openInInbox(admin, ticket.id, ticket.title)
+      await admin.getByRole('button', { name: 'New', exact: true }).first().click()
+      await expect(admin.getByRole('menuitem').first()).toBeVisible()
+      const items = await admin.getByRole('menuitem').allInnerTexts()
+      const ours = items.filter((t) => t.includes(marker)).map((t) => t.split('\n')[0].trim())
+      expect(ours).toEqual([second, renamed])
+      await admin.keyboard.press('Escape')
+
+      // The default status offers no Delete.
+      await admin.goto('/admin/settings/ticket-statuses')
+      await admin.getByRole('button', { name: 'Actions for New' }).click()
+      await expect(admin.getByRole('menuitem', { name: 'Edit' })).toBeVisible()
+      await expect(admin.getByRole('menuitem', { name: 'Delete' })).toHaveCount(0)
+      await admin.keyboard.press('Escape')
+
+      // A status in use is refused, and stays.
+      await supportDb()`
+        UPDATE tickets SET status_id = (SELECT id FROM ticket_statuses WHERE name = ${second})
+        WHERE id = ${toUuid(ticket.id as `ticket_${string}`)}`
+      await admin.getByRole('button', { name: `Actions for ${second}` }).click()
+      await admin.getByRole('menuitem', { name: 'Delete' }).click()
+      await admin.getByRole('alertdialog').getByRole('button', { name: 'Delete status' }).click()
+      await expect(
+        admin.getByText('Cannot delete status. 1 ticket(s) use it. Reassign them first.')
+      ).toBeVisible()
+      await expect(admin.getByRole('alertdialog')).toBeHidden()
+      expect((await rows()).map((r) => r.name)).toEqual([second, renamed])
+
+      // Unused statuses are deleted and leave the list.
+      await setStatus(api, ticket.id, 'Investigating')
+      for (const name of [renamed, second]) {
+        await admin.getByRole('button', { name: `Actions for ${name}` }).click()
+        await admin.getByRole('menuitem', { name: 'Delete' }).click()
+        const confirm = admin.getByRole('alertdialog')
+        await confirm.getByRole('button', { name: 'Delete status' }).click()
+        await expect(confirm).toBeHidden()
+        await expect(admin.getByRole('button', { name: `Reorder ${name}` })).toHaveCount(0)
+        await expect.poll(async () => (await rows()).map((r) => r.name)).not.toContain(name)
+      }
+      expect(await rows()).toEqual([])
+      await api.dispose()
+    }
+  )
+})
+
+test.describe('tickets: the inbox list', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } })
+
+  test(
+    'TKT-37 a bulk status, assignee and priority change applies to every selected ticket only',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, people, marker }) => {
+      test.setTimeout(120_000)
+      const api = await ticketApi(playwright, baseURL)
+      const picked = [
+        await createTicket(api, { title: `Bulk one ${marker}`, type: 'back_office' }),
+        await createTicket(api, { title: `Bulk two ${marker}`, type: 'back_office' }),
+      ]
+      const untouched = await createTicket(api, {
+        title: `Left alone ${marker}`,
+        type: 'back_office',
+      })
+      const admin = await asPerson('admin')
+      await admin.goto(`/admin/inbox?view=tickets_back_office&q=${encodeURIComponent(marker)}`)
+      await expect(listRows(admin, marker)).toHaveCount(3, { timeout: 20_000 })
+      const bar = bulkBar(admin)
+
+      await selectRows(
+        admin,
+        picked.map((t) => t.title)
+      )
+      await bar.getByRole('button', { name: 'Assign' }).click()
+      await admin.getByRole('menuitem', { name: 'Ben Agent' }).click()
+      await expect(admin.getByText('Assigned 2 items')).toBeVisible({ timeout: 15_000 })
+
+      await expect(bar).toHaveCount(0)
+      await selectRows(
+        admin,
+        picked.map((t) => t.title)
+      )
+      await bar.getByRole('button', { name: 'Priority' }).click()
+      await admin.getByRole('menuitem', { name: 'High' }).click()
+      await expect(
+        admin.getByText('Prioritized 2 items').or(admin.getByText(/2 items/))
+      ).toBeVisible({
+        timeout: 15_000,
+      })
+
+      await expect(bar).toHaveCount(0)
+      await selectRows(
+        admin,
+        picked.map((t) => t.title)
+      )
+      await bar.getByRole('button', { name: 'Close', exact: true }).click()
+      await expect(admin.getByText('Closed 2 items')).toBeVisible({ timeout: 15_000 })
+
+      const adminUuid = principalUuid(people.people.admin.principalId)
+      const agentBUuid = principalUuid(people.people.agentB.principalId)
+      for (const t of picked) {
+        const row = await waitForTicket(t.id, 'bulk applied', (r) => r.status_category === 'closed')
+        expect(row).toMatchObject({ assignee_principal_id: agentBUuid, priority: 'high' })
+        // Each ticket ran the single-ticket op with its own activity.
+        const kinds = (await ticketActivity(t.id)).map((a) => a.type)
+        expect(kinds).toEqual(
+          expect.arrayContaining(['ticket.assigned', 'priority.changed', 'status.changed'])
+        )
+      }
+      // The creator's own assignment stays on the ticket nobody selected.
+      expect(await ticketRow(untouched.id)).toMatchObject({
+        status_name: 'New',
+        assignee_principal_id: adminUuid,
+        priority: 'none',
+      })
+      await api.dispose()
+    }
+  )
+
+  test(
+    'TKT-61 ticket views filter by kind, type and status, and sort oldest first',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, marker, customerEmail }) => {
+      test.setTimeout(90_000)
+      const api = await ticketApi(playwright, baseURL)
+      const older = await createTicket(api, { title: `Older ${marker}`, type: 'back_office' })
+      const newer = await createTicket(api, { title: `Newer ${marker}`, type: 'back_office' })
+      const done = await createTicket(api, { title: `Done ${marker}`, type: 'back_office' })
+      await setStatus(api, done.id, 'Resolved')
+      const tracker = await createTicket(api, { title: `Umbrella ${marker}`, type: 'tracker' })
+      const q = encodeURIComponent(marker)
+      const admin = await asPerson('admin')
+      const titles = async () =>
+        (await listRows(admin, marker).allInnerTexts()).map(
+          (t) => t.match(new RegExp(`(\\w+) ${marker}`))?.[1]
+        )
+
+      // Kind: back office lists the open back-office tickets, never the tracker.
+      await admin.goto(`/admin/inbox?view=tickets_back_office&q=${q}`)
+      await expect(listRows(admin, marker)).toHaveCount(2, { timeout: 20_000 })
+      expect((await titles()).sort()).toEqual(['Newer', 'Older'])
+      // Sort: oldest first.
+      await admin.goto(`/admin/inbox?view=tickets_back_office&q=${q}&sort=oldest`)
+      await expect(listRows(admin, marker)).toHaveCount(2, { timeout: 20_000 })
+      expect(await titles()).toEqual(['Older', 'Newer'])
+      // Status: the closed facet shows only the resolved one.
+      await admin.goto(`/admin/inbox?view=tickets_back_office&q=${q}&status=closed`)
+      await expect(listRows(admin, marker)).toHaveCount(1, { timeout: 20_000 })
+      expect(await titles()).toEqual(['Done'])
+      await admin.goto(`/admin/inbox?view=tickets_tracker&q=${q}`)
+      await expect(listRows(admin, marker)).toHaveCount(1, { timeout: 20_000 })
+      expect(await titles()).toEqual(['Umbrella'])
+      void older
+      void newer
+      void tracker
+
+      // The REST list takes the same filters, here scoped to one requester.
+      const customer = await createCustomer(api, customerEmail)
+      const a = await createTicket(api, {
+        title: `First ${marker}`,
+        type: 'customer',
+        requesterPrincipalId: customer.principalId,
+        priority: 'low',
+      })
+      const b = await createTicket(api, {
+        title: `Second ${marker}`,
+        type: 'customer',
+        requesterPrincipalId: customer.principalId,
+        priority: 'urgent',
+      })
+      await setStatus(api, b.id, 'Investigating')
+      const list = async (query: string) => {
+        const res = await api.get(
+          `/api/v1/tickets?requesterPrincipalId=${customer.principalId}&${query}`
+        )
+        expect(res.ok(), await res.text()).toBe(true)
+        return ((await res.json()).data as { id: string }[]).map((t) => t.id)
+      }
+      expect((await list('sort=oldest')).slice(0, 2)).toEqual([a.id, b.id])
+      expect(await list('sort=priority')).toEqual([b.id, a.id])
+      expect(await list('stage=in_progress')).toEqual([b.id])
+      expect(await list('stage=received')).toEqual([a.id])
+      expect(await list('statusCategory=closed')).toEqual([])
+      expect(await list('type=back_office')).toEqual([])
+      expect(await list('sort=oldest&limit=1')).toEqual([a.id])
+      await api.dispose()
+    }
+  )
+
+  test(
+    'TKT-62 inbox search finds a ticket by a token in its title or only in an internal note',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, marker }) => {
+      test.setTimeout(90_000)
+      const api = await ticketApi(playwright, baseURL)
+      const token = `zq${marker.replace(/[^a-z0-9]/g, '').slice(-10)}`
+      const byTitle = await createTicket(api, {
+        title: `Ledger ${token} mismatch`,
+        type: 'back_office',
+      })
+      const byNote = await createTicket(api, { title: `Quiet ${marker}`, type: 'back_office' })
+      const noteRes = await api.post(`/api/v1/tickets/${byNote.id}/note`, {
+        data: { content: `Root cause ${token} found in the logs` },
+      })
+      expect(noteRes.ok(), await noteRes.text()).toBe(true)
+      const other = await createTicket(api, { title: `Other ${marker}`, type: 'back_office' })
+
+      const admin = await asPerson('admin')
+      await admin.goto(`/admin/inbox?view=tickets_back_office&q=${token}`)
+      await expect(listRows(admin, byTitle.title)).toHaveCount(1, { timeout: 20_000 })
+      await expect(listRows(admin, byNote.title)).toHaveCount(1)
+      await expect(listRows(admin, other.title)).toHaveCount(0)
+      // `#<number>` finds a ticket by its number.
+      await admin.goto(
+        `/admin/inbox?view=tickets_back_office&q=${encodeURIComponent(`#${other.number}`)}`
+      )
+      await expect(listRows(admin, other.title)).toHaveCount(1, { timeout: 20_000 })
+      await api.dispose()
+    }
+  )
+
+  test(
+    'TKT-59 a requester message marks the ticket unread; opening it reads it; mark unread brings it back',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, request, asPerson, marker, customerEmail }) => {
+      test.setTimeout(90_000)
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket, conversationId } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Unread ${marker}`
+      )
+      const readAt = async () => {
+        const [row] = await supportDb()<{ agent_last_read_at: Date | null }[]>`
+          SELECT agent_last_read_at FROM conversations
+          WHERE id = ${toUuid(conversationId as `conversation_${string}`)}`
+        return row.agent_last_read_at?.getTime() ?? 0
+      }
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      await expect.poll(readAt).toBeGreaterThan(0)
+      const firstRead = await readAt()
+      await admin.goto(`/admin/inbox?view=tickets_customer&q=${encodeURIComponent(marker)}`)
+      const row = listRows(admin, ticket.title)
+      await expect(row).toHaveCount(1, { timeout: 20_000 })
+      await expect(row.getByText(/^\d+$/)).toHaveCount(0)
+
+      // The requester writes twice; an internal note never counts.
+      for (const text of [`First question ${marker}`, `Second question ${marker}`]) {
+        const res = await sendInboundEmail(request, {
+          from: customerEmail,
+          to: ticketReplyAddress(ticket.id),
+          subject: `Re: ${ticket.title}`,
+          text,
+        })
+        expect(res.status(), await res.text()).toBe(200)
+      }
+      await api.post(`/api/v1/tickets/${ticket.id}/note`, { data: { content: `Note ${marker}` } })
+      await expect(async () => {
+        await admin.reload()
+        await expect(listRows(admin, ticket.title).getByText('2', { exact: true })).toBeVisible({
+          timeout: 3_000,
+        })
+      }).toPass({ timeout: 30_000 })
+
+      // Opening it marks it read.
+      await listRows(admin, ticket.title).getByRole('button').first().click()
+      await expect(admin.getByText(`Second question ${marker}`).last()).toBeVisible()
+      await expect.poll(readAt).toBeGreaterThan(firstRead)
+      await expect(listRows(admin, ticket.title).getByText('2', { exact: true })).toHaveCount(0, {
+        timeout: 15_000,
+      })
+
+      // Mark unread from the first question: the badge comes back.
+      const message = admin
+        .locator('[data-message-id]')
+        .filter({ hasText: `First question ${marker}` })
+        .last()
+      await message.hover()
+      await message.getByRole('button', { name: 'More actions' }).click()
+      await admin.getByRole('menuitem', { name: 'Mark unread' }).click()
+      await expect(listRows(admin, ticket.title).getByText('2', { exact: true })).toBeVisible({
+        timeout: 15_000,
+      })
+      await api.dispose()
+    }
+  )
+})
+
+test.describe('tickets: notes and export', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } })
+
+  test(
+    'TKT-44 a shared back-office note lands on the source conversation; an unshared one does not',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, people, marker, customerEmail }) => {
+      test.setTimeout(120_000)
+      await createCustomer(await ticketApi(playwright, baseURL), customerEmail)
+      const seeded = seedConversation(`Share source ${marker}`, customerEmail)
+      const admin = await asPerson('admin')
+      await openInInbox(admin, seeded.conversationId, seeded.messages[0])
+      const dialog = admin.getByRole('dialog')
+      await clickUntilVisible(admin.getByRole('button', { name: 'Create ticket' }).first(), dialog)
+      await dialog.getByRole('combobox').first().click()
+      await admin.getByRole('option', { name: /^Back-office\b/ }).click()
+      const title = `Internal ${marker}`
+      await dialog.getByPlaceholder('Summarize the request…').fill(title)
+      await dialog.getByRole('button', { name: 'Create ticket' }).click()
+      const [linked] = await pollFor('the back-office ticket', async () => {
+        const rows = await supportDb()<{ id: string; number: number }[]>`
+          SELECT t.id, t.number FROM ticket_conversations tc JOIN tickets t ON t.id = tc.ticket_id
+          WHERE tc.conversation_id = ${toUuid(seeded.conversationId as `conversation_${string}`)}
+            AND tc.ticket_type = 'back_office'`
+        return rows.length ? rows : null
+      })
+      const ticketId = fromUuid('ticket', linked.id)
+
+      await openInInbox(admin, ticketId, title)
+      const share = admin.getByRole('button', { name: 'Share with conversation' })
+      await expect(share).toHaveAttribute('aria-pressed', 'false')
+      const quiet = `Kept here ${marker}`
+      await sendFromComposer(admin, quiet, 'Add note')
+      await expect(admin.getByText(quiet).first()).toBeVisible()
+
+      await share.click()
+      await expect(share).toHaveAttribute('aria-pressed', 'true')
+      const shared = `Shared out ${marker}`
+      await sendFromComposer(admin, shared, 'Add note')
+      await expect(admin.getByText(shared).first()).toBeVisible()
+
+      const crossPosted = `Note on internal ticket #${linked.number}: ${shared}`
+      await expect
+        .poll(async () =>
+          (await conversationMessages(seeded.conversationId)).find((m) =>
+            m.content.includes(shared)
+          )
+        )
+        .toMatchObject({ is_internal: true, content: crossPosted })
+      const [author] = await supportDb()<
+        { principal_id: string; metadata: Record<string, unknown> }[]
+      >`
+        SELECT principal_id, metadata FROM conversation_messages
+        WHERE conversation_id = ${toUuid(seeded.conversationId as `conversation_${string}`)}
+          AND content = ${crossPosted}`
+      expect(author.principal_id).toBe(principalUuid(people.people.admin.principalId))
+      expect(author.metadata).toMatchObject({ crossPostedFromTicketId: ticketId })
+      expect(
+        (await conversationMessages(seeded.conversationId)).some((m) => m.content.includes(quiet))
+      ).toBe(false)
+      // The toggle resets after a send.
+      await expect(share).toHaveAttribute('aria-pressed', 'false')
+    }
+  )
+
+  test(
+    'TKT-67 export transcript downloads the whole ticket thread with internal notes',
+    { tag: '@nightly' },
+    async ({ playwright, baseURL, asPerson, marker, customerEmail }) => {
+      test.setTimeout(90_000)
+      const api = await ticketApi(playwright, baseURL)
+      const { ticket } = await pairedCustomerTicket(
+        api,
+        customerEmail,
+        `Export ${marker}`,
+        `Opening words ${marker}`
+      )
+      await replyToTicket(api, ticket.id, `Agent answer ${marker}`)
+      await api.post(`/api/v1/tickets/${ticket.id}/note`, {
+        data: { content: `Private note ${marker}` },
+      })
+      await setStatus(api, ticket.id, 'Investigating')
+      const admin = await asPerson('admin')
+      await openInInbox(admin, ticket.id, ticket.title)
+      await expect(admin.getByText(`Private note ${marker}`).first()).toBeVisible()
+      await admin.getByRole('button', { name: 'More ticket actions' }).first().click()
+      const download = admin.waitForEvent('download')
+      await admin.getByRole('menuitem', { name: 'Export transcript' }).click()
+      const file = await download
+      expect(file.suggestedFilename()).toBe(`ticket-${ticket.number}.md`)
+      const path = await file.path()
+      const content = readFileSync(path, 'utf8')
+      expect(content).toContain(`Ticket ${ticket.reference}`)
+      expect(content).toContain(ticket.title)
+      expect(content).toContain('Investigating')
+      for (const text of [
+        `Opening words ${marker}`,
+        `Agent answer ${marker}`,
+        `Private note ${marker}`,
+      ]) {
+        expect(content).toContain(text)
+      }
+      await api.dispose()
     }
   )
 })
