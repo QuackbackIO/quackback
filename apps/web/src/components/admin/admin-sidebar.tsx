@@ -1,6 +1,8 @@
 import { LaunchPlanDock, LaunchPlanInHelp } from '@/components/onboarding/launch-plan-dock'
 import { openHelpLauncher } from '@/components/shared/cloud-quackback-widget'
 import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
+import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+import type { PlanLimitsNotice } from '@/lib/server/domains/plan-limits/plan-limits.notice'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { SearchTrigger } from '@/components/admin/ask/search-palette'
 import { useProductTour } from '@/components/onboarding/product-tour'
@@ -8,7 +10,7 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { htmlLangDir } from '@/lib/shared/document-locale'
 import type { SupportedLocale } from '@/lib/shared/i18n'
 import { railControlClass } from '@/components/admin/rail-item'
-import { useMemo, useState, type ComponentType } from 'react'
+import { lazy, Suspense, useMemo, useState, type ComponentType } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useRouter, useRouterState } from '@tanstack/react-router'
 import {
@@ -95,7 +97,16 @@ interface AdminSidebarProps {
   latestVersion?: LatestVersionResult | null
   /** A running trial shows here quietly until its last days. */
   planNotice?: PlanNotice | null
+  /** The plan limits state, only while their flag is on; null otherwise. */
+  planLimits?: PlanLimitsPage | PlanLimitsNotice | null
 }
+
+/** The plan limits line, in the banner's chunk, which only a workspace with the flag loads. */
+const PlanLimitsQuietLive = lazy(() =>
+  import('@/components/admin/plan-limits/plan-limits-banner').then((module) => ({
+    default: module.PlanLimitsQuietLive,
+  }))
+)
 
 type RailIcon = ComponentType<{ className?: string }>
 
@@ -310,7 +321,12 @@ function MobileNavLink({
   )
 }
 
-export function AdminSidebar({ initialUserData, latestVersion, planNotice }: AdminSidebarProps) {
+export function AdminSidebar({
+  initialUserData,
+  latestVersion,
+  planNotice,
+  planLimits,
+}: AdminSidebarProps) {
   const intl = useIntl()
   const router = useRouter()
   const onNotificationsPage = useRouterState({
@@ -449,6 +465,11 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
             <div className="flex flex-col gap-0.5 px-2">
               {/* Mounted only for a notice, so a page without one renders nothing here. */}
               {planNotice && <PlanNoticeQuiet notice={planNotice} />}
+              {planLimits ? (
+                <Suspense fallback={null}>
+                  <PlanLimitsQuietLive initial={planLimits} />
+                </Suspense>
+              ) : null}
               <LaunchPlanDock />
               {/* Settings (admin-only) */}
               {showSettings &&
@@ -676,6 +697,11 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
               ))}
               <div className="h-px bg-border/40 my-4" />
               <PlanNoticeQuiet notice={planNotice ?? null} />
+              {planLimits ? (
+                <Suspense fallback={null}>
+                  <PlanLimitsQuietLive initial={planLimits} />
+                </Suspense>
+              ) : null}
               <div onClickCapture={() => setMobileMenuOpen(false)}>
                 <LaunchPlanDock />
               </div>

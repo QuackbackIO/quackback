@@ -109,6 +109,12 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   // Plan limits: every teammate sees what is over the plan; each chooser takes
   // billing rights or the permission that manages what it picks.
+  'lib/server/functions/plan-notice.ts::getPlanNotice': END_USER(
+    'team-any read for the admin plan strip: dashboard session and team members only (inline isTeamMember); returns plan name, dates and copy, a billing link only for billing.manage, and the operator notice only for member.view'
+  ),
+  'lib/server/functions/plan-limits.ts::getPlanLimitsNoticeFn': END_USER(
+    'team-any read for the admin banner without member.view: dashboard session and team members only (inline isTeamMember); returns no member ids, seat counts or team links'
+  ),
   'lib/server/functions/plan-limits.ts::setKeptBoardFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.BILLING_MANAGE, PERMISSIONS.SETTINGS_MANAGE],
     'choose the board that stays open: billing rights or whoever manages boards'
@@ -785,6 +791,16 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     intent: 'SECONDARY_GATE',
     roleBar: 'team',
     why: 'personal API keys are for team members only; a portal user is refused',
+  },
+  'lib/server/functions/plan-notice.ts::getPlanNotice::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'the plan strip is for teammates only; a portal user is refused',
+  },
+  'lib/server/functions/plan-limits.ts::getPlanLimitsNoticeFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'the plan limits banner is for teammates only; a portal user is refused',
   },
   // Real access decisions the requireAuth/withApiKeyAuth scan does NOT cover —
   // surfaced precisely because a stray change here would widen access silently.

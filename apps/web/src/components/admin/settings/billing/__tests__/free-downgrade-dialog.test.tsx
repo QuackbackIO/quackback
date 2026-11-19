@@ -50,7 +50,7 @@ describe('FreeDowngradeDialog', () => {
   it('only reads the preview: a look is not a choice, and closing just closes', async () => {
     hoisted.preview.mockResolvedValue(OVER_LIMITS)
     const onOpenChange = renderDialog()
-    await screen.findByText('You have 3 out of 1 boards')
+    await screen.findByRole('link', { name: 'Remove 2 boards' })
     expect(hoisted.preview).toHaveBeenCalledWith({ data: { planId: 'free' } })
     fireEvent.click(screen.getByRole('button', { name: 'Back to plans' }))
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
@@ -64,19 +64,29 @@ describe('FreeDowngradeDialog', () => {
       info: [{ key: 'maxPosts', used: 400, cap: 50, message: 'You have 400 out of 50 posts' }],
     })
     renderDialog()
-    await screen.findByText(/You have 400 out of 50 posts/)
-    expect(screen.getByRole('button', { name: 'Switch to Free' })).toBeEnabled()
+    await screen.findByText('New posts stop at 50. Existing posts stay.')
+    const row = document.querySelector('[data-plan-limit-row="maxPosts"]')
+    expect(row).toHaveTextContent('Posts400 of 50')
+    expect(row).toHaveAttribute('data-status', 'info')
+    expect(screen.getByRole('button', { name: 'Downgrade to Free' })).toBeEnabled()
   })
 
   it('keeps one title while it checks and says why the switch waits', async () => {
     hoisted.preview.mockResolvedValue(OVER_LIMITS)
     renderDialog()
-    expect(screen.getByRole('heading', { name: 'Switch to Free' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Downgrade to Free' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Checking…' })).toBeDisabled()
-    await screen.findByText('You have 3 out of 1 boards')
-    expect(screen.getByRole('heading', { name: 'Switch to Free' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Resolve issues first' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Back to plans' })).toBeInTheDocument()
+    await screen.findByRole('link', { name: 'Remove 2 boards' })
+    expect(screen.getByRole('heading', { name: 'Downgrade to Free' })).toBeInTheDocument()
+    // While anything is over, staying is the one action: no greyed-out switch.
+    expect(screen.queryByRole('button', { name: /Downgrade to Free/ })).toBeNull()
+    // Solid, not the outline it is beside a switch button.
+    expect(screen.getByRole('button', { name: 'Back to plans' }).className).toMatch(
+      /\bbg-primary\b/
+    )
+    expect(screen.getByText('Fix these issues to downgrade to Free.')).toBeInTheDocument()
+    const remove = screen.getByRole('link', { name: 'Remove 2 boards' })
+    expect(remove.closest('[data-plan-limit-actions]')).not.toBeNull()
   })
 
   it('leaves out the clean-up warning when the workspace fits Free', async () => {
@@ -84,6 +94,24 @@ describe('FreeDowngradeDialog', () => {
     renderDialog()
     await screen.findByText('This workspace fits the Free plan.')
     expect(screen.queryByText(/Delete extra resources first/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Switch to Free' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Downgrade to Free' })).toBeEnabled()
+  })
+
+  it('renders the same rows as the Plan limits page, and says nothing is deleted', async () => {
+    hoisted.preview.mockResolvedValue({
+      ...OVER_LIMITS,
+      featuresDisabled: ['Webhooks pause after 7 days.'],
+    })
+    renderDialog()
+    const link = await screen.findByRole('link', { name: 'Remove 2 boards' })
+    expect(link).toHaveAttribute('href', '/admin/settings/boards')
+    const row = document.querySelector('[data-plan-limit-issues] [data-plan-limit-row="maxBoards"]')
+    expect(row).toHaveAttribute('data-status', 'over')
+    expect(row).toHaveTextContent('Boards3 of 1')
+    expect(screen.getByText('What pauses on Free')).toBeInTheDocument()
+    expect(screen.getByText('Webhooks pause after 7 days.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Nothing is deleted. It comes back when you upgrade.')
+    ).toBeInTheDocument()
   })
 })

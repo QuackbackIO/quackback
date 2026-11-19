@@ -105,7 +105,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 769 surfaces
+### Server functions (`requireAuth`) — 773 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -543,7 +543,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/plan-limits.ts`::setSeatHoldersFn | DYNAMIC (billing.manage | member.manage) |
 | `lib/server/functions/plan-limits.ts`::setVisibleStatusComponentsFn | DYNAMIC (billing.manage | status_page.manage) |
 | `lib/server/functions/plan-limits.ts`::setKeptSendingDomainsFn | DYNAMIC (billing.manage | channel_account.manage) |
-| `lib/server/functions/plan-notice.ts`::getPlanNotice | member.view |
+| `lib/server/functions/plan-limits.ts`::getPlanLimitsSummaryFn | member.view |
+| `lib/server/functions/plan-limits.ts`::getPlanLimitsNoticeFn | END_USER (any authenticated) |
+| `lib/server/functions/plan-limits.ts`::getPlanLimitsNoticeFn | TEAM-ONLY |
+| `lib/server/functions/plan-notice.ts`::getPlanNotice | END_USER (any authenticated) |
+| `lib/server/functions/plan-notice.ts`::getPlanNotice | TEAM-ONLY |
 | `lib/server/functions/platform-credentials.ts`::savePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::fetchPlatformCredentialsMaskedFn | integration.manage |
@@ -1096,7 +1100,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-233 of 1111 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+233 of 1113 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

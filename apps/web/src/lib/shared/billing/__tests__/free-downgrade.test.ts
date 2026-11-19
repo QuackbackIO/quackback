@@ -198,57 +198,86 @@ describe('capIssues', () => {
   })
 })
 
+const ON = { planLimits: true }
+
 describe('featuresDisabledOnFree', () => {
   it('names Pro features when the trial plan is Pro', () => {
-    expect(featuresDisabledOnFree('pro')).toContain('MCP access will be revoked')
-    expect(featuresDisabledOnFree('pro')).not.toContain(
-      'Workflows and automations will be disabled'
-    )
+    expect(featuresDisabledOnFree('pro', ON)).toContain('MCP access pauses.')
+    expect(featuresDisabledOnFree('pro', ON)).not.toContain('Live workflows pause after 7 days.')
   })
 
   it('names Business features when leaving Business', () => {
-    expect(featuresDisabledOnFree('business')).toContain(
-      'Workflows and automations will be disabled'
-    )
+    expect(featuresDisabledOnFree('business', ON)).toContain('Live workflows pause after 7 days.')
   })
 
   it('never warns that API access is revoked, since every plan includes the REST API', () => {
     for (const plan of ['pro', 'business', 'enterprise']) {
-      expect(featuresDisabledOnFree(plan)).not.toContain('API access will be revoked')
+      expect(featuresDisabledOnFree(plan, ON)).not.toContain('API access will be revoked')
     }
-    expect(featuresDisabledOnDowngrade('enterprise', 'pro')).not.toContain(
+    expect(featuresDisabledOnDowngrade('enterprise', 'pro', ON)).not.toContain(
       'API access will be revoked'
     )
   })
 
   it('keeps Copilot drafts out of the Free warning, since Free includes them', () => {
     for (const plan of ['pro', 'business', 'enterprise']) {
-      expect(featuresDisabledOnFree(plan).join(' ')).not.toMatch(/drafts/i)
-      expect(featuresDisabledOnFree(plan)).toContain('AI assistant and insights will be disabled')
+      expect(featuresDisabledOnFree(plan, ON).join(' ')).not.toMatch(/drafts/i)
+      expect(featuresDisabledOnFree(plan, ON)).toContain(
+        'The AI assistant pauses after 7 days. AI insights pause now.'
+      )
     }
   })
 
   it('warns that AI article translation stops when leaving Business or Enterprise', () => {
-    expect(featuresDisabledOnFree('business')).toContain('AI article translation will be disabled')
-    expect(featuresDisabledOnDowngrade('business', 'pro')).toContain(
-      'AI article translation will be disabled'
+    expect(featuresDisabledOnFree('business', ON)).toContain(
+      'AI article translation pauses after 7 days. Published translations stay.'
     )
-    expect(featuresDisabledOnDowngrade('enterprise', 'pro')).toContain(
-      'AI article translation will be disabled'
+    expect(featuresDisabledOnDowngrade('business', 'pro', ON)).toContain(
+      'AI article translation pauses after 7 days. Published translations stay.'
+    )
+    expect(featuresDisabledOnDowngrade('enterprise', 'pro', ON)).toContain(
+      'AI article translation pauses after 7 days. Published translations stay.'
     )
   })
 
   it('names what a paid-to-paid downgrade loses, and nothing for an upgrade or the same plan', () => {
-    expect(featuresDisabledOnDowngrade('enterprise', 'business')).toEqual([
-      'Single sign-on will be disabled',
-      'The audit log will be disabled',
+    expect(featuresDisabledOnDowngrade('enterprise', 'business', ON)).toEqual([
+      'Single sign-on pauses after 7 days. Your team signs in with email links.',
+      'The audit log is hidden. New entries are still recorded.',
     ])
-    expect(featuresDisabledOnDowngrade('business', 'pro')).toContain(
-      'Workflows and automations will be disabled'
+    expect(featuresDisabledOnDowngrade('business', 'pro', ON)).toContain(
+      'Live workflows pause after 7 days.'
     )
-    expect(featuresDisabledOnDowngrade('pro', 'business')).toEqual([])
-    expect(featuresDisabledOnDowngrade('pro', 'pro')).toEqual([])
-    expect(featuresDisabledOnDowngrade('scale', 'free').length).toBeGreaterThan(0)
+    expect(featuresDisabledOnDowngrade('pro', 'business', ON)).toEqual([])
+    expect(featuresDisabledOnDowngrade('pro', 'pro', ON)).toEqual([])
+    expect(featuresDisabledOnDowngrade('scale', 'free', ON).length).toBeGreaterThan(0)
+  })
+})
+
+describe('downgrade feature copy', () => {
+  it('with plan limits on, says what pauses after 7 days', () => {
+    const lines = featuresDisabledOnFree('enterprise', { planLimits: true })
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) {
+      expect(line).not.toMatch(/disabled|revoked|deleted|\u2014/i)
+    }
+    expect(lines).toContain('Webhooks pause after 7 days.')
+    expect(lines).toContain(
+      'Your custom domain pauses after 7 days. Links go to your workspace address.'
+    )
+    expect(featuresDisabledOnDowngrade('enterprise', 'business', { planLimits: true })).toEqual([
+      'Single sign-on pauses after 7 days. Your team signs in with email links.',
+      'The audit log is hidden. New entries are still recorded.',
+    ])
+  })
+
+  it('with plan limits off, says features are disabled on the change, and never a grace', () => {
+    const lines = featuresDisabledOnFree('enterprise')
+    expect(featuresDisabledOnFree('enterprise', { planLimits: false })).toEqual(lines)
+    expect(lines.join(' ')).not.toMatch(/7 days|revoked/)
+    expect(lines).toContain('Webhooks will be disabled')
+    expect(lines).toContain('Single sign-on will be disabled')
+    expect(lines).toContain('MCP access pauses.')
   })
 })
 

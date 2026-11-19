@@ -1,9 +1,9 @@
 /**
  * The admin layout loader runs for every admin page, so nothing it reads may
- * fail the layout for a role that lacks an optional permission. The plan
- * notice needs member.view; a custom role holding only inbox permissions
- * (conversation.view, ticket.view, reply, note, set_status) used to get a 500
- * on every admin page because the loader called it regardless.
+ * fail the layout. The plan notice is for every teammate on a dashboard
+ * session, including a custom role holding only inbox permissions
+ * (conversation.view, ticket.view, reply, note, set_status), and a failed
+ * read leaves the layout without a notice rather than failing it.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
@@ -23,16 +23,10 @@ vi.mock('@/lib/server/functions/version', () => ({
   isNewerVersion: () => false,
 }))
 
-// Stands in for the real server function's gate: it refuses a caller whose
-// permission set lacks member.view, exactly as requireAuth does.
-const callerPermissions = vi.hoisted(() => ({ current: [] as string[] }))
+// Stands in for the real server function, which answers any teammate on a
+// dashboard session whatever their permissions.
 const getPlanNotice = vi.hoisted(() =>
-  vi.fn(async () => {
-    if (!callerPermissions.current.includes('member.view')) {
-      throw new Error("Access denied: Requires permission 'member.view', role member lacks it")
-    }
-    return { label: 'Trial', message: '7 days left' }
-  })
+  vi.fn(async () => ({ label: 'Trial', message: '7 days left' }))
 )
 vi.mock('@/lib/server/functions/plan-notice', () => ({ getPlanNotice }))
 
@@ -56,7 +50,6 @@ afterEach(() => {
 })
 
 function loadAdmin(permissions: PermissionKey[]) {
-  callerPermissions.current = permissions
   return loader({
     context: {
       queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
@@ -70,11 +63,11 @@ function loadAdmin(permissions: PermissionKey[]) {
 }
 
 describe('admin loader: plan notice', () => {
-  it('loads the layout for a role without member.view, with no plan notice and no refused call', async () => {
+  it('shows the plan notice to a role without member.view', async () => {
     const data = await loadAdmin(INBOX_ONLY)
 
-    expect(data.planNotice).toBeNull()
-    expect(getPlanNotice).not.toHaveBeenCalled()
+    expect(getPlanNotice).toHaveBeenCalledTimes(1)
+    expect(data.planNotice).toEqual({ label: 'Trial', message: '7 days left' })
   })
 
   it('shows the plan notice to a role holding member.view', async () => {

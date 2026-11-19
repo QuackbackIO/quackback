@@ -11,6 +11,7 @@ vi.mock('@/lib/client/queries/billing', () => ({
 }))
 
 const { TrialExpiredBilling } = await import('../trial-expired-billing')
+const { overLimits } = await import('./plan-limits-fixtures')
 
 const EXPIRED = '2026-11-19T12:00:00.000Z'
 
@@ -33,7 +34,12 @@ const overview: BillingProjectionOverview = {
   hideBranding: false,
 }
 
-function renderPage(props: { overview?: BillingProjectionOverview } = {}) {
+function renderPage(
+  props: {
+    overview?: BillingProjectionOverview
+    limits?: ReturnType<typeof overLimits>
+  } = {}
+) {
   render(
     <IntlProvider locale="en" messages={{}}>
       <QueryClientProvider client={new QueryClient()}>
@@ -41,6 +47,7 @@ function renderPage(props: { overview?: BillingProjectionOverview } = {}) {
           overview={props.overview ?? overview}
           catalogue={null}
           catalogueError={null}
+          limits={props.limits}
         />
       </QueryClientProvider>
     </IntlProvider>
@@ -61,7 +68,7 @@ describe('TrialExpiredBilling lead', () => {
     vi.setSystemTime(new Date(Date.parse(EXPIRED) + 72 * 3_600_000))
     renderPage()
     expect(screen.getByRole('heading', { name: 'Your Pro trial has ended' })).toBeInTheDocument()
-    expect(screen.getByText(/keep Pro, or switch to Free/)).toBeInTheDocument()
+    expect(screen.getByText(/upgrade to Pro, or downgrade to Free/)).toBeInTheDocument()
     expect(screen.queryByText(/rest of admin/)).not.toBeInTheDocument()
   })
 
@@ -70,6 +77,28 @@ describe('TrialExpiredBilling lead', () => {
     renderPage({ overview: { ...overview, trialPlanName: null, trialPlanId: null } })
     expect(screen.getByRole('heading', { name: 'Your trial has ended' })).toBeInTheDocument()
     expect(screen.queryByText(/your plan/)).not.toBeInTheDocument()
-    expect(screen.getByText(/pick a paid plan, or switch to Free/)).toBeInTheDocument()
+    expect(screen.getByText(/upgrade to a paid plan, or downgrade to Free/)).toBeInTheDocument()
+  })
+})
+
+describe('TrialExpiredBilling with plan limits', () => {
+  it('lists the caps over the plan above the plan choice, linking to Plan limits', async () => {
+    renderPage({ limits: overLimits() })
+    expect(
+      await screen.findByRole('heading', { name: 'Over your limits' }, { timeout: 10_000 })
+    ).toBeInTheDocument()
+    expect(
+      document.querySelector('[data-plan-limit-row="maxBoards"][data-status="over"]')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See plan limits' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing/limits'
+    )
+  })
+
+  it('shows nothing extra with the flag off', () => {
+    renderPage({ limits: overLimits({ enabled: false }) })
+    expect(screen.queryByRole('heading', { name: 'Over your limits' })).toBeNull()
+    expect(document.querySelector('[data-plan-limit-issues]')).toBeNull()
   })
 })

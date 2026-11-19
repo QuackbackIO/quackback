@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import { Button } from '@/components/ui/button'
@@ -11,9 +11,16 @@ import {
   catalogueTrialedPlanIds,
   type PaidPlanId,
 } from '@/lib/shared/billing/plan-action'
-import { FreeDowngradeDialog } from './free-downgrade-dialog'
 import { SubscribeDialog } from './subscribe-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+
+// Both load only when they show: the dialog on a click, the list for a
+// workspace over its plan. The page itself ships no plan limits code.
+const FreeDowngradeDialog = lazy(() =>
+  import('./free-downgrade-dialog').then((module) => ({ default: module.FreeDowngradeDialog }))
+)
+const PlanLimitsOverList = lazy(() => import('./plan-limits-over-list'))
 
 /** What happened and what is being asked. */
 function TrialChoiceLead(props: { trialPlanName: string | null }) {
@@ -24,7 +31,7 @@ function TrialChoiceLead(props: { trialPlanName: string | null }) {
         {name ? `Your ${name} trial has ended` : 'Your trial has ended'}
       </h2>
       <p className="text-sm text-muted-foreground">
-        {`Choose how this workspace continues: ${name ? `keep ${name}` : 'pick a paid plan'}, or switch to Free once anything over Free's limits is removed. Everything you built is still here.`}
+        {`Choose how this workspace continues: ${name ? `upgrade to ${name}` : 'upgrade to a paid plan'}, or downgrade to Free once anything over Free's limits is fixed. Everything you built is still here.`}
       </p>
     </div>
   )
@@ -34,6 +41,7 @@ export function TrialExpiredBilling(props: {
   overview: BillingProjectionOverview
   catalogue: BillingCatalogue | null
   catalogueError: string | null
+  limits?: PlanLimitsPage | null
 }) {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
   const [selectedId, setSelectedId] = useState<PaidPlanId | 'free'>(
@@ -51,6 +59,14 @@ export function TrialExpiredBilling(props: {
   return (
     <div className="space-y-6">
       <TrialChoiceLead trialPlanName={overview.trialPlanName ?? null} />
+
+      {props.limits?.enabled &&
+      (props.limits.phase === 'grace' || props.limits.phase === 'enforced') &&
+      props.limits.issues.length > 0 ? (
+        <Suspense fallback={null}>
+          <PlanLimitsOverList limits={props.limits} />
+        </Suspense>
+      ) : null}
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-5">
@@ -140,7 +156,7 @@ export function TrialExpiredBilling(props: {
               <OrderSummary plan={paidSelected} period={period} />
             ) : (
               <p className="mt-3 text-[13px] text-muted-foreground">
-                Free has no charge. Resolve anything over the Free caps, then switch.
+                Free has no charge. Fix anything over the Free plan, then downgrade.
               </p>
             )}
             {paidSelected ? (
@@ -149,7 +165,7 @@ export function TrialExpiredBilling(props: {
               </Button>
             ) : (
               <Button className="mt-4 w-full" type="button" onClick={() => setFreeOpen(true)}>
-                Switch to Free
+                Downgrade to Free
               </Button>
             )}
           </div>
@@ -166,7 +182,9 @@ export function TrialExpiredBilling(props: {
         />
       ) : null}
       {freeOpen ? (
-        <FreeDowngradeDialog open onOpenChange={setFreeOpen} cancelLabel="Back to plans" />
+        <Suspense fallback={null}>
+          <FreeDowngradeDialog open onOpenChange={setFreeOpen} cancelLabel="Back to plans" />
+        </Suspense>
       ) : null}
     </div>
   )

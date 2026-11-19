@@ -115,4 +115,32 @@ describe('planLimitsPage', () => {
       '/admin/settings/portal',
     ])
   })
+
+  it('passes the fixed caps through, and an empty list when the view has none', () => {
+    const fixed = [{ key: 'maxStatusComponents' as const, used: 3, cap: 3 }]
+    expect(planLimitsPage({ ...view, fixedIssues: fixed }, candidates, []).fixedIssues).toEqual(
+      fixed
+    )
+    expect(planLimitsPage(view, candidates, []).fixedIssues).toEqual([])
+  })
+
+  it('names the members who always keep a seat, only with the member list', () => {
+    const members = [
+      ...candidates.members,
+      {
+        id: 'p2',
+        name: 'Bar',
+        email: 'bar@example.com',
+        roleNames: [],
+        isOwner: false,
+        canManageBilling: false,
+        isAdmin: false,
+        lastActiveAt: '2026-11-17T00:00:00.000Z',
+        createdAt: '',
+      },
+    ]
+    const page = planLimitsPage(view, { ...candidates, members }, [PERMISSIONS.BILLING_MANAGE])
+    expect(page.lockedSeatHolderIds).toEqual(['p1'])
+    expect(planLimitsPage(view, { ...candidates, members }, []).lockedSeatHolderIds).toEqual([])
+  })
 })
