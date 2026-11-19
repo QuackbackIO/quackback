@@ -715,12 +715,40 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       // lands on.
       expect(ticket.firstResponseAt).toBeNull()
 
-      // Gating: conversation.created fires, Quinn stays out, and the matrix's
-      // agent-reply → requester email channel rides the redirect unchanged.
+      // Gating: conversation.created fires and Quinn stays out. The requester
+      // hears about the ticket once, from ticket.created's confirmation: the
+      // opening message is not a reply, so no "replied to your conversation".
       expect(convEmit.emitConversationCreated).toHaveBeenCalledTimes(1)
-      expect(convNotify.notifyAgentReply).toHaveBeenCalledTimes(1)
+      expect(ticketEmit.emitTicketCreated).toHaveBeenCalledTimes(1)
+      expect(convNotify.notifyAgentReply).not.toHaveBeenCalled()
       await flushAssistantChain()
       expect(assistant.runAssistantTurnForConversation).not.toHaveBeenCalled()
+    })
+
+    it('a teammate-filed ticket sends the requester the confirmation only, and a later reply still emails', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({ contactEmail: 'requester@example.com' })
+      const agentP = await seedPrincipal({ role: 'member' })
+
+      const dto = await createTicket(
+        {
+          type: 'customer',
+          title: 'Printer on fire',
+          description: 'Filed on the customer’s behalf after a phone call.',
+          requesterPrincipalId: requesterP,
+        },
+        { principalId: agentP, role: 'member', principalType: 'user', segmentIds: new Set() }
+      )
+      expect(ticketEmit.emitTicketCreated).toHaveBeenCalledTimes(1)
+      expect(convNotify.notifyAgentReply).not.toHaveBeenCalled()
+
+      // A real reply on the same ticket is a reply, and still reaches them.
+      const { sendTicketMessage } = await import('../ticket-message.service')
+      await sendTicketMessage(
+        { principalId: agentP, role: 'member', principalType: 'user', segmentIds: new Set() },
+        { ticketId: dto.id as TicketId, content: 'We are on it.' }
+      )
+      expect(convNotify.notifyAgentReply).toHaveBeenCalledTimes(1)
     })
 
     it('customer + NO requester + flag stays standalone (requester-less API create)', async () => {

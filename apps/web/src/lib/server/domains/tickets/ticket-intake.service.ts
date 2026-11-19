@@ -358,6 +358,9 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
             senderType: filedByRequester ? 'visitor' : 'agent',
             isInternal: false,
             actor,
+            // The opening is not a reply: ticket.created's confirmation is the
+            // requester's one email about a ticket a teammate filed for them.
+            notifyCustomer: false,
           }
         )
       } catch (err) {
