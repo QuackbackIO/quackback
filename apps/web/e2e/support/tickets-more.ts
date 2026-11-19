@@ -6,6 +6,7 @@
  * `message.body contains <marker>` condition and the test deletes it in
  * `finally`.
  */
+import { randomUUID } from 'node:crypto'
 import { expect, type Locator, type Page } from '@playwright/test'
 import { fromUuid, toUuid } from '@quackback/ids'
 import { pollFor, supportDb } from './db'
@@ -128,4 +129,79 @@ export async function selectRows(page: Page, texts: string[]): Promise<void> {
       await expect(bulkBar(page).getByText(`${i + 1} selected`)).toBeVisible({ timeout: 3_000 })
     }
   }).toPass({ timeout: 40_000 })
+}
+
+const WIDGET_FRAME = 'iframe.quackback-widget-iframe'
+
+/** The conversation (TypeID) holding a message that contains `text`. */
+export function conversationWithText(text: string, timeoutMs = 15_000): Promise<string> {
+  return pollFor(
+    `a conversation with "${text}"`,
+    async () => {
+      const [row] = await supportDb()<{ conversation_id: string }[]>`
+        SELECT conversation_id FROM conversation_messages
+        WHERE content LIKE ${`%${text}%`} AND conversation_id IS NOT NULL LIMIT 1`
+      return row ? fromUuid('conversation', row.conversation_id) : null
+    },
+    { timeoutMs }
+  )
+}
+
+/**
+ * Open the widget as a fresh anonymous visitor (the harness host page) and
+ * start a conversation with `text`.
+ */
+export async function anonWidgetConversation(page: Page, text: string) {
+  await page.goto('/e2e/widget?persona=anon')
+  const widget = page.frameLocator(WIDGET_FRAME)
+  await widget.getByRole('button', { name: /^(?:\d+ unread )?Messages$/ }).click()
+  await widget
+    .getByRole('button', { name: /Ask a question/ })
+    .first()
+    .click()
+  const composer = widget.locator('.ProseMirror[contenteditable="true"]')
+  await expect(composer).toBeVisible({ timeout: 15_000 })
+  await composer.click()
+  await composer.fill(text)
+  const send = widget.getByRole('button', { name: 'Send', exact: true })
+  let conversationId = ''
+  // A click before the composer is wired does nothing: click while the text is still there.
+  await expect(async () => {
+    if ((await composer.innerText()).includes(text)) await send.click({ timeout: 2_000 })
+    conversationId = await conversationWithText(text, 4_000)
+  }).toPass({ timeout: 30_000 })
+  return { widget, conversationId }
+}
+
+/** Reload the host page and open the visitor's conversation that contains `text`. */
+export async function reopenWidgetConversation(page: Page, text: string): Promise<void> {
+  const widget = page.frameLocator(WIDGET_FRAME)
+  await expect(async () => {
+    await page.reload()
+    await widget.getByRole('button', { name: /^(?:\d+ unread )?Messages$/ }).click()
+    await widget.getByText(text).first().click({ timeout: 5_000 })
+    await expect(widget.getByLabel('Subject').last()).toBeVisible({ timeout: 5_000 })
+  }).toPass({ timeout: 45_000 })
+}
+
+/**
+ * A teammate message carrying a ticket embed card, as the assistant drops one
+ * into a conversation. A precondition: the card's rendering is under test.
+ */
+export async function postTicketEmbed(
+  conversationId: string,
+  authorPrincipalId: string,
+  ticketId: string
+): Promise<void> {
+  // The same embed-only message `shareTicket` (conversation.cards.ts) sends.
+  const doc = {
+    type: 'doc',
+    content: [{ type: 'quackbackEmbed', attrs: { kind: 'ticket', id: ticketId } }],
+  }
+  await supportDb()`
+    INSERT INTO conversation_messages
+      (id, conversation_id, principal_id, sender_type, content, content_json, is_internal, created_at)
+    VALUES (${randomUUID()}, ${toUuid(conversationId as `conversation_${string}`)},
+            ${toUuid(authorPrincipalId as `principal_${string}`)}, 'agent', '',
+            ${supportDb().json(doc as never)}, false, NOW())`
 }
