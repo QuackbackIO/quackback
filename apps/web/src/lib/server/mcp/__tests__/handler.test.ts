@@ -467,6 +467,27 @@ describe('MCP HTTP Handler', () => {
   })
 
   // ===========================================================================
+  // Request size
+  // ===========================================================================
+
+  describe('Request size', () => {
+    it('refuses a request over the cap with a 413 that names the upload limit', async () => {
+      const { handleMcpRequest } = await import('../handler')
+      const { MCP_MAX_REQUEST_BYTES } = await import('../tools/files')
+      await setupValidAuth()
+
+      const request = mcpRequest(jsonRpcRequest('tools/list'))
+      request.headers.set('content-length', String(MCP_MAX_REQUEST_BYTES + 1))
+      const response = await handleMcpRequest(request)
+
+      expect(response.status).toBe(413)
+      const body = (await response.json()) as { error: { message: string } }
+      expect(body.error.message).toContain('upload_file accepts files up to 3 MB')
+      expect(body.error.message).toContain('/api/v1/files')
+    })
+  })
+
+  // ===========================================================================
   // Auth Flow
   // ===========================================================================
 
