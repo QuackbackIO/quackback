@@ -423,6 +423,21 @@ describe('buildConversationRows — block state derivation', () => {
       expect(blockStateOf(closedAgain, 'csat1')).toBe('pending')
     })
 
+    it('keeps a CSAT block tappable after a teammate answered the reopened conversation and closed it again', () => {
+      const rows = buildConversationRows({
+        ...base,
+        messages: [
+          systemMsg('sys1', 'chat_ended'),
+          agentMsg('csat1', { block: csatBlock }),
+          systemMsg('sys2', 'chat_reopened'),
+          teammateMsg('t1'),
+          systemMsg('sys3', 'chat_ended'),
+        ],
+        conversationStatus: 'closed',
+      })
+      expect(blockStateOf(rows, 'csat1')).toBe('pending')
+    })
+
     it('falls back to superseding everything when no chat_ended row exists at all (no in-list signal)', () => {
       // No system row — same as pre-amendment-3 behavior: conservatively
       // treat every block as predating the close.

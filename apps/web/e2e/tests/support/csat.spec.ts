@@ -435,6 +435,61 @@ test.describe('the rating block', () => {
   )
 
   test(
+    'CSAT-21 a rating tapped while the conversation is open again is refused, and counts once it is closed',
+    { tag: '@core' },
+    async ({ browser, playwright, marker }) => {
+      test.setTimeout(90_000)
+      const { customer, customerApi, conversation, admin } = await answeredPortalConversation(
+        playwright,
+        marker
+      )
+      // Asked on close, then a teammate reopens it before the customer rates.
+      await withLiveWorkflow(admin, askOnClose(customer, marker), async () => {
+        await close(admin, conversation.id)
+        await waitForCsatBlock(conversation.uuid)
+      })
+      await fnOk(admin, 'setConversationStatusFn', {
+        conversationId: conversation.id,
+        status: 'open',
+      })
+
+      const context = await browser.newContext({ storageState: customer.statePath })
+      const portal = await context.newPage()
+      await portal.goto(`/support/${conversation.id}`)
+      await portal.getByRole('button', { name: '4 of 5' }).click()
+
+      // Refused: said so, nothing stored, and no thanks.
+      const notClosed = portal.getByText('You can rate once this conversation is closed.')
+      await expect(notClosed).toBeVisible({ timeout: 15_000 })
+      await expect(portal.getByText('Anything we could improve?')).toHaveCount(0)
+      expect(
+        (await messagesOf(conversation.uuid)).filter(
+          (m) => m.sender_type === 'visitor' && m.metadata?.blockReply
+        )
+      ).toEqual([])
+      expect((await csatOf(conversation.uuid)).csat_rating).toBeNull()
+
+      // A teammate answers and closes it: the same block now takes the rating.
+      await fnOk(admin, 'sendAgentMessageFn', {
+        conversationId: conversation.id,
+        content: `All sorted ${marker}`,
+      })
+      await close(admin, conversation.id)
+      await expect(notClosed).toHaveCount(0, { timeout: 15_000 })
+      await portal.getByRole('button', { name: '5 of 5' }).click()
+      await expect(portal.getByText('Anything we could improve?')).toBeVisible({
+        timeout: 15_000,
+      })
+      const rated = await waitForRating(conversation.uuid)
+      expect(rated.csat_rating).toBe(5)
+      expect(rated.status).toBe('closed')
+
+      await context.close()
+      await Promise.all([admin.dispose(), customerApi.dispose()])
+    }
+  )
+
+  test(
     'CSAT-09 a rating reply never reopens a resolved ticket or closed conversation; a plain reply does',
     { tag: '@smoke' },
     async ({ browser, playwright, marker }) => {
