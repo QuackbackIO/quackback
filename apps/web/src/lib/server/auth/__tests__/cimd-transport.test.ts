@@ -166,22 +166,6 @@ function listen(address: string, tls: { key: string; cert: string }): Promise<vo
   })
 }
 
-beforeAll(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'cimd-transport-'))
-  const pinned = makeCert(HOST)
-  const other = makeCert(OTHER_HOST)
-  control.ca = [pinned.cert, other.cert]
-  // Same port on three loopback addresses, so only the address tells them apart.
-  await listen('127.0.0.2', pinned)
-  await listen('127.0.0.3', pinned)
-  await listen('127.0.0.4', other)
-})
-
-afterAll(() => {
-  for (const server of servers) server.close()
-  rmSync(dir, { recursive: true, force: true })
-})
-
 beforeEach(() => {
   control.dns.clear()
   control.lookups = []
@@ -255,63 +239,86 @@ describe('CIMD fetch transport', () => {
     expect(control.connects).toBe(0)
   })
 
-  it('resolves once and connects to the validated address, keeping Host and SNI', async () => {
-    control.route.set(PUBLIC_A, '127.0.0.2')
-    control.route.set(PUBLIC_B, '127.0.0.3')
-    // A second lookup would rebind to another server. It must never happen:
-    // the hostname is `.invalid`, so only the pinned answer can reach anything.
-    control.dns.set(HOST, [[{ address: PUBLIC_A, family: 4 }], [{ address: PUBLIC_B, family: 4 }]])
-    const res = await fetchClientMetadataResource(`https://${HOST}:${port}/client.json`)
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ boundTo: '127.0.0.2' })
-    expect(control.lookups).toEqual([HOST])
-    expect(seen).toEqual([
-      { boundTo: '127.0.0.2', servername: HOST, host: `${HOST}:${port}`, path: '/client.json' },
-    ])
-  })
-
-  it('verifies the certificate against the hostname, not the pinned address', async () => {
-    control.route.set(PUBLIC_A, '127.0.0.4')
-    control.dns.set(HOST, [[{ address: PUBLIC_A, family: 4 }]])
-    // 127.0.0.4 presents a certificate for another name.
-    await expect(
-      fetchClientMetadataResource(`https://${HOST}:${port}/client.json`)
-    ).rejects.toThrow(/altnames|certificate/i)
-    expect(seen).toEqual([])
-  })
-
-  it('returns a redirect instead of following it', async () => {
-    control.route.set(PUBLIC_A, '127.0.0.2')
-    control.dns.set(HOST, [[{ address: PUBLIC_A, family: 4 }]])
-    const res = await fetchClientMetadataResource(`https://${HOST}:${port}/redirect`, {
-      redirect: 'error',
+  // Needs 127.0.0.2-4 (Linux routes all of 127/8 to loopback; macOS does not
+  // without aliases) and the openssl CLI to mint test certificates.
+  describe.skipIf(process.platform !== 'linux')('against loopback TLS servers', () => {
+    beforeAll(async () => {
+      dir = mkdtempSync(join(tmpdir(), 'cimd-transport-'))
+      const pinned = makeCert(HOST)
+      const other = makeCert(OTHER_HOST)
+      control.ca = [pinned.cert, other.cert]
+      // Same port on three loopback addresses, so only the address tells them apart.
+      await listen('127.0.0.2', pinned)
+      await listen('127.0.0.3', pinned)
+      await listen('127.0.0.4', other)
     })
-    expect(res.status).toBe(302)
-    expect(res.redirected).toBe(false)
-    expect(seen.map((s) => s.path)).toEqual(['/redirect'])
-    expect(control.lookups).toEqual([HOST])
-  })
 
-  it('tears the request down on abort, before headers and mid-body', async () => {
-    control.route.set(PUBLIC_A, '127.0.0.2')
-    control.dns.set(HOST, [[{ address: PUBLIC_A, family: 4 }]])
+    afterAll(() => {
+      for (const server of servers) server.close()
+      rmSync(dir, { recursive: true, force: true })
+    })
 
-    const started = Date.now()
-    await expect(
-      fetchClientMetadataResource(`https://${HOST}:${port}/stall-headers`, {
-        signal: AbortSignal.timeout(300),
+    it('resolves once and connects to the validated address, keeping Host and SNI', async () => {
+      control.route.set(PUBLIC_A, '127.0.0.2')
+      control.route.set(PUBLIC_B, '127.0.0.3')
+      // A second lookup would rebind to another server. It must never happen:
+      // the hostname is `.invalid`, so only the pinned answer can reach anything.
+      control.dns.set(HOST, [
+        [{ address: PUBLIC_A, family: 4 }],
+        [{ address: PUBLIC_B, family: 4 }],
+      ])
+      const res = await fetchClientMetadataResource(`https://${HOST}:${port}/client.json`)
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ boundTo: '127.0.0.2' })
+      expect(control.lookups).toEqual([HOST])
+      expect(seen).toEqual([
+        { boundTo: '127.0.0.2', servername: HOST, host: `${HOST}:${port}`, path: '/client.json' },
+      ])
+    })
+
+    it('verifies the certificate against the hostname, not the pinned address', async () => {
+      control.route.set(PUBLIC_A, '127.0.0.4')
+      control.dns.set(HOST, [[{ address: PUBLIC_A, family: 4 }]])
+      // 127.0.0.4 presents a certificate for another name.
+      await expect(
+        fetchClientMetadataResource(`https://${HOST}:${port}/client.json`)
+      ).rejects.toThrow(/altnames|certificate/i)
+      expect(seen).toEqual([])
+    })
+
+    it('returns a redirect instead of following it', async () => {
+      control.route.set(PUBLIC_A, '127.0.0.2')
+      control.dns.set(HOST, [[{ address: PUBLIC_A, family: 4 }]])
+      const res = await fetchClientMetadataResource(`https://${HOST}:${port}/redirect`, {
+        redirect: 'error',
       })
-    ).rejects.toThrow()
-    expect(Date.now() - started).toBeLessThan(3000)
-
-    const controller = new AbortController()
-    const res = await fetchClientMetadataResource(`https://${HOST}:${port}/stall-body`, {
-      signal: controller.signal,
+      expect(res.status).toBe(302)
+      expect(res.redirected).toBe(false)
+      expect(seen.map((s) => s.path)).toEqual(['/redirect'])
+      expect(control.lookups).toEqual([HOST])
     })
-    expect(res.status).toBe(200)
-    const body = res.text()
-    setTimeout(() => controller.abort(), 200)
-    await expect(body).rejects.toThrow()
-    expect(Date.now() - started).toBeLessThan(5000)
+
+    it('tears the request down on abort, before headers and mid-body', async () => {
+      control.route.set(PUBLIC_A, '127.0.0.2')
+      control.dns.set(HOST, [[{ address: PUBLIC_A, family: 4 }]])
+
+      const started = Date.now()
+      await expect(
+        fetchClientMetadataResource(`https://${HOST}:${port}/stall-headers`, {
+          signal: AbortSignal.timeout(300),
+        })
+      ).rejects.toThrow()
+      expect(Date.now() - started).toBeLessThan(3000)
+
+      const controller = new AbortController()
+      const res = await fetchClientMetadataResource(`https://${HOST}:${port}/stall-body`, {
+        signal: controller.signal,
+      })
+      expect(res.status).toBe(200)
+      const body = res.text()
+      setTimeout(() => controller.abort(), 200)
+      await expect(body).rejects.toThrow()
+      expect(Date.now() - started).toBeLessThan(5000)
+    })
   })
 })

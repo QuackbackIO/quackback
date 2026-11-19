@@ -113,6 +113,14 @@ function routeGet(mod: { Route: { options: unknown } }) {
   ).server.handlers.GET
 }
 
+function routePost(mod: { Route: { options: unknown } }) {
+  return (
+    mod.Route.options as {
+      server: { handlers: { POST: (ctx: { request: Request }) => Promise<Response> } }
+    }
+  ).server.handlers.POST
+}
+
 async function getAuth() {
   const { getAuth } = await import('@/lib/server/auth/index')
   return getAuth()
@@ -138,11 +146,12 @@ async function signedIn(): Promise<{ userId: UserId; headers: Headers }> {
   return { userId, headers: new Headers({ authorization: `Bearer ${token}`, origin: ORIGIN }) }
 }
 
-async function authorize(
-  auth: Awaited<ReturnType<typeof getAuth>>,
-  headers: Headers,
-  overrides: Record<string, string> = {}
-) {
+/**
+ * Ask the authorize endpoint through the app's route, as a client does: the
+ * route widens `scope` to the whole catalogue first, so this also proves the
+ * client row allows every scope.
+ */
+async function authorize(headers: Headers, overrides: Record<string, string> = {}) {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: CLIENT_ID,
@@ -154,9 +163,9 @@ async function authorize(
     resource: `${ORIGIN}/api/mcp`,
     ...overrides,
   })
-  const res = await auth.handler(
-    new Request(`${ORIGIN}/api/auth/oauth2/authorize?${params}`, { headers })
-  )
+  const res = await routeGet(authCatchAllRoute)({
+    request: new Request(`${ORIGIN}/api/auth/oauth2/authorize?${params}`, { headers }),
+  })
   return { status: res.status, location: res.headers.get('location') ?? '', body: await res.text() }
 }
 
@@ -218,7 +227,7 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
       createdAt: new Date(),
     })
 
-    const first = await authorize(auth, person.headers)
+    const first = await authorize(person.headers)
     expect(first.status, first.body).toBe(302)
     expect(first.location).toContain('/oauth/consent')
     expect(docs.fetches).toEqual([CLIENT_ID])
@@ -282,8 +291,9 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
     const code = callback.searchParams.get('code')
     expect(code).toBeTruthy()
 
-    const tokenRes = await auth.handler(
-      new Request(`${ORIGIN}/api/auth/oauth2/token`, {
+    // Through the route, which adds the MCP `resource` the client left out.
+    const tokenRes = await routePost(authCatchAllRoute)({
+      request: new Request(`${ORIGIN}/api/auth/oauth2/token`, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded', origin: ORIGIN },
         body: new URLSearchParams({
@@ -292,10 +302,9 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
           redirect_uri: REDIRECT_URI,
           client_id: CLIENT_ID,
           code_verifier: VERIFIER,
-          resource: `${ORIGIN}/api/mcp`,
         }).toString(),
-      })
-    )
+      }),
+    })
     const tokens = (await tokenRes.json()) as { access_token?: string; scope?: string }
     expect(tokenRes.status, JSON.stringify(tokens)).toBe(200)
     const payload = JSON.parse(
@@ -330,16 +339,14 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
   it('lets a CIMD client step up to write scopes, also after its document is refetched', async () => {
     serveDocument()
     const person = await signedIn()
-    const auth = await getAuth()
-    expect((await authorize(auth, person.headers)).status).toBe(302)
+    expect((await authorize(person.headers)).status).toBe(302)
 
     // A new instance has an empty cache: the next use refetches and refreshes
     // the row. A changed name is audited; the capability set is kept.
     serveDocument({ client_name: 'Chat Example Pro' })
     const { resetAuth } = await import('@/lib/server/auth/index')
     resetAuth()
-    const fresh = await getAuth()
-    const stepUp = await authorize(fresh, person.headers, { scope: MCP_AS_SCOPES.join(' ') })
+    const stepUp = await authorize(person.headers, { scope: MCP_AS_SCOPES.join(' ') })
     expect(stepUp.status, stepUp.body).toBe(302)
     expect(stepUp.location).toContain('/oauth/consent')
     expect(stepUp.location).not.toContain('error=')
@@ -360,7 +367,7 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
   it('widens a CIMD row with the scope reconcile, like any other client', async () => {
     serveDocument()
     const person = await signedIn()
-    expect((await authorize(await getAuth(), person.headers)).status).toBe(302)
+    expect((await authorize(person.headers)).status).toBe(302)
     await testDb
       .update(oauthClient)
       .set({ scopes: ['openid', 'read:feedback'] })
@@ -419,12 +426,7 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
     )
     expect(bare.status, 'Better Auth alone still refuses it').toBe(400)
 
-    const post = (
-      authCatchAllRoute.Route.options as unknown as {
-        server: { handlers: { POST: (ctx: { request: Request }) => Promise<Response> } }
-      }
-    ).server.handlers.POST
-    const reg = await post({
+    const reg = await routePost(authCatchAllRoute)({
       request: new Request(`${ORIGIN}/api/auth/oauth2/register`, {
         method: 'POST',
         headers: { origin: ORIGIN, 'content-type': 'application/json' },
@@ -440,7 +442,7 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
     expect(registered.redirect_uris).toEqual([cursorRedirect])
 
     const person = await signedIn()
-    const res = await authorize(auth, person.headers, {
+    const res = await authorize(person.headers, {
       client_id: registered.client_id,
       redirect_uri: cursorRedirect,
     })
@@ -451,7 +453,7 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
   describe('refuses a document the server should not trust', () => {
     async function refused(): Promise<string> {
       const person = await signedIn()
-      const res = await authorize(await getAuth(), person.headers)
+      const res = await authorize(person.headers)
       expect(res.status).toBeGreaterThanOrEqual(300)
       const rows = await testDb
         .select()
@@ -517,9 +519,44 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
     })
   })
 
+  // A workspace's auth instance (and so the document cache) is rebuilt after
+  // the pool goes idle. A cold instance refetches the document on first use,
+  // and the plugin fails closed when it cannot: the stored row alone is not
+  // enough. A client whose document host is down cannot authorize, or refresh,
+  // until it is back.
+  it('fails closed when a cold instance cannot refetch the document', async () => {
+    serveDocument()
+    const person = await signedIn()
+    expect((await authorize(person.headers)).status).toBe(302)
+
+    docs.served.clear()
+    const { resetAuth } = await import('@/lib/server/auth/index')
+    resetAuth()
+    const res = await authorize(person.headers)
+    expect(`${res.location} ${res.body}`).toMatch(/invalid_client/)
+    expect(docs.fetches).toEqual([CLIENT_ID, CLIENT_ID])
+    const rows = await testDb.select().from(oauthClient).where(eq(oauthClient.clientId, CLIENT_ID))
+    expect(rows).toHaveLength(1)
+  })
+
+  // Discovery runs before the sign-in check, as client lookup does for DCR
+  // clients. Only the plugin's fetch budgets bound it; the DCR registration
+  // limiter in the route does not apply.
+  it('discovers the client on an authorize request from someone not signed in', async () => {
+    serveDocument()
+    const res = await authorize(new Headers({ origin: ORIGIN }))
+    expect(res.status).toBe(302)
+    expect(res.location).toContain('/auth/login')
+    expect(docs.fetches).toEqual([CLIENT_ID])
+    const audits = await testDb
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.eventType, 'oauth.client.discovered'))
+    expect(audits.map((a) => [a.actorType, a.actorUserId])).toEqual([['anonymous', null]])
+  })
+
   it('never fetches a client_id outside the policy', async () => {
     const person = await signedIn()
-    const auth = await getAuth()
     for (const clientId of [
       'https://chat.example.com/',
       'https://chat.example.com',
@@ -528,7 +565,7 @@ describe.skipIf(!fixture.available)('Client ID Metadata Documents (real DB, roll
       'https://127.0.0.1/oauth/client.json',
       'https://chat.example.com/a/../client.json',
     ]) {
-      const res = await authorize(auth, person.headers, { client_id: clientId })
+      const res = await authorize(person.headers, { client_id: clientId })
       expect(res.status, clientId).toBeGreaterThanOrEqual(300)
     }
     expect(docs.fetches).toEqual([])
