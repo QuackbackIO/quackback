@@ -66,7 +66,7 @@ test.describe('lists', () => {
   test(
     'ACC-02 a view-all teammate lists conversations of every team, assigned to anyone, and unassigned',
     { tag: '@core' },
-    async ({ asPerson, people, marker }) => {
+    async ({ browser, people, marker, newTeammate }) => {
       const convs = [
         await seedConv({ marker, label: 'support team', teamId: people.teams.support }),
         await seedConv({ marker, label: 'billing team', teamId: people.teams.billing }),
@@ -78,10 +78,13 @@ test.describe('lists', () => {
         }),
         await seedConv({ marker, label: 'unassigned' }),
       ]
-      // Ben (Support lead) is on team Support only, but sees everything.
-      const agentB = await asPerson('agentB')
-      await searchInbox(agentB, marker)
-      await expectListed(agentB, convs, [])
+      // A Support lead on team Support only, who still sees everything. (A
+      // teammate of this test's own: the inbox page marks its viewer online,
+      // and the harness's presence checks read the shared people.)
+      const lead = await newTeammate({ roleKey: 'support_lead', teams: [people.teams.support] })
+      const page = await lead.newPage(browser)
+      await searchInbox(page, marker)
+      await expectListed(page, convs, [])
     }
   )
 
@@ -162,15 +165,17 @@ test.describe('opening by id', () => {
   test(
     'ACC-05 another team\'s conversation by deep link shows "Conversation not found" with no reply box; the server answers CONVERSATION_NOT_FOUND',
     { tag: '@smoke' },
-    async ({ asPerson, playwright, people, marker }) => {
+    async ({ browser, playwright, people, marker, newTeammate }) => {
       const hidden = await seedConv({ marker, label: 'support team', teamId: people.teams.support })
-      const contributor = await asPerson('contributor')
+      // A Contributor on team Billing, of this test's own (see ACC-02).
+      const s = await newTeammate({ roleKey: 'contributor', teams: [people.teams.billing] })
+      const contributor = await s.newPage(browser)
       await contributor.goto(`/admin/inbox?i=${hidden.id}`)
       await expect(contributor.getByText('Conversation not found')).toBeVisible({ timeout: 15_000 })
       await expect(contributor.getByRole('button', { name: 'Send reply' })).toHaveCount(0)
       await expect(contributor.getByText(hidden.messages[0])).toHaveCount(0)
 
-      const api = await personApi(playwright, 'contributor')
+      const api = await s.api(playwright)
       const res = await callServerFn(
         api,
         'getConversationFn',
