@@ -144,7 +144,7 @@ test.describe('realtime and presence', () => {
           },
           { timeoutMs: 30_000 }
         )
-        const widget = await openWidgetAs(browser, visitor, answer)
+        const widget = await openWidgetAs(browser, visitor, answer, conversationId)
         const teammate = await newTeammate({ roleKey: 'support_lead' })
         await warmUpWidgetThread(widget, await teammate.api(playwright), conversationId)
         const stream = await visitor.openStream(conversationId)

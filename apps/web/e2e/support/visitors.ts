@@ -50,11 +50,14 @@ export interface TestVisitor {
  * context as this visitor: their token is put where the widget keeps it, so
  * the widget shows the same conversations the API visitor started. Opens the
  * Messages tab, and the conversation whose text is `openText` when given.
+ * With `conversationId`, opens that thread through the widget's own deep link
+ * (`/widget?c=<id>`, the one reply emails use) and waits for `openText` in it.
  */
 export async function openWidgetAs(
   browser: Browser,
   visitor: TestVisitor,
-  openText?: string
+  openText?: string,
+  conversationId?: string
 ): Promise<Page> {
   const context = await browser.newContext()
   const origin = new URL(supportEnv().baseUrl).origin
@@ -73,6 +76,11 @@ export async function openWidgetAs(
   )
   const page = await context.newPage()
   page.on('close', () => void context.close().catch(() => {}))
+  if (conversationId) {
+    await page.goto(`/widget?c=${encodeURIComponent(conversationId)}`)
+    if (openText) await expect(page.getByText(openText).first()).toBeVisible({ timeout: 20_000 })
+    return page
+  }
   await page.goto('/widget')
   await expect(async () => {
     await page.getByRole('button', { name: 'Messages', exact: true }).click()

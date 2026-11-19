@@ -79,7 +79,7 @@ test.describe('realtime: teammates and customers', () => {
       })
       expect(team.ok, team.error).toBe(true)
 
-      const widget = await openWidgetAs(browser, visitor, first)
+      const widget = await openWidgetAs(browser, visitor, first, conversationId)
       await warmUpWidgetThread(widget, agentApi, conversationId)
       const visitorStream = await visitor.openStream(conversationId)
       expect(visitorStream.status).toBe(200)
@@ -365,7 +365,7 @@ test.describe('realtime: teammates and customers', () => {
         ).ok
       ).toBe(true)
 
-      const widget = await openWidgetAs(browser, visitor, `on it ${marker}`)
+      const widget = await openWidgetAs(browser, visitor, `on it ${marker}`, conversationId)
       const agentPage = await agent.newPage(browser)
       await agentPage.goto(`/admin/inbox?i=${conversationId}`)
       await expect(agentPage.getByText(`on it ${marker}`).first()).toBeVisible({ timeout: 15_000 })
@@ -539,7 +539,12 @@ test.describe('realtime: teammates and customers', () => {
       const noteId = note.data.message?.id ?? note.data.id
       expect(noteId).toBeTruthy()
 
-      const widget = await openWidgetAs(browser, visitor, `original reply ${marker}`)
+      const widget = await openWidgetAs(
+        browser,
+        visitor,
+        `original reply ${marker}`,
+        conversationId
+      )
       await expect(widget.getByText(`original reply ${marker}`)).toBeVisible({ timeout: 15_000 })
       const agentPage = await agent.newPage(browser)
       await agentPage.goto(`/admin/inbox?i=${conversationId}`)
@@ -621,7 +626,7 @@ test.describe('realtime: teammates and customers', () => {
       expect(keep.ok && reply.ok && note.ok).toBe(true)
       const noteId = (note.data.message?.id ?? note.data.id)!
 
-      const widget = await openWidgetAs(browser, visitor, `doomed reply ${marker}`)
+      const widget = await openWidgetAs(browser, visitor, `doomed reply ${marker}`, conversationId)
       await expect(widget.getByText(`doomed reply ${marker}`)).toBeVisible({ timeout: 15_000 })
       const agentPage = await agent.newPage(browser)
       await agentPage.goto(`/admin/inbox?i=${conversationId}`)
@@ -700,7 +705,7 @@ test.describe('realtime: teammates and customers', () => {
           })
         ).ok
       ).toBe(true)
-      const widget = await openWidgetAs(browser, visitor, `filing ${marker}`)
+      const widget = await openWidgetAs(browser, visitor, `filing ${marker}`, conversationId)
       await expect(widget.getByText(`filing ${marker}`)).toBeVisible({ timeout: 15_000 })
       await warmUpWidgetThread(widget, api, conversationId)
 
@@ -804,7 +809,7 @@ test.describe('realtime: teammates and customers', () => {
   test(
     'RT-24 the stream refuses missing, tampered, expired and unscoped credentials and the wrong audience',
     { tag: '@core' },
-    async ({ playwright, people, marker }) => {
+    async ({ playwright, marker, newTeammate }) => {
       const visitor = await createVisitor(playwright)
       const { conversationId } = await visitor.send(`refusals ${marker}`)
       const principalId = await visitor.principalId()
@@ -840,7 +845,8 @@ test.describe('realtime: teammates and customers', () => {
 
       expect(await status({ scope: 'inbox', token: good })).toBe(403)
       // A teammate's portal-audience token is not an inbox credential.
-      const teammate = people.people.agentB.principalId
+      // (A test's own teammate: an inbox stream marks its owner online.)
+      const teammate = (await newTeammate({ roleKey: 'support_lead' })).principalId
       expect(
         await status({
           scope: 'inbox',
