@@ -28,6 +28,7 @@ import type { Actor, PrincipalType } from '@/lib/server/policy/types'
 import type { TiptapContent, ConversationAttachment } from '@/lib/shared/db-types'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
+import { isBlocked } from '@/lib/server/domains/principals/blocking'
 import { loadTicketOr404, createTicketCore, autoReopenOnRequesterReply } from './ticket.service'
 import { emitTicketReplied } from './ticket.webhooks'
 import {
@@ -327,6 +328,12 @@ export async function createMyTicket(
   }
 ): Promise<RequesterTicketDTO> {
   const principalId = requireRequester(actor)
+  // A blocked person cannot send new messages, and filing a ticket is one.
+  // Refused before anything is written, with the same answer the messenger
+  // send gives them.
+  if (await isBlocked(principalId)) {
+    throw new ForbiddenError('BLOCKED', 'You are not able to send messages here.')
+  }
   // Anonymous requesters must have a durable contact channel (email) on file —
   // the widget email-capture tier writes it before calling this (defense in
   // depth: the fn layer enforces the same guard).
