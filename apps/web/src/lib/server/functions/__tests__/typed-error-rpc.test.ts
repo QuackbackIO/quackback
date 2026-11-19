@@ -26,6 +26,7 @@ import {
 } from '@/lib/shared/errors'
 import { UNEXPECTED_ERROR_MESSAGE, errorReferenceOf } from '@/lib/shared/error-reference'
 import { isTestDataLinkConflict } from '@/lib/shared/tickets'
+import { ConversationRateLimitError } from '@/lib/server/domains/conversation/conversation.ratelimit'
 
 const { createServerFnRpc } = await import('./_server-fn-rpc')
 
@@ -68,6 +69,9 @@ beforeAll(async () => {
       headers: {},
     })
   })
+  define('rate-limited', () => {
+    throw new ConversationRateLimitError(17)
+  })
   define('plain', () => {
     throw new Error('Pick a board first')
   })
@@ -94,6 +98,17 @@ describe('a typed server-function error, as the browser sees it in production', 
     const error = await failure('link-conflict')
     expect(error).toMatchObject({ code: 'TEST_DATA_LINK_CONFLICT', statusCode: 409 })
     expect(isTestDataLinkConflict(error)).toBe(true)
+  })
+
+  it('a visitor send over the rate limit arrives with its code and the wait', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const error = await failure('rate-limited')
+    expect(error).toMatchObject({
+      message: 'You are sending messages too quickly. Please wait a moment.',
+      code: 'RATE_LIMITED',
+      statusCode: 429,
+      retryAfter: 17,
+    })
   })
 
   it('a typed error of 500 or above keeps no code or status', async () => {
