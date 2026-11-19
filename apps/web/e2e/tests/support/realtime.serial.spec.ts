@@ -19,6 +19,7 @@ import {
   type TestVisitor,
 } from '../../support/visitors'
 import { clearPresence, setWidgetAssistant } from '../../support/workspace-settings'
+import { setRouting } from '../../support/routing'
 
 async function agentsOnline(visitor: TestVisitor): Promise<boolean> {
   const r = await callServerFn<{ agentsOnline: boolean }>(
@@ -222,13 +223,15 @@ test.describe('realtime and presence', () => {
   )
 
   test(
-    'RT-22 the last stream closing returns unanswered open conversations to the queue',
+    'RT-22 with routing on, the last stream closing returns unanswered open conversations to the queue',
     { tag: '@core' },
     async ({ playwright, marker, newTeammate }) => {
       test.setTimeout(60_000)
       const t = await newTeammate({ roleKey: 'support_lead' })
       const tApi = await t.api(playwright)
-      const observer = await newTeammate({ roleKey: 'support_lead' })
+      // Away, so routing hands nothing to the observer and the freed
+      // conversations wait in the queue, where the observer sees them.
+      const observer = await newTeammate({ roleKey: 'support_lead', availability: 'away' })
       const admin = await personApi(playwright, 'admin')
 
       const start = async (text: string) => {
@@ -290,12 +293,18 @@ test.describe('realtime and presence', () => {
       )
       expect(await assigneeOf(unanswered.id)).toBe(tUuid)
 
-      // The last one closes: T went offline.
-      tab2.close()
-      await waitForPresence(t.principalId, false, 15_000)
-      await pollFor('the unanswered conversation back in the queue', async () =>
-        (await assigneeOf(unanswered.id)) === null ? true : null
-      )
+      // The last one closes with routing on: T went offline. (With routing off
+      // the work stays with T, RTE-51.)
+      await setRouting(playwright, true)
+      try {
+        tab2.close()
+        await waitForPresence(t.principalId, false, 15_000)
+        await pollFor('the unanswered conversation back in the queue', async () =>
+          (await assigneeOf(unanswered.id)) === null ? true : null
+        )
+      } finally {
+        await setRouting(playwright, false)
+      }
       expect(await assigneeOf(noted.id)).toBeNull()
       expect(await assigneeOf(answered.id)).toBe(tUuid)
       expect(await assigneeOf(closed.id)).toBe(tUuid)
