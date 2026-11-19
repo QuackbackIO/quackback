@@ -634,11 +634,12 @@ export function mailText(mail: MailpitMessage): string {
       .replace(/&nbsp;/g, ' ')
       .replace(/&#x27;|&#39;|&apos;/g, "'")
       .replace(/&quot;/g, '"')
-      .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       // Invisible preheader padding.
       .replace(/[\u200b-\u200f\u034f\u00ad\u2060\ufeff]|&#8202;|&#8203;/g, '')
+      // Last, so an escaped entity such as &amp;lt; is decoded only once.
+      .replace(/&amp;/g, '&')
       .replace(/\s+/g, ' ')
       // React leaves a comment between text and an adjacent expression.
       .replace(/ ([.,!?:;])/g, '$1')
