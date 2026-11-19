@@ -46,6 +46,7 @@ import type {
 import type { ConversationPriority, TicketStage } from '@/lib/shared/db-types'
 import type { Channel } from '@/lib/shared/channels'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
+import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import { can } from '@/lib/server/policy/authorize'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { ticketFilter } from '@/lib/server/policy/tickets'
@@ -58,6 +59,7 @@ import {
   facetToConversationStatus,
   facetToTicketStatusCategory,
   resolveInboxSort,
+  ticketSlaDueAt,
   type InboxItemDTO,
   type InboxSort,
   type InboxTriageFacet,
@@ -197,12 +199,29 @@ function itemActivityAt(item: InboxItemDTO): string {
 }
 
 /**
+ * The 'sla' merge key: the item's nearest unmet SLA deadline (ms), read off
+ * the same DTO fields each branch's SQL due expression orders by, or
+ * +Infinity when no clock is open, so those rows follow every live deadline
+ * as the branches' NULLS LAST does.
+ */
+function itemSlaDueMs(item: InboxItemDTO): number {
+  const due =
+    item.kind === 'conversation'
+      ? item.conversation.sla
+        ? (nextSlaDue(item.conversation.sla)?.dueAt ?? null)
+        : null
+      : ticketSlaDueAt(item.ticket.sla)
+  return due ? due.getTime() : Number.POSITIVE_INFINITY
+}
+
+/**
  * The numeric sort value for one item under one sort. 'created' reads each
  * branch's own `createdAt` (NOT the activity key — "recently created" must
  * not fold in later message activity, unlike 'recent'/'oldest').
  */
 function sortValue(item: InboxItemDTO, sort: InboxSort): number {
   if (sort === 'priority') return PRIORITY_RANK[itemPriority(item)] ?? 1
+  if (sort === 'sla') return itemSlaDueMs(item)
   if (sort === 'created') return new Date(itemCreatedAt(item)).getTime()
   return new Date(itemActivityAt(item)).getTime()
 }
@@ -259,8 +278,11 @@ export function mergeInboxBranches(input: MergeInboxBranchesInput): MergeInboxBr
   const keyed: KeyedInboxItem[] = relevanceOrdered
     ? [conversation.items, ticket.items].flatMap((b) => b.map((item, key) => ({ item, key })))
     : [...conversation.items, ...ticket.items].map((item) => ({ item, key: sortValue(item, sort) }))
-  // Rank fusion ascends (position 0 = best match), as does the oldest sort.
-  keyed.sort((a, b) => compareKeyedInboxItems(a, b, relevanceOrdered || sort === 'oldest'))
+  // Rank fusion ascends (position 0 = best match), as do the oldest and
+  // soonest-deadline sorts.
+  keyed.sort((a, b) =>
+    compareKeyedInboxItems(a, b, relevanceOrdered || sort === 'oldest' || sort === 'sla')
+  )
   const combined = keyed.map((k) => k.item)
   const truncated = combined.length > limit ? combined.slice(0, limit) : combined
   const overflowed = combined.length > limit
