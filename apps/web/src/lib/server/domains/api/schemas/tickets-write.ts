@@ -137,8 +137,8 @@ registerPath('/tickets', {
         },
       },
       400: {
-        description: 'Validation error',
-        content: { 'application/json': { schema: ValidationErrorSchema } },
+        description: 'Validation error, or the assignee is not a teammate',
+        content: { 'application/json': { schema: AssignValidationErrorSchema } },
       },
       401: {
         description: 'Unauthorized',
