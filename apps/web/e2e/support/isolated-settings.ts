@@ -124,6 +124,48 @@ export const SUPPORT_FLAGS_ON: Record<string, unknown> = {
   supportTickets: true,
 }
 
+/** Every column these helpers may flip. */
+export const ALL_SETTINGS_COLUMNS: SettingsColumn[] = [
+  'feature_flags',
+  'widget_config',
+  'portal_config',
+  'help_center_config',
+  'metadata',
+]
+
+/**
+ * The workspace every isolated test starts from: the support surfaces on and
+ * WIDGET_BASELINE. Applied before each test and the whole settings row put
+ * back after it (see `isolatedSettingsBaseline`), so a test's own flips nest
+ * inside it and nothing leaks into the next test, even on a timeout.
+ */
+export const SETTINGS_BASELINE: SettingsPatch = {
+  feature_flags: SUPPORT_FLAGS_ON,
+  widget_config: WIDGET_BASELINE,
+  portal_config: { 'support.enabled': true },
+}
+
+/**
+ * beforeEach/afterEach bodies for an isolated spec file:
+ *
+ *   const baseline = isolatedSettingsBaseline()
+ *   test.beforeEach(async () => { test.skip(!ISOLATED, ISOLATED_SKIP); await baseline.apply() })
+ *   test.afterEach(() => baseline.restore())
+ */
+export function isolatedSettingsBaseline() {
+  let snapshot: SettingsSnapshot | null = null
+  return {
+    async apply(): Promise<void> {
+      snapshot = await snapshotSettings(ALL_SETTINGS_COLUMNS)
+      await patchSettings(SETTINGS_BASELINE)
+    },
+    async restore(): Promise<void> {
+      if (snapshot) await restoreSettings(snapshot)
+      snapshot = null
+    },
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Teammate availability (principal.chat_availability)
 // ---------------------------------------------------------------------------
