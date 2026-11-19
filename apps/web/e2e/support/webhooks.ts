@@ -70,24 +70,10 @@ export async function subscribe(
   channel: string,
   events: string[]
 ): Promise<Hook> {
-  await purgeDeletedSinkWebhooks()
   const res = await api.post('/api/v1/webhooks', { data: { url: sink.url(channel), events } })
   expect(res.status(), await res.text()).toBe(201)
   const { data } = (await res.json()) as { data: Hook }
   return data
-}
-
-/**
- * Known product bug (QUARANTINE.md, "deleted webhooks count toward the cap"):
- * the 25-webhook cap counts soft-deleted rows (webhook.service.ts), so a
- * database that has created 25 webhooks can never create another. Every
- * support test creates and deletes its own, so remove the soft-deleted sink
- * webhooks (test data only, never a live one) before creating a new one.
- */
-export async function purgeDeletedSinkWebhooks(): Promise<void> {
-  const sql = supportDb()
-  await sql`DELETE FROM webhooks
-    WHERE deleted_at IS NOT NULL AND url LIKE ${`${supportEnv().sinkOrigin}/hooks/%`}`
 }
 
 export async function unsubscribe(api: APIRequestContext, hook: Hook | undefined): Promise<void> {
