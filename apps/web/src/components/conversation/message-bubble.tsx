@@ -277,6 +277,23 @@ export function bubbleContentTextClass(
   )
 }
 
+/**
+ * The rich body worth rendering: null when the doc is absent or carries nothing
+ * visible (a composer sends an empty paragraph with an attachment-only message).
+ */
+function visibleRichBody(contentJson: TiptapContent | null | undefined): TiptapContent | null {
+  return contentJson && !isEmptyTiptapDoc(contentJson) ? contentJson : null
+}
+
+/**
+ * Whether a message has a body for its bubble. One that carries only
+ * attachments has none: its attachments render on their own, with no empty
+ * bubble above them.
+ */
+function hasBubbleBody(content: string, richBody: TiptapContent | null): boolean {
+  return richBody !== null || content.trim().length > 0
+}
+
 /** A thin "New" divider rendered immediately above the first unread message. */
 export function UnreadDivider() {
   return (
@@ -537,6 +554,9 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   // Notes never get the jumbo-emoji treatment — they keep their own body
   // renderer (mention chips), matching the pre-restyle behavior.
   const jumbo = !isNote && isJumboEmojiMessage(message.content, message.contentJson)
+  const richBody = visibleRichBody(message.contentJson)
+  // An attachment-only message shows its attachments with no empty bubble.
+  const hasBody = hasBubbleBody(message.content, richBody) || !!message.block
   // "Track as feedback" quick actions only apply to a visitor's own message (not
   // agent replies or internal notes) and only when the host wired them up.
   const showTrackActions =
@@ -593,83 +613,85 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             />
           ) : (
             <>
-              <div
-                className={cn(
-                  jumbo
-                    ? 'max-w-full'
-                    : cn(
-                        bubbleClasses(side, {
-                          note: isNote,
-                          agentSelf: true,
-                          assistant: message.isAssistant,
-                        }),
-                        'max-w-full'
-                      ),
-                  // Animated flash for motion users; a static brand ring as the
-                  // reduced-motion equivalent (no background fight with the fill).
-                  highlighted &&
-                    'motion-safe:animate-flash-highlight motion-reduce:ring-2 motion-reduce:ring-inset motion-reduce:ring-primary/50'
-                )}
-              >
-                {isNote ? (
-                  <NoteContent
-                    content={message.content}
-                    contentJson={message.contentJson}
-                    className="text-sm text-foreground/90"
-                  />
-                ) : jumbo ? (
-                  // A lone-emoji message renders large (Slack/iMessage style).
-                  <div className={JUMBO_EMOJI_CLASS}>{message.content}</div>
-                ) : message.contentJson ? (
-                  // Rich reply (inline embeds / images). No mention overlay — replies
-                  // carry no @-mentions, unlike internal notes. An embedded post opens
-                  // in the admin `?post=` modal rather than navigating away.
-                  <EmbedHydration openMode="modal" onOpenInModal={onOpenPost}>
-                    <RichTextContent
-                      content={message.contentJson}
-                      className={cn(
-                        'text-sm leading-relaxed',
-                        bubbleContentTextClass(side, { agentSelf: true })
-                      )}
+              {hasBody && (
+                <div
+                  className={cn(
+                    jumbo
+                      ? 'max-w-full'
+                      : cn(
+                          bubbleClasses(side, {
+                            note: isNote,
+                            agentSelf: true,
+                            assistant: message.isAssistant,
+                          }),
+                          'max-w-full'
+                        ),
+                    // Animated flash for motion users; a static brand ring as the
+                    // reduced-motion equivalent (no background fight with the fill).
+                    highlighted &&
+                      'motion-safe:animate-flash-highlight motion-reduce:ring-2 motion-reduce:ring-inset motion-reduce:ring-primary/50'
+                  )}
+                >
+                  {isNote ? (
+                    <NoteContent
+                      content={message.content}
+                      contentJson={richBody}
+                      className="text-sm text-foreground/90"
                     />
-                  </EmbedHydration>
-                ) : message.isAssistant ? (
-                  // Quinn's reply: render the same markdown + inline citations the
-                  // customer sees, so the agent has full context — uncited replies
-                  // don't show raw markdown. No explicit text color: it inherits
-                  // the bubble's `text-primary-foreground` from `bubbleClasses`.
-                  <AssistantAnswer text={message.content} citations={message.citations} />
-                ) : (
-                  message.content && (
-                    <>
-                      <MessageMarkdown
-                        text={
-                          translation
-                            ? translation.showingOriginal
-                              ? translation.originalContent
-                              : translation.translatedContent
-                            : message.content
-                        }
+                  ) : jumbo ? (
+                    // A lone-emoji message renders large (Slack/iMessage style).
+                    <div className={JUMBO_EMOJI_CLASS}>{message.content}</div>
+                  ) : richBody ? (
+                    // Rich reply (inline embeds / images). No mention overlay — replies
+                    // carry no @-mentions, unlike internal notes. An embedded post opens
+                    // in the admin `?post=` modal rather than navigating away.
+                    <EmbedHydration openMode="modal" onOpenInModal={onOpenPost}>
+                      <RichTextContent
+                        content={richBody}
+                        className={cn(
+                          'text-sm leading-relaxed',
+                          bubbleContentTextClass(side, { agentSelf: true })
+                        )}
                       />
-                      {translation && (
-                        <button
-                          type="button"
-                          onClick={translation.onToggleOriginal}
-                          className="mt-0.5 text-[11px] text-muted-foreground/60 underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
-                        >
-                          {translation.showingOriginal
-                            ? 'Show translation'
-                            : `${translation.label} · Show original`}
-                        </button>
-                      )}
-                    </>
-                  )
-                )}
-                {linkPreviews && !isNote && (
-                  <LinkPreviews content={message.content} contentJson={message.contentJson} />
-                )}
-                {message.block && <AgentBlockSummary block={message.block} state={blockState} />}
-              </div>
+                    </EmbedHydration>
+                  ) : message.isAssistant ? (
+                    // Quinn's reply: render the same markdown + inline citations the
+                    // customer sees, so the agent has full context — uncited replies
+                    // don't show raw markdown. No explicit text color: it inherits
+                    // the bubble's `text-primary-foreground` from `bubbleClasses`.
+                    <AssistantAnswer text={message.content} citations={message.citations} />
+                  ) : (
+                    message.content && (
+                      <>
+                        <MessageMarkdown
+                          text={
+                            translation
+                              ? translation.showingOriginal
+                                ? translation.originalContent
+                                : translation.translatedContent
+                              : message.content
+                          }
+                        />
+                        {translation && (
+                          <button
+                            type="button"
+                            onClick={translation.onToggleOriginal}
+                            className="mt-0.5 text-[11px] text-muted-foreground/60 underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
+                          >
+                            {translation.showingOriginal
+                              ? 'Show translation'
+                              : `${translation.label} · Show original`}
+                          </button>
+                        )}
+                      </>
+                    )
+                  )}
+                  {linkPreviews && !isNote && (
+                    <LinkPreviews content={message.content} contentJson={message.contentJson} />
+                  )}
+                  {message.block && <AgentBlockSummary block={message.block} state={blockState} />}
+                </div>
+              )}
 
               {/* Hover toolbar: inbox affordances. Anchored to the bubble's
               inner-facing top corner (the side facing the thread's center) so
@@ -678,7 +700,9 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
               <div
                 className={cn(
                   'absolute -top-3 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5 shadow-sm transition-opacity',
-                  self ? 'left-2' : 'right-2',
+                  // With no bubble the anchor is the attachments' outer edge, so
+                  // the toolbar opens toward the thread rather than off the column.
+                  hasBody ? (self ? 'left-2' : 'right-2') : self ? 'right-0' : 'left-0',
                   toolbarPinned ? 'opacity-100' : 'opacity-0 group-hover/message:opacity-100'
                 )}
               >
@@ -921,6 +945,9 @@ export function VisitorMessageBubble({
 }: VisitorMessageBubbleProps) {
   const self = side === 'self'
   const jumbo = isJumboEmojiMessage(content, contentJson)
+  const richBody = visibleRichBody(contentJson)
+  // An attachment-only message shows its attachments with no empty bubble.
+  const hasBody = hasBubbleBody(content, richBody)
   // Quinn's turns render as Markdown, with
   // inline citation dots + a sources trace only when the answer was grounded.
   const isAiReply = !self && isAssistant
@@ -933,37 +960,39 @@ export function VisitorMessageBubble({
       className={self ? 'flex flex-col items-end' : 'flex flex-col items-start'}
     >
       {cited && <AssistantSourcesTrace citations={cited} />}
-      <div className={jumbo ? 'max-w-[85%]' : bubbleClasses(side)}>
-        {jumbo ? (
-          // A lone-emoji message renders large (no bubble chrome).
-          <div className={JUMBO_EMOJI_CLASS}>{content}</div>
-        ) : contentJson ? (
-          // Rich message (inline images / post embeds): hydrate embed cards into
-          // the static rendered HTML, matching the changelog/inbox surfaces. The
-          // widget's iframe origin may differ from the portal's, so an embedded
-          // post opens its absolute URL in a new tab there.
-          <EmbedHydration openMode={embedOpenMode} getAuthHeaders={getAuthHeaders}>
-            <RichTextContent
-              content={contentJson}
-              className={cn('text-sm leading-relaxed', bubbleContentTextClass(side))}
-            />
-          </EmbedHydration>
-        ) : (
-          content &&
-          (isAiReply ? (
-            <AssistantAnswer text={content} citations={cited ?? []} />
+      {hasBody && (
+        <div className={jumbo ? 'max-w-[85%]' : bubbleClasses(side)}>
+          {jumbo ? (
+            // A lone-emoji message renders large (no bubble chrome).
+            <div className={JUMBO_EMOJI_CLASS}>{content}</div>
+          ) : richBody ? (
+            // Rich message (inline images / post embeds): hydrate embed cards into
+            // the static rendered HTML, matching the changelog/inbox surfaces. The
+            // widget's iframe origin may differ from the portal's, so an embedded
+            // post opens its absolute URL in a new tab there.
+            <EmbedHydration openMode={embedOpenMode} getAuthHeaders={getAuthHeaders}>
+              <RichTextContent
+                content={richBody}
+                className={cn('text-sm leading-relaxed', bubbleContentTextClass(side))}
+              />
+            </EmbedHydration>
           ) : (
-            <MessageMarkdown text={content} />
-          ))
-        )}
-        {linkPreviews && (
-          <LinkPreviews
-            content={content}
-            contentJson={contentJson}
-            getAuthHeaders={getAuthHeaders}
-          />
-        )}
-      </div>
+            content &&
+            (isAiReply ? (
+              <AssistantAnswer text={content} citations={cited ?? []} />
+            ) : (
+              <MessageMarkdown text={content} />
+            ))
+          )}
+          {linkPreviews && (
+            <LinkPreviews
+              content={content}
+              contentJson={contentJson}
+              getAuthHeaders={getAuthHeaders}
+            />
+          )}
+        </div>
+      )}
 
       {/* Attachments render BELOW the bubble fill, not inside it — same rule
           as the admin thread's AgentMessageBubble, so a file card reads the
