@@ -483,6 +483,10 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
     // Whether an offline reply could actually reach this visitor by email —
     // the widget shows a non-promising offline message when false.
     canEmailVisitor: canEmailVisitor({ emailConfigured, visitorHasEmail: false }),
+    // Whether a visitor reply reopens a closed conversation. False when the
+    // workspace prevents replies to closed conversations: the send is refused
+    // (CONVERSATION_CLOSED), so the thread says to start a new one instead.
+    reopensOnReply: !messengerConfig.preventRepliesWhenClosed,
     // Whether the surfaced conversation is closed (read-only) — the widget
     // then offers "start a new conversation" instead of a composer (P1.9).
     isReadOnly: false,

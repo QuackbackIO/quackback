@@ -3,6 +3,7 @@ import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import type { JSONContent } from '@tiptap/core'
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
+import { cn } from '@/lib/shared/utils'
 import {
   buildConversationRows,
   computeBlockStates,
@@ -83,6 +84,20 @@ const TIME_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-dig
 const NO_HEADERS = (): Record<string, string> => ({})
 const ALWAYS_READY = async (): Promise<boolean> => true
 const EMPTY_MESSAGES: ConversationMessageDTO[] = []
+
+/**
+ * Whether a send was refused because the conversation is closed and the
+ * workspace does not let a reply reopen it. Reads the refusal's code: in the
+ * browser a typed server error is a plain Error carrying `code`
+ * (typed-error-serialization.ts).
+ */
+function isClosedConversationRefusal(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === 'object' &&
+    (error as { code?: unknown }).code === 'CONVERSATION_CLOSED'
+  )
+}
 const NO_HELP_RESULTS: Array<{ slug: string; title: string }> = []
 
 // The full rich-text editor pulls in lowlight's syntax-highlighting grammars
@@ -309,6 +324,15 @@ export function VisitorConversationThread({
   useEffect(() => {
     onReplyByEmailChange?.(canEmailReply)
   }, [canEmailReply, onReplyByEmailChange])
+  // Whether a reply reopens a closed conversation. False when the workspace
+  // prevents replies to closed conversations, or once a send was refused
+  // because the conversation is closed: the closed notice then says to start
+  // a new conversation instead of "reply to reopen".
+  const [reopensOnReply, setReopensOnReply] = useState(true)
+  // A send was just refused for that reason: the notice is raised (an alert,
+  // in the foreground colour) so the refusal shows even when it was already
+  // on screen. The next send that goes through lowers it.
+  const [closedRefusal, setClosedRefusal] = useState(false)
   // Whether the visitor rated in THIS session — enables the optional comment
   // follow-up. A returning, already-rated visitor goes straight to "thanks".
   const [csatJustRated, setCsatJustRated] = useState(false)
@@ -463,6 +487,7 @@ export function VisitorConversationThread({
         setTeamName(res.teamName)
         setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
+        setReopensOnReply(res.reopensOnReply !== false)
         setLinkedTicket(res.linkedTicket ?? null)
         const conv = res.conversation
         if (conv) {
@@ -980,9 +1005,20 @@ export function VisitorConversationThread({
       clearComposer()
       clearAttachments()
       sendThrottle.clear()
+      setClosedRefusal(false)
     } catch (error) {
       // Leave the composer content intact for a retry.
       sendThrottle.noteFailure(error)
+      if (conversationId && isClosedConversationRefusal(error)) {
+        // Replies to closed conversations are refused here: show the thread
+        // as closed, with the notice that says to start a new one.
+        setReopensOnReply(false)
+        setClosedRefusal(true)
+        queryClient.setQueryData(
+          conversationKeys.visitorThread(conversationId),
+          (prev: VisitorThreadCache | undefined) => (prev ? { ...prev, status: 'closed' } : prev)
+        )
+      }
     } finally {
       setSending(false)
     }
@@ -1388,16 +1424,33 @@ export function VisitorConversationThread({
         </div>
       )}
 
-      {/* Composer is always available. A closed thread reopens on the next send,
-          so we keep the composer and only hint at the state. */}
+      {/* Composer is always available. A closed thread reopens on the next send
+          unless the workspace prevents replies to closed conversations (a
+          rating or button tap still goes through), so we keep the composer and
+          only say what a reply will do. */}
       {conversationStatus === 'closed' && (
-        <div className="flex items-center gap-2 px-3 pt-2" role="status">
+        <div
+          className="flex items-center gap-2 px-3 pt-2"
+          role={closedRefusal ? 'alert' : 'status'}
+        >
           <span className="h-px flex-1 bg-border/50" />
-          <span className="text-center text-[11px] text-muted-foreground">
-            <FormattedMessage
-              id="widget.messenger.closedReopen"
-              defaultMessage="This conversation was closed. Reply to reopen it."
-            />
+          <span
+            className={cn(
+              'text-center text-[11px]',
+              closedRefusal ? 'font-medium text-foreground' : 'text-muted-foreground'
+            )}
+          >
+            {reopensOnReply ? (
+              <FormattedMessage
+                id="widget.messenger.closedReopen"
+                defaultMessage="This conversation was closed. Reply to reopen it."
+              />
+            ) : (
+              <FormattedMessage
+                id="widget.messenger.closedStartNew"
+                defaultMessage="This conversation is closed. Start a new one to message us."
+              />
+            )}
           </span>
           <span className="h-px flex-1 bg-border/50" />
         </div>

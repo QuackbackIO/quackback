@@ -602,6 +602,7 @@
   "widget.messenger.block.collect.required": "Este campo é obrigatório.",
   "widget.messenger.block.collect.submit": "Enviar",
   "widget.messenger.block.writeOnceExplainer": "Somente nossa equipe pode alterar isso agora.",
+  "widget.messenger.closedStartNew": "Esta conversa foi encerrada. Inicie uma nova para falar com a gente.",
   "widget.messenger.closedReopen": "Esta conversa foi encerrada. Responda para reabri-la.",
   "widget.messenger.sendTooFast": "Você está enviando mensagens rápido demais. Aguarde um momento e tente novamente.",
   "widget.messenger.composer.lockedButtons": "Escolha uma opção acima",

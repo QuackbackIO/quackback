@@ -602,6 +602,7 @@
   "widget.messenger.block.collect.required": "To pole jest wymagane.",
   "widget.messenger.block.collect.submit": "Wyślij",
   "widget.messenger.block.writeOnceExplainer": "Teraz może to zmienić tylko nasz zespół.",
+  "widget.messenger.closedStartNew": "Ta rozmowa jest zamknięta. Rozpocznij nową, aby do nas napisać.",
   "widget.messenger.closedReopen": "Ta rozmowa została zamknięta. Odpowiedz, aby ją wznowić.",
   "widget.messenger.sendTooFast": "Wysyłasz wiadomości zbyt szybko. Poczekaj chwilę i spróbuj ponownie.",
   "widget.messenger.composer.lockedButtons": "Wybierz jedną z opcji powyżej",

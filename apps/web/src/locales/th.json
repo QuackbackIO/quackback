@@ -856,6 +856,7 @@
   "widget.messenger.block.collect.required": "กรุณากรอกช่องนี้",
   "widget.messenger.block.collect.submit": "ส่ง",
   "widget.messenger.block.writeOnceExplainer": "ตอนนี้มีเพียงทีมงานที่เปลี่ยนข้อมูลนี้ได้",
+  "widget.messenger.closedStartNew": "การสนทนานี้ปิดแล้ว เริ่มการสนทนาใหม่เพื่อส่งข้อความถึงเรา",
   "widget.messenger.closedReopen": "การสนทนานี้ปิดแล้ว ตอบกลับเพื่อเปิดอีกครั้ง",
   "widget.messenger.sendTooFast": "คุณส่งข้อความเร็วเกินไป รอสักครู่แล้วลองอีกครั้ง",
   "widget.messenger.composer.lockedButtons": "เลือกตัวเลือกด้านบน",
