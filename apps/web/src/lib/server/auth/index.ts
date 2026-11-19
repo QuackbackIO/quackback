@@ -749,14 +749,14 @@ async function createAuth() {
           workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
         allowUnauthenticatedClientRegistration: true,
         scopes: [...MCP_AS_SCOPES],
-        // Fallback when DCR omits `scope`. The register interceptor still
-        // persists the full AS allow-list on the client row so step-up works.
-        clientRegistrationDefaultScopes: [
-          'openid',
-          'profile',
-          'email',
-          ...API_KEY_SCOPES.filter((s) => s.startsWith('read:')),
-        ],
+        // Baseline capability set stored on every dynamically registered (DCR)
+        // and discovered (CIMD) client: Better Auth persists the union of this
+        // and `clientRegistrationAllowedScopes`. The full catalogue, so a later
+        // step-up authorize can ask for writes. What a token may do stays
+        // bounded by the person's consent. CIMD clients never reach the
+        // register interceptor in `routes/api/auth/$.ts`, so this is what
+        // sets theirs.
+        clientRegistrationDefaultScopes: [...MCP_AS_SCOPES],
         clientRegistrationAllowedScopes: [...MCP_AS_SCOPES],
         resources: [
           {
