@@ -223,4 +223,15 @@ describe('plan limits notice, for a teammate who cannot view members', () => {
     await expect(getPlanLimitsNotice!({ data: {} })).rejects.toThrow(/Access denied/)
     expect(hoisted.getPlanLimits).not.toHaveBeenCalled()
   })
+
+  it('offers a billing manager the plans only where the plan can be changed in the app', async () => {
+    hoisted.requireAuth.mockResolvedValue(teammate([PERMISSIONS.BILLING_MANAGE]))
+    hoisted.getPlanLimits.mockResolvedValue(enforcedView)
+    expect(await getPlanLimitsNotice!({ data: {} })).toMatchObject({ canManageBilling: true })
+    hoisted.billing = { canUpgrade: false, canManageBilling: false }
+    expect(await getPlanLimitsNotice!({ data: {} })).toMatchObject({
+      phase: 'enforced',
+      canManageBilling: false,
+    })
+  })
 })

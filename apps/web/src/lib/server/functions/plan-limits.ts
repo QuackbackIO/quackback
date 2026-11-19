@@ -117,5 +117,5 @@ export const getPlanLimitsNoticeFn = createServerFn({ method: 'GET' }).handler(a
   }
   const { getPlanLimits } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
   const { planLimitsNotice } = await import('@/lib/server/domains/plan-limits/plan-limits.notice')
-  return planLimitsNotice(await getPlanLimits(), auth.permissions)
+  return planLimitsNotice(await getPlanLimits(), auth.permissions, await inAppBilling())
 })
