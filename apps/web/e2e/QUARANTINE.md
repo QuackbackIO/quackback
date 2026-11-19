@@ -52,30 +52,6 @@ job leaves it out, so it cannot hide new failures.
 
 Every entry has owner: unassigned and review by: 2026-12-02.
 
-### Storage is now wired; the sent attachment's rendering is not traced
-
-Since #629, conversation attachments upload to `/api/upload/file` (team) and
-`/api/widget/files` (widget) and become file records in object storage. The
-e2e-full and e2e-quarantine jobs now run an S3-compatible storage container.
-With it (checked locally against the same container) the upload works: the
-tray thumb renders and the stored file reads back with a 200. The tests then
-fail after the reply is sent: they wait for the sent image as an
-`img.object-contain` thumb, and the thread showed it as a file link instead.
-The thread renders a single image that way (`ImageRow` in
-`attachment-list.tsx`), so either the sent file is not classed as an image
-here or the assertions are stale; not traced. The paperclip label
-(`Attach files`) and an image-load wait were fixed on the way.
-
-- `admin/conversation-images.spec.ts` › Admin conversation images › paste and
-  paperclip stage the tray, then send a contain thumb. owner: unassigned,
-  review by: 2026-12-02.
-- `admin/conversation-images.spec.ts` › Local Vite storage serves conversation
-  thumbs › real paste thumb still decodes after a full page refresh. owner:
-  unassigned, review by: 2026-12-02.
-- `widget/conversation-images.spec.ts` › Widget conversation images › paste and
-  attach land in the tray, then render a contain thumb + zoom. owner:
-  unassigned, review by: 2026-12-02.
-
 ### Needs a reachable OIDC discovery document (environment, and a suspected product bug)
 
 - `auth/unified-login.spec.ts` › (4) /?auth=signin shows the dialog with OIDC

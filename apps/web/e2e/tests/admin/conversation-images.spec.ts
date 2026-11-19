@@ -10,6 +10,7 @@ import {
   POST_PNG,
   expectLandscapeContainThumb,
   expectLoadedImage,
+  expectSquareImageTile,
   landscapePng,
   pasteImageOn,
   stubConversationImageNetwork,
@@ -52,53 +53,45 @@ test.describe('Admin conversation images', () => {
     await expect(dialog).toBeHidden()
   })
 
-  test(
-    'paste and paperclip stage the tray, then send a contain thumb',
-    {
-      tag: '@quarantine',
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Storage works now; the sent image renders as a file link instead of a thumb (not traced). See QUARANTINE.md.',
-      },
-    },
-    async ({ page }) => {
-      test.setTimeout(60_000)
-      const png = await stubConversationImageNetwork(page)
-      await page.goto(`/admin/inbox?i=${seeded.conversationId}`)
-      await expect(page.getByText(seeded.messages[0]).first()).toBeVisible({ timeout: 15000 })
+  test('paste and paperclip stage the tray, then send both images as tiles', async ({ page }) => {
+    test.setTimeout(60_000)
+    const png = await stubConversationImageNetwork(page)
+    await page.goto(`/admin/inbox?i=${seeded.conversationId}`)
+    await expect(page.getByText(seeded.messages[0]).first()).toBeVisible({ timeout: 15000 })
 
-      const composer = page.locator('[data-inbox-composer]')
-      await expect(composer).toBeVisible()
-      await pasteImageOn(composer, png, 'pasted-shot.png')
+    const composer = page.locator('[data-inbox-composer]')
+    await expect(composer).toBeVisible()
+    await pasteImageOn(composer, png, 'pasted-shot.png')
 
-      const trayThumb = composer.getByRole('button', { name: 'Open pasted-shot.png' })
-      await expect(trayThumb).toBeVisible({ timeout: 10000 })
-      await expect(composer.locator('.ProseMirror img')).toHaveCount(0)
+    const trayThumb = composer.getByRole('button', { name: 'Open pasted-shot.png' })
+    await expect(trayThumb).toBeVisible({ timeout: 10000 })
+    await expect(composer.locator('.ProseMirror img')).toHaveCount(0)
 
-      const [chooser] = await Promise.all([
-        page.waitForEvent('filechooser'),
-        page.getByRole('button', { name: 'Attach files' }).click(),
-      ])
-      await chooser.setFiles({
-        name: 'paperclip.png',
-        mimeType: 'image/png',
-        buffer: landscapePng(),
-      })
-      await expect(composer.getByRole('button', { name: 'Open paperclip.png' })).toBeVisible({
-        timeout: 10000,
-      })
+    const [chooser] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      page.getByRole('button', { name: 'Attach files' }).click(),
+    ])
+    await chooser.setFiles({
+      name: 'paperclip.png',
+      mimeType: 'image/png',
+      buffer: landscapePng(),
+    })
+    await expect(composer.getByRole('button', { name: 'Open paperclip.png' })).toBeVisible({
+      timeout: 10000,
+    })
 
-      await page.getByRole('button', { name: 'Send reply' }).click()
-      const sent = page
-        .getByRole('button', { name: 'Open pasted-shot.png' })
-        .filter({ has: page.locator('img.object-contain') })
-      await expect(sent).toBeVisible({ timeout: 15000 })
-      await expectLandscapeContainThumb(sent)
-      await sent.click()
-      await expect(page.getByRole('dialog').getByRole('button', { name: 'Zoom in' })).toBeVisible()
-    }
-  )
+    await page.getByRole('button', { name: 'Send reply' }).click()
+    await expect(composer.getByRole('button', { name: /^Open .+\.png$/ })).toHaveCount(0, {
+      timeout: 15000,
+    })
+    const thread = page.locator('[data-message-id]')
+    const sent = thread.getByRole('button', { name: 'Open pasted-shot.png' })
+    await expect(sent).toBeVisible({ timeout: 15000 })
+    await expectSquareImageTile(sent)
+    await expectSquareImageTile(thread.getByRole('button', { name: 'Open paperclip.png' }))
+    await sent.click()
+    await expect(page.getByRole('dialog').getByRole('button', { name: 'Zoom in' })).toBeVisible()
+  })
 })
 
 test.describe('Changelog images stay inline', () => {
@@ -173,49 +166,42 @@ test.describe('Local Vite storage serves conversation thumbs', () => {
     expect(res.status()).not.toBe(404)
   })
 
-  test(
-    'real paste thumb still decodes after a full page refresh',
-    {
-      tag: '@quarantine',
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Storage works now; the sent image renders as a file link instead of a thumb (not traced). See QUARANTINE.md.',
-      },
-    },
-    async ({ page }) => {
-      test.setTimeout(60_000)
-      const seeded = seedConversation(`E2E real paste refresh ${Date.now()}`)
-      const png = landscapePng()
-      await page.goto(`/admin/inbox?i=${seeded.conversationId}`)
-      await expect(page.getByText(seeded.messages[0]).first()).toBeVisible({ timeout: 15000 })
+  test('real paste thumb still decodes after a full page refresh', async ({ page }) => {
+    test.setTimeout(60_000)
+    const seeded = seedConversation(`E2E real paste refresh ${Date.now()}`)
+    const png = landscapePng()
+    await page.goto(`/admin/inbox?i=${seeded.conversationId}`)
+    await expect(page.getByText(seeded.messages[0]).first()).toBeVisible({ timeout: 15000 })
 
-      const composer = page.locator('[data-inbox-composer]')
-      await expect(composer).toBeVisible()
-      await pasteImageOn(composer, png, 'real-refresh.png')
+    const composer = page.locator('[data-inbox-composer]')
+    await expect(composer).toBeVisible()
+    await pasteImageOn(composer, png, 'real-refresh.png')
 
-      const trayThumb = composer.getByRole('button', { name: 'Open real-refresh.png' })
-      await expect(trayThumb).toBeVisible({ timeout: 15000 })
-      await expectLoadedImage(trayThumb.locator('img'))
-      await expect(composer.locator('.ProseMirror img')).toHaveCount(0)
+    const trayThumb = composer.getByRole('button', { name: 'Open real-refresh.png' })
+    await expect(trayThumb).toBeVisible({ timeout: 15000 })
+    await expectLoadedImage(trayThumb.locator('img'))
+    await expect(composer.locator('.ProseMirror img')).toHaveCount(0)
 
-      await page.getByRole('button', { name: 'Send reply' }).click()
-      const sent = page
-        .getByRole('button', { name: 'Open real-refresh.png' })
-        .filter({ has: page.locator('img.object-contain') })
-      await expect(sent).toBeVisible({ timeout: 15000 })
-      await expectLoadedImage(sent.locator('img'))
-      await expectLandscapeContainThumb(sent)
+    await page.getByRole('button', { name: 'Send reply' }).click()
+    const sent = page
+      .locator('[data-message-id]')
+      .getByRole('button', { name: 'Open real-refresh.png' })
+      .filter({ has: page.locator('img.object-contain') })
+    await expect(sent).toBeVisible({ timeout: 15000 })
+    await expectLoadedImage(sent.locator('img'))
+    await expectLandscapeContainThumb(sent)
 
-      await page.reload()
-      await expect(page.getByText(seeded.messages[0]).first()).toBeVisible({ timeout: 15000 })
-      const afterReload = page
-        .getByRole('button', { name: 'Open real-refresh.png' })
-        .filter({ has: page.locator('img.object-contain') })
-      await expect(afterReload).toBeVisible({ timeout: 15000 })
-      await expectLoadedImage(afterReload.locator('img'))
-      await expectLandscapeContainThumb(afterReload)
-      await expect(page.getByRole('link', { name: /real-refresh\.png/i })).toHaveCount(0)
-    }
-  )
+    await page.reload()
+    await expect(page.getByText(seeded.messages[0]).first()).toBeVisible({ timeout: 15000 })
+    const afterReload = page
+      .getByRole('button', { name: 'Open real-refresh.png' })
+      .filter({ has: page.locator('img.object-contain') })
+    await expect(afterReload).toBeVisible({ timeout: 15000 })
+    await expectLoadedImage(afterReload.locator('img'))
+    await expectLandscapeContainThumb(afterReload)
+    // Not a file link in the thread (the Details panel's Files list may link it).
+    await expect(
+      page.locator('[data-message-id]').getByRole('link', { name: /real-refresh\.png/i })
+    ).toHaveCount(0)
+  })
 })
