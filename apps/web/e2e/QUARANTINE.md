@@ -93,3 +93,12 @@ These assert the right behaviour and fail until the fix lands. Review by
   (`apps/web/src/lib/server/domains/workflows/workflow-sweep.ts`). It can pass
   by accident while another test has a live SLA workflow. owner: unassigned,
   review by: 2026-12-03.
+
+### Support suite: routing switch permission (known bug)
+
+- `support/routing.spec.ts` › the routing switch › RTE-03 a Support lead
+  (routing.manage) may read and change the routing switch. The routing
+  switch's server functions require `settings.manage`
+  (`functions/settings.ts:930`, `:940`), so the Support lead role, whose
+  description lists routing and which holds `routing.manage`, is refused. The
+  test asserts the intended rule. owner: unassigned, review by: 2026-12-03.
