@@ -32,7 +32,10 @@ const key = (...parts: string[]) => JSON.stringify(parts)
 
 describe('channels settings loaders', () => {
   it('hub: warms the configs, the email and GitHub status and the routing switch', async () => {
-    const keys = await warmedKeys(HubRoute, [PERMISSIONS.SETTINGS_MANAGE])
+    const keys = await warmedKeys(HubRoute, [
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.ROUTING_MANAGE,
+    ])
     expect(keys).toEqual(
       expect.arrayContaining([
         key('settings', 'widgetConfig'),
@@ -42,6 +45,12 @@ describe('channels settings loaders', () => {
         key('conversation-routing'),
       ])
     )
+  })
+
+  it('hub: leaves the routing switch out without routing.manage', async () => {
+    const keys = await warmedKeys(HubRoute, [PERMISSIONS.SETTINGS_MANAGE])
+    expect(keys).toContain(key('settings', 'widgetConfig'))
+    expect(keys).not.toContain(key('conversation-routing'))
   })
 
   it('email: warms every card on the page', async () => {
