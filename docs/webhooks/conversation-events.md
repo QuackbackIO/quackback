@@ -8,7 +8,7 @@ are opt-in: a webhook only receives the event types listed in its subscription.
 | Topic                             | Fired when                                                                                                       |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `conversation.created`            | A visitor starts a new conversation.                                                                             |
-| `conversation.status_changed`     | A conversation moves between `open`/`pending`/`closed`.                                                          |
+| `conversation.status_changed`     | A conversation moves between `open`/`snoozed`/`closed`.                                                          |
 | `conversation.assigned`           | A conversation is assigned to or unassigned from an agent (includes auto-routing).                               |
 | `conversation.priority_changed`   | A conversation's priority changes.                                                                               |
 | `conversation.csat_submitted`     | A visitor submits their satisfaction rating. Fires once per survey.                                              |

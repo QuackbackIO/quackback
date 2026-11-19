@@ -1,7 +1,7 @@
 import type { StoredCloudConfig } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
 import { DISABLED_CLOUD_CONFIG, type CloudConfig } from './cloud.types'
-import { parseBillingProjection } from './billing-projection'
+import { entitlementsAt, parseBillingProjection, projectionAccessEnded } from './billing-projection'
 
 const log = logger.child({ component: 'cloud-config' })
 
@@ -17,9 +17,7 @@ export function resolveCloudConfig(
     return DISABLED_CLOUD_CONFIG
   }
 
-  const accessExpired =
-    projection.planLimitsExpireAt !== null &&
-    now.getTime() >= Date.parse(projection.planLimitsExpireAt)
+  const accessExpired = projectionAccessEnded(projection, now)
   const trialActive =
     projection.subscriptionStatus == null &&
     projection.trialExpiresAt !== null &&
@@ -28,7 +26,7 @@ export function resolveCloudConfig(
   return {
     enabled: true,
     plan: accessExpired ? 'free' : projection.effectivePlan,
-    entitlements: accessExpired ? {} : projection.entitlements,
+    entitlements: entitlementsAt(projection, now),
     subscriptionStatus: projection.subscriptionStatus,
     trialStartedAt: projection.trialStartedAt,
     trialExpiresAt: projection.trialExpiresAt,
