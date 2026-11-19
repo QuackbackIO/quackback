@@ -203,3 +203,18 @@ Each entry: owner: unassigned, review by: 2026-12-03.
   `requester.service.ts:376`), so agent watchers get no `ticket_replied` bell
   for a requester's widget or portal message. The no-team-wide-bell half of
   the same journey runs normally. owner: unassigned, review by: 2026-12-03.
+
+### Support suite: widget rate limits (PR 2x)
+
+- `support/widget-rate-limits.spec.ts` › workspace-wide widget limits ›
+  CUS-W-53 one visitor reaching the search limit leaves other visitors
+  searching. Product bug: `enforceWidgetQuota`
+  (`apps/web/src/lib/server/widget/public-endpoint.ts:70-79`) counts each
+  request in a per-address bucket, a per-session bucket and a workspace
+  bucket, and gives all three the same limit unless the caller sets
+  `workspaceLimit`. Widget search (`routes/api/widget/search.ts:20`, 60 a
+  minute) and the legacy image upload (`routes/api/widget/upload.ts:21`, 20 a
+  minute) do not set it, and every signed-out caller shares the one
+  `session:anonymous` bucket, so one visitor's burst refuses search (or
+  upload) for every visitor of the workspace for the rest of the minute.
+  Runs in the support-isolated job. owner: unassigned, review by: 2026-12-03.
