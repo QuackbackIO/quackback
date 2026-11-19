@@ -25,12 +25,8 @@ import {
   uuidOf,
 } from '../../support/api-client'
 import { getMail, mailTo } from '../../support/mailpit'
-import { setFeatureFlag } from '../../utils/db-helpers'
 
 test.describe.configure({ timeout: 90_000 })
-
-// Ticket emails go out only with tickets on. Only ever turned on.
-test.beforeAll(() => setFeatureFlag('supportTickets', true))
 
 /** Mail to `address` whose text carries `needle`. */
 async function mailCarrying(address: string, needle: string) {
