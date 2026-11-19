@@ -664,6 +664,17 @@ describe.skipIf(!fixture.available)('Messages list time for paired conversations
     ])
   })
 
+  it('finds a paired conversation that sits past a full page by last message', async () => {
+    const me = await seedWorld()
+    const start = await seedStatus({ category: 'open', publicStage: 'received' })
+    const pair = await seedPair({ requester: me, statusId: start, createdAt: T3 })
+    await setLastMessageAt(pair.conversationId, T0)
+    await seedChat(me, T2)
+
+    const rows = await listConversationsForVisitor(me, 1, 'visitor', { ticketActivity: true })
+    expect(rows.map((c) => [c.id, c.activityAt])).toEqual([[pair.conversationId, T3.toISOString()]])
+  })
+
   it('ignores a paired ticket the row would not show: another requester or deleted', async () => {
     const me = await seedWorld()
     const someoneElse = await seedPrincipal()

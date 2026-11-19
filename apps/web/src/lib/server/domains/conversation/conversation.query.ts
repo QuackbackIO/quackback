@@ -833,42 +833,51 @@ export async function listConversationsForVisitor(
   side: MessageSenderType = 'agent',
   options: { ticketActivity?: boolean } = {}
 ): Promise<VisitorConversationListItem[]> {
-  let activityAt: SQL<Date> = sql<Date>`${conversations.lastMessageAt}`.mapWith(
-    conversations.lastMessageAt
+  const select = (activityAt: SQL<Date>) =>
+    db
+      .select({ conversation: conversations, activityAt, pairedTicketId: tickets.id })
+      .from(conversations)
+      .leftJoin(
+        ticketConversations,
+        and(
+          eq(ticketConversations.conversationId, conversations.id),
+          eq(ticketConversations.ticketType, 'customer')
+        )
+      )
+      // Unaliased `tickets`: requesterUpdatedAtSql reads the outer row by that
+      // name. The unique customer pair per conversation keeps this one row each.
+      .leftJoin(
+        tickets,
+        and(
+          eq(tickets.id, ticketConversations.ticketId),
+          eq(tickets.requesterPrincipalId, visitorPrincipalId),
+          isNull(tickets.deletedAt)
+        )
+      )
+      .where(eq(conversations.visitorPrincipalId, visitorPrincipalId))
+      .orderBy(desc(activityAt), desc(conversations.id))
+      .limit(limit)
+
+  let rows = await select(
+    sql<Date>`${conversations.lastMessageAt}`.mapWith(conversations.lastMessageAt)
   )
-  if (options.ticketActivity) {
+  // The ticket-aware order costs a status read and per-row subqueries, so it
+  // runs only when it can change something: a row on this page has a ticket,
+  // or the page is full and a paired conversation could sit past it. A visitor
+  // with no tickets (most of them, and every teammate) stays at one query.
+  const mayHaveTickets = rows.length === limit || rows.some((r) => r.pairedTicketId !== null)
+  if (options.ticketActivity && mayHaveTickets) {
     const { loadCustomerVisibleStatusIds, requesterUpdatedAtSql } =
       await import('@/lib/server/domains/tickets/requester-ticket.dto')
     const ticketUpdatedAt = requesterUpdatedAtSql(await loadCustomerVisibleStatusIds())
     // GREATEST skips nulls: an unpaired row (no joined ticket) keeps its
     // lastMessageAt.
-    activityAt = sql<Date>`GREATEST(${conversations.lastMessageAt}, ${ticketUpdatedAt})`.mapWith(
-      conversations.lastMessageAt
+    rows = await select(
+      sql<Date>`GREATEST(${conversations.lastMessageAt}, ${ticketUpdatedAt})`.mapWith(
+        conversations.lastMessageAt
+      )
     )
   }
-  const rows = await db
-    .select({ conversation: conversations, activityAt })
-    .from(conversations)
-    .leftJoin(
-      ticketConversations,
-      and(
-        eq(ticketConversations.conversationId, conversations.id),
-        eq(ticketConversations.ticketType, 'customer')
-      )
-    )
-    // Unaliased `tickets`: requesterUpdatedAtSql reads the outer row by that
-    // name. The unique customer pair per conversation keeps this one row each.
-    .leftJoin(
-      tickets,
-      and(
-        eq(tickets.id, ticketConversations.ticketId),
-        eq(tickets.requesterPrincipalId, visitorPrincipalId),
-        isNull(tickets.deletedAt)
-      )
-    )
-    .where(eq(conversations.visitorPrincipalId, visitorPrincipalId))
-    .orderBy(desc(activityAt), desc(conversations.id))
-    .limit(limit)
   // Small N per user, so per-row DTO building is fine.
   return Promise.all(
     rows.map(async (r) => ({
