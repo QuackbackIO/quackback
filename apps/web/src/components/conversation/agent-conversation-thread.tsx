@@ -1912,6 +1912,7 @@ export function AgentConversationThread({
             canEdit={canEditAgentMessage(m, myPrincipalId, permissions)}
             canDelete={canDeleteAgentMessage(m, myPrincipalId, permissions)}
             onEdit={handleEditMessage}
+            mentionItem={item}
             onToggleReaction={handleToggleReaction}
             onToggleFlag={handleToggleFlag}
             onMarkUnread={markUnreadMutation.mutate}

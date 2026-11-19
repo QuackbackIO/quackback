@@ -70,6 +70,7 @@ import {
 } from '@/components/shared/conversation/assistant-turn'
 import { PendingActionCard } from '@/components/conversation/pending-action-card'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import type { MentionItemRef } from '@/components/ui/mention-extension'
 import {
   CONVERSATION_EDITOR_FEATURES,
   CONVERSATION_NOTE_FEATURES,
@@ -324,6 +325,10 @@ interface AgentMessageBubbleProps {
     messageId: ConversationMessageId,
     draft: { content: string; contentJson: TiptapContent | null }
   ) => Promise<void>
+  /** The inbox item this thread shows. Editing an internal note marks the
+   *  teammates who cannot see it in the @mention list, as the note composer
+   *  does. */
+  mentionItem?: MentionItemRef
   /** Toggle the caller's reaction with `emoji` (hasReacted = current state). */
   onToggleReaction?: (messageId: ConversationMessageId, emoji: string, hasReacted: boolean) => void
   /** Set/clear the team-wide flag (next = the desired flagged state). */
@@ -411,10 +416,12 @@ interface VisitorMessageBubbleProps {
 
 function MessageEditForm({
   message,
+  mentionItem,
   onCancel,
   onSave,
 }: {
   message: AgentConversationMessageDTO
+  mentionItem?: MentionItemRef
   onCancel: () => void
   onSave: (draft: { content: string; contentJson: TiptapContent | null }) => Promise<void>
 }) {
@@ -460,6 +467,7 @@ function MessageEditForm({
       <RichTextEditor
         value={message.contentJson ?? message.content}
         features={message.isInternal ? CONVERSATION_NOTE_FEATURES : CONVERSATION_EDITOR_FEATURES}
+        mentionItem={message.isInternal ? mentionItem : undefined}
         borderless
         minHeight="2.5rem"
         autofocus="end"
@@ -502,6 +510,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   canEdit = false,
   canDelete = false,
   onEdit,
+  mentionItem,
   onToggleReaction = () => {},
   onToggleFlag = () => {},
   onMarkUnread = () => {},
@@ -605,6 +614,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           {editing && onEdit ? (
             <MessageEditForm
               message={message}
+              mentionItem={mentionItem}
               onCancel={() => setEditing(false)}
               onSave={async (draft) => {
                 await onEdit(message.id, draft)
