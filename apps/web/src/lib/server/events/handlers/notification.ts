@@ -70,6 +70,11 @@ export interface NotificationConfig {
   // message.created (WO-3 slice 5) — read back out by the anti-spam presence
   // gate in run(), below.
   isFirstMessage?: boolean
+  // message.created: the conversation is still closed after this customer
+  // message (a button tap answering a block posted after the close). It
+  // shows in no one's open inbox, so the presence gate cannot assume an
+  // online teammate sees it live.
+  stillClosed?: boolean
   // ticket.external_status_changed — the link row's display reference plus the
   // provider's status/transition, resolved by getTicketExternalStatusChangedTargets.
   reference?: string | null
@@ -95,7 +100,7 @@ export const notificationHook: HookHandler = {
     // store counts as someone online, so an outage cannot ping everyone on
     // every message. This is a deliberate skew from notifyVisitorMessage's own
     // (request-time) presence check for the offline email — never unified.
-    if (event.type === 'message.created' && !cfg.isFirstMessage) {
+    if (event.type === 'message.created' && !cfg.isFirstMessage && !cfg.stillClosed) {
       const { readAvailableAgentIds } = await import('@/lib/server/realtime/presence')
       const online = await readAvailableAgentIds()
       if (online === null) return { success: true }

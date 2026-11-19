@@ -1266,6 +1266,11 @@ export async function getMessageCreatedTargets(event: EventData): Promise<HookTa
       authorName,
       preview: truncate(event.data.message.content, 140),
       isFirstMessage: event.data.isFirstMessage,
+      // A customer message that leaves the conversation closed (a button tap
+      // on a block posted after the close) never reaches an open inbox, so
+      // the hook's presence gate must not hold its bell back. A rating keeps
+      // the gate: it answers the close rather than asking for help.
+      stillClosed: current?.status === 'closed' && event.data.message.blockReplyKind !== 'csat',
     },
   }
 }
