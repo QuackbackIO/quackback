@@ -139,7 +139,8 @@ test('a lapsed trial over its limits: banner, page, chooser, fixes', async ({ pa
   await expect(page.locator('[data-plan-limits-deadline="grace"]')).toContainText('1 of 2 fixed')
 
   // Fix the rest: the teammate leaves the team, the custom CSS goes, and the
-  // AI assistant (on by default, so set up on most workspaces) stops replying.
+  // AI assistant stops replying (it counts only where a model and a chat
+  // surface let it answer).
   planLimits.role(TEAMMATE, 'user')
   planLimits.css(false)
   planLimits.assistantOff()

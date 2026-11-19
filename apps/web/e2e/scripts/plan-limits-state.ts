@@ -161,12 +161,15 @@ async function setAside() {
 async function begin(teammate: string): Promise<void> {
   if (existsSync(SNAPSHOT)) await end()
   const [row] = await sql`
-    SELECT id, cloud, tier_limits, plan_limits_state, custom_css, widget_config
+    SELECT id, cloud, tier_limits, plan_limits_state, custom_css, widget_config, cloud_identity
     FROM settings ORDER BY created_at ASC LIMIT 1`
   const aside = await setAside()
   writeFileSync(SNAPSHOT, JSON.stringify({ settings: row, aside, teammate }))
+  // A custom domain another run left ready would be one more thing to fix.
   await sql`
-    UPDATE settings SET tier_limits = NULL, plan_limits_state = NULL, custom_css = NULL
+    UPDATE settings SET tier_limits = NULL, plan_limits_state = NULL, custom_css = NULL,
+      cloud_identity = CASE WHEN cloud_identity IS NULL THEN NULL
+        ELSE jsonb_set(cloud_identity, '{customDomains}', '[]'::jsonb) END
     WHERE id = ${row.id}`
   await sql`UPDATE principal SET role = 'user'
     WHERE user_id IN (SELECT id FROM "user" WHERE email = ${teammate})`
@@ -187,6 +190,7 @@ async function end(): Promise<void> {
         },
         custom_css = ${settings.custom_css},
         widget_config = ${settings.widget_config},
+        cloud_identity = ${settings.cloud_identity === null ? null : sql.json(settings.cloud_identity)},
         cloud_revision = cloud_revision + 1,
         auth_config_version = auth_config_version + 1
       WHERE id = ${settings.id}`
@@ -346,9 +350,10 @@ try {
       break
     case 'busy-boards': {
       // Posts as the plan limits count them: live, and not by a test customer.
+      // A board an admin set read-only is closed already and is kept open last.
       const [row] = await sql`
         SELECT count(*)::int AS n FROM boards b
-        WHERE b.deleted_at IS NULL AND (
+        WHERE b.deleted_at IS NULL AND NOT b.read_only AND (
           SELECT count(*) FROM posts p
           LEFT JOIN principal a ON a.id = p.principal_id
           WHERE p.board_id = b.id AND p.deleted_at IS NULL
