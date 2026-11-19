@@ -320,6 +320,20 @@ export async function seedMentionNote(
                     ${toUuid(mentioned as `principal_${string}`)})`
 }
 
+export interface BellRow {
+  type: string
+  title: string
+  body: string | null
+  metadata: Record<string, unknown> | null
+}
+
+/** A teammate's in-app notifications (bells), newest first. */
+export async function bellsFor(principalUuid: string): Promise<BellRow[]> {
+  return supportDb()<BellRow[]>`
+    SELECT type, title, body, metadata FROM in_app_notifications
+    WHERE principal_id = ${principalUuid} ORDER BY created_at DESC`
+}
+
 export function conversationTypeId(uuid: string): string {
   return fromUuid('conversation', uuid)
 }
