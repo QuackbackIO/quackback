@@ -82,8 +82,10 @@ export interface AssignTicketInput {
 }
 
 /** How a ticket list is ordered. `recent`/`oldest` sort by activity (updatedAt);
- *  `sla` by the open time-to-resolve deadline, soonest first, none last. */
-export type TicketSort = 'recent' | 'oldest' | 'created' | 'priority' | 'sla'
+ *  `sla` by the open time-to-resolve deadline, soonest first, none last;
+ *  `waiting` by id alone, since a ticket has no waiting clock (the unified
+ *  inbox lists them after every conversation, in a stable order). */
+export type TicketSort = 'recent' | 'oldest' | 'created' | 'priority' | 'sla' | 'waiting'
 
 /** Who a list is scoped to by assignee: the caller, nobody, or a specific teammate. */
 export type TicketAssigneeFilter = 'me' | 'unassigned' | PrincipalId

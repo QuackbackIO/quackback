@@ -69,7 +69,7 @@ const listTicketsSchema = z.object({
   requesterPrincipalId: z.string().optional(),
   companyId: z.string().optional(),
   search: z.string().optional(),
-  sort: z.enum(['recent', 'oldest', 'created', 'priority', 'sla']).optional(),
+  sort: z.enum(['recent', 'oldest', 'created', 'priority', 'sla', 'waiting']).optional(),
   cursor: z.string().optional(),
   limit: PageLimitMinOneSchema,
 })
