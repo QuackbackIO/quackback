@@ -95,7 +95,7 @@ function everyLine(): string[] {
             page({ phase: tense, planName: plan, canManageBilling, issues }),
             'Nov 24'
           )
-          if (copy) lines.push(copy.title, copy.body, copy.action)
+          if (copy) lines.push(copy.title, copy.body, copy.action ?? '')
         }
       }
     }

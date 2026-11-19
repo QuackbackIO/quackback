@@ -2,6 +2,7 @@ import { LaunchPlanDock, LaunchPlanInHelp } from '@/components/onboarding/launch
 import { openHelpLauncher } from '@/components/shared/cloud-quackback-widget'
 import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+import type { PlanLimitsNotice } from '@/lib/server/domains/plan-limits/plan-limits.notice'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { SearchTrigger } from '@/components/admin/ask/search-palette'
 import { useProductTour } from '@/components/onboarding/product-tour'
@@ -97,7 +98,7 @@ interface AdminSidebarProps {
   /** A running trial shows here quietly until its last days. */
   planNotice?: PlanNotice | null
   /** The plan limits state, only while their flag is on; null otherwise. */
-  planLimits?: PlanLimitsPage | null
+  planLimits?: PlanLimitsPage | PlanLimitsNotice | null
 }
 
 /** The plan limits line, in the banner's chunk, which only a workspace with the flag loads. */

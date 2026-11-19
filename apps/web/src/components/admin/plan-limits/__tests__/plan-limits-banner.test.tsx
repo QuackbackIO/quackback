@@ -5,6 +5,7 @@ import { IntlProvider } from 'react-intl'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+import type { PlanLimitsNotice } from '@/lib/server/domains/plan-limits/plan-limits.notice'
 import { PLAN_LIMITS_PATH } from '@/lib/shared/billing/plan-limits-path'
 
 vi.mock('@/lib/client/queries/plan-limits', () => ({
@@ -217,5 +218,56 @@ describe('PlanLimitsQuiet', () => {
   it('needs no message catalogue, so nothing is seeded for it', () => {
     render(<PlanLimitsQuiet limits={limits()} />)
     expect(screen.getByRole('link')).toHaveTextContent('Free plan · 2 issues')
+  })
+})
+
+describe('for a viewer who cannot open the Plan limits page', () => {
+  const narrowed = (over: Partial<PlanLimitsNotice> = {}): PlanLimitsNotice => ({
+    canViewPage: false,
+    enabled: true,
+    phase: 'enforced',
+    graceEndsAt: '2026-11-25T12:00:00.000Z',
+    deadlineDay: '2026-11-24',
+    planName: 'Free',
+    fromPlanName: 'Pro',
+    canManageBilling: false,
+    issues: [{ key: 'maxBoards', used: 5, cap: 1 }],
+    withheldIssues: ['maxTeamSeats'],
+    featureIssues: [],
+    ...over,
+  })
+
+  it('says teammates lost access without counting them, and links nowhere', () => {
+    render(<PlanLimitsBanner limits={narrowed()} pathname="/admin" />)
+    expect(
+      screen.getByText(
+        '4 boards are read-only and some teammates have no admin access. Ask someone who manages billing to upgrade.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('still shows when only withheld caps are over after the date', () => {
+    render(<PlanLimitsBanner limits={narrowed({ issues: [] })} pathname="/admin" />)
+    expect(banner()).toHaveAttribute('data-plan-limits-banner', 'enforced')
+    expect(screen.getByText(/^Some teammates have no admin access\./)).toBeInTheDocument()
+  })
+
+  it('sends a billing manager to compare plans', () => {
+    render(<PlanLimitsBanner limits={narrowed({ canManageBilling: true })} pathname="/admin" />)
+    expect(screen.getByRole('link', { name: 'Compare plans' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing'
+    )
+  })
+
+  it('counts every issue in the sidebar line, as plain text or a link to the plans', () => {
+    render(<PlanLimitsQuiet limits={narrowed({ phase: 'grace' })} />)
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByText('Free plan · 2 issues')).toBeInTheDocument()
+    expect(screen.getByText('Fix by Nov 24')).toBeInTheDocument()
+    cleanup()
+    render(<PlanLimitsQuiet limits={narrowed({ phase: 'grace', canManageBilling: true })} />)
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/admin/settings/billing')
   })
 })

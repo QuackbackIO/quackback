@@ -20,6 +20,7 @@ import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { presentPlanNotice } from '@/lib/shared/plan-notice'
 import { planLimitsBannerShows } from '@/lib/shared/billing/plan-limits-shown'
 import type { PlanLimitsPage } from '@/lib/server/domains/plan-limits/plan-limits.page'
+import type { PlanLimitsNotice } from '@/lib/server/domains/plan-limits/plan-limits.notice'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
 import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
@@ -168,9 +169,12 @@ export const Route = createFileRoute('/admin')({
         warmModeration
           ? context.queryClient.ensureQueryData(adminQueries.moderationStatus()).catch(() => null)
           : null,
+        // Without member.view, the narrowed notice: no team details.
         planLimitsOn
           ? import('@/lib/server/functions/plan-limits')
-              .then((module) => module.getPlanLimitsSummaryFn())
+              .then((module): Promise<PlanLimitsPage | PlanLimitsNotice> =>
+                readPlanNotice ? module.getPlanLimitsSummaryFn() : module.getPlanLimitsNoticeFn()
+              )
               .catch(() => null)
           : null,
       ])
@@ -191,7 +195,7 @@ export const Route = createFileRoute('/admin')({
       latestVersion,
       updateBannerDismissedVersion: context.updateBannerDismissedVersion ?? null,
       planNotice,
-      planLimits: planLimits as PlanLimitsPage | null,
+      planLimits,
       inLaunchWindow: launchWindow.open,
       locale,
       messages,

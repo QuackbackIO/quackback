@@ -13,7 +13,12 @@ import {
 import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { PLAN_ONLY_FEATURES } from '@/lib/server/domains/settings/plan-only-features'
 import { PLAN_NUMERIC_CAPS, type PlanCapKey } from './plan-downgrade'
-import { planLimitsBannerShows } from './plan-limits-shown'
+import {
+  planLimitsBannerShows,
+  planLimitsIssueCount,
+  planLimitsLink,
+  type PlanLimitsBannerLimits,
+} from './plan-limits-shown'
 
 /**
  * A plan limits calendar day (YYYY-MM-DD) as an instant to format with
@@ -212,9 +217,19 @@ function joinClauses(clauses: string[]): string {
   return `${two}. ${plural(rest, 'more thing is', 'more things are')} paused`
 }
 
+/** Caps over whose counts the viewer does not get, said without a number. */
+const WITHHELD_CLAUSE: Partial<Record<string, string>> = {
+  maxTeamSeats: 'some teammates have no admin access',
+}
+
 /** "4 boards are read-only and webhooks are paused", from the caps first, then features. */
-export function pausedSummary(limits: Pick<PlanLimitsPage, 'issues' | 'featureIssues'>): string {
-  const clauses = limits.issues.map(pausedClause).filter((c): c is string => c !== null)
+export function pausedSummary(
+  limits: Pick<PlanLimitsBannerLimits, 'issues' | 'featureIssues' | 'withheldIssues'>
+): string {
+  const clauses = [
+    ...limits.issues.map(pausedClause),
+    ...(limits.withheldIssues ?? []).map((key) => WITHHELD_CLAUSE[key] ?? null),
+  ].filter((c): c is string => c !== null)
   for (const feature of limits.featureIssues) {
     const name = `${feature.label.charAt(0).toLowerCase()}${feature.label.slice(1)}`
     clauses.push(`${name} ${PLURAL_FEATURES.has(feature.key) ? 'are' : 'is'} paused`)
@@ -227,7 +242,8 @@ export interface PlanLimitsBannerCopy {
   tone: 'grace' | 'enforced'
   title: string
   body: string
-  action: string
+  /** The link's label, or null when this viewer has nowhere to go (see `planLimitsLink`). */
+  action: string | null
 }
 
 /**
@@ -236,16 +252,7 @@ export interface PlanLimitsBannerCopy {
  * those pages carries its own line, and an ended trial keeps its strip).
  */
 export function planLimitsBannerCopy(
-  limits: Pick<
-    PlanLimitsPage,
-    | 'enabled'
-    | 'phase'
-    | 'issues'
-    | 'featureIssues'
-    | 'planName'
-    | 'fromPlanName'
-    | 'canManageBilling'
-  >,
+  limits: Omit<PlanLimitsBannerLimits, 'graceEndsAt' | 'deadlineDay'>,
   date: string
 ): PlanLimitsBannerCopy | null {
   if (!isPlanLimitsOver(limits)) return null
@@ -254,6 +261,7 @@ export function planLimitsBannerCopy(
     : "Your workspace is over its plan's limits."
   const ask = 'Ask someone who manages billing to upgrade.'
   if (!planLimitsBannerShows(limits)) return null
+  const action = planLimitsLink(limits)?.label ?? null
   if (limits.phase === 'enforced') {
     return {
       tone: 'enforced',
@@ -261,10 +269,10 @@ export function planLimitsBannerCopy(
       body: `${pausedSummary(limits)} ${
         limits.canManageBilling ? 'They come back when you upgrade.' : ask
       }`,
-      action: 'Review issues',
+      action,
     }
   }
-  const n = limits.issues.length
+  const n = planLimitsIssueCount(limits)
   const fix =
     n > 0 ? `Fix ${plural(n, 'issue', 'issues')} by ${date}` : `Some features pause after ${date}`
   return {
@@ -275,7 +283,7 @@ export function planLimitsBannerCopy(
         ? `${fix}, or upgrade to keep everything.`
         : `${fix}. Upgrade to keep everything.`
       : `${fix}. ${ask}`,
-    action: 'Review issues',
+    action,
   }
 }
 

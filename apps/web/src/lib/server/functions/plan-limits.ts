@@ -8,7 +8,9 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { assertAnyPermission, requireAuth } from './auth-helpers'
+import { ForbiddenError } from '@/lib/shared/errors'
+import { isTeamMember } from '@/lib/shared/roles'
+import { assertAnyPermission, assertDashboardScope, requireAuth } from './auth-helpers'
 
 // Server-only helpers are imported inside each handler: anything this module
 // reaches at module scope ships to the browser with its RPC stubs.
@@ -87,4 +89,21 @@ export const getPlanLimitsSummaryFn = createServerFn({ method: 'GET' }).handler(
   const { getPlanLimits } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
   const { planLimitsPage } = await import('@/lib/server/domains/plan-limits/plan-limits.page')
   return planLimitsPage(await getPlanLimits(), {}, permissions)
+})
+
+/**
+ * The banner's state for a teammate without `member.view`, who cannot open
+ * the Plan limits page: no member ids, seat counts or links to the team
+ * (see `planLimitsNotice`). Any teammate on a dashboard session, never a
+ * portal user.
+ */
+export const getPlanLimitsNoticeFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const auth = await requireAuth()
+  assertDashboardScope(auth)
+  if (!isTeamMember(auth.principal.role)) {
+    throw new ForbiddenError('FORBIDDEN', 'Access denied: Not a team member')
+  }
+  const { getPlanLimits } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  const { planLimitsNotice } = await import('@/lib/server/domains/plan-limits/plan-limits.notice')
+  return planLimitsNotice(await getPlanLimits(), auth.permissions)
 })

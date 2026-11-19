@@ -19,7 +19,9 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import { SYSTEM_ROLE_PERMISSIONS } from '@/lib/shared/permissions'
+import { PERMISSIONS, SYSTEM_ROLE_PERMISSIONS } from '@/lib/shared/permissions'
+import { PLAN_LIMITS_PATH } from '@/lib/shared/billing/plan-limits-path'
+import type { PlanLimitsNotice } from '@/lib/server/domains/plan-limits/plan-limits.notice'
 import { DEFAULT_FEATURE_FLAGS } from '@/lib/shared/types/settings'
 import { overLimits } from '@/components/admin/settings/billing/__tests__/plan-limits-fixtures'
 
@@ -30,6 +32,7 @@ const shell = vi.hoisted(() => ({
   permissions: [] as string[],
   notice: null as unknown,
   summary: vi.fn(),
+  limitsNotice: vi.fn(),
 }))
 
 vi.mock('@/components/admin/admin-sidebar', () => ({
@@ -59,8 +62,13 @@ vi.mock('@/lib/server/functions/notifications', () => ({
   getUnreadCountFn: async () => ({ count: 0 }),
   getNotificationsFn: async () => ({ notifications: [], total: 0, unreadCount: 0 }),
 }))
+// The summary refuses a viewer without member.view, as its real gate does.
 vi.mock('@/lib/server/functions/plan-limits', () => ({
-  getPlanLimitsSummaryFn: () => shell.summary(),
+  getPlanLimitsSummaryFn: () =>
+    shell.permissions.includes('member.view')
+      ? shell.summary()
+      : Promise.reject(new Error("Access denied: Requires permission 'member.view'")),
+  getPlanLimitsNoticeFn: () => shell.limitsNotice(),
   getPlanLimitsFn: vi.fn(),
 }))
 
@@ -88,6 +96,7 @@ beforeEach(() => {
   shell.permissions = SYSTEM_ROLE_PERMISSIONS.contributor
   shell.notice = ENDED_TRIAL
   shell.summary.mockReset()
+  shell.limitsNotice.mockReset()
 })
 afterEach(() => {
   cleanup()
@@ -196,5 +205,65 @@ describe('the plan limits strip in the admin layout', () => {
     shell.summary.mockResolvedValue(overLimits({ phase: 'ok', issues: [], graceEndsAt: null }))
     await act(() => queryClient.invalidateQueries({ queryKey: ['plan-limits'] }))
     await waitFor(() => expect(banner()).toBeNull())
+  })
+})
+
+/** The narrowed read, as `getPlanLimitsNoticeFn` returns it: seats are over, and withheld. */
+function limitsNotice(over: Partial<PlanLimitsNotice> = {}): PlanLimitsNotice {
+  return {
+    canViewPage: false,
+    enabled: true,
+    phase: 'grace',
+    graceEndsAt: '2026-11-25T12:00:00.000Z',
+    deadlineDay: '2026-11-24',
+    planName: 'Free',
+    fromPlanName: 'Pro',
+    canManageBilling: false,
+    issues: [{ key: 'maxBoards', used: 3, cap: 1 }],
+    withheldIssues: ['maxTeamSeats'],
+    featureIssues: [],
+    ...over,
+  }
+}
+
+describe('the plan limits strip for a custom role without member.view', () => {
+  const customRole = [PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.CONVERSATION_VIEW]
+
+  it('shows the banner with no team details and no link they cannot open', async () => {
+    shell.permissions = customRole
+    shell.limitsNotice.mockResolvedValue(limitsNotice())
+    await mount()
+    await waitFor(() => expect(banner()).toHaveAttribute('data-plan-limits-banner', 'grace'))
+    expect(banner()).toHaveTextContent(
+      'Fix 2 issues by Nov 24. Ask someone who manages billing to upgrade.'
+    )
+    expect(banner()?.querySelector('a')).toBeNull()
+    expect(document.querySelector(`a[href="${PLAN_LIMITS_PATH}"]`)).toBeNull()
+    expect(shell.summary).not.toHaveBeenCalled()
+    expect(JSON.stringify(shell.sidebarLimits)).not.toMatch(/seatHolder|members/)
+  })
+
+  it('offers a billing manager the plans instead of the Plan limits page', async () => {
+    shell.permissions = [...customRole, PERMISSIONS.BILLING_MANAGE]
+    shell.limitsNotice.mockResolvedValue(limitsNotice({ canManageBilling: true }))
+    await mount()
+    await waitFor(() => expect(banner()).not.toBeNull())
+    expect(banner()).toHaveTextContent('Fix 2 issues by Nov 24, or upgrade to keep everything.')
+    expect(screen.getByRole('link', { name: 'Compare plans' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing'
+    )
+    expect(document.querySelector(`a[href="${PLAN_LIMITS_PATH}"]`)).toBeNull()
+  })
+
+  it('reads nothing and shows nothing without plan billing', async () => {
+    shell.permissions = customRole
+    shell.limitsNotice.mockResolvedValue(limitsNotice())
+    await mount({ billing: false, planLimits: true })
+    await act(async () => {})
+    expect(shell.limitsNotice).not.toHaveBeenCalled()
+    expect(shell.summary).not.toHaveBeenCalled()
+    expect(banner()).toBeNull()
+    expect(shell.sidebarLimits).toBeNull()
   })
 })

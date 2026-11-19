@@ -48,7 +48,12 @@ function isOver(limits: PlanLimitsPage | null | undefined): limits is PlanLimits
 
 /** The summary the banner keeps fresh, else the one the admin loader read; null with the flag off. */
 function usePlanLimits(): PlanLimitsPage | null {
-  const loaded = useLoaderData({ from: '/admin', select: (data) => data.planLimits ?? null })
+  // The narrowed notice opens no Plan limits page, so this page links to none.
+  const loaded = useLoaderData({
+    from: '/admin',
+    select: (data) =>
+      data.planLimits && !('canViewPage' in data.planLimits) ? data.planLimits : null,
+  })
   const live = useQuery<PlanLimitsPage | null>({
     queryKey: ['plan-limits', 'summary'],
     queryFn: skipToken,
