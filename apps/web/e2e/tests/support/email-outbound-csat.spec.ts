@@ -13,6 +13,7 @@ import { pollFor, supportDb } from '../../support/db'
 import { supportEnv } from '../../support/env'
 import { conversationReplyAddress } from '../../support/inbound-email'
 import { linksIn } from '../../support/mailpit'
+import { apiAs as sessionApiAs, fnOk, withLiveWorkflow, workflowRuns } from '../../support/sla-csat'
 import {
   agentReply,
   apiAs,
@@ -32,9 +33,7 @@ import {
   personalKeyFor,
   principalForUserEmail,
   principalTypeId,
-  retireWorkflow,
   seedCustomer,
-  seedLiveWorkflow,
   sendColdMail,
   setConversationStatus,
   setTicketStatus,
@@ -91,6 +90,17 @@ async function csatEvents(conversationId: string, type: string) {
   return (await eventsFor(conversationId)).filter((e) => e.type === type)
 }
 
+async function closeAsTeammate(admin: APIRequestContext, conversationId: string) {
+  await fnOk(admin, 'setConversationStatusFn', { conversationId, status: 'closed' })
+}
+
+/** The rating blocks in a conversation's thread. */
+async function csatBlocks(conversationUuid: string) {
+  return (await messagesIn(conversationUuid)).filter(
+    (m) => (m.metadata as { block?: { kind?: string } } | null)?.block?.kind === 'csat'
+  )
+}
+
 async function rateOnPage(page: Page, rating: number) {
   await page.getByRole('button', { name: `Rate ${rating} of 5` }).click()
   await expect(page.getByText('Thanks for the feedback')).toBeVisible()
@@ -98,88 +108,165 @@ async function rateOnPage(page: Page, rating: number) {
 
 test.describe('rating request emails', () => {
   test(
-    'CUS-O-21 a workflow rating block on an email conversation sends one rating request email',
-    {
-      tag: ['@core', '@quarantine'],
-      annotation: {
-        type: 'quarantine',
-        description:
-          'Waits on an owner decision: the workflow asks on an open conversation, which #1102 skips',
-      },
-    },
+    'CUS-O-21 a workflow rating block on a closed email conversation sends one rating request email',
+    { tag: '@core' },
     async ({ request, playwright, baseURL, people, customerEmail, marker }) => {
       test.setTimeout(90_000)
       await seedCustomer(customerEmail, 'Rhea Rater')
       const thread = await coldThread(request, customerEmail, marker)
       const prompt = `How was your help today ${marker}?`
-      const workflowId = await seedLiveWorkflow({
-        name: `Rating ${marker}`,
-        triggerType: 'message.created',
-        personEmail: customerEmail,
-        then: [{ type: 'request_csat', body: tiptapDoc(prompt), allowTypingInterrupt: true }],
-      })
+      const admin = await sessionApiAs(playwright, 'admin')
+      const api = await apiAs(playwright, baseURL!, personalKeyFor(people.people.admin.email))
       try {
-        // The app caches "is any workflow live" for 30 s, and a row written
-        // straight to the table does not clear it: keep writing until a
-        // message reaches the workflow.
-        let n = 0
-        await expect(async () => {
-          n++
-          const sent = await deliver(request, {
-            from: customerEmail,
-            to: conversationReplyAddress(thread.id),
-            subject: `Re: ${thread.subject}`,
-            text: `Any news ${n} ${marker}?`,
-          })
-          expect(sent.status).toBe('ingested')
-          await waitForMailMatching({ to: customerEmail, body: prompt }, 4_000)
-        }).toPass({ timeout: 60_000, intervals: [1_000] })
+        await withLiveWorkflow(
+          admin,
+          {
+            name: `Rating ${marker}`,
+            class: 'customer_facing',
+            triggerType: 'conversation.status_changed',
+            onlyFor: customerEmail,
+            alsoWhen: [{ field: 'conversation.status', op: 'eq', value: 'closed' }],
+            steps: [
+              {
+                id: 'csat',
+                type: 'request_csat',
+                body: tiptapDoc(prompt),
+                allowTypingInterrupt: true,
+              },
+            ],
+          },
+          async (workflow) => {
+            // A rating is only asked for once the conversation is closed. A
+            // teammate closes it in the app: a close made with an API key is
+            // automated, and automated changes do not start workflows.
+            await closeAsTeammate(admin, thread.id)
 
-        const mail = await waitForMailMatching({ to: customerEmail, body: prompt })
-        expect(mail.Subject).toBe(`Re: ${thread.subject}`)
-        const text = mailText(mail)
-        expect(text).toContain('How did we do?')
-        expect(text).toContain('Click a face above to rate your experience.')
-        expect(text).toContain(
-          `You received this email because you had a conversation with ${WORKSPACE}.`
-        )
-        const links = linksIn(mail).filter((h) => h.includes('/csat?token='))
-        expect(links.map((h) => new URL(h).searchParams.get('rating'))).toEqual([
-          '1',
-          '2',
-          '3',
-          '4',
-          '5',
-        ])
-        expect(new Set(links.map((h) => new URL(h).searchParams.get('token'))).size).toBe(1)
-        expect(new URL(links[0]).origin).toBe(supportEnv().baseUrl)
+            const mail = await waitForMailMatching({ to: customerEmail, body: prompt })
+            expect(mail.Subject).toBe(`Re: ${thread.subject}`)
+            const text = mailText(mail)
+            expect(text).toContain('How did we do?')
+            expect(text).toContain('Click a face above to rate your experience.')
+            expect(text).toContain(
+              `You received this email because you had a conversation with ${WORKSPACE}.`
+            )
+            const links = linksIn(mail).filter((h) => h.includes('/csat?token='))
+            expect(links.map((h) => new URL(h).searchParams.get('rating'))).toEqual([
+              '1',
+              '2',
+              '3',
+              '4',
+              '5',
+            ])
+            expect(new Set(links.map((h) => new URL(h).searchParams.get('token'))).size).toBe(1)
+            expect(new URL(links[0]).origin).toBe(supportEnv().baseUrl)
 
-        // The block is in the thread, as the assistant's message.
-        const block = (await messagesIn(thread.row.id)).find(
-          (m) => (m.metadata as { block?: { kind?: string } } | null)?.block?.kind === 'csat'
-        )
-        expect(block).toBeTruthy()
-        const log = await pollFor('the CsatRequestEmail log row', async () =>
-          (await emailLogForConversation(thread.row.id)).find(
-            (r) => r.email_type === 'CsatRequestEmail'
-          )
-        )
-        expect(log.status).toBe('sent')
+            // The block is in the thread, as the assistant's message.
+            expect(await csatBlocks(thread.row.id)).toHaveLength(1)
+            const log = await pollFor('the CsatRequestEmail log row', async () =>
+              (await emailLogForConversation(thread.row.id)).find(
+                (r) => r.email_type === 'CsatRequestEmail'
+              )
+            )
+            expect(log.status).toBe('sent')
+            expect((await conversation(thread.row.id)).status).toBe('closed')
 
-        // Asked once: more messages, then a teammate reply arrives, and still one ask.
-        await deliver(request, {
-          from: customerEmail,
-          to: conversationReplyAddress(thread.id),
-          subject: `Re: ${thread.subject}`,
-          text: `One more thing ${marker}`,
-        })
-        const api = await apiAs(playwright, baseURL!, personalKeyFor(people.people.admin.email))
-        await agentReply(api, thread.id, `Sentinel answer ${marker}`)
-        await api.dispose()
-        await waitForMailMatching({ to: customerEmail, body: `Sentinel answer ${marker}` })
-        expect(await mailsMatching({ to: customerEmail, body: prompt })).toHaveLength(1)
+            // Asked once: the customer writes again (which reopens it), a
+            // teammate answers, and it is closed a second time. The workflow
+            // runs again on that close and asks nobody.
+            await deliver(request, {
+              from: customerEmail,
+              to: conversationReplyAddress(thread.id),
+              subject: `Re: ${thread.subject}`,
+              text: `One more thing ${marker}`,
+            })
+            await waitForConversation(thread.row.id, 'reopened', (r) => r.status === 'open')
+            await agentReply(api, thread.id, `Sentinel answer ${marker}`)
+            await waitForMailMatching({ to: customerEmail, body: `Sentinel answer ${marker}` })
+            await closeAsTeammate(admin, thread.id)
+            await expect
+              .poll(async () => (await workflowRuns(workflow.id)).length, { timeout: 20_000 })
+              .toBe(2)
+            await expect
+              .poll(async () => (await mailsMatching({ to: customerEmail, body: RESOLVED })).length)
+              .toBe(2)
+            // Settle, then count: one rating request email, one log row, one block.
+            await new Promise((r) => setTimeout(r, 2_000))
+            expect(await mailsMatching({ to: customerEmail, body: prompt })).toHaveLength(1)
+            expect(
+              (await emailLogForConversation(thread.row.id)).filter(
+                (r) => r.email_type === 'CsatRequestEmail'
+              )
+            ).toHaveLength(1)
+            expect(await csatBlocks(thread.row.id)).toHaveLength(1)
+          }
+        )
       } finally {
-        await retireWorkflow(workflowId)
+        await Promise.all([admin.dispose(), api.dispose()])
+      }
+    }
+  )
+
+  test(
+    'CUS-O-21 a workflow rating block on an open email conversation sends nothing',
+    { tag: '@core' },
+    async ({ request, playwright, customerEmail, marker }) => {
+      test.setTimeout(90_000)
+      await seedCustomer(customerEmail, 'Oren Open')
+      const thread = await coldThread(request, customerEmail, marker)
+      const prompt = `How was your help today ${marker}?`
+      const reached = `Reached the rating step ${marker}`
+      const admin = await sessionApiAs(playwright, 'admin')
+      try {
+        await withLiveWorkflow(
+          admin,
+          {
+            name: `Rating open ${marker}`,
+            class: 'customer_facing',
+            triggerType: 'message.created',
+            onlyFor: customerEmail,
+            steps: [
+              // Runs in the same pass as the ask, just before it: proof that
+              // the workflow got to the rating step.
+              { id: 'note', type: 'action', action: { type: 'add_note', body: reached } },
+              {
+                id: 'csat',
+                type: 'request_csat',
+                body: tiptapDoc(prompt),
+                allowTypingInterrupt: true,
+              },
+            ],
+          },
+          async (workflow) => {
+            const sent = await deliver(request, {
+              from: customerEmail,
+              to: conversationReplyAddress(thread.id),
+              subject: `Re: ${thread.subject}`,
+              text: `Any news ${marker}?`,
+            })
+            expect(sent.status).toBe('ingested')
+
+            await pollFor('the note written just before the rating step', async () =>
+              (await messagesIn(thread.row.id)).find((m) => m.content === reached)
+            )
+            // The run went past the ask (it waits on it) and asked nobody.
+            await expect
+              .poll(async () => (await workflowRuns(workflow.id)).map((r) => r.state), {
+                timeout: 20_000,
+              })
+              .toEqual(['waiting'])
+            await new Promise((r) => setTimeout(r, 2_000))
+            expect((await conversation(thread.row.id)).status).toBe('open')
+            expect(await csatBlocks(thread.row.id)).toEqual([])
+            expect(
+              (await emailLogForConversation(thread.row.id)).filter(
+                (r) => r.email_type === 'CsatRequestEmail'
+              )
+            ).toEqual([])
+            expect(await mailsMatching({ to: customerEmail, body: prompt })).toEqual([])
+          }
+        )
+      } finally {
+        await admin.dispose()
       }
     }
   )
