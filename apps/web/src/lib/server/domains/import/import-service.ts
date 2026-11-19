@@ -35,6 +35,7 @@ import { ValidationError } from '@/lib/shared/errors'
 import type { ImportInput, ImportResult, ImportRowError, ImportVoterRecord } from './types'
 import { ImportUserResolver } from './user-resolver'
 import { BATCH_SIZE, IMPORT_LINK_TYPE, loadRowContext, resolveRows } from './import-row-resolver'
+import { assertImportWithinPlanLimits } from './import-plan-limits'
 
 /** integration_type/sourceType tag on post_votes rows this pipeline creates. */
 const VOTE_SOURCE_TYPE = 'import'
@@ -419,6 +420,7 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
   }
 
   const rows = parseCSV(data.csvContent)
+  await assertImportWithinPlanLimits(data, rows)
   let result: ImportResult = {
     imported: 0,
     updated: 0,
