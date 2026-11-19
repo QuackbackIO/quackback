@@ -25,6 +25,7 @@ import {
   runEventKinds,
   runsFor,
   waitForRun,
+  widgetExpectText,
   widgetSend,
   widgetStartConversation,
   withWorkflows,
@@ -407,8 +408,8 @@ test(
       ],
       async ([id]) => {
         await widgetSend(page, `Over to the step ${marker}`)
-        await expect(page.getByText(`Escalated path ${marker}`)).toBeVisible({ timeout: 20_000 })
         const run = await waitForRun(conversationId, id, 'done')
+        await widgetExpectText(page, `Escalated path ${marker}`, `Over to the step ${marker}`)
         // Declined in the same pass: the step never parked.
         expect(await runEventKinds(run.id)).not.toContain('waiting')
         expect(
