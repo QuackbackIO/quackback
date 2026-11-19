@@ -105,7 +105,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 773 surfaces
+### Server functions (`requireAuth`) — 774 surfaces
 
 | Surface | Enforces |
 | --- | --- |
