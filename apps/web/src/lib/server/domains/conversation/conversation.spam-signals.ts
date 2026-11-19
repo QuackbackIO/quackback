@@ -64,6 +64,14 @@ export interface SpamSignalHints {
  * email-auth.ts computes it precisely so the condition is not re-spelled at
  * each call site, where it would drift.
  */
+/**
+ * The conversation attribute a cold email conversation carries when its first
+ * mail failed sender authentication (any non-null senderAuthSpamSignal), so its
+ * From address is never trusted downstream. Written by the cold-inbound create,
+ * read by the workflow condition context.
+ */
+export const SENDER_AUTH_FAILED_ATTRIBUTE = 'senderAuthFailed'
+
 export function senderAuthSpamSignal(verdict: InboundAuthResult): SpamSignal | null {
   if (verdict.verdict === 'reject') return 'sender_auth_reject'
   if (verdict.arcRescued) return 'sender_auth_arc_rescued'

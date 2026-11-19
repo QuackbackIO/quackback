@@ -783,6 +783,9 @@ async function ingestColdInbound(
       channelAccountId: channelAccount.id,
       principalId: resolution.principalId,
       unverified: resolution.unverified,
+      // Any sender-auth failure, whether or not it filed the thread to Spam
+      // (the trusted-sender list can outrank that filing, not the failure).
+      senderAuthFailed: authSignal !== null,
       content,
       contentJson: converted?.contentJson ?? null,
       attachments: media.attachments,

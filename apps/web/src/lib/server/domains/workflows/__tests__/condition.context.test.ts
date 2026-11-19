@@ -484,6 +484,67 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     expect(evaluateCondition({ field: 'person.email', op: 'is_set' }, ctx!)).toBe(true)
   })
 
+  it('never matches the sender address of a conversation whose mail failed sender authentication', async () => {
+    // A forged From must not trip an email condition (VIP routing, an auto-reply).
+    async function lead(): Promise<PrincipalId> {
+      const id = createId('principal') as PrincipalId
+      await testDb.insert(principal).values({
+        id,
+        userId: null,
+        role: 'user',
+        type: 'anonymous',
+        contactEmail: `ceo-${suffix()}@bigcustomer.example`,
+        createdAt: new Date(),
+      })
+      return id
+    }
+
+    // Marked by the cold-inbound create (kept after a release from Spam).
+    const [marked] = await testDb
+      .insert(conversations)
+      .values({
+        visitorPrincipalId: await lead(),
+        channel: 'email',
+        customAttributes: { unverifiedSender: true, senderAuthFailed: true },
+      })
+      .returning()
+    const markedCtx = await resolveConditionContext(marked.id)
+    expect(markedCtx!.person!.email).toBeNull()
+    expect(
+      evaluateCondition(
+        { field: 'person.email', op: 'contains', value: '@bigcustomer.example' },
+        markedCtx!
+      )
+    ).toBe(false)
+
+    // Filed to Spam for its authentication before the marker existed.
+    const [filed] = await testDb
+      .insert(conversations)
+      .values({
+        visitorPrincipalId: await lead(),
+        channel: 'email',
+        status: 'closed',
+        endReason: 'spam',
+        spamReason: 'sender_auth_failure',
+      })
+      .returning()
+    expect((await resolveConditionContext(filed.id))!.person!.email).toBeNull()
+
+    // Unknown authentication (no Authentication-Results: unverified, not
+    // failed) still matches, as a pass does.
+    const [unknown] = await testDb
+      .insert(conversations)
+      .values({
+        visitorPrincipalId: await lead(),
+        channel: 'email',
+        customAttributes: { unverifiedSender: true },
+      })
+      .returning()
+    expect((await resolveConditionContext(unknown.id))!.person!.email).toMatch(
+      /@bigcustomer\.example$/
+    )
+  })
+
   it('prefers the account email over the contact email, and never reads a synthetic contact address', async () => {
     const accountEmail = `account-${suffix()}@customer.example`
     const withAccount = await seedPrincipal({ email: accountEmail })

@@ -26,6 +26,7 @@
  *
  * Resolution only touches identity; the caller owns creating the conversation.
  */
+import { SENDER_AUTH_FAILED_ATTRIBUTE } from './conversation.spam-signals'
 import {
   db,
   sql,
@@ -179,6 +180,12 @@ export async function createEmailConversation(input: {
   channelAccountId: ChannelAccountId
   principalId: PrincipalId
   unverified: boolean
+  /** The mail failed sender authentication (a DMARC failure, ARC-rescued or
+   *  not, or a hard reject): stamped on the conversation so nothing downstream
+   *  trusts its From address (a workflow `person.email` condition reads it).
+   *  Stays after an agent releases the thread from Spam: a release says the
+   *  message is wanted, not that the sender is who they claim. */
+  senderAuthFailed?: boolean
   content: string
   /** Rich body converted from the inbound HTML, or null for a plaintext mail. */
   contentJson?: TiptapContent | null
@@ -238,7 +245,10 @@ export async function createEmailConversation(input: {
             }
           : {}),
         visitorEmail: isTest ? null : normalizeSenderAddress(parsed.from),
-        customAttributes: unverified ? { unverifiedSender: true } : {},
+        customAttributes: {
+          ...(unverified ? { unverifiedSender: true } : {}),
+          ...(input.senderAuthFailed ? { [SENDER_AUTH_FAILED_ATTRIBUTE]: true } : {}),
+        },
       })
       .returning()
 
