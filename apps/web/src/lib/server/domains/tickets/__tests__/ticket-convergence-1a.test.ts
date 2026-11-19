@@ -449,6 +449,85 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
     })
   })
 
+  describe('ticket.replied from either view of a paired ticket', () => {
+    /** Let every pending fire-and-forget signal land before counting. */
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 150))
+
+    function inboxActor(principalId: PrincipalId): Actor {
+      return agentActor(principalId, [PERMISSIONS.CONVERSATION_VIEW_ALL])
+    }
+
+    async function pairedTicket() {
+      const statuses = await seedStatuses()
+      const agentP = await seedPrincipal('admin')
+      const requesterP = await seedPrincipal()
+      const ticketId = await seedTicket({
+        statusId: statuses.received,
+        requesterPrincipalId: requesterP,
+      })
+      const conversationId = await seedConversation(requesterP)
+      await linkPair(ticketId, conversationId)
+      return { agentP, ticketId, conversationId }
+    }
+
+    it('signals once for a reply typed in the conversation', async () => {
+      const { agentP, ticketId, conversationId } = await pairedTicket()
+      const { sendAgentMessage } = await import('../../conversation/conversation.service')
+
+      const { message } = await sendAgentMessage(
+        conversationId,
+        'Typed in the inbox.',
+        { principalId: agentP },
+        inboxActor(agentP)
+      )
+
+      await vi.waitFor(() => expect(ticketEmit.emitTicketReplied).toHaveBeenCalled())
+      await settle()
+      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+      const [, ticket, replied] = ticketEmit.emitTicketReplied.mock.calls[0]
+      expect(ticket.id).toBe(ticketId)
+      expect(replied.id).toBe(message.id)
+      expect(replied.senderType).toBe('agent')
+    })
+
+    it('signals once for a reply typed on the ticket', async () => {
+      const { agentP, ticketId } = await pairedTicket()
+
+      const { message } = await sendTicketMessage(agentActor(agentP), {
+        ticketId,
+        content: 'Typed on the ticket.',
+      })
+
+      await vi.waitFor(() => expect(ticketEmit.emitTicketReplied).toHaveBeenCalled())
+      await settle()
+      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+      expect(ticketEmit.emitTicketReplied.mock.calls[0][2].id).toBe(message.id)
+    })
+
+    it('does not signal for a shared card, only for the reply after it', async () => {
+      const { agentP, ticketId, conversationId } = await pairedTicket()
+      const { sendAgentMessage } = await import('../../conversation/conversation.service')
+      const { shareTicket } = await import('../../conversation/conversation.cards')
+      const actor = inboxActor(agentP)
+
+      await shareTicket(
+        { conversationId, ticketId },
+        { agentActor: actor, agentPrincipalId: agentP, agent: { principalId: agentP } }
+      )
+      const { message } = await sendAgentMessage(
+        conversationId,
+        'And a word about it.',
+        { principalId: agentP },
+        actor
+      )
+
+      await vi.waitFor(() => expect(ticketEmit.emitTicketReplied).toHaveBeenCalled())
+      await settle()
+      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+      expect(ticketEmit.emitTicketReplied.mock.calls[0][2].id).toBe(message.id)
+    })
+  })
+
   describe('write redirect — requester reply on a linked customer ticket', () => {
     it('lands conversation-parented, arms the wait clock, reopens the ticket, and emits ticket.replied', async () => {
       const statuses = await seedStatuses()

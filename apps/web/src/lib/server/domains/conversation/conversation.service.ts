@@ -786,6 +786,12 @@ export interface SendAgentMessageOptions extends SystemCascadeOptions {
    *  the opening message of a ticket a teammate filed for them, which the
    *  ticket's own confirmation email announces. */
   notifyCustomer?: boolean
+  /** The ticket side wrote this reply onto its pair and signals
+   *  `ticket.replied` itself. */
+  fromTicketThread?: boolean
+  /** A shared card (a post or ticket embed), not a reply, so it signals
+   *  nothing on the ticket. */
+  card?: boolean
 }
 
 /**
@@ -978,6 +984,20 @@ export async function sendAgentMessage(
     txResult.conversation,
     false
   )
+  // A reply on a conversation paired with a customer ticket is a reply on that
+  // ticket, whichever view it was typed in: signal ticket.replied so the
+  // ticket's watchers get their bell and integrations their webhook. The
+  // ticket side signals for its own writes, and a shared card is not a reply.
+  if (!opts?.fromTicketThread && !opts?.card) {
+    void import('@/lib/server/domains/tickets/ticket-message.service')
+      .then((m) => m.emitPairTicketReplied(txResult.conversation.id, actor, messageDTO))
+      .catch((err) =>
+        log.warn(
+          { err, conversationId: txResult.conversation.id },
+          'pair ticket reply signal failed'
+        )
+      )
+  }
   if (
     txResult.previousAgentPrincipalId === null &&
     txResult.conversation.assignedAgentPrincipalId !== null

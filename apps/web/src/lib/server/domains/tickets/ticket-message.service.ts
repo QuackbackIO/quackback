@@ -422,7 +422,8 @@ async function sendViaPairConversation(
             input.metadata as ConversationMessageMetadata | undefined,
             // The agent caller checked the ticket, and a tracker reply-all is
             // a system effect, so the pair's conversation is not checked again.
-            { systemCascade: true, notifyCustomer: opts.notifyCustomer }
+            // This module's caller owns the ticket.replied signal for it.
+            { systemCascade: true, notifyCustomer: opts.notifyCustomer, fromTicketThread: true }
           )
         ).message
   const message = { ...sent, author: supportAuthor }
@@ -455,9 +456,10 @@ async function sendViaPairConversation(
 }
 
 /**
- * Signal `ticket.replied` for a customer message written straight on a pair's
- * conversation (the widget, the portal Messages thread, an email reply to the
- * conversation's address). Called by the conversation send after its own
+ * Signal `ticket.replied` for a message written straight on a pair's
+ * conversation: a customer message (the widget, the portal Messages thread, an
+ * email reply to the conversation's address) or a teammate's reply typed in
+ * the conversation view. Called by the conversation send after its own
  * `message.created`; a conversation with no customer ticket signals nothing.
  * Messages the ticket side writes onto the pair never come through here:
  * their callers signal for themselves.

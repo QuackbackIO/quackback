@@ -309,10 +309,19 @@ test.describe('ticket emails to the requester', () => {
           ticketId: ticket.id,
           content: `We are on it ${marker}`,
         })
+        // The requester's one email is the conversation's; the watcher gets
+        // the ticket reply email.
         const reply = await waitForMailWhere(requester.email, 'the email', (m) =>
-          m.Subject.includes(`New reply on ${ticket.label}: Reply ${marker}`)
+          m.HTML.includes(`We are on it ${marker}`)
         )
-        expect(reply.HTML).toContain(`We are on it ${marker}`)
+        expect(reply.HTML).toContain('replied to your conversation')
+        await waitForMailWhere(
+          watcher.email,
+          'the ticket reply email',
+          (m) =>
+            m.Subject.includes(`New reply on ${ticket.label}: Reply ${marker}`) &&
+            m.HTML.includes(`We are on it ${marker}`)
+        )
 
         // The requester answers by email on the ticket thread.
         const res = await sendInboundEmail(request, {
@@ -328,10 +337,28 @@ test.describe('ticket emails to the requester', () => {
             timeout: 20_000,
           })
           .toBeGreaterThanOrEqual(1)
-        // The requester is never mailed about their own reply.
-        expect(
-          (await mailTo(requester.email)).filter((m) => m.Subject.startsWith('New reply on'))
-        ).toHaveLength(1)
+        // A later agent reply reaches the requester. By then they were never
+        // mailed about their own reply, and the first agent reply reached them
+        // once, never as the ticket reply email.
+        await fnOk(admin, 'sendTicketMessageFn', {
+          ticketId: ticket.id,
+          content: `Glad to help ${marker}`,
+        })
+        await waitForMailWhere(requester.email, 'the later email', (m) =>
+          m.HTML.includes(`Glad to help ${marker}`)
+        )
+        const mails = await fullMailTo(requester.email)
+        expect(mails.filter((m) => m.Subject.startsWith('New reply on'))).toEqual([])
+        expect(mails.filter((m) => m.HTML.includes(`We are on it ${marker}`))).toHaveLength(1)
+        // Every mail is the confirmation or an agent reply (the later one may
+        // quote their message, but none is about it).
+        const other = mails.filter(
+          (m) =>
+            !m.Subject.startsWith('We received your ticket') &&
+            !m.HTML.includes(`We are on it ${marker}`) &&
+            !m.HTML.includes(`Glad to help ${marker}`)
+        )
+        expect(other.map((m) => m.Subject)).toEqual([])
       } finally {
         await admin.dispose()
         await retireTeammate(watcher)

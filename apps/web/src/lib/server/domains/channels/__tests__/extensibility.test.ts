@@ -74,6 +74,14 @@ vi.mock('@/lib/server/domains/conversation/csat-email-token', () => ({
   mintCsatEmailToken: () => hoisted.mintCsatEmailToken(),
 }))
 
+// These conversations carry no customer ticket. The ticket gate on the reply
+// email runs over real rows in
+// domains/tickets/__tests__/ticket-reply-one-email.db.test.ts.
+vi.mock('@/lib/server/domains/tickets/ticket-reply-email', () => ({
+  requesterTicketForConversation: async () => null,
+  requesterWantsReplyEmail: async () => true,
+}))
+
 vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isPortalSupportEnabled: async () => false,
 }))

@@ -126,7 +126,9 @@ export async function createPostFromConversation(
     ctx.agent,
     ctx.agentActor,
     undefined,
-    postEmbedDoc(postId)
+    postEmbedDoc(postId),
+    undefined,
+    { card: true }
   )
 
   return { postId, created, boardSlug }
