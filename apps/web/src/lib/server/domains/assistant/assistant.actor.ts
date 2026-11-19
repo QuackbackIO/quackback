@@ -3,9 +3,9 @@
  * conversations, publish team-only pending-action notices, record conversation
  * attributes (metadata facts learned while talking to the customer), and raise
  * tickets (capturing a reported problem for a teammate to investigate is the
- * support agent's core job), but cannot close conversations or publish on a
- * customer's behalf. Approved actions execute under the approving teammate's
- * actor.
+ * support agent's core job), and close a conversation the customer has said is
+ * finished (end_conversation), but cannot publish on a customer's behalf.
+ * Approved actions execute under the approving teammate's actor.
  *
  * The explicit ceiling cannot silently widen as the admin role grows.
  */
@@ -36,6 +36,11 @@ export const ASSISTANT_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
   // close, and the write-tool idempotency key already prevents duplicates for
   // the same customer message.
   PERMISSIONS.TICKET_CREATE,
+  // end_conversation closes the conversation once the customer has confirmed
+  // they are done; it is the only assistant tool that declares this
+  // permission. Without it the autonomous permission check denied every call.
+  // A teammate can reopen a closed conversation.
+  PERMISSIONS.CONVERSATION_SET_STATUS,
 ])
 
 export function quinnActor(principalId: PrincipalId): Actor {
