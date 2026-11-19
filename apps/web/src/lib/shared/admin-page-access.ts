@@ -14,8 +14,14 @@ export const ADMIN_PAGE_ACCESS = {
   '/admin/feedback': [PERMISSIONS.POST_VIEW_PRIVATE],
   // fetchRoadmaps: the board opens on the roadmap list.
   '/admin/roadmap': [PERMISSIONS.ROADMAP_MANAGE],
-  // listConversationsFn (conversation.view) or the ticket list (ticket.view).
-  '/admin/inbox': [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+  // listInboxItemsFn: refused unless the viewer may see conversations or
+  // tickets (canViewInboxAtAll).
+  '/admin/inbox': [
+    PERMISSIONS.CONVERSATION_VIEW,
+    PERMISSIONS.CONVERSATION_VIEW_ALL,
+    PERMISSIONS.TICKET_VIEW,
+    PERMISSIONS.TICKET_VIEW_ALL,
+  ],
   // listChangelogsFn
   '/admin/changelog': [PERMISSIONS.CHANGELOG_VIEW_DRAFT],
   // listCategoriesFn and listArticlesFn

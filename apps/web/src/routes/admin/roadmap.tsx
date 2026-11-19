@@ -68,18 +68,17 @@ export const Route = createFileRoute('/admin/roadmap')({
     const can = (permission: PermissionKey) => (context.permissions ?? []).includes(permission)
     const ensure = readBatch(queryClient)
     // A viewer who cannot list roadmaps gets the no-access state and no reads.
-    const canOpen = canOpenAdminPage(context.permissions ?? [], '/admin/roadmap')
-    await Promise.all([
-      can(PERMISSIONS.STATUS_VIEW) ? ensure(adminQueries.statuses()) : undefined,
-      can(PERMISSIONS.BOARD_MANAGE) ? ensure(adminQueries.boards()) : undefined,
-      can(PERMISSIONS.TAG_VIEW) ? ensure(adminQueries.tags()) : undefined,
-      can(PERMISSIONS.SEGMENT_VIEW) ? ensure(adminQueries.segments()) : undefined,
-      canOpen
-        ? warmRoadmapBoard(queryClient, location.search as Record<string, unknown>).catch(
-            () => undefined
-          )
-        : undefined,
-    ])
+    if (canOpenAdminPage(context.permissions ?? [], '/admin/roadmap')) {
+      await Promise.all([
+        can(PERMISSIONS.STATUS_VIEW) ? ensure(adminQueries.statuses()) : undefined,
+        can(PERMISSIONS.BOARD_MANAGE) ? ensure(adminQueries.boards()) : undefined,
+        can(PERMISSIONS.TAG_VIEW) ? ensure(adminQueries.tags()) : undefined,
+        can(PERMISSIONS.SEGMENT_VIEW) ? ensure(adminQueries.segments()) : undefined,
+        warmRoadmapBoard(queryClient, location.search as Record<string, unknown>).catch(
+          () => undefined
+        ),
+      ])
+    }
 
     return {
       currentUser: {
