@@ -68,7 +68,7 @@ test(
           waitSeconds: 60,
           waitSeq: 1,
         })
-        expect(await runEventKinds(parked.id)).toContain('waiting')
+        await expect.poll(() => runEventKinds(parked.id), { timeout: 10_000 }).toContain('waiting')
 
         // One workflow-wait job, keyed by run and wait sequence, about 60 s out.
         const [job] = await waitJobsOf(parked.id)
@@ -82,7 +82,7 @@ test(
         await expect(page.getByText(`Back again ${marker}`)).toBeVisible({ timeout: 30_000 })
         const done = await waitForRun(conversationId, workflowId, 'done')
         expect(done.cursor.resumedAt).toBeTruthy()
-        expect(await runEventKinds(done.id)).toContain('completed')
+        await expect.poll(() => runEventKinds(done.id), { timeout: 10_000 }).toContain('completed')
       }
     )
   }
@@ -260,7 +260,9 @@ test(
         ] as const) {
           const after = await waitForRun(conversationId, workflowId, 'interrupted')
           expect(after.id).toBe(run.id)
-          expect(await runEventKinds(run.id)).toContain('swept_expired')
+          await expect
+            .poll(() => runEventKinds(run.id), { timeout: 10_000 })
+            .toContain('swept_expired')
         }
         await expect
           .poll(async () => (await conversationRow(abandoned)).status, { timeout: 15_000 })

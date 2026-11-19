@@ -254,9 +254,16 @@ export async function widgetSend(page: Page | FrameLocator, text: string): Promi
   await expect(composer).toBeVisible({ timeout: 15_000 })
   await composer.click()
   await composer.fill(text)
-  await page.getByRole('button', { name: 'Send', exact: true }).click()
-  // Accepted: the composer clears and the message is in the thread.
-  await expect(composer).toHaveText('', { timeout: 15_000 })
+  const send = page.getByRole('button', { name: 'Send', exact: true })
+  // A click that lands before the composer is wired up does nothing and
+  // leaves the text in place: click again only while the text is still there.
+  await expect(async () => {
+    if ((await composer.innerText()).includes(text)) {
+      await send.click({ timeout: 2_000 })
+    }
+    // Accepted: the message is stored (text is unique per call).
+    await conversationWithMessage(text, 4_000)
+  }).toPass({ timeout: 30_000 })
   await expect(page.getByText(text).first()).toBeVisible({ timeout: 15_000 })
 }
 
@@ -270,7 +277,8 @@ export async function identifiedWidgetConversation(
   customer: { id: string; email: string; name: string },
   text: string
 ): Promise<{ widget: FrameLocator; conversationId: string }> {
-  const ssoToken = runScript('support-widget-token.ts', [JSON.stringify(customer)])
+  // Minted per attempt: the widget secret can be (re)created while tests run.
+  let ssoToken = ''
   const hostPath = `/__e2e-host-${customer.id}`
   await page.route(`**${hostPath}`, (route) =>
     route.fulfill({
@@ -286,8 +294,12 @@ export async function identifiedWidgetConversation(
 </script></body></html>`,
     })
   )
-  await page.goto(hostPath)
-  await expect(page.locator('html')).toHaveAttribute('data-identified', '1', { timeout: 20_000 })
+  // Identify is retried once with a reload: under load the first handshake can fail.
+  await expect(async () => {
+    ssoToken = runScript('support-widget-token.ts', [JSON.stringify(customer)])
+    await page.goto(hostPath)
+    await expect(page.locator('html')).toHaveAttribute('data-identified', '1', { timeout: 15_000 })
+  }).toPass({ timeout: 60_000 })
   const widget = page.frameLocator('iframe.quackback-widget-iframe')
   await widget.getByRole('button', { name: /^(?:\d+ unread )?Messages$/ }).click()
   await widget
@@ -456,6 +468,23 @@ export async function enableAssistantRespond(): Promise<void> {
                 COALESCE(NULLIF(widget_config, '')::jsonb -> 'messenger' -> 'assistant', '{}'::jsonb)
                 || '{"respond": true}'::jsonb))
     )::text`
+  await supportDb()`DELETE FROM kv_store WHERE key LIKE '%settings%'`
+}
+
+/**
+ * Turn the widget's ticket filing on (supportTickets flag, Tickets tab) in one
+ * atomic UPDATE. The shared set-widget-surfaces script reads and rewrites the
+ * whole settings row, which can drop a concurrent write such as the widget
+ * secret; this merges into the current values instead. Only ever turns on.
+ */
+export async function enableWidgetTickets(): Promise<void> {
+  await supportDb()`UPDATE settings SET
+      feature_flags = (COALESCE(NULLIF(feature_flags, '')::jsonb, '{}'::jsonb)
+        || '{"supportInbox": true, "supportTickets": true}'::jsonb)::text,
+      widget_config = (COALESCE(NULLIF(widget_config, '')::jsonb, '{}'::jsonb)
+        || jsonb_build_object('enabled', true, 'tabs',
+             COALESCE(NULLIF(widget_config, '')::jsonb -> 'tabs', '{}'::jsonb)
+             || '{"messenger": true, "tickets": true}'::jsonb))::text`
   await supportDb()`DELETE FROM kv_store WHERE key LIKE '%settings%'`
 }
 

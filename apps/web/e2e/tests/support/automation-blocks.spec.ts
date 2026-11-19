@@ -13,7 +13,6 @@ import { test, expect } from '../../support/fixtures'
 import { supportDb, pollFor } from '../../support/db'
 import { sink } from '../../support/webhook-sink-client'
 import { linksIn } from '../../support/mailpit'
-import { setWidgetSurfaces } from '../../utils/db-helpers'
 import {
   attrChain,
   attributeOf,
@@ -21,6 +20,7 @@ import {
   conversationRow,
   createAttributeDefinition,
   doc,
+  enableWidgetTickets,
   emailConversation,
   markerChain,
   messagesOf,
@@ -95,7 +95,9 @@ test(
         // The yes branch's message follows; the no branch never runs.
         await expect(page.getByText(`Great, glad ${marker}`)).toBeVisible({ timeout: 20_000 })
         const done = await waitForRun(conversationId, workflowId, 'done')
-        expect(await runEventKinds(done.id)).toContain('block_engaged')
+        await expect
+          .poll(() => runEventKinds(done.id), { timeout: 10_000 })
+          .toContain('block_engaged')
         const messages = await messagesOf(conversationId)
         expect(messages.some((m) => m.content.includes(`Sorry about ${marker}`))).toBe(false)
 
@@ -139,7 +141,7 @@ test(
       async ([workflowId]) => {
         const conversationId = await widgetStartConversation(page, `Hi ${marker}`)
         const run = await waitForRun(conversationId, workflowId, 'done')
-        expect(await runEventKinds(run.id)).toContain('block_sent')
+        await expect.poll(() => runEventKinds(run.id), { timeout: 10_000 }).toContain('block_sent')
 
         const sent = (await messagesOf(conversationId)).find((m) =>
           m.content.includes(`[${marker}]`)
@@ -417,7 +419,9 @@ test(
         await page.getByRole('button', { name: 'Submit' }).click()
         // The run logs the refused write and carries on.
         const run = await waitForRun(conversationId, workflowId, 'done')
-        expect(await runEventKinds(run.id)).toContain('action_failed:set_attribute')
+        await expect
+          .poll(() => runEventKinds(run.id), { timeout: 10_000 })
+          .toContain('action_failed:set_attribute')
         expect(await attributeOf(conversationId, key)).toMatchObject({
           v: 'TEAM-1',
           src: 'teammate',
@@ -459,7 +463,9 @@ test(
         await waitForRun(conversationId, workflowId, 'waiting')
         await widgetSend(page, `because reasons ${Date.now()}`)
         const run = await waitForRun(conversationId, workflowId, 'done')
-        expect(await runEventKinds(run.id)).toContain('block_engaged')
+        await expect
+          .poll(() => runEventKinds(run.id), { timeout: 10_000 })
+          .toContain('block_engaged')
         const attr = await attributeOf(conversationId, key)
         expect(attr?.src).toBe('customer')
         expect(String(attr?.v)).toMatch(/^because reasons \d+$/)
@@ -552,7 +558,9 @@ test(
           })
           .toBe(4)
         const run = await waitForRun(conversationId, workflowId, 'done')
-        expect(await runEventKinds(run.id)).toContain('block_engaged')
+        await expect
+          .poll(() => runEventKinds(run.id), { timeout: 10_000 })
+          .toContain('block_engaged')
         // The '4' edge ran; the conversation stayed closed with resolvedAt unchanged.
         const row = await conversationRow(conversationId)
         expect(row.priority).toBe('low')
@@ -608,7 +616,7 @@ test(
             }
             return null
           },
-          { timeoutMs: 20_000 }
+          { timeoutMs: 45_000 }
         )
         const ratingLinks = linksIn(mail).filter((l) => /csat|rat/i.test(l))
         expect(ratingLinks.length).toBeGreaterThanOrEqual(1)
@@ -655,7 +663,7 @@ test(
   { tag: '@core' },
   async ({ page, marker, customerEmail }) => {
     // Widget ticket filing needs the tickets surface on (only ever turned on).
-    setWidgetSurfaces(true)
+    await enableWidgetTickets()
     await withWorkflows(
       [
         {

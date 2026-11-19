@@ -12,7 +12,6 @@ import { toUuid } from '@quackback/ids'
 import type { Page } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
 import { supportDb, pollFor } from '../../support/db'
-import { setWidgetSurfaces } from '../../utils/db-helpers'
 import {
   attributeOf,
   conversationRow,
@@ -20,6 +19,7 @@ import {
   createWorkflow,
   deleteWorkflow,
   doc,
+  enableWidgetTickets,
   emailConversation,
   identifiedWidgetConversation,
   markerChain,
@@ -57,10 +57,19 @@ async function rowAction(page: Page, name: string, item: string): Promise<void> 
 }
 
 /** Save the builder (a committed name change may already have saved itself). */
-async function saveBuilder(page: Page): Promise<void> {
+async function saveBuilder(page: Page, id: string, expectedName: string): Promise<void> {
   const save = page.getByRole('button', { name: 'Save', exact: true })
-  if (await save.isEnabled()) await save.click()
-  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15_000 })
+  const name = page.getByRole('textbox', { name: 'Workflow name' })
+  await expect(async () => {
+    // A rename typed before hydration is lost: retype it until it sticks.
+    if ((await name.inputValue()).trim() !== expectedName) {
+      await name.fill(expectedName)
+      await name.press('Enter')
+    }
+    if (await save.isEnabled()) await save.click({ timeout: 2_000 })
+    const [row] = await supportDb()`SELECT name FROM workflows WHERE id = ${wfUuid(id)}`
+    expect(row.name).toBe(expectedName)
+  }).toPass({ timeout: 20_000 })
 }
 
 async function workflowStatus(id: string): Promise<{ status: string; deleted_at: Date | null }> {
@@ -140,7 +149,7 @@ test(
       await expect(name).toHaveValue('Untitled workflow', { timeout: 15_000 })
       await name.fill(`   Draft ${marker}   `)
       await name.press('Enter')
-      await saveBuilder(admin)
+      await saveBuilder(admin, id, `Draft ${marker}`)
       await expect
         .poll(
           async () => (await sql`SELECT name FROM workflows WHERE id = ${wfUuid(id)}`)[0].name,
@@ -260,7 +269,7 @@ test(
     expect(await runsFor(after, id)).toHaveLength(0)
     // History survives the delete.
     expect(await runsFor(before, id)).toHaveLength(1)
-    expect(await runEventKinds(run.id)).toContain('completed')
+    await expect.poll(() => runEventKinds(run.id), { timeout: 10_000 }).toContain('completed')
   }
 )
 
@@ -332,7 +341,7 @@ test(
       await expect(name).toHaveValue(`Versions ${marker}`, { timeout: 15_000 })
       await name.fill(`Versions two ${marker}`)
       await name.press('Enter')
-      await saveBuilder(admin)
+      await saveBuilder(admin, id, `Versions two ${marker}`)
       const versions = async () =>
         (
           await supportDb()`SELECT count(*)::int AS n FROM workflow_versions WHERE workflow_id = ${wfUuid(id)}`
@@ -346,12 +355,12 @@ test(
       await admin.getByRole('button', { name: 'History' }).click()
       const sheet = admin.getByRole('dialog', { name: 'Version history' })
       await expect(sheet).toBeVisible()
-      await expect(
-        sheet.getByRole('button', { name: new RegExp(`^Versions two ${marker}`) })
-      ).toBeVisible()
+      // The admin's save is authored by name (the script-made first version has no author).
+      const saved = sheet.getByRole('button', { name: new RegExp(`^Versions two ${marker}`) })
+      await expect(saved).toBeVisible()
+      await expect(saved).toContainText('Ada Admin')
       const original = sheet.getByRole('button', { name: new RegExp(`^Versions ${marker}`) })
       await expect(original).toBeVisible()
-      await expect(original).toContainText('Ada Admin')
       await original.click()
       await expect(sheet.getByText(/\d+ nodes? ·/)).toBeVisible()
       await sheet.getByRole('button', { name: 'Restore this version' }).click()
@@ -437,7 +446,8 @@ test(
     await expect(keep).toBeVisible()
     const wait = admin.locator('input[type="number"]').first()
     await expect(wait).toBeVisible()
-    await wait.fill('7')
+    const minutes = String(2 + Math.floor(Math.random() * 50))
+    await wait.fill(minutes)
     await wait.press('Enter')
     await expect
       .poll(
@@ -447,12 +457,12 @@ test(
         },
         { timeout: 10_000 }
       )
-      .toContain('"waitMinutes":7')
+      .toMatch(new RegExp(`"waitMinutes": ?${minutes}\\b`))
     await admin.reload()
     await expect(admin.getByRole('switch', { name: 'Auto-close abandoned journeys' })).toBeChecked({
       timeout: 20_000,
     })
-    await expect(admin.locator('input[type="number"]').first()).toHaveValue('7')
+    await expect(admin.locator('input[type="number"]').first()).toHaveValue(minutes)
   }
 )
 
@@ -548,7 +558,7 @@ test(
   "WFL-28 a ticket trigger runs on the ticket's linked customer conversation",
   { tag: '@nightly' },
   async ({ page, customerEmail, marker }) => {
-    setWidgetSurfaces(true)
+    await enableWidgetTickets()
     await withWorkflows(
       [
         {
@@ -612,7 +622,7 @@ test(
         const { fromUuid } = await import('@quackback/ids')
         const linkedId = fromUuid('conversation', linked.conversation_id as string)
         const run = await waitForRun(linkedId, ticketWorkflow, 'done', 30_000)
-        expect(await runEventKinds(run.id)).toContain('completed')
+        await expect.poll(() => runEventKinds(run.id), { timeout: 10_000 }).toContain('completed')
         const note = (await messagesOf(linkedId)).find((m) => m.content === `Ticket seen ${marker}`)
         expect(note?.is_internal).toBe(true)
       }
