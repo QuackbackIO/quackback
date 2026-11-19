@@ -146,3 +146,17 @@ by a separate test that is not quarantined.
   refuses it; `rating=abc` and a link with no rating work. The other CSAT
   journeys open the page with the token alone. owner: unassigned, review by:
   2026-12-03.
+
+Found here, with no quarantined test: the background job worker keeps the
+workspace settings it first read for as long as the app runs. The job loop
+runs inside one log context (`jobs/worker.ts` `runWithLogContext`), and
+`memoizePerRequest` (`request-memo.ts`) keys on that context, so
+`getWorkspaceSettings` (`settings.service.ts`) never re-reads in the worker.
+A setting switched on after boot (Support tickets) reaches a job only when that
+job happens to run inline in the request; picked up by the worker, the job
+still sees the boot value and, for ticket mail, sends nothing. The support
+suite turns Support tickets on before the app starts (`support/start-app.ts`).
+No deterministic test: whether an event job runs inline or in the worker is
+not under the suite's control, and the one job-read setting the suite could
+switch on after boot is part of its baseline. owner: unassigned, review by:
+2026-12-03.

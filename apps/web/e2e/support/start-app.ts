@@ -31,10 +31,12 @@ const logPath = resolve(SUPPORT_RUN_DIR, 'app.log')
 const logFd = openSync(logPath, 'a')
 process.stdout.write(`support app: ${env.baseUrl}, log ${logPath}\n`)
 
-// The background job worker keeps the workspace settings it first read for as
-// long as the app runs (its loop shares one request memo), so a setting that
-// mail sent from a job depends on must be on before the app starts. Support
-// tickets: ticket emails are built in jobs and skipped while it reads off.
+// Suite baseline: support tickets on from boot, as a workspace that uses the
+// support module would run. It also has to be on BEFORE the app starts: the
+// background job worker keeps the workspace settings it first read for as
+// long as the app runs (its loop shares one request memo; a known product bug,
+// see QUARANTINE.md), and ticket emails are built in jobs that skip the send
+// while the flag reads off.
 const db = postgres(env.app.DATABASE_URL, { max: 1, onnotice: () => {} })
 try {
   await db`

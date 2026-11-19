@@ -121,6 +121,8 @@ test.describe('agent replies by email', () => {
       const principalUuid = await principalForUserEmail(customerEmail)
       const row = await latestConversationOf(principalUuid)
       expect(row.channel).toBe('messenger')
+      // The thread's live stream registers first; only then does leaving mean offline.
+      await waitForVisitorPresence(principalUuid, true)
       await context.close()
       await waitForVisitorPresence(principalUuid, false)
 
@@ -186,10 +188,15 @@ test.describe('agent replies by email', () => {
       await api.dispose()
       await waitForMailMatching({ to: customerEmail, body: later })
       expect(await mailsMatching({ to: customerEmail, body: live })).toEqual([])
-      const logged = (await emailLogForConversation(row.id)).filter(
-        (r) => r.email_type === 'ConversationMessageEmail' && r.address === customerEmail
+      const customerRows = async () =>
+        (await emailLogForConversation(row.id)).filter(
+          (r) => r.email_type === 'ConversationMessageEmail' && r.address === customerEmail
+        )
+      // The log row lands after the SMTP send returns.
+      await pollFor('the emailed reply in email_log', async () =>
+        (await customerRows()).length > 0 ? true : null
       )
-      expect(logged).toHaveLength(1)
+      expect(await customerRows()).toHaveLength(1)
     }
   )
 
@@ -248,7 +255,11 @@ test.describe('agent replies by email', () => {
       await agentReply(api, thread.id, reachable)
       await api.dispose()
       await waitForMailMatching({ to: customerEmail, body: reachable })
-      const rows = await emailLogForConversation(thread.uuid)
+      // The log row is written after the SMTP send returns.
+      const rows = await pollFor('the email_log row', async () => {
+        const found = await emailLogForConversation(thread.uuid)
+        return found.length > 0 ? found : null
+      })
       expect(rows.map((r) => r.address)).toEqual([customerEmail])
       expect(await mailsMatching({ to: customerEmail, body: unreachable })).toEqual([])
     }
@@ -477,6 +488,8 @@ test.describe('agent replies by email', () => {
       const principalUuid = await principalForUserEmail(customerEmail)
       const row = await latestConversationOf(principalUuid)
       const id = conversationTypeId(row.id)
+      // The thread's live stream registers first; only then does leaving mean offline.
+      await waitForVisitorPresence(principalUuid, true)
       await context.close()
       await waitForVisitorPresence(principalUuid, false)
 
@@ -1201,10 +1214,12 @@ test.describe('who the email speaks as', () => {
       await api.dispose()
       await waitForMailMatching({ to: owner.email, body: reply })
       expect(await mailsMatching({ to: sender, body: reply })).toEqual([])
-      const rows = await emailLogForConversation(row.id)
-      expect(rows.filter((r) => r.direction === 'outbound').map((r) => r.address)).toEqual([
-        owner.email,
-      ])
+      const outbound = async () =>
+        (await emailLogForConversation(row.id)).filter((r) => r.direction === 'outbound')
+      await pollFor('the reply in email_log', async () =>
+        (await outbound()).length > 0 ? true : null
+      )
+      expect((await outbound()).map((r) => r.address)).toEqual([owner.email])
     }
   )
 })
