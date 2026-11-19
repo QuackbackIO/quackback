@@ -71,7 +71,11 @@ test(
         await expect.poll(() => runEventKinds(parked.id), { timeout: 10_000 }).toContain('waiting')
 
         // One workflow-wait job, keyed by run and wait sequence, about 60 s out.
-        const [job] = await waitJobsOf(parked.id)
+        // The job row is written just after the run parks.
+        const job = await pollFor(
+          'the wait job',
+          async () => (await waitJobsOf(parked.id))[0] ?? null
+        )
         const runId = fromUuid('workflow_run', parked.id)
         expect(job.dedupe_key).toBe(`workflow-wait:${runId}:1`)
         const startedAt = new Date(String(parked.cursor.waitStartedAt)).getTime()

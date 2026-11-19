@@ -345,6 +345,12 @@ async function openWithDefaultReply(page: import('@playwright/test').Page): Prom
   return conversationId
 }
 
+/** A widget conversation with a neutral first message (whatever the AI does with it). */
+async function openConversation(page: import('@playwright/test').Page): Promise<string> {
+  const opening = `Opening ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  return widgetStartConversation(page, opening)
+}
+
 /** The model calls handoff_to_human, then answers with text. Two uses: a
  *  side call (language detection) may read the marker message first. */
 async function scriptHandoff(marker: string): Promise<void> {
@@ -373,9 +379,11 @@ async function scriptHandoff(marker: string): Promise<void> {
 test(
   'WFL-58 with the AI agent not eligible the step logs "assistant declined" and follows the escalated branch at once',
   { tag: '@nightly' },
-  async ({ page, marker }) => {
-    // In the shared shards the AI agent's widget answers are off: not eligible.
-    test.skip(ISOLATED, 'the isolated job turns the AI agent on')
+  async ({ page, asPerson, marker }) => {
+    // Not eligible because a teammate replied after the AI (the silence rule),
+    // whatever the workspace's AI switch says.
+    const conversationId = await openConversation(page)
+    await replyInInbox(await asPerson('admin'), conversationId, `Teammate here ${marker}-tm`)
     await withWorkflows(
       [
         {
@@ -398,18 +406,19 @@ test(
         },
       ],
       async ([id]) => {
-        const conversationId = await widgetStartConversation(page, `No AI ${marker}`)
+        await widgetSend(page, `Over to the step ${marker}`)
         await expect(page.getByText(`Escalated path ${marker}`)).toBeVisible({ timeout: 20_000 })
         const run = await waitForRun(conversationId, id, 'done')
+        // Declined in the same pass: the step never parked.
         expect(await runEventKinds(run.id)).not.toContain('waiting')
         expect(
           (await messagesOf(conversationId)).some((m) =>
             m.content.includes(`Resolved path ${marker}`)
           )
         ).toBe(false)
-        // Only the inbox spam check reads the message; no AI turn is asked for.
-        const turns = (await fakeAi.requests({ contains: marker, endpoint: 'chat' })).filter(
-          (r) => !r.text.includes('You are a spam filter')
+        // No AI turn was asked for (an assistant turn carries its system prompt).
+        const turns = (await fakeAi.requests({ contains: `Over to the step ${marker}` })).filter(
+          (r) => r.text.includes('Instruction priority')
         )
         expect(turns).toHaveLength(0)
       }
