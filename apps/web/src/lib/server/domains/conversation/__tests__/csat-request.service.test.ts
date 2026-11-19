@@ -60,6 +60,7 @@ import {
   isCsatRatedOrEmailed,
 } from '../csat-request.service'
 import { applyAction } from '@/lib/server/domains/workflows/action.executor'
+import { pruneEmailLog } from '@/lib/server/email/email-log.retention'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -218,6 +219,22 @@ describe.skipIf(!fixture.available)('the close email and rating signals', () => 
     await addEmailLog(emailed.conversationId, 'CsatRequestEmail')
     expect(await isCsatRatedOrEmailed(emailed.conversationId)).toBe(true)
     expect(await isConversationRated(emailed.conversationId)).toBe(false)
+  })
+
+  it('JOB-27 forgets a rating email once the email log retention prunes it', async () => {
+    const { conversationId } = await seedConversation()
+    await addEmailLog(conversationId, 'CsatRequestEmail')
+    // The ask went out 91 days ago: past the 90-day email log window.
+    await testDb
+      .update(emailLog)
+      .set({ createdAt: new Date(Date.now() - 91 * 86_400_000) })
+      .where(eq(emailLog.conversationId, conversationId))
+    expect(await isCsatAlreadyRequested(conversationId)).toBe(true)
+
+    expect(await pruneEmailLog()).toBeGreaterThanOrEqual(1)
+
+    expect(await isCsatAlreadyRequested(conversationId)).toBe(false)
+    expect(await isCsatRatedOrEmailed(conversationId)).toBe(false)
   })
 })
 
