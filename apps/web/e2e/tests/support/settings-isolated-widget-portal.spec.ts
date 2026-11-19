@@ -329,8 +329,11 @@ test.describe('prevent replies to closed conversations', { tag: '@isolated' }, (
         // From the widget: the reply is not taken and the thread stays closed.
         const reply = `${marker} one more thing`
         await visitorType(widget, reply)
+        // The refusal has come back once the notice is raised as an alert.
+        await expect(widget.getByRole('alert').filter({ hasText: CLOSED_STARTS_NEW })).toBeVisible({
+          timeout: 15_000,
+        })
         await expect(composer(widget)).toContainText(reply)
-        await new Promise((r) => setTimeout(r, 2_000))
         expect(await visitorMessages(conversation.id)).toEqual([opening])
         expect((await conversationRow(conversation.id)).status).toBe('closed')
 
@@ -457,7 +460,6 @@ test.describe('prevent replies to closed conversations', { tag: '@isolated' }, (
             timeout: 15_000,
           })
           await expect(composer(page)).toContainText(`${marker} typed reply`)
-          await new Promise((r) => setTimeout(r, 2_000))
           expect((await conversationRow(conversation.id)).status).toBe('closed')
           expect(await visitorMessages(conversation.id)).toEqual([`${marker} closed soon`])
 
@@ -627,7 +629,7 @@ test.describe('transport and availability', { tag: '@isolated' }, () => {
     async ({ page, request, marker }) => {
       await anonymousVisitorOffline(page, request, marker, `${marker} offline`, async (widget) => {
         await expect(widget.getByText(/We're away right now/)).toBeVisible({ timeout: 15_000 })
-        await expect(widget.getByText("We'll reply here").first()).toBeVisible()
+        await expect(widget.getByText("We'll reply here", { exact: true }).first()).toBeVisible()
         await expect(widget.getByText(/by email/i)).toHaveCount(0)
       })
     }

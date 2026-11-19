@@ -114,13 +114,20 @@ test.describe('the support product switched off', { tag: '@isolated' }, () => {
     { tag: '@nightly' },
     async ({ asPerson }) => {
       const admin = await asPerson('admin')
+      const newConversation = admin.getByRole('button', { name: 'New conversation' })
+      const allConversations = admin.getByText('All conversations', { exact: true })
+      // With the inbox on (the baseline) both are offered.
+      await admin.goto('/admin/inbox')
+      await expect(newConversation).toBeVisible({ timeout: 20_000 })
+      await expect(allConversations.filter({ visible: true }).first()).toBeVisible()
+
       await withSettings(
         { feature_flags: { supportInbox: false, supportTickets: true } },
         async () => {
           await admin.goto('/admin/inbox')
           await expect(admin.getByText('All tickets').first()).toBeVisible({ timeout: 20_000 })
-          await expect(admin.getByRole('button', { name: 'New conversation' })).toHaveCount(0)
-          await expect(admin.getByText('All conversations')).toHaveCount(0)
+          await expect(newConversation).toHaveCount(0)
+          await expect(allConversations).toHaveCount(0)
         }
       )
     }
