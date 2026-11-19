@@ -105,7 +105,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 772 surfaces
+### Server functions (`requireAuth`) — 773 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -546,7 +546,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/plan-limits.ts`::getPlanLimitsSummaryFn | member.view |
 | `lib/server/functions/plan-limits.ts`::getPlanLimitsNoticeFn | END_USER (any authenticated) |
 | `lib/server/functions/plan-limits.ts`::getPlanLimitsNoticeFn | TEAM-ONLY |
-| `lib/server/functions/plan-notice.ts`::getPlanNotice | member.view |
+| `lib/server/functions/plan-notice.ts`::getPlanNotice | END_USER (any authenticated) |
+| `lib/server/functions/plan-notice.ts`::getPlanNotice | TEAM-ONLY |
 | `lib/server/functions/platform-credentials.ts`::savePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::fetchPlatformCredentialsMaskedFn | integration.manage |

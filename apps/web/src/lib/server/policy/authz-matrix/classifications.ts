@@ -109,6 +109,9 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   // Plan limits: every teammate sees what is over the plan; each chooser takes
   // billing rights or the permission that manages what it picks.
+  'lib/server/functions/plan-notice.ts::getPlanNotice': END_USER(
+    'team-any read for the admin plan strip: dashboard session and team members only (inline isTeamMember); returns plan name, dates and copy, a billing link only for billing.manage, and the operator notice only for member.view'
+  ),
   'lib/server/functions/plan-limits.ts::getPlanLimitsNoticeFn': END_USER(
     'team-any read for the admin banner without member.view: dashboard session and team members only (inline isTeamMember); returns no member ids, seat counts or team links'
   ),
@@ -788,6 +791,11 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     intent: 'SECONDARY_GATE',
     roleBar: 'team',
     why: 'personal API keys are for team members only; a portal user is refused',
+  },
+  'lib/server/functions/plan-notice.ts::getPlanNotice::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'the plan strip is for teammates only; a portal user is refused',
   },
   'lib/server/functions/plan-limits.ts::getPlanLimitsNoticeFn::isTeamMember': {
     intent: 'SECONDARY_GATE',

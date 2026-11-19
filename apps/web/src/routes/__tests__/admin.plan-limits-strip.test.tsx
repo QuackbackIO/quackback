@@ -229,6 +229,33 @@ function limitsNotice(over: Partial<PlanLimitsNotice> = {}): PlanLimitsNotice {
 describe('the plan limits strip for a custom role without member.view', () => {
   const customRole = [PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.CONVERSATION_VIEW]
 
+  it('keeps the ended trial strip, without a link, once only paused features remain', async () => {
+    shell.permissions = customRole
+    // As the plan notice builds it for a teammate who cannot manage billing.
+    shell.notice = trialEndedNotice(
+      {
+        enabled: true,
+        plan: 'free',
+        trialActive: false,
+        trialExpiresAt: '2026-11-10T00:00:00.000Z',
+        subscriptionStatus: null,
+        canUpgrade: true,
+      } as never,
+      { trialPlanName: 'Pro', canManageBilling: false, now: new Date('2026-11-18T12:00:00.000Z') }
+    )
+    const limits = limitsNotice({ phase: 'enforced', issues: [], withheldIssues: [] })
+    limits.featureIssues = overLimits({ phase: 'enforced', issues: [] }).featureIssues
+    expect(limits.featureIssues.length).toBeGreaterThan(0)
+    shell.limitsNotice.mockResolvedValue(limits)
+    await mount()
+    expect(await screen.findByText('Pro trial ended')).toBeInTheDocument()
+    expect(
+      screen.getByText('Ask someone who manages billing to upgrade. Until then, Free limits apply.')
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Compare plans' })).toBeNull()
+    expect(banner()).toBeNull()
+  })
+
   it('shows the banner with no team details and no link they cannot open', async () => {
     shell.permissions = customRole
     shell.limitsNotice.mockResolvedValue(limitsNotice())

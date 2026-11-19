@@ -11,10 +11,17 @@ function planLabel(config: CloudConfig, trialPlanName?: string | null): string {
   return config.plan ? PLAN_CATALOGUE[config.plan].name : PLAN_CATALOGUE.pro.name
 }
 
-/** Trial countdown derived from the control-plane-owned expiry timestamp. */
-export function trialNotice(config: CloudConfig, now: Date = new Date()): PlanNotice | null {
+/**
+ * Trial countdown derived from the control-plane-owned expiry timestamp. The
+ * billing link is only for someone who can open billing.
+ */
+export function trialNotice(
+  config: CloudConfig,
+  now: Date = new Date(),
+  options: { canManageBilling?: boolean } = {}
+): PlanNotice | null {
   if (!config.enabled || !config.trialActive || !config.trialExpiresAt) return null
-  const actionUrl = plansActionUrl(config)
+  const actionUrl = options.canManageBilling === false ? null : plansActionUrl(config)
   const daysLeft = daysUntil(config.trialExpiresAt, now)
   const urgent = daysLeft !== null && daysLeft <= 3
   return {

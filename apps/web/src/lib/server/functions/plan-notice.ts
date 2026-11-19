@@ -1,14 +1,18 @@
 import { createServerFn } from '@tanstack/react-start'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
-import { requireAuth } from './auth-helpers'
+import { assertDashboardScope, requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ForbiddenError } from '@/lib/shared/errors'
+import { isTeamMember } from '@/lib/shared/roles'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'plan-notice' })
 
 /** The plan notice, or null. Read by the admin layout to render the notice
- *  banner. Team-only: the notice can carry billing or maintenance details, so
- *  the RPC endpoint must not leak it to portal users or anonymous callers.
+ *  banner. Any teammate on a dashboard session, never a portal user or an
+ *  anonymous caller. The commercial strips carry only the plan, the date,
+ *  plain copy and, for someone who manages billing, a link to billing; the
+ *  free-form operator notice stays with teammates who can view members.
  *
  *  Two sources, in order. Self-host operator notices (config-file) win.
  *  Cloud workspaces ignore stored `tier_limits.notice`: commercial banners
@@ -17,7 +21,11 @@ const log = logger.child({ component: 'plan-notice' })
  *  config the second source is disabled and returns null. */
 export const getPlanNotice = createServerFn({ method: 'GET' }).handler(
   async (): Promise<PlanNotice | null> => {
-    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+    const auth = await requireAuth()
+    assertDashboardScope(auth)
+    if (!isTeamMember(auth.principal.role)) {
+      throw new ForbiddenError('FORBIDDEN', 'Access denied: Not a team member')
+    }
     // The admin layout shows no notice when this fails, so a real failure
     // (settings or cloud config unreadable) is logged here rather than lost.
     try {
@@ -35,7 +43,9 @@ async function readPlanNotice(
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
   const [limits, initial] = await Promise.all([getTierLimits(), getCloudConfig()])
-  if (!initial.enabled && limits.notice) return limits.notice
+  if (!initial.enabled && limits.notice) {
+    return auth.permissions.includes(PERMISSIONS.MEMBER_VIEW) ? limits.notice : null
+  }
 
   const { reportStarterTrialIfDue } = await import('@/lib/server/control-plane/starter-trial')
   await reportStarterTrialIfDue({ principalId: auth.principal.id })
@@ -45,10 +55,10 @@ async function readPlanNotice(
 
   const { trialNotice, trialEndedNotice } =
     await import('@/lib/server/domains/settings/cloud/commercial-notice')
-  const running = trialNotice(cloud)
+  const canManageBilling = auth.permissions.includes(PERMISSIONS.BILLING_MANAGE)
+  const running = trialNotice(cloud, new Date(), { canManageBilling })
   if (running) return running
 
-  const canManageBilling = auth.permissions.includes(PERMISSIONS.BILLING_MANAGE)
   const ended = trialEndedNotice(cloud, { canManageBilling })
   if (!ended) return null
 
