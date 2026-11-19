@@ -76,7 +76,7 @@ describe.skipIf(!fixture.available)('plan limits choosers (real DB)', () => {
       second = await addStatusComponent('Acme Web', 1)
       third = await addStatusComponent('Acme Mail', 2)
       await configure(settingsId, {
-        planLimits: true,
+        planBilling: true,
         tierLimits: { ...OSS_TIER_LIMITS, maxStatusComponents: 2 },
       })
     })
@@ -125,7 +125,7 @@ describe.skipIf(!fixture.available)('plan limits choosers (real DB)', () => {
       older = await addSendingDomain('b.example.com', 'verified', new Date('2026-02-01'))
       newer = await addSendingDomain('c.example.com', 'verified', new Date('2026-03-01'))
       await configure(settingsId, {
-        planLimits: true,
+        planBilling: true,
         tierLimits: { ...OSS_TIER_LIMITS, maxSendingDomains: 1 },
       })
     })

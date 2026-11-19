@@ -142,10 +142,9 @@ export const Route = createFileRoute('/admin')({
     const canViewMembers = (context.permissions ?? []).includes(PERMISSIONS.MEMBER_VIEW)
 
     const locale = context.acceptLanguageLocale ?? DEFAULT_LOCALE
-    // Plan limits ride on this loader, and only while their flag is on, so a
-    // workspace without them pays no request and no code for them.
-    const planLimitsOn =
-      Boolean(context.billingEnabled) && context.settings?.featureFlags?.planLimits === true
+    // Plan limits ride on this loader, and only with plan billing on, so an
+    // install without it pays no request and no code for them.
+    const planLimitsOn = Boolean(context.cloudEnabled)
     const [avatarData, latestRelease, planNotice, messages, launchWindow, , , planLimits] =
       await Promise.all([
         fetchUserAvatar({
@@ -319,7 +318,7 @@ function AdminLayout() {
   )
 }
 
-/** The plan limits banner, in a chunk of its own that only a workspace with the flag loads. */
+/** The plan limits banner, in a chunk of its own that only a workspace with plan billing loads. */
 const PlanLimitsStrip = lazy(() => import('@/components/admin/plan-limits/plan-limits-banner'))
 
 /**

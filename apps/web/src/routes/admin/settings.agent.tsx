@@ -29,7 +29,7 @@ import { warmQuery } from '@/lib/client/queries/warm-query'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import type { FeatureFlags } from '@/lib/shared/types'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useCloudEnabled, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
 
 const AGENT_TABS = ['basics', 'knowledge', 'guidance'] as const
@@ -228,16 +228,15 @@ function AssistantAgentSettings() {
 }
 
 /**
- * The paused notice. The flag check lives in this route rather than a shared
- * module, so with the plan limits flag off the page loads no extra chunk.
+ * The paused notice. The plan billing check lives in this route rather than a
+ * shared module, so without plan billing the page loads no extra chunk.
  */
 const PlanFeatureNoticeBody = lazy(
   () => import('@/components/admin/settings/plan-feature-notice-body')
 )
 
 function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
-  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
-  if (!enabled) return null
+  if (!useCloudEnabled()) return null
   return (
     <Suspense fallback={null}>
       <PlanFeatureNoticeBody feature={feature} />

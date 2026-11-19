@@ -1,6 +1,6 @@
 /**
  * Broadcasts skipped because the month's email cap is used up, against a real
- * database: each is counted once per UTC month, only with plan limits on, and
+ * database: each is counted once per UTC month, only with plan billing on, and
  * the count reaches the Plan limits page's used-up email row.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -31,16 +31,18 @@ vi.mock('@/lib/server/db', async (original) => ({
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { recordSkippedBroadcast, skippedBroadcastCount } from '../plan-limits.broadcasts'
 import { planLimitsPage, skippedBroadcastsNote } from '../plan-limits.page'
+import { planBillingOn } from './plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
 
 let settingsId: WorkspaceId
 
-async function configure(options: { planLimits: boolean }) {
+/** `planBilling` off is an install without plan billing. */
+async function configure(options: { planBilling: boolean }) {
   await testDb
     .update(settings)
-    .set({ featureFlags: JSON.stringify({ feedback: true, planLimits: options.planLimits }) })
+    .set({ cloud: (options.planBilling ? planBillingOn() : null) as never })
     .where(eq(settings.id, settingsId))
   await invalidateSettingsCache()
 }
@@ -64,7 +66,7 @@ describe.skipIf(!fixture.available)('skipped broadcasts (real DB)', () => {
   })
 
   it('records each broadcast once for the month and counts it on the page row', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     expect(await recordSkippedBroadcast('evt-a')).toBe(true)
     expect(await recordSkippedBroadcast('evt-a')).toBe(false)
     expect(await recordSkippedBroadcast('evt-b')).toBe(true)
@@ -104,7 +106,7 @@ describe.skipIf(!fixture.available)('skipped broadcasts (real DB)', () => {
   })
 
   it('counts each UTC month on its own', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     const lastOfNov = new Date('2026-11-30T23:59:00.000Z')
     const firstOfDec = new Date('2026-12-01T00:01:00.000Z')
     expect(await recordSkippedBroadcast('evt-nov', lastOfNov)).toBe(true)
@@ -116,8 +118,8 @@ describe.skipIf(!fixture.available)('skipped broadcasts (real DB)', () => {
     expect(skippedBroadcastsNote(3)).toBe('3 updates were not sent')
   })
 
-  it('records nothing with the flag off', async () => {
-    await configure({ planLimits: false })
+  it('records nothing without plan billing', async () => {
+    await configure({ planBilling: false })
     expect(await recordSkippedBroadcast('evt-off')).toBeNull()
     expect(await skippedBroadcastCount()).toBe(0)
   })

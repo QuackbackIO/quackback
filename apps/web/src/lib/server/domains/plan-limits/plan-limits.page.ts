@@ -81,11 +81,22 @@ export function skippedBroadcastsNote(count: number): string {
   return count === 1 ? '1 update was not sent' : `${count} updates were not sent`
 }
 
+/**
+ * Whether the plan can be changed in the app at all, from the billing
+ * projection. Where it cannot, nobody is offered an upgrade and everyone is
+ * asked to find someone who manages billing.
+ */
+export interface PlanLimitsPageBilling {
+  canUpgrade: boolean
+  canManageBilling: boolean
+}
+
 export function planLimitsPage(
   view: PlanLimitsView,
   candidates: PlanLimitsPageCandidates,
   permissions: readonly PermissionKey[],
-  skippedBroadcasts = 0
+  skippedBroadcasts = 0,
+  billing: PlanLimitsPageBilling = { canUpgrade: true, canManageBilling: true }
 ): PlanLimitsPage {
   const over = new Set(view.issues.map((issue) => issue.key))
   const choosers = {} as Record<PlanLimitsChooser, boolean>
@@ -126,6 +137,9 @@ export function planLimitsPage(
     choosers,
     candidates: shown,
     lockedSeatHolderIds: shown.members ? guaranteedSeatHolders(shown.members) : [],
-    canManageBilling: permissions.includes(PERMISSIONS.BILLING_MANAGE),
+    canManageBilling:
+      permissions.includes(PERMISSIONS.BILLING_MANAGE) &&
+      billing.canUpgrade &&
+      billing.canManageBilling,
   }
 }

@@ -113,7 +113,7 @@ beforeEach(() => {
 afterEach(() => {
   process.env = saved
   resetConfig()
-  setFeatureState('flagOff')
+  setFeatureState('tierOff')
 })
 
 /** One request through the real middleware, signed in with a session cookie. */

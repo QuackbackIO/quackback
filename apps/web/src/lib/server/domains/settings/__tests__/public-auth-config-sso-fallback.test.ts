@@ -51,8 +51,9 @@ vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service',
   getConfiguredIntegrationTypes: async () => new Set(['auth_sso']),
 }))
 
-vi.mock('../tier-limits.service', () => ({
-  getTierLimits: async () => ({ features: { customOidcProvider: state.ssoInPlan } }),
+// Whether single sign-on is live comes from plan limits.
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+  isFeatureLive: async (key: string) => key !== 'sso' || state.ssoInPlan,
 }))
 
 // Keep the real visibility predicates; only the DB-backed list is faked.

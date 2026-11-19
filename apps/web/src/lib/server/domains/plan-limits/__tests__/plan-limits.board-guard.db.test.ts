@@ -1,7 +1,7 @@
 /**
  * Read-only boards against a real database: every service that writes a post,
  * a vote or a comment refuses a board that is not kept open once the grace has
- * ended, and allows it in grace, when the board is kept, and with the flag off.
+ * ended, and allows it in grace, when the board is kept, and without plan billing.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -35,6 +35,21 @@ const dispatch = vi.hoisted(() => ({
   dispatchCommentCreated: vi.fn(),
 }))
 
+// The application cache, kept in memory: its kv rows are shared by every test
+// file on the database, and a write that collides with another file's commit
+// aborts this test's transaction.
+const cache = vi.hoisted(() => new Map<string, unknown>())
+vi.mock('@/lib/server/cache', async (original) => ({
+  ...(await original<typeof import('@/lib/server/cache')>()),
+  cacheGet: async (key: string) => (cache.has(key) ? structuredClone(cache.get(key)) : null),
+  cacheSet: async (key: string, value: unknown) => {
+    cache.set(key, structuredClone(value))
+  },
+  cacheDel: async (...keys: string[]) => {
+    for (const key of keys) cache.delete(key)
+  },
+}))
+
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
@@ -55,6 +70,7 @@ import { createComment } from '@/lib/server/domains/comments/comment.service'
 import { processBatch } from '@/lib/server/domains/import/import-service'
 import { ImportUserResolver } from '@/lib/server/domains/import/user-resolver'
 import { getPlanLimits, invalidatePlanLimits, openBoardIds } from '../plan-limits.service'
+import { planBillingOn } from './plan-billing'
 import { setKeptBoard } from '../plan-limits.choosers'
 import {
   BOARD_READ_ONLY_MESSAGE,
@@ -79,11 +95,12 @@ let closedBoard: BoardId
 let openPost: PostId
 let closedPost: PostId
 
-async function configure(options: { planLimits: boolean; tierLimits?: Record<string, unknown> }) {
+/** `planBilling` off is an install without plan billing. */
+async function configure(options: { planBilling: boolean; tierLimits?: Record<string, unknown> }) {
   await testDb
     .update(settings)
     .set({
-      featureFlags: JSON.stringify({ feedback: true, planLimits: options.planLimits }),
+      cloud: (options.planBilling ? planBillingOn() : null) as never,
       tierLimits: JSON.stringify(options.tierLimits ?? FREE_LIKE),
     })
     .where(eq(settings.id, settingsId))
@@ -93,7 +110,7 @@ async function configure(options: { planLimits: boolean; tierLimits?: Record<str
 
 /** First detection now, then the clock moves past the 7 day grace. */
 async function enforce() {
-  await configure({ planLimits: true })
+  await configure({ planBilling: true })
   await getPlanLimits()
   vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
   expect((await getPlanLimits()).phase).toBe('enforced')
@@ -130,6 +147,7 @@ const newComment = (postId: PostId, isPrivate = false) =>
 describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
   beforeEach(async () => {
     await fixture.begin()
+    cache.clear()
     vi.useRealTimers()
     const [row] = await testDb.select({ id: settings.id }).from(settings).limit(1)
     settingsId =
@@ -245,7 +263,7 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
         .where(eq(settings.id, settingsId))
       vi.useRealTimers()
       await invalidatePlanLimits()
-      await configure({ planLimits: false })
+      await configure({ planBilling: false })
       const row = {
         title: 'Acme first',
         content: 'x',
@@ -289,7 +307,7 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
   })
 
   it('allows every create path once the admin keeps the board open', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     expect(await setKeptBoard(closedBoard)).toEqual({ ok: true })
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
     await expect(newPost(closedBoard)).resolves.toBeDefined()
@@ -299,7 +317,7 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
   })
 
   it('allows every create path during the grace', async () => {
-    await configure({ planLimits: true })
+    await configure({ planBilling: true })
     expect((await getPlanLimits()).phase).toBe('grace')
     await expect(
       changeBoard(openPost, closedBoard, { principalId: ownerId })
@@ -317,9 +335,9 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
     await expect(newComment(closedPost)).resolves.toBeDefined()
   })
 
-  it('is inert with the flag off, even long past the first detection', async () => {
+  it('is inert without plan billing, even long past the first detection', async () => {
     await enforce()
-    await configure({ planLimits: false })
+    await configure({ planBilling: false })
     await expect(addVoteOnBehalf(closedPost, voterId)).resolves.toBeDefined()
     await expect(
       changeBoard(openPost, closedBoard, { principalId: ownerId })
@@ -368,13 +386,13 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
       expect(permissions[openBoard]).toEqual({ canSubmit: true, canVote: true })
     })
 
-    it('says nothing about read-only boards in grace or with the flag off', async () => {
-      await configure({ planLimits: true })
+    it('says nothing about read-only boards in grace or without plan billing', async () => {
+      await configure({ planBilling: true })
       expect((await runFetchBoardCapabilities(null)).permissions[closedBoard]).toEqual({
         canSubmit: true,
         canVote: true,
       })
-      await configure({ planLimits: false })
+      await configure({ planBilling: false })
       expect((await runFetchBoardCapabilities(null)).permissions[closedBoard]).toEqual({
         canSubmit: true,
         canVote: true,
@@ -395,9 +413,9 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
     })
   })
 
-  describe('a board an admin set read-only, with the plan limits flag off', () => {
+  describe('a board an admin set read-only, without plan billing', () => {
     beforeEach(async () => {
-      await configure({ planLimits: false })
+      await configure({ planBilling: false })
       await testDb.update(boards).set({ readOnly: true }).where(eq(boards.id, closedBoard))
     })
 
@@ -468,7 +486,7 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
       // The bigger board is the manual read-only one: the default keeps the other.
       await testDb.update(boards).set({ readOnly: true }).where(eq(boards.id, openBoard))
       await testDb.update(boards).set({ readOnly: false }).where(eq(boards.id, closedBoard))
-      await configure({ planLimits: true })
+      await configure({ planBilling: true })
       const limits = await getPlanLimits()
       expect(limits.issues.map((i) => [i.key, i.used, i.cap])).toEqual([['maxBoards', 2, 1]])
       expect(limits.openBoardIds).toEqual([closedBoard])
@@ -483,8 +501,8 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
       expect(await boardClosedReason(closedBoard)).toBe('manual')
     })
 
-    it('is manual with the flag off, and null for the open board', async () => {
-      await configure({ planLimits: false })
+    it('is manual without plan billing, and null for the open board', async () => {
+      await configure({ planBilling: false })
       await updateBoard(closedBoard, { readOnly: true })
       expect(await boardClosedReason(closedBoard)).toBe('manual')
       expect(await boardClosedReason(openBoard)).toBeNull()
@@ -526,7 +544,7 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
     })
 
     it('does not keep a chosen board open once it is set read-only', async () => {
-      await configure({ planLimits: true })
+      await configure({ planBilling: true })
       expect(await setKeptBoard(openBoard)).toEqual({ ok: true })
       vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
       expect(await openBoardIds()).toEqual([openBoard])
@@ -535,7 +553,7 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
     })
 
     it('refuses to keep a board open that an admin set read-only', async () => {
-      await configure({ planLimits: true })
+      await configure({ planBilling: true })
       await updateBoard(closedBoard, { readOnly: true })
       expect(await setKeptBoard(closedBoard)).toEqual({ ok: false, reason: 'read_only' })
       expect(await setKeptBoard(openBoard)).toEqual({ ok: true })
@@ -559,7 +577,7 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
     })
 
     it('still resolves the voters of a row that is imported', async () => {
-      await configure({ planLimits: false })
+      await configure({ planBilling: false })
       await processBatch(voterRows(openBoard), openBoard, 0, new ImportUserResolver(), null, {
         'src-v': [voter],
       })
@@ -577,20 +595,20 @@ describe.skipIf(!fixture.available)('read-only boards (real DB)', () => {
       })
     }
 
-    it('gives a visitor the neutral line with the flag on', async () => {
-      await configure({ planLimits: true })
+    it('gives a visitor the neutral line with plan billing on', async () => {
+      await configure({ planBilling: true })
       const error = await withVisitorPostCapCopy(capped).catch((e: unknown) => e as Error)
       expect(error).toBeInstanceOf(BoardReadOnlyError)
       expect((error as Error).message).toBe(BOARD_READ_ONLY_MESSAGE)
     })
 
-    it('leaves the upgrade wording alone with the flag off', async () => {
-      await configure({ planLimits: false })
+    it('leaves the upgrade wording alone without plan billing', async () => {
+      await configure({ planBilling: false })
       await expect(withVisitorPostCapCopy(capped)).rejects.toBeInstanceOf(TierLimitError)
     })
 
     it('passes every other error through', async () => {
-      await configure({ planLimits: true })
+      await configure({ planBilling: true })
       const other = new Error('boom')
       await expect(
         withVisitorPostCapCopy(async () => {

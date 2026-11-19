@@ -2,8 +2,8 @@
  * Each paid feature's settings page carries the paused notice for its own
  * feature, so the line shows on the page that sets the feature up and nowhere
  * else. Checked against the route sources: rendering every settings page here
- * would need its whole loader graph. The flag check before the notice body
- * loads is checked the same way; settings.plan-feature-notice.test.tsx
+ * would need its whole loader graph. The plan billing check before the
+ * notice body loads is checked the same way; settings.plan-feature-notice.test.tsx
  * renders one page to prove what it does.
  */
 import { readFileSync } from 'node:fs'
@@ -52,8 +52,8 @@ describe('the paused notice on each settings page', () => {
   })
 
   // A notice module shared by these routes becomes a chunk of its own, one
-  // more request on each page even with the flag off. Each page checks the
-  // flag itself and only then loads the body.
+  // more request on each page even without plan billing. Each page checks
+  // plan billing itself and only then loads the body.
   it.each([
     'settings.developers.tsx',
     'settings.workflows.tsx',
@@ -61,14 +61,15 @@ describe('the paused notice on each settings page', () => {
     'settings.agent.tsx',
     'settings.help-center.tsx',
     'settings.portal.tsx',
-  ])('%s checks the flag before loading the notice body', (file) => {
+  ])('%s checks plan billing before loading the notice body', (file) => {
     const text = source(file)
     expect(text).not.toMatch(/from '@\/components\/admin\/settings\/plan-feature-notice'/)
+    expect(text).not.toContain('planLimits')
     expect(text).toContain(
       "lazy(\n  () => import('@/components/admin/settings/plan-feature-notice-body')\n)"
     )
     expect(text).toMatch(
-      /function PlanFeatureNotice\([^)]*\) \{\n {2}const enabled = useWorkspaceSettings\(\)\?\.featureFlags\?\.planLimits === true\n {2}if \(!enabled\) return null\n/
+      /function PlanFeatureNotice\([^)]*\) \{\n {2}if \(!useCloudEnabled\(\)\) return null\n/
     )
   })
 

@@ -150,15 +150,27 @@ describe('usage-report job', () => {
     expect(hoisted.cancelJob).not.toHaveBeenCalled()
   })
 
-  it('detects plan limits from the hourly slot only, not the monthly report', async () => {
+  it('detects plan limits from the hourly slot and from the monthly report', async () => {
     process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://billing.example.com'
     vi.useFakeTimers({ now: new Date('2026-08-01T00:10:00.000Z') })
+    // The monthly report is the job the dormant catch-up queues for a parked
+    // workspace, which runs no hourly slot.
     await runUsageReport(job({ month: '2026-07' }, 'usage-report:2026-07'))
-    expect(hoisted.detectPlanLimitsQuietly).not.toHaveBeenCalled()
+    expect(hoisted.detectPlanLimitsQuietly).toHaveBeenCalledTimes(1)
+    expect(hoisted.reportWorkspaceUsage).toHaveBeenCalledTimes(1)
     await runUsageReport(
       job({ scheduledFor: '2026-08-01T00:10:00.000Z' }, 'usage-report:2026-08-01T00:10:00.000Z')
     )
-    expect(hoisted.detectPlanLimitsQuietly).toHaveBeenCalledTimes(1)
+    expect(hoisted.detectPlanLimitsQuietly).toHaveBeenCalledTimes(2)
+  })
+
+  it('detects nothing without a hosted billing URL', async () => {
+    delete process.env.QUACKBACK_CONTROL_PLANE_URL
+    await runUsageReport(job({ month: '2026-07' }, 'usage-report:2026-07'))
+    await runUsageReport(
+      job({ scheduledFor: '2026-08-01T00:10:00.000Z' }, 'usage-report:2026-08-01T00:10:00.000Z')
+    )
+    expect(hoisted.detectPlanLimitsQuietly).not.toHaveBeenCalled()
   })
 
   it('sends the due plan limits email from the hourly slot, after detection', async () => {

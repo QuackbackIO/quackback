@@ -8,8 +8,8 @@
  * construction. The refusal is neutral on purpose: end users see it, and it
  * never mentions plans or billing.
  *
- * Like the other runtime helpers it fails open: with the flag off, or when the
- * plan limits cannot be read, every board is open.
+ * Like the other runtime helpers it fails open: without plan billing, or when
+ * the plan limits cannot be read, every board is open.
  */
 import { toUuid } from '@quackback/ids'
 import type { SQL } from 'drizzle-orm'
@@ -99,7 +99,7 @@ export async function isPostBoardOpen(postId: PostId): Promise<boolean> {
 
 /**
  * The boards the plan keeps open as a uuid array for a vote query, or a null
- * array when it keeps all of them (the flag is off, or nothing is over).
+ * array when it keeps all of them (no plan billing, or nothing is over).
  */
 export async function planOpenBoardsSql(): Promise<SQL> {
   const open = await openBoardIds()
@@ -118,7 +118,7 @@ export async function assertPostBoardOpen(postId: PostId): Promise<void> {
 /**
  * Runs a post create for a portal or widget visitor. A refusal at the posts
  * cap reads as the neutral line instead of the upgrade wording, which is for
- * admins. With the plan limits flag off the refusal is left as it is.
+ * admins. Without plan billing the refusal is left as it is.
  */
 export async function withVisitorPostCapCopy<T>(create: () => Promise<T>): Promise<T> {
   try {

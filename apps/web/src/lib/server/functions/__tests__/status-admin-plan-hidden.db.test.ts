@@ -36,6 +36,7 @@ import {
   getPlanLimits,
   invalidatePlanLimits,
 } from '@/lib/server/domains/plan-limits/plan-limits.service'
+import { planBillingOn } from '@/lib/server/domains/plan-limits/__tests__/plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -52,11 +53,11 @@ const list = async () =>
 let api: StatusComponentId
 let web: StatusComponentId
 
-async function configure(planLimits: boolean) {
+/** `planBilling` off is an install without plan billing. */
+async function configure(planBilling: boolean) {
   await testDb.update(settings).set({
-    featureFlags: JSON.stringify({ feedback: true, planLimits }),
+    cloud: (planBilling ? planBillingOn() : null) as never,
     tierLimits: JSON.stringify({ ...OSS_TIER_LIMITS, maxStatusComponents: 1 }),
-    cloud: null,
   })
   invalidateTierLimitsCache()
   await invalidateSettingsCache()
@@ -106,7 +107,7 @@ describe.skipIf(!fixture.available)('admin services list and plan limits (real D
     expect(enforced.planHidden?.ids).toEqual([web])
   })
 
-  it('marks nothing with the rules off', async () => {
+  it('marks nothing without plan billing', async () => {
     await configure(false)
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
     const off = await list()

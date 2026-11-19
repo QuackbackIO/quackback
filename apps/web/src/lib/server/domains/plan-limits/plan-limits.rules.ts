@@ -192,7 +192,7 @@ export function basisAtLeast(reader: PlanLimitsBasis, state: PlanLimitsBasis | u
 }
 
 export interface PlanLimitsInputs {
-  /** The rollout flag. Off: always ok, and a stored state is left as it is. */
+  /** Whether plan billing is on. Off: always ok, and a stored state is left as it is. */
   enabled: boolean
   /** The inputs revision these limits were read under. */
   basis?: PlanLimitsBasis
@@ -364,8 +364,8 @@ function graceFeatures(features: PlanFeatureSet, previous: PreviousPlan | null):
 
 export function computePlanLimits(input: PlanLimitsInputs, now: Date): PlanLimitsResult {
   if (!input.enabled) {
-    // Turning the flag off pauses the rules; it does not forget a grace or the
-    // admin's choices.
+    // Without plan billing the rules do not run; a stored grace and the
+    // admin's choices are left as they are.
     return { view: okView(input), nextState: input.stored, changed: false }
   }
 
@@ -477,7 +477,7 @@ function choicesOf(state: PlanLimitsState | null): Partial<PlanLimitsState> {
 
 /**
  * Whether a feature may run now: the current plan has it, or the phase is
- * grace and it was live at first detection. With the flag off this is the
+ * grace and it was live at first detection. Without plan billing this is the
  * current plan alone.
  */
 export function featureLive(
@@ -489,7 +489,7 @@ export function featureLive(
   return view.phase === 'grace' && view.fromFeatures?.[key] === true
 }
 
-/** Whether a feature is paused: only with the flag on, when it is not live. */
+/** Whether a feature is paused: only with plan billing on, when it is not live. */
 export function featurePaused(
   view: Pick<PlanLimitsView, 'enabled' | 'phase' | 'features' | 'fromFeatures'>,
   key: PlanFeatureKey

@@ -170,17 +170,28 @@ export async function getPublicOidcProviders(
   /** The settings row's raw `auth_config`, which every caller already holds. */
   authConfig: string | null | undefined,
   /** The provider list, when the caller has already read it. */
-  knownProviders?: IdentityProvider[]
+  knownProviders?: IdentityProvider[],
+  /**
+   * `configured` skips the single sign-on check: the cached workspace settings
+   * hold every set-up provider's button, and `getWorkspaceSettings` drops them
+   * after the cache while single sign-on is not live. Plan limits decide that
+   * from the settings row, so it cannot be asked while the row is loading.
+   */
+  gate: 'registered' | 'configured' = 'registered'
 ): Promise<OidcSignInButton[]> {
   const { listIdentityProviders, shouldRenderPublicButton } =
     await import('./identity-providers.service')
-  const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
+  const { getRegisteredOidcProviderIds, getConfiguredOidcProviderIds } =
+    await import('@/lib/server/auth/registered-providers')
 
   const providers =
     knownProviders ?? (await listIdentityProviders({ authConfig: authConfig ?? null }))
   // No providers → no buttons; skip the tier + credential round-trips.
   if (providers.length === 0) return []
-  const registered = await getRegisteredOidcProviderIds(providers)
+  const registered =
+    gate === 'configured'
+      ? await getConfiguredOidcProviderIds(providers)
+      : await getRegisteredOidcProviderIds(providers)
 
   return providers
     .filter((p) => registered.has(p.registrationId) && shouldRenderPublicButton(p))
@@ -993,9 +1004,9 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
 /**
  * The login forms' sign-in methods as they are in force right now. The cached
  * settings hold the stored methods; while identity providers are set up but
- * single sign-on is not live, `effectiveSignInMethods` adds email links. That
- * is decided here, after the cache, so it follows the plan as soon as plan
- * limits do (a clock-driven plan expiry included) rather than when the
+ * single sign-on is not live, `effectiveSignInMethods` adds email links and
+ * the portal's provider buttons are dropped. That is decided here, after the
+ * cache, so it follows the plan as soon as plan limits do (a clock-driven plan expiry included) rather than when the
  * cached entry is next rebuilt. Nothing stored is changed.
  *
  * The provider half is cached with the settings (`ssoProvidersConfigured`,
@@ -1024,7 +1035,14 @@ async function withEffectiveSignInMethods(settings: WorkspaceSettings): Promise<
     configuredTypes,
     passthroughKeys
   )
-  return { ...settings, publicAuthConfig: { ...settings.publicAuthConfig, oauth } }
+  // The cached buttons are every set-up provider's; none signs in now.
+  const publicPortalConfig = { ...settings.publicPortalConfig }
+  delete publicPortalConfig.oidcProviders
+  return {
+    ...settings,
+    publicAuthConfig: { ...settings.publicAuthConfig, oauth },
+    publicPortalConfig,
+  }
 }
 
 /**
@@ -1134,7 +1152,11 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
     // surface only); the static map supplies social providers only.
     const { listIdentityProviders } = await import('./identity-providers.service')
     const identityProviders = await listIdentityProviders({ authConfig: org.authConfig })
-    const portalOidcProviders = await getPublicOidcProviders(org.authConfig, identityProviders)
+    const portalOidcProviders = await getPublicOidcProviders(
+      org.authConfig,
+      identityProviders,
+      'configured'
+    )
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
@@ -1254,15 +1276,7 @@ export async function updateFeatureFlags(
     return updated
   }
   const flags = options.executor ? await write(options.executor) : await db.transaction(write)
-  if (!options.executor) {
-    await invalidateSettingsCache()
-    // Turning plan limits on detects at once rather than on the next read.
-    if (input.planLimits === true) {
-      const { detectPlanLimitsQuietly } =
-        await import('@/lib/server/domains/plan-limits/plan-limits.service')
-      await detectPlanLimitsQuietly()
-    }
-  }
+  if (!options.executor) await invalidateSettingsCache()
   return flags
 }
 

@@ -28,11 +28,7 @@ export async function loadDowngradePreview(input: {
   used: Record<string, number>
 }): Promise<DowngradePreview> {
   const { fetchBillingCatalogue } = await import('@/lib/server/control-plane/client')
-  const { getFeatureFlags } = await import('@/lib/server/domains/settings/settings.service')
-  const [catalogue, flags] = await Promise.all([
-    fetchBillingCatalogue().catch(() => null),
-    getFeatureFlags().catch(() => null),
-  ])
+  const catalogue = await fetchBillingCatalogue().catch(() => null)
   const catalogueName = catalogue?.plans.find((plan) => plan.id === input.planId)?.name
   return {
     planId: input.planId,
@@ -41,10 +37,7 @@ export async function loadDowngradePreview(input: {
     info: planDowngradeInfo(input.used, input.planId),
     featuresDisabled: featuresDisabledOnDowngrade(
       input.overview?.trialPlanId ?? input.overview?.plan,
-      input.planId,
-      // The copy says what really happens: a 7-day grace, then a pause, only
-      // while the plan limits rules are on.
-      { planLimits: flags?.planLimits === true }
+      input.planId
     ),
   }
 }

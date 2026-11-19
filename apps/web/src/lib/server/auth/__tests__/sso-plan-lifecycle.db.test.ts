@@ -27,20 +27,32 @@ const state = vi.hoisted(() => ({
   configuredTypes: new Set<string>(),
 }))
 
-vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+vi.mock('@/lib/server/domains/settings/identity-providers.service', async (original) => ({
+  ...(await original<typeof import('@/lib/server/domains/settings/identity-providers.service')>()),
   listIdentityProviders: async () => state.providers,
 }))
 
-vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service', () => ({
-  getConfiguredIntegrationTypes: async () => state.configuredTypes,
-  hasPlatformCredentials: async (type: string) => state.configuredTypes.has(type),
+vi.mock(
+  '@/lib/server/domains/platform-credentials/platform-credential.service',
+  async (original) => ({
+    ...(await original<
+      typeof import('@/lib/server/domains/platform-credentials/platform-credential.service')
+    >()),
+    getConfiguredIntegrationTypes: async () => state.configuredTypes,
+    hasPlatformCredentials: async (type: string) => state.configuredTypes.has(type),
+  })
+)
+
+vi.mock('@quackback/email', async (original) => ({
+  ...(await original<typeof import('@quackback/email')>()),
+  isEmailConfigured: () => true,
 }))
 
-vi.mock('@quackback/email', () => ({ isEmailConfigured: () => true }))
-
 // The last-way-in guard reads the stored methods from the settings; serve the
-// same SSO-only methods the row holds.
-vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+// same SSO-only methods the row holds. The settings row itself stays real:
+// plan limits read the plan from it.
+vi.mock('@/lib/server/domains/settings/settings.service', async (original) => ({
+  ...(await original<typeof import('@/lib/server/domains/settings/settings.service')>()),
   getWorkspaceSettings: async () => ssoOnlyWorkspace(),
 }))
 

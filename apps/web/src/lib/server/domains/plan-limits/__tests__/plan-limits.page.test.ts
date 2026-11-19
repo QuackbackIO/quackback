@@ -82,6 +82,21 @@ describe('planLimitsPage', () => {
     expect(page.fromPlanName).toBe('Pro')
   })
 
+  it('offers nobody an upgrade where the plan cannot be changed in the app, and still shows the page', () => {
+    for (const billing of [
+      { canUpgrade: false, canManageBilling: false },
+      { canUpgrade: false, canManageBilling: true },
+      { canUpgrade: true, canManageBilling: false },
+    ]) {
+      const page = planLimitsPage(view, candidates, [PERMISSIONS.BILLING_MANAGE], 0, billing)
+      expect(page.canManageBilling).toBe(false)
+      expect(page.enabled).toBe(true)
+      expect(page.phase).toBe(view.phase)
+      // Fixing stays open to whoever manages what is over.
+      expect(page.choosers.board).toBe(true)
+    }
+  })
+
   it('shows a teammate only the choosers their permissions allow, and no member list otherwise', () => {
     const page = planLimitsPage(view, candidates, [PERMISSIONS.SETTINGS_MANAGE])
     expect(page.choosers.board).toBe(true)

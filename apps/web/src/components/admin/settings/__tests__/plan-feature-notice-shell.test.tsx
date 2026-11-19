@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 /**
- * Whether a page carries the paused notice costs nothing with the plan limits
- * flag off: no query runs. With the flag on it shares the notice's query.
+ * Whether a page carries the paused notice costs nothing on an install
+ * without plan billing: no query runs. With plan billing on it shares the
+ * notice's query.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, renderHook, waitFor } from '@testing-library/react'
@@ -9,12 +10,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
 const h = vi.hoisted(() => ({
-  flags: {} as Record<string, boolean>,
+  planBilling: false,
   getPlanLimitsFn: vi.fn(),
 }))
 
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
-  useWorkspaceSettings: () => ({ featureFlags: h.flags }),
+  useCloudEnabled: () => h.planBilling,
 }))
 vi.mock('@/lib/server/functions/plan-limits', () => ({ getPlanLimitsFn: h.getPlanLimitsFn }))
 
@@ -40,8 +41,8 @@ describe('usePlanFeatureNoticeShown', () => {
     return { client, ...renderHook(() => usePlanFeatureNoticeShown(feature), { wrapper }) }
   }
 
-  it('is false and asks nothing with the flag off', async () => {
-    h.flags = { planLimits: false }
+  it('is false and asks nothing without plan billing', async () => {
+    h.planBilling = false
     h.getPlanLimitsFn.mockReset()
     const { result, client } = shown('customDomain')
     // No fetch starts at all, and none lands after the query's own import.
@@ -54,7 +55,7 @@ describe('usePlanFeatureNoticeShown', () => {
   it.each(['grace', 'enforced'])(
     'is true for a feature set up past the plan (%s)',
     async (phase) => {
-      h.flags = { planLimits: true }
+      h.planBilling = true
       h.getPlanLimitsFn.mockReset().mockResolvedValue(state(phase, ['customDomain']))
       const { result } = shown('customDomain')
       await waitFor(() => expect(result.current).toBe(true))
@@ -62,7 +63,7 @@ describe('usePlanFeatureNoticeShown', () => {
   )
 
   it('is false for a feature that is not over, and when nothing is', async () => {
-    h.flags = { planLimits: true }
+    h.planBilling = true
     h.getPlanLimitsFn.mockReset().mockResolvedValue(state('grace', ['customDomain']))
     const css = shown('customCss')
     await waitFor(() => expect(h.getPlanLimitsFn).toHaveBeenCalled())

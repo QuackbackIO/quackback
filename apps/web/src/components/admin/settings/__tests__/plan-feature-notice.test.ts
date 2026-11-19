@@ -96,7 +96,7 @@ describe('planFeatureNotice', () => {
   })
 
   it.each([
-    ['the flag is off', state({ enabled: false })],
+    ['there is no plan billing', state({ enabled: false })],
     ['nothing is over the plan', state({ phase: 'ok' })],
     ['this feature is not set up past the plan', state({ featureIssues: [{ key: 'webhooks' }] })],
     ['the state has not loaded', undefined],
@@ -182,7 +182,7 @@ describe('the body and the leaf agree', () => {
   it.each<[string, PlanNoticeState | null | undefined]>([
     ['no state', undefined],
     ['null state', null],
-    ['rules off', state({ enabled: false })],
+    ['no plan billing', state({ enabled: false })],
     ['nothing over', state({ phase: 'ok' })],
     ['in the grace', state({ phase: 'grace' })],
     ['paused', state()],

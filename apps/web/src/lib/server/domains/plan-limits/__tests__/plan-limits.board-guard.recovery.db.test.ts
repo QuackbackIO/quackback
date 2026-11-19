@@ -65,6 +65,7 @@ import {
   BoardReadOnlyError,
   withVisitorPostCapCopy,
 } from '../plan-limits.board-guard'
+import { planBillingOn } from './plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -79,9 +80,10 @@ let openBoard: BoardId
 let closedBoard: BoardId
 let closedPost: PostId
 
-async function configure(planLimits: boolean, tierLimits: object = FREE_LIKE) {
+/** `planBilling` off is an install without plan billing. */
+async function configure(planBilling: boolean, tierLimits: object = FREE_LIKE) {
   await testDb.update(settings).set({
-    featureFlags: JSON.stringify({ feedback: true, planLimits }),
+    cloud: (planBilling ? planBillingOn() : null) as never,
     tierLimits: JSON.stringify(tierLimits),
   })
   invalidateTierLimitsCache()
@@ -277,9 +279,9 @@ describe.skipIf(!fixture.available)('read-only boards, edges (real DB)', () => {
   })
 
   describe('an install without plan billing', () => {
-    it('never closes a board with the rules on and no board cap, however many boards', async () => {
+    it('never closes a board, however far over the tier limits board cap', async () => {
       await addBoard('Acme third', 2, new Date('2026-03-01T00:00:00.000Z'))
-      await configure(true, OSS_TIER_LIMITS)
+      await configure(false, FREE_LIKE)
       vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 30 * DAY })
       expect((await getPlanLimits()).phase).toBe('ok')
       await expectEveryPath(closedBoard, closedPost, true)
@@ -324,7 +326,7 @@ describe.skipIf(!fixture.available)('read-only boards, edges (real DB)', () => {
         permissions: [],
       }) as unknown as Parameters<typeof runCreatePublicPost>[0]
 
-    it('gives a portal or widget visitor the neutral line with the rules on', async () => {
+    it('gives a portal or widget visitor the neutral line with plan billing on', async () => {
       await configure(true, await capAtCurrentCount())
       const error = await runCreatePublicPost(visitorAuth(), {
         boardId: openBoard,

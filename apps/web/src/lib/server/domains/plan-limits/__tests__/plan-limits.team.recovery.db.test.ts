@@ -62,6 +62,7 @@ import { setSeatHolders } from '../plan-limits.choosers'
 import { isPausedTeamSeat } from '../plan-limits.seats'
 import { heldHelpCenterLocales } from '../plan-limits.locales'
 import { markPresent, readAvailableAgentIds } from '@/lib/server/realtime/presence'
+import { planBillingOn } from './plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -80,11 +81,11 @@ const UNCAPPED = {
 
 let ownerId: PrincipalId
 
-async function configure(planLimits: boolean, tierLimits: object) {
+/** `planBilling` off is an install without plan billing. */
+async function configure(planBilling: boolean, tierLimits: object) {
   await testDb.update(settings).set({
-    featureFlags: JSON.stringify({ feedback: true, planLimits }),
+    cloud: (planBilling ? planBillingOn() : null) as never,
     tierLimits: JSON.stringify(tierLimits),
-    cloud: null,
   })
   invalidateTierLimitsCache()
   await invalidateSettingsCache()
@@ -270,11 +271,16 @@ describe.skipIf(!fixture.available)('coming back (real DB)', () => {
 })
 
 describe.skipIf(!fixture.available)('an install without plan billing (real DB)', () => {
-  it('never pauses, locks or hides anything with the rules on and no caps', async () => {
+  it('never pauses, locks or hides anything, however far over the tier limits caps', async () => {
     const member = await addPerson('Acme Member', 'member')
     await addComponents(['Acme API', 'Acme Web', 'Acme Docs', 'Acme Mail'])
     await setLanguages(['fr', 'de', 'es', 'it'])
-    await configure(true, OSS_TIER_LIMITS)
+    await configure(false, {
+      ...UNCAPPED,
+      maxTeamSeats: 1,
+      maxHelpCenterLocales: 1,
+      maxStatusComponents: 1,
+    })
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 30 * DAY })
     expect((await getPlanLimits()).phase).toBe('ok')
     expect(await paused(member)).toBe(false)

@@ -609,7 +609,7 @@ describe('BillingPlansView with plan limits', () => {
     )
   })
 
-  it('says nothing new with the flag off', () => {
+  it('says nothing new without plan billing', () => {
     renderView({ usage, limits: overLimits({ enabled: false }) })
     expect(screen.queryByText('Over limits')).toBeNull()
     expect(screen.queryByRole('link', { name: /Over limit|See plan limits/ })).toBeNull()

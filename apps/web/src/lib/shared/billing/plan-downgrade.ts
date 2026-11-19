@@ -124,74 +124,53 @@ const RESOURCE: Record<PlanCapKey, { singular: string; plural: string; href: str
 
 /**
  * Plan features a downgrade can turn off, in display order, with the plans
- * that include each. `paused` is the wording with plan limits on: features
- * that were running keep running for 7 days after the drop, then pause, are
- * kept, and come back on upgrade (MCP, AI insights and the audit log stop at
- * once). `disabled` is the wording with plan limits off, where the plan change
- * itself turns them off. Copilot drafts and the REST API are on every plan, so
- * no downgrade loses them.
+ * that include each. Features that were running keep running for 7 days
+ * after the drop, then pause, are kept, and come back on upgrade (MCP, AI
+ * insights and the audit log stop at once). Copilot drafts and the REST API
+ * are on every plan, so no downgrade loses them.
  */
-const PLAN_FEATURES: ReadonlyArray<{
-  paused: string
-  disabled: string
-  plans: readonly PlanId[]
-}> = [
+const PLAN_FEATURES: ReadonlyArray<{ lost: string; plans: readonly PlanId[] }> = [
   {
-    paused: 'Your custom domain pauses after 7 days. Links go to your workspace address.',
-    disabled: 'Custom domains will be disabled',
+    lost: 'Your custom domain pauses after 7 days. Links go to your workspace address.',
     plans: ['pro', 'business', 'enterprise'],
   },
   {
-    paused: 'Live workflows pause after 7 days.',
-    disabled: 'Workflows and automations will be disabled',
+    lost: 'Live workflows pause after 7 days.',
     plans: ['business', 'enterprise'],
   },
   {
-    paused: 'Single sign-on pauses after 7 days. Your team signs in with email links.',
-    disabled: 'Single sign-on will be disabled',
+    lost: 'Single sign-on pauses after 7 days. Your team signs in with email links.',
     plans: ['enterprise'],
   },
   {
-    paused: 'The AI assistant pauses after 7 days. AI insights pause now.',
-    disabled: 'AI assistant and insights will be disabled',
+    lost: 'The AI assistant pauses after 7 days. AI insights pause now.',
     plans: ['pro', 'business', 'enterprise'],
   },
   {
-    paused: 'AI article translation pauses after 7 days. Published translations stay.',
-    disabled: 'AI article translation will be disabled',
+    lost: 'AI article translation pauses after 7 days. Published translations stay.',
     plans: ['business', 'enterprise'],
   },
   {
-    paused: 'Webhooks pause after 7 days.',
-    disabled: 'Webhooks will be disabled',
+    lost: 'Webhooks pause after 7 days.',
     plans: ['pro', 'business', 'enterprise'],
   },
   {
-    paused: 'MCP access pauses.',
-    disabled: 'MCP access pauses.',
+    lost: 'MCP access pauses.',
     plans: ['pro', 'business', 'enterprise'],
   },
   {
-    paused: 'The audit log is hidden. New entries are still recorded.',
-    disabled: 'The audit log will be disabled',
+    lost: 'The audit log is hidden. New entries are still recorded.',
     plans: ['enterprise'],
   },
 ]
 
-/** Whether the plan limits rules (7-day grace, then pause) apply to this workspace. */
-export type DowngradeCopyOptions = { planLimits?: boolean }
-
-function featuresLost(
-  fromPlanId: string,
-  toPlanId: string,
-  options: DowngradeCopyOptions
-): string[] {
+function featuresLost(fromPlanId: string, toPlanId: string): string[] {
   const from = canonicalPlanId(fromPlanId)
   const to = canonicalPlanId(toPlanId)
   if (!isPlanId(from) || !isPlanId(to)) return []
   return PLAN_FEATURES.filter(
     (feature) => feature.plans.includes(from) && !feature.plans.includes(to)
-  ).map((feature) => (options.planLimits ? feature.paused : feature.disabled))
+  ).map((feature) => feature.lost)
 }
 
 export function usedByKey(lines: readonly PlanUsageLine[]): Record<string, number> {
@@ -268,19 +247,15 @@ export function freeDowngradeIssues(used: Record<string, number>): PlanDowngrade
   return planDowngradeIssues(used, 'free')
 }
 
-export function featuresDisabledOnFree(
-  planId: string | null | undefined,
-  options: DowngradeCopyOptions = {}
-): string[] {
+export function featuresDisabledOnFree(planId: string | null | undefined): string[] {
   const from = planId ? canonicalPlanId(planId) : 'business'
-  return featuresLost(isPlanId(from) ? from : 'business', 'free', options)
+  return featuresLost(isPlanId(from) ? from : 'business', 'free')
 }
 
 export function featuresDisabledOnDowngrade(
   fromPlanId: string | null | undefined,
-  toPlanId: string,
-  options: DowngradeCopyOptions = {}
+  toPlanId: string
 ): string[] {
-  if (canonicalPlanId(toPlanId) === 'free') return featuresDisabledOnFree(fromPlanId, options)
-  return fromPlanId ? featuresLost(fromPlanId, toPlanId, options) : []
+  if (canonicalPlanId(toPlanId) === 'free') return featuresDisabledOnFree(fromPlanId)
+  return fromPlanId ? featuresLost(fromPlanId, toPlanId) : []
 }

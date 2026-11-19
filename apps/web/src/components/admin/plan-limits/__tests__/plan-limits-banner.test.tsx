@@ -78,7 +78,7 @@ describe('PlanLimitsBanner', () => {
     expect(banner()).toBeNull()
   })
 
-  it('renders nothing with the flag off, whatever the rest says', () => {
+  it('renders nothing without plan billing, whatever the rest says', () => {
     render(<PlanLimitsBanner limits={limits({ enabled: false })} pathname="/admin" />)
     expect(banner()).toBeNull()
   })
@@ -195,7 +195,7 @@ describe('PlanLimitsQuiet', () => {
     expect(link).toHaveTextContent(/Fix by Nov 24$/)
   })
 
-  it('says what is paused once enforced, and nothing when it fits or the flag is off', () => {
+  it('says what is paused once enforced, and nothing when it fits or without plan billing', () => {
     mount(limits({ phase: 'enforced' }))
     expect(screen.getByRole('link')).toHaveTextContent(/Paused since Nov 25$/)
     cleanup()

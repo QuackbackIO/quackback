@@ -33,9 +33,8 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
     developerConfig: {},
   })),
 }))
-vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
-  getTierLimits: vi.fn(async () => ({ features: {} })),
-  invalidateTierLimitsCache: vi.fn(),
+vi.mock('@/lib/server/domains/plan-limits/plan-limits.service', () => ({
+  isFeatureLive: vi.fn(async () => false),
 }))
 vi.mock('../ensure-mcp-oauth-resource', () => ({
   ensureMcpOauthResource: vi.fn(async ({ identifier }: { identifier: string }) => {

@@ -21,6 +21,13 @@ export type PlanLimitsChoiceRefusal = {
 }
 export type PlanLimitsChoiceResponse = { ok: true } | PlanLimitsChoiceRefusal
 
+/** Whether the plan can be changed in the app, from the billing projection. */
+async function inAppBilling() {
+  const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
+  const { canUpgrade, canManageBilling } = await getCloudConfig()
+  return { canUpgrade, canManageBilling }
+}
+
 const idSchema = z.string().min(1).max(200)
 const idsSchema = z.object({ ids: z.array(idSchema).max(500) })
 
@@ -36,7 +43,7 @@ export const getPlanLimitsFn = createServerFn({ method: 'GET' }).handler(async (
   const skipped = limits.infoRows.some((row) => row.key === 'emailsPerMonth')
     ? await skippedBroadcastCount()
     : 0
-  return planLimitsPage(limits, candidates, permissions, skipped)
+  return planLimitsPage(limits, candidates, permissions, skipped, await inAppBilling())
 })
 
 export const setKeptBoardFn = createServerFn({ method: 'POST' })
@@ -93,7 +100,7 @@ export const getPlanLimitsSummaryFn = createServerFn({ method: 'GET' }).handler(
   const { permissions } = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
   const { getPlanLimits } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
   const { planLimitsPage } = await import('@/lib/server/domains/plan-limits/plan-limits.page')
-  return planLimitsPage(await getPlanLimits(), {}, permissions)
+  return planLimitsPage(await getPlanLimits(), {}, permissions, 0, await inAppBilling())
 })
 
 /**
@@ -110,5 +117,5 @@ export const getPlanLimitsNoticeFn = createServerFn({ method: 'GET' }).handler(a
   }
   const { getPlanLimits } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
   const { planLimitsNotice } = await import('@/lib/server/domains/plan-limits/plan-limits.notice')
-  return planLimitsNotice(await getPlanLimits(), auth.permissions)
+  return planLimitsNotice(await getPlanLimits(), auth.permissions, await inAppBilling())
 })

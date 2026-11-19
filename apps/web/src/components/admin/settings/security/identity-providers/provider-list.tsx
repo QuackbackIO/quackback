@@ -13,7 +13,7 @@
  * leave no way in (with the tier off, a provider keeps the stand-in email links
  * on); turning one on, adding one, and opening its page need the tier. The recovery codes stay.
  */
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
@@ -35,11 +35,18 @@ import { isProviderLastWayIn, type AuthMethodInputs } from '../auth-method-count
 import { SsoOffOnPlanNotice, SsoUpgradeNotice } from './sso-upgrade-notice'
 import { toastError } from '@/lib/client/error-notice'
 
+// Loaded only while a provider set up past the plan still works.
+const SsoPausesNotice = lazy(() => import('./sso-pauses-notice'))
+
 export function IdentityProvidersSection({
   tierEnabled,
+  ssoLive = tierEnabled,
   methods,
 }: {
   tierEnabled: boolean
+  /** Single sign-on works right now: the plan has it, or it keeps working
+   *  through a plan limits grace. Defaults to the tier flag. */
+  ssoLive?: boolean
   /** The other sign-in methods (built-in and social). With the providers below
    *  they decide whether switching a provider off would leave no way in. */
   methods: Omit<AuthMethodInputs, 'identityProviders' | 'ssoLive'>
@@ -47,12 +54,10 @@ export function IdentityProvidersSection({
   const providersQuery = useSuspenseQuery(settingsQueries.identityProviders())
   const providers = providersQuery.data ?? []
   const isLastWayIn = (providerId: string) =>
-    isProviderLastWayIn(
-      { ...methods, identityProviders: providers, ssoLive: tierEnabled },
-      providerId
-    )
-  // Set up but not in the plan: email links stand in for single sign-on.
-  const setUpButOff = !tierEnabled && providers.some((p) => p.enabled && p.configured)
+    isProviderLastWayIn({ ...methods, identityProviders: providers, ssoLive }, providerId)
+  // Set up but not in the plan: it keeps working through a plan limits grace,
+  // and once paused email links stand in for it.
+  const setUp = !tierEnabled && providers.some((p) => p.enabled && p.configured)
 
   const createAction = (
     <NewButton noun="provider" asChild>
@@ -69,7 +74,15 @@ export function IdentityProvidersSection({
     >
       {!tierEnabled && (
         <div className="p-4 sm:p-6">
-          {setUpButOff ? <SsoOffOnPlanNotice /> : <SsoUpgradeNotice />}
+          {!setUp ? (
+            <SsoUpgradeNotice />
+          ) : ssoLive ? (
+            <Suspense fallback={null}>
+              <SsoPausesNotice />
+            </Suspense>
+          ) : (
+            <SsoOffOnPlanNotice />
+          )}
         </div>
       )}
       {providers.length === 0 ? (

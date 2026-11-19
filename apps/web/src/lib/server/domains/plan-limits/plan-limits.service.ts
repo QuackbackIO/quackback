@@ -5,23 +5,22 @@
  * tier limits, the current plan's features, usage counts, what is set up and
  * the choosers' candidates), runs the pure rules in plan-limits.rules.ts and
  * persists a changed state with a compare-and-set, so detection happens on
- * read. The other detection triggers (a billing projection write, the flag
- * being turned on, the hourly usage-report slot) call `detectPlanLimits()`.
+ * read. The other detection triggers (a billing projection write and the
+ * hourly usage-report slot) call `detectPlanLimits()`.
  *
  * Runtime paths ask the narrow helpers below (`isFeatureLive`,
  * `isBoardOpen`, `isSeatPaused`, ...). Each fails open: a read error never
  * blocks a post, a delivery or a sign-in.
  *
- * With the `planLimits` flag off nothing is read beyond the cached settings
- * row and the phase is always ok.
+ * The rules apply wherever plan billing is on. On an install without it
+ * nothing is read beyond the cached settings row and the phase is always ok.
+ * A workspace first seen over its limits gets a full grace from that moment,
+ * however long ago its plan changed.
  */
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { CACHE_KEYS, cacheGet, cacheSet } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
-import { memoizePerRequest, rememberPerRequest } from '@/lib/server/request-memo'
-import { getFeatureFlags } from '@/lib/server/domains/settings/settings.service'
-import { config } from '@/lib/server/config'
-import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
-import { getChatModel } from '@/lib/server/domains/ai/models'
+import { derivedMemoKey, memoizePerRequest, rememberPerRequest } from '@/lib/server/request-memo'
 import {
   compareAndSetPlanLimitsState,
   readPlanLimitsSources,
@@ -65,6 +64,7 @@ import {
   type MemberChoice,
   type SendingDomainChoice,
   type StatusComponentChoice,
+  modelConfigured,
 } from './plan-limits.loaders'
 
 export { invalidatePlanLimits }
@@ -90,7 +90,6 @@ export interface PlanLimitsSnapshot {
 type SnapshotPart = keyof PlanLimitsSnapshot
 
 interface Context {
-  enabled: boolean
   sources: PlanLimitsSources | null
   inputs: Omit<PlanLimitsInputs, 'usage' | 'configured' | 'candidates'>
 }
@@ -102,7 +101,7 @@ interface Context {
  * against different limits (the per-process tier limits cache is not used).
  */
 async function loadContext(now: Date, previous?: PreviousPlan | null): Promise<Context> {
-  const [flags, sources] = await Promise.all([getFeatureFlags(), readPlanLimitsSources()])
+  const sources = await readPlanLimitsSources()
   const limits = resolveTierLimitsFromRow(
     sources?.tierLimits ?? null,
     sources?.cloud?.projection ?? null,
@@ -110,10 +109,9 @@ async function loadContext(now: Date, previous?: PreviousPlan | null): Promise<C
   )
   const cloud = resolveCloudConfig(sources?.cloud ?? null, now)
   return {
-    enabled: flags.planLimits === true,
     sources,
     inputs: {
-      enabled: flags.planLimits === true,
+      enabled: cloud.enabled,
       basis: {
         cloudRevision: sources?.cloudRevision ?? 0,
         authConfigVersion: sources?.authConfigVersion ?? 0,
@@ -151,22 +149,6 @@ function previousPlanAt(
 
 async function readSnapshot(): Promise<PlanLimitsSnapshot> {
   return (await memoizePerRequest(INPUTS_KEY, () => cacheGet<PlanLimitsSnapshot>(INPUTS_KEY))) ?? {}
-}
-
-/**
- * The check the assistant and article translation make before a model call:
- * an AI client and the feature's chat model. A config that cannot load runs
- * no model.
- */
-function modelConfigured(feature: 'assistant' | 'helpCenterTranslate'): boolean {
-  try {
-    return (
-      isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) &&
-      getChatModel(feature) !== null
-    )
-  } catch {
-    return false
-  }
 }
 
 async function loadPart(
@@ -231,12 +213,26 @@ export interface Evaluation {
   snapshot: PlanLimitsSnapshot
 }
 
-/** @internal The evaluation with its inputs, for the choosers. */
-export async function evaluate(options: {
+/**
+ * Set while an evaluation runs. Loading its inputs reads the workspace
+ * settings, whose sign-in methods ask whether single sign-on is live, which
+ * asks plan limits again. A runtime helper asked from inside answers as on a
+ * read error rather than waiting on the evaluation that asked.
+ */
+const evaluating = new AsyncLocalStorage<true>()
+
+interface EvaluateOptions {
   now: Date
   previous?: PreviousPlan | null
   persist: boolean
-}): Promise<Evaluation> {
+}
+
+/** @internal The evaluation with its inputs, for the choosers. */
+export function evaluate(options: EvaluateOptions): Promise<Evaluation> {
+  return evaluating.run(true, () => evaluateNow(options))
+}
+
+async function evaluateNow(options: EvaluateOptions): Promise<Evaluation> {
   const { now } = options
   const context = await loadContext(now, options.previous)
   const base = { ...context.inputs, usage: null, configured: null, candidates: {} }
@@ -285,11 +281,14 @@ export async function evaluate(options: {
       // This process won the write of a changed, non-empty state, which is only
       // ever a new grace (an unchanged state is never written, and a reader that
       // merely adopts the stored one lost the write): tell the billing managers
-      // now, not at the next hourly slot.
+      // now, not at the next hourly slot. The send runs outside the evaluation,
+      // so the plan limits it reads are real answers, not the guard's.
       const view = result.view
-      void import('./plan-limits.emails')
-        .then((m) => m.sendPlanLimitsEmailsQuietly(view))
-        .catch((err) => log.warn({ err }, 'plan limits start email trigger failed'))
+      evaluating.exit(() => {
+        void import('./plan-limits.emails')
+          .then((m) => m.sendPlanLimitsEmailsQuietly(view))
+          .catch((err) => log.warn({ err }, 'plan limits start email trigger failed'))
+      })
     }
   }
   // The emails' progress rides along so the hourly slot can skip a finished email.
@@ -423,9 +422,16 @@ export async function detectPlanLimitsQuietly(): Promise<void> {
 // Runtime helpers. Each fails open.
 // ---------------------------------------------------------------------------
 
+/**
+ * Every runtime helper in one request shares one evaluation. A write that
+ * drops the plan limits inputs or the settings forgets it with them.
+ */
+const VIEW_MEMO_KEY = derivedMemoKey(INPUTS_KEY, 'view')
+
 async function viewOrNull(): Promise<PlanLimits | null> {
+  if (evaluating.getStore()) return null
   try {
-    return await getPlanLimits()
+    return await memoizePerRequest(VIEW_MEMO_KEY, () => getPlanLimits())
   } catch (err) {
     log.error({ err }, 'plan limits read failed; failing open')
     return null
@@ -434,12 +440,12 @@ async function viewOrNull(): Promise<PlanLimits | null> {
 
 /**
  * Whether a paid feature may run now: the current plan has it, or the phase
- * is grace and it was live at first detection. With the flag off this is the
- * current plan's grant alone, the same answer as today's plan gates.
+ * is grace and it was live at first detection. Without plan billing this is
+ * the plan's grant alone, which is every feature.
  *
- * Use it where a runtime path already gates on the plan (the assistant,
- * article translation, MCP). Where a path runs with no plan gate today, use
- * {@link isFeaturePaused}, which is false with the flag off.
+ * Use it where a runtime path gates on the plan (the assistant, article
+ * translation, MCP, single sign-on). Where a path otherwise runs with no plan
+ * gate, use {@link isFeaturePaused}, which is false without plan billing.
  *
  * On a read error a key gated by an entitlement answers as its gate did
  * before: the plan's own entitlement, so it fails closed on a plan without
@@ -454,7 +460,7 @@ export async function isFeatureLive(key: PlanFeatureKey): Promise<boolean> {
   return hasEntitlement(definition.entitlement)
 }
 
-/** True only with the flag on, when the feature is not live (see {@link isFeatureLive}). */
+/** True only with plan billing on, when the feature is not live (see {@link isFeatureLive}). */
 export async function isFeaturePaused(key: PlanFeatureKey): Promise<boolean> {
   const view = await viewOrNull()
   return view ? featurePaused(view, key) : false

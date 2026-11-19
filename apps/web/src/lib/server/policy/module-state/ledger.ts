@@ -101,6 +101,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Indexes the bundled emoji dataset by emoticon, built once on first lookup. The dataset ships with the app and is the same for every workspace, so a cross-workspace hit returns the emoji any workspace would look up.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/plan-limits/plan-limits.service.ts',
+    name: 'evaluating',
+    category: 'process-lifetime',
+    reason:
+      'The AsyncLocalStorage instance marking one plan limits evaluation in progress. evaluate() opens a new store per call and the store holds only `true`, so concurrent workspaces and requests never see each other’s evaluation; the instance holds no value outside those contexts.',
+  },
+  {
     file: 'apps/web/src/lib/server/integrations/sync/transport.ts',
     name: 'evidence',
     category: 'process-lifetime',

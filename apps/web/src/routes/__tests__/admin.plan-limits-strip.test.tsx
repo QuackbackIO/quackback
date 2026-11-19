@@ -104,11 +104,12 @@ afterEach(() => {
   expireRouteContext()
 })
 
-function buildRouter(queryClient: QueryClient, flags: { billing: boolean; planLimits: boolean }) {
+function buildRouter(queryClient: QueryClient, flags: { billing: boolean }) {
   const rootRoute = createRootRouteWithContext<object>()({
     beforeLoad: () => ({
-      settings: { featureFlags: { ...DEFAULT_FEATURE_FLAGS, planLimits: flags.planLimits } },
+      settings: { featureFlags: DEFAULT_FEATURE_FLAGS },
       billingEnabled: flags.billing,
+      cloudEnabled: flags.billing,
       acceptLanguageLocale: 'en',
     }),
     component: () => <Outlet />,
@@ -131,7 +132,7 @@ function buildRouter(queryClient: QueryClient, flags: { billing: boolean; planLi
   })
 }
 
-async function mount(flags = { billing: true, planLimits: true }) {
+async function mount(flags = { billing: true }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const router = buildRouter(queryClient, flags)
   render(
@@ -190,7 +191,7 @@ describe('the plan limits strip in the admin layout', () => {
   })
 
   it('shows nothing and asks nothing without plan billing', async () => {
-    await mount({ billing: false, planLimits: true })
+    await mount({ billing: false })
     expect(await screen.findByText('Pro trial ended')).toBeInTheDocument()
     expect(shell.summary).not.toHaveBeenCalled()
     expect(banner()).toBeNull()
@@ -286,7 +287,7 @@ describe('the plan limits strip for a custom role without member.view', () => {
   it('reads nothing and shows nothing without plan billing', async () => {
     shell.permissions = customRole
     shell.limitsNotice.mockResolvedValue(limitsNotice())
-    await mount({ billing: false, planLimits: true })
+    await mount({ billing: false })
     await act(async () => {})
     expect(shell.limitsNotice).not.toHaveBeenCalled()
     expect(shell.summary).not.toHaveBeenCalled()

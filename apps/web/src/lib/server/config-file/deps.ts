@@ -100,20 +100,6 @@ export function makeReconcileDeps(): ReconcileDeps {
       const result = await writeTierLimits(limits as never, { writer: 'config' })
       return result.changed
     },
-    applyRolloutFlags: async (rollout) => {
-      // The internal write: the settings server function drops rollout flags,
-      // this path is how an operator sets them.
-      const { getFeatureFlags, updateFeatureFlags } =
-        await import('@/lib/server/domains/settings/settings.service')
-      const current = await getFeatureFlags()
-      const changes: { planLimits?: boolean } = {}
-      if (rollout.planLimits !== undefined && rollout.planLimits !== current.planLimits) {
-        changes.planLimits = rollout.planLimits
-      }
-      if (Object.keys(changes).length === 0) return false
-      await updateFeatureFlags(changes)
-      return true
-    },
     invalidateSettingsCache: async () => {
       await invalidateSettingsCache()
     },

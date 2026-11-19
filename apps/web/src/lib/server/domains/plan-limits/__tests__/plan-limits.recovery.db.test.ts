@@ -95,7 +95,7 @@ describe.skipIf(!fixture.available)('plan limits recovery (real DB)', () => {
   }
 
   it('restores every board and paused feature on an upgrade after the deadline, deleting nothing', async () => {
-    await configure(settingsId, { planLimits: true, tierLimits: FREE_LIKE })
+    await configure(settingsId, { planBilling: true, tierLimits: FREE_LIKE })
     await addWebhook()
     const start = await getPlanLimits()
     expect(start.phase).toBe('grace')
@@ -105,7 +105,7 @@ describe.skipIf(!fixture.available)('plan limits recovery (real DB)', () => {
     expect(await isFeaturePaused('webhooks')).toBe(true)
     expect(await isCapEnforced('maxBoards')).toBe(true)
 
-    await configure(settingsId, { planLimits: true, tierLimits: UNLIMITED })
+    await configure(settingsId, { planBilling: true, tierLimits: UNLIMITED })
     const after = await getPlanLimits()
     expect(after.phase).toBe('ok')
     expect(after.issues).toEqual([])
@@ -130,7 +130,7 @@ describe.skipIf(!fixture.available)('plan limits recovery (real DB)', () => {
     const a = await addStatusComponent('Acme API', 0)
     const b = await addStatusComponent('Acme Web', 1)
     await configure(settingsId, {
-      planLimits: true,
+      planBilling: true,
       tierLimits: { ...FREE_LIKE, maxStatusComponents: 1 },
     })
     await getPlanLimits()
@@ -157,7 +157,7 @@ describe.skipIf(!fixture.available)('plan limits recovery (real DB)', () => {
   })
 
   it('is ok after a fix during the grace, keeps that grace for the same limits, and gives a later drop a fresh one', async () => {
-    await configure(settingsId, { planLimits: true, tierLimits: FREE_LIKE })
+    await configure(settingsId, { planBilling: true, tierLimits: FREE_LIKE })
     const first = await getPlanLimits()
     expect(first.phase).toBe('grace')
 
@@ -177,13 +177,13 @@ describe.skipIf(!fixture.available)('plan limits recovery (real DB)', () => {
     expect(again.graceEndsAt).toBe(first.graceEndsAt)
 
     // An upgrade clears it.
-    await configure(settingsId, { planLimits: true, tierLimits: UNLIMITED })
+    await configure(settingsId, { planBilling: true, tierLimits: UNLIMITED })
     expect((await getPlanLimits()).phase).toBe('ok')
     expect(await storedState(settingsId)).toBeNull()
 
     // A later drop gets a fresh grace from that moment.
     later(30)
-    await configure(settingsId, { planLimits: true, tierLimits: FREE_LIKE })
+    await configure(settingsId, { planBilling: true, tierLimits: FREE_LIKE })
     const fresh = await getPlanLimits()
     expect(fresh.phase).toBe('grace')
     expect(fresh.since).toBe(new Date().toISOString())
@@ -192,7 +192,7 @@ describe.skipIf(!fixture.available)('plan limits recovery (real DB)', () => {
 
   it('pauses a feature only when it is set up, and only after the deadline', async () => {
     await configure(settingsId, {
-      planLimits: true,
+      planBilling: true,
       tierLimits: { ...FREE_LIKE, maxBoards: null },
     })
     // Webhooks are off on the plan but none is set up: nothing is over.

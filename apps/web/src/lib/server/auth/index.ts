@@ -214,8 +214,6 @@ async function createAuth() {
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders, socialProviderConfig } = await import('./auth-providers')
   const { isSsoLive } = await import('./registered-providers')
-  const { invalidateTierLimitsCache } =
-    await import('@/lib/server/domains/settings/tier-limits.service')
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { listIdentityProviders, getIdentityProviderCredentials } =
     await import('@/lib/server/domains/settings/identity-providers.service')
@@ -232,10 +230,9 @@ async function createAuth() {
   // together to avoid stacking Redis round-trips on every auth-instance
   // rebuild. workspaceSettings still drives the social-provider surface
   // filter below; OIDC config now comes from the identity_provider list.
-  // The instance keeps the plan it was built on until the next version change,
-  // and a plan written by another process arrives as exactly such a change, so
-  // read the plan afresh here rather than from this process's short-lived copy.
-  invalidateTierLimitsCache()
+  // The instance keeps the plan it was built on until the next version change.
+  // Plan limits read the plan from the same settings copy that carried that
+  // version, so a plan written by another process is the one built on.
   const [ssoLive, workspaceSettings] = await Promise.all([isSsoLive(), getWorkspaceSettings()])
 
   // OIDC providers (single sign-on + portal custom OIDC) are registered

@@ -7,7 +7,7 @@ import { WhoRepliesFirstCard } from '@/components/admin/automation/who-replies-f
 import { AbandonedJourneyAutoCloseCard } from '@/components/admin/automation/abandoned-journey-auto-close-card'
 import { WorkflowsManager } from '@/components/admin/automation/workflows-manager'
 import { warmQuery } from '@/lib/client/queries/warm-query'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useCloudEnabled, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { adminPageHead } from '@/lib/client/admin-head'
@@ -67,16 +67,15 @@ function WorkflowsPage() {
 }
 
 /**
- * The paused notice. The flag check lives in this route rather than a shared
- * module, so with the plan limits flag off the page loads no extra chunk.
+ * The paused notice. The plan billing check lives in this route rather than a
+ * shared module, so without plan billing the page loads no extra chunk.
  */
 const PlanFeatureNoticeBody = lazy(
   () => import('@/components/admin/settings/plan-feature-notice-body')
 )
 
 function PlanFeatureNotice({ feature }: { feature: PlanNoticeFeature }) {
-  const enabled = useWorkspaceSettings()?.featureFlags?.planLimits === true
-  if (!enabled) return null
+  if (!useCloudEnabled()) return null
   return (
     <Suspense fallback={null}>
       <PlanFeatureNoticeBody feature={feature} />

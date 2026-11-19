@@ -719,7 +719,7 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
 describe.skipIf(!fixture.available)('Create issue and the plan limits pause (real DB)', () => {
   beforeEach(fixture.begin)
   afterEach(async () => {
-    setFeatureState('flagOff')
+    setFeatureState('tierOff')
     await fixture.rollback()
   })
 

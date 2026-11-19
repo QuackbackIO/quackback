@@ -1,6 +1,7 @@
 /**
  * The plan limits state against a real database: detection on read, the
- * stored state, the cache and its invalidation, the choosers, and the flag.
+ * stored state, the cache and its invalidation, the choosers, and an install
+ * without plan billing.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -64,6 +65,16 @@ vi.mock('@/lib/server/domains/settings/settings.plan-limits', async (original) =
     },
   }
 })
+// The provider's saved secret, read as the auth layer reads it: by credential type.
+vi.mock(
+  '@/lib/server/domains/platform-credentials/platform-credential.service',
+  async (original) => ({
+    ...(await original<
+      typeof import('@/lib/server/domains/platform-credentials/platform-credential.service')
+    >()),
+    getConfiguredIntegrationTypes: async () => new Set(['auth_acme-sso']),
+  })
+)
 vi.mock('@/lib/server/domains/billing/usage-counts', async (original) => {
   const real = await original<typeof import('@/lib/server/domains/billing/usage-counts')>()
   spies.loadUsageCounts.mockImplementation(real.loadUsageCounts)
@@ -71,7 +82,6 @@ vi.mock('@/lib/server/domains/billing/usage-counts', async (original) => {
 })
 
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
-import { updateFeatureFlags } from '@/lib/server/domains/settings/settings.service'
 import { deleteBoard } from '@/lib/server/domains/boards/board.service'
 import { removeTeamMember } from '@/lib/server/domains/principals/principal.service'
 import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
@@ -83,9 +93,11 @@ import {
   invalidateTierLimitsCache,
 } from '@/lib/server/domains/settings/tier-limits.service'
 import { mergeTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
+import { resolveCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { DISABLED_CLOUD_CONFIG } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { planFeatureSet } from '../plan-limits.features'
-import { limitsKeyFor } from '../plan-limits.rules'
+import { planBillingOn } from './plan-billing'
+import { graceEndFor, limitsKeyFor } from '../plan-limits.rules'
 import { writeTierLimits } from '@/lib/server/domains/settings/tier-limits.write'
 import { compareAndSetPlanLimitsState } from '@/lib/server/domains/settings/settings.plan-limits'
 import {
@@ -109,17 +121,17 @@ const DAY = 24 * 60 * 60 * 1000
 let settingsId: WorkspaceId
 let ownerId: PrincipalId
 
+/** `planBilling` off is an install without plan billing; `cloud` overrides it. */
 async function configure(options: {
-  planLimits: boolean
+  planBilling: boolean
   tierLimits?: Record<string, unknown> | null
   cloud?: unknown
 }) {
   await testDb
     .update(settings)
     .set({
-      featureFlags: JSON.stringify({ feedback: true, planLimits: options.planLimits }),
       tierLimits: options.tierLimits === null ? null : JSON.stringify(options.tierLimits ?? {}),
-      cloud: (options.cloud ?? null) as never,
+      cloud: (options.cloud ?? (options.planBilling ? planBillingOn() : null)) as never,
     })
     .where(eq(settings.id, settingsId))
   invalidateTierLimitsCache()
@@ -190,8 +202,8 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     await fixture.rollback()
   })
 
-  it('is ok and stores nothing with the flag off, without counting anything', async () => {
-    await configure({ planLimits: false, tierLimits: FREE_LIKE })
+  it('is ok and stores nothing without plan billing, without counting anything', async () => {
+    await configure({ planBilling: false, tierLimits: FREE_LIKE })
     const limits = await getPlanLimits()
     expect(limits.phase).toBe('ok')
     expect(limits.issues).toEqual([])
@@ -199,25 +211,45 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     expect(spies.loadUsageCounts).not.toHaveBeenCalled()
     expect(await isBoardOpen(small)).toBe(true)
     expect(await isFeaturePaused('webhooks')).toBe(false)
-    // Today's plan gate answer: the plan does not have webhooks.
+    // The plan's own answer: it does not have webhooks.
     expect(await isFeatureLive('webhooks')).toBe(false)
   })
 
-  it('detects as soon as the flag is turned on', async () => {
-    await configure({ planLimits: false, tierLimits: FREE_LIKE })
-    await updateFeatureFlags({ planLimits: true })
-    expect(await storedState()).toMatchObject({ since: expect.any(String) })
+  it('never starts a grace on an install whose operator sets tier limits in the config file', async () => {
+    await configure({ planBilling: false, tierLimits: null })
+    // The config file's tier limits: one board, webhooks off, and webhooks set up.
+    await writeTierLimits(FREE_LIKE as never, { writer: 'config' })
+    invalidateTierLimitsCache()
+    await invalidateSettingsCache()
+    await testDb.insert(webhooks).values({
+      url: 'https://example.com/hook',
+      secret: 'acme-secret',
+      events: ['post.created'],
+      createdById: ownerId,
+    } as never)
+    for (const days of [0, 8, 30]) {
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + days * DAY })
+      await invalidatePlanLimits()
+      const limits = await detectPlanLimits()
+      expect(limits.enabled).toBe(false)
+      expect(limits.phase).toBe('ok')
+      expect(await openBoardIds()).toBeNull()
+      expect(await isBoardOpen(small)).toBe(true)
+      expect(await isFeaturePaused('webhooks')).toBe(false)
+      vi.useRealTimers()
+    }
+    expect(await storedState()).toBeNull()
   })
 
   it('is ok without counting anything when nothing is capped', async () => {
-    await configure({ planLimits: true, tierLimits: null })
+    await configure({ planBilling: true })
     expect((await getPlanLimits()).phase).toBe('ok')
     expect(spies.loadUsageCounts).not.toHaveBeenCalled()
     expect(await storedState()).toBeNull()
   })
 
   it('starts the grace on first detection and stores it once', async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     const first = await getPlanLimits()
     expect(first.phase).toBe('grace')
     expect(first.issues.map((i) => [i.key, i.used, i.cap])).toEqual([['maxBoards', 2, 1]])
@@ -238,7 +270,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it('freezes the boards past the cap after the grace, keeping the one with most posts', async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     await getPlanLimits()
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 8 * DAY })
     expect((await getPlanLimits()).phase).toBe('enforced')
@@ -248,7 +280,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it("keeps the admin's chosen board and refuses one that does not exist", async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     expect(await setKeptBoard(createId('board'))).toEqual({ ok: false, reason: 'unknown' })
     expect(await setKeptBoard(small)).toEqual({ ok: true })
     expect((await storedState())?.keptBoardId).toBe(small)
@@ -258,12 +290,12 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it('refuses a choice for a cap that is not over', async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     expect(await setSeatHolders([ownerId])).toEqual({ ok: false, reason: 'not_over' })
   })
 
   it('serves the cached count until a counted resource changes, then shows the fix at once', async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     // The first read stores the state, which drops the inputs; the second caches them.
     await getPlanLimits()
     expect((await getPlanLimits()).phase).toBe('grace')
@@ -275,7 +307,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it('shows the fix at once when a board is deleted through the board service', async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     await getPlanLimits()
     expect((await getPlanLimits()).phase).toBe('grace')
     await deleteBoard(small)
@@ -284,7 +316,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
 
   it('shows the fix at once when a status component is deleted', async () => {
     await configure({
-      planLimits: true,
+      planBilling: true,
       tierLimits: { ...FREE_LIKE, maxBoards: null, maxStatusComponents: 0 },
     })
     const [component] = await testDb
@@ -299,7 +331,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it('gives no new grace for going back over the same limits after the grace ended', async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     const first = await getPlanLimits()
     await testDb.update(boards).set({ deletedAt: new Date() }).where(eq(boards.id, small))
     await invalidatePlanLimits()
@@ -313,12 +345,15 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it('judges the grace by the shared settings, never a stale per-process copy of the limits', async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     const first = await getPlanLimits()
     expect(first.phase).toBe('grace')
     // Another process still holds the limits from before the drop.
     const freeRow = (await testDb.select().from(settings).where(eq(settings.id, settingsId)))[0]!
-    await testDb.update(settings).set({ tierLimits: null }).where(eq(settings.id, settingsId))
+    await testDb
+      .update(settings)
+      .set({ tierLimits: JSON.stringify({ ...FREE_LIKE, maxBoards: null }) })
+      .where(eq(settings.id, settingsId))
     invalidateTierLimitsCache()
     expect((await getTierLimits()).maxBoards).toBeNull()
     await testDb
@@ -338,6 +373,48 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     expect(later.since).toBe(first.since)
   })
 
+  it('gives a workspace already over a fresh grace from first detection, however long ago its term lapsed', async () => {
+    const now = new Date()
+    vi.useFakeTimers({ toFake: ['Date'], now })
+    const lapsed = lapsedProjection(new Date(now.getTime() - 30 * DAY))
+    await configure({
+      planBilling: true,
+      tierLimits: null,
+      cloud: { enabled: true, projection: lapsed },
+    })
+    expect(await storedState()).toBeNull()
+
+    const first = await getPlanLimits()
+    expect(first.phase).toBe('grace')
+    expect(first.issues.map((i) => i.key)).toEqual(['maxBoards'])
+    expect(first.since).toBe(now.toISOString())
+    expect(first.graceEndsAt).toBe(graceEndFor(now).toISOString())
+    expect(first.fromPlan).toBe('pro')
+    expect(await storedState()).toMatchObject({
+      since: now.toISOString(),
+      graceEndsAt: graceEndFor(now).toISOString(),
+    })
+  })
+
+  it('starts that fresh grace from the projection write too, never from the lapse', async () => {
+    const now = new Date()
+    vi.useFakeTimers({ toFake: ['Date'], now })
+    const lapsed = lapsedProjection(new Date(now.getTime() - 30 * DAY))
+    await configure({
+      planBilling: true,
+      tierLimits: null,
+      cloud: { enabled: true, projection: lapsed },
+    })
+    expect(await storedState()).toBeNull()
+
+    await detectPlanLimitsAfterProjectionWrite(lapsed, now)
+    expect(await storedState()).toMatchObject({
+      since: now.toISOString(),
+      graceEndsAt: graceEndFor(now).toISOString(),
+      fromPlan: 'pro',
+    })
+  })
+
   it('writes the state only over the value it read', async () => {
     const a = { since: 'a' }
     expect(await compareAndSetPlanLimitsState(null, a)).toBe(true)
@@ -348,7 +425,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it("takes the other process's grace when it loses the race to store one", async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     // Another process stores its grace after this one read the settings.
     spies.readsNoState = true
     const theirs = {
@@ -358,9 +435,12 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
       fromFeatures: {},
       // The same limits this process reads: the race is over the same drop.
       limitsKey: limitsKeyFor(
-        null,
+        'free',
         mergeTierLimits(FREE_LIKE),
-        planFeatureSet(mergeTierLimits(FREE_LIKE).features, DISABLED_CLOUD_CONFIG)
+        planFeatureSet(
+          mergeTierLimits(FREE_LIKE).features,
+          resolveCloudConfig(planBillingOn() as never)
+        )
       ),
     }
     await testDb
@@ -374,14 +454,14 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
     expect(await storedState()).toEqual(theirs)
   })
 
-  it('leaves the grace and its choices alone while the flag is off', async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+  it('leaves the grace and its choices alone without plan billing', async () => {
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     const first = await getPlanLimits()
     expect(await setKeptBoard(small)).toEqual({ ok: true })
-    await configure({ planLimits: false, tierLimits: FREE_LIKE })
+    await configure({ planBilling: false, tierLimits: FREE_LIKE })
     expect((await getPlanLimits()).phase).toBe('ok')
     expect(await storedState()).toMatchObject({ since: first.since, keptBoardId: small })
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     const back = await getPlanLimits()
     expect(back.since).toBe(first.since)
     expect(back.keptBoardId).toBe(small)
@@ -395,11 +475,11 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it('clears the state when the limits are lifted', async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     await getPlanLimits()
     expect(await storedState()).not.toBeNull()
     await configure({
-      planLimits: true,
+      planBilling: true,
       tierLimits: { ...FREE_LIKE, maxBoards: null, features: OSS_TIER_LIMITS.features },
     })
     expect((await getPlanLimits()).phase).toBe('ok')
@@ -407,7 +487,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it('lists a paid feature that is set up past the plan, and keeps it live through the grace only', async () => {
-    await configure({ planLimits: true, tierLimits: { ...FREE_LIKE, maxBoards: null } })
+    await configure({ planBilling: true, tierLimits: { ...FREE_LIKE, maxBoards: null } })
     await testDb.insert(webhooks).values({
       url: 'https://example.com/hook',
       secret: 'acme-secret',
@@ -435,7 +515,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
 
   it('reads an owner role assignment as the owner', async () => {
     await configure({
-      planLimits: true,
+      planBilling: true,
       tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: 0 },
     })
     const [ownerRole] = await testDb.select().from(roles).where(eq(roles.key, 'owner')).limit(1)
@@ -462,7 +542,7 @@ describe.skipIf(!fixture.available)('plan limits state (real DB)', () => {
   })
 
   it('carries the replaced plan into the grace after a projection write', async () => {
-    await configure({ planLimits: true, tierLimits: FREE_LIKE })
+    await configure({ planBilling: true, tierLimits: FREE_LIKE })
     const replaced = {
       version: 1,
       effectivePlan: 'pro',
@@ -550,7 +630,7 @@ describe.skipIf(!fixture.available)('seat ranking against one snapshot (real DB)
     // One seat over, whatever else the database holds.
     const { used } = await countSeatUsage()
     await configure({
-      planLimits: true,
+      planBilling: true,
       tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
     })
     await invalidatePlanLimits()
@@ -578,7 +658,7 @@ describe.skipIf(!fixture.available)('seat ranking against one snapshot (real DB)
     // One seat over, whatever else the database holds.
     const { used } = await countSeatUsage()
     await configure({
-      planLimits: true,
+      planBilling: true,
       tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
     })
     await invalidatePlanLimits()
@@ -601,7 +681,7 @@ describe.skipIf(!fixture.available)('seat ranking against one snapshot (real DB)
     const active = await addMember('Acme Active', new Date(Date.now() - DAY))
     const { used } = await countSeatUsage()
     await configure({
-      planLimits: true,
+      planBilling: true,
       tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 1 },
     })
     await invalidatePlanLimits()
@@ -628,7 +708,7 @@ describe.skipIf(!fixture.available)('seat ranking against one snapshot (real DB)
     const unrelated = await addSeat('Acme Unrelated', new Date('2100-01-02T00:00:00.000Z'), null)
     const { used } = await countSeatUsage()
     await configure({
-      planLimits: true,
+      planBilling: true,
       tierLimits: { ...FREE_LIKE, maxBoards: null, maxTeamSeats: used - 2 },
     })
     const start = await getPlanLimits()
@@ -663,7 +743,7 @@ describe.skipIf(!fixture.available)('detection on a billing projection write (re
     await addBoard('Acme two', 0, new Date('2026-02-01T00:00:00.000Z'))
     const pro = projection(1, 'pro', null, { webhooks: true })
     await configure({
-      planLimits: true,
+      planBilling: true,
       tierLimits: null,
       cloud: { enabled: true, projection: pro },
     })
@@ -680,7 +760,7 @@ describe.skipIf(!fixture.available)('detection on a billing projection write (re
     const appliedAt = new Date(Date.now() - 1000)
     const free = parseBillingProjection(projection(2, 'free', 1, {}))!
     await configure({
-      planLimits: true,
+      planBilling: true,
       tierLimits: null,
       cloud: { enabled: true, projection: free },
     })
@@ -699,7 +779,7 @@ describe.skipIf(!fixture.available)('detection on a billing projection write (re
   it('never rewrites the plan of a grace from before the projection write', async () => {
     const free = parseBillingProjection(projection(2, 'free', 1, {}))!
     await configure({
-      planLimits: true,
+      planBilling: true,
       tierLimits: null,
       cloud: { enabled: true, projection: free },
     })
@@ -759,5 +839,13 @@ function projectedLimits(boards: number | null) {
     maxInboundEmailAddresses: null,
     maxHelpCenterLocales: null,
     maxStatusSubscribers: null,
+  }
+}
+
+/** A Pro term that lapsed at `at`: Free's one board from then on. */
+function lapsedProjection(at: Date) {
+  return {
+    ...projection(1, 'pro', null, { webhooks: true }),
+    planLimitsExpireAt: at.toISOString(),
   }
 }

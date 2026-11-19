@@ -40,13 +40,13 @@ const PlanDowngradeDialog = lazy(() =>
 
 // Plan limits reach this page as data only (the admin loader's summary, kept
 // fresh by the banner's query), never as code: the page imports nothing of
-// theirs, so a workspace without the flag ships nothing extra.
+// theirs, so a workspace without plan billing ships nothing extra.
 
 function isOver(limits: PlanLimitsPage | null | undefined): limits is PlanLimitsPage {
   return Boolean(limits?.enabled) && (limits?.phase === 'grace' || limits?.phase === 'enforced')
 }
 
-/** The summary the banner keeps fresh, else the one the admin loader read; null with the flag off. */
+/** The summary the banner keeps fresh, else the one the admin loader read; null without plan billing. */
 function usePlanLimits(): PlanLimitsPage | null {
   // The narrowed notice opens no Plan limits page, so this page links to none.
   const loaded = useLoaderData({

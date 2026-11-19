@@ -10,6 +10,7 @@ import { AuthSettings, type AuthTab } from '@/components/admin/settings/security
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { getSsoLiveFn } from '@/lib/server/functions/sso'
 
 const searchSchema = z.object({
   // The Access & Security page splits by CONCERN, not by surface:
@@ -47,7 +48,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
     const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const ensure = readBatch(queryClient)
-    const [, entitlements] = await Promise.all([
+    const [, entitlements, ssoLive] = await Promise.all([
       Promise.all([
         ensure(settingsQueries.authConfig()),
         ensure(settingsQueries.verifiedDomains()),
@@ -58,10 +59,13 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
         warmSegments ? warmQuery(ensure, adminQueries.segments()) : undefined,
       ]),
       listEntitlementsFn(),
+      // Without plan billing single sign-on follows the plan alone, so the
+      // page asks nothing more.
+      context.cloudEnabled ? getSsoLiveFn() : undefined,
       ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
 
-    return { ssoEntitled: entitlements.sso, auditEntitled: entitlements.auditLog }
+    return { ssoEntitled: entitlements.sso, ssoLive, auditEntitled: entitlements.auditLog }
   },
   component: AuthenticationPage,
 })
@@ -74,7 +78,7 @@ function AuthenticationPage() {
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const credentialStatusQuery = useSuspenseQuery(adminQueries.authProviderStatus())
 
-  const { ssoEntitled, auditEntitled } = Route.useLoaderData()
+  const { ssoEntitled, ssoLive, auditEntitled } = Route.useLoaderData()
 
   return (
     <SettingsPage
@@ -87,6 +91,7 @@ function AuthenticationPage() {
         portalConfig={portalConfigQuery.data}
         credentialStatus={credentialStatusQuery.data}
         customOidcProviderTier={ssoEntitled}
+        ssoLive={ssoLive}
         auditEntitled={auditEntitled}
       />
     </SettingsPage>

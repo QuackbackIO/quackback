@@ -16,10 +16,6 @@ vi.mock('@/lib/server/domains/settings/settings.plan-limits', async (original) =
     throw new Error('settings row unavailable')
   },
 }))
-vi.mock('@/lib/server/domains/settings/settings.service', async (original) => ({
-  ...(await original<typeof import('@/lib/server/domains/settings/settings.service')>()),
-  getFeatureFlags: async () => ({ planLimits: true }),
-}))
 vi.mock('@/lib/server/domains/settings/tier-limits.service', async (original) => ({
   ...(await original<typeof import('@/lib/server/domains/settings/tier-limits.service')>()),
   getTierLimits: async () => {

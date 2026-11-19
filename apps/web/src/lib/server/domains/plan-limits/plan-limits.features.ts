@@ -4,10 +4,9 @@
  *
  * A plan "has" a key when the gates it is checked by today are open: the tier
  * feature flag and/or the entitlement. Most keys need every gate they map to.
- * Two keys follow the one gate their runtime path reads today, so swapping
- * that check for `isFeatureLive` changes nothing with the flag off: single
- * sign-on reads the tier flag (`registered-providers.ts`) and the MCP server
- * reads the entitlement (`mcp/handler.ts`). On an install without plan billing
+ * Two keys follow the one gate their runtime path reads: single sign-on reads
+ * the tier flag (`registered-providers.ts`) and the MCP server reads the
+ * entitlement (`mcp/handler.ts`). On an install without plan billing
  * every gate is open, so every key is live.
  *
  * `grace` says whether a feature that ran on the previous plan keeps running

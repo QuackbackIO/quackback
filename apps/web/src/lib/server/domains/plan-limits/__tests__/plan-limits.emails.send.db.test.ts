@@ -66,6 +66,7 @@ import { writeBillingProjection } from '@/lib/server/domains/settings/cloud/bill
 import { emailsSentInUtcMonth } from '@/lib/server/email/email-budget'
 import { getPlanLimits, invalidatePlanLimits } from '../plan-limits.service'
 import { claimPlanLimitsEmail, deadlineText, sendPlanLimitsEmails } from '../plan-limits.emails'
+import { planBillingOn } from './plan-billing'
 
 const fixture = await createDbTestFixture()
 afterAll(fixture.close)
@@ -97,11 +98,11 @@ const mailedOf = (...people: { email: string }[]) =>
     .map((s) => s.to)
     .filter((to) => people.some((p) => p.email === to))
 
-async function configure(tierLimits: unknown, cloud: unknown = null) {
+/** Plan billing on: `cloud` when given, else `planBillingOn()` so the stored tier limits decide. */
+async function configure(tierLimits: unknown, cloud: unknown = planBillingOn()) {
   await testDb
     .update(settings)
     .set({
-      featureFlags: JSON.stringify({ feedback: true, planLimits: true }),
       tierLimits: tierLimits === null ? null : JSON.stringify(tierLimits),
       cloud: cloud as never,
     })

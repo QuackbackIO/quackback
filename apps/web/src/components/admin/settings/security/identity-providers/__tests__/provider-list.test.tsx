@@ -91,6 +91,9 @@ beforeEach(() => {
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
+// The Plan limits state the grace notice reads; tests seed the same key.
+vi.mock('@/lib/server/functions/plan-limits', () => ({ getPlanLimitsFn: vi.fn(async () => null) }))
+
 // Recovery codes nest inside this section now; stub it so the test doesn't
 // pull in the recovery-codes server fn and its server-only import chain.
 vi.mock('../../sso/recovery-codes-section', () => ({
@@ -476,5 +479,67 @@ describe('set up but paused on the plan', () => {
     renderSetUp(false, [buttonProvider, { ...routedProvider, configured: false }])
     expect(screen.queryByText(/Single sign-on is paused/)).toBeNull()
     expect(screen.getByText(/Single sign-on is an Enterprise feature/)).toBeInTheDocument()
+  })
+})
+
+describe('set up, and still working until the plan limits deadline', () => {
+  const grace = (canManageBilling: boolean) => ({
+    enabled: true,
+    phase: 'grace',
+    planName: 'Free',
+    graceEndsAt: '2026-11-23T12:00:00.000Z',
+    deadlineDay: '2026-11-22',
+    featureIssues: [{ key: 'sso' }],
+    canManageBilling,
+  })
+
+  function renderGrace(canManageBilling: boolean) {
+    const qc = new QueryClient()
+    qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
+    qc.setQueryData(['billing', 'upgrade-context'], { currentPlanName: 'Free' })
+    qc.setQueryData(['plan-limits', 'feature-notice'], grace(canManageBilling))
+    return render(
+      <QueryClientProvider client={qc}>
+        <IdentityProvidersSection tierEnabled={false} ssoLive methods={withPassword} />
+      </QueryClientProvider>
+    )
+  }
+
+  it('names the last day and offers Upgrade to someone who manages billing', async () => {
+    renderGrace(true)
+    expect(await screen.findByText('Single sign-on pauses after Nov 22.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Upgrade' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing'
+    )
+    expect(screen.queryByText(/is paused/)).toBeNull()
+    expect(screen.queryByText(/email links/)).toBeNull()
+  })
+
+  it('asks someone without billing rights to find a billing manager', async () => {
+    access.permissions = new Set()
+    renderGrace(false)
+    expect(await screen.findByText('Single sign-on pauses after Nov 22.')).toBeInTheDocument()
+    expect(screen.getByText('Ask someone who manages billing to upgrade.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Upgrade' })).toBeNull()
+  })
+
+  it('shows the providers working, switched on', () => {
+    renderGrace(true)
+    expect(screen.getByText('Acme SSO')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Enable Acme SSO' })).toBeChecked()
+  })
+
+  it('keeps the paused copy once single sign-on is not live', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
+    qc.setQueryData(['billing', 'upgrade-context'], { currentPlanName: 'Free' })
+    render(
+      <QueryClientProvider client={qc}>
+        <IdentityProvidersSection tierEnabled={false} ssoLive={false} methods={withPassword} />
+      </QueryClientProvider>
+    )
+    expect(screen.getByText(/Single sign-on is paused on the Free plan/)).toBeInTheDocument()
+    expect(screen.queryByText(/pauses after/)).toBeNull()
   })
 })

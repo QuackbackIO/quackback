@@ -303,10 +303,10 @@ describe('queueAutoTranslateOnPublish', () => {
   })
 })
 
-// The plan gate reads isFeatureLive: today's answer with the flag off, kept
+// The plan gate reads isFeatureLive: the plan's own answer without plan billing, kept
 // live through the plan limits grace, off after it.
 describe('AI article translation and the plan limits pause', () => {
-  beforeEach(() => setFeatureState('flagOff'))
+  beforeEach(() => setFeatureState('tierOff'))
 
   it.each(FEATURE_STATES)('translates in the %s state only while live', async (state) => {
     setFeatureState(state, 'aiArticleTranslation')

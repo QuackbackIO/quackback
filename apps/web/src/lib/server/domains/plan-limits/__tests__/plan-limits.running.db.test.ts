@@ -86,7 +86,7 @@ describe.skipIf(!fixture.available)('plan limits on what is running (real DB)', 
     ownerId = await addOwner()
     await addBoard('Acme one', 0, new Date('2026-01-01T00:00:00.000Z'), ownerId)
     await configure(settingsId, {
-      planLimits: true,
+      planBilling: true,
       tierLimits: null,
       cloud: { enabled: true, projection: projection(1, 'business', null, PAID, EXPIRY) },
     })
@@ -162,7 +162,7 @@ describe.skipIf(!fixture.available)(
       ownerId = await addOwner()
       await addBoard('Acme one', 0, new Date('2026-01-01T00:00:00.000Z'), ownerId)
       await configure(settingsId, {
-        planLimits: true,
+        planBilling: true,
         tierLimits: null,
         cloud: { enabled: true, projection: projection(1, 'free', 1, {}) },
       })

@@ -5,7 +5,7 @@
  * field added to the page never reaches it unseen.
  */
 import type { PermissionKey } from '@/lib/shared/permissions'
-import { planLimitsPage, type PlanLimitsPage } from './plan-limits.page'
+import { planLimitsPage, type PlanLimitsPage, type PlanLimitsPageBilling } from './plan-limits.page'
 import type { PlanLimitIssueKey, PlanLimitsView } from './plan-limits.rules'
 
 /** Caps whose counts describe the team, so this viewer gets only that they are over. */
@@ -32,9 +32,10 @@ export type PlanLimitsNotice = Pick<
 
 export function planLimitsNotice(
   view: PlanLimitsView,
-  permissions: readonly PermissionKey[]
+  permissions: readonly PermissionKey[],
+  billing?: PlanLimitsPageBilling
 ): PlanLimitsNotice {
-  const page = planLimitsPage(view, {}, permissions)
+  const page = planLimitsPage(view, {}, permissions, 0, billing)
   return {
     canViewPage: false,
     enabled: page.enabled,

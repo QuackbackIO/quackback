@@ -20,7 +20,6 @@
  */
 
 import { getWorkspaceSettings } from '@/lib/server/domains/settings/settings.service'
-import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { getConfiguredIntegrationTypes } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 import {
   listIdentityProviders,
@@ -42,12 +41,14 @@ const REGISTERED_AUTH_PROVIDERS_TTL_SECONDS = 300
 
 /**
  * Whether single sign-on works right now: the plan includes the
- * `customOidcProvider` feature. The one place that decides it, so the provider
- * registry, the auth runtime, the sign-in fallback and the last-method guards
- * all agree.
+ * `customOidcProvider` feature, or plan limits keep it running through the
+ * grace after a drop (it falls back to email links only once paused). The one
+ * place that decides it, so the provider registry, the auth runtime, the
+ * sign-in fallback and the last-method guards all agree.
  */
 export async function isSsoLive(): Promise<boolean> {
-  return (await getTierLimits()).features.customOidcProvider
+  const { isFeatureLive } = await import('@/lib/server/domains/plan-limits/plan-limits.service')
+  return isFeatureLive('sso')
 }
 
 /**

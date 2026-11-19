@@ -99,15 +99,6 @@ const tierLimitsSchema = z
   })
   .strict()
 
-// Operator rollout flags: per-workspace switches a workspace cannot change from
-// settings. Each is written to the feature flags when the file names it; a
-// flag the file leaves out is left as it is.
-const rolloutSchema = z
-  .object({
-    planLimits: z.boolean().optional(),
-  })
-  .strict()
-
 // Deprecated compatibility keys. `auth` and top-level `features` were managed
 // by older config files, but are now in-app only. Keep accepting them for one
 // release so old files do not make the whole watcher fail before supported
@@ -125,7 +116,6 @@ export const quackbackConfigSchema = z
       .object({
         workspace: workspaceSchema.optional(),
         tierLimits: tierLimitsSchema.optional(),
-        rollout: rolloutSchema.optional(),
         features: deprecatedFeaturesSchema.optional(),
         auth: deprecatedAuthSchema.optional(),
       })
