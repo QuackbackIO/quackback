@@ -245,6 +245,10 @@ Each entry: owner: unassigned, review by: 2026-12-03.
   `maybeAutoFileSpam` files it (`conversation.email-inbound.service.ts:784`),
   and the worker-time bell resolver `getMessageCreatedTargets`
   (`events/targets.ts:1215`) never checks the filing, so every teammate in
-  scope gets a new-message bell for spam. Outbound webhooks and message
-  workflows ride the same two events. owner: unassigned, review by:
+  scope gets a new-message bell for spam. Outbound webhooks (and workflow
+  triggers, when a live workflow exists) are resolved from the same two
+  events. The messenger path has the same order: `notifyVisitorMessage`
+  (team email, `conversation.service.ts:507`) runs before the filter
+  (`:551`), whose burst-rate rule needs only the visitor's email (traced,
+  not tested). owner: unassigned, review by:
   2026-12-03.

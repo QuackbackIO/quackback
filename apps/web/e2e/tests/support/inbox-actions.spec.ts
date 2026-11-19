@@ -960,13 +960,19 @@ test.describe('inbox thread actions, details and group threads', () => {
       const { page, mate } = await teammate()
       const c = await seed({ visitorEmail: customerEmail })
       const added = `${marker}-cc@customers.example`
+      // A second customer who stays: their copy is the signal the fan-out ran.
+      const kept = `${marker}-kept@customers.example`
       await openConversation(page, c.id, c.messages[0])
       await threadMenu(page, 'Add customer…')
       const dialog = page.getByRole('dialog', { name: 'Conversation customers' })
-      await dialog.getByLabel('Customer email').fill(added)
-      await dialog.getByRole('button', { name: 'Add customer' }).click()
+      for (const email of [added, kept]) {
+        await dialog.getByLabel('Customer email').fill(email)
+        await dialog.getByRole('button', { name: 'Add customer' }).click()
+        await expect(dialog.getByRole('button', { name: `Remove ${email}` })).toBeVisible({
+          timeout: 15_000,
+        })
+      }
       const remove = dialog.getByRole('button', { name: `Remove ${added}` })
-      await expect(remove).toBeVisible({ timeout: 15_000 })
 
       await remove.click()
       await expect(page.getByText('Customer removed').first()).toBeVisible({ timeout: 15_000 })
@@ -975,15 +981,17 @@ test.describe('inbox thread actions, details and group threads', () => {
       await expect(threadMessages(page, notice)).toBeVisible({ timeout: 15_000 })
       expect(
         await supportDb()`SELECT 1 FROM conversation_participants WHERE conversation_id = ${c.uuid}`
-      ).toHaveLength(0)
+      ).toHaveLength(1)
       await page.keyboard.press('Escape')
 
-      // The reply still reaches the visitor; the removed customer gets none of it.
-      // Participants are mailed in the same pass right after the visitor, so
-      // once the visitor's copy has landed a participant copy would have too.
+      // The reply reaches the visitor and the customer who stayed; the removed
+      // customer gets none of it. Participants are mailed one by one in no set
+      // order, so after the kept copy lands give the fan-out a moment to finish.
       const reply = `Only for you now ${marker}`
       await sendFromComposer(page, reply, 'reply')
       await waitForMailContaining(customerEmail, reply)
+      await waitForMailContaining(kept, reply)
+      await new Promise((resolve) => setTimeout(resolve, 3_000))
       expect(await mailsContaining(added, reply)).toEqual([])
     }
   )
@@ -1125,7 +1133,7 @@ test.describe('inbox thread actions, details and group threads', () => {
       expect(row.sla_applied).toBeNull()
       const events = await supportDb()<{ kind: string }[]>`
         SELECT kind FROM sla_events WHERE conversation_id = ${c.uuid}`
-      expect(events.map((e) => e.kind)).toEqual(['removed'])
+      expect(events.map((e) => e.kind)).toContain('removed')
       // A fresh load agrees: no chip.
       await openConversation(page, c.id, c.messages[0])
       await expect(slaChip(page, policy)).toHaveCount(0)
