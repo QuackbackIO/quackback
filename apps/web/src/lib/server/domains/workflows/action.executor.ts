@@ -582,6 +582,9 @@ export async function applyAction(
       const createdAt = new Date().toISOString()
       const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
       const res = await safeFetch(action.url, {
+        // Only takes effect for the e2e suite's own sink, behind the harness
+        // gate (same allowance as events/handlers/webhook.ts).
+        allowE2eWebhookSink: true,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
