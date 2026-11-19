@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { buildAskDestinations } from '@/lib/shared/ask-destinations'
 import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
@@ -144,6 +144,7 @@ export const workspaceNavigationInputSchema = z
 export function registerNavigationTools(server: McpServer, auth: McpAuthContext) {
   registerTool<{ destination: WorkspaceNavigationDestination }>(server, auth, {
     name: 'navigate_workspace',
+    title: 'Get workspace link',
     permissions: ({ destination }, toolAuth) => [
       navigationPermission(WORKSPACE_NAVIGATION[destination], heldPermissions(toolAuth)),
     ],

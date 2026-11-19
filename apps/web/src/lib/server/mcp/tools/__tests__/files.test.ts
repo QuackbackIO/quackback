@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 
 const mockStoreFile = vi.fn()
 const mockToUploadedFile = vi.fn()
@@ -17,7 +17,7 @@ type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
 function collect(auth: McpAuthContext): Map<string, Handler> {
   const handlers = new Map<string, Handler>()
   const fakeServer = {
-    tool: (name: string, _d: string, _s: unknown, _a: unknown, handler: Handler) => {
+    registerTool: (name: string, _c: unknown, handler: Handler) => {
       handlers.set(name, handler)
     },
   }
@@ -28,8 +28,8 @@ function collect(auth: McpAuthContext): Map<string, Handler> {
 function collectDescriptions(auth: McpAuthContext): Map<string, string> {
   const descriptions = new Map<string, string>()
   const fakeServer = {
-    tool: (name: string, description: string) => {
-      descriptions.set(name, description)
+    registerTool: (name: string, config: { description: string }) => {
+      descriptions.set(name, config.description)
     },
   }
   registerFileTools(fakeServer as never, auth)

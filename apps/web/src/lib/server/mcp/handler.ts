@@ -10,6 +10,7 @@
  * the MCP SDK's OAuth discovery flow.
  */
 
+import { createMcpHandler, isLegacyRequest } from '@modelcontextprotocol/server'
 import type { Role } from '@/lib/shared/roles'
 import { requestToResourceInput, verifyAccessTokenRequest } from 'better-auth/oauth2'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
@@ -48,13 +49,20 @@ import { logger } from '@/lib/server/logger'
 import type { PrincipalId } from '@quackback/ids'
 import type { McpAuthContext, McpScope } from './types'
 
+/**
+ * JSON-RPC code for the handler's own refusals (MCP disabled, plan, portal
+ * access). It sits in the range 2026-07-28 leaves to implementations
+ * (-32000..-32019); -32020..-32099 are reserved for the spec.
+ */
+const MCP_REFUSED_ERROR_CODE = -32001
+
 /** Build a JSON-RPC error response (used for MCP-level denials). */
-function jsonRpcError(status: number, message: string): Response {
+function jsonRpcError(status: number, message: string, id: RpcId = null): Response {
   return new Response(
     JSON.stringify({
       jsonrpc: '2.0',
-      error: { code: -32001, message },
-      id: null,
+      error: { code: MCP_REFUSED_ERROR_CODE, message },
+      id,
     }),
     { status, headers: { 'Content-Type': 'application/json' } }
   )
@@ -66,12 +74,12 @@ function jsonRpcError(status: number, message: string): Response {
  * server in `data` so a client can show the upgrade prompt rather than a bare
  * "denied".
  */
-function jsonRpcEntitlementError(error: EntitlementRequiredError): Response {
+function jsonRpcEntitlementError(error: EntitlementRequiredError, id: RpcId = null): Response {
   return new Response(
     JSON.stringify({
       jsonrpc: '2.0',
-      error: { code: -32001, message: error.message, data: error.toResponseBody() },
-      id: null,
+      error: { code: MCP_REFUSED_ERROR_CODE, message: error.message, data: error.toResponseBody() },
+      id,
     }),
     { status: error.statusCode, headers: { 'Content-Type': 'application/json' } }
   )
@@ -267,21 +275,37 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
   return unauthenticatedMcpResponse()
 }
 
+type RpcId = string | number | null
+
+/**
+ * The request body as JSON, read once from a clone so the protocol leg can
+ * still read the request. `undefined` when it is not a JSON POST; the
+ * protocol leg answers that itself.
+ */
+async function readRpcBody(request: Request): Promise<unknown> {
+  const contentType = request.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) return undefined
+  try {
+    return await request.clone().json()
+  } catch {
+    return undefined
+  }
+}
+
+/** The id of a single JSON-RPC request, so a refusal can answer it; null for a batch or none. */
+function rpcIdOf(body: unknown): RpcId {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null
+  const id = (body as { id?: unknown }).id
+  return typeof id === 'string' || typeof id === 'number' ? id : null
+}
+
 /**
  * OAuth-only: if this JSON-RPC call needs a scope the token lacks, return
  * HTTP 403 + `insufficient_scope` so the client can step up (see
  * `insufficientScopeChallenge`). API keys never enter this path.
  */
-async function oauthScopeStepUp(request: Request, auth: McpAuthContext): Promise<Response | null> {
-  if (request.method !== 'POST') return null
-  const contentType = request.headers.get('content-type') ?? ''
-  if (!contentType.includes('application/json')) return null
-  let body: unknown
-  try {
-    body = await request.clone().json()
-  } catch {
-    return null
-  }
+function oauthScopeStepUp(body: unknown, auth: McpAuthContext, modern: boolean): Response | null {
+  if (body === undefined) return null
   // Every scope the request lacks goes in one challenge. Nothing in a batch
   // runs when any call in it is refused, so every call gets the refusal.
   const calls = Array.isArray(body) ? body : [body]
@@ -304,6 +328,7 @@ async function oauthScopeStepUp(request: Request, auth: McpAuthContext): Promise
       }
     }),
     batch: Array.isArray(body),
+    modern,
   })
 }
 
@@ -321,6 +346,13 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   // are refused before any of that runs. Streamable HTTP allows exactly this.
   if (request.method !== 'POST') return methodNotAllowed()
 
+  // Refused before anything reads the body (the request log, the JSON-RPC
+  // parse, auth): an unauthenticated caller must not make the server buffer
+  // an arbitrarily large body. Both protocol legs also cap what they read, but
+  // answer with a bare byte count; most oversized requests are file uploads,
+  // so say what the limit is for.
+  if (contentLengthExceeds(request, MCP_MAX_REQUEST_BYTES)) return requestTooLarge()
+
   const startedAt = Date.now()
   const summary = await summarizeMcpRequest(request)
   const response = await runWithAuditAttribution(MCP_ATTRIBUTION, () =>
@@ -328,6 +360,14 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   )
   await logMcpRequest(summary, response, startedAt)
   return response
+}
+
+/** 413 that names upload_file's limit and the REST alternative. */
+function requestTooLarge(): Response {
+  return jsonRpcError(
+    413,
+    `Request is too large (max ${formatBytes(MCP_MAX_REQUEST_BYTES)}). upload_file accepts files up to ${formatBytes(MCP_UPLOAD_MAX_BYTES)}; upload larger files with the REST API (POST /api/v1/files).`
+  )
 }
 
 /** 405 for every method but POST, as Streamable HTTP allows. */
@@ -346,11 +386,15 @@ async function handleMcpRequestInBoundary(
   request: Request,
   summary: McpRequestSummary
 ): Promise<Response> {
+  const body = await readRpcBody(request)
+  const id = rpcIdOf(body)
+
   const devConfig = await getDeveloperConfig()
   if (!devConfig.mcpEnabled) {
     return jsonRpcError(
       403,
-      'MCP server is disabled. Enable it in Settings > Developers > MCP Server.'
+      'MCP server is disabled. Enable it in Settings > Developers > MCP Server.',
+      id
     )
   }
 
@@ -366,8 +410,14 @@ async function handleMcpRequestInBoundary(
   // made it.
   if (auth.auditAttribution) setAuditAttribution(auth.auditAttribution)
 
+  // The SDK's own era classification: a 2026-07-28 request carries its
+  // revision in a per-request `_meta` envelope; everything else is 2025-era.
+  const legacy = await isLegacyRequest(request, body, {
+    maxRequestBodySize: MCP_MAX_REQUEST_BYTES,
+  })
+
   if (auth.authMethod === 'oauth') {
-    const denied = await oauthScopeStepUp(request, auth)
+    const denied = oauthScopeStepUp(body, auth, !legacy)
     if (denied) return denied
   }
 
@@ -382,35 +432,57 @@ async function handleMcpRequestInBoundary(
       import('@/lib/server/domains/settings/cloud/entitlements'),
       import('@/lib/server/domains/settings/cloud/cloud.service'),
     ])
-    return jsonRpcEntitlementError(buildRefusal(await getCloudConfig(), 'mcpServer'))
+    return jsonRpcEntitlementError(buildRefusal(await getCloudConfig(), 'mcpServer'), id)
   }
 
   // Portal user access check
   if (auth.role === 'user') {
     if (!devConfig.mcpPortalAccessEnabled) {
-      return jsonRpcError(403, 'Portal user MCP access is disabled by the administrator.')
+      return jsonRpcError(403, 'Portal user MCP access is disabled by the administrator.', id)
     }
   }
 
-  return serveMcpRequest(request, auth)
+  return legacy ? serveLegacyRequest(request, auth) : serveModernRequest(request, auth)
 }
 
-async function serveMcpRequest(request: Request, auth: McpAuthContext): Promise<Response> {
-  // The transport refuses an oversized body too, but with a bare byte count;
-  // most oversized requests are file uploads, so say what the limit is for.
-  if (contentLengthExceeds(request, MCP_MAX_REQUEST_BYTES)) {
-    return jsonRpcError(
-      413,
-      `Request is too large (max ${formatBytes(MCP_MAX_REQUEST_BYTES)}). upload_file accepts files up to ${formatBytes(MCP_UPLOAD_MAX_BYTES)}; upload larger files with the REST API (POST /api/v1/files).`
-    )
-  }
-  const transport = createMcpTransport()
+function logTransportError(error: Error): void {
+  // The SDK names the reason for a refusal it answers itself (an unsupported
+  // protocol version, a header that disagrees with the body, a malformed
+  // body); without this it is lost.
+  logger.warn({ err: error }, 'mcp transport error')
+}
 
-  // The transport names the reason for a refusal it answers itself (an
-  // unsupported protocol version, a malformed body); without this it is lost.
-  transport.onerror = (error) => {
-    logger.warn({ err: error }, 'mcp transport error')
+/**
+ * 2026-07-28 traffic: the SDK's per-request entry, which answers
+ * `server/discover`, validates the `_meta` envelope and the `Mcp-Method` /
+ * `Mcp-Name` headers, and adds `resultType` and the cache fields. It is built
+ * per request around this caller's server, so nothing is shared between
+ * requests. Legacy traffic never reaches it (`legacy: 'reject'`): it is routed
+ * to serveLegacyRequest first, which keeps JSON responses for 2025 clients.
+ */
+async function serveModernRequest(request: Request, auth: McpAuthContext): Promise<Response> {
+  const handler = createMcpHandler(() => createMcpServer(auth), {
+    legacy: 'reject',
+    responseMode: 'json',
+    maxRequestBodySize: MCP_MAX_REQUEST_BYTES,
+    onerror: logTransportError,
+  })
+  try {
+    return await handler.fetch(request)
+  } finally {
+    await handler.close()
   }
+}
+
+/**
+ * 2025-era traffic (`initialize`, then requests without the 2026 envelope):
+ * stateless Streamable HTTP with JSON responses, as before the 2026 support.
+ * The SDK's built-in legacy fallback answers over SSE instead, so it is not
+ * used.
+ */
+async function serveLegacyRequest(request: Request, auth: McpAuthContext): Promise<Response> {
+  const transport = createMcpTransport()
+  transport.onerror = logTransportError
 
   const server = createMcpServer(auth)
   await server.connect(transport)

@@ -9,7 +9,7 @@
  * uses) and the real upload_file registration; only storage is stubbed.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer } from '@modelcontextprotocol/server'
 
 const mockStoreFile = vi.fn()
 vi.mock('@/lib/server/domains/files/files.service', () => ({

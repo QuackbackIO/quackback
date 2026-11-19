@@ -539,7 +539,7 @@ describe('conversation writes check visibility (real DB, rolled back)', () => {
         .where(eq(principal.id, w.teammate))
       const handlers = new Map<string, Handler>()
       const server = {
-        tool: (name: string, _d: string, _s: unknown, _a: unknown, handler: Handler) => {
+        registerTool: (name: string, _config: unknown, handler: Handler) => {
           handlers.set(name, handler)
           return { update: () => {} }
         },

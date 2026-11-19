@@ -1824,8 +1824,20 @@ describe('MCP HTTP Handler', () => {
         body.result.tools.find((tool) => tool.name === name)?._meta?.securitySchemes
 
       expect(schemes('create_post')).toEqual([{ type: 'oauth2', scopes: ['write:feedback'] }])
-      // A tool that picks its scope from its arguments declares none.
-      expect(schemes('search')).toBeUndefined()
+      // A tool that picks its scope from its arguments declares every read
+      // scope a branch can need.
+      expect(schemes('search')).toEqual([
+        { type: 'oauth2', scopes: ['read:feedback', 'read:article'] },
+      ])
+      // Every tool declares at least one scope and has a title.
+      for (const tool of body.result.tools as {
+        name: string
+        title?: string
+        _meta?: { securitySchemes?: { scopes: string[] }[] }
+      }[]) {
+        expect(tool.title, tool.name).toMatch(/\S/)
+        expect(tool._meta?.securitySchemes?.[0]?.scopes.length, tool.name).toBeGreaterThan(0)
+      }
     })
 
     it('should deny create_changelog when write:changelog scope missing', async () => {
@@ -3062,7 +3074,8 @@ describe('MCP plan gate and the plan limits pause', () => {
           expect(await response.json()).toEqual({
             jsonrpc: '2.0',
             error: { code: -32001, message: refusal.message, data: refusal.toResponseBody() },
-            id: null,
+            // The refusal answers the request it refuses (JSON-RPC 2.0 §5).
+            id: 1,
           })
         }
       } finally {

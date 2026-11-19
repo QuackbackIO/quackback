@@ -10,13 +10,12 @@ type CollectedTool = {
 function collectTools(): CollectedTool[] {
   const tools: CollectedTool[] = []
   const fakeServer = {
-    tool: (
+    registerTool: (
       name: string,
-      description: string,
-      schema: Record<string, unknown>,
-      _annotations: unknown,
-      _handler: unknown
+      config: { description: string; inputSchema: { shape: Record<string, unknown> } }
     ) => {
+      const { description } = config
+      const schema = config.inputSchema.shape
       const simplified: Record<string, { description?: string }> = {}
       for (const [key, value] of Object.entries(schema)) {
         const desc =

@@ -5,7 +5,7 @@
 
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { CONVERSATION_STATUSES } from '@/lib/shared/db-types'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import type { PostId, BoardId, ConversationId, PrincipalId } from '@quackback/ids'
@@ -38,6 +38,7 @@ export function registerConversationTools(server: McpServer, auth: McpAuthContex
     limit?: number
   }>(server, auth, {
     name: 'list_conversations',
+    title: 'List conversations',
     permissions: [PERMISSIONS.CONVERSATION_VIEW],
     description: `List support-inbox conversations, newest activity first. Filter by status, priority, or assigned agent; paginate with cursor.
 
@@ -96,6 +97,7 @@ Examples:
     cursor?: string
   }>(server, auth, {
     name: 'get_conversation',
+    title: 'Get conversation',
     permissions: [PERMISSIONS.CONVERSATION_VIEW],
     description: `Get a conversation and its most recent messages. Set includeInternal to also return agent-only internal notes and assignment notices, which customers never see.
 
@@ -163,6 +165,7 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
 
   registerTool<{ conversationId: string; content: string; fileIds?: string[] }>(server, auth, {
     name: 'reply_to_conversation',
+    title: 'Reply to conversation',
     permissions: [PERMISSIONS.CONVERSATION_REPLY],
     description: `Send an agent reply in a conversation (visible to the visitor). When you are signed in as a teammate, replying to an unassigned conversation assigns it to you. A reply made with an API key leaves the assignment unchanged.
 
@@ -216,6 +219,7 @@ Example: reply_to_conversation({ conversationId: "conversation_01abc...", conten
     content: string
   }>(server, auth, {
     name: 'suggest_post',
+    title: 'Suggest feedback post to team',
     permissions: [PERMISSIONS.CONVERSATION_NOTE],
     description: `Suggest to the SUPPORT TEAM (not the visitor) that a RESOLVED conversation be tracked as a feedback post. Appears only in the agent inbox as an internal note; a team member confirms with one click. Rejected unless the conversation is resolved.
 
@@ -249,6 +253,7 @@ Example: suggest_post({ conversationId: "conversation_01...", boardId: "board_01
 
   registerTool<{ conversationId: string; postId: string }>(server, auth, {
     name: 'share_post',
+    title: 'Share post in conversation',
     permissions: [PERMISSIONS.CONVERSATION_REPLY],
     description: `Embed an EXISTING feedback post as a card in the conversation so the visitor can view and upvote it. Find
 candidates first with the search tool. Use to surface related ideas / avoid duplicates.
@@ -279,6 +284,7 @@ Example: share_post({ conversationId: "conversation_01...", postId: "post_01..."
     status: 'open' | 'snoozed' | 'closed'
   }>(server, auth, {
     name: 'set_conversation_status',
+    title: 'Set conversation status',
     permissions: [PERMISSIONS.CONVERSATION_SET_STATUS],
     description: `Change a conversation's status (open, snoozed, or closed). Snoozing defers it until the customer next replies; closing stamps the resolution time; a later reply reopens it.
 

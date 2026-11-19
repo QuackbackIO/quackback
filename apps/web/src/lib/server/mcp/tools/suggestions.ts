@@ -7,7 +7,7 @@
 
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { z } from 'zod'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import {
   acceptMergeSuggestion,
   dismissMergeSuggestion,
@@ -15,7 +15,7 @@ import {
 } from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
 import { isTypeId } from '@quackback/ids'
 import type { PostMergeSuggestionId } from '@quackback/ids'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import type { McpAuthContext } from '../types'
 import { registerTool, jsonResult, errorResult, WRITE } from './helpers'
 
@@ -52,6 +52,7 @@ type RestoreSuggestionArgs = { id: string }
 export function registerSuggestionTools(server: McpServer, auth: McpAuthContext) {
   registerTool<AcceptSuggestionArgs>(server, auth, {
     name: 'accept_suggestion',
+    title: 'Accept merge suggestion',
     permissions: [PERMISSIONS.SUGGESTION_MANAGE],
     description: `Accept a post-to-post merge suggestion, merging the source post into the target. Use swapDirection to reverse which post is kept.
 
@@ -74,6 +75,7 @@ Examples:
 
   registerTool<DismissSuggestionArgs>(server, auth, {
     name: 'dismiss_suggestion',
+    title: 'Dismiss merge suggestion',
     permissions: [PERMISSIONS.SUGGESTION_MANAGE],
     description: `Dismiss a merge suggestion. It can be restored later via restore_suggestion.
 
@@ -92,6 +94,7 @@ Example: dismiss_suggestion({ id: "post_merge_sug_01abc..." })`,
 
   registerTool<RestoreSuggestionArgs>(server, auth, {
     name: 'restore_suggestion',
+    title: 'Restore merge suggestion',
     permissions: [PERMISSIONS.SUGGESTION_MANAGE],
     description: `Restore a dismissed merge suggestion back to pending status.
 

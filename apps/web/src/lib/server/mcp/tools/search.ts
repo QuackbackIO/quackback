@@ -8,8 +8,8 @@
 
 import { z } from 'zod'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { McpServer } from '@modelcontextprotocol/server'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { getPostWithDetails, getCommentsWithReplies } from '@/lib/server/domains/posts/post.query'
 import { getMergedPosts } from '@/lib/server/domains/posts/post.merge'
@@ -176,6 +176,7 @@ type GetDetailsArgs = { id: string }
 export function registerSearchTools(server: McpServer, auth: McpAuthContext) {
   registerTool<SearchArgs>(server, auth, {
     name: 'search',
+    title: 'Search workspace',
     // Every branch is team-only; the per-branch scope gates stay in the handler.
     teamOnly: true,
     permissions: (args) => [SEARCH_PERMISSIONS[args.entity ?? 'posts']],
@@ -226,6 +227,7 @@ Examples:
 
   registerTool<GetDetailsArgs>(server, auth, {
     name: 'get_details',
+    title: 'Get details by ID',
     // Every branch is team-only; the per-branch scope gates stay in the handler.
     teamOnly: true,
     permissions: (args) => detailPermissions(args.id),
