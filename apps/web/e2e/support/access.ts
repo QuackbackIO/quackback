@@ -87,6 +87,19 @@ export async function seedConv(opts: SeedConvOptions): Promise<SeededConv> {
   return { id, subject, messages, visitorPrincipalId: fromUuid('principal', visitorUuid) }
 }
 
+/**
+ * Turn a workspace feature flag on in one statement. The shared
+ * set-feature-flag script reads, edits and writes the whole flags object, so
+ * two workers turning on different flags at once can lose one.
+ */
+export async function turnOnFlag(flag: string): Promise<void> {
+  const sql = supportDb()
+  await sql`UPDATE settings
+            SET feature_flags = (COALESCE(NULLIF(feature_flags, ''), '{}')::jsonb
+                                 || jsonb_build_object(${flag}::text, true))::text`
+  await sql`DELETE FROM kv_store WHERE key = 'settings:workspace'`
+}
+
 /** The conversation row as the app stores it (for "row unchanged" checks). */
 export async function convRow(id: string) {
   const [row] = await supportDb()`

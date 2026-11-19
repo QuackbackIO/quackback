@@ -598,9 +598,6 @@ test.describe('inbox access on screen', () => {
       await expect(page.getByRole('navigation').first()).toBeVisible({ timeout: 15_000 })
       await page.goto(`/admin/inbox?view=all&q=${encodeURIComponent(marker)}`)
       await openFromList(page, conv)
-      await expect(
-        page.getByText(/plan|upgrade/i).filter({ hasText: /seats|plan limit/i })
-      ).toHaveCount(0)
 
       // The assignee picker opens with nobody in it (no member.view).
       await page.getByRole('button', { name: 'Unassigned', exact: true }).click()

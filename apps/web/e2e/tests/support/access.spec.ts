@@ -22,13 +22,14 @@ import {
   openFromList,
   seedConv,
   seedTicket,
+  turnOnFlag,
   type SeededConv,
 } from '../../support/access'
 import { bellsFor, mentionDoc } from '../../support/access-bells'
 import { callServerFn, personApi } from '../../support/server-fns'
 import { openStream } from '../../support/streams'
 import { createTeam } from '../../support/teammates'
-import { createSupportApiKey, setFeatureFlag } from '../../utils/db-helpers'
+import { createSupportApiKey } from '../../utils/db-helpers'
 import type { Page } from '@playwright/test'
 
 /** Write permissions without the workspace-wide view. */
@@ -526,7 +527,11 @@ test.describe('removal, bells and mentions', () => {
       await expect(option).toContainText('No access')
       await option.click({ force: true })
       await admin.keyboard.press('Enter')
-      await expect(composer.locator('[data-type="mention"]')).toHaveCount(0)
+      await expect(composer.locator('.mention')).toHaveCount(0)
+      // Control: a teammate with access is picked as a mention.
+      await composer.pressSequentially(` @Insider ${marker.slice(-6)}`, { delay: 20 })
+      await admin.getByRole('option', { name: new RegExp(`Insider ${marker.slice(-6)}`) }).click()
+      await expect(composer.locator('.mention')).toHaveCount(1)
 
       // A forced mention through the server: the insider hears, the outsider never.
       const api = await personApi(playwright, 'admin')
@@ -552,7 +557,7 @@ test.describe('tickets', () => {
     'ACC-16 another team\'s ticket is not found by deep link; its linked conversation shows "Linked ticket you can\'t open" with no Create ticket',
     { tag: '@core' },
     async ({ asPerson, playwright, people, marker }) => {
-      setFeatureFlag('supportTickets', true)
+      await turnOnFlag('supportTickets')
       const ticket = await seedTicket({
         marker,
         label: 'support ticket',
@@ -596,7 +601,7 @@ test.describe('tickets', () => {
     'ACC-17 a Contributor keeps Support in the rail with an empty ticket list; ticket functions refuse and the ticket stream answers 404',
     { tag: '@core' },
     async ({ asPerson, playwright, people, marker }) => {
-      setFeatureFlag('supportTickets', true)
+      await turnOnFlag('supportTickets')
       const ticket = await seedTicket({
         marker,
         label: 'billing ticket',

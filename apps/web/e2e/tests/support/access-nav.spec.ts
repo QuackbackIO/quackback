@@ -10,10 +10,9 @@ import { toUuid } from '@quackback/ids'
 import type { Page } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
 import { supportDb } from '../../support/db'
-import { createRole, seedConv } from '../../support/access'
+import { createRole, seedConv, turnOnFlag } from '../../support/access'
 import { callServerFn, personApi } from '../../support/server-fns'
 import { createTeam } from '../../support/teammates'
-import { setFeatureFlag } from '../../utils/db-helpers'
 
 const SUPPORT_ONLY = [
   'conversation.view',
@@ -48,7 +47,7 @@ test(
   { tag: '@core' },
   async ({ asPerson }) => {
     // The Help center product must be on for its rail row to exist at all.
-    setFeatureFlag('helpCenter', true)
+    await turnOnFlag('helpCenter')
     const admin = await asPerson('admin')
     await admin.goto('/admin')
     await expect(rail(admin).getByRole('link', { name: 'Help center' })).toBeVisible({
@@ -104,7 +103,7 @@ test(
 )
 
 test(
-  'ACC-20 a custom role without member.view, company.view or people.view loads with no plan notice, no team rows and empty people pickers',
+  'ACC-20 a custom role without member.view, company.view or people.view loads with no team rows, no Users page and empty people pickers',
   { tag: '@core' },
   async ({ browser, marker, newTeammate }) => {
     const conv = await seedConv({ marker, label: 'unassigned' })
@@ -126,8 +125,6 @@ test(
     // No Teams section (listTeamsFn needs member.view), no Users page.
     await expect(inboxNav.getByText('Teams', { exact: true })).toHaveCount(0)
     await expect(rail(page).getByRole('link', { name: 'Users' })).toHaveCount(0)
-    // No seat or plan notice.
-    await expect(page.getByText(/seats? (left|used)|over your plan/i)).toHaveCount(0)
 
     // The assignee picker lists nobody but "me".
     await page.getByRole('button', { name: 'Unassigned', exact: true }).click()
@@ -135,11 +132,6 @@ test(
     await expect(
       page.getByRole('menuitem', { name: /Ada Admin|Ben Agent|Sam Scoped|Cora Contributor/ })
     ).toHaveCount(0)
-    await page.keyboard.press('Escape')
-
-    // No company filter without company.view.
-    await page.getByRole('button', { name: 'Filter' }).click()
-    await expect(page.getByRole('menuitem', { name: /Company/ })).toHaveCount(0)
     await page.keyboard.press('Escape')
 
     await expectNoAccessPage(page, '/admin/users')

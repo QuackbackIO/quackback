@@ -7,17 +7,17 @@
  * Journeys: RT-48, and the new-message half of ACC-14 (the assignment and
  * mention halves are in access.spec.ts).
  */
-import { fromUuid } from '@quackback/ids'
+import { fromUuid, toUuid } from '@quackback/ids'
 import type { APIRequestContext } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
 import { pollFor, supportDb } from '../../support/db'
-import { bellsFor } from '../../support/access-bells'
+import { bellsFor, waitForNotificationHook } from '../../support/access-bells'
 import {
   conversationReplyAddress,
   sendInboundEmail,
   supportInboxAddress,
 } from '../../support/inbound-email'
-import { emailLogFor, waitForEmailLog } from '../../support/mailpit'
+import { emailLogFor } from '../../support/mailpit'
 import { presenceRows, setAvailability } from '../../support/presence'
 import { callServerFn, personApi } from '../../support/server-fns'
 import { openStream, type OpenStream } from '../../support/streams'
@@ -86,13 +86,25 @@ async function followUp(
   expect(await res.json()).toMatchObject({ status: 'ingested' })
 }
 
-const messageBells = async (t: TestTeammate, conversationId: string) =>
-  (await bellsFor(t.principalId, conversationId)).filter((b) => b.type === 'chat_message')
+/** A teammate's new-message bells on this conversation whose text contains `text`. */
+const bellsWith = async (t: TestTeammate, conversationId: string, text: string) =>
+  (await bellsFor(t.principalId, conversationId)).filter(
+    (b) => b.type === 'chat_message' && (b.body ?? '').includes(text)
+  )
 
-/** Wait for a teammate's n-th new-message bell on this conversation. */
-const bellCount = (t: TestTeammate, conversationId: string, n: number) =>
-  pollFor(`${n} new-message bells for ${t.name}`, async () =>
-    (await messageBells(t, conversationId)).length >= n ? true : null
+/** Wait for a teammate's new-message bell carrying `text`. */
+const waitForBell = (t: TestTeammate, conversationId: string, text: string) =>
+  pollFor(`a new-message bell "${text}" for ${t.name}`, async () =>
+    (await bellsWith(t, conversationId, text)).length > 0 ? true : null
+  )
+
+/** The app's outbound mail rows for an address about a conversation since a moment. */
+const mailSince = async (address: string, conversationId: string, since: Date) =>
+  (await emailLogFor(address)).filter(
+    (r) =>
+      r.direction === 'outbound' &&
+      r.conversation_id === toUuid(conversationId as `conversation_${string}`) &&
+      r.created_at >= since
   )
 
 test(
@@ -108,42 +120,45 @@ test(
     // First message, with T1 online and available: it still rings.
     const t1Online = await online(t1)
     const conv = await emailConversation(request, customerEmail, marker)
-    await bellCount(t1, conv, 1)
+    await waitForBell(t1, conv, `First message ${marker}`)
 
     const admin = await personApi(playwright, 'admin')
-    expect(
-      (
-        await callServerFn(admin, 'assignConversationTeamFn', {
-          conversationId: conv,
-          teamId: teamA.id,
-        })
-      ).ok
-    ).toBe(true)
+    const moved = await callServerFn(admin, 'assignConversationTeamFn', {
+      conversationId: conv,
+      teamId: teamA.id,
+    })
+    expect(moved.ok, moved.error).toBe(true)
 
-    // Follow-up while T1 (in scope, available) is online: held.
-    await followUp(request, customerEmail, conv, `${marker} follow-up held`)
+    // Follow-up while T1 (in scope, available) is online: held. The hook
+    // decides when it runs, so presence stays put until it has.
+    const held = `${marker} follow-up held`
+    await followUp(request, customerEmail, conv, held)
+    await waitForNotificationHook(held)
+    expect(await bellsWith(t1, conv, held)).toEqual([])
+
     // T1 goes Away: the next follow-up rings although T1 is still connected.
     await setAvailability(t1.principalId, 'away')
-    await followUp(request, customerEmail, conv, `${marker} follow-up while away`)
-    await bellCount(t1, conv, 2)
+    const away = `${marker} follow-up while away`
+    await followUp(request, customerEmail, conv, away)
+    await waitForBell(t1, conv, away)
 
     // Back online and available, then offline: only an out-of-scope teammate is
     // online, which holds nothing.
     await setAvailability(t1.principalId, 'online')
     t1Online.close()
-    await pollFor('T1 offline', async () => {
-      const rows = await presenceRows(t1.principalId)
-      return rows.length === 0 ? true : null
-    })
+    await pollFor('T1 offline', async () =>
+      (await presenceRows(t1.principalId)).length === 0 ? true : null
+    )
     await online(outsider)
-    await followUp(request, customerEmail, conv, `${marker} follow-up nobody in scope`)
-    await bellCount(t1, conv, 3)
+    const nobody = `${marker} follow-up nobody in scope`
+    await followUp(request, customerEmail, conv, nobody)
+    await waitForBell(t1, conv, nobody)
 
-    // Exactly three: the held follow-up never produced one.
-    expect(await messageBells(t1, conv)).toHaveLength(3)
-    // The outsider heard the first message (then in the Unassigned queue, so in
-    // everyone's scope) and none of the follow-ups on team A.
-    expect(await messageBells(outsider, conv)).toHaveLength(1)
+    // The held follow-up never rang, later or otherwise; the outsider heard
+    // only the first message (then in the Unassigned queue, so everyone's).
+    expect(await bellsWith(t1, conv, held)).toEqual([])
+    expect(await bellsWith(outsider, conv, `First message ${marker}`)).toHaveLength(1)
+    expect(await bellsWith(outsider, conv, `${marker} follow-up`)).toEqual([])
     await admin.dispose()
   }
 )
@@ -158,33 +173,30 @@ test(
     const s = await newTeammate({ roleKey: 'e2e_scoped_agent', teams: [teamA.id] })
     const b1 = await newTeammate({ roleKey: 'e2e_scoped_agent', teams: [teamB.id] })
     const conv = await emailConversation(request, customerEmail, marker)
+    // In the Unassigned queue the first message reaches S too: the control
+    // that S can hear about this conversation at all.
+    await waitForBell(s, conv, `First message ${marker}`)
     const admin = await personApi(playwright, 'admin')
-    expect(
-      (
-        await callServerFn(admin, 'assignConversationTeamFn', {
-          conversationId: conv,
-          teamId: teamB.id,
-        })
-      ).ok
-    ).toBe(true)
-    const sBellsBefore = (await messageBells(s, conv)).length
+    const moved = await callServerFn(admin, 'assignConversationTeamFn', {
+      conversationId: conv,
+      teamId: teamB.id,
+    })
+    expect(moved.ok, moved.error).toBe(true)
 
     // Nobody is online, so the follow-up rings and mails team B.
-    await followUp(request, customerEmail, conv, `${marker} follow-up for team B`)
-    await bellCount(b1, conv, 2)
+    const since = new Date(Date.now() - 1_000)
+    const text = `${marker} follow-up for team B`
+    await followUp(request, customerEmail, conv, text)
+    await waitForBell(b1, conv, text)
     // email_log records each address the app chose to mail, whatever the SMTP
-    // stand-in did with it; S was never one of them.
-    await waitForEmailLog(b1.email, {
-      direction: 'outbound',
-      email_type: 'ConversationMessageEmail',
-    })
+    // stand-in then did with it.
+    await pollFor('team B mail for the follow-up', async () =>
+      (await mailSince(b1.email, conv, since)).length > 0 ? true : null
+    )
+    await waitForNotificationHook(text)
 
-    expect(await messageBells(s, conv)).toHaveLength(sBellsBefore)
-    const sMail = (await emailLogFor(s.email)).filter((r) => r.direction === 'outbound')
-    // S was in scope for the first message only (then in the Unassigned queue).
-    expect(sMail.length).toBeLessThanOrEqual(1)
-    const b1Mail = (await emailLogFor(b1.email)).filter((r) => r.direction === 'outbound')
-    expect(b1Mail.length).toBe(sMail.length + 1)
+    expect(await bellsWith(s, conv, text)).toEqual([])
+    expect(await mailSince(s.email, conv, since)).toEqual([])
     await admin.dispose()
   }
 )
