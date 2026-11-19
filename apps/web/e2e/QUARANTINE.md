@@ -54,16 +54,6 @@ Every entry has owner: unassigned and review by: 2026-12-02.
 
 ### Suspected product bugs
 
-### Support API and MCP (support suite)
-
-- `support/mcp.spec.ts` › MCP tickets › API-63 reply_to_ticket and
-  add_ticket_note take up to 10000 characters as advertised. The tools'
-  schemas accept content up to 10000 characters (`mcp/tools/tickets.ts:328`,
-  `:371`), but the shared message write refuses anything over 4000
-  (`messages/message-core.ts:93`, `MAX_CONVERSATION_MESSAGE_LENGTH`), so a
-  9000-character reply or note fails with "Message must be 4,000 characters
-  or less". Either the schemas or the limit is wrong. owner: unassigned,
-  review by: 2026-12-03.
 ### Support suite: known product bugs (fixes in flight)
 
 These assert the right behaviour and fail until the fix lands. Review by
