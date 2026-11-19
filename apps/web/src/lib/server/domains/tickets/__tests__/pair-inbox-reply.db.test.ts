@@ -168,9 +168,10 @@ describe('a teammate reply typed in the inbox on a ticket conversation', () => {
       teammateActor(teammate)
     )
 
+    // Runs just after the send returns, off its path.
+    await vi.waitFor(() => expect(spies.emitTicketReplied).toHaveBeenCalledTimes(1))
     expect(await watchReason(ticketId, teammate)).toBe('replier')
     expect((await updatedAtOf(ticketId)).getTime()).toBe(new Date(message.createdAt).getTime())
-    expect(spies.emitTicketReplied).toHaveBeenCalledTimes(1)
   })
 
   it('does not make an API key a watcher, but still marks the ticket updated', async () => {
@@ -183,8 +184,8 @@ describe('a teammate reply typed in the inbox on a ticket conversation', () => {
 
     await sendAgentMessage(conversationId, 'Automated update', { principalId: apiKey }, actor)
 
+    await vi.waitFor(() => expect(spies.emitTicketReplied).toHaveBeenCalledTimes(1))
     expect(await watchReason(ticketId, apiKey)).toBeNull()
     expect((await updatedAtOf(ticketId)).getTime()).toBeGreaterThan(LONG_AGO.getTime())
-    expect(spies.emitTicketReplied).toHaveBeenCalledTimes(1)
   })
 })

@@ -1081,17 +1081,18 @@ export async function sendAgentMessage(
   // A reply on a conversation paired with a customer ticket is a reply on that
   // ticket, whichever view it was typed in: the replier watches the ticket,
   // the ticket counts as updated, and ticket.replied gives its watchers their
-  // bell and integrations their webhook. Awaited so the ticket is current when
-  // the send returns; best-effort, as the reply itself already landed. The
-  // ticket side does this for its own writes, and a shared card is not a reply.
+  // bell and integrations their webhook. Off the send's own path, best-effort:
+  // the reply itself already landed. The ticket side does this for its own
+  // writes, and a shared card is not a reply.
   if (!opts?.fromTicketThread && !opts?.card) {
-    try {
-      const { emitPairTicketReplied } =
-        await import('@/lib/server/domains/tickets/ticket-message.service')
-      await emitPairTicketReplied(txResult.conversation.id, actor, messageDTO)
-    } catch (err) {
-      log.warn({ err, conversationId: txResult.conversation.id }, 'pair ticket reply signal failed')
-    }
+    void import('@/lib/server/domains/tickets/ticket-message.service')
+      .then((m) => m.emitPairTicketReplied(txResult.conversation.id, actor, messageDTO))
+      .catch((err) =>
+        log.warn(
+          { err, conversationId: txResult.conversation.id },
+          'pair ticket reply signal failed'
+        )
+      )
   }
   if (
     txResult.previousAgentPrincipalId === null &&
