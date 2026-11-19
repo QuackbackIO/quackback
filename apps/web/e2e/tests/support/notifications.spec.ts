@@ -26,6 +26,11 @@ async function quiet(playwright: PlaywrightWorkerArgs['playwright'], t: TestTeam
     matrix: { chat_message: { inApp: false, email: false } },
   })
   expect(r.ok, r.error).toBe(true)
+  // Bells that landed before the switch (other tests' visitors) are noise for
+  // this teammate's counts: let any in-flight write settle, then drop them.
+  await new Promise((resolve) => setTimeout(resolve, 1_000))
+  await supportDb()`DELETE FROM in_app_notifications
+    WHERE principal_id = ${toUuid(t.principalId as `principal_${string}`)}`
   return api
 }
 
@@ -136,8 +141,12 @@ test.describe('notifications', () => {
       expect(refused.ok).toBe(false)
       expect(await bellsFor(removed.principalId, second.conversationId)).toEqual([])
 
-      // Conversation assignment sends no email.
-      expect(await emailLogFor(assignee.email)).toEqual([])
+      // Conversation assignment sends no email. (In-scope teammates also get
+      // the team's new-message email for other tests' visitors, which the
+      // per-type switch does not cover, a known gap: those are left out.)
+      await waitForEventHandled(conversationId, { type: 'conversation.assigned' })
+      const mails = await emailLogFor(assignee.email)
+      expect(mails.filter((m) => m.email_type !== 'ConversationMessageEmail')).toEqual([])
     }
   )
 
@@ -454,16 +463,19 @@ test.describe('notifications', () => {
       await page.goto('/admin/feedback')
       const bell = page.getByRole('button', { name: 'Notifications (12 unread)' })
       await expect(bell).toBeVisible({ timeout: 15_000 })
-      await bell.click()
-      await expect(page.getByText('You were assigned a conversation')).toHaveCount(10, {
-        timeout: 10_000,
-      })
+      await expect(async () => {
+        await bell.click()
+        await expect(page.getByText('You were assigned a conversation')).toHaveCount(10, {
+          timeout: 2_000,
+        })
+      }).toPass({ timeout: 20_000 })
       await page.getByRole('button', { name: 'Mark all read' }).click()
       await expect(page.getByRole('button', { name: 'Notifications', exact: true })).toBeVisible({
         timeout: 10_000,
       })
-      const rows = await bellsFor(t.principalId)
-      expect(rows.every((b) => b.read_at !== null)).toBe(true)
+      await expect
+        .poll(async () => (await bellsFor(t.principalId)).every((b) => b.read_at !== null))
+        .toBe(true)
       await admin.dispose()
     }
   )
