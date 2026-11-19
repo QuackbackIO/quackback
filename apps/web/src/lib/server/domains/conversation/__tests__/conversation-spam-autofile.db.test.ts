@@ -91,6 +91,7 @@ vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
 import { ingestParsedEmail } from '../conversation.email-inbound.service'
 import { listConversationsForAgent } from '../conversation.query'
 import { maybeAutoFileSpam } from '../conversation.spam-filter'
+import { sendVisitorMessage } from '../conversation.service'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -352,6 +353,94 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     expect(stored?.endReason).toBe('spam')
     expect(stored?.spamReason).toBe('burst_rate')
     expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  // A widget visitor's conversation records no email (the anonymous user's
+  // address is a synthetic placeholder), so a burst keyed only on the email
+  // could never fire for one: it counts on the visitor instead.
+  it('files a messenger visitor who opens threads in a burst', async () => {
+    await seedWorkspace()
+    mockChat.mockResolvedValue({ spam: false })
+    const { incrementBucket } = await import('@/lib/server/utils/rate-bucket')
+    vi.mocked(incrementBucket).mockImplementation(async (spec: { key: string }) => ({
+      count: spec.key.includes(':burst:') ? 5 : 1,
+    }))
+    const visitorUserId = createId('user') as UserId
+    const visitor = createId('principal') as PrincipalId
+    const syntheticEmail = `temp-${visitorUserId}@anon.quackback.io`
+    await testDb.insert(user).values({ id: visitorUserId, name: 'Visitor', email: syntheticEmail })
+    await testDb.insert(principal).values({
+      id: visitor,
+      userId: visitorUserId,
+      role: 'user',
+      type: 'anonymous',
+      createdAt: new Date(),
+    })
+
+    const res = await sendVisitorMessage(
+      { content: 'Cheap watches, best prices' },
+      { principalId: visitor, displayName: null, email: syntheticEmail },
+      { principalId: visitor, role: 'user', principalType: 'anonymous', segmentIds: new Set() }
+    )
+
+    // The filter runs after the send returns.
+    await vi.waitFor(
+      async () => {
+        const stored = await testDb.query.conversations.findFirst({
+          where: eq(conversations.id, res.conversation.id as never),
+        })
+        expect(stored?.spamReason).toBe('burst_rate')
+      },
+      { timeout: 5000, interval: 50 }
+    )
+    const burstKeys = vi
+      .mocked(incrementBucket)
+      .mock.calls.map(([spec]) => (spec as { key: string }).key)
+      .filter((key) => key.includes(':burst:'))
+    expect(burstKeys).toEqual([`conversation:cold:burst:principal:${visitor}`])
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it("counts an identified messenger visitor's burst on their email address", async () => {
+    await seedWorkspace()
+    mockChat.mockResolvedValue({ spam: false })
+    const { incrementBucket } = await import('@/lib/server/utils/rate-bucket')
+    vi.mocked(incrementBucket).mockImplementation(async (spec: { key: string }) => ({
+      count: spec.key.includes(':burst:') ? 5 : 1,
+    }))
+    const visitorUserId = createId('user') as UserId
+    const visitor = createId('principal') as PrincipalId
+    await testDb
+      .insert(user)
+      .values({ id: visitorUserId, name: 'Known', email: `known-${suffix()}@acme.com` })
+    await testDb.insert(principal).values({
+      id: visitor,
+      userId: visitorUserId,
+      role: 'user',
+      type: 'user',
+      createdAt: new Date(),
+    })
+
+    const res = await sendVisitorMessage(
+      { content: 'Hello again' },
+      { principalId: visitor, displayName: 'Known', email: 'Known@acme.com' },
+      { principalId: visitor, role: 'user', principalType: 'user', segmentIds: new Set() }
+    )
+
+    await vi.waitFor(
+      async () => {
+        const stored = await testDb.query.conversations.findFirst({
+          where: eq(conversations.id, res.conversation.id as never),
+        })
+        expect(stored?.spamReason).toBe('burst_rate')
+      },
+      { timeout: 5000, interval: 50 }
+    )
+    const burstKeys = vi
+      .mocked(incrementBucket)
+      .mock.calls.map(([spec]) => (spec as { key: string }).key)
+      .filter((key) => key.includes(':burst:'))
+    expect(burstKeys).toEqual(['conversation:cold:burst:known@acme.com'])
   })
 
   it('keeps a trusted sender in triage even when a signal matches', async () => {

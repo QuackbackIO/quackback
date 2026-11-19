@@ -64,6 +64,9 @@ export interface ClassifyInboundSpamInput {
    *  null when the channel has none — a null sender can never be trusted, so
    *  classification proceeds. */
   senderEmail: string | null
+  /** The sender's principal, for a channel that knows it (the messenger).
+   *  The burst signal counts on it when there is no sender address. */
+  senderPrincipalId?: string | null
   subject?: string | null
   content: string
 }
@@ -184,7 +187,11 @@ export async function maybeAutoFileSpam(
     if (await isTestConversation(conversationId)) return false
     if (await isTrustedInboundSender(input.senderEmail)) return false
     const { detectSpamSignal } = await import('./conversation.spam-signals')
-    const signal = await detectSpamSignal({ senderEmail: input.senderEmail, ...input.signals })
+    const signal = await detectSpamSignal({
+      senderEmail: input.senderEmail,
+      senderPrincipalId: input.senderPrincipalId ?? null,
+      ...input.signals,
+    })
     if (signal) {
       log.info({ conversation_id: conversationId, signal }, 'spam signal matched; filing')
       const { autoFileConversationAsSpam } = await import('./conversation.service')

@@ -551,7 +551,15 @@ export async function sendVisitorMessage(
     void import('./conversation.spam-filter')
       .then((m) =>
         m.maybeAutoFileSpam(txResult.conversation.id, {
-          senderEmail: txResult.conversation.visitorEmail ?? null,
+          // The visitor's own address when they have a real one (an
+          // anonymous visitor's is a synthetic placeholder), else one they
+          // gave before the chat. With neither, the burst rule counts on the
+          // visitor themselves.
+          senderEmail:
+            normalizeEmail(realEmail(author.email) ?? undefined) ??
+            txResult.conversation.visitorEmail ??
+            null,
+          senderPrincipalId: author.principalId,
           subject: null,
           content: content || fallbackLabel,
         })

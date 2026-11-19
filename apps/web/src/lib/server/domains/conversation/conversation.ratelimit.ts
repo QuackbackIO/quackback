@@ -73,7 +73,8 @@ export async function assertColdInboundRate(senderEmail: string): Promise<void> 
 // above. Three new threads in ten minutes is already past what a person
 // types, but well under the drop threshold — so instead of rejecting the
 // message, the caller files the thread to Spam. Runs on every new-conversation
-// ingest path (email cold inbound and messenger), keyed by sender address.
+// ingest path (email cold inbound and messenger), keyed by sender address, or
+// by `principal:<id>` for a messenger visitor with no address.
 const BURST_WINDOW_SECONDS = 600
 const BURST_MAX = 3
 
@@ -82,9 +83,9 @@ const BURST_MAX = 3
  * store errors (count === null) — a throttle outage never files a real
  * customer's thread as spam.
  */
-export async function isColdInboundBurst(senderEmail: string): Promise<boolean> {
+export async function isColdInboundBurst(senderKey: string): Promise<boolean> {
   const spec = {
-    key: `conversation:cold:burst:${senderEmail}`,
+    key: `conversation:cold:burst:${senderKey}`,
     windowSeconds: BURST_WINDOW_SECONDS,
   }
   const { count } = await incrementBucket(spec)
