@@ -855,35 +855,31 @@ test.describe('replies to an existing conversation', () => {
   )
 
   test(
-    'CUS-E-15 a reply to a spam-filed thread reopens it out of Spam',
+    'CUS-E-15 a reply to a spam-filed thread is kept but stays closed in Spam',
     {
       tag: ['@core', '@quarantine'],
       annotation: {
         type: 'quarantine',
-        description: "Known bug: a visitor reopen keeps endReason='spam' (and spamReason)",
+        description: 'Waits for #1084 (a customer message on a spam conversation stays in Spam)',
       },
     },
     async ({ request, customerEmail, marker }) => {
-      // Known bug: the visitor reopen keeps endReason='spam', so the thread is
-      // open but in neither triage nor Spam (QUARANTINE.md).
-      await enableAutoAck()
       const cold = await coldConversation(request, customerEmail, marker, {
         headers: { 'authentication-results': DMARC_QUARANTINE },
       })
       await waitForConversation(cold.row.id, 'spam filing', (r) => r.end_reason === 'spam')
-      const ack = await waitForMailMatching({ to: customerEmail, subject: marker })
-      const replyTo = header(await getMailHeaders(ack.ID), 'Reply-To')!
       const reply = await deliver(request, {
         from: customerEmail,
-        to: replyTo,
+        to: conversationReplyAddress(cold.id),
         subject: `Re: ${marker}`,
         text: `I am real ${marker}`,
       })
       expect(reply.status).toBe('ingested')
+      // The message is stored, but the conversation stays closed and in Spam.
+      expect(await messagesIn(cold.row.id)).toHaveLength(2)
       const row = await conversation(cold.row.id)
-      expect(row.status).toBe('open')
-      expect(row.end_reason).toBeNull()
-      expect(row.spam_reason).toBeNull()
+      expect(row.status).toBe('closed')
+      expect(row.end_reason).toBe('spam')
     }
   )
 

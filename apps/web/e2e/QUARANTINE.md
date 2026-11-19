@@ -114,10 +114,11 @@ by a separate test that is not quarantined.
   conversation publishes no realtime frame, so an open inbox shows it only
   after a refetch. owner: unassigned, review by: 2026-12-03.
 - `support/email-inbound.spec.ts` › CUS-E-15 a reply to a spam-filed thread
-  reopens it out of Spam. Known bug: the visitor reopen
-  (`conversation.service.ts` `sendVisitorMessage`) clears neither `endReason`
-  nor `spamReason`, so the thread is open but in neither triage nor Spam.
-  owner: unassigned, review by: 2026-12-03.
+  is kept but stays closed in Spam. Waits for #1084, which keeps a customer
+  message on a spam conversation in Spam (owner decision 2026-11-19); today the
+  reply reopens the thread and keeps the spam marker, so it shows in neither
+  triage nor Spam. Lift when #1084 lands. owner: unassigned, review by:
+  2026-12-03.
 - `support/email-outbound.spec.ts` › CUS-O-08 References repeats our earlier
   Message-IDs exactly as they were sent. Found here: outbound ids are stored
   lower-cased (`conversation.email-store.ts` `normalizeMessageId`, used by
