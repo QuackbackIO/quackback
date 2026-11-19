@@ -35,6 +35,9 @@ import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
 import { getConfiguredIntegrationTypes } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 import { advancedCssRemainder } from '@/lib/shared/theme/generator'
 import { notTestPrincipal } from '@/lib/server/test-data'
+import { config } from '@/lib/server/config'
+import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
+import { getChatModel } from '@/lib/server/domains/ai/models'
 import type { PlanFeatureKey } from './plan-limits.features'
 import type {
   BoardCandidate,
@@ -306,4 +309,20 @@ export async function loadSendingDomainChoices(): Promise<SendingDomainChoice[]>
     })
     .from(emailSendingDomains)
   return rows.map((row) => ({ ...row, createdAt: iso(row.createdAt)! }))
+}
+
+/**
+ * The check the assistant and article translation make before a model call:
+ * an AI client and the feature's chat model. A config that cannot load runs
+ * no model.
+ */
+export function modelConfigured(feature: 'assistant' | 'helpCenterTranslate'): boolean {
+  try {
+    return (
+      isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) &&
+      getChatModel(feature) !== null
+    )
+  } catch {
+    return false
+  }
 }

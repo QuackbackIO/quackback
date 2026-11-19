@@ -21,9 +21,6 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { CACHE_KEYS, cacheGet, cacheSet } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
 import { derivedMemoKey, memoizePerRequest, rememberPerRequest } from '@/lib/server/request-memo'
-import { config } from '@/lib/server/config'
-import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
-import { getChatModel } from '@/lib/server/domains/ai/models'
 import {
   compareAndSetPlanLimitsState,
   readPlanLimitsSources,
@@ -67,6 +64,7 @@ import {
   type MemberChoice,
   type SendingDomainChoice,
   type StatusComponentChoice,
+  modelConfigured,
 } from './plan-limits.loaders'
 
 export { invalidatePlanLimits }
@@ -151,22 +149,6 @@ function previousPlanAt(
 
 async function readSnapshot(): Promise<PlanLimitsSnapshot> {
   return (await memoizePerRequest(INPUTS_KEY, () => cacheGet<PlanLimitsSnapshot>(INPUTS_KEY))) ?? {}
-}
-
-/**
- * The check the assistant and article translation make before a model call:
- * an AI client and the feature's chat model. A config that cannot load runs
- * no model.
- */
-function modelConfigured(feature: 'assistant' | 'helpCenterTranslate'): boolean {
-  try {
-    return (
-      isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) &&
-      getChatModel(feature) !== null
-    )
-  } catch {
-    return false
-  }
 }
 
 async function loadPart(
