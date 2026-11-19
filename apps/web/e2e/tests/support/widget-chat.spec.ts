@@ -3,25 +3,36 @@
  * writes, a teammate answers, the visitor sees it live, and what the team
  * keeps to itself never reaches the widget.
  */
-import { generateId, toUuid } from '@quackback/ids'
+import { fromUuid, generateId, toUuid } from '@quackback/ids'
 import type { APIRequestContext, Page } from '@playwright/test'
 import { test, expect } from '../../support/fixtures'
-import { supportDb } from '../../support/db'
+import { pollFor, supportDb } from '../../support/db'
+import { fakeAi } from '../../support/fake-ai-client'
 import {
+  adminRequest,
+  adminWrite,
   agentApi,
   composer,
   conversationCount,
   conversationRow,
   conversationWithMessage,
+  createTicket,
+  deleteMessage,
+  editMessage,
+  enableTicketSurfaces,
   inboxWrite,
   messageCount,
   mintVisitor,
+  moveTicket,
   openWidget,
   openWidgetThread,
+  signSsoToken,
   streamStatus,
+  threadStreamOpen,
   visitorSend,
   visitorType,
   widgetFn,
+  widgetSecret,
   widgetTab,
 } from '../../support/widget-portal'
 
@@ -66,8 +77,10 @@ test.describe('widget chat: the core loop', () => {
       const { conversation } = await visitorSend(request, visitor.token, opening)
 
       const widget = await openWidget(page, { visitorToken: visitor.token })
+      const live = threadStreamOpen(page, conversation.id)
       await openWidgetThread(widget, opening)
       await expect(widget.getByText(opening)).toBeVisible({ timeout: 15_000 })
+      await live
 
       const admin = await asPerson('admin')
       await admin.goto(`/admin/inbox?i=${conversation.id}`)
@@ -101,8 +114,10 @@ test.describe('widget chat: the core loop', () => {
         VALUES (gen_random_uuid(), ${conversationUuid}, 'system', ${legacy}, false, NOW())`
 
       const widget = await openWidget(page, { visitorToken: visitor.token })
+      const live = threadStreamOpen(page, conversation.id)
       await openWidgetThread(widget, opening)
       await expect(widget.getByText(opening)).toBeVisible({ timeout: 15_000 })
+      await live
 
       const api = agentApi(request)
       await api.assign(conversation.id, people.people.agentB.principalId)
@@ -305,12 +320,18 @@ async function visitorWithOpenThread(
   const visitor = await mintVisitor({ name })
   const { conversation } = await visitorSend(request, visitor.token, opening)
   const widget = await openWidget(page, { visitorToken: visitor.token })
+  const live = threadStreamOpen(page, conversation.id)
   await openWidgetThread(widget, opening)
   await expect(widget.getByText(opening)).toBeVisible({ timeout: 15_000 })
+  await live
   return { visitor, conversation, widget }
 }
 
 test.describe('widget chat: the live thread', () => {
+  test.beforeAll(async () => {
+    await enableTicketSurfaces()
+  })
+
   test(
     'CUS-W-13 a follow-up updates the same conversation, wakes it and shows live in the inbox',
     { tag: '@core' },
@@ -529,6 +550,247 @@ test.describe('widget chat: the live thread', () => {
       })
       await expect(widget.getByRole('button', { name: /unread Messages/ })).toHaveCount(0)
       await expect(busyRow).not.toContainText('unread')
+    }
+  )
+
+  test(
+    'CUS-W-38 an agent edit shows "(edited)" and a delete removes the bubble, live; a note edit sends nothing',
+    { tag: '@core' },
+    async ({ page, request, playwright, marker }) => {
+      const opening = `${marker} edit me`
+      const { conversation, widget } = await visitorWithOpenThread(page, request, opening)
+      const admin = await adminRequest(playwright)
+      const first = await adminWrite(admin, 'reply', conversation.id, `${marker} first answer`)
+      const second = await adminWrite(admin, 'reply', conversation.id, `${marker} wrong answer`)
+      const note = await adminWrite(admin, 'note', conversation.id, `${marker} private note`)
+      await expect(widget.getByText(`${marker} wrong answer`)).toBeVisible({ timeout: 15_000 })
+
+      await editMessage(admin, note.id as string, `${marker} private note, edited`)
+      await editMessage(admin, first.id as string, `${marker} better answer`)
+      await expect(widget.getByText(`${marker} better answer`)).toBeVisible({ timeout: 15_000 })
+      await expect(widget.getByText('(edited)')).toHaveCount(1)
+      await deleteMessage(admin, second.id as string)
+      await expect(widget.getByText(`${marker} wrong answer`)).toHaveCount(0, { timeout: 15_000 })
+      await expect(widget.getByText(/private note/)).toHaveCount(0)
+      await admin.dispose()
+    }
+  )
+
+  test(
+    'CUS-W-39 a ticket made from the conversation and its stage moves show in the widget thread',
+    { tag: '@core' },
+    async ({ page, request, playwright, marker }) => {
+      const opening = `${marker} broken export`
+      const { visitor, conversation, widget } = await visitorWithOpenThread(page, request, opening)
+      const admin = await adminRequest(playwright)
+      const ticket = await createTicket(admin, {
+        title: `${marker} export ticket`,
+        requesterPrincipalId: visitor.principalId,
+        conversationId: conversation.id,
+      })
+      await expect(
+        widget.getByText(`Ticket ${ticket.reference} created from this conversation`)
+      ).toBeVisible({ timeout: 15_000 })
+
+      await moveTicket(admin, ticket.id, 'Investigating')
+      await expect(widget.getByText('Status updated to In progress')).toBeVisible({
+        timeout: 15_000,
+      })
+      // The header card follows the stage.
+      await expect(widget.getByText(`${marker} export ticket`).first()).toBeVisible()
+      await expect(widget.getByText('In progress').first()).toBeVisible()
+      await admin.dispose()
+    }
+  )
+
+  test(
+    'CUS-W-30 an AI spam verdict files the conversation closed, and the visitor sees no spam notice',
+    { tag: '@core' },
+    async ({ page, request, marker }) => {
+      const spamMarker = `${marker}-spam`
+      await fakeAi.script({ marker: spamMarker, json: { spam: true } })
+      const visitor = await mintVisitor()
+      const opening = `Cheap pills ${spamMarker}`
+      const { conversation } = await visitorSend(request, visitor.token, opening)
+
+      const row = await pollFor('the spam filing', async () => {
+        const r = await conversationRow(conversation.id)
+        return r.end_reason === 'spam' ? r : null
+      })
+      expect(row.status).toBe('closed')
+      expect(row.spam_reason).toBeTruthy()
+      // Whatever the filing records stays with the team.
+      const [{ n }] = await supportDb()`SELECT count(*)::int AS n FROM conversation_messages
+        WHERE conversation_id = ${row.id} AND sender_type = 'system' AND is_internal = false`
+      expect(n).toBe(0)
+
+      const widget = await openWidget(page, { visitorToken: visitor.token })
+      await openWidgetThread(widget, opening)
+      await expect(widget.getByText(opening)).toBeVisible({ timeout: 15_000 })
+      await expect(
+        widget.getByText('This conversation was closed. Reply to reopen it.')
+      ).toBeVisible()
+      await expect(widget.getByText(/spam/i)).toHaveCount(1) // only the visitor's own words
+      await expect(widget.getByText(/auto-filed/i)).toHaveCount(0)
+    }
+  )
+})
+
+test.describe('widget chat: identified visitors', () => {
+  test.beforeAll(async () => {
+    await enableTicketSurfaces()
+  })
+
+  test(
+    'CUS-W-36 the Tickets tab stays hidden until the visitor has a ticket, then sits after Messages',
+    { tag: '@core' },
+    async ({ page, request, playwright, customerEmail, marker }) => {
+      const secret = await widgetSecret(request)
+      const ssoToken = signSsoToken(
+        { id: marker, email: customerEmail, name: 'Tia Tickets' },
+        secret
+      )
+      const widget = await openWidget(page, { ssoToken })
+      await expect(widgetTab(widget, 'Messages')).toBeVisible({ timeout: 15_000 })
+      await expect(widgetTab(widget, 'Tickets')).toHaveCount(0)
+
+      const [principal] = await supportDb()`SELECT p.id FROM principal p
+        JOIN "user" u ON u.id = p.user_id WHERE u.email = ${customerEmail}`
+      const admin = await adminRequest(playwright)
+      await createTicket(admin, {
+        title: `${marker} first ticket`,
+        requesterPrincipalId: fromUuid('principal', principal.id as string),
+      })
+      await admin.dispose()
+
+      await page.reload()
+      const again = page.frameLocator('iframe.quackback-widget-iframe')
+      await expect(widgetTab(again, 'Tickets')).toBeVisible({ timeout: 20_000 })
+      const labels = await again
+        .getByRole('button', {
+          name: /^(?:\d+ unread )?(Home|Messages|Tickets|Help|News|Feedback)$/,
+        })
+        .allTextContents()
+      const order = labels.map((l) => l.replace(/^\d+/, '').trim())
+      expect(order.indexOf('Tickets')).toBe(order.indexOf('Messages') + 1)
+      await widgetTab(again, 'Tickets').click()
+      await expect(again.getByText(`${marker} first ticket`)).toBeVisible({ timeout: 15_000 })
+    }
+  )
+})
+
+test.describe('widget chat: limits and history', () => {
+  test(
+    'CUS-W-19 the 21st visitor send in the window is rate limited; a teammate burst is not',
+    { tag: '@nightly' },
+    async ({ request, playwright, marker }) => {
+      // The send budget is keyed on the sender's principal, so this burst
+      // throttles nobody else.
+      const visitor = await mintVisitor()
+      const { conversation } = await visitorSend(request, visitor.token, `${marker} 1`)
+      for (let i = 2; i <= 20; i++) {
+        await visitorSend(request, visitor.token, `${marker} ${i}`, conversation.id)
+      }
+      const over = await widgetFn(request, 'widgetSendConversationMessageFn', {
+        bearer: visitor.token,
+        data: { conversationId: conversation.id, content: `${marker} 21` },
+      })
+      expect(over.error?.message).toBe(
+        'You are sending messages too quickly. Please wait a moment.'
+      )
+      expect(await messageCount(conversation.id)).toBe(20)
+
+      const admin = await adminRequest(playwright)
+      for (let i = 1; i <= 21; i++) {
+        await adminWrite(admin, 'reply', conversation.id, `${marker} agent ${i}`)
+      }
+      expect(await messageCount(conversation.id)).toBe(41)
+      await admin.dispose()
+    }
+  )
+
+  test(
+    'CUS-W-19 the rate-limit refusal carries RATE_LIMITED and retryAfter to the client',
+    { tag: ['@nightly', '@quarantine'] },
+    async ({ request, marker }) => {
+      // Quarantined: ConversationRateLimitError is a plain Error, not a typed
+      // DomainException, so only its message crosses the wire (see QUARANTINE.md).
+      const visitor = await mintVisitor()
+      const { conversation } = await visitorSend(request, visitor.token, `${marker} 1`)
+      for (let i = 2; i <= 20; i++) {
+        await visitorSend(request, visitor.token, `${marker} ${i}`, conversation.id)
+      }
+      const over = await widgetFn(request, 'widgetSendConversationMessageFn', {
+        bearer: visitor.token,
+        data: { conversationId: conversation.id, content: `${marker} 21` },
+      })
+      expect(over.error).toMatchObject({ code: 'RATE_LIMITED' })
+      expect(Number(over.error?.retryAfter)).toBeGreaterThan(0)
+    }
+  )
+
+  test(
+    'CUS-W-22 a closed thread reads as read-only, and a send without its id starts a new conversation',
+    { tag: '@nightly' },
+    async ({ request, marker }) => {
+      const visitor = await mintVisitor()
+      const old = await visitorSend(request, visitor.token, `${marker} old question`)
+      await agentApi(request).status(old.conversation.id, 'closed')
+
+      const past = await widgetFn<{ isReadOnly: boolean; conversation: { id: string } | null }>(
+        request,
+        'widgetGetMyConversationFn',
+        { bearer: visitor.token, data: { conversationId: old.conversation.id } }
+      )
+      expect(past.value?.isReadOnly).toBe(true)
+      expect(past.value?.conversation?.id).toBe(old.conversation.id)
+
+      const fresh = await visitorSend(request, visitor.token, `${marker} new question`)
+      expect(fresh.conversation.id).not.toBe(old.conversation.id)
+      expect(fresh.conversation.status).toBe('open')
+      expect((await conversationRow(old.conversation.id)).status).toBe('closed')
+      expect(await conversationCount(visitor.principalUuid)).toBe(2)
+    }
+  )
+
+  test(
+    'CUS-W-37 scrolling up loads older public messages, never notes, and offers "Jump to latest"',
+    { tag: '@nightly' },
+    async ({ page, request, marker }) => {
+      const visitor = await mintVisitor()
+      const { conversation } = await visitorSend(request, visitor.token, `${marker} latest`)
+      const uuid = toUuid(conversation.id as `conversation_${string}`)
+      // 45 older public messages and a note among them, all before the opener.
+      await supportDb()`
+        INSERT INTO conversation_messages (id, conversation_id, principal_id, sender_type, content, is_internal, created_at)
+        SELECT gen_random_uuid(), ${uuid}, ${visitor.principalUuid}, 'visitor',
+               ${marker} || ' old ' || lpad(g::text, 2, '0'), false,
+               NOW() - make_interval(mins => 100 - g)
+        FROM generate_series(1, 45) g`
+      await supportDb()`
+        INSERT INTO conversation_messages (id, conversation_id, sender_type, content, is_internal, created_at)
+        VALUES (gen_random_uuid(), ${uuid}, 'agent', ${`${marker} hidden note`}, true,
+                NOW() - make_interval(mins => 90))`
+
+      const widget = await openWidget(page, { visitorToken: visitor.token })
+      await openWidgetThread(widget, `${marker} latest`)
+      await expect(widget.getByText(`${marker} latest`)).toBeVisible({ timeout: 15_000 })
+      const oldest = widget.getByText(`${marker} old 01`, { exact: true })
+      await expect(oldest).toHaveCount(0)
+
+      await expect(async () => {
+        await widget
+          .getByText(/ old \d\d$/)
+          .first()
+          .scrollIntoViewIfNeeded()
+        await widget.locator('body').hover()
+        await page.mouse.wheel(0, -4000)
+        const loadOlder = widget.getByRole('button', { name: 'Load earlier messages' })
+        if (await loadOlder.isVisible()) await loadOlder.click()
+        await expect(oldest).toBeVisible({ timeout: 1_000 })
+      }).toPass({ timeout: 20_000 })
+      await expect(widget.getByRole('button', { name: 'Jump to latest' })).toBeVisible()
+      await expect(widget.getByText(`${marker} hidden note`)).toHaveCount(0)
     }
   )
 })

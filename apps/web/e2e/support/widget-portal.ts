@@ -29,7 +29,7 @@ import {
 import { supportDb, pollFor } from './db'
 import { supportEnv } from './env'
 import { createSupportApiKey } from '../utils/db-helpers'
-import { SUPPORT_PEOPLE } from './people'
+import { SUPPORT_PEOPLE, personStatePath } from './people'
 
 // ---------------------------------------------------------------------------
 // Server functions
@@ -303,6 +303,21 @@ export function signSsoToken(
 // The widget in a browser
 // ---------------------------------------------------------------------------
 
+/**
+ * Turn the customer ticket surfaces on (only ever on): the supportTickets
+ * flag (requester ticket functions, the ticket form) and the widget Tickets
+ * tab, which still shows only to a visitor who has a ticket. Idempotent, one
+ * statement, so parallel workers never lose each other's write. The suite runs
+ * with QUACKBACK_SETTINGS_CACHE_MS=0, so the app sees it at once.
+ */
+export async function enableTicketSurfaces(): Promise<void> {
+  await supportDb()`UPDATE settings SET
+    feature_flags = (coalesce(nullif(feature_flags, '')::jsonb, '{}'::jsonb)
+                     || '{"supportTickets": true}'::jsonb)::text,
+    widget_config = jsonb_set(coalesce(nullif(widget_config, '')::jsonb, '{}'::jsonb),
+                              '{tabs,tickets}', 'true'::jsonb, true)::text`
+}
+
 /** Clear the per-IP identify budget (every test client shares 127.0.0.1). */
 export async function resetIdentifyBudget(): Promise<void> {
   await supportDb()`DELETE FROM rate_bucket WHERE key LIKE 'widget:identify:ip:%'`
@@ -479,6 +494,112 @@ export async function streamStatus(
   return { status: res.status, contentType, body }
 }
 
+// ---------------------------------------------------------------------------
+// Teammate actions through the app's own server functions (admin cookie)
+// ---------------------------------------------------------------------------
+
+/** An API context signed in as the suite admin (for cookie-authed server fns). */
+export async function adminRequest(playwright: {
+  request: { newContext: (o: Record<string, unknown>) => Promise<APIRequestContext> }
+}): Promise<APIRequestContext> {
+  return playwright.request.newContext({
+    baseURL: supportEnv().baseUrl,
+    storageState: personStatePath('admin'),
+  })
+}
+
+async function must<T>(res: Promise<ServerFnResult<T>>, what: string): Promise<T> {
+  const r = await res
+  if (r.error) throw new Error(`${what} failed: ${JSON.stringify(r.error)}`)
+  return r.value as T
+}
+
+/** A workspace ticket status by name, as a TypeID. */
+export async function ticketStatusId(name: string): Promise<string> {
+  const [row] = await supportDb()`SELECT id FROM ticket_statuses WHERE name = ${name} LIMIT 1`
+  if (!row) throw new Error(`no ticket status "${name}"`)
+  return fromUuid('ticket_status', row.id as string)
+}
+
+export interface CreatedTicket {
+  id: string
+  reference: string
+  title: string
+}
+
+/** Teammate files a customer ticket, paired with a conversation when given. */
+export async function createTicket(
+  admin: APIRequestContext,
+  opts: { title: string; requesterPrincipalId: string; conversationId?: string }
+): Promise<CreatedTicket> {
+  const ticket = await must(
+    callServerFn<Record<string, unknown>>(admin, FN_FILES.tickets, 'createTicketFn', {
+      data: { type: 'customer', ...opts },
+    }),
+    'create ticket'
+  )
+  // The create-from-conversation flow links the pair as its own step.
+  if (opts.conversationId) {
+    await must(
+      callServerFn(admin, FN_FILES.tickets, 'linkTicketToConversationFn', {
+        data: { ticketId: ticket.id, conversationId: opts.conversationId },
+      }),
+      'link ticket'
+    )
+  }
+  const [row] = await supportDb()`SELECT number FROM tickets
+    WHERE id = ${toUuid(ticket.id as `ticket_${string}`)}`
+  return { id: ticket.id as string, reference: `#${row?.number}`, title: opts.title }
+}
+
+/** Teammate moves a ticket to a workspace status (by name). */
+export async function moveTicket(admin: APIRequestContext, ticketId: string, status: string) {
+  return must(
+    callServerFn(admin, FN_FILES.tickets, 'setTicketStatusFn', {
+      data: { ticketId, statusId: await ticketStatusId(status) },
+    }),
+    `move ticket to ${status}`
+  )
+}
+
+/** Teammate (the signed-in admin) replies or notes in a conversation; returns the message. */
+export async function adminWrite(
+  admin: APIRequestContext,
+  mode: 'reply' | 'note',
+  conversationId: string,
+  content: string
+): Promise<{ id: string }> {
+  const value = await must(
+    callServerFn<Record<string, unknown>>(
+      admin,
+      FN_FILES.conversation,
+      mode === 'reply' ? 'sendAgentMessageFn' : 'addConversationNoteFn',
+      { data: { conversationId, content } }
+    ),
+    `admin ${mode}`
+  )
+  const message = (value.message ?? value) as { id: string }
+  return message
+}
+
+/** Teammate edits or deletes a conversation message. */
+export async function editMessage(admin: APIRequestContext, messageId: string, content: string) {
+  return must(
+    callServerFn(admin, FN_FILES.conversation, 'editConversationMessageFn', {
+      data: { messageId, content },
+    }),
+    'edit message'
+  )
+}
+export async function deleteMessage(admin: APIRequestContext, messageId: string) {
+  return must(
+    callServerFn(admin, FN_FILES.conversation, 'deleteConversationMessageFn', {
+      data: { messageId },
+    }),
+    'delete message'
+  )
+}
+
 /** A conversation row by TypeID. */
 export async function conversationRow(typeId: string): Promise<ConversationRow> {
   const rows =
@@ -537,6 +658,21 @@ export async function openWidgetThread(widget: Frame, preview: string | RegExp) 
     })
     .first()
     .click()
+}
+
+/**
+ * Resolves once the page (or its widget iframe) has the live stream for this
+ * conversation open, so a teammate action after it is seen live rather than
+ * raced against the subscription. Start it before opening the thread.
+ */
+export function threadStreamOpen(page: Page, conversationId: string) {
+  return page.waitForResponse(
+    (res) =>
+      res.url().includes('/api/chat/stream') &&
+      res.url().includes(conversationId) &&
+      res.status() === 200,
+    { timeout: 20_000 }
+  )
 }
 
 /** The widget/portal composer editor. */
