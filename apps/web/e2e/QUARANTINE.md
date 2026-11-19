@@ -238,23 +238,3 @@ Each entry: owner: unassigned, review by: 2026-12-03.
   there, the requester's thread then failed with "Something went wrong", so
   the fix likely needs more than that line. owner: unassigned, review by:
   2026-12-03.
-
-### Support suite: inbox remainder
-
-- `src/lib/server/domains/conversation/__tests__/conversation-spam-autofile-quiet.db.test.ts`
-  › a spam-filed cold email rings no team bell (vitest, marked `it.fails`
-  rather than tagged: remove the marker when it starts to fail). A cold
-  inbound email that a deterministic rule files into Spam still bells the
-  team. `createEmailConversation` creates the thread open and writes
-  `conversation.created` and `message.created` to the outbox
-  (`conversation.email-cold-inbound.ts:276`, `:280`) before
-  `maybeAutoFileSpam` files it (`conversation.email-inbound.service.ts:784`),
-  and the worker-time bell resolver `getMessageCreatedTargets`
-  (`events/targets.ts:1215`) never checks the filing, so every teammate in
-  scope gets a new-message bell for spam. Outbound webhooks (and workflow
-  triggers, when a live workflow exists) are resolved from the same two
-  events. The messenger path has the same order: `notifyVisitorMessage`
-  (team email, `conversation.service.ts:507`) runs before the filter
-  (`:551`), whose burst-rate rule needs only the visitor's email (traced,
-  not tested). owner: unassigned, review by:
-  2026-12-03.
