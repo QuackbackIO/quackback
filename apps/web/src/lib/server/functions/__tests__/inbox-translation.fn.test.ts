@@ -144,7 +144,6 @@ beforeEach(() => {
   hoisted.requireAuth.mockResolvedValue({
     principal: { id: 'principal_agent', role: 'admin' },
     user: { id: 'user_1', name: 'Ann', image: null },
-    permissions: ['conversation.view'],
   })
   hoisted.policyActorFromAuth.mockResolvedValue({ principalId: 'principal_agent', role: 'admin' })
   hoisted.sendAgentMessage.mockResolvedValue({
